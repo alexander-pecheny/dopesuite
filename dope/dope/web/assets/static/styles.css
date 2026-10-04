@@ -41,6 +41,10 @@
   --narrow-col: 30px;
   --sheet-corner-col: 56px;
   --sheet-corner-row: 32px;
+  --row-marker-col: 12px;
+  /* How far the cue that a sheet has scrolled under its pinned columns
+     reaches past their edge. */
+  --pin-fade-w: 28px;
   /* Сетка geometry, the whole of it: every fest-grid rule reads these
      and states no length of its own (scripts/classcheck enforces it), so a
      phone is a second set of values below, never a second set of rules —
@@ -597,16 +601,18 @@
   height: var(--control-h-xs);
 }
 
-.sticky {
-  position: sticky;
-  z-index: 5;
-}
-
-.match-table thead .sticky {
+/* ── pinned columns ─────────────────────────────────────────
+   A sheet declares the columns it pins once (sheet-pins.ts declarePins), and
+   the module writes each pinned cell's position and offset on the cell, so no
+   rule here places one: these only layer a pinned cell over what scrolls
+   under it, fill the gaps around it, and draw the cue that the sheet has
+   scrolled. A column the sheet does not declare is not pinned, whatever its
+   class. */
+.match-table thead .pinned {
   z-index: 9;
 }
 
-.match-table tbody .sticky {
+.match-table tbody .pinned {
   z-index: 3;
 }
 
@@ -615,9 +621,14 @@
    answer cells show through as they scroll underneath. A structure-colored
    box-shadow fills those gaps with solid gray. The sticky header row gets the
    same treatment so its bottom edge stays a clean gray line instead of going
-   jagged where body cells scroll under the rounded corners. */
+   jagged where body cells scroll under the rounded corners. The place and its
+   gap keep the frame on a sheet that does not pin them (OD's detailed sheet),
+   so leaving a column out of the pins changes how it scrolls and nothing
+   about how it looks. */
 .match-table thead th,
-.match-table tbody .sticky {
+.match-table tbody .pinned,
+.match-table tbody .col-place,
+.match-table tbody .place-gap {
   box-shadow: 0 0 0 var(--cell-gap) var(--structure);
 }
 
@@ -630,29 +641,50 @@
   border-bottom-right-radius: 0;
 }
 
-.sticky-name {
-  left: var(--sheet-corner-col);
+/* Once the frame has scrolled sideways (.pins-scrolled, bound by the game
+   shell), the last pinned column shades what slides under it. The shade is
+   the fill of the cell it comes off: the sheet's structure, or a results
+   table's paper below its head. */
+.pinned {
+  --pin-fade: var(--structure);
+  --pin-fade-clear: var(--structure-transparent);
+}
+
+.results-table :where(tbody) .pinned {
+  --pin-fade: var(--paper);
+  --pin-fade-clear: var(--paper-transparent);
+}
+
+.pins-scrolled .pin-edge::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: calc(var(--pin-fade-w) * -1);
+  bottom: 0;
+  width: var(--pin-fade-w);
+  pointer-events: none;
+  background: linear-gradient(to right, var(--pin-fade), var(--pin-fade-clear));
+}
+
+/* The score table's leading columns, sized by the tokens their pins are
+   declared with (score-table.ts scoreSheetPins). A table that changes a
+   width changes the token, and the offsets follow. */
+.col-name {
   width: var(--team-col);
   min-width: var(--team-col);
   max-width: var(--team-col);
 }
 
-.sticky-total {
-  left: calc(var(--sheet-corner-col) + var(--team-col));
+.col-total {
   width: var(--total-col);
   min-width: var(--total-col);
   max-width: var(--total-col);
 }
 
-.sticky-place {
-  left: calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col));
+.col-place {
   width: var(--place-col);
   min-width: var(--place-col);
   max-width: var(--place-col);
-}
-
-.sticky-place-gap {
-  left: calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--place-col));
 }
 
 .match-table .place-gap,
@@ -1634,12 +1666,6 @@ body:not(.embedded-match) .grid-match {
     height: 24px;
   }
 
-  .match-table .sticky-name {
-    width: 90px;
-    min-width: 90px;
-    max-width: 90px;
-  }
-
   .match-table .battle {
     padding-left: 6px;
   }
@@ -1664,24 +1690,6 @@ body:not(.embedded-match) .grid-match {
     height: 18px;
     padding: 0 var(--space-1);
     font-size: var(--text-xs-tight);
-  }
-
-  .match-table .sticky-total {
-    left: var(--team-col);
-    width: var(--total-col);
-    min-width: var(--total-col);
-    max-width: var(--total-col);
-  }
-
-  .match-table .sticky-place {
-    left: calc(var(--team-col) + var(--total-col));
-    width: var(--place-col);
-    min-width: var(--place-col);
-    max-width: var(--place-col);
-  }
-
-  .match-table .sticky-place-gap {
-    left: calc(var(--team-col) + var(--total-col) + var(--place-col));
   }
 
   .match-table .team-name {
@@ -2746,21 +2754,6 @@ html:has(.game-host-top) {
   padding-left: var(--results-team-pad);
 }
 
-/* The name cells borrow the .results-team(-head) classes only for the truncate
-   + fade + popover primitive — NOT the OD/KSI frozen-column layout. Cancel the
-   inherited place-column offset (those rules set position:sticky; left:place-col,
-   which on this table just shoves the first column 60px in and overlaps the two
-   name columns). Higher specificity than the .results-table sticky rules, so
-   this holds regardless of source order. Mobile re-pins just the player column. */
-.ek-stats-table td.ek-stats-name {
-  position: static;
-}
-
-.ek-stats-table thead th.ek-stats-name,
-.ek-stats-table td.ek-stats-name {
-  left: auto;
-}
-
 /* Size each name column to its content, capped at --ek-stats-name-col. The cell
    follows its inner wrap, so the column is exactly as wide as the longest name
    (up to the cap) — no dead space, no premature clipping. */
@@ -2858,96 +2851,14 @@ html:has(.game-host-top) {
   font-weight: var(--fw-bold);
 }
 
-.od-results-table thead th.results-team-head,
-.ksi-results-table thead th.results-team-head {
-  --results-sticky-fade-from: var(--structure);
-  --results-sticky-fade-to: var(--structure-transparent);
-}
-
-.od-results-table thead th.results-total-head,
-.ksi-results-table thead th.results-total-head {
-  --results-sticky-fade-from: var(--structure);
-  --results-sticky-fade-to: var(--structure-transparent);
-}
-
-.od-results-table .results-total,
-.ksi-results-table .results-total {
-  --results-sticky-fade-from: var(--paper);
-  --results-sticky-fade-to: var(--paper-transparent);
-}
-
-.results-scroll-left .od-results-table thead th.results-total-head::after,
-.results-scroll-left .od-results-table .results-total::after,
-.results-scroll-left .ksi-results-table thead th.results-total-head::after,
-.results-scroll-left .ksi-results-table .results-total::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -28px;
-  bottom: 0;
-  width: 28px;
-  pointer-events: none;
-  background: linear-gradient(to right, var(--results-sticky-fade-from), var(--results-sticky-fade-to));
-}
-
-.detailed-scroll-left .match-table.od-detailed .sticky-total::after,
-.detailed-scroll-left .match-table.multi-table .sticky-total::after,
-.detailed-scroll-left .match-table.multi-table .sticky-place::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -28px;
-  bottom: 0;
-  width: 28px;
-  pointer-events: none;
-  background: linear-gradient(to right, var(--structure), var(--structure-transparent));
-}
-
-/* EK stage tables get the same scrolled-under fade as OD/KSI, drawn off the
-   right edge of the place-gap (the rightmost frozen column) once the score
-   columns have been scrolled. .stage-scroll-left is toggled on the scroll
-   frame by ek.js, and by hamsa.js for the same cue on its бой sheet — there the
-   раунд row's leading cell spans the frozen columns, so it draws the fade for
-   the row it is in. */
-.sheet-frame.stage-scroll-left .match-table.ek-stage-table .sticky-place-gap::after,
-.sheet-frame.stage-scroll-left .match-table.hamsa-sheet .sticky-place-gap::after,
-.sheet-frame.stage-scroll-left .match-table.hamsa-sheet .hamsa-round-lead::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -28px;
-  bottom: 0;
-  width: 28px;
-  pointer-events: none;
-  background: linear-gradient(to right, var(--structure), var(--structure-transparent));
-}
-
-.results-table .results-place,
-.results-table .results-team,
-.results-table .results-total {
-  position: sticky;
+/* A results table's pinned columns (standings.ts resultsPins): their cells
+   keep the paper a tinted row would show through, and ride over the rest. */
+.results-table :where(tbody) .pinned {
   z-index: 1;
   background: var(--paper);
 }
 
-.results-table .results-place,
-.results-table thead .results-place-head {
-  left: 0;
-}
-
-.results-table .results-team,
-.results-table thead .results-team-head {
-  left: var(--results-place-col);
-}
-
-.results-table .results-total,
-.results-table thead .results-total-head {
-  left: calc(var(--results-place-col) + var(--results-team-col));
-}
-
-.results-table thead .results-place-head,
-.results-table thead .results-team-head,
-.results-table thead .results-total-head {
+.results-table thead .pinned {
   z-index: 3;
 }
 
@@ -3151,28 +3062,6 @@ html:has(.game-host-top) {
   --theme-score-col: 40px;
 }
 
-.match-table.od-detailed .sticky-name {
-  width: var(--team-col);
-  min-width: var(--team-col);
-  max-width: var(--team-col);
-}
-
-/* OD Подробно unfreezes М so two more questions fit on a phone. Only the
-   horizontal half: the header keeps `position: sticky` for the vertical
-   scroll, and drops to the question columns' z-index so it slides under the
-   frozen Команда and Σ rather than over them. */
-.match-table.od-detailed:not(.ksi-detailed) tbody .sticky-place,
-.match-table.od-detailed:not(.ksi-detailed) tbody .sticky-place-gap {
-  position: static;
-  z-index: auto;
-}
-
-.match-table.od-detailed:not(.ksi-detailed) thead .sticky-place,
-.match-table.od-detailed:not(.ksi-detailed) thead .sticky-place-gap {
-  left: auto;
-  z-index: 4;
-}
-
 .match-table.compact-score-table,
 .match-table.compact-score-table th,
 .match-table.compact-score-table td {
@@ -3200,30 +3089,13 @@ html:has(.game-host-top) {
 
 .match-table .row-marker {
   --cell-fill: var(--structure);
-  left: 0;
-  width: 12px;
-  min-width: 12px;
-  max-width: 12px;
+  width: var(--row-marker-col);
+  min-width: var(--row-marker-col);
+  max-width: var(--row-marker-col);
   padding: 0;
   border-color: var(--structure);
   border-radius: 0;
   background: var(--structure);
-}
-
-.fight-frame .match-table .row-marker + .sticky-name {
-  left: 12px;
-}
-
-.fight-frame .match-table .row-marker ~ .sticky-total {
-  left: calc(12px + var(--team-col));
-}
-
-.fight-frame .match-table .row-marker ~ .sticky-place {
-  left: calc(12px + var(--team-col) + var(--total-col));
-}
-
-.fight-frame .match-table .row-marker ~ .sticky-place-gap {
-  left: calc(12px + var(--team-col) + var(--total-col) + var(--place-col));
 }
 
 .host:not(.viewer-readonly) .fight-frame .match-table tbody tr.active-team-row > .active-row-marker {
@@ -3499,7 +3371,7 @@ html:has(.game-host-top) {
   text-decoration: underline;
 }
 
-.match-table.ksi-detailed .sticky-total {
+.match-table.ksi-detailed .col-total {
   padding-right: 4px;
   padding-left: 4px;
 }
@@ -3604,31 +3476,6 @@ html:has(.game-host-top) {
      while Команда and the counts scroll under it. */
   .ek-stats-table { --ek-stats-name-col: 132px; }
 
-  .ek-stats-table thead th.ek-stats-player,
-  .ek-stats-table td.ek-stats-player {
-    position: sticky;
-    left: 0;
-  }
-
-  .ek-stats-table td.ek-stats-player { z-index: 1; --ek-stats-fade-from: var(--paper); --ek-stats-fade-to: var(--paper-transparent); }
-
-  .ek-stats-table thead th.ek-stats-player { z-index: 4; --ek-stats-fade-from: var(--structure); --ek-stats-fade-to: var(--structure-transparent); }
-
-  /* Scrolled-under fade off the frozen player column's right edge, drawn once
-     the rest has scrolled — same cue as the OD/KSI results tables. The scroll
-     frame toggles .stage-scroll-left (ek.js). */
-  .sheet-frame.stage-scroll-left .ek-stats-table td.ek-stats-player::after,
-  .sheet-frame.stage-scroll-left .ek-stats-table thead th.ek-stats-player::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: -28px;
-    bottom: 0;
-    width: 28px;
-    pointer-events: none;
-    background: linear-gradient(to right, var(--ek-stats-fade-from), var(--ek-stats-fade-to));
-  }
-
   .ek-stats-table .narrow { width: 26px; min-width: 26px; }
 
   .results-place-head,
@@ -3663,14 +3510,6 @@ html:has(.game-host-top) {
     width: var(--results-num-col-mobile);
     min-width: var(--results-num-col-mobile);
     max-width: var(--results-num-col-mobile);
-  }
-
-  .results-table .results-team,
-  .results-table thead .results-team-head { left: var(--results-place-col); }
-
-  .results-table .results-total,
-  .results-table thead .results-total-head {
-    left: calc(var(--results-place-col) + var(--results-team-col));
   }
 
   .od-results-table .results-team,
@@ -3709,25 +3548,6 @@ html:has(.game-host-top) {
   --theme-score-col: 42px;
   --theme-gap-col: 16px;
   --narrow-col: 24px;
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .sticky-name {
-  width: var(--team-col);
-  min-width: var(--team-col);
-  max-width: var(--team-col);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .sticky-total {
-  left: var(--team-col);
-  width: var(--total-col);
-  min-width: var(--total-col);
-  max-width: var(--total-col);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .sticky-place {
-  width: var(--place-col);
-  min-width: var(--place-col);
-  max-width: var(--place-col);
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .place-gap,
@@ -4582,14 +4402,6 @@ body.is-fullscreen.od-page .match-main {
   width: var(--results-team-col);
 }
 
-/* A roster without a № column (troikas; a fest not numbered yet): the name
-   column is frozen at the left edge, not one № column in, or it covers the
-   start of the players' names. Doubled class to outweigh the phone override
-   of the same variable on .results-table. */
-.roster-results-table.roster-unnumbered {
-  --results-place-col: 0px;
-}
-
 /* The team name is the shared name cell (clip + fade + popover); the roster
    only adds its bold weight on top. */
 .roster-results-table .results-team .name-cell-text {
@@ -4607,10 +4419,9 @@ body.is-fullscreen.od-page .match-main {
    boards it was built for, and if anything ever does overflow here (an
    unusually long name, a browser that inflates text) those frozen columns
    would paint over the players text while the Игроки header slid away alone.
-   Freeze the header with them so the columns stay legible and aligned. */
+   The header rides just past them (fest-roster.ts, trailHead), so the columns
+   stay legible and aligned; here it only takes the pinned heads' layer. */
 .roster-results-table thead .roster-players {
-  position: sticky;
-  left: calc(var(--results-place-col) + var(--results-team-col));
   z-index: 3;
 }
 
@@ -4917,17 +4728,17 @@ body.is-fullscreen.od-page .match-main {
 }
 
 /* A normalised Итог is fractional, so it needs more room than the integer one
-   the shared width is cut for. */
-.match-table.multi-table .sticky-total {
-  width: calc(var(--total-col) + var(--space-5));
-  min-width: calc(var(--total-col) + var(--space-5));
-  max-width: calc(var(--total-col) + var(--space-5));
+   the shared width is cut for. The token is set on the table, where the
+   phone's --total-col is, and the sheet declares its pins with it, so Σ+
+   pins after the widened Итог. */
+.match-table.multi-table {
+  --multi-total-col: calc(var(--total-col) + var(--space-5));
 }
 
-/* …and Σ+ pins after the widened Итог, or a scrolled sheet parks it on top
-   of the Итог's tail. */
-.match-table.multi-table .sticky-place {
-  left: calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--space-5));
+.match-table.multi-table .col-total {
+  width: var(--multi-total-col);
+  min-width: var(--multi-total-col);
+  max-width: var(--multi-total-col);
 }
 
 /* A мини-игра's name heads a block dozens of columns wide; centred it sits off
@@ -4948,7 +4759,7 @@ body.is-fullscreen.od-page .match-main {
 }
 
 /* The sticky heads span both header rows and read at the numbers' line. */
-.multi-table thead .sticky {
+.multi-table thead .pinned {
   vertical-align: bottom;
 }
 
@@ -4965,9 +4776,9 @@ body.is-fullscreen.od-page .match-main {
   vertical-align: bottom;
 }
 
-/* The мини-игра's name follows a scrolled sheet until its block runs out. */
+/* The мини-игра's name follows a scrolled sheet until its block runs out
+   (multi.ts pins it just past the pinned columns). */
 .multi-game-name {
-  position: sticky;
   display: inline-block;
 }
 
@@ -5060,16 +4871,9 @@ body.is-fullscreen.od-page .match-main {
   color: var(--text-strong);
 }
 
-/* The side's name is pinned (.sticky-name, its left edge) and is
+/* The side's name is pinned (troika.ts, the .col-name width) and is
    ЭК's fading cell. «длинная Гриша в подготовке к дизастеру» is a real team
    name, and a бой seats two of them beside a column of кресла. */
-.troika-sheet .troika-team,
-.troika-sheet .troika-team-head {
-  width: var(--team-col);
-  min-width: var(--team-col);
-  max-width: var(--team-col);
-}
-
 .troika-sheet .troika-team-head {
   text-align: left;
 }
@@ -5294,19 +5098,12 @@ body.is-fullscreen.od-page .match-main {
   width: var(--narrow-col);
 }
 
-/* The sticky columns hold the sheet's own widths, so their offsets follow. */
-.hamsa-sheet .sticky-total {
+/* Σ holds the sheet's own width; hamsa.ts declares its pins with the same
+   token, so the place after it follows. */
+.hamsa-sheet .col-total {
   width: var(--hamsa-total-col);
   min-width: var(--hamsa-total-col);
   max-width: var(--hamsa-total-col);
-}
-
-.hamsa-sheet .sticky-place {
-  left: calc(var(--sheet-corner-col) + var(--team-col) + var(--hamsa-total-col));
-}
-
-.hamsa-sheet .sticky-place-gap {
-  left: calc(var(--sheet-corner-col) + var(--team-col) + var(--hamsa-total-col) + var(--place-col));
 }
 
 .hamsa-sheet .theme-head,

@@ -6,13 +6,13 @@ import {cssEscape, formatDisplayText, td, th} from "./cells.js";
 import {buildFlatScoreTable, computePlaces, createScoreTableIndex, setMarkClass, setNodeText} from "./score-table.js";
 import type {NodeIndex} from "./score-table.js";
 import {nameCell as clippedNameCell} from "./name-cell.js";
-import {resultsTeamCell} from "./standings.js";
+import {resultsPins, resultsTeamCell} from "./standings.js";
 import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import {buildRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, clamp, fitScrollFade, renderTabBar} from "./widgets.js";
+import {clamp, fitScrollFade, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
@@ -21,6 +21,11 @@ import * as ksi from "./ksi-protocol.js";
 import {KSI_THEMES, QUESTION_VALUES, RESULT_VALUES, STICKER_NEUTRAL} from "./ksi-protocol.js";
 import S from "./i18nstrings.js";
 import type {KSIRules, KSIScheme, KSIState, ParticipantEntry, ResultRow, ScoreSheet, StickerType} from "./ksi-protocol.js";
+
+// The results sheet pins the place, the team and the total; the refusals
+// table its number and the team.
+const RESULTS_PINS = resultsPins({total: true});
+const SEED_PINS = resultsPins();
 
 // Page globals the bundle environment provides (the server-inlined
 // __GAME_INIT__). Accessed via a structural cast, same as game-page.ts.
@@ -174,8 +179,6 @@ function teamBadges(index: number): string[] | undefined {
   return (ksi.participantFlags(state!, index) || []).filter((flag) => !hidden.includes(flag));
 }
 
-window.addEventListener("resize", () => updateResultsScrollState());
-
 const doc = mountGameDocument({
   route,
   cachePrefix: "si",
@@ -275,7 +278,6 @@ function render(options: {preserveScroll?: boolean} = {}): void {
       frame.scrollLeft = scrollLeft;
     }
   }
-  updateResultsScrollState();
   if (team && activeTab === "detailed") refreshAllStickerLimits();
   if (!team || activeTab === "detailed") restoreCursor();
   shell.presence.refresh();
@@ -309,9 +311,9 @@ function buildTable(): HTMLTableElement {
   const rows = detailedPlayerOrder().map((playerIndex) => ({
     rowClassName: isActivePlayerRow(playerIndex) ? "active-team-row" : "",
     nameCell: nameCell(participantName(playerIndex), playerIndex),
-    totalCell: indexedCell(scores.totals[playerIndex], "sticky sticky-total number total-cell", {player: playerIndex}),
+    totalCell: indexedCell(scores.totals[playerIndex], "number total-cell", {player: playerIndex}),
     placeCell: showPlaceColumn
-      ? indexedCell(scores.places[playerIndex] || "", "sticky sticky-place number place-cell", {player: playerIndex})
+      ? indexedCell(scores.places[playerIndex] || "", "number place-cell", {player: playerIndex})
       : null,
     themes: themes.map((_, themeIndex) => ({
       answers: QUESTION_VALUES.map((__, answerIndex) => {
@@ -332,8 +334,8 @@ function buildTable(): HTMLTableElement {
   const table = buildFlatScoreTable({
     className: "match-table compact-score-table si-table od-detailed ksi-detailed",
     rowMarkerColumn: true,
-    rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
-    rowMarkerCellClassName: "sticky row-marker active-row-marker",
+    rowMarkerHeaderClassName: "row-marker-head active-row-marker",
+    rowMarkerCellClassName: "active-row-marker",
     nameHeader: battleHeader(),
     placeColumn: showPlaceColumn,
     themes,
@@ -456,8 +458,8 @@ function buildRefusalsTable(): HTMLElement {
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  head.appendChild(th("№", "results-place-head seed-number-head"));
-  head.appendChild(th(S.si.refusals.team(), "results-team-head seed-team-head"));
+  head.appendChild(SEED_PINS.mark(th("№", "results-place-head seed-number-head"), "place"));
+  head.appendChild(SEED_PINS.mark(th(S.si.refusals.team(), "results-team-head seed-team-head"), "name"));
   head.appendChild(th(S.si.refusals.declined(), "seed-declined-head"));
   thead.appendChild(head);
   table.appendChild(thead);
@@ -473,10 +475,10 @@ function buildRefusalsTable(): HTMLElement {
     tr.className = classes.join(" ");
 
     const number = participantNumber(index);
-    tr.appendChild(td(number > 0 ? number : "", "results-place seed-number-cell"));
+    tr.appendChild(SEED_PINS.mark(td(number > 0 ? number : "", "results-place seed-number-cell"), "place"));
 
     const label = participantLabel(index);
-    tr.appendChild(resultsTeamCell(label));
+    tr.appendChild(SEED_PINS.mark(resultsTeamCell(label), "name"));
 
     const declinedCell = document.createElement("td");
     declinedCell.className = "results-num seed-declined-cell";
@@ -503,9 +505,9 @@ function buildResultsTableInner(): HTMLTableElement {
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  head.appendChild(th(S.si.results.place(), "results-place-head"));
-  head.appendChild(th(S.si.results.team(), "results-team-head"));
-  head.appendChild(th("Σ", "results-num-head results-total-head"));
+  head.appendChild(RESULTS_PINS.mark(th(S.si.results.place(), "results-place-head"), "place"));
+  head.appendChild(RESULTS_PINS.mark(th(S.si.results.team(), "results-team-head"), "name"));
+  head.appendChild(RESULTS_PINS.mark(th("Σ", "results-num-head results-total-head"), "total"));
   head.appendChild(th("Σ+", "results-num-head"));
   for (const value of RESULT_VALUES) {
     head.appendChild(th(value, "results-num-head"));
@@ -520,9 +522,9 @@ function buildResultsTableInner(): HTMLTableElement {
     if (rowIdx === 0) classes.push("results-group-first");
     if (rowIdx === rows.length - 1) classes.push("results-group-last");
     tr.className = classes.join(" ");
-    tr.appendChild(td(row.placeText, "results-place"));
-    tr.appendChild(resultsTeamCell(row.name, {city: ksi.participantCity(state!, row.index), badges: teamBadges(row.index)}));
-    tr.appendChild(td(row.metrics.total, "results-num total-cell results-total"));
+    tr.appendChild(RESULTS_PINS.mark(td(row.placeText, "results-place"), "place"));
+    tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(row.name, {city: ksi.participantCity(state!, row.index), badges: teamBadges(row.index)}), "name"));
+    tr.appendChild(RESULTS_PINS.mark(td(row.metrics.total, "results-num total-cell results-total"), "total"));
     tr.appendChild(td(row.metrics.plus, "results-num"));
     for (const value of RESULT_VALUES) {
       tr.appendChild(td(row.metrics.correct[value] || 0, "results-num"));
@@ -571,14 +573,6 @@ function restoreTabScroll(tab: string): void {
 }
 
 fitScrollFade(siRoot.closest(".sheet-frame"));
-const resultsScroll = bindScrollEdges(siRoot.closest(".sheet-frame"), ({left}, frame) => {
-  frame.classList.toggle("results-scroll-left", isTeamMode() && activeTab === "results" && left);
-  frame.classList.toggle("detailed-scroll-left", isTeamMode() && activeTab === "detailed" && left);
-});
-
-function updateResultsScrollState(): void {
-  resultsScroll.refresh();
-}
 
 function detailedPlayerOrder(): number[] {
   if (detailedOrderCache) return detailedOrderCache;
@@ -646,14 +640,14 @@ function nameCell(name: string, playerIndex: number): HTMLElement {
   if (isTeamMode()) {
     const number = participantNumber(playerIndex);
     return clippedNameCell(name || participantFallback(playerIndex), {
-      className: "sticky sticky-name team-name od-detailed-team-cell",
+      className: "team-name od-detailed-team-cell",
       layout: true,
       number: {text: number > 0 ? String(number) : "", className: "od-detailed-team-number"},
       badges: teamBadges(playerIndex),
     });
   }
   const cell = document.createElement("td");
-  cell.className = "sticky sticky-name team-name";
+  cell.className = "team-name";
   const input = document.createElement("input");
   input.type = "text";
   input.className = "venue-input";
@@ -819,12 +813,12 @@ function refreshAllStickerLimits(): void {
 function battleHeader(): HTMLElement {
   if (isTeamMode()) {
     const node = document.createElement("th");
-    node.className = "sticky sticky-name battle od-detailed-team-head";
+    node.className = "battle od-detailed-team-head";
     node.appendChild(detailedNameHeader());
     return node;
   }
   const node = document.createElement("th");
-  node.className = "sticky sticky-name battle";
+  node.className = "battle";
   const layout = document.createElement("span");
   layout.className = "battle-layout";
   const title = document.createElement("span");

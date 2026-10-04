@@ -32,6 +32,10 @@ import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
 import S from "./i18nstrings.js";
+import {declarePins} from "./sheet-pins.js";
+
+// A bout sheet pins the side's name, which is the whole of its pinned block.
+const SIDE_PINS = declarePins([{key: "name", width: "var(--team-col)"}], {start: "var(--sheet-corner-col)"});
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -319,7 +323,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
-  themeRow.appendChild(th(S.troika.protocol.team(), "sticky sticky-name troika-team-head"));
+  themeRow.appendChild(SIDE_PINS.mark(th(S.troika.protocol.team(), "col-name troika-team-head"), "name"));
   state.values.forEach((value, t) => {
     // The gap parts themes BEFORE any seating column, which sits flush
     // against the theme it seats.
@@ -368,7 +372,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 // themes scroll under it. It is EK's cell: a long name fades at the column's edge
 // and shows whole in the page's popover, never an ellipsis.
 function sideNameCell(name: string, rowSpan = troika.CHAIRS): HTMLElement {
-  const cell = nameCell(name, {className: "sticky sticky-name ek-team-cell troika-team", layout: true});
+  const cell = SIDE_PINS.mark(nameCell(name, {className: "col-name ek-team-cell troika-team", layout: true}), "name");
   (cell as HTMLTableCellElement).rowSpan = rowSpan;
   return cell;
 }
@@ -699,7 +703,7 @@ function buildWrittenBout(bout: BoutEntry): HTMLElement {
   table.classList.toggle("match-finished", Boolean(bout.view.finished));
   const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
-  themeRow.appendChild(th(S.troika.protocol.team(), "sticky sticky-name troika-team-head"));
+  themeRow.appendChild(SIDE_PINS.mark(th(S.troika.protocol.team(), "col-name troika-team-head"), "name"));
   state.values.forEach((value, t) => {
     if (t > 0) themeRow.appendChild(th("", "gap-head"));
     themeRow.appendChild(th(S.troika.theme.head(String(t + 1), String(value)), "theme-block",

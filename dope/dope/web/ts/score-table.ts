@@ -4,6 +4,8 @@
 import {applyAttrs, cellFromSpec, formatDisplayText, formatPlace, sameArray, td, th} from "./cells.js";
 import type {CellAttrs, CellContent, CellSpec} from "./cells.js";
 import {seatedNames, seatingLabel} from "./ek-seating.js";
+import {declarePins} from "./sheet-pins.js";
+import type {Pins} from "./sheet-pins.js";
 import S from "./i18nstrings.js";
 
 export interface ScoreTableTheme {
@@ -65,6 +67,53 @@ export interface ScoreTableOptions {
   gapRowClassName?: string;
   gapCellClassName?: string;
   gapColSpan?: number;
+  // The sheet's pinned block. Left out, it is scoreSheetPins for the columns
+  // the table has.
+  pins?: Pins;
+}
+
+// scoreSheetPins declares a score table's pinned block: the row marker when
+// the sheet has one, the name, Σ, and the place with its gap. A format passes
+// what differs: Hamsa's wider total, or `place: false` where the place scrolls
+// with the questions (OD's detailed sheet, so two more questions fit on a
+// phone). The block starts after the sheet's corner gutter, which the fight
+// frame sets to nothing.
+export function scoreSheetPins({rowMarker = false, place = true, total = "var(--total-col)"}: {
+  rowMarker?: boolean;
+  place?: boolean;
+  total?: string;
+} = {}): Pins {
+  return declarePins([
+    ...(rowMarker ? [{key: "marker", width: "var(--row-marker-col)"}] : []),
+    {key: "name", width: "var(--team-col)"},
+    {key: "total", width: total},
+    ...(place ? [{key: "place", width: "var(--place-col)"}, {key: "place-gap", width: "var(--place-gap)"}] : []),
+  ], {start: "var(--sheet-corner-col)"});
+}
+
+// The leading columns every score table has, each with the class that sizes it
+// and the class a cell gets when the page passes no class of its own.
+const LEADING = {
+  marker: {column: "row-marker", head: "row-marker-head", cell: ""},
+  name: {column: "col-name", head: "battle", cell: "team-name"},
+  total: {column: "col-total", head: "number", cell: "number total-cell"},
+  place: {column: "col-place", head: "number", cell: "number place-cell"},
+  "place-gap": {column: "", head: "place-gap-head", cell: "place-gap"},
+} as const;
+
+type LeadingKey = keyof typeof LEADING;
+
+// leadingCell builds one of those cells from the page's spec and pins it when
+// the sheet's declaration says so.
+function leadingCell(tag: "th" | "td", key: LeadingKey, spec: CellSpec, pins: Pins, className?: string, rowSpan = 1): Node {
+  const own = LEADING[key];
+  const node = cellFromSpec(tag, spec, {
+    className: className || (tag === "th" ? own.head : own.cell),
+    attrs: rowSpan > 1 ? {rowSpan} : undefined,
+  });
+  if (!(node instanceof Element)) return node;
+  if (own.column) node.classList.add(own.column);
+  return pins.mark(node, key);
 }
 
 export function buildFlatScoreTable(options: ScoreTableOptions): HTMLTableElement {
@@ -81,16 +130,15 @@ export function buildFlatScoreTable(options: ScoreTableOptions): HTMLTableElemen
   const showRowMarker = Boolean(options.rowMarkerColumn);
   const thead = document.createElement("thead");
   const header = document.createElement("tr");
+  const pins = options.pins ?? scoreSheetPins({rowMarker: showRowMarker, place: showPlaceColumn});
   if (showRowMarker) {
-    header.appendChild(cellFromSpec("th", options.rowMarkerHeader ?? "", {
-      className: options.rowMarkerHeaderClassName || "sticky row-marker row-marker-head",
-    }));
+    header.appendChild(leadingCell("th", "marker", options.rowMarkerHeader ?? "", pins, options.rowMarkerHeaderClassName));
   }
-  header.appendChild(cellFromSpec("th", options.nameHeader, {className: "sticky sticky-name battle"}));
-  header.appendChild(cellFromSpec("th", options.totalHeader ?? "Σ", {className: "sticky sticky-total number"}));
+  header.appendChild(leadingCell("th", "name", options.nameHeader, pins));
+  header.appendChild(leadingCell("th", "total", options.totalHeader ?? "Σ", pins));
   if (showPlaceColumn) {
-    header.appendChild(cellFromSpec("th", options.placeHeader ?? S.widgets.scoreTable.place(), {className: "sticky sticky-place number"}));
-    header.appendChild(cellFromSpec("th", options.placeGapHeader ?? "", {className: "sticky sticky-place-gap place-gap-head"}));
+    header.appendChild(leadingCell("th", "place", options.placeHeader ?? S.widgets.scoreTable.place(), pins));
+    header.appendChild(leadingCell("th", "place-gap", options.placeGapHeader ?? "", pins));
   }
 
   for (const theme of themes) {
@@ -117,15 +165,13 @@ export function buildFlatScoreTable(options: ScoreTableOptions): HTMLTableElemen
     const row = document.createElement("tr");
     if (rowSpec.rowClassName) row.className = rowSpec.rowClassName;
     if (showRowMarker) {
-      row.appendChild(cellFromSpec("td", rowSpec.rowMarkerCell ?? "", {
-        className: rowSpec.rowMarkerClassName || options.rowMarkerCellClassName || "sticky row-marker",
-      }));
+      row.appendChild(leadingCell("td", "marker", rowSpec.rowMarkerCell ?? "", pins, rowSpec.rowMarkerClassName || options.rowMarkerCellClassName));
     }
-    row.appendChild(cellFromSpec("td", rowSpec.nameCell, {className: "sticky sticky-name team-name"}));
-    row.appendChild(cellFromSpec("td", rowSpec.totalCell ?? rowSpec.total, {className: "sticky sticky-total number total-cell"}));
+    row.appendChild(leadingCell("td", "name", rowSpec.nameCell, pins));
+    row.appendChild(leadingCell("td", "total", rowSpec.totalCell ?? rowSpec.total, pins));
     if (showPlaceColumn) {
-      row.appendChild(cellFromSpec("td", rowSpec.placeCell ?? rowSpec.place, {className: "sticky sticky-place number place-cell"}));
-      row.appendChild(cellFromSpec("td", rowSpec.placeGapCell ?? "", {className: "sticky sticky-place-gap place-gap"}));
+      row.appendChild(leadingCell("td", "place", rowSpec.placeCell ?? rowSpec.place, pins));
+      row.appendChild(leadingCell("td", "place-gap", rowSpec.placeGapCell ?? "", pins));
     }
 
     (rowSpec.themes || []).forEach((themeSpec, themeIndex) => {
@@ -170,16 +216,15 @@ export function buildTwoRowScoreTable(options: ScoreTableOptions): HTMLTableElem
   const showRowMarker = Boolean(options.rowMarkerColumn);
   const thead = document.createElement("thead");
   const header = document.createElement("tr");
+  const pins = options.pins ?? scoreSheetPins({rowMarker: showRowMarker, place: showPlaceColumn});
   if (showRowMarker) {
-    header.appendChild(cellFromSpec("th", options.rowMarkerHeader ?? "", {
-      className: options.rowMarkerHeaderClassName || "sticky row-marker row-marker-head",
-    }));
+    header.appendChild(leadingCell("th", "marker", options.rowMarkerHeader ?? "", pins, options.rowMarkerHeaderClassName));
   }
-  header.appendChild(cellFromSpec("th", options.nameHeader, {className: "sticky sticky-name battle"}));
-  header.appendChild(cellFromSpec("th", options.totalHeader ?? "Σ", {className: "sticky sticky-total number"}));
+  header.appendChild(leadingCell("th", "name", options.nameHeader, pins));
+  header.appendChild(leadingCell("th", "total", options.totalHeader ?? "Σ", pins));
   if (showPlaceColumn) {
-    header.appendChild(cellFromSpec("th", options.placeHeader ?? S.widgets.scoreTable.place(), {className: "sticky sticky-place number"}));
-    header.appendChild(cellFromSpec("th", options.placeGapHeader ?? "", {className: "sticky sticky-place-gap place-gap-head"}));
+    header.appendChild(leadingCell("th", "place", options.placeHeader ?? S.widgets.scoreTable.place(), pins));
+    header.appendChild(leadingCell("th", "place-gap", options.placeGapHeader ?? "", pins));
   }
 
   for (const theme of themes) {
@@ -213,16 +258,13 @@ export function buildTwoRowScoreTable(options: ScoreTableOptions): HTMLTableElem
     ].filter(Boolean).join(" ");
 
     if (showRowMarker) {
-      topRow.appendChild(cellFromSpec("td", rowSpec.rowMarkerCell ?? "", {
-        className: rowSpec.rowMarkerClassName || options.rowMarkerCellClassName || "sticky row-marker",
-        attrs: {rowSpan: 2},
-      }));
+      topRow.appendChild(leadingCell("td", "marker", rowSpec.rowMarkerCell ?? "", pins, rowSpec.rowMarkerClassName || options.rowMarkerCellClassName, 2));
     }
-    topRow.appendChild(cellFromSpec("td", rowSpec.nameCell, {className: "sticky sticky-name team-name", attrs: {rowSpan: 2}}));
-    topRow.appendChild(cellFromSpec("td", rowSpec.totalCell ?? rowSpec.total, {className: "sticky sticky-total number total-cell", attrs: {rowSpan: 2}}));
+    topRow.appendChild(leadingCell("td", "name", rowSpec.nameCell, pins, undefined, 2));
+    topRow.appendChild(leadingCell("td", "total", rowSpec.totalCell ?? rowSpec.total, pins, undefined, 2));
     if (showPlaceColumn) {
-      topRow.appendChild(cellFromSpec("td", rowSpec.placeCell ?? rowSpec.place, {className: "sticky sticky-place number place-cell", attrs: {rowSpan: 2}}));
-      topRow.appendChild(cellFromSpec("td", rowSpec.placeGapCell ?? "", {className: "sticky sticky-place-gap place-gap", attrs: {rowSpan: 2}}));
+      topRow.appendChild(leadingCell("td", "place", rowSpec.placeCell ?? rowSpec.place, pins, undefined, 2));
+      topRow.appendChild(leadingCell("td", "place-gap", rowSpec.placeGapCell ?? "", pins, undefined, 2));
     }
 
     (rowSpec.themes || []).forEach((themeSpec, themeIndex) => {

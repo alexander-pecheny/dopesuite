@@ -301,7 +301,6 @@ const stageCache = createStageCache({
   onPaneShown: ({pane, stageCode}) => {
     // The cursor follows the active cell into the pane, or has nothing there.
     seatCursor({focus: false});
-    bindStageOverflowScroll();
   },
   cleanupPane: ({pane}) => {
     (pane as StagePane)._stageObserver?.disconnect();
@@ -325,8 +324,6 @@ const entrantsTab = createEntrantsTab({
   apiBase: () => route.apiBase || "",
   onRebuilt: () => window.location.reload(),
 });
-let stageOverflowScrollFrame: Element | null = null;
-let stageScroll: ScrollEdgeBinding | null = null;
 let ekTabsScroll: ScrollEdgeBinding | null = null;
 
 // The bout head's popover is the EK page's own: a spectator's head holds the
@@ -1044,7 +1041,6 @@ function renderStats(): void {
   shell.renderChrome();
   renderEKTabs();
   rerenderStatsTable();
-  bindStatsScrollFade();
   shell.presence.refresh();
 }
 
@@ -1081,12 +1077,7 @@ function render(): void {
   matchTableIndex = createScoreTableIndex(table, {entity: "team", shootout: true});
   ekRoot.replaceChildren(table);
   notifyEmbeddedResize(embedded);
-  if (viewer) {
-    // The spectator's match is a stage-skinned table with a frozen column, so
-    // it wants the same scrolled-under cue a stage pane gets.
-    bindStageOverflowScroll();
-    return;
-  }
+  if (viewer) return;
   seatCursor({focus: false});
   refreshMatchPendingMarkers(state.code || route.matchCode);
   shell.presence.refresh();
@@ -1323,33 +1314,6 @@ function letterMap(): Map<string, string> {
 }
 function letteredBoutTitle(matchCode: string | undefined, title: string): string {
   return letteredTitle(title, letterMap().get(matchCode || ""));
-}
-
-function bindStageOverflowScroll(): void {
-  const scrollFrame = ekRoot.closest(".sheet-frame");
-  if (!scrollFrame) return;
-  if (stageOverflowScrollFrame === scrollFrame) {
-    stageScroll?.refresh();
-    return;
-  }
-  unbindStageOverflowScroll();
-  stageScroll = bindScrollEdges(scrollFrame, ({left}, frame) => {
-    frame.classList.toggle("stage-scroll-left", left);
-  });
-  stageOverflowScrollFrame = scrollFrame;
-}
-
-function unbindStageOverflowScroll(): void {
-  stageScroll?.dispose();
-  stageScroll = null;
-  stageOverflowScrollFrame = null;
-}
-
-// The stats page wants the same .stage-scroll-left cue for its frozen player
-// column, on the same .sheet-frame — so it reuses the one binding rather than
-// adding a second listener that toggles the same class and is never removed.
-function bindStatsScrollFade(): void {
-  bindStageOverflowScroll();
 }
 
 // buildRankedStageTable draws a ranked stage's table: place, team, and the
@@ -1612,9 +1576,6 @@ function indexedNode(name: string, values: Record<string, unknown>): HTMLElement
 
 function resetMatchTableIndex(): void {
   matchTableIndex = null;
-  // unbindStageOverflowScroll only matters when leaving stage mode
-  // (renderFest/renderVenues/etc).
-  if (route.mode !== "stage") unbindStageOverflowScroll();
 }
 
 function stageRowOffset(matchIndex: number): number {
@@ -1983,8 +1944,8 @@ function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
     className: compact ? `match-table compact-score-table ek-stage-table${viewer ? " readonly-table" : ""}${individual}` : `match-table${individual}`,
     attrs: {dataset: {matchCode}},
     rowMarkerColumn: !compact,
-    rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
-    rowMarkerCellClassName: "sticky row-marker active-row-marker",
+    rowMarkerHeaderClassName: "row-marker-head active-row-marker",
+    rowMarkerCellClassName: "active-row-marker",
     nameHeader: viewer ? readonlyBattleHeader() : battleHeader(),
     placeColumn: showPlaceColumn,
     themes,
@@ -2040,20 +2001,20 @@ function trailingHeaders(hasShootout: boolean): Array<HTMLElement | {content: st
 // stage sheet four names share a narrow column, so a long one wraps onto a
 // second line and steps its font down before it fades (name-cell.ts shrink).
 function teamNameCell(team: HostParticipantView, teamIndex: number, compact: boolean): HTMLElement {
-  const cell = nameCell(team.name || "", {className: "sticky sticky-name team-name ek-team-cell", layout: true, shrink: compact});
+  const cell = nameCell(team.name || "", {className: "team-name ek-team-cell", layout: true, shrink: compact});
   (cell as HTMLTableCellElement).rowSpan = seatRowSpan();
   cell.dataset.team = String(teamIndex);
   return cell;
 }
 
 function totalCell(team: HostParticipantView, teamIndex: number): HTMLElement {
-  const cell = td(team.total, "sticky sticky-total number total-cell", {rowSpan: seatRowSpan()});
+  const cell = td(team.total, "number total-cell", {rowSpan: seatRowSpan()});
   cell.dataset.team = String(teamIndex);
   return cell;
 }
 
 function placeCell(team: HostParticipantView, teamIndex: number, matchCode: string): HTMLElement {
-  if (viewer) return td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: seatRowSpan(), dataset: {team: teamIndex}});
+  if (viewer) return td(formatPlace(team.place), "number place-cell", {rowSpan: seatRowSpan(), dataset: {team: teamIndex}});
   const input = document.createElement("input");
   input.type = "text";
   input.inputMode = "decimal";
@@ -2092,7 +2053,7 @@ function placeCell(team: HostParticipantView, teamIndex: number, matchCode: stri
     }
   });
   const cell = document.createElement("td");
-  cell.className = "sticky sticky-place number place-cell";
+  cell.className = "number place-cell";
   cell.rowSpan = seatRowSpan();
   cell.dataset.team = String(teamIndex);
   cell.appendChild(input);
@@ -2162,7 +2123,7 @@ function readonlyPlayerCell(team: HostParticipantView, teamIndex: number, theme:
 // venue button, which are the host's.
 function readonlyBattleHeader(): HTMLElement {
   const fullLabel = matchTitle();
-  const node = th("", "sticky sticky-name battle readonly-battle-head readonly-battle-with-popover");
+  const node = th("", "battle readonly-battle-head readonly-battle-with-popover");
   const title = document.createElement("span");
   title.className = "readonly-battle-title";
   title.tabIndex = 0;
@@ -2474,7 +2435,7 @@ function trailingCells(team: HostParticipantView, teamIndex: number, hasShootout
 function battleHeader(): HTMLElement {
   const matchCode = currentMatchCode();
   const node = document.createElement("th");
-  node.className = "sticky sticky-name battle";
+  node.className = "battle";
 
   const layout = document.createElement("span");
   layout.className = "battle-layout";

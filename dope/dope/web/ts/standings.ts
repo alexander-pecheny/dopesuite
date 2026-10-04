@@ -6,6 +6,8 @@ import {formatDisplayText, td, th} from "./cells.js";
 import type {CellContent, CellContentItem} from "./cells.js";
 import S from "./i18nstrings.js";
 import {nameCell} from "./name-cell.js";
+import {declarePins} from "./sheet-pins.js";
+import type {Pins} from "./sheet-pins.js";
 
 export interface StageRef {
   code: string;
@@ -81,6 +83,24 @@ export interface StandingsColumn {
   label: CellContent;
   kind?: "place" | "name" | "num";
   className?: string;
+  // A place or a name column is pinned unless it says `pin: false`. The
+  // first name column is the one that pins; a table with a second (EK's
+  // stats: the player, then his team) lets the second scroll.
+  pin?: boolean;
+  // The column's head rides the scroll just past the pinned columns, though
+  // its cells scroll (the roster's players).
+  trailHead?: boolean;
+}
+
+// resultsPins declares a results table's pinned block: the place, the name
+// and, on a sheet that shows one, Σ, at the widths the results-table skin
+// gives them.
+export function resultsPins({place = true, total = false}: {place?: boolean; total?: boolean} = {}): Pins {
+  return declarePins([
+    ...(place ? [{key: "place", width: "var(--results-place-col)"}] : []),
+    {key: "name", width: "var(--results-team-col)"},
+    ...(total ? [{key: "total", width: "var(--results-total-col)"}] : []),
+  ]);
 }
 
 export interface StandingsSpec {
@@ -101,19 +121,36 @@ const STANDINGS_KIND_CLASSES: Record<NonNullable<StandingsColumn["kind"]>, {head
 export function standingsTable({className, columns, rows}: StandingsSpec): HTMLTableElement {
   const table = document.createElement("table");
   table.className = classNames("results-table", className);
+  const pinKeys = columns.map(pinKeyOf);
+  const pins = resultsPins({place: pinKeys.includes("place")});
   const head = document.createElement("tr");
-  for (const column of columns) {
-    head.appendChild(th(column.label, classNames(column.kind && STANDINGS_KIND_CLASSES[column.kind].head, column.className)));
-  }
+  columns.forEach((column, i) => {
+    const cell = th(column.label, classNames(column.kind && STANDINGS_KIND_CLASSES[column.kind].head, column.className));
+    if (pinKeys[i]) pins.mark(cell, pinKeys[i]);
+    else if (column.trailHead) pins.markTrailing(cell);
+    head.appendChild(cell);
+  });
   table.appendChild(document.createElement("thead")).appendChild(head);
   const body = table.appendChild(document.createElement("tbody"));
   rows.forEach((row, index) => {
     const tr = document.createElement("tr");
     tr.className = classNames("results-row", index === 0 && "results-group-first", index === rows.length - 1 && "results-group-last");
-    columns.forEach((column, i) => tr.appendChild(standingsCell(column, row[i])));
+    columns.forEach((column, i) => {
+      const cell = standingsCell(column, row[i]);
+      if (pinKeys[i]) pins.mark(cell, pinKeys[i]);
+      tr.appendChild(cell);
+    });
     body.appendChild(tr);
   });
   return table;
+
+  // pinKeyOf is the pinned column a column is, or "" when it scrolls: the
+  // first place and the first name, unless the column opts out.
+  function pinKeyOf(column: StandingsColumn, index: number): string {
+    if (column.pin === false || (column.kind !== "place" && column.kind !== "name")) return "";
+    const first = columns.findIndex((other) => other.kind === column.kind && other.pin !== false);
+    return first === index ? column.kind : "";
+  }
 }
 
 function standingsCell(column: StandingsColumn, value: CellContentItem): HTMLElement {

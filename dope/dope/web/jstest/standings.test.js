@@ -11,6 +11,7 @@ function node(tag) {
     attributes: {},
     className: "",
     textContent: "",
+    style: {setProperty(name, value) { self.style[name] = value; }},
     classList: {
       add(...names) {
         self.className = [self.className, ...names].filter(Boolean).join(" ");
@@ -64,14 +65,16 @@ test("standingsTable draws the results-table skin from columns and rows", () => 
   const heads = byTag(table, "th");
   assert.deepEqual(heads.map((h) => h.textContent), ["М", "Игрок", "Очки", "Круг 1"]);
   assert.deepEqual(heads.map(classes), [
-    ["results-place-head"], ["results-team-head"], ["results-num", "ek-stats-sum"], ["results-num"],
+    ["results-place-head", "pinned"], ["results-team-head", "pinned", "pin-edge"], ["results-num", "ek-stats-sum"], ["results-num"],
   ]);
   const rows = byTag(table, "tr").slice(1);
   assert.deepEqual(rows.map(classes), [
     ["results-row", "results-group-first"], ["results-row", "results-group-last"],
   ]);
   const cells = rows.map((row) => row.children.map(classes));
-  assert.deepEqual(cells[0], [["results-place"], ["name-cell", "results-team"], ["results-num", "ek-stats-sum"], ["results-num"]]);
+  assert.deepEqual(cells[0], [["results-place", "pinned"], ["name-cell", "results-team", "pinned", "pin-edge"], ["results-num", "ek-stats-sum"], ["results-num"]]);
+  // The place and the name are pinned, the name one place column in.
+  assert.deepEqual(rows[0].children.map((c) => c.style.left), ["0px", "var(--results-place-col)", undefined, undefined]);
   assert.deepEqual(rows[0].children.map((c) => c.textContent), ["1", "", "9", "−3"], "a leading minus is typographic");
   // The name column is the fading name cell, not a bare td.
   assert.equal(withClass(rows[0].children[1], "name-cell-text")[0].textContent, "Ктулху");
@@ -90,6 +93,24 @@ test("standingsTable takes a built cell and adds the column's classes", () => {
   const [, cell] = byTag(table, "tr")[1].children;
   assert.equal(cell, own);
   assert.deepEqual(classes(cell), ["brain-cross-live", "results-num", "brain-cross"]);
+});
+
+// The first name pins and a second one scrolls (EK's stats: the player, then
+// his team); a table without a place pins its name at the edge; a head can
+// ride just past the pinned columns while its cells scroll.
+test("standingsTable pins the first place and name it has", () => {
+  const table = standingsTable({
+    columns: [
+      {label: "Player", kind: "name"},
+      {label: "Team", kind: "name"},
+      {label: "Players", trailHead: true},
+    ],
+    rows: [["a", "b", "c"]],
+  });
+  const [head, row] = byTag(table, "tr");
+  assert.deepEqual(head.children.map((c) => c.style.left), ["0px", undefined, "var(--results-team-col)"]);
+  assert.deepEqual(head.children.map((c) => classes(c).includes("pinned")), [true, false, false]);
+  assert.deepEqual(row.children.map((c) => c.style.left), ["0px", undefined, undefined]);
 });
 
 // resultsTeamCell is the one name cell: a name that clips into a fade with the

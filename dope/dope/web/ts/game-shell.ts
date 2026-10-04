@@ -11,6 +11,7 @@ import {createLiveEvents, createScopedWriter, createSyncIndicator, createHostPre
 import S from "./i18nstrings.js";
 import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, SyncIndicator} from "./state-sync.js";
 import {bindNameCells} from "./name-cell.js";
+import {bindPinnedScroll} from "./sheet-pins.js";
 import {createStatusReporter, createViewerCounter, floatingPopover} from "./widgets.js";
 import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
 import type {GameDataSnapshot, GameRoute} from "./game-page.js";
@@ -86,6 +87,10 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
   // (name-cell.ts nameCell) and never measures them.
   bindNameCells(document.body);
   floatingPopover();
+  // Every sheet declares its pinned columns (sheet-pins.ts); the frame they
+  // scroll in says when the rest has scrolled under them, which is the one cue
+  // for it on every page.
+  bindPinnedScroll(spec.root.closest(".sheet-frame"));
 
   let jumpLink: {refresh(): void} | null = null;
   if (!embedded) {

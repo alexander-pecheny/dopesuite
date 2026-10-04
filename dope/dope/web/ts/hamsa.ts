@@ -15,10 +15,9 @@ import {nameCell} from "./name-cell.js";
 import {mountBoutPage} from "./bout-page.js";
 import type {BoutPage, BoutView} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {bindScrollEdges} from "./widgets.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
-import {buildTwoRowScoreTable} from "./score-table.js";
+import {buildTwoRowScoreTable, scoreSheetPins} from "./score-table.js";
 import type {ScoreTableThemeRow} from "./score-table.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
@@ -29,6 +28,9 @@ import type {HamsaState, Mark} from "./hamsa-protocol.js";
 import {computeHamsaPlayerStats} from "./hamsa-stats.js";
 import type {HamsaBout} from "./hamsa-stats.js";
 import S from "./i18nstrings.js";
+
+// A bout sheet pins EK's block, with a total column wide enough for thousands.
+const BOUT_PINS = scoreSheetPins({total: "var(--hamsa-total-col)"});
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -99,7 +101,6 @@ const page: BoutPage<HamsaMatchView, HamsaState> = mountBoutPage({
   },
   activeCursorElement: () => cursor.activeCell,
   cursors: () => [cursor],
-  afterRender: () => sheetScroll.refresh(),
 });
 const {viewer} = page;
 
@@ -108,12 +109,6 @@ const boutLetters = page.letters;
 function tabStages(tab: GameTab): SchemeStage[] {
   return (scheme.stages || []).filter((stage) => tab.stages.includes(stage.code || ""));
 }
-
-// Once a sheet is scrolled sideways, the frozen columns' right edge shades what
-// slides under it — the same cue EK's stage sheet draws, from the same class.
-const sheetScroll = bindScrollEdges(root.closest(".sheet-frame"), ({left}, frame) => {
-  frame.classList.toggle("stage-scroll-left", left && page.tab()?.kind === "protocol");
-});
 
 // === the document ===
 
@@ -157,7 +152,7 @@ function seatName(view: HamsaMatchView, seat: number): string {
 // name stays on one line and fades at the column's edge, whole in the popover,
 // rather than wrapping the row taller than its neighbours.
 function seatNameCell(name: string): HTMLElement {
-  const cell = nameCell(name, {className: "sticky sticky-name team-name ek-team-cell", layout: true});
+  const cell = nameCell(name, {className: "team-name ek-team-cell", layout: true});
   (cell as HTMLTableCellElement).rowSpan = 2;
   return cell;
 }
@@ -295,6 +290,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const table = buildTwoRowScoreTable({
     className: "match-table hamsa-sheet",
+    pins: BOUT_PINS,
     attrs: {dataset: {match: bout.code}},
     nameHeader: boutHeader(bout),
     themes: groups.map((group) => ({
@@ -309,8 +305,8 @@ function buildBout(bout: BoutEntry): HTMLElement {
     afterThemeHeaders: trailingHeaders(),
     rows: seats.map((id, seat) => ({
       nameCell: seatNameCell(seatName(bout.view, seat)),
-      totalCell: {content: rows[seat].total, className: "sticky sticky-total number total-cell", dataset: {total: `${bout.code}-${seat}`}},
-      placeCell: {content: placeContent(bout, seat, rows[seat]), className: "sticky sticky-place number place-cell", dataset: {place: `${bout.code}-${seat}`}},
+      totalCell: {content: rows[seat].total, className: "number total-cell", dataset: {total: `${bout.code}-${seat}`}},
+      placeCell: {content: placeContent(bout, seat, rows[seat]), className: "number place-cell", dataset: {place: `${bout.code}-${seat}`}},
       themes: groups.map((group) => themeRow(bout, id, seat, group, editable)),
       afterThemeCells: [
         {content: rows[seat].plus, className: "number plus-cell", attrs: {rowSpan: 2}, dataset: {plus: `${bout.code}-${seat}`}},
@@ -338,7 +334,7 @@ function roundHeaderRow(bout: BoutEntry, groups: ThemeGroup[]): HTMLElement {
   const state = stateOf(bout.code);
   const row = document.createElement("tr");
   row.className = "hamsa-round-row";
-  row.appendChild(th("", "sticky sticky-name hamsa-round-lead", {colSpan: 4}));
+  row.appendChild(BOUT_PINS.markSpan(th("", "hamsa-round-lead", {colSpan: 4})));
   let index = 0;
   while (index < groups.length) {
     const round = groups[index].round;
@@ -526,7 +522,7 @@ function paintMark(cell: HTMLElement, mark: Mark): void {
 // question headers showed through it.
 // A finished bout is read-only until the host unticks it.
 function boutHeader(bout: BoutEntry): CellContent {
-  const node = th("", "sticky sticky-name battle");
+  const node = th("", "battle");
   const layout = document.createElement("span");
   layout.className = "battle-layout";
   const title = document.createElement("span");

@@ -4,10 +4,14 @@
 // and every other tab draws them as it draws teams.
 import {td, th} from "./cells.js";
 import {iconed, icon} from "./icons_gen.js";
-import {resultsTeamCell} from "./standings.js";
+import {resultsPins, resultsTeamCell} from "./standings.js";
 import * as kd from "./kd-protocol.js";
 import type {KDPlayer, KDState} from "./kd-protocol.js";
 import S from "./i18nstrings.js";
+
+// The personal standings pin the place, the player and the total; the
+// player's team scrolls under them.
+const PERSONAL_PINS = resultsPins({total: true});
 
 export interface KDViewContext {
   state: KDState;
@@ -32,7 +36,12 @@ export function buildPersonalView(ctx: KDViewContext): HTMLElement {
   const table = document.createElement("table");
   table.className = "results-table";
   const head = document.createElement("tr");
-  head.append(th(S.od.kd.place(), "results-place-head"), th(S.od.kd.player(), "results-team-head"), th(S.od.kd.team()), th(S.od.head.total(), "results-num-head results-total-head"));
+  head.append(
+    PERSONAL_PINS.mark(th(S.od.kd.place(), "results-place-head"), "place"),
+    PERSONAL_PINS.mark(th(S.od.kd.player(), "results-team-head"), "name"),
+    th(S.od.kd.team()),
+    PERSONAL_PINS.mark(th(S.od.head.total(), "results-num-head results-total-head"), "total"),
+  );
   ctx.tourLengths.forEach((_, t) => head.appendChild(th(S.od.detailed.tour(String(t + 1)), "results-tour-head")));
   for (let k = 0; k < kd.TIEBREAKS && size - k > 0; k++) {
     head.appendChild(th(S.od.kd.toursTook(String(size - k)), "results-num-head", {title: S.od.kd.toursTookHint(String(size - k))}));
@@ -43,7 +52,12 @@ export function buildPersonalView(ctx: KDViewContext): HTMLElement {
   for (const row of rows) {
     const tr = document.createElement("tr");
     tr.className = "results-row";
-    tr.append(td(row.place || "—", "results-place"), resultsTeamCell(row.player.name), td(row.player.team || ""), td(row.total, "results-num total-cell results-total"));
+    tr.append(
+      PERSONAL_PINS.mark(td(row.place || "—", "results-place"), "place"),
+      PERSONAL_PINS.mark(resultsTeamCell(row.player.name), "name"),
+      td(row.player.team || ""),
+      PERSONAL_PINS.mark(td(row.total, "results-num total-cell results-total"), "total"),
+    );
     row.tours.forEach((took, t) => tr.appendChild(started[t]
       ? td(took, "results-tour", {title: S.od.kd.atTable(String(row.tables[t]))})
       : td("·", "results-tour results-tour-pending", {title: S.od.kd.atTable(String(row.tables[t]))})));

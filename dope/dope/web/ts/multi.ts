@@ -14,7 +14,9 @@ import {buildRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, fitScrollFade, renderTabBar} from "./widgets.js";
+import {fitScrollFade, renderTabBar} from "./widgets.js";
+import {declarePins} from "./sheet-pins.js";
+import type {Pins} from "./sheet-pins.js";
 import {icon, iconed} from "./icons_gen.js";
 import type {IconName} from "./icons_gen.js";
 import type {WriteRequest} from "./state-sync.js";
@@ -66,11 +68,6 @@ const shell = mountGamePage({
 const {viewer} = shell;
 
 fitScrollFade(root.closest(".sheet-frame"));
-// Once the sheet is scrolled, the frozen columns' edge shades the content
-// sliding under it — the fade every other sheet draws.
-const sheetScroll = bindScrollEdges(root.closest(".sheet-frame"), ({left}, frame) => {
-  frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && left);
-});
 
 let scheme: MultiScheme | null = null;
 let state: MultiState | null = null;
@@ -156,20 +153,32 @@ function applyRemoteState(next: unknown): void {
 // A column block per minigame — its tasks, then its subtotal — and the total last.
 // The nominal row prints what each task is worth, which is the top of its
 // domain: a host reading the sheet wants the task's price, not its range.
+// sheetPins is the sheet's pinned block: the team, the total, and the plus
+// column after it when a minigame can take points away. A normalised total is
+// fractional, so its column is a step wider than the shared one.
+function sheetPins(): Pins {
+  return declarePins([
+    {key: "name", width: "var(--team-col)"},
+    {key: "total", width: "var(--multi-total-col)"},
+    ...(rules.signed ? [{key: "plus", width: "var(--place-col)"}] : []),
+  ], {start: "var(--sheet-corner-col)"});
+}
+
 function buildTable(): HTMLElement {
   const table = document.createElement("table");
   // The KSI sheet's compact skin: the same short rows and tight cells.
   table.className = "match-table compact-score-table multi-table";
+  const pins = sheetPins();
 
   const head = document.createElement("thead");
   const gamesRow = document.createElement("tr");
-  gamesRow.appendChild(th(teamHead(), "sticky sticky-name", {rowSpan: 2}));
-  gamesRow.appendChild(th(S.multi.sheet.total(), "sticky sticky-total number", {rowSpan: 2}));
-  if (rules.signed) gamesRow.appendChild(th("Σ+", "sticky sticky-place number", {rowSpan: 2}));
+  gamesRow.appendChild(pins.mark(th(teamHead(), "col-name", {rowSpan: 2}), "name"));
+  gamesRow.appendChild(pins.mark(th(S.multi.sheet.total(), "col-total number", {rowSpan: 2}), "total"));
+  if (rules.signed) gamesRow.appendChild(pins.mark(th("Σ+", "col-place number", {rowSpan: 2}), "plus"));
   rules.minigames.forEach((game, g) => {
     // A gap column parts one minigame from the next, as KSI parts its themes.
     if (g > 0) gamesRow.appendChild(th("", "gap-head", {rowSpan: 2}));
-    gamesRow.appendChild(th(gameHead(game), "theme-block",
+    gamesRow.appendChild(th(gameHead(game, pins), "theme-block",
       {colSpan: game.columns.length + gapCount(game) + 1, dataset: {game: g}}));
   });
   head.appendChild(gamesRow);
@@ -191,11 +200,11 @@ function buildTable(): HTMLElement {
   rowOrder().forEach((p) => {
     const tr = document.createElement("tr");
     if (multi.participantDeclined(state!, p)) tr.classList.add("declined-row");
-    tr.appendChild(teamCell(p));
-    tr.appendChild(td(multi.formatScore(sheetRows[p].total), "sticky sticky-total number total-cell",
-      {dataset: {total: p}}));
+    tr.appendChild(pins.mark(teamCell(p), "name"));
+    tr.appendChild(pins.mark(td(multi.formatScore(sheetRows[p].total), "col-total number total-cell",
+      {dataset: {total: p}}), "total"));
     if (rules.signed) {
-      tr.appendChild(td(String(sheetRows[p].plus), "sticky sticky-place number", {dataset: {plus: p}}));
+      tr.appendChild(pins.mark(td(String(sheetRows[p].plus), "col-place number", {dataset: {plus: p}}), "plus"));
     }
     rules.minigames.forEach((game, g) => {
       if (g > 0) tr.appendChild(td("", "gap"));
@@ -212,7 +221,7 @@ function buildTable(): HTMLElement {
   return table;
 }
 
-// The sticky name cell is EK's: the ek-team-cell family brings the clipped
+// The pinned name cell is EK's: the ek-team-cell family brings the clipped
 // name, the fade and the hover popover, so a long team never paints over the
 // scores beside it. The number stands in a column of its own, so the rows read
 // down it as they do in KSI's sheet; the popover and the aria-label carry it
@@ -222,7 +231,7 @@ function teamCell(p: number): HTMLElement {
   const name = multi.participantName(state!, p);
   const labelText = `${number > 0 ? number + ". " : ""}${name}`;
   return nameCell(name, {
-    className: "sticky sticky-name team-name ek-team-cell",
+    className: "col-name team-name ek-team-cell",
     layout: true,
     number: {text: number > 0 ? String(number) : "", className: "multi-team-number"},
     ariaLabel: labelText,
@@ -259,18 +268,16 @@ function gapCount(game: MultiRules["minigames"][number]): number {
   return gaps;
 }
 
-// The minigame's name rides sticky past the frozen columns, so a scrolled
-// sheet still says which game these columns are; a uniform price joins it —
-// "Not only songs (1 each)" — and the heads keep just the numbers.
-function gameHead(game: MultiRules["minigames"][number]): CellContent {
+// The minigame's name rides the scroll just past the pinned columns, so a
+// scrolled sheet still says which game these columns are; a uniform price
+// joins it — "Not only songs (1 each)" — and the heads keep just the numbers.
+function gameHead(game: MultiRules["minigames"][number], pins: Pins): CellContent {
   const span = document.createElement("span");
   span.className = "multi-game-name";
   span.textContent = uniformNominal(game) && !samePriceEverywhere()
     ? S.multi.game.uniformPrice(game.name, String(maxOf(game.columns[0]?.values || [])))
     : game.name;
-  span.style.left = "calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--space-5)" +
-    (rules.signed ? " + var(--place-col)" : "") + ")";
-  return span;
+  return pins.markTrailing(span);
 }
 
 // A head is the question's number — with its nominal above, muted, where the
@@ -710,7 +717,6 @@ function render(): void {
   const chips = activeTab === "results" ? divisionChips() : null;
   root.replaceChildren(...(chips ? [chips, node] : [node]));
   root.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "refusals");
-  sheetScroll.refresh();
   if (activeTab === "detailed") sheet.refresh();
 }
 

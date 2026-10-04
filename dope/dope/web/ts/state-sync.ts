@@ -1441,7 +1441,7 @@ export function createHostPresence(options: HostPresenceOptions): HostPresence {
 
   function isHiddenByStickyLayer(target: Element, rect: DOMRect): boolean {
     const frame = target.closest?.(".sheet-frame");
-    if (!frame || target.closest?.(".sticky")) return false;
+    if (!frame || target.closest?.(".pinned")) return false;
     const frameRect = frame.getBoundingClientRect();
     let stickyRight = frameRect.left;
     let stickyBottom = frameRect.top;
@@ -1490,7 +1490,7 @@ export function createHostPresence(options: HostPresenceOptions): HostPresence {
   }
 
   function stickyProbes(frame: Element): Array<{node: Element; style: CSSStyleDeclaration}> {
-    const nodes = frame.querySelectorAll(".sticky, thead th");
+    const nodes = frame.querySelectorAll(".pinned, thead th");
     const out: Array<{node: Element; style: CSSStyleDeclaration}> = [];
     const cache = stickyStyleCache;
     for (const node of nodes) {

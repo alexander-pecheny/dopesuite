@@ -2,10 +2,10 @@
 // entry-cell navigation, shootout rounds, the Screen projector board, SSE state
 // sync. Converted from the legacy od.js; boots itself on import (ADR-0001).
 import {cssEscape, questionNumberNode, td, th} from "./cells.js";
-import {buildFlatScoreTable, computePlaces} from "./score-table.js";
+import {buildFlatScoreTable, computePlaces, scoreSheetPins} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
 import {nameCell} from "./name-cell.js";
-import {resultsTeamCell} from "./standings.js";
+import {resultsPins, resultsTeamCell} from "./standings.js";
 import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import {buildRosterView} from "./fest-roster.js";
 import {buildPersonalView, buildPlayersView, captureDraft, restoreDraft, showRefusal, tablesOf} from "./kd-view.js";
@@ -16,7 +16,7 @@ import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
+import {fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
@@ -28,6 +28,9 @@ import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, readCityCountry, t
 import type {ScreenSettings} from "./screen-board.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import S from "./i18nstrings.js";
+
+// The results sheet and the screen board pin the place, the team and the total.
+const RESULTS_PINS = resultsPins({total: true});
 
 interface ODPageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -214,7 +217,6 @@ function divisionChips(): HTMLElement | null {
 
 window.addEventListener("resize", () => {
   if (renderedTab === "screen") scheduleScreenFit();
-  updateResultsScrollState();
 });
 
 // Chrome-hide ("Hide chrome"): the host explicitly drops the site chrome
@@ -438,7 +440,6 @@ function render(): void {
     playersDraft = null;
   }
   restoreTabScroll(activeTab);
-  updateResultsScrollState();
   if (activeTab === "screen") scheduleScreenFit();
   positionInvertOverlay();
   shell.presence.refresh();
@@ -492,14 +493,6 @@ function restoreTabScroll(tab: string): void {
 }
 
 fitScrollFade(document.querySelector(".sheet-frame"));
-const resultsScroll = bindScrollEdges(document.querySelector(".sheet-frame"), ({left}, frame) => {
-  frame.classList.toggle("results-scroll-left", activeTab === "results" && left);
-  frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && left);
-});
-
-function updateResultsScrollState(): void {
-  resultsScroll.refresh();
-}
 
 function toggleResultsTour(tourIndex: number): void {
   if (resultsExpandedTours.has(tourIndex)) resultsExpandedTours.delete(tourIndex);
@@ -2011,14 +2004,8 @@ function buildDetailedScoreTable(): HTMLTableElement {
     let qIndex = 0;
     return {
       nameCell: teamNameCell(teamIndex),
-      totalCell: {
-        content: totals[teamIndex],
-        className: "sticky sticky-total number total-cell",
-      },
-      placeCell: {
-        content: placeMap[teamIndex] || "",
-        className: "sticky sticky-place number place-cell",
-      },
+      totalCell: totals[teamIndex],
+      placeCell: placeMap[teamIndex] || "",
       themes: tourLengths.map((tourSize): ScoreTableThemeRow => {
         let tourSum = 0;
         const answers = [];
@@ -2047,9 +2034,12 @@ function buildDetailedScoreTable(): HTMLTableElement {
 
   return buildFlatScoreTable({
     className: "match-table compact-score-table od-detailed",
+    // The place is not pinned, so two more questions fit on a phone: it
+    // scrolls with them, under the name and the total.
+    pins: scoreSheetPins({place: false}),
     nameHeader: {
       content: detailedNameHeader(),
-      className: "sticky sticky-name battle od-detailed-team-head",
+      className: "battle od-detailed-team-head",
     },
     themes,
     rows,
@@ -2123,7 +2113,7 @@ function teamLabel(index: number): string {
 function teamNameCell(teamIndex: number): HTMLElement {
   const num = teamNumber(teamIndex);
   return nameCell(teamLabel(teamIndex), {
-    className: "sticky sticky-name team-name od-detailed-team-cell",
+    className: "team-name od-detailed-team-cell",
     layout: true,
     number: {text: num ? String(num) : "", className: "od-detailed-team-number"},
     badges: teamBadges(teamIndex),
@@ -2539,9 +2529,9 @@ function makeScreenColumn(tourLabel: string | undefined, rowItems: ScreenRowItem
   table.className = "results-table od-results-table screen-table";
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  headRow.appendChild(th(S.od.head.placeShort(), "results-place-head"));
-  headRow.appendChild(th(S.od.head.team(), "results-team-head"));
-  headRow.appendChild(th(S.od.head.total(), "results-num-head results-total-head"));
+  headRow.appendChild(RESULTS_PINS.mark(th(S.od.head.placeShort(), "results-place-head"), "place"));
+  headRow.appendChild(RESULTS_PINS.mark(th(S.od.head.team(), "results-team-head"), "name"));
+  headRow.appendChild(RESULTS_PINS.mark(th(S.od.head.total(), "results-num-head results-total-head"), "total"));
   headRow.appendChild(th(tourLabel, "results-num-head results-tour-head"));
   thead.appendChild(headRow);
   table.appendChild(thead);
@@ -2608,13 +2598,13 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
       if (rowIdx === 0) classes.push("results-group-first");
       if (rowIdx === keys.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
-      tr.appendChild(td(placeText, "results-place"));
-      tr.appendChild(resultsTeamCell(teamLabel(index), {
+      tr.appendChild(RESULTS_PINS.mark(td(placeText, "results-place"), "place"));
+      tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(teamLabel(index), {
         city: screenSettings.showCity ? state.teams[index].city : "",
         flag: screenSettings.showCountry ? teamFlagEmoji(index) : "",
         badges: teamBadges(index),
-      }));
-      tr.appendChild(td(total, "results-num total-cell results-total"));
+      }), "name"));
+      tr.appendChild(RESULTS_PINS.mark(td(total, "results-num total-cell results-total"), "total"));
       const tourValue = tourStarted ? tourTotals[index][tourIndex] : "·";
       tr.appendChild(td(tourValue, "results-tour" + (tourStarted ? "" : " results-tour-pending")));
       rowItems.push({tr, group: groupIdx});
@@ -2726,9 +2716,9 @@ function buildResultsTableInner(): HTMLTableElement {
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  head.appendChild(th(S.od.head.place(), "results-place-head"));
-  head.appendChild(th(S.od.head.team(), "results-team-head"));
-  head.appendChild(th(S.od.head.total(), "results-num-head results-total-head"));
+  head.appendChild(RESULTS_PINS.mark(th(S.od.head.place(), "results-place-head"), "place"));
+  head.appendChild(RESULTS_PINS.mark(th(S.od.head.team(), "results-team-head"), "name"));
+  head.appendChild(RESULTS_PINS.mark(th(S.od.head.total(), "results-num-head results-total-head"), "total"));
   for (let t = 0; t < tourLengths.length; t++) {
     head.appendChild(resultsTourHeader(t));
     if (resultsExpandedTours.has(t)) {
@@ -2774,9 +2764,9 @@ function buildResultsTableInner(): HTMLTableElement {
       if (rowIdx === 0) classes.push("results-group-first");
       if (rowIdx === group.rows.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
-      tr.appendChild(td(group.placeText, "results-place"));
-      tr.appendChild(resultsTeamCell(teamLabel(index), {city: state.teams[index].city, badges: teamBadges(index)}));
-      tr.appendChild(td(total, "results-num total-cell results-total"));
+      tr.appendChild(RESULTS_PINS.mark(td(group.placeText, "results-place"), "place"));
+      tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(teamLabel(index), {city: state.teams[index].city, badges: teamBadges(index)}), "name"));
+      tr.appendChild(RESULTS_PINS.mark(td(total, "results-num total-cell results-total"), "total"));
       for (let t = 0; t < tourLengths.length; t++) {
         if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));
         else tr.appendChild(td("·", "results-tour results-tour-pending"));

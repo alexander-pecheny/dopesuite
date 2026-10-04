@@ -6,10 +6,13 @@
 // be removed, which seats move — and answers the tab afresh after each write.
 
 import {td, th} from "./cells.js";
-import {resultsTeamCell} from "./standings.js";
+import {resultsPins, resultsTeamCell} from "./standings.js";
 import {icon, iconed} from "./icons_gen.js";
 import type {IconName} from "./icons_gen.js";
 import S from "./i18nstrings.js";
+
+// The list pins the seed number and the name.
+const ENTRANT_PINS = resultsPins();
 
 export interface EntrantSource {
   kind: string;
@@ -305,8 +308,8 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     const head = document.createElement("thead");
     const headRow = document.createElement("tr");
     headRow.append(
-      th(S.entrants.head.seed(), "results-place-head seed-number-head"),
-      th(S.entrants.head.name(), "results-team-head seed-team-head"),
+      ENTRANT_PINS.mark(th(S.entrants.head.seed(), "results-place-head seed-number-head"), "place"),
+      ENTRANT_PINS.mark(th(S.entrants.head.name(), "results-team-head seed-team-head"), "name"),
       th(S.entrants.head.declined(), "seed-declined-head"),
       th("", "entrant-actions-head"),
     );
@@ -340,7 +343,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     const name = row.name || "";
     if (row.played) tr.title = S.entrants.row.played();
 
-    const seedCell = td("", "results-place seed-number-cell");
+    const seedCell = ENTRANT_PINS.mark(td("", "results-place seed-number-cell"), "place");
     const seed = document.createElement("input");
     seed.type = "text";
     seed.inputMode = "numeric";
@@ -368,7 +371,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     } else if (replacing === row.teamID) {
       tr.appendChild(td(replaceField(rows, row)));
     } else {
-      tr.appendChild(resultsTeamCell(name, {city: row.city, badges: row.oneOff ? [S.entrants.row.oneOff()] : undefined}));
+      tr.appendChild(ENTRANT_PINS.mark(resultsTeamCell(name, {city: row.city, badges: row.oneOff ? [S.entrants.row.oneOff()] : undefined}), "name"));
     }
 
     const declinedCell = td("", "results-num seed-declined-cell");

@@ -16,6 +16,7 @@ function fakeNode(tag) {
     querySelectorAll: () => [],
     addEventListener() {},
     contains: () => false,
+    closest: () => null,
   };
 }
 const body = fakeNode("body");
