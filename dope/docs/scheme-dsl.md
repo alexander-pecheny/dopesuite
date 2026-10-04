@@ -92,7 +92,7 @@ defaults < block < round. `[defaults]` takes `venues`, `sorting`, `points` and
 every Protocol param as the game-wide default; the structural keys are a
 block's own. Protocol params cascade identically to structure params and are
 validated against what the game's Protocol declares
-(`protocol.Protocol.Params()`): brain accepts `questions` (always written,
+(`games.Protocol.Params()`): brain accepts `questions` (always written,
 default 5) and `tiebreak_questions`; ЭК, личная СИ and КСИ `themes`; ОД
 `tour_comp`. An unregistered key is a compile error naming the keys the block
 does take.

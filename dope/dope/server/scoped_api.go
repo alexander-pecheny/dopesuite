@@ -149,7 +149,7 @@ func (s *server) rewriteMultiGuests(reqCtx context.Context, scope festScope, app
 		if err != nil {
 			return err
 		}
-		if !games.TakesGuests(doc.GameType) {
+		if host, ok := games.As[games.GuestHost](doc.GameType); !ok || !host.TakesGuests() {
 			return corei18n.User(dopestrings.Default.Games.MultiGuest.WrongGame())
 		}
 		schemeJSON, stateJSON, err := apply(doc.SchemeJSON, doc.State)
@@ -174,10 +174,11 @@ update games set scheme_json = ?, updated_at = ? where fest_id = ? and id = ?`, 
 }
 
 func validateImmutableRatingRosterState(gameType string, previousRaw, nextRaw []byte) error {
-	key, ok := games.RatingRosterStateKey(gameType)
+	owner, ok := games.As[games.RatingRosterOwner](gameType)
 	if !ok {
 		return nil
 	}
+	key := owner.RatingRosterStateKey()
 	previous, previousOK, err := topLevelCanonicalJSON(previousRaw, key)
 	if err != nil {
 		return err

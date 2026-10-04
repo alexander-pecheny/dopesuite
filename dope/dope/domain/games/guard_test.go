@@ -10,14 +10,13 @@ import (
 	"testing"
 )
 
-// guardAllowed are the lines outside the registries that may still name a
+// guardAllowed are the lines outside the registry that may still name a
 // format by its code (ADR-0027), each with the reason it stays. A path that
 // ends in "/" allows its whole directory. The guard fails on any other line,
 // and on an allowed line that no longer exists, so the list only shrinks.
 var guardAllowed = map[string][]string{
-	// The registries themselves.
-	"domain/games/":    nil,
-	"domain/protocol/": nil,
+	// The registry itself: each format's Definition, Protocol and document.
+	"domain/games/": nil,
 	// Historical data conversions: they read rows as the codes were when the
 	// conversion was written.
 	"storage/migrate/": nil,
@@ -46,10 +45,10 @@ var guardAllowed = map[string][]string{
 	},
 }
 
-// TestNoFormatSwitchOutsideTheRegistries greps the server's non-test Go for a
+// TestNoFormatSwitchOutsideTheRegistry greps the server's non-test Go for a
 // format code compared, switched on or filtered by in SQL. A format's facts
 // live on its Definition and its Protocol; code elsewhere asks them.
-func TestNoFormatSwitchOutsideTheRegistries(t *testing.T) {
+func TestNoFormatSwitchOutsideTheRegistry(t *testing.T) {
 	var codes, consts []string
 	for _, d := range All() {
 		codes = append(codes, regexp.QuoteMeta(d.Code))
@@ -105,7 +104,7 @@ func TestNoFormatSwitchOutsideTheRegistries(t *testing.T) {
 					seen[rel][line] = true
 					break
 				}
-				t.Errorf("%s:%d names a format by its code: %s\nAsk the format's Definition (domain/games) or Protocol (domain/protocol) instead (ADR-0027).", rel, n, line)
+				t.Errorf("%s:%d names a format by its code: %s\nAsk the format's Definition or its Protocol (domain/games) instead (ADR-0027).", rel, n, line)
 				break
 			}
 		}

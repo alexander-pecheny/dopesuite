@@ -1,20 +1,19 @@
-// Package games holds the game-type-specific domain logic shared across the
-// server. The system supports several tournament formats (EK — erudit-quartet,
-// OD — team quiz / ChGK, KSI — team jeopardy) and is expected to
-// grow to many more. Rather than scattering `switch gameType` blocks and bare
-// "ek"/"od"/"ksi" string literals across the handler, export and import code,
-// generic server code consults the registry defined here.
+// Package games is the registry of formats and everything each one is: the
+// canonical game_type codes, a Definition per format with its Protocol, and
+// the format's document, arithmetic and default schemes. A format lives in
+// its own files — <format>.go for the document and its arithmetic,
+// <format>_protocol.go for its registration and Protocol — so it is read and
+// changed in one place. Rather than scattering `switch gameType` blocks and
+// bare "ek"/"od"/"ksi" string literals across the handler, export and import
+// code, generic server code consults the registry defined here (ADR-0027).
 //
-// This package is a leaf: it depends only on the standard library and the
-// Catalog, and never on the server, database or HTTP layers, so per-game pure
-// domain logic (state shapes, scoring, etc.) can live here without import
-// cycles.
+// The package depends on the Catalog, structure (the slot outcomes a Protocol
+// scores into) and storage/store (EK's blob and the facts the store learns at
+// registration), and never on the server, database or HTTP layers.
 package games
 
 import (
 	"encoding/json"
-
-	dopestrings "dope/i18nstrings"
 )
 
 // Canonical game_type codes as stored in the games.game_type column.
@@ -34,9 +33,9 @@ const (
 // Default is the game type assumed when a game has none recorded.
 const Default = EK
 
-// Definition is everything the code outside the registries may ask about a
-// format. A format is added by registering its Definition below and its
-// Protocol (domain/protocol); no other code names a format by its code
+// Definition is everything the code outside the registry may ask about a
+// format. A format is added by writing its Definition, with its Protocol, and
+// listing it in the registry; no other code names a format by its code
 // (ADR-0027). A fact about the document a bout holds belongs on the Protocol;
 // a fact about the Game's place in the fest — what it seats, how it is
 // created, edited, rostered, exported and journaled — belongs here.
@@ -74,7 +73,7 @@ type Definition struct {
 	// HandRoster reports whether the host may keep a team's roster by hand
 	// for one Game (CONTEXT.md, Game roster): the buzzer formats that seat
 	// teams. Its Protocol must say which players a bout used
-	// (protocol.PlayersUser), which is what locks them on the roster.
+	// (PlayersUser), which is what locks them on the roster.
 	HandRoster bool
 	// Divisions reports whether the Game's settings offer the fest's divisions
 	// to show or hide: the formats whose results tabs carry the chips.
@@ -105,6 +104,10 @@ type Definition struct {
 	Sheets Sheets
 	// Journal is how the host's history page describes the Game's edits.
 	Journal Journal
+	// Protocol is the in-match ruleset a bout of the format plays: its
+	// document, its scoring, and the optional capabilities code elsewhere asks
+	// for with As (protocol.go).
+	Protocol Protocol
 }
 
 // InitKind names the init payload a page boots from: the flat game init
@@ -238,71 +241,12 @@ func KeepsEntrantList(code string) bool {
 	return ok && !d.Flat
 }
 
-func odResults(schemeJSON, stateJSON string) (any, error) {
-	return ComputeODResults(schemeJSON, stateJSON)
-}
-
-// A friendship cup answers its personal standings; the tables' own totals are
-// the OD sheet's, read from the state.
-func kdResults(schemeJSON, stateJSON string) (any, error) {
-	return ComputeKDResults(schemeJSON, stateJSON)
-}
-
-func brainDefaultDSL(participants int) string { return BrainDSL(participants, BrainQuestionCount) }
-
-// A pre-DSL Brain gets its shortcut scheme re-expressed in the DSL, keeping
-// the questions a bout played.
-func brainUpgradeDSL(participants int, schemeJSON string) string {
-	return BrainDSL(participants, BrainQuestions(schemeJSON))
-}
-
 // registry is the single source of truth for known game types, in the order
-// the creation form offers them.
+// the creation form offers them. Each format's Definition, with its Protocol,
+// is in its own <format>_protocol.go (or <format>.go) beside its document.
 var registry = []Definition{
-	{Code: OD, Label: dopestrings.Default.Games.Od.Label(), Title: dopestrings.Default.Host.Games.TypeOd(),
-		Page: "static/od.html", Flat: true, Divisions: true, DSL: DSLAccepted, ToursSeed: true,
-		Results: odResults, Sheets: SheetsODRating, Journal: JournalODPatches},
-	{Code: KSI, Label: dopestrings.Default.Games.Ksi.Label(), Title: dopestrings.Default.Host.Games.TypeKsi(),
-		Page: "static/si.html", Flat: true, Divisions: true, PlayerOverrides: true, DSL: DSLAccepted,
-		Sheets: SheetsKSI, Journal: JournalKSIPatches},
-	{Code: Brain, Label: dopestrings.Default.Games.Brain.Label(), Title: dopestrings.Default.Host.Games.TypeBrain(),
-		Page: "static/brain.html", HandRoster: true, DSL: DSLEditable,
-		DefaultDSL: brainDefaultDSL, UpgradeDSL: brainUpgradeDSL, Sheets: SheetsBrain, Journal: JournalEvents},
-	{Code: EK, Label: dopestrings.Default.Games.Ek.Label(), Title: dopestrings.Default.Host.Games.TypeEk(),
-		Page: "static/ek.html", Init: InitEK, EKBout: true, HandRoster: true, PlayerOverrides: true,
-		DSL: DSLAccepted, PastedScheme: true, Sheets: SheetsEK, Journal: JournalEKRows},
-	// Erudit-Sextet rides EK's page and EK's scoring — twelve themes of five,
-	// the same shootout — and differs only in seating up to three players on a
-	// theme, which is a Protocol param, not a renderer of its own. Its history
-	// lists events only: the history page reads EK's rows for EK alone.
-	{Code: ES, Label: dopestrings.Default.Games.Es.Label(), Title: dopestrings.Default.Host.Games.TypeEs(),
-		Page: "static/ek.html", Init: InitEK, EKBout: true, HandRoster: true, PlayerOverrides: true,
-		DSL: DSLAccepted, PastedScheme: true, Sheets: SheetsEK, Journal: JournalEvents},
-	// Individual SI's export is KSI's document sheets, which is what it has
-	// always been given, though its Games are brackets on EK's page.
-	{Code: SI, Label: dopestrings.Default.Games.Si.Label(), Title: dopestrings.Default.Host.Games.TypeSi(),
-		Individual: true, Page: "static/ek.html", Init: InitEK, DSL: DSLAccepted,
-		DefaultDSL: SIDefaultDSL, Sheets: SheetsKSI, Journal: JournalEvents},
-	{Code: Multi, Label: dopestrings.Default.Games.Multi.Label(), Title: dopestrings.Default.Host.Games.TypeMulti(),
-		Page: "static/multi.html", Flat: true, Divisions: true, DSL: DSLRefused,
-		Sheets: SheetsMulti, Journal: JournalEvents},
-	// Troika plays a bracket of matches, as brain does, and boots the same
-	// payload: its page fetches the matches itself and draws them its own way.
-	{Code: Troika, Label: dopestrings.Default.Games.Troika.Label(), Title: dopestrings.Default.Host.Games.TypeTroika(),
-		Troikas: true, Page: "static/troika.html", DSL: DSLAccepted,
-		DefaultDSL: TroikaDefaultDSL, Sheets: SheetsTroika, Journal: JournalEvents},
-	// Hamsa plays a bracket of four-seat bouts and boots the bracket payload,
-	// as Troika does: the page fetches its matches and draws them its own way.
-	{Code: Hamsa, Label: dopestrings.Default.Games.Hamsa.Label(), Title: dopestrings.Default.Host.Games.TypeHamsa(),
-		Page: "static/hamsa.html", HandRoster: true, DSL: DSLAccepted,
-		DefaultDSL: HamsaDefaultDSL, Sheets: SheetsHamsa, Journal: JournalEvents},
-	// The friendship cup is an OD document whose teams are the tables, and
-	// rides OD's page: the entry, the detailed sheet and the screen board
-	// work on tables unchanged, and the page adds the personal standings.
-	// Its tables carry no Flags, so it offers no divisions.
-	{Code: KD, Label: dopestrings.Default.Games.Kd.Label(), Title: dopestrings.Default.Host.Games.TypeKd(),
-		Page: "static/od.html", Flat: true, DSL: DSLAccepted,
-		Results: kdResults, Sheets: SheetsODTables, Journal: JournalODPatches},
+	odFormat, ksiFormat, brainFormat, ekFormat, esFormat, siFormat,
+	multiFormat, troikaFormat, hamsaFormat, kdFormat,
 }
 
 // byCode indexes the registry.

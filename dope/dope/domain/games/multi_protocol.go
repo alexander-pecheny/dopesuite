@@ -5,9 +5,14 @@ import (
 	"fmt"
 
 	"dope/dope/domain/structure"
+	dopestrings "dope/i18nstrings"
 )
 
-func init() { Register(multi{}) }
+// multiFormat is several minigames in one flat sheet; the DSL cannot
+// describe it, since its shape is its minigames.
+var multiFormat = Definition{Code: Multi, Label: dopestrings.Default.Games.Multi.Label(), Title: dopestrings.Default.Host.Games.TypeMulti(),
+	Page: "static/multi.html", Flat: true, Divisions: true, DSL: DSLRefused,
+	Sheets: SheetsMulti, Journal: JournalEvents, Protocol: multi{}}
 
 // multi wraps ComputeMultiResults: state is MultiState and the
 // match config is the Multi scheme document, whose minigames say how wide
@@ -112,4 +117,91 @@ func (multi) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, err
 		outcomes[team.Index] = structure.SlotOutcome{Place: team.Place, Metrics: metrics}
 	}
 	return outcomes, nil
+}
+
+// A Multi's minigames and the fest's tiebreak, which a clear keeps: it wipes
+// what was played, not what the Game is.
+func (multi) PristineGame(slug, title string, shape Shape) ([]byte, []byte, error) {
+	scheme, state := MultiEmptyGameJSON(slug, title, shape.Minigames, shape.Sorting)
+	return scheme, state, nil
+}
+
+func (multi) ShapeOf(schemeJSON string) Shape {
+	var sc MultiScheme
+	_ = json.Unmarshal([]byte(schemeJSON), &sc)
+	return Shape{Minigames: sc.Minigames, Sorting: sc.Sorting}
+}
+
+// KeepOnClear keeps a Multi's guest teams, which are part of who plays.
+func (multi) KeepOnClear(oldScheme, _ string, scheme, state []byte) ([]byte, []byte, error) {
+	return KeepMultiGuests(oldScheme, scheme, state)
+}
+
+// Multi carries its roster the way KSI does — the participants list plus
+// one cell grid per minigame, each row a team — so the fold is the same:
+// rewrite the list, and follow every team's row across the reorder. The
+// game's guest teams are not on the roster, so they stay, after the fest's.
+func (multi) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, _ map[int]int) ([]byte, []byte, error) {
+	state, err := RawJSONObject(stateJSON)
+	if err != nil {
+		return nil, nil, err
+	}
+	oldParticipants := ParseKSIParticipants(state["participants"])
+	participants := append(teamParticipantsFromRoster(teams), MultiGuests(oldParticipants)...)
+	return rewriteMultiParticipants(schemeJSON, state, oldParticipants, participants)
+}
+
+// rewriteMultiParticipants writes a new team list into a Multi document, in
+// the scheme and in the state, and moves every team's cells to its new row.
+func rewriteMultiParticipants(schemeJSON string, state map[string]json.RawMessage, oldParticipants, participants []KSIParticipant) ([]byte, []byte, error) {
+	scheme, err := RawJSONObject(schemeJSON)
+	if err != nil {
+		return nil, nil, err
+	}
+	participantsJSON, err := json.Marshal(participants)
+	if err != nil {
+		return nil, nil, err
+	}
+	scheme["participants"] = participantsJSON
+	schemeOut, err := json.Marshal(scheme)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var minigames struct {
+		Minigames []MultiGame `json:"minigames"`
+	}
+	_ = json.Unmarshal(schemeOut, &minigames)
+
+	state["participants"] = participantsJSON
+
+	var grids []map[string]json.RawMessage
+	if raw, ok := state["games"]; ok && len(raw) > 0 {
+		_ = json.Unmarshal(raw, &grids)
+	}
+	for len(grids) < len(minigames.Minigames) {
+		grids = append(grids, map[string]json.RawMessage{})
+	}
+	grids = grids[:len(minigames.Minigames)]
+	for i, game := range minigames.Minigames {
+		if grids[i] == nil {
+			grids[i] = map[string]json.RawMessage{}
+		}
+		var cells [][]int
+		if raw, ok := grids[i]["cells"]; ok && len(raw) > 0 {
+			_ = json.Unmarshal(raw, &cells)
+		}
+		cellsJSON, err := json.Marshal(RemapAnswerMatrix(cells, oldParticipants, participants, len(game.Columns)))
+		if err != nil {
+			return nil, nil, err
+		}
+		grids[i]["cells"] = cellsJSON
+	}
+	gridsJSON, err := json.Marshal(grids)
+	if err != nil {
+		return nil, nil, err
+	}
+	state["games"] = gridsJSON
+	stateOut, err := json.Marshal(state)
+	return schemeOut, stateOut, err
 }

@@ -10,14 +10,14 @@ func team(name string, number int64) RosterTeam { return RosterTeam{Name: name, 
 
 func TestFoldRosterThroughTheRegistry(t *testing.T) {
 	teams := []RosterTeam{team("A", 1)}
-	if _, _, ok, _ := FoldRoster("ek", "{}", "{}", teams, nil); ok {
+	if _, _, ok, _ := foldRoster("ek", "{}", "{}", teams, nil); ok {
 		t.Fatal("ЭК carries no roster")
 	}
-	scheme, state, ok, err := FoldRoster("od", `{}`, `{}`, teams, nil)
+	scheme, state, ok, err := foldRoster("od", `{}`, `{}`, teams, nil)
 	if err != nil || !ok || string(scheme) != `{"nTeams":1,"teams":[{"name":"A","number":1}]}` || string(state) != `{"teams":[{"name":"A","number":1}]}` {
 		t.Fatalf("od: %s %s %v %v", scheme, state, ok, err)
 	}
-	if _, _, ok, err := FoldRoster("ksi", `{"themes":3}`, `{}`, teams, nil); !ok || err != nil {
+	if _, _, ok, err := foldRoster("ksi", `{"themes":3}`, `{}`, teams, nil); !ok || err != nil {
 		t.Fatalf("ksi: %v %v", ok, err)
 	}
 }
@@ -29,7 +29,7 @@ func TestFoldRosterCarriesFlagsIntoBothDocuments(t *testing.T) {
 		{Name: "A", Number: 1, Flags: []string{"Школ", "Е"}},
 		{Name: "B", Number: 2},
 	}
-	_, state, _, err := FoldRoster("od", `{}`, `{}`, teams, nil)
+	_, state, _, err := foldRoster("od", `{}`, `{}`, teams, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestFoldRosterCarriesFlagsIntoBothDocuments(t *testing.T) {
 		t.Fatalf("unflagged od team carries %v", od.Teams[1].Flags)
 	}
 
-	_, state, _, err = FoldRoster("ksi", `{"themes":3}`, `{}`, teams, nil)
+	_, state, _, err = foldRoster("ksi", `{"themes":3}`, `{}`, teams, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

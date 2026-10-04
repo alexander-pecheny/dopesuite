@@ -103,12 +103,13 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 	folded := RosterTeams(teams)
 	var updates []GameStateBroadcast
 	for _, doc := range docs {
-		schemeJSON, stateJSON, ok, err := games.FoldRoster(doc.GameType, doc.SchemeJSON, doc.State, folded, entryRemap)
-		if err != nil {
-			return nil, fmt.Errorf("game %d: %w", doc.GameID, err)
-		}
+		folder, ok := games.As[games.RosterFolder](doc.GameType)
 		if !ok {
 			continue
+		}
+		schemeJSON, stateJSON, err := folder.FoldRoster(doc.SchemeJSON, doc.State, folded, entryRemap)
+		if err != nil {
+			return nil, fmt.Errorf("game %d: %w", doc.GameID, err)
 		}
 		if _, err := tx.ExecContext(ctx, `
 update games set scheme_json = ?, updated_at = ?
@@ -143,11 +144,12 @@ func ScoredNumbers(ctx context.Context, q store.Queryer, festID int64) (map[int6
 	}
 	scored := make(map[int64][]string)
 	for _, doc := range docs {
-		entered, ok := games.EnteredSeats(doc.GameType, json.RawMessage(doc.State))
+		counter, ok := games.As[games.Entered](doc.GameType)
 		if !ok {
 			continue
 		}
-		seats, _ := games.Seats(doc.GameType, json.RawMessage(doc.State))
+		state := json.RawMessage(doc.State)
+		entered, seats := counter.EnteredSeats(state), counter.Seats(state)
 		for i, seat := range seats {
 			if i < len(entered) && entered[i] && seat.Number > 0 {
 				scored[seat.Number] = append(scored[seat.Number], titles[doc.GameID])

@@ -1,12 +1,12 @@
-// Package protocol holds the Protocol half of the unified model
-// (docs/unified-model.md, ADR-0001/0002): the registry of in-match rulesets.
-// A Protocol owns one match's state shape (a JSON document), its scoring, and
-// nothing else — the Structure layer consumes the scorer's per-slot output
-// (place + metrics) and never looks inside the state.
-//
-// Like domain/games this package is a leaf: storage/store for the shared state
-// vocabulary, never the server, HTTP or DB layers.
 package games
+
+// This file is the Protocol half of a format's registration (the unified
+// model, docs/unified-model.md, ADR-0001/0002): the in-match ruleset a bout
+// plays. A Protocol owns one match's state shape (a JSON document), its
+// scoring, and nothing else — the Structure layer consumes the scorer's
+// per-slot output (place + metrics) and never looks inside the state. Each
+// format's Protocol sits beside its document in <format>_protocol.go and
+// rides on its Definition; an optional capability is asked for with As.
 
 import (
 	"encoding/json"
@@ -45,61 +45,54 @@ type Protocol interface {
 	Score(cfg, state json.RawMessage) ([]structure.SlotOutcome, error)
 }
 
-// Seat is one Participant a flat document lists: its number in the Game and
-// the name and city the document knows it by.
-type Seat struct {
-	Number int64
-	Name   string
-	City   string
-	// Declined marks a team that refused to play on — KSI's refusals tab —
-	// so a seeding drawn from this game skips it.
-	Declined bool
-}
-
-// Seater is the Protocol of a flat format — one Block, one match, the whole
-// document on it — declaring who sits at that match: the Participants its
-// document lists, in the order Score returns their outcomes. The Structure
-// seats them from this, so a flat game ranks like every other.
-type Seater interface {
-	Seats(state json.RawMessage) []Seat
-}
-
-// Seats returns the seats a flat document lists, and whether the Protocol is
-// a flat one at all.
-func Seats(code string, state json.RawMessage) ([]Seat, bool) {
-	p, ok := ProtocolOf(code)
+// ProtocolOf returns the Protocol a game type's bouts play; ok is false for
+// an unknown type.
+func ProtocolOf(code string) (Protocol, bool) {
+	d, ok := byCode[code]
 	if !ok {
 		return nil, false
 	}
-	seater, ok := p.(Seater)
-	if !ok {
-		return nil, false
-	}
-	return seater.Seats(state), true
+	return d.Protocol, true
 }
 
-// Entered is a Seater that can also say, seat by seat, whether a host has
-// entered anything against that seat. Started answers the same question for a
-// whole document; this one answers it per team, which is what a roster
-// re-import needs before it takes a team off the roster and its column with
-// it.
-type Entered interface {
-	EnteredSeats(state json.RawMessage) []bool
+// As returns a game type's Protocol as one of its optional capabilities, the
+// interfaces below (ADR-0012's pattern): Seater, Grower, PlayersUser,
+// PristineBuilder and the rest. ok is false for an unknown type and for a
+// Protocol that does not have the capability. A capability whose absence
+// means something other than "no" keeps a named function here instead
+// (Started, UsesFestNumbers, ValidateEdit, EditableWhenFinished).
+func As[C any](code string) (C, bool) {
+	p, _ := ProtocolOf(code)
+	c, ok := p.(C)
+	return c, ok
 }
 
-// EnteredSeats reports, aligned with Seats, which seats of a flat document
-// already carry something a host entered. ok is false for a Protocol that does
-// not answer.
-func EnteredSeats(code string, state json.RawMessage) ([]bool, bool) {
-	p, found := ProtocolOf(code)
-	if !found {
-		return nil, false
+// The store, a leaf that cannot ask, learns here what it needs to know of
+// each format's Protocol: which are team blobs, which seat named players,
+// which bout score a sheet prints, and the seat cap a match plays at when no
+// stage config says. A Definition whose Protocol is missing or answers to
+// another code is a programming error.
+func init() {
+	for _, d := range registry {
+		p := d.Protocol
+		if p == nil || p.Code() != d.Code {
+			panic("games: format " + d.Code + " registers no Protocol of its own code")
+		}
+		if p.TeamBlob() {
+			store.RegisterTeamBlob(p.Code())
+		}
+		if seater, ok := p.(SeatsPlayers); ok && seater.SeatsPlayers() {
+			store.RegisterSeatRoster(p.Code())
+		}
+		if scorer, ok := p.(ScoreMetricer); ok {
+			store.RegisterScoreMetric(p.Code(), scorer.ScoreMetric())
+		}
+		for _, param := range p.Params() {
+			if param.Key == SeatsParam && param.Default > 0 {
+				store.RegisterSeatCap(p.Code(), param.Default)
+			}
+		}
 	}
-	entered, ok := p.(Entered)
-	if !ok {
-		return nil, false
-	}
-	return entered.EnteredSeats(state), true
 }
 
 // Param is one DSL key a Protocol accepts and the stage-config field it
@@ -113,6 +106,11 @@ type Param struct {
 	List    bool
 	Default int
 }
+
+// SeatsParam is the DSL key naming how many players a team sends to one theme
+// — the seating. A Protocol that has the notion declares it with a Default,
+// which is the cap a match plays at when no Block overrides it.
+const SeatsParam = "players"
 
 // Metrics returns the metrics a protocol declares for a match config, or nil
 // for an unknown code.
@@ -138,45 +136,33 @@ func Started(code, state string) bool {
 	return !ok || p.Started(json.RawMessage(state))
 }
 
-// protocols is the single source of truth for known protocols. Add a format by
-// registering a Protocol — never by a switch on protocol codes elsewhere.
-var protocols = map[string]Protocol{}
-
-// Register adds a protocol; duplicate codes are a programming error. The
-// store learns which Protocols are team blobs here, being a leaf that cannot ask.
-func Register(p Protocol) {
-	if _, dup := protocols[p.Code()]; dup {
-		panic("protocol: duplicate protocol " + p.Code())
-	}
-	protocols[p.Code()] = p
-	if p.TeamBlob() {
-		store.RegisterTeamBlob(p.Code())
-	}
-	if seater, ok := p.(SeatsPlayers); ok && seater.SeatsPlayers() {
-		store.RegisterSeatRoster(p.Code())
-	}
-	if scorer, ok := p.(ScoreMetricer); ok {
-		store.RegisterScoreMetric(p.Code(), scorer.ScoreMetric())
-	}
-	// How many players a theme seats when no stage config says: the store
-	// loads matches without knowing Protocols, so the default travels down
-	// with the registration rather than being looked up by game type.
-	for _, param := range p.Params() {
-		if param.Key == SeatsParam && param.Default > 0 {
-			store.RegisterSeatCap(p.Code(), param.Default)
-		}
-	}
+// Seat is one Participant a flat document lists: its number in the Game and
+// the name and city the document knows it by.
+type Seat struct {
+	Number int64
+	Name   string
+	City   string
+	// Declined marks a team that refused to play on — KSI's refusals tab —
+	// so a seeding drawn from this game skips it.
+	Declined bool
 }
 
-// SeatsParam is the DSL key naming how many players a team sends to one theme
-// — the seating. A Protocol that has the notion declares it with a Default,
-// which is the cap a match plays at when no Block overrides it.
-const SeatsParam = "players"
+// Seater is the Protocol of a flat format — one Block, one match, the whole
+// document on it — declaring who sits at that match: the Participants its
+// document lists, in the order Score returns their outcomes. The Structure
+// seats them from this, so a flat game ranks like every other.
+type Seater interface {
+	Seats(state json.RawMessage) []Seat
+}
 
-// Get looks up a registered protocol by code.
-func ProtocolOf(code string) (Protocol, bool) {
-	p, ok := protocols[code]
-	return p, ok
+// Entered is a Seater that can also say, seat by seat, whether a host has
+// entered anything against that seat, aligned with Seats. Started answers the
+// same question for a whole document; this one answers it per team, which is
+// what a roster re-import needs before it takes a team off the roster and its
+// column with it.
+type Entered interface {
+	Seater
+	EnteredSeats(state json.RawMessage) []bool
 }
 
 // SeatedScorer is implemented by a Protocol whose document is keyed by
@@ -205,29 +191,6 @@ type Grower interface {
 	GrowSeats(state json.RawMessage, seats int) (json.RawMessage, bool, error)
 }
 
-// CanGrow reports whether a Protocol has bouts that may grow once started.
-func CanGrow(code string) bool {
-	p, ok := ProtocolOf(code)
-	if !ok {
-		return false
-	}
-	_, ok = p.(Grower)
-	return ok
-}
-
-// GrowSeats asks a Protocol to give a started bout's document more seats.
-func GrowSeats(code string, state json.RawMessage, seats int) (json.RawMessage, bool, error) {
-	p, ok := ProtocolOf(code)
-	if !ok {
-		return nil, false, nil
-	}
-	grower, ok := p.(Grower)
-	if !ok {
-		return nil, false, nil
-	}
-	return grower.GrowSeats(state, seats)
-}
-
 // LateEditor is implemented by a Protocol whose document keeps an entry a
 // host makes after a bout is finished: Hamsa's lot among teams that share a
 // place, which is only known once the bout is over. Every other path stays
@@ -239,11 +202,7 @@ type LateEditor interface {
 // EditableWhenFinished reports whether every one of these paths may be written
 // on a finished bout of the Protocol.
 func EditableWhenFinished(code string, paths [][]json.RawMessage) bool {
-	p, ok := ProtocolOf(code)
-	if !ok {
-		return false
-	}
-	late, ok := p.(LateEditor)
+	late, ok := As[LateEditor](code)
 	if !ok || len(paths) == 0 {
 		return false
 	}
@@ -283,11 +242,7 @@ type FestNumbering interface {
 // teams' numbers. It is true unless the Protocol says otherwise, and for an
 // unknown type.
 func UsesFestNumbers(code string) bool {
-	p, ok := ProtocolOf(code)
-	if !ok {
-		return true
-	}
-	if n, ok := p.(FestNumbering); ok {
+	if n, ok := As[FestNumbering](code); ok {
 		return n.UsesFestNumbers()
 	}
 	return true
@@ -305,25 +260,10 @@ type EditValidator interface {
 // ValidateEdit asks a game type's Protocol whether an edit of its document
 // may stand. A Protocol that does not validate accepts every edit.
 func ValidateEdit(code string, prev, next []byte) error {
-	p, ok := ProtocolOf(code)
-	if !ok {
-		return nil
-	}
-	if v, ok := p.(EditValidator); ok {
+	if v, ok := As[EditValidator](code); ok {
 		return v.ValidateEdit(prev, next)
 	}
 	return nil
-}
-
-// RatingRosterStateKey returns the protocol's immutable rating-roster state
-// key, if the protocol declares one.
-func RatingRosterStateKey(code string) (string, bool) {
-	if p, ok := ProtocolOf(code); ok {
-		if owner, ok := p.(RatingRosterOwner); ok {
-			return owner.RatingRosterStateKey(), true
-		}
-	}
-	return "", false
 }
 
 // ScoreMetricer is a Protocol whose bout score, as a sheet prints it, is one
@@ -350,32 +290,8 @@ type PlayersUser interface {
 	UsedPlayers(state json.RawMessage, seats []int64) []UsedPlayer
 }
 
-// UsedPlayers lists the players a bout of the game type names; ok is false
-// for a Protocol that names none.
-func UsedPlayers(code string, state json.RawMessage, seats []int64) ([]UsedPlayer, bool) {
-	p, found := ProtocolOf(code)
-	if !found {
-		return nil, false
-	}
-	user, ok := p.(PlayersUser)
-	if !ok {
-		return nil, false
-	}
-	return user.UsedPlayers(state, seats), true
-}
-
 // GuestHost is a Protocol whose document may list guest teams a host adds by
 // name on the Game's page (CONTEXT.md, Guest team).
 type GuestHost interface {
 	TakesGuests() bool
-}
-
-// TakesGuests reports whether a game type's document may list guest teams.
-func TakesGuests(code string) bool {
-	p, ok := ProtocolOf(code)
-	if !ok {
-		return false
-	}
-	g, ok := p.(GuestHost)
-	return ok && g.TakesGuests()
 }

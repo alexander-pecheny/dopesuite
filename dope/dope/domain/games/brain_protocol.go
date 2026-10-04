@@ -6,9 +6,22 @@ import (
 	"strings"
 
 	"dope/dope/domain/structure"
+	dopestrings "dope/i18nstrings"
 )
 
-func init() { Register(brain{}) }
+// brainFormat is brain-ring: a bracket of two-seat buzzer bouts, the one
+// format whose settings page edits its DSL.
+var brainFormat = Definition{Code: Brain, Label: dopestrings.Default.Games.Brain.Label(), Title: dopestrings.Default.Host.Games.TypeBrain(),
+	Page: "static/brain.html", HandRoster: true, DSL: DSLEditable,
+	DefaultDSL: brainDefaultDSL, UpgradeDSL: brainUpgradeDSL, Sheets: SheetsBrain, Journal: JournalEvents, Protocol: brain{}}
+
+func brainDefaultDSL(participants int) string { return BrainDSL(participants, BrainQuestionCount) }
+
+// A pre-DSL Brain gets its shortcut scheme re-expressed in the DSL, keeping
+// the questions a bout played.
+func brainUpgradeDSL(participants int, schemeJSON string) string {
+	return BrainDSL(participants, BrainQuestions(schemeJSON))
+}
 
 // brain wraps ComputeBrainResults: state is BrainState, the match
 // config is the brain scheme document (its questions count sizes the match).

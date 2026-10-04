@@ -88,30 +88,48 @@ database transaction or the server itself stays in `dopeserver`, and calls in
 here when it needs type metadata.
 
 - `games` is the single source of truth for everything the code knows about
-  game types: the canonical codes, the `Definition` registry, and the pure
-  per-format domain (state shapes, scoring, the default schemes). A
-  `Definition` carries every fact about a format's place in the fest that code
-  elsewhere asks (ADR-0027): what it seats (`Individual`, `Troikas`, `Flat`,
-  which also means it keeps no entrant list), `EKBout`, `HandRoster`,
-  `Divisions`, `PlayerOverrides`, how it takes a DSL (`DSL`, `DefaultDSL`,
-  `UpgradeDSL`, `PastedScheme`), its `Title`, `Page` and `Init`, its `Results`
-  view, its xlsx layout (`Sheets`) and how the history page reads it
-  (`Journal`). Facts about the document a bout holds are on its Protocol
-  (`domain/protocol`), as optional capabilities in ADR-0012's pattern: a flat
-  Game's pristine scheme and document (`PristineBuilder`, which creation and
-  Clear share), what a clear keeps (`ClearKeeper`), which players a bout used
-  (`PlayersUser`), the bout's score metric (`ScoreMetricer`), guest teams
-  (`GuestHost`).
+  game types, and a format is read and changed in one place in it: its
+  document and arithmetic in `<format>.go` (state shapes, scoring, the
+  default schemes), its registration and its Protocol in
+  `<format>_protocol.go`. EK, ES and SI have one file each (`ek.go`, `es.go`,
+  `si.go`), since their document is the store's blob. The package also holds the canonical codes,
+  the ordered registry (`games.go`), the Protocol interface and its optional
+  capabilities (`protocol.go`), and what several flat formats share: the
+  pristine Game (`pristine.go`), the roster fold (`roster.go`) and Multi's
+  guest teams (`multi_guests.go`). It imports `structure` and `store`, and
+  nothing that imports it is below them, so there is no cycle.
 
-  **To add a format**: register its `Definition` (and give it a row in
-  `formatFacts`, `games_test.go`), register its Protocol, give it a part of
+  A `Definition` carries every fact about a format's place in the fest that
+  code elsewhere asks (ADR-0027): what it seats (`Individual`, `Troikas`,
+  `Flat`, which also means it keeps no entrant list), `EKBout`, `HandRoster`,
+  `Divisions`, `PlayerOverrides`, how it takes a DSL (`DSL`, `DefaultDSL`,
+  `UpgradeDSL`, `PastedScheme`), its `Title`, `Page` and `Init`, its
+  `Results` view, its xlsx layout (`Sheets`), how the history page reads it
+  (`Journal`), and its `Protocol`. Facts about the document a bout holds are
+  on the Protocol, as optional capabilities in ADR-0012's pattern, and a
+  caller asks for one with `games.As[C](gameType)`: a flat Game's pristine
+  scheme and document (`PristineBuilder`, which creation and Clear share),
+  what a clear keeps (`ClearKeeper`), which players a bout used
+  (`PlayersUser`), who a flat document seats (`Seater`, `Entered`), a growing
+  bout (`Grower`), the roster fold (`RosterFolder`), the bout's score metric
+  (`ScoreMetricer`), guest teams (`GuestHost`). A capability whose absence
+  means something other than "no" keeps a named function (`Started`,
+  `UsesFestNumbers`, `ValidateEdit`, `EditableWhenFinished`).
+
+  **To add a format**: write `<format>.go` (its document and arithmetic) and
+  `<format>_protocol.go` (its `Definition` with `Protocol:` set, and the
+  Protocol with the capabilities its document has), list the Definition in
+  `registry` (`games.go`, in the order the creation form offers formats) and
+  give it a row in `formatFacts` (`games_test.go`). Then give it a part of
   the creation form (`hostpages.formatForms`), its page (`Page`, a
   `ui/<name>.dopeui`, a bundle in `scripts/webbuild` and a page kind in
-  `web/ui/app.go`/`vocab.json`), and, if its transcript is replayed, a codec in
-  `domain/replay/codec.go`. The tests that walk the registry say what is
-  missing. Do not add another `switch gameType`, `== games.X` or SQL
-  `game_type = '…'`: `games/guard_test.go` refuses them outside the
-  registries.
+  `web/ui/app.go`/`vocab.json`), and, if its transcript is replayed, a codec
+  in `domain/replay/codec.go`. The tests that walk the registry say what is
+  missing. A format that plays another's document embeds the part it shares
+  (ES embeds `ek`; the friendship cup embeds `odSheet`, OD's params, metrics
+  and scoring, and not OD's seating or roster fold). Do not add another
+  `switch gameType`, `== games.X` or SQL `game_type = '…'`:
+  `games/guard_test.go` refuses them outside `domain/games`.
 - `core` — the `Engine`: shared in-memory state, write-tx plumbing, journal
   service, broadcast, revert. Embedded by `*server`.
 - `structure` is the Kind registry. A Kind is one type that plays three roles:
@@ -190,8 +208,8 @@ Stdlib-only or near-it utilities with no domain knowledge:
   `export/` imports `web/` or `server/`. `platform/` imports no internal package
   upward of itself.
 - **Registry over switches.** New game-type behaviour is a fact on the
-  format's `Definition` (`domain/games`) or a capability of its Protocol
-  (`domain/protocol`), never another `switch gameType` in a handler (ADR-0027,
+  format's `Definition` or a capability of its Protocol (both in
+  `domain/games`), never another `switch gameType` in a handler (ADR-0027,
   enforced by `games/guard_test.go`). The one literal left in `storage/` is
   `storeutil.ValidateScheme`'s EK-shaped check, because storage may not import
   `domain/games`; facts storage needs travel down at registration

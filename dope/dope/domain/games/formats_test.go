@@ -56,11 +56,11 @@ func TestPristineGameSurvivesItsOwnShape(t *testing.T) {
 			t.Errorf("%s: no shape to test the pristine builder with", d.Code)
 			continue
 		}
-		scheme, state, built, err := PristineGame(d.Code, "g-1", "Игра", shape)
+		scheme, state, built, err := pristineGame(d.Code, "g-1", "Игра", shape)
 		if err != nil || !built {
 			t.Fatalf("%s: built %v, err %v", d.Code, built, err)
 		}
-		again, stateAgain, _, err := PristineGame(d.Code, "g-1", "Игра", ShapeOf(d.Code, string(scheme)))
+		again, stateAgain, _, err := pristineGame(d.Code, "g-1", "Игра", shapeOf(d.Code, string(scheme)))
 		if err != nil {
 			t.Fatalf("%s: rebuild: %v", d.Code, err)
 		}
@@ -72,12 +72,12 @@ func TestPristineGameSurvivesItsOwnShape(t *testing.T) {
 
 // A friendship cup keeps its players through a clear; a Multi its guests.
 func TestClearKeepsWhatTheDocumentHolds(t *testing.T) {
-	scheme, state, _, err := PristineGame(KD, "kd-1", "Кубок", Shape{Tours: []int{4}, Tables: 3})
+	scheme, state, _, err := pristineGame(KD, "kd-1", "Кубок", Shape{Tours: []int{4}, Tables: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
 	old := `{"players":{"1":{"name":"Аня"}},"teams":[]}`
-	_, kept, err := KeepOnClear(KD, string(scheme), old, scheme, state)
+	_, kept, err := kdFormat.Protocol.(ClearKeeper).KeepOnClear(string(scheme), old, scheme, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestClearKeepsWhatTheDocumentHolds(t *testing.T) {
 	if string(doc["players"]) != `{"1":{"name":"Аня"}}` {
 		t.Errorf("players after a clear: %s", doc["players"])
 	}
-	if !KeepsOnClear(KD) || !KeepsOnClear(Multi) || KeepsOnClear(OD) || KeepsOnClear(KSI) {
+	if !keepsOnClear(KD) || !keepsOnClear(Multi) || keepsOnClear(OD) || keepsOnClear(KSI) {
 		t.Error("only the friendship cup and Multi keep part of their document through a clear")
 	}
 }
@@ -96,10 +96,10 @@ func TestClearKeepsWhatTheDocumentHolds(t *testing.T) {
 // A friendship cup refuses tables that are not a prime, and more tours than
 // tables, whoever builds it.
 func TestFriendshipCupShapeIsChecked(t *testing.T) {
-	if _, _, _, err := PristineGame(KD, "kd", "Кубок", Shape{Tours: []int{4}, Tables: 4}); err == nil {
+	if _, _, _, err := pristineGame(KD, "kd", "Кубок", Shape{Tours: []int{4}, Tables: 4}); err == nil {
 		t.Error("four tables accepted")
 	}
-	if _, _, _, err := PristineGame(KD, "kd", "Кубок", Shape{Tours: []int{4, 4, 4, 4}, Tables: 3}); err == nil {
+	if _, _, _, err := pristineGame(KD, "kd", "Кубок", Shape{Tours: []int{4, 4, 4, 4}, Tables: 3}); err == nil {
 		t.Error("four tours at three tables accepted")
 	}
 }
@@ -107,15 +107,62 @@ func TestFriendshipCupShapeIsChecked(t *testing.T) {
 // The players a bout used, by format: ids from EK's blob and Hamsa's document,
 // names from brain's rows against the side's seat.
 func TestUsedPlayers(t *testing.T) {
-	ek, _ := UsedPlayers(EK, json.RawMessage(`{"participants":{"7":{"themes":[{"players":[3],"answers":["right","","","",""]}]}}}`), nil)
+	ek, _ := usedPlayers(EK, json.RawMessage(`{"participants":{"7":{"themes":[{"players":[3],"answers":["right","","","",""]}]}}}`), nil)
 	if len(ek) != 1 || ek[0].Team != 7 || ek[0].Player != 3 {
 		t.Errorf("ek: %+v", ek)
 	}
-	brain, _ := UsedPlayers(Brain, json.RawMessage(`{"teams":[{"rows":[{"player":"Аня","mark":"right"}]},{"rows":[{"player":" ","mark":"wrong"}]}]}`), []int64{11, 12})
+	brain, _ := usedPlayers(Brain, json.RawMessage(`{"teams":[{"rows":[{"player":"Аня","mark":"right"}]},{"rows":[{"player":" ","mark":"wrong"}]}]}`), []int64{11, 12})
 	if len(brain) != 1 || brain[0].Team != 11 || brain[0].Name != "Аня" {
 		t.Errorf("brain: %+v", brain)
 	}
-	if _, ok := UsedPlayers(OD, json.RawMessage(`{}`), nil); ok {
+	if _, ok := usedPlayers(OD, json.RawMessage(`{}`), nil); ok {
 		t.Error("an OD document names no players")
 	}
+}
+
+// The helpers below ask a format's capability the way callers do, through
+// As, and answer ok false where the format does not have it.
+
+func pristineGame(code, slug, title string, shape Shape) (scheme, state []byte, ok bool, err error) {
+	builder, ok := As[PristineBuilder](code)
+	if !ok {
+		return nil, nil, false, nil
+	}
+	scheme, state, err = builder.PristineGame(slug, title, shape)
+	return scheme, state, true, err
+}
+
+func shapeOf(code, schemeJSON string) Shape {
+	builder, _ := As[PristineBuilder](code)
+	return builder.ShapeOf(schemeJSON)
+}
+
+func keepsOnClear(code string) bool {
+	_, ok := As[ClearKeeper](code)
+	return ok
+}
+
+func foldRoster(code, schemeJSON, stateJSON string, teams []RosterTeam, entryRemap map[int]int) (scheme, state []byte, ok bool, err error) {
+	folder, ok := As[RosterFolder](code)
+	if !ok {
+		return nil, nil, false, nil
+	}
+	scheme, state, err = folder.FoldRoster(schemeJSON, stateJSON, teams, entryRemap)
+	return scheme, state, true, err
+}
+
+func usedPlayers(code string, state json.RawMessage, seats []int64) ([]UsedPlayer, bool) {
+	user, ok := As[PlayersUser](code)
+	if !ok {
+		return nil, false
+	}
+	return user.UsedPlayers(state, seats), true
+}
+
+func enteredSeats(code string, state json.RawMessage) ([]bool, bool) {
+	entered, ok := As[Entered](code)
+	if !ok {
+		return nil, false
+	}
+	return entered.EnteredSeats(state), true
 }

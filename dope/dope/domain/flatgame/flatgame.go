@@ -92,11 +92,11 @@ func settleTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64) er
 select g.game_type, m.state_json from matches m join games g on g.id = m.game_id where m.id = ?`, matchID).Scan(&gameType, &state); err != nil {
 		return err
 	}
-	seats, ok := games.Seats(gameType, json.RawMessage(state))
+	seater, ok := games.As[games.Seater](gameType)
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrNotFlat, gameType)
 	}
-	if err := seatTx(ctx, tx, festID, gameID, matchID, seats); err != nil {
+	if err := seatTx(ctx, tx, festID, gameID, matchID, seater.Seats(json.RawMessage(state))); err != nil {
 		return err
 	}
 	match, err := store.LoadMatchState(ctx, tx, store.MatchSelector{FestID: festID, GameID: gameID, MatchID: matchID})

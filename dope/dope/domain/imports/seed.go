@@ -814,8 +814,8 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 	less := structure.LessBy(order)
 	sort.SliceStable(rows, func(i, j int) bool { return less(rows[i].entry, rows[j].entry) })
 	declined := map[int64]bool{}
-	if seats, ok := games.Seats(gameType, json.RawMessage(document)); ok {
-		for _, seat := range seats {
+	if seater, ok := games.As[games.Seater](gameType); ok {
+		for _, seat := range seater.Seats(json.RawMessage(document)) {
 			if seat.Declined {
 				declined[seat.Number] = true
 			}

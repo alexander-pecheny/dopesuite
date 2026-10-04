@@ -43,7 +43,7 @@ New-primitive rule: a Stage Kind or Protocol is Go code + config vocabulary — 
 ## 2. Go contracts
 
 ```go
-// domain/protocol — registry, one per format.
+// domain/games — one per format, on its Definition (<format>_protocol.go).
 type Protocol interface {
     Code() string                                  // 'ek' | 'od' | 'ksi' | 'brain' | ...
     EmptyState(cfg MatchConfig) json.RawMessage

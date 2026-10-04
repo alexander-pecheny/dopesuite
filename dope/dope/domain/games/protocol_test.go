@@ -413,7 +413,7 @@ func TestEnteredSeats(t *testing.T) {
 	}}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, ok := EnteredSeats(c.code, json.RawMessage(c.state))
+			got, ok := enteredSeats(c.code, json.RawMessage(c.state))
 			if !ok {
 				t.Fatalf("%s does not answer EnteredSeats", c.code)
 			}
@@ -429,7 +429,7 @@ func TestEnteredSeats(t *testing.T) {
 	}
 	// ЭК seats its own entrants and keeps them through a re-import, so it is
 	// never asked about the fest roster.
-	if _, ok := EnteredSeats("ek", json.RawMessage(`{}`)); ok {
+	if _, ok := enteredSeats("ek", json.RawMessage(`{}`)); ok {
 		t.Error("ek should not answer EnteredSeats")
 	}
 }

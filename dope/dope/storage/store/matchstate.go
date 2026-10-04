@@ -54,7 +54,7 @@ type DBMatchState struct {
 
 // teamBlobProtocols are the Protocols whose match state is the team-keyed
 // blob (matchops/MatchBlob), which the loader projects into slots and every
-// generic edit addresses by team; each registers itself (protocol.Register).
+// generic edit addresses by team; each registers itself (games registry).
 // A game with no type is the legacy EK fixture.
 var teamBlobProtocols = map[string]bool{"": true}
 
@@ -65,7 +65,7 @@ func TeamBlobShaped(gameType string) bool { return teamBlobProtocols[gameType] }
 // seatRosterProtocols are the Protocols whose matches name players and so
 // need each seat's roster loaded — every team-blob one, and Troika, whose
 // document records which of a team's three sat in which chair. Each registers
-// itself (protocol.Register).
+// itself (games registry).
 var seatRosterProtocols = map[string]bool{}
 
 func RegisterSeatRoster(code string) { seatRosterProtocols[code] = true }
@@ -78,7 +78,7 @@ func SeatsPlayers(gameType string) bool {
 
 // scoreMetrics names, per Protocol, the metric a bout's score is printed as
 // when it is not the total column: brain counts the questions a side took.
-// Each Protocol that has one registers it (protocol.Register).
+// Each Protocol that has one registers it (games registry).
 var scoreMetrics = map[string]string{}
 
 func RegisterScoreMetric(code, metric string) { scoreMetrics[code] = metric }
@@ -89,7 +89,7 @@ func ScoreMetric(gameType string) string { return scoreMetrics[gameType] }
 
 // seatCaps is how many players each Protocol seats on a theme when no Block
 // config says — one for EK, three for Erudit-Sextet. Each registers its own
-// (protocol.Register), the store being a leaf that cannot ask.
+// (games registry), the store being a leaf that cannot ask.
 var seatCaps = map[string]int{}
 
 func RegisterSeatCap(code string, players int) { seatCaps[code] = players }

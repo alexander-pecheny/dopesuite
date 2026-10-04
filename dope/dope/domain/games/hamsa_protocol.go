@@ -6,9 +6,15 @@ import (
 	"strconv"
 
 	"dope/dope/domain/structure"
+	dopestrings "dope/i18nstrings"
 )
 
-func init() { Register(hamsa{}) }
+// hamsaFormat plays a bracket of four-seat bouts and boots the bracket
+// payload, as Troika does: the page fetches its matches and draws them its
+// own way.
+var hamsaFormat = Definition{Code: Hamsa, Label: dopestrings.Default.Games.Hamsa.Label(), Title: dopestrings.Default.Host.Games.TypeHamsa(),
+	Page: "static/hamsa.html", HandRoster: true, DSL: DSLAccepted,
+	DefaultDSL: HamsaDefaultDSL, Sheets: SheetsHamsa, Journal: JournalEvents, Protocol: hamsa{}}
 
 // hamsa wraps ComputeHamsaResults. A bout's shape — how many themes each
 // game round plays, what a question is worth there, whether the Block allows a

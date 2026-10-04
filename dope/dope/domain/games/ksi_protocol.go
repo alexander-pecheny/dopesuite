@@ -6,9 +6,13 @@ import (
 
 	"dope/dope/domain/structure"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 )
 
-func init() { Register(ksi{}) }
+// ksiFormat is team jeopardy: one flat sheet of themes.
+var ksiFormat = Definition{Code: KSI, Label: dopestrings.Default.Games.Ksi.Label(), Title: dopestrings.Default.Host.Games.TypeKsi(),
+	Page: "static/si.html", Flat: true, Divisions: true, PlayerOverrides: true, DSL: DSLAccepted,
+	Sheets: SheetsKSI, Journal: JournalKSIPatches, Protocol: ksi{}}
 
 // ksi wraps ComputeKSIResults: state is KSIState, the match config
 // is the KSI scheme document (its stickers block selects the stickers
@@ -130,4 +134,134 @@ func (ksi) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error
 		}
 	}
 	return outcomes, nil
+}
+
+// A KSI's themes, and its stickers block, which a clear keeps so a stickers
+// game stays one. A stored scheme with no themes is read as twenty.
+func (ksi) PristineGame(slug, title string, shape Shape) ([]byte, []byte, error) {
+	scheme, state := KSIStickersEmptyGameJSON(slug, title, shape.Themes, shape.Stickers)
+	return scheme, state, nil
+}
+
+func (ksi) ShapeOf(schemeJSON string) Shape {
+	var sc struct {
+		Themes   int             `json:"themes"`
+		Stickers json.RawMessage `json:"stickers"`
+	}
+	_ = json.Unmarshal([]byte(schemeJSON), &sc)
+	if sc.Themes <= 0 {
+		sc.Themes = KSIThemeCount
+	}
+	return Shape{Themes: sc.Themes, Stickers: sc.Stickers}
+}
+
+// KSI's theme count rides on the scheme, so the state is resized to it.
+func (ksi) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, _ map[int]int) ([]byte, []byte, error) {
+	scheme, err := ksiRosterScheme(schemeJSON, teams)
+	if err != nil {
+		return nil, nil, err
+	}
+	state, err := ksiRosterState(stateJSON, teams, ksiThemeCountFromSchemeJSON(schemeJSON))
+	return scheme, state, err
+}
+
+func ksiRosterScheme(raw string, teams []RosterTeam) ([]byte, error) {
+	obj, err := RawJSONObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	themesCount := KSIThemeCount
+	if rawThemes, ok := obj["themes"]; ok && len(rawThemes) > 0 {
+		var configured int
+		if err := json.Unmarshal(rawThemes, &configured); err == nil && configured > 0 {
+			themesCount = configured
+		}
+	}
+	participantsJSON, err := json.Marshal(teamParticipantsFromRoster(teams))
+	if err != nil {
+		return nil, err
+	}
+	gameTypeJSON, err := json.Marshal("ksi")
+	if err != nil {
+		return nil, err
+	}
+	themesJSON, err := json.Marshal(themesCount)
+	if err != nil {
+		return nil, err
+	}
+	obj["gameType"] = gameTypeJSON
+	obj["participants"] = participantsJSON
+	obj["themes"] = themesJSON
+	return json.Marshal(obj)
+}
+
+func ksiRosterState(raw string, teams []RosterTeam, targetThemeCount int) ([]byte, error) {
+	obj, err := RawJSONObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	// Capture the pre-import participant order before overwriting it, so the
+	// answer grid (keyed by row position) can be remapped to follow each team
+	// across roster reorders/additions/removals instead of staying at its old
+	// index. Read tolerantly: new states store [{number,name}], legacy states a
+	// bare name array (matched by name for that one transition).
+	oldParticipants := ParseKSIParticipants(obj["participants"])
+	participants := teamParticipantsFromRoster(teams)
+	participantsJSON, err := json.Marshal(participants)
+	if err != nil {
+		return nil, err
+	}
+	obj["participants"] = participantsJSON
+
+	var themes []map[string]json.RawMessage
+	if rawThemes, ok := obj["themes"]; ok && len(rawThemes) > 0 {
+		_ = json.Unmarshal(rawThemes, &themes)
+	}
+	if targetThemeCount <= 0 {
+		targetThemeCount = len(themes)
+	}
+	if targetThemeCount <= 0 {
+		targetThemeCount = KSIThemeCount
+	}
+	if len(themes) > targetThemeCount {
+		themes = themes[:targetThemeCount]
+	}
+	for len(themes) < targetThemeCount {
+		themes = append(themes, map[string]json.RawMessage{})
+	}
+	for i := range themes {
+		if themes[i] == nil {
+			themes[i] = map[string]json.RawMessage{}
+		}
+		var answers [][]string
+		if rawAnswers, ok := themes[i]["answers"]; ok && len(rawAnswers) > 0 {
+			_ = json.Unmarshal(rawAnswers, &answers)
+		}
+		answers = RemapAnswerMatrix(answers, oldParticipants, participants, len(store.QuestionValues))
+		answersJSON, err := json.Marshal(answers)
+		if err != nil {
+			return nil, err
+		}
+		themes[i]["answers"] = answersJSON
+	}
+	themesJSON, err := json.Marshal(themes)
+	if err != nil {
+		return nil, err
+	}
+	obj["themes"] = themesJSON
+	return json.Marshal(obj)
+}
+
+func ksiThemeCountFromSchemeJSON(raw string) int {
+	obj, err := RawJSONObject(raw)
+	if err != nil {
+		return 0
+	}
+	if rawThemes, ok := obj["themes"]; ok && len(rawThemes) > 0 {
+		var themesCount int
+		if err := json.Unmarshal(rawThemes, &themesCount); err == nil && themesCount > 0 {
+			return themesCount
+		}
+	}
+	return 0
 }

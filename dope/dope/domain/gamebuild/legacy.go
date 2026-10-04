@@ -38,12 +38,13 @@ func createFlatGameTx(ctx context.Context, tx *sql.Tx, festID int64, def games.D
 	if err != nil {
 		return 0, err
 	}
-	emptyScheme, emptyState, ok, err := games.PristineGame(def.Code, identity.Code, identity.Title, shape)
-	if err != nil {
-		return 0, err
-	}
+	builder, ok := games.As[games.PristineBuilder](def.Code)
 	if !ok {
 		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
+	}
+	emptyScheme, emptyState, err := builder.PristineGame(identity.Code, identity.Title, shape)
+	if err != nil {
+		return 0, err
 	}
 	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, def.Code, emptyScheme, emptyState)
 	if err != nil {
@@ -86,8 +87,12 @@ func pristineFlatTx(ctx context.Context, tx *sql.Tx, festID int64, gameType stri
 	if len(teams) == 0 {
 		return schemeJSON, stateJSON, nil
 	}
-	scheme, state, ok, err := games.FoldRoster(gameType, string(schemeJSON), string(stateJSON), roster.RosterTeams(teams), nil)
-	if err != nil || !ok {
+	folder, ok := games.As[games.RosterFolder](gameType)
+	if !ok {
+		return schemeJSON, stateJSON, nil
+	}
+	scheme, state, err := folder.FoldRoster(string(schemeJSON), string(stateJSON), roster.RosterTeams(teams), nil)
+	if err != nil {
 		return schemeJSON, stateJSON, err
 	}
 	return scheme, state, nil

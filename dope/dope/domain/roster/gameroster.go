@@ -271,9 +271,12 @@ join matches m on m.id = ms.match_id where m.game_id = ?`, []any{gameID}, func(r
 		row[s.index] = s.participant
 		seats[s.match] = row
 	}
+	user, ok := games.As[games.PlayersUser](gameType)
+	if !ok {
+		return used, nil
+	}
 	for _, m := range matches {
-		players, _ := games.UsedPlayers(gameType, json.RawMessage(m.state), seats[m.id])
-		for _, p := range players {
+		for _, p := range user.UsedPlayers(json.RawMessage(m.state), seats[m.id]) {
 			used.markID(p.Team, p.Player)
 			if name := strings.TrimSpace(p.Name); name != "" {
 				if used.names[p.Team] == nil {

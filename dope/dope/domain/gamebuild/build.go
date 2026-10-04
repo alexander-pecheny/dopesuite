@@ -702,13 +702,15 @@ select id, stage_id, code, status, coalesce(state_json, '{}') from matches where
 			continue
 		}
 		if survives && slotIdentitiesExtend(ctx, tx, m.ID, match.Slots) {
-			state, ok, err := games.GrowSeats(gameType, json.RawMessage(m.State), len(match.Slots))
-			if err != nil {
-				return err
-			}
-			if ok {
-				grown[code] = state
-				continue
+			if grower, ok := games.As[games.Grower](gameType); ok {
+				state, grew, err := grower.GrowSeats(json.RawMessage(m.State), len(match.Slots))
+				if err != nil {
+					return err
+				}
+				if grew {
+					grown[code] = state
+					continue
+				}
 			}
 		}
 		blocked = append(blocked, code)

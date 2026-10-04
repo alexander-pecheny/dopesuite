@@ -82,3 +82,34 @@ that format's registration.
   although its Games are brackets on EK's page. ES's history lists only the
   coarse events, because the history page reads EK's rows for EK alone. All
   three were kept as they were.
+
+## Amendment, 4 Oct 2026: one package per registry, one place per format
+
+Each format was still split over two packages: its document and arithmetic in
+`domain/games/<format>.go`, its Protocol adapter in
+`domain/protocol/<format>.go`, which mostly unmarshalled the config and called
+`games.*`. The split guarded nothing. `games` was a leaf only because it did
+not import `structure` and `store`, and neither of those, nor anything they
+import, imports `games`. So `domain/protocol` was folded into `domain/games`:
+
+- A format is `<format>.go` (document and arithmetic) and
+  `<format>_protocol.go` (its Definition and its Protocol). The Definition
+  carries the Protocol (`Definition.Protocol`), so one registration names
+  both, and the registry in `games.go` is one ordered list.
+- The per-capability wrappers (`Seats`, `EnteredSeats`, `CanGrow`,
+  `GrowSeats`, `UsedPlayers`, `TakesGuests`, `RatingRosterStateKey`,
+  `PristineGame`, `ShapeOf`, `KeepsOnClear`, `KeepOnClear`, `FoldRoster`) are
+  one generic lookup, `games.As[C](gameType)`. The four whose absence means
+  something other than "no" keep their names: `Started`, `UsesFestNumbers`,
+  `ValidateEdit`, `EditableWhenFinished`.
+- The friendship cup embeds `odSheet`, the part of OD's Protocol the two
+  share, where it used to forward four methods to `od{}` by hand. ES embeds
+  `ek` as before.
+- The guard allows `domain/games/` alone.
+
+Separate packages per format (`domain/formats/<format>/`) were considered and
+not taken. Every caller of the registry would need a package that imports all
+the formats, and the code several formats share (the roster fold for OD, KSI
+and Multi, KSI's participants in Multi) would have to be exported from a core
+package. That is a lot of indirection for a split that buys nothing at ten
+formats.

@@ -53,12 +53,13 @@ select coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`, scope.
 		// long as nothing after it is played (Recompile says when). Anything
 		// else leaves the Structure as it is, and the list waits, quietly: the
 		// tab already says results fix the seats.
+		_, grows := games.As[games.Grower](current.GameType)
 		switch {
 		case !entered:
 			if applied.Rebuilt, applied.Kept, err = tryReseatTx(ctx, tx, scope, dsl, next.Active()); err != nil {
 				return applied, err
 			}
-		case games.CanGrow(current.GameType):
+		case grows:
 			seated, err := gameEntrantsTx(ctx, tx, scope.GameID)
 			if err != nil {
 				return applied, err
