@@ -873,7 +873,7 @@ func seedRosterForGame(ctx context.Context, q store.Queryer, scope core.FestScop
 		scope.FestID, scope.GameID).Scan(&gameType); err != nil {
 		return nil, err
 	}
-	if gameType != games.Troika {
+	if !games.SeatsTroikas(gameType) {
 		return loadSeedRosterTeams(ctx, q, scope.FestID)
 	}
 	return store.CollectRows(ctx, q, `

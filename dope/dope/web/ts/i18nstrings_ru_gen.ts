@@ -309,6 +309,7 @@ export const RU: Strings = {
       total: () => "Итог",
     },
     error: {
+      brainState: (match: string, err: string) => `бой ${match}: ${err}`,
       hamsaState: (match: string, err: string) => `бой ${match}: ${err}`,
       multiScheme: (err: string) => `parse Мультиигры scheme: ${err}`,
       multiState: (err: string) => `parse Мультиигры state: ${err}`,
@@ -575,12 +576,6 @@ export const RU: Strings = {
       needTwo: () => "для схемы нужны хотя бы два участника в фесте",
       unknownParticipant: (n: string) => `участника ${n} нет в этом фесте`,
       unnumbered: () => "перед созданием игры пронумеруйте участников феста",
-    },
-    titles: {
-      kd: () => "Кубок Дружбы",
-      ksi: () => "КСИ",
-      multi: () => "Мультиигры",
-      od: () => "ОД",
     },
   },
   games: {

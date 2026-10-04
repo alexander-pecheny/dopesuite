@@ -308,6 +308,7 @@ export type Strings = {
       total: () => string;
     };
     error: {
+      brainState: (match: string, err: string) => string;
       hamsaState: (match: string, err: string) => string;
       multiScheme: (err: string) => string;
       multiState: (err: string) => string;
@@ -574,12 +575,6 @@ export type Strings = {
       needTwo: () => string;
       unknownParticipant: (n: string) => string;
       unnumbered: () => string;
-    };
-    titles: {
-      kd: () => string;
-      ksi: () => string;
-      multi: () => string;
-      od: () => string;
     };
   };
   games: {

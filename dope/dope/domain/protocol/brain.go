@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
@@ -33,6 +34,30 @@ func (brain) Started(state json.RawMessage) bool { return games.BrainStateStarte
 // Metrics: questions taken, and the same without the shootout — the share
 // denominator on a reseed counts the match's base questions.
 func (brain) Metrics(json.RawMessage) []string { return []string{"taken", structure.MetricTakenBase} }
+
+// ScoreMetric: a brain bout's score is the questions a side took.
+func (brain) ScoreMetric() string { return "taken" }
+
+// UsedPlayers: a brain row records the player who buzzed by name, against the
+// side's seat.
+func (brain) UsedPlayers(stateJSON json.RawMessage, seats []int64) []UsedPlayer {
+	var state games.BrainState
+	if json.Unmarshal(stateJSON, &state) != nil {
+		return nil
+	}
+	var out []UsedPlayer
+	for slot, team := range seats {
+		if slot >= len(state.Teams) || team == 0 {
+			continue
+		}
+		for _, row := range state.Teams[slot].Rows {
+			if name := strings.TrimSpace(row.Player); name != "" {
+				out = append(out, UsedPlayer{Team: team, Name: name})
+			}
+		}
+	}
+	return out
+}
 
 func (brain) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return games.BrainEmptyStateJSON(games.BrainQuestions(string(cfg))), nil

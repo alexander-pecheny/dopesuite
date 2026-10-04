@@ -22,6 +22,9 @@ func (multi) Params() []Param { return nil }
 
 func (multi) TeamBlob() bool { return false }
 
+// TakesGuests: the one-off teams of a music quiz sit in a Multi's document.
+func (multi) TakesGuests() bool { return true }
+
 func (multi) Started(state json.RawMessage) bool { return false }
 
 // Metrics: the total, Σ+ and each minigame's subtotal. The minigames are the

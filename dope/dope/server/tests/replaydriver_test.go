@@ -564,12 +564,12 @@ func (g *serverGame) Outcome(at replay.Coord) (map[string]replay.Result, error) 
 	}
 	// Σ is whatever the sheet printed as the бой's score, and that is not the
 	// same column in every game: ЭК and своя игра score points, брейн counts the
-	// questions a side took — the codec says which.
+	// questions a side took — the Protocol says which.
 	score := "r.total"
 	args := []any{matchID}
-	if codec, _ := replay.CodecFor(g.gameType); codec.ScoreMetric != "" {
+	if metric := store.ScoreMetric(g.gameType); metric != "" {
 		score = "coalesce(cast(r.metrics_json ->> ? as integer), 0)"
-		args = []any{"$." + codec.ScoreMetric, matchID}
+		args = []any{"$." + metric, matchID}
 	}
 	rows, err := g.db().Query(`
 select p.name, r.place, `+score+` from match_results r

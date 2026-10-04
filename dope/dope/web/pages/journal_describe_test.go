@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"dope/dope/domain/edit"
+	"dope/dope/domain/games"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func mkPatchOp(t *testing.T, pathJSON, valueJSON string) edit.PatchOp {
 // KSI state shape: themes[t].answers[participant][question] = mark. The
 // participant index resolves to a name for display.
 func TestKSIPatchLineResolvesParticipant(t *testing.T) {
-	r := &nameResolver{gameType: "ksi", names: []string{"Аня", "Боря", "Витя"}}
+	r := &nameResolver{style: games.JournalKSIPatches, names: []string{"Аня", "Боря", "Витя"}}
 	got := r.ksiPatchLine(mkPatchOp(t, `["themes",3,"answers",1,2]`, `"wrong"`))
 	if got != "тема 4, Боря, вопрос 3: неверно" {
 		t.Fatalf("got %q", got)
@@ -34,7 +35,7 @@ func TestKSIPatchLineResolvesParticipant(t *testing.T) {
 // OD state shape: entries[question][slot] = teamNumber. The slot index is just
 // a grid position; the team is identified by the VALUE (its printed number).
 func TestODPatchLineResolvesTeam(t *testing.T) {
-	r := &nameResolver{gameType: "od", odNum: map[int]string{3: "Дятлы"}}
+	r := &nameResolver{style: games.JournalODPatches, odNum: map[int]string{3: "Дятлы"}}
 	got := r.odPatchLine(mkPatchOp(t, `["entries",5,1]`, `3`))
 	if got != "вопрос 6: засчитана «Дятлы» (№3)" {
 		t.Fatalf("got %q", got)

@@ -21,9 +21,9 @@ create_submit = "Создать"
 # Label of the game-type picker (create form) and of the read-only type field
 # (settings page).
 type_label = "Тип игры"
-# The game-type names: picker radios on the create form, and a game's type
-# label wherever the type is shown (also the Spec.Label values gameSpecFromForm
-# writes).
+# The game-type names: picker radios on the create form, and the title a new
+# Game of the format takes (games.Definition.Title, the Spec.Label
+# gameSpecFromForm writes).
 type_od = "ОД"
 type_ksi = "КСИ"
 type_ksi_stickers = "КСИ со стикерами"

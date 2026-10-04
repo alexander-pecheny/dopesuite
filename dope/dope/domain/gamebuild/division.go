@@ -101,10 +101,24 @@ func divisionEntrantsTx(ctx context.Context, q store.Queryer, festID int64, divi
 	return ids, nil
 }
 
-// TroikaGameIDs lists the fest's Troika Games.
+// troikaFormats is the game_type filter for the formats that seat troikas
+// (games.Definition.Troikas), with its arguments after the fest's id.
+func troikaFormats(festID int64) (string, []any) {
+	codes := games.Codes(func(d games.Definition) bool { return d.Troikas })
+	args := []any{festID}
+	marks := make([]string, len(codes))
+	for i, code := range codes {
+		marks[i] = "?"
+		args = append(args, code)
+	}
+	return "game_type in (" + strings.Join(marks, ", ") + ")", args
+}
+
+// TroikaGameIDs lists the fest's Games that seat troikas.
 func TroikaGameIDs(ctx context.Context, q store.Queryer, festID int64) ([]int64, error) {
+	filter, args := troikaFormats(festID)
 	return store.CollectRows(ctx, q, `
-select id from games where fest_id = ? and game_type = ? order by position, id`, []any{festID, games.Troika},
+select id from games where fest_id = ? and `+filter+` order by position, id`, args,
 		func(rows *sql.Rows) (int64, error) {
 			var id int64
 			return id, rows.Scan(&id)
@@ -120,15 +134,16 @@ func LoadDivisionGames(ctx context.Context, q store.Queryer, festID int64) ([]Di
 
 func divisionGames(ctx context.Context, q store.Queryer, festID, exclude int64) ([]DivisionGame, []imports.List, error) {
 	type row struct {
-		id         int64
-		title, dsl string
+		id                   int64
+		title, dsl, gameType string
 	}
+	filter, args := troikaFormats(festID)
 	rows, err := store.CollectRows(ctx, q, `
-select id, title, scheme_dsl from games
-where fest_id = ? and game_type = ? and scheme_dsl is not null
-order by position, id`, []any{festID, games.Troika}, func(rows *sql.Rows) (row, error) {
+select id, title, scheme_dsl, game_type from games
+where fest_id = ? and `+filter+` and scheme_dsl is not null
+order by position, id`, args, func(rows *sql.Rows) (row, error) {
 		var r row
-		return r, rows.Scan(&r.id, &r.title, &r.dsl)
+		return r, rows.Scan(&r.id, &r.title, &r.dsl, &r.gameType)
 	})
 	if err != nil {
 		return nil, nil, err
@@ -150,7 +165,7 @@ order by position, id`, []any{festID, games.Troika}, func(rows *sql.Rows) (row, 
 		}
 		game.Current = slices.Equal(list.Active(), game.Troikas)
 		game.Manual = list.State.Edited || (list.State.Source != "" && list.State.Source != "troikas")
-		if game.Frozen, err = imports.GameEntered(ctx, q, r.id, games.Troika); err != nil {
+		if game.Frozen, err = imports.GameEntered(ctx, q, r.id, r.gameType); err != nil {
 			return nil, nil, err
 		}
 		out = append(out, game)

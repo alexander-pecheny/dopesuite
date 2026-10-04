@@ -1,12 +1,11 @@
-// The flat formats that predate the DSL — OD and KSI — built the way they
-// always were, behind the same Spec; and the venues every scheme may name.
+// The flat formats that predate the DSL — OD, KSI, Multi and the friendship
+// cup — built from their own knobs behind the same Spec; and the venues every
+// scheme may name.
 package gamebuild
 
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"strconv"
 	"strings"
 
 	"dope/dope/domain/flatgame"
@@ -20,10 +19,10 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
-// titleOr is the Label the Spec asked for, else the format's own title. A flat
-// format used to take its title from the Catalog and nothing else, so a host
-// who named the game — and the stickers variant, which is a KSI under another
-// name — got a numeric suffix instead.
+// titleOr is the Label the Spec asked for, else the format's own title
+// (games.Definition.Title). A flat format used to take its title from the
+// Catalog and nothing else, so a host who named the game — and the stickers
+// variant, which is a KSI under another name — got a numeric suffix instead.
 func titleOr(label, fallback string) string {
 	if strings.TrimSpace(label) != "" {
 		return label
@@ -31,77 +30,50 @@ func titleOr(label, fallback string) string {
 	return fallback
 }
 
-func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string, tours, questions int) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", titleOr(label, dopestrings.Default.Gamebuild.Titles.Od()))
+// createFlatGameTx makes a flat Game: its Protocol builds the empty scheme and
+// document for the shape asked (protocol.PristineBuilder), the fest roster is
+// folded in when the Protocol carries one, and the one 'main' Match is
+// written and settled. Clear rebuilds a Game through the same builder.
+func createFlatGameTx(ctx context.Context, tx *sql.Tx, festID int64, def games.Definition, label string, shape protocol.Shape) (int64, error) {
+	identity, err := nextGameIdentityTx(ctx, tx, festID, def.Code, titleOr(label, def.Title))
 	if err != nil {
 		return 0, err
 	}
-	tourComp := make([]int, tours)
-	for i := range tourComp {
-		tourComp[i] = questions
-	}
-	emptyScheme, emptyState := games.ODEmptyGameJSON(identity.Code, identity.Title, tourComp)
-	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, games.OD, emptyScheme, emptyState)
+	emptyScheme, emptyState, ok, err := protocol.PristineGame(def.Code, identity.Code, identity.Title, shape)
 	if err != nil {
 		return 0, err
 	}
-	return insertJSONGameTx(ctx, tx, festID, identity, "od", schemeJSON, stateJSON)
+	if !ok {
+		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
+	}
+	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, def.Code, emptyScheme, emptyState)
+	if err != nil {
+		return 0, err
+	}
+	return insertJSONGameTx(ctx, tx, festID, identity, def.Code, schemeJSON, stateJSON)
 }
 
-// createKDGameTx makes a friendship cup: an OD document seating n tables
-// in place of the fest's teams, with no players yet (ADR-0026). The roster
-// is not folded in — a table is nobody on it.
-func createKDGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string, tours, questions, tables int) (int64, error) {
-	if !games.IsPrime(tables) {
-		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.KdTablesPrime(strconv.Itoa(tables)))
+// specShape is the flat Game the creation form's knobs describe.
+func specShape(spec Spec) protocol.Shape {
+	return protocol.Shape{
+		Tours:     sameTours(spec.ODTours, spec.ODQuestions),
+		Tables:    spec.KDTables,
+		Themes:    spec.KSIThemes,
+		Stickers:  spec.KSIStickers,
+		Minigames: spec.Minigames,
+		Sorting:   spec.MultiSorting,
 	}
-	// Two cards share a table at most once only while the tours are no more
-	// than the tables: in tour n+1 every card is back at its first table.
-	if tours > tables {
-		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.KdToursTables(strconv.Itoa(tours), strconv.Itoa(tables)))
-	}
-	identity, err := nextGameIdentityTx(ctx, tx, festID, games.KD, titleOr(label, dopestrings.Default.Gamebuild.Titles.Kd()))
-	if err != nil {
-		return 0, err
-	}
-	schemeJSON, stateJSON := games.KDEmptyGameJSON(identity.Code, identity.Title, sameTours(tours, questions), tables, kdTableName)
-	return insertJSONGameTx(ctx, tx, festID, identity, games.KD, schemeJSON, stateJSON)
 }
-
-func kdTableName(n int) string { return dopestrings.Default.Gamebuild.Kd.Table(strconv.Itoa(n)) }
 
 func sameTours(tours, questions int) []int {
+	if tours < 0 {
+		tours = 0
+	}
 	tourComp := make([]int, tours)
 	for i := range tourComp {
 		tourComp[i] = questions
 	}
 	return tourComp
-}
-
-func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string, themesCount int, stickers json.RawMessage) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "ksi", titleOr(label, dopestrings.Default.Gamebuild.Titles.Ksi()))
-	if err != nil {
-		return 0, err
-	}
-	emptyScheme, emptyState := games.KSIStickersEmptyGameJSON(identity.Code, identity.Title, themesCount, stickers)
-	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, games.KSI, emptyScheme, emptyState)
-	if err != nil {
-		return 0, err
-	}
-	return insertJSONGameTx(ctx, tx, festID, identity, "ksi", schemeJSON, stateJSON)
-}
-
-func createMultiGameTx(ctx context.Context, tx *sql.Tx, festID int64, label string, minigames []games.MultiGame, sorting []string) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "multi", titleOr(label, dopestrings.Default.Gamebuild.Titles.Multi()))
-	if err != nil {
-		return 0, err
-	}
-	emptyScheme, emptyState := games.MultiEmptyGameJSON(identity.Code, identity.Title, minigames, sorting)
-	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, games.Multi, emptyScheme, emptyState)
-	if err != nil {
-		return 0, err
-	}
-	return insertJSONGameTx(ctx, tx, festID, identity, "multi", schemeJSON, stateJSON)
 }
 
 // pristineFlatTx is a flat game's empty scheme and state with the fest's

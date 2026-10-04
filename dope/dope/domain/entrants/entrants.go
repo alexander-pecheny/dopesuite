@@ -37,7 +37,7 @@ const (
 // kindOf is what the format seats.
 func kindOf(gameType string) string {
 	switch {
-	case gameType == games.Troika:
+	case games.SeatsTroikas(gameType):
 		return KindTroika
 	case games.IsIndividual(gameType):
 		return KindPlayer
@@ -46,14 +46,8 @@ func kindOf(gameType string) string {
 }
 
 // Formats reports whether a Game type keeps an Entrant list: the buzzer
-// formats, where a few entrants meet in each bout.
-func Formats(gameType string) bool {
-	switch gameType {
-	case games.EK, games.ES, games.SI, games.Brain, games.Troika, games.Hamsa:
-		return true
-	}
-	return false
-}
+// formats, where a few entrants meet in each bout (games.KeepsEntrantList).
+func Formats(gameType string) bool { return games.KeepsEntrantList(gameType) }
 
 // Source is where a list comes from: a Game's table (Game is its code), the
 // fest's own roster, the fest's troikas, a lot, an uploaded sheet or the
@@ -183,7 +177,7 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 	default:
 		view.Sources = append(view.Sources, SourceOption{Source: Source{Kind: SourceFest}, Label: s.Entrants.Source.FestTeams(), Divided: true})
 		for _, o := range others {
-			if !games.IsIndividual(o.gameType) && o.gameType != games.Troika {
+			if !games.IsIndividual(o.gameType) && !games.SeatsTroikas(o.gameType) {
 				view.Sources = append(view.Sources, SourceOption{Source: Source{Kind: SourceGame, Game: o.code}, Label: s.Entrants.Source.Game(o.title), Divided: true})
 			}
 		}

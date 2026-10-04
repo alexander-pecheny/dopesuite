@@ -377,7 +377,7 @@ func (c *compiler) readInit() error {
 		// division without a seed names who plays rather than how they are
 		// ranked: a Troika Game's entrants are the troikas in that division.
 		if division, ok := c.doc.Init.Str("division"); ok {
-			if c.in.GameType != games.Troika {
+			if !games.SeatsTroikas(c.in.GameType) {
 				return errAt(c.doc.Init.Values["division"].Line, "%s", dopestrings.Default.Scheme.Seed.DivisionTroikaOnly())
 			}
 			c.scheme.Division = strings.TrimSpace(division)

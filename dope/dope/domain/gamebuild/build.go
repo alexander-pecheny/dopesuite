@@ -103,11 +103,12 @@ type Spec struct {
 // Numbers are dealt from 1 inside the Game, so the same team is «2» in one
 // and «4» in another.
 func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
+	def, known := games.Lookup(spec.Type)
 	if strings.TrimSpace(spec.DSL) != "" {
 		// Multi is one sitting whose shape is its minigames, and the DSL
 		// has no way to say what they are — so a scheme for one would compile
 		// to a game that scores nothing. Refuse it rather than build it.
-		if spec.Type == games.Multi {
+		if known && def.DSL == games.DSLRefused {
 			return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.MultiFromScheme())
 		}
 		return createSchemeGame(ctx, tx, spec.FestID, spec.Type, spec.Label, spec.DSL, spec.Entrants)
@@ -122,8 +123,8 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		}
 		return Materialise(ctx, tx, spec.FestID, scheme)
 	}
-	switch spec.Type {
-	case games.OD, games.KSI, games.Multi, games.KD:
+	switch {
+	case known && def.Flat:
 		// A flat format is one Match seating the whole fest roster under the
 		// fest's own numbers, and who did not play is marked on its refusals
 		// tab. It has no way to seat a chosen few, so a chosen list is refused
@@ -131,17 +132,8 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		if len(spec.Entrants) > 0 {
 			return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.WholeRoster(games.Label(spec.Type)))
 		}
-	}
-	switch spec.Type {
-	case games.OD:
-		return createODGameTx(ctx, tx, spec.FestID, spec.Label, spec.ODTours, spec.ODQuestions)
-	case games.KD:
-		return createKDGameTx(ctx, tx, spec.FestID, spec.Label, spec.ODTours, spec.ODQuestions, spec.KDTables)
-	case games.KSI:
-		return createKSIGameTx(ctx, tx, spec.FestID, spec.Label, spec.KSIThemes, spec.KSIStickers)
-	case games.Multi:
-		return createMultiGameTx(ctx, tx, spec.FestID, spec.Label, spec.Minigames, spec.MultiSorting)
-	case games.EK, games.ES:
+		return createFlatGameTx(ctx, tx, spec.FestID, def, spec.Label, specShape(spec))
+	case known && def.PastedScheme:
 		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.EkNoScheme())
 	}
 	return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
@@ -246,7 +238,8 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 	// Structure is built for as many empty seats as its first stage sends on,
 	// and the troikas fill it as they are entered (SyncDivisionEntrantsTx).
 	var placeholders int
-	if division, ok := entrantDivision(dsl); ok && gameType == games.Troika {
+	troikas := games.SeatsTroikas(gameType)
+	if division, ok := entrantDivision(dsl); ok && troikas {
 		if entrants, err = divisionEntrantsTx(ctx, tx, festID, division, 0); err != nil {
 			return 0, err
 		}
@@ -258,7 +251,7 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 	// it takes every troika of the fest in the order of applications — not
 	// the fest's teams, which is what «none ticked» means for a team game and
 	// which a Тройка never seats.
-	if gameType == games.Troika && len(entrants) == 0 && placeholders == 0 && !declaresSeed(dsl) {
+	if troikas && len(entrants) == 0 && placeholders == 0 && !declaresSeed(dsl) {
 		if entrants, err = festTroikasTx(ctx, tx, festID); err != nil {
 			return 0, err
 		}

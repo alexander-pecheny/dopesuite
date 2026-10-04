@@ -393,6 +393,7 @@ var RU = Strings{
 			Total:         func() string { return "Итог" },
 		},
 		Error: ExportErrorStrings{
+			BrainState:  func(match string, err string) string { return fmt.Sprintf("бой %s: %s", match, err) },
 			HamsaState:  func(match string, err string) string { return fmt.Sprintf("бой %s: %s", match, err) },
 			MultiScheme: func(err string) string { return fmt.Sprintf("parse Мультиигры scheme: %s", err) },
 			MultiState:  func(err string) string { return fmt.Sprintf("parse Мультиигры state: %s", err) },
@@ -737,12 +738,6 @@ var RU = Strings{
 			Unnumbered: func() string {
 				return "перед созданием игры пронумеруйте участников феста"
 			},
-		},
-		Titles: GamebuildTitlesStrings{
-			Kd:    func() string { return "Кубок Дружбы" },
-			Ksi:   func() string { return "КСИ" },
-			Multi: func() string { return "Мультиигры" },
-			Od:    func() string { return "ОД" },
 		},
 	},
 	Games: GamesStrings{

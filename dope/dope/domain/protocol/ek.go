@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"dope/dope/domain/structure"
 	"dope/dope/storage/store"
@@ -42,6 +43,25 @@ func (ek) Metrics(json.RawMessage) []string {
 		names = append(names, fmt.Sprintf("correct_%d", value), fmt.Sprintf("wrong_%d", value))
 	}
 	return names
+}
+
+// UsedPlayers: the blob keys each section by Participant, and a theme names
+// the players who sat it, the shootout's too. ES inherits it.
+func (ek) UsedPlayers(stateJSON json.RawMessage, _ []int64) []UsedPlayer {
+	blob, err := store.ParseMatchBlob(string(stateJSON))
+	if err != nil {
+		return nil
+	}
+	var out []UsedPlayer
+	for key, section := range blob.Participants {
+		team, _ := strconv.ParseInt(key, 10, 64)
+		for _, theme := range append(append([]store.BlobTheme(nil), section.Themes...), section.ShootoutThemes...) {
+			for _, player := range theme.Players {
+				out = append(out, UsedPlayer{Team: team, Player: player})
+			}
+		}
+	}
+	return out
 }
 
 type ekConfig struct {

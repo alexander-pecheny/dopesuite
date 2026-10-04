@@ -889,6 +889,112 @@ func buildMultiResultsSheet(f *excelize.File, scheme *games.MultiScheme, schemeJ
 	return nil
 }
 
+// --- Brain: one sheet per stage ------------------------------------------------
+
+// BuildBrainSheets writes a brain game "as it looks": a sheet per stage, and
+// within it a block per bout — each side's marks per question (the shootout
+// questions after the base ones), the questions it took and its place, and
+// under them, when the side named any, the player who buzzed on each question.
+func BuildBrainSheets(f *excelize.File, stages []store.StageMatches) error {
+	first := true
+	for _, stage := range stages {
+		if len(stage.Matches) == 0 {
+			continue
+		}
+		name := uniqueSheetName(f, sanitizeSheetName(stage.Matches[0].StageTitle))
+		if first {
+			f.SetSheetName("Sheet1", name)
+			first = false
+		} else if _, err := f.NewSheet(name); err != nil {
+			return err
+		}
+		row := 1
+		for _, match := range stage.Matches {
+			next, err := writeBrainMatch(f, name, row, match)
+			if err != nil {
+				return err
+			}
+			row = next + 1 // a blank line between bouts
+		}
+	}
+	return nil
+}
+
+func writeBrainMatch(f *excelize.File, sheet string, row int, match store.MatchView) (int, error) {
+	s := dopestrings.Default
+	var state games.BrainState
+	if len(match.State) > 0 {
+		if err := json.Unmarshal(match.State, &state); err != nil {
+			return row, corei18n.User(s.Export.Error.BrainState(match.Code, err.Error()))
+		}
+	}
+	if err := setRow(f, sheet, row, []interface{}{match.Title}); err != nil {
+		return row, err
+	}
+	row++
+
+	questions := 0
+	for _, side := range state.Teams {
+		questions = max(questions, len(side.Rows))
+	}
+	tiebreaks := min(max(state.Tiebreaks, 0), questions)
+	base := questions - tiebreaks
+	header := []interface{}{s.Export.Col.Team()}
+	for q := 1; q <= base; q++ {
+		header = append(header, q)
+	}
+	for t := 1; t <= tiebreaks; t++ {
+		header = append(header, s.Export.Col.ShootoutN(strconv.Itoa(t)))
+	}
+	header = append(header, "Σ", s.Export.Col.MatchPlace())
+	if err := setRow(f, sheet, row, header); err != nil {
+		return row, err
+	}
+	row++
+
+	results, err := games.ComputeBrainResults(string(match.State))
+	if err != nil {
+		return row, corei18n.User(s.Export.Error.BrainState(match.Code, err.Error()))
+	}
+	for side := range state.Teams {
+		marks := []interface{}{sideName(match, side)}
+		players := []interface{}{nil}
+		named := false
+		for q := 0; q < questions; q++ {
+			var mark, player interface{}
+			if q < len(state.Teams[side].Rows) {
+				cell := state.Teams[side].Rows[q]
+				switch cell.Mark {
+				case "right":
+					mark = "+"
+				case "wrong":
+					mark = "−"
+				}
+				if name := strings.TrimSpace(cell.Player); name != "" {
+					player, named = name, true
+				}
+			}
+			marks = append(marks, mark)
+			players = append(players, player)
+		}
+		if side < len(results) {
+			marks = append(marks, results[side].Taken, formatPlace(results[side].Place))
+		}
+		if err := setRow(f, sheet, row, marks); err != nil {
+			return row, err
+		}
+		row++
+		// The players who buzzed, under their marks, when the side named any.
+		if named {
+			if err := setRow(f, sheet, row, players); err != nil {
+				return row, err
+			}
+			row++
+		}
+	}
+	return row, nil
+}
+
 // --- Troika: one sheet per stage ----------------------------------------------
 
 // BuildTroikaSheets writes a sheet per stage: each of its matches as two
@@ -958,7 +1064,7 @@ func writeTroikaMatch(f *excelize.File, sheet string, row int, match store.Match
 		for chair := 0; chair < games.TroikaChairs; chair++ {
 			cells := []interface{}{nil, chair + 1}
 			if chair == 0 {
-				cells[0] = troikaSideName(match, side)
+				cells[0] = sideName(match, side)
 			}
 			for t := range state.Values {
 				for q := 0; q < games.TroikaThemeQuestions; q++ {
@@ -997,7 +1103,7 @@ func writeTroikaWritten(f *excelize.File, sheet string, row int, match store.Mat
 		return row, err
 	}
 	for side := range state.Sides {
-		cells := []interface{}{troikaSideName(match, side)}
+		cells := []interface{}{sideName(match, side)}
 		for t := range state.Values {
 			for q := 0; q < games.TroikaThemeQuestions; q++ {
 				count := 0
@@ -1178,7 +1284,7 @@ func hamsaBetText(section *games.HamsaParticipant) interface{} {
 	return *section.Bet.Amount
 }
 
-func troikaSideName(match store.MatchView, side int) string {
+func sideName(match store.MatchView, side int) string {
 	if side < len(match.Participants) {
 		if name := strings.TrimSpace(match.Participants[side].Name); name != "" {
 			return name

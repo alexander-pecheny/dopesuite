@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
@@ -42,6 +43,26 @@ func (hamsa) EditableWhenFinished(path []json.RawMessage) bool {
 	var head, tail string
 	return json.Unmarshal(path[0], &head) == nil && head == "participants" &&
 		json.Unmarshal(path[2], &tail) == nil && tail == "lot"
+}
+
+// UsedPlayers: Hamsa's document keys each side by Participant, and a theme
+// (the shootout's too) names the player who sat it.
+func (hamsa) UsedPlayers(stateJSON json.RawMessage, _ []int64) []UsedPlayer {
+	var state games.HamsaState
+	if json.Unmarshal(stateJSON, &state) != nil {
+		return nil
+	}
+	var out []UsedPlayer
+	for key, side := range state.Participants {
+		if side == nil {
+			continue
+		}
+		team, _ := strconv.ParseInt(key, 10, 64)
+		for _, theme := range append(append([]games.HamsaTheme(nil), side.Themes...), side.Shootout...) {
+			out = append(out, UsedPlayer{Team: team, Player: theme.Player})
+		}
+	}
+	return out
 }
 
 func (hamsa) Started(state json.RawMessage) bool { return games.HamsaStateStarted(string(state)) }

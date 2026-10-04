@@ -76,6 +76,17 @@ func SeatsPlayers(gameType string) bool {
 	return TeamBlobShaped(gameType) || seatRosterProtocols[gameType]
 }
 
+// scoreMetrics names, per Protocol, the metric a bout's score is printed as
+// when it is not the total column: brain counts the questions a side took.
+// Each Protocol that has one registers it (protocol.Register).
+var scoreMetrics = map[string]string{}
+
+func RegisterScoreMetric(code, metric string) { scoreMetrics[code] = metric }
+
+// ScoreMetric is the metric a game type's bout score is read from, or "" for
+// the total column.
+func ScoreMetric(gameType string) string { return scoreMetrics[gameType] }
+
 // seatCaps is how many players each Protocol seats on a theme when no Block
 // config says — one for EK, three for Erudit-Sextet. Each registers its own
 // (protocol.Register), the store being a leaf that cannot ask.

@@ -3,9 +3,11 @@ package dopeserver
 import (
 	"io/fs"
 	"net/http"
+	"strings"
 
 	kit "pecheny.me/dopeuikit/kit"
 
+	"dope/dope/domain/games"
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 )
@@ -52,20 +54,22 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 // pages are authored in the constrained UI DSL (dope/web/assets/ui) and compiled
 // to HTML — at startup in embed mode, per request in disk/dev mode. Their
 // compiled bytes feed the existing init-splice + versionAssetRefs pipeline
-// unchanged; everything else is read from the asset FS verbatim.
-var pageSources = map[string]string{
-	"static/login.html":  "ui/login.dopeui",
-	"static/ek.html":     "ui/ek.dopeui",
-	"static/od.html":     "ui/od.dopeui",
-	"static/si.html":     "ui/si.dopeui",
-	"static/brain.html":  "ui/brain.dopeui",
-	"static/multi.html":  "ui/multi.dopeui",
-	"static/troika.html": "ui/troika.dopeui",
-	"static/hamsa.html":  "ui/hamsa.dopeui",
-	// The gallery renders every shared table and the Grid from fixtures —
-	// the skin sheet the verify matrix shoots. Dev mode only (see main.go).
-	"static/gallery.html": "ui/gallery.dopeui",
-}
+// unchanged; everything else is read from the asset FS verbatim. A game page
+// is the one its format's Definition names (static/<name>.html from
+// ui/<name>.dopeui), so a new format's page needs no line here.
+var pageSources = func() map[string]string {
+	out := map[string]string{
+		"static/login.html": "ui/login.dopeui",
+		// The gallery renders every shared table and the Grid from fixtures —
+		// the skin sheet the verify matrix shoots. Dev mode only (see main.go).
+		"static/gallery.html": "ui/gallery.dopeui",
+	}
+	for _, d := range games.All() {
+		name := strings.TrimSuffix(strings.TrimPrefix(d.Page, "static/"), ".html")
+		out[d.Page] = "ui/" + name + ".dopeui"
+	}
+	return out
+}()
 
 // pageBytes returns the HTML for a shell path: the compiled .dopeui page for the
 // DSL-authored shells (cached in embed mode, recompiled per request in disk

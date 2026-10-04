@@ -36,18 +36,12 @@ func HandleScopedGameResults(s Host, w http.ResponseWriter, r *http.Request, fes
 		route.WriteError(w, r, err)
 		return
 	}
-	var results any
-	switch gameType {
-	case games.OD:
-		results, err = games.ComputeODResults(schemeJSON, stateJSON)
-	case games.KD:
-		// A friendship cup answers its personal standings; the tables'
-		// own totals are the OD sheet's, read from the state.
-		results, err = games.ComputeKDResults(schemeJSON, stateJSON)
-	default:
+	def, known := games.Lookup(gameType)
+	if !known || def.Results == nil {
 		http.Error(w, fmt.Sprintf("results view not available for game type %q", gameType), http.StatusBadRequest)
 		return
 	}
+	results, err := def.Results(schemeJSON, stateJSON)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return

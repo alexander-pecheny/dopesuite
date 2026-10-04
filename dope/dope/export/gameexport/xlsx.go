@@ -11,6 +11,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	"dope/dope/domain/games"
 	"dope/dope/export/xlsxexport"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
@@ -21,6 +22,48 @@ import (
 // 0/1 cells). KSI and EK export "as they look" — one sheet per in-app view tab,
 // pure values, no formulas. Answer cells, which are color-only on screen, are
 // rendered as the signed point value the color stands for (+10 / -10 / blank).
+
+// sheetBuilder writes one layout of a Game's xlsx export into f.
+type sheetBuilder func(ctx context.Context, s Host, f *excelize.File, festID, gameID int64, schemeJSON, stateJSON string) error
+
+// sheetBuilders is a builder per export layout a format declares
+// (games.Definition.Sheets). A format whose layout has no builder fails
+// TestEveryFormatHasAnExport.
+var sheetBuilders = map[games.Sheets]sheetBuilder{
+	games.SheetsODRating: func(ctx context.Context, s Host, f *excelize.File, festID, _ int64, schemeJSON, stateJSON string) error {
+		ratingByNumber, err := loadTeamRatingIDsByNumber(ctx, s.DB(), festID)
+		if err != nil {
+			return err
+		}
+		return xlsxexport.BuildODSheet(f, schemeJSON, stateJSON, ratingByNumber)
+	},
+	// A friendship cup's tables are an OD sheet; no rating ids, since a
+	// table is no rating team.
+	games.SheetsODTables: func(_ context.Context, _ Host, f *excelize.File, _, _ int64, schemeJSON, stateJSON string) error {
+		return xlsxexport.BuildODSheet(f, schemeJSON, stateJSON, nil)
+	},
+	games.SheetsKSI: func(_ context.Context, _ Host, f *excelize.File, _, _ int64, schemeJSON, stateJSON string) error {
+		return xlsxexport.BuildKSISheets(f, schemeJSON, stateJSON)
+	},
+	games.SheetsMulti: func(_ context.Context, _ Host, f *excelize.File, _, _ int64, schemeJSON, stateJSON string) error {
+		return xlsxexport.BuildMultiSheets(f, schemeJSON, stateJSON)
+	},
+	games.SheetsEK:     boutSheets(xlsxexport.BuildEKSheets),
+	games.SheetsBrain:  boutSheets(xlsxexport.BuildBrainSheets),
+	games.SheetsTroika: boutSheets(xlsxexport.BuildTroikaSheets),
+	games.SheetsHamsa:  boutSheets(xlsxexport.BuildHamsaSheets),
+}
+
+// boutSheets is a layout drawn from the Game's bouts, stage by stage.
+func boutSheets(build func(*excelize.File, []store.StageMatches) error) sheetBuilder {
+	return func(ctx context.Context, s Host, f *excelize.File, festID, gameID int64, _, _ string) error {
+		stages, err := s.LoadAllStageMatchViews(ctx, festID, gameID)
+		if err != nil {
+			return err
+		}
+		return build(f, stages)
+	}
+}
 
 // HandleScopedGameExport serves GET /api/fest/{fid}/games/{gid}/export.xlsx.
 // Gated by read access — anyone who can view the fest can download the archive.
@@ -39,40 +82,13 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 	f := excelize.NewFile()
 	defer f.Close()
 
-	switch gameType {
-	case "od":
-		var ratingByNumber map[int64]int64
-		ratingByNumber, err = loadTeamRatingIDsByNumber(r.Context(), s.DB(), festID)
-		if err == nil {
-			err = xlsxexport.BuildODSheet(f, schemeJSON, stateJSON, ratingByNumber)
-		}
-	case "kd":
-		// A friendship cup's tables are an OD sheet; no rating ids, since a
-		// table is no rating team.
-		err = xlsxexport.BuildODSheet(f, schemeJSON, stateJSON, nil)
-	case "ksi", "si":
-		err = xlsxexport.BuildKSISheets(f, schemeJSON, stateJSON)
-	case "multi":
-		err = xlsxexport.BuildMultiSheets(f, schemeJSON, stateJSON)
-	case "troika":
-		var stages []store.StageMatches
-		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {
-			err = xlsxexport.BuildTroikaSheets(f, stages)
-		}
-	case "hamsa":
-		var stages []store.StageMatches
-		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {
-			err = xlsxexport.BuildHamsaSheets(f, stages)
-		}
-	case "ek", "es":
-		var stages []store.StageMatches
-		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {
-			err = xlsxexport.BuildEKSheets(f, stages)
-		}
-	default:
+	def, known := games.Lookup(gameType)
+	build, ok := sheetBuilders[def.Sheets]
+	if !known || !ok {
 		http.Error(w, "export not supported for this game type", http.StatusBadRequest)
 		return
 	}
+	err = build(r.Context(), s, f, festID, gameID, schemeJSON, stateJSON)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return

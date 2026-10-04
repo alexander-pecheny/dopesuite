@@ -3,6 +3,7 @@ package pages
 import (
 	"context"
 	"dope/dope/domain/edit"
+	"dope/dope/domain/games"
 	"dope/dope/storage/journal"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
@@ -122,7 +123,7 @@ order by j.id`, gameID)
 	}
 
 	res := s.newNameResolver(ctx, gameType, stateJSON)
-	if gameType == "ek" {
+	if res.style == games.JournalEKRows {
 		allOps := make([][]journalOpRow, 0, len(groups))
 		for _, g := range groups {
 			allOps = append(allOps, g.ops)
@@ -168,7 +169,9 @@ type ekCell struct {
 }
 
 type nameResolver struct {
-	gameType      string
+	// style is how the Game's format says its edits are read
+	// (games.Definition.Journal).
+	style         games.Journal
 	names         []string         // KSI participants / OD team names by index
 	odNum         map[int]string   // OD team number -> name (entries store numbers)
 	ekAnswer      map[int64]ekCell // answer id -> resolved cell
@@ -180,13 +183,16 @@ type nameResolver struct {
 }
 
 func (s *Server) newNameResolver(ctx context.Context, gameType, stateJSON string) *nameResolver {
-	r := &nameResolver{gameType: gameType}
-	switch gameType {
-	case "ksi":
+	r := &nameResolver{style: games.Get(gameType).Journal}
+	if !games.Known(gameType) {
+		r.style = games.JournalEvents
+	}
+	switch r.style {
+	case games.JournalKSIPatches:
 		r.names = ksiParticipantNames(stateJSON)
-	case "od", "kd":
+	case games.JournalODPatches:
 		r.names, r.odNum = odTeamNames(stateJSON)
-	case "ek":
+	case games.JournalEKRows:
 		r.ekAnswer = map[int64]ekCell{}
 		r.ekAnswerTeam = map[int64]int64{}
 		r.ekAnswerMatch = map[int64]int64{}
@@ -373,12 +379,12 @@ where a.id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 // --- per-group description --------------------------------------------------
 
 func (r *nameResolver) describeGroup(ops []journalOpRow) []string {
-	switch r.gameType {
-	case "ek":
+	switch r.style {
+	case games.JournalEKRows:
 		return r.describeEK(ops)
-	case "od", "kd":
+	case games.JournalODPatches:
 		return r.describeStatePatchGroup(ops, r.odPatchLine)
-	case "ksi":
+	case games.JournalKSIPatches:
 		return r.describeStatePatchGroup(ops, r.ksiPatchLine)
 	default:
 		var lines []string

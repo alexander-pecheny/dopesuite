@@ -37,10 +37,9 @@ type Codec struct {
 	// `shootoutThemes` on the 10..50 scale.
 	ShootoutKey    string
 	ShootoutValues func(state string) []int
-	// ScoreMetric names the Protocol metric the sheet prints as the Match's Σ
-	// when it is not the total column (brain counts the questions taken).
-	ScoreMetric string
-	Columns     [3]string
+	// What the sheet prints as the Match's Σ is the Protocol's to say
+	// (store.ScoreMetric): brain counts the questions taken.
+	Columns [3]string
 	// Aggregate folds every finished Match into the sheet's per-player rows.
 	Aggregate func(bouts []BoutState) ([]Stat, error)
 }
@@ -61,10 +60,10 @@ var codecs = map[string]Codec{
 	// a theme's Σ merely divides among the two or three who sat it.
 	"es":    {Columns: [3]string{"Σ", "Σ+", dopestrings.Default.Replay.Codec.StatThemes()}, Aggregate: ekStats},
 	"si":    {Individual: true, Columns: [3]string{"Σ", "Σ+", dopestrings.Default.Replay.Codec.StatBouts()}, Aggregate: individualStats},
-	"brain": {Questions: true, ScoreMetric: "taken", Columns: [3]string{dopestrings.Default.Replay.Codec.StatAttempts(), dopestrings.Default.Replay.Codec.StatRight(), dopestrings.Default.Replay.Codec.StatWrong()}, Aggregate: brainStats},
+	"brain": {Questions: true, Columns: [3]string{dopestrings.Default.Replay.Codec.StatAttempts(), dopestrings.Default.Replay.Codec.StatRight(), dopestrings.Default.Replay.Codec.StatWrong()}, Aggregate: brainStats},
 	// Troika's sheet keeps no per-player row — it never records which seat
 	// answered — so there is no stats section to hold dope to.
-	"troika": {Counts: true, ThemeSize: 3, ScoreMetric: "total"},
+	"troika": {Counts: true, ThemeSize: 3},
 	// Hamsa reads like EK — a grid of themes and the player who sat for each —
 	// with the team round's bet after them. Its shootout is another personal
 	// round, so its questions are worth what that round paid.

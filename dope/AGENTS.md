@@ -161,7 +161,7 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 
 **Writes**: there is a single global write lock, and SQLite runs in WAL mode, so writes are serialised. Broadcasts are sent only after the transaction commits. A slow-write canary reports when writes start contending.
 
-**Game types**: EK, OD and KSI are separate pluggable modules, each with its own question and match state.
+**Game types**: each format (EK, ES, OD, KSI, SI, brain, Multi, Troika, Hamsa, the friendship cup) is a `games.Definition` plus a Protocol. Everything the rest of the code asks about a format is a fact on one of the two, and nothing outside `domain/games` and `domain/protocol` compares or switches on a game-type code (ADR-0027, enforced by `domain/games/guard_test.go`). ARCHITECTURE.md lists what adding a format takes.
 
 ## Testing UI Changes
 Use the `verify` skill, in `.claude/skills/verify/` at the repo root. It drives

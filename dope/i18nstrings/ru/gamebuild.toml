@@ -1,19 +1,6 @@
-# Building a game (dope/dope/domain/gamebuild): the titles the pre-DSL flat
-# formats are created under, and the errors a host can read while creating a
-# game, seating it, recompiling its scheme or clearing it.
-
-[titles]
-# The default title under which each pre-DSL flat format is created (a
-# colliding title gets a numeric suffix at creation).
-od = "ОД"
-# The default title under which each pre-DSL flat format is created (a
-# colliding title gets a numeric suffix at creation).
-ksi = "КСИ"
-# The default title under which each pre-DSL flat format is created (a
-# colliding title gets a numeric suffix at creation).
-multi = "Мультиигры"
-# The default title a friendship cup is created under.
-kd = "Кубок Дружбы"
+# Building a game (dope/dope/domain/gamebuild): a friendship cup's table
+# names, and the errors a host can read while creating a game, seating it,
+# recompiling its scheme or clearing it.
 
 [kd]
 # The name of a friendship cup's table, as a team of the ОД sheet: Стол 3.

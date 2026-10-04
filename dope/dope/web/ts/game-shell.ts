@@ -46,8 +46,9 @@ export interface GameShellSpec {
   init?: Record<string, unknown> | null;
   // An embedded view (EK's ?embed=1) mounts no menu items and no presence.
   embedded?: boolean;
-  // Whether the ☰ menu offers the game's XLSX/archive downloads (the server
-  // exports OD, KSI and EK; not brain). Default true.
+  // Whether the ☰ menu offers the game's XLSX/archive downloads. Default
+  // true; the bout page (brain, Hamsa, Troika) turns it off, though the
+  // server exports every format.
   downloads?: boolean;
   chrome: () => GameChrome;
   cursorKinds: Record<string, CursorKind>;

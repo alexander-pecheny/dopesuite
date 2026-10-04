@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
 
 	"dope/dope/domain/core"
@@ -33,7 +32,7 @@ func (s *server) scopedGameRoster(w http.ResponseWriter, r *http.Request, sc rou
 	if err := s.eng.DB.QueryRowContext(ctx, `select game_type from games where id = ? and fest_id = ?`, sc.GameID, sc.FestID).Scan(&gameType); err != nil {
 		return err
 	}
-	if slices.Contains(roster.HandRosterFormats, gameType) {
+	if roster.HandRoster(gameType) {
 		teams, err := roster.LoadGameRosters(ctx, s.eng.DB, sc.FestID, sc.GameID)
 		if err != nil {
 			return err
@@ -54,7 +53,7 @@ func (s *server) scopedGameRoster(w http.ResponseWriter, r *http.Request, sc rou
 		}
 		return s.scopedFestRoster(w, r, sc)
 	}
-	if gameType != games.Troika {
+	if !games.SeatsTroikas(gameType) {
 		return s.scopedFestRoster(w, r, sc)
 	}
 	entrants, err := s.troikaRoster(ctx, sc)

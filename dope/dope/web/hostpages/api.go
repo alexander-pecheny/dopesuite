@@ -426,9 +426,10 @@ func (s *Server) apiUpdateGame(w http.ResponseWriter, r *http.Request, sc route.
 	if err := route.DecodeJSON(r, &settings); err != nil {
 		return err
 	}
-	if settings.SchemeDSL != "" && current.Type != games.Brain {
-		// The settings page offers the scheme only to a brain game; the
-		// others are rebuilt by deleting and creating them again.
+	if settings.SchemeDSL != "" && games.Get(current.Type).DSL != games.DSLEditable {
+		// The settings page offers the scheme only to a format whose DSL it
+		// edits (brain); the others are rebuilt by deleting and creating
+		// them again.
 		if strings.TrimSpace(settings.SchemeDSL) != strings.TrimSpace(current.SchemeDSL) {
 			return corei18n.User(dopestrings.Default.Host.Games.ErrorSchemeNotEditable(games.Label(current.Type)))
 		}

@@ -1,7 +1,7 @@
 # The .xlsx export (dope/dope/export/xlsxexport): the archive workbook's sheet
 # names, column headers and cell copy — the OD rating.chgk.info layout, the
 # KSI/Multi detailed and results sheets, the EK match and per-player sheets,
-# and the Troika match sheets.
+# and the brain, Troika and Hamsa match sheets.
 
 [sheet]
 # The KSI and Multi detailed sheet (Sheet1 renamed).
@@ -63,6 +63,8 @@ normalized_name = '{{.name}} (из 100)'
 [error]
 # BuildHamsaSheets: a бой's document does not parse; match is its code.
 hamsa_state = 'бой {{.match}}: {{.err}}'
+# BuildBrainSheets: a бой's document does not parse; match is its code.
+brain_state = 'бой {{.match}}: {{.err}}'
 
 # BuildMultiSheets: the game's scheme JSON does not parse.
 multi_scheme = 'parse Мультиигры scheme: {{.err}}'

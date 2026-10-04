@@ -2,6 +2,7 @@ package xlsxexport
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -492,5 +493,43 @@ func TestBuildHamsaSheets(t *testing.T) {
 	}
 	if got := cell(t, f, sheet, "R4"); got != "-200" {
 		t.Fatalf("R4 Σ = %q", got)
+	}
+}
+
+// A brain bout is a block of its sides: each side's marks per question, the
+// shootout after the base questions, Σ taken and the place, and under the
+// marks the player who buzzed — a side that named nobody has no such row.
+func TestBuildBrainSheets(t *testing.T) {
+	state := `{"tiebreaks":1,"teams":[
+		{"rows":[{"player":"Аня","mark":"right"},{"mark":"wrong","player":"Боря"},{"mark":""},{"player":"Аня","mark":"right"}]},
+		{"rows":[{"mark":""},{"mark":"right"},{"mark":""},{"mark":"wrong"}]}]}`
+	mv := store.MatchView{
+		Title: "Бой A", Code: "s1-r1-m1", StageTitle: "Группа", StageCode: "s1-r1",
+		State:        json.RawMessage(state),
+		Participants: []store.ParticipantView{{ID: 7, Name: "Сарепта"}, {ID: 8, Name: ""}},
+	}
+	f := excelize.NewFile()
+	defer f.Close()
+	if err := BuildBrainSheets(f, []store.StageMatches{{Code: "s1-r1", Matches: []store.MatchView{mv}}}); err != nil {
+		t.Fatalf("BuildBrainSheets: %v", err)
+	}
+	rows, err := f.GetRows("Группа")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{"Бой A"},
+		{"Команда", "1", "2", "3", "П1", "Σ", "М"},
+		{"Сарепта", "+", "−", "", "+", "2", "1"},
+		{"", "Аня", "Боря", "", "Аня"},
+		{"Команда 2", "", "+", "", "−", "1", "2"},
+	}
+	if len(rows) != len(want) {
+		t.Fatalf("rows: %q", rows)
+	}
+	for i := range want {
+		if strings.Join(rows[i], "|") != strings.Join(want[i], "|") {
+			t.Errorf("row %d: %q, want %q", i+1, rows[i], want[i])
+		}
 	}
 }

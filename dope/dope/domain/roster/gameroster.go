@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strconv"
 	"strings"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/protocol"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
@@ -26,10 +26,14 @@ import (
 // game_team_players with hand = 1 (store.GameRosters reads it), and clearing
 // the Game drops it together with the overrides.
 
-// HandRosterFormats are the formats whose teams' rosters the host edits per
-// Game: the buzzer formats that seat teams. Troika seats troikas, whose people
-// are edited on the troikas page; personal SI seats players, not teams.
-var HandRosterFormats = []string{games.EK, games.ES, games.Brain, games.Hamsa}
+// HandRoster reports whether the host edits a team's roster per Game in this
+// format (games.Definition.HandRoster): the buzzer formats that seat teams.
+// Troika seats troikas, whose people are edited on the troikas page; personal
+// SI seats players, not teams.
+func HandRoster(gameType string) bool {
+	d, ok := games.Lookup(gameType)
+	return ok && d.HandRoster
+}
 
 // GameRosterPlayer is one player on a team's game roster. Locked says the
 // player already has something entered in this Game, so the host cannot take
@@ -230,7 +234,8 @@ func (u usedPlayers) markID(team, player int64) {
 	u.ids[team][player] = true
 }
 
-// playersWithResults reads every bout of the Game for the players it names.
+// playersWithResults reads every bout of the Game for the players it names,
+// through the format's Protocol (protocol.PlayersUser).
 func playersWithResults(ctx context.Context, q store.Queryer, gameID int64, gameType string) (usedPlayers, error) {
 	used := usedPlayers{ids: map[int64]map[int64]bool{}, names: map[int64]map[string]bool{}}
 	type match struct {
@@ -245,61 +250,37 @@ select id, coalesce(state_json, '{}') from matches where game_id = ?`, []any{gam
 	if err != nil {
 		return used, err
 	}
+	type slot struct{ match, index, participant int64 }
+	slots, err := store.CollectRows(ctx, q, `
+select ms.match_id, ms.slot_index, coalesce(ms.participant_id, 0) from match_slots ms
+join matches m on m.id = ms.match_id where m.game_id = ?`, []any{gameID}, func(rows *sql.Rows) (slot, error) {
+		var s slot
+		return s, rows.Scan(&s.match, &s.index, &s.participant)
+	})
+	if err != nil {
+		return used, err
+	}
+	seats := map[int64][]int64{}
+	for _, s := range slots {
+		if s.index < 0 {
+			continue
+		}
+		row := seats[s.match]
+		for int64(len(row)) <= s.index {
+			row = append(row, 0)
+		}
+		row[s.index] = s.participant
+		seats[s.match] = row
+	}
 	for _, m := range matches {
-		switch {
-		case games.EKShaped(gameType):
-			blob, err := store.ParseMatchBlob(m.state)
-			if err != nil {
-				continue
-			}
-			for key, section := range blob.Participants {
-				team, _ := strconv.ParseInt(key, 10, 64)
-				for _, theme := range append(append([]store.BlobTheme(nil), section.Themes...), section.ShootoutThemes...) {
-					for _, player := range theme.Players {
-						used.markID(team, player)
-					}
+		players, _ := protocol.UsedPlayers(gameType, json.RawMessage(m.state), seats[m.id])
+		for _, p := range players {
+			used.markID(p.Team, p.Player)
+			if name := strings.TrimSpace(p.Name); name != "" {
+				if used.names[p.Team] == nil {
+					used.names[p.Team] = map[string]bool{}
 				}
-			}
-		case gameType == games.Hamsa:
-			var state games.HamsaState
-			if json.Unmarshal([]byte(m.state), &state) != nil {
-				continue
-			}
-			for key, side := range state.Participants {
-				if side == nil {
-					continue
-				}
-				team, _ := strconv.ParseInt(key, 10, 64)
-				for _, theme := range append(append([]games.HamsaTheme(nil), side.Themes...), side.Shootout...) {
-					used.markID(team, theme.Player)
-				}
-			}
-		case gameType == games.Brain:
-			var state games.BrainState
-			if json.Unmarshal([]byte(m.state), &state) != nil {
-				continue
-			}
-			seats, err := store.CollectRows(ctx, q, `
-select slot_index, coalesce(participant_id, 0) from match_slots where match_id = ?`, []any{m.id},
-				func(rows *sql.Rows) ([2]int64, error) {
-					var s [2]int64
-					return s, rows.Scan(&s[0], &s[1])
-				})
-			if err != nil {
-				return used, err
-			}
-			for _, seat := range seats {
-				if seat[0] < 0 || int(seat[0]) >= len(state.Teams) || seat[1] == 0 {
-					continue
-				}
-				for _, row := range state.Teams[seat[0]].Rows {
-					if name := strings.TrimSpace(row.Player); name != "" {
-						if used.names[seat[1]] == nil {
-							used.names[seat[1]] = map[string]bool{}
-						}
-						used.names[seat[1]][util.AlphaKey(name)] = true
-					}
-				}
+				used.names[p.Team][util.AlphaKey(name)] = true
 			}
 		}
 	}
@@ -314,7 +295,7 @@ func editableTeam(ctx context.Context, q store.Queryer, festID, gameID, particip
 	if err != nil {
 		return game, err
 	}
-	if !slices.Contains(HandRosterFormats, game.gameType) {
+	if !HandRoster(game.gameType) {
 		return game, corei18n.User(s.Fest.RosterEdit.WrongFormat())
 	}
 	ids, err := gameTeamIDs(ctx, q, gameID, game.state)

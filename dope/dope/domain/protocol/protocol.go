@@ -155,6 +155,9 @@ func Register(p Protocol) {
 	if seater, ok := p.(SeatsPlayers); ok && seater.SeatsPlayers() {
 		store.RegisterSeatRoster(p.Code())
 	}
+	if scorer, ok := p.(ScoreMetricer); ok {
+		store.RegisterScoreMetric(p.Code(), scorer.ScoreMetric())
+	}
 	// How many players a theme seats when no stage config says: the store
 	// loads matches without knowing Protocols, so the default travels down
 	// with the registration rather than being looked up by game type.
@@ -321,4 +324,58 @@ func RatingRosterStateKey(code string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// ScoreMetricer is a Protocol whose bout score, as a sheet prints it, is one
+// of its metrics rather than the total: brain counts the questions a side
+// took. The store reads it (store.ScoreMetric) for the match summaries, and
+// the replay harness for the transcript's Σ.
+type ScoreMetricer interface {
+	ScoreMetric() string
+}
+
+// UsedPlayer is one player a bout's document names against a team: by id
+// where the document records ids, by Name where it records the name.
+type UsedPlayer struct {
+	Team   int64
+	Player int64
+	Name   string
+}
+
+// PlayersUser is a Protocol whose bouts name the players who answered for a
+// team. A hand roster may not drop a player a bout names
+// (games.Definition.HandRoster), so every format with hand rosters has one.
+// seats are the bout's Participants by slot index (0 for an empty seat).
+type PlayersUser interface {
+	UsedPlayers(state json.RawMessage, seats []int64) []UsedPlayer
+}
+
+// UsedPlayers lists the players a bout of the game type names; ok is false
+// for a Protocol that names none.
+func UsedPlayers(code string, state json.RawMessage, seats []int64) ([]UsedPlayer, bool) {
+	p, found := Get(code)
+	if !found {
+		return nil, false
+	}
+	user, ok := p.(PlayersUser)
+	if !ok {
+		return nil, false
+	}
+	return user.UsedPlayers(state, seats), true
+}
+
+// GuestHost is a Protocol whose document may list guest teams a host adds by
+// name on the Game's page (CONTEXT.md, Guest team).
+type GuestHost interface {
+	TakesGuests() bool
+}
+
+// TakesGuests reports whether a game type's document may list guest teams.
+func TakesGuests(code string) bool {
+	p, ok := Get(code)
+	if !ok {
+		return false
+	}
+	g, ok := p.(GuestHost)
+	return ok && g.TakesGuests()
 }

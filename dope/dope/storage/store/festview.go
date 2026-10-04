@@ -101,14 +101,15 @@ order by m.position, m.id`, stageID)
 // slot index, resolving each slot's source label. The score is what the sheet
 // prints as the match's score, and that is not the same column in every game:
 // brain counts the questions a side took, everything else scores points.
+// The Protocol says which (store.ScoreMetric).
 //
 // A Draw Slot also carries who may be seated in it. The grid's panel needs
 // Participant ids to send back, and a match summary carries names alone, so
 // the candidates are resolved here rather than on the page.
 func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64, gameType string) ([]MatchParticipantSummary, error) {
 	score := "coalesce(r.total, 0)"
-	if gameType == "brain" {
-		score = "coalesce(cast(r.metrics_json ->> '$.taken' as integer), 0)"
+	if metric := ScoreMetric(gameType); metric != "" {
+		score = "coalesce(cast(r.metrics_json ->> '$." + metric + "' as integer), 0)"
 	}
 	var gameID int64
 	draws := map[int]*SchemeDraw{}

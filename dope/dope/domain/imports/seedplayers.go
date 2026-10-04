@@ -303,7 +303,7 @@ func loadSeedSourceGame(ctx context.Context, q store.Queryer, festID int64, code
 	gameID := doc.GameID
 	var places map[int64]float64
 	if len(tours) > 0 {
-		if doc.GameType != games.OD {
+		if !games.Get(doc.GameType).ToursSeed {
 			return seedSourceGame{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.ToursOd(code))
 		}
 		places, err = odPlacesAfterTours(ctx, q, festID, code, doc.SchemeJSON, doc.State, tours)

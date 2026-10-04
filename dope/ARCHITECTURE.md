@@ -88,10 +88,30 @@ database transaction or the server itself stays in `dopeserver`, and calls in
 here when it needs type metadata.
 
 - `games` is the single source of truth for everything the code knows about
-  game types: the canonical codes (`EK`, `OD`, `KSI`, `SI`), the `Definition`
-  registry, and the pure OD (ЧГК) domain, which covers the state shapes, parsing
-  the tour composition and scoring the standings. To add a new format, register a
-  `Definition`. Do not add another `switch gameType`.
+  game types: the canonical codes, the `Definition` registry, and the pure
+  per-format domain (state shapes, scoring, the default schemes). A
+  `Definition` carries every fact about a format's place in the fest that code
+  elsewhere asks (ADR-0027): what it seats (`Individual`, `Troikas`, `Flat`,
+  which also means it keeps no entrant list), `EKBout`, `HandRoster`,
+  `Divisions`, `PlayerOverrides`, how it takes a DSL (`DSL`, `DefaultDSL`,
+  `UpgradeDSL`, `PastedScheme`), its `Title`, `Page` and `Init`, its `Results`
+  view, its xlsx layout (`Sheets`) and how the history page reads it
+  (`Journal`). Facts about the document a bout holds are on its Protocol
+  (`domain/protocol`), as optional capabilities in ADR-0012's pattern: a flat
+  Game's pristine scheme and document (`PristineBuilder`, which creation and
+  Clear share), what a clear keeps (`ClearKeeper`), which players a bout used
+  (`PlayersUser`), the bout's score metric (`ScoreMetricer`), guest teams
+  (`GuestHost`).
+
+  **To add a format**: register its `Definition` (and give it a row in
+  `formatFacts`, `games_test.go`), register its Protocol, give it a part of
+  the creation form (`hostpages.formatForms`), its page (`Page`, a
+  `ui/<name>.dopeui`, a bundle in `scripts/webbuild` and a page kind in
+  `web/ui/app.go`/`vocab.json`), and, if its transcript is replayed, a codec in
+  `domain/replay/codec.go`. The tests that walk the registry say what is
+  missing. Do not add another `switch gameType`, `== games.X` or SQL
+  `game_type = '…'`: `games/guard_test.go` refuses them outside the
+  registries.
 - `core` — the `Engine`: shared in-memory state, write-tx plumbing, journal
   service, broadcast, revert. Embedded by `*server`.
 - `structure` is the Kind registry. A Kind is one type that plays three roles:
@@ -144,7 +164,8 @@ here when it needs type metadata.
 
 ### `export/` — output generation
 
-- `xlsxexport` — per-game xlsx sheet builders (OD/KSI/EK).
+- `xlsxexport` — per-game xlsx sheet builders (OD, KSI, Multi, EK, brain,
+  Troika, Hamsa); `gameexport` picks one by the format's `Definition.Sheets`.
 - `gameexport` — game export orchestration (xlsx / json / results archive).
 
 ### `platform/` — cross-cutting leaves
@@ -168,8 +189,13 @@ Stdlib-only or near-it utilities with no domain knowledge:
   `domain → storage → platform`. Nothing in `domain/`, `storage/`, `platform/`,
   `export/` imports `web/` or `server/`. `platform/` imports no internal package
   upward of itself.
-- **Registry over switches.** New game-type behaviour is registered in
-  `domain/games`, not added as another `switch gameType` in a handler.
+- **Registry over switches.** New game-type behaviour is a fact on the
+  format's `Definition` (`domain/games`) or a capability of its Protocol
+  (`domain/protocol`), never another `switch gameType` in a handler (ADR-0027,
+  enforced by `games/guard_test.go`). The one literal left in `storage/` is
+  `storeutil.ValidateScheme`'s EK-shaped check, because storage may not import
+  `domain/games`; facts storage needs travel down at registration
+  (`store.RegisterTeamBlob`, `RegisterScoreMetric`).
 - **Refactors preserve behaviour.** The existing test suite (`just test`) and
   `just vet` are what verify that. Never let a functional change ride along with
   a refactor.

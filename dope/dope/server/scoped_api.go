@@ -12,7 +12,6 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
 	"dope/dope/domain/flatgame"
-	"dope/dope/domain/games"
 	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/platform/util"
@@ -150,7 +149,7 @@ func (s *server) rewriteMultiGuests(reqCtx context.Context, scope festScope, app
 		if err != nil {
 			return err
 		}
-		if doc.GameType != games.Multi {
+		if !protocol.TakesGuests(doc.GameType) {
 			return corei18n.User(dopestrings.Default.Games.MultiGuest.WrongGame())
 		}
 		schemeJSON, stateJSON, err := apply(doc.SchemeJSON, doc.State)

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,12 +47,9 @@ type hostGameCreateData struct {
 	Fest         view.HostFest
 	Error        string
 	SelectedType string
-	BrainDSL     string
-	SIDSL        string
-	TroikaDSL    string
-	HamsaDSL     string
-	EKDSL        string
-	ESDSL        string
+	// DSL is each scheme format's editor text, by format code: what the host
+	// posted, else the format's default scheme (games.Definition.DefaultDSL).
+	DSL map[string]string
 	// Entrants is the fest's registry offered as this Game's entrant list.
 	// A Game numbers whom it seats from 1 (ADR-0009), so a fest of 65 can hold
 	// an EK of 48 and a brain of a different 48.
@@ -157,107 +153,230 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 	}
 	submit = append(submit, dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.CreateSubmit())))
 
-	page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/game/new"),
+	form := []dopeui.Item{dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/" + ref + "/game/new"),
 		dopeui.Autocomplete("off"), dopeui.Data("game-create-form", ""),
-		dopeui.Pickgroup(dopeui.Label(s.Host.Games.TypeLabel()),
-			gameTypeRadio("od", s.Host.Games.TypeOd(), sel),
-			gameTypeRadio("ksi", s.Host.Games.TypeKsi(), sel),
-			gameTypeRadio("ksi_stickers", s.Host.Games.TypeKsiStickers(), sel),
-			gameTypeRadio("brain", s.Host.Games.TypeBrain(), sel),
-			gameTypeRadio("ek", s.Host.Games.TypeEk(), sel),
-			gameTypeRadio("es", s.Host.Games.TypeEs(), sel),
-			gameTypeRadio("si", s.Host.Games.TypeSi(), sel),
-			gameTypeRadio("multi", s.Host.Games.TypeMulti(), sel),
-			gameTypeRadio("troika", s.Host.Games.TypeTroika(), sel),
-			gameTypeRadio("hamsa", s.Host.Games.TypeHamsa(), sel),
-			gameTypeRadio("kd", s.Host.Games.TypeKd(), sel),
-		),
-		gameSettings("od", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
-			dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("od_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
-		),
-		gameSettings("kd", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("kd_tours"), dopeui.Inputmode("numeric"), dopeui.Value("9"))),
-			dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("kd_questions"), dopeui.Inputmode("numeric"), dopeui.Value("4"))),
-			dopeui.Field(dopeui.Label(s.Host.Games.KdTablesLabel()), dopeui.Textfield(dopeui.Name("kd_tables"), dopeui.Inputmode("numeric"), dopeui.Value("11"))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.KdHint())),
-		),
-		gameSettings("ksi", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksi_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
-		),
-		gameSettings("ksi_stickers", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksis_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
-			dopeui.Hint(dopeui.Text(s.Host.Games.StickersHint())),
-			stickerRow(s.Host.Games.StickerNeutral(), "ksis_neutral_max", "20", "ksis_neutral_color", "#ffffff"),
-			stickerRow(s.Host.Games.StickerX2Row(), "ksis_x2_max", "2", "ksis_x2_color", "#fdf66f"),
-			stickerRow(s.Host.Games.StickerNowrongRow(), "ksis_nowrong_max", "1", "ksis_nowrong_color", "#aded87"),
-			stickerRow(s.Host.Games.StickerEmptywrongRow(), "ksis_emptywrong_max", "1", "ksis_emptywrong_color", "#ff7a6b"),
-		),
-		gameSettings("brain", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.BrainDSL))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.BrainHint())),
-		),
-		gameSettings("si", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("si_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SIDSL))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.SiHint())),
-		),
-		gameSettings("multi", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.MinigamesLabel()),
-				dopeui.Editor(dopeui.Name("multi_games"), dopeui.Rows("8"), dopeui.Spellcheck("false"),
-					dopeui.Placeholder(s.Host.Games.MinigamesPlaceholder()))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.MinigamesHint())),
-			dopeui.Hint(dopeui.Text(s.Host.Games.MinigamesShareHint())),
-			dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
-			dopeui.Field(dopeui.Label(s.Host.Games.MultiSortingLabel()),
-				dopeui.Textfield(dopeui.Name("multi_sorting"), dopeui.Placeholder("total, game2, plus"))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.MultiSortingHint())),
-		),
-		gameSettings("troika", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("troika_dsl"), dopeui.Rows("16"), dopeui.Spellcheck("false"), dopeui.Text(data.TroikaDSL))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.TroikaHint())),
-		),
-		gameSettings("hamsa", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("hamsa_dsl"), dopeui.Rows("18"), dopeui.Spellcheck("false"), dopeui.Text(data.HamsaDSL))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.HamsaHint())),
-		),
-		gameSettings("ek", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("ek_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Text(data.EKDSL), dopeui.Placeholder("[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2"))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.EkHint())),
-			dopeui.Field(dopeui.Label(s.Host.Games.EkJsonLabel()),
-				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
-		),
-		gameSettings("es", sel,
-			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("es_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Text(data.ESDSL), dopeui.Placeholder("[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2\nplayers: 3"))),
-			dopeui.Hint(dopeui.Text(s.Host.Games.EsHint())),
-			dopeui.Field(dopeui.Label(s.Host.Games.EkJsonLabel()),
-				dopeui.Editor(dopeui.Name("es_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"es","stages":[...]}`))),
-		),
-		entrantPicker(data),
-		dopeui.Row(submit...),
-	))
+		dopeui.Pickgroup(append([]dopeui.Item{dopeui.Label(s.Host.Games.TypeLabel())}, typeRadios(sel)...)...),
+	}
+	form = append(form, settingsSections(data)...)
+	form = append(form, entrantPicker(data), dopeui.Row(submit...))
+	page = append(page, dopeui.Form(form...))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
 
-// entrantFormats are the formats whose creation seats the entrants a host ticks
-// — the ones described by a scheme. A flat format (OD, KSI, multi) seats the
-// whole fest roster under the fest's own numbers and marks who did not play on
-// its refusals tab, so it is not offered the picker at all and refuses a chosen
-// list rather than dropping it (gamebuild.Create).
-var entrantFormats = []string{games.Brain, games.SI, games.Troika, games.Hamsa, games.EK}
+// formatForm is what the creation form draws and reads for one format beyond
+// what its Definition says. A format described by a scheme gets a DSL editor
+// (games.Definition.DefaultDSL prefills it) and, when it takes a pasted JSON
+// scheme, a JSON editor too; a flat format draws its own knobs and reads
+// them into the Spec. A variant is a second radio over the same format.
+type formatForm struct {
+	// A scheme format's editor height, hint and placeholder.
+	rows        string
+	hint        func() string
+	placeholder string
+	// A flat format's knobs, and how they are read.
+	knobs   func() []dopeui.Item
+	read    func(spec *gamebuild.Spec, form url.Values) error
+	variant *formVariant
+}
+
+// formVariant is a radio that creates the format it follows with other knobs:
+// KSI with stickers is an ordinary KSI whose scheme carries a stickers block.
+type formVariant struct {
+	value, label string
+	knobs        func() []dopeui.Item
+	read         func(spec *gamebuild.Spec, form url.Values) error
+}
+
+// formatForms is every format's part of the creation form, by code. A format
+// registered in domain/games without one fails TestEveryFormatHasACreationForm.
+var formatForms = map[string]formatForm{
+	games.OD: {
+		knobs: func() []dopeui.Item {
+			s := dopestrings.Default
+			return []dopeui.Item{
+				dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
+				dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("od_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
+				dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
+			}
+		},
+		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
+			s := dopestrings.Default
+			if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", s.Host.Games.OdToursLabel(), 1, 20); err != nil {
+				return err
+			}
+			spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", s.Host.Games.OdQuestionsLabel(), 1, 100)
+			return err
+		},
+	},
+	games.KSI: {
+		knobs: func() []dopeui.Item {
+			s := dopestrings.Default
+			return []dopeui.Item{
+				dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksi_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
+				dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
+			}
+		},
+		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
+			spec.KSIThemes, err = parsePositiveFormInt(form, "ksi_themes", dopestrings.Default.Host.Games.ThemesLabel(), 1, 100)
+			return err
+		},
+		variant: &formVariant{
+			value: ksiStickersGameType,
+			label: dopestrings.Default.Host.Games.TypeKsiStickers(),
+			knobs: func() []dopeui.Item {
+				s := dopestrings.Default
+				return []dopeui.Item{
+					dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksis_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
+					dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
+					dopeui.Hint(dopeui.Text(s.Host.Games.StickersHint())),
+					stickerRow(s.Host.Games.StickerNeutral(), "ksis_neutral_max", "20", "ksis_neutral_color", "#ffffff"),
+					stickerRow(s.Host.Games.StickerX2Row(), "ksis_x2_max", "2", "ksis_x2_color", "#fdf66f"),
+					stickerRow(s.Host.Games.StickerNowrongRow(), "ksis_nowrong_max", "1", "ksis_nowrong_color", "#aded87"),
+					stickerRow(s.Host.Games.StickerEmptywrongRow(), "ksis_emptywrong_max", "1", "ksis_emptywrong_color", "#ff7a6b"),
+				}
+			},
+			read: func(spec *gamebuild.Spec, form url.Values) (err error) {
+				if spec.KSIThemes, err = parsePositiveFormInt(form, "ksis_themes", dopestrings.Default.Host.Games.ThemesLabel(), 1, 100); err != nil {
+					return err
+				}
+				spec.KSIStickers, err = ksiStickerConfigFromForm(form)
+				return err
+			},
+		},
+	},
+	games.Brain: {rows: "14", hint: dopestrings.Default.Host.Games.BrainHint},
+	games.EK: {rows: "10", hint: dopestrings.Default.Host.Games.EkHint,
+		placeholder: "[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2"},
+	games.ES: {rows: "10", hint: dopestrings.Default.Host.Games.EsHint,
+		placeholder: "[scheme]\nkind: single_elimination\nparticipants: 48\nmatch_size: 4\nwinning_places: 2\nplayers: 3"},
+	games.SI: {rows: "14", hint: dopestrings.Default.Host.Games.SiHint},
+	games.Multi: {
+		knobs: func() []dopeui.Item {
+			s := dopestrings.Default
+			return []dopeui.Item{
+				dopeui.Field(dopeui.Label(s.Host.Games.MinigamesLabel()),
+					dopeui.Editor(dopeui.Name("multi_games"), dopeui.Rows("8"), dopeui.Spellcheck("false"),
+						dopeui.Placeholder(s.Host.Games.MinigamesPlaceholder()))),
+				dopeui.Hint(dopeui.Text(s.Host.Games.MinigamesHint())),
+				dopeui.Hint(dopeui.Text(s.Host.Games.MinigamesShareHint())),
+				dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
+				dopeui.Field(dopeui.Label(s.Host.Games.MultiSortingLabel()),
+					dopeui.Textfield(dopeui.Name("multi_sorting"), dopeui.Placeholder("total, game2, plus"))),
+				dopeui.Hint(dopeui.Text(s.Host.Games.MultiSortingHint())),
+			}
+		},
+		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
+			s := dopestrings.Default
+			if spec.Minigames, err = games.ParseMultiGames(form.Get("multi_games")); err != nil {
+				return corei18n.User(s.Host.Games.ErrorMinigames(err.Error()))
+			}
+			if spec.MultiSorting, err = games.ParseMultiSorting(spec.Minigames, form.Get("multi_sorting")); err != nil {
+				return corei18n.User(s.Host.Games.ErrorMultiSorting(err.Error()))
+			}
+			return nil
+		},
+	},
+	games.Troika: {rows: "16", hint: dopestrings.Default.Host.Games.TroikaHint},
+	games.Hamsa:  {rows: "18", hint: dopestrings.Default.Host.Games.HamsaHint},
+	games.KD: {
+		knobs: func() []dopeui.Item {
+			s := dopestrings.Default
+			return []dopeui.Item{
+				dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("kd_tours"), dopeui.Inputmode("numeric"), dopeui.Value("9"))),
+				dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("kd_questions"), dopeui.Inputmode("numeric"), dopeui.Value("4"))),
+				dopeui.Field(dopeui.Label(s.Host.Games.KdTablesLabel()), dopeui.Textfield(dopeui.Name("kd_tables"), dopeui.Inputmode("numeric"), dopeui.Value("11"))),
+				dopeui.Hint(dopeui.Text(s.Host.Games.KdHint())),
+			}
+		},
+		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
+			s := dopestrings.Default
+			if spec.ODTours, err = parsePositiveFormInt(form, "kd_tours", s.Host.Games.OdToursLabel(), 1, 20); err != nil {
+				return err
+			}
+			if spec.ODQuestions, err = parsePositiveFormInt(form, "kd_questions", s.Host.Games.OdQuestionsLabel(), 1, 100); err != nil {
+				return err
+			}
+			spec.KDTables, err = parsePositiveFormInt(form, "kd_tables", s.Host.Games.KdTablesLabel(), 2, 199)
+			return err
+		},
+	},
+}
+
+// dslFieldOf names a scheme format's DSL editor on the creation form, and
+// jsonFieldOf its pasted-JSON editor. Every section is in the document at
+// once and the page merely hides the ones not picked — a hidden field still
+// posts — so one shared name would have handed a brain game's prefilled
+// scheme to whatever type the host actually chose. A flat format has no
+// scheme on the form and its DSL is empty.
+func dslFieldOf(code string) (string, bool) {
+	d, ok := games.Lookup(code)
+	if !ok || d.Flat {
+		return "", false
+	}
+	return code + "_dsl", true
+}
+
+func jsonFieldOf(code string) (string, bool) {
+	d, ok := games.Lookup(code)
+	if !ok || !d.PastedScheme {
+		return "", false
+	}
+	return code + "_scheme", true
+}
+
+// typeRadios is the game-type picker: every registered format in the
+// registry's order, each followed by its variants.
+func typeRadios(selected string) []dopeui.Item {
+	var out []dopeui.Item
+	for _, d := range games.All() {
+		out = append(out, gameTypeRadio(d.Code, d.Title, selected))
+		if v := formatForms[d.Code].variant; v != nil {
+			out = append(out, gameTypeRadio(v.value, v.label, selected))
+		}
+	}
+	return out
+}
+
+// settingsSections is every format's settings section, hidden unless picked.
+func settingsSections(data hostGameCreateData) []dopeui.Item {
+	s := dopestrings.Default
+	var out []dopeui.Item
+	for _, d := range games.All() {
+		f := formatForms[d.Code]
+		var kids []dopeui.Item
+		if field, ok := dslFieldOf(d.Code); ok {
+			editor := []dopeui.Item{dopeui.Name(field), dopeui.Rows(f.rows), dopeui.Spellcheck("false"), dopeui.Text(data.DSL[d.Code])}
+			if f.placeholder != "" {
+				editor = append(editor, dopeui.Placeholder(f.placeholder))
+			}
+			kids = append(kids, dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()), dopeui.Editor(editor...)))
+			if f.hint != nil {
+				kids = append(kids, dopeui.Hint(dopeui.Text(f.hint())))
+			}
+			if field, ok := jsonFieldOf(d.Code); ok {
+				kids = append(kids, dopeui.Field(dopeui.Label(s.Host.Games.EkJsonLabel()),
+					dopeui.Editor(dopeui.Name(field), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"`+d.Code+`","stages":[...]}`))))
+			}
+		} else if f.knobs != nil {
+			kids = f.knobs()
+		}
+		out = append(out, gameSettings(d.Code, data.SelectedType, kids...))
+		if v := f.variant; v != nil {
+			out = append(out, gameSettings(v.value, data.SelectedType, v.knobs()...))
+		}
+	}
+	return out
+}
 
 // SeatsChosenEntrants reports whether a format seats the entrant list a host
-// picked, rather than the whole fest roster.
+// picked, rather than the whole fest roster: every format described by a
+// scheme, which keeps an entrant list (games.KeepsEntrantList). A flat format
+// (OD, KSI, Multi, the friendship cup) seats the whole fest roster under the
+// fest's own numbers and marks who did not play on its refusals tab, so it is
+// not offered the picker at all and refuses a chosen list rather than
+// dropping it (gamebuild.Create).
 func SeatsChosenEntrants(gameType string) bool {
-	return slices.Contains(entrantFormats, gameType)
+	return games.KeepsEntrantList(gameType)
 }
 
 // entrantPicker offers the fest's registry as this Game's entrant list. Ticking
@@ -277,7 +396,7 @@ func entrantPicker(data hostGameCreateData) dopeui.Item {
 		boxes = append(boxes, dopeui.Checkbox(dopeui.Name("entrant_id"),
 			dopeui.Value(entrant.value()), dopeui.Text(entrant.Label)))
 	}
-	items := []dopeui.Item{dopeui.Data("game-entrants", strings.Join(entrantFormats, " "))}
+	items := []dopeui.Item{dopeui.Data("game-entrants", strings.Join(games.Codes(func(d games.Definition) bool { return !d.Flat }), " "))}
 	if !SeatsChosenEntrants(data.SelectedType) {
 		items = append(items, dopeui.Hidden())
 	}
@@ -369,7 +488,7 @@ select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_d
 			Slug:      slug.String,
 			Error:     errMsg,
 			SchemeDSL: schemeDSL,
-			HasDSL:    gameType == games.Brain && schemeDSL != "",
+			HasDSL:    games.Get(gameType).DSL == games.DSLEditable && schemeDSL != "",
 			Divisions: divisions,
 			Hidden:    store.ParseHiddenDivisions(hidden),
 		}), nil
@@ -516,10 +635,12 @@ order by t.position, t.id, f.position`, []any{festID}, func(rows *sql.Rows) (str
 	return cleanDivisions(flags), nil
 }
 
-// divisionsGame reports whether a game type shows divisions to choose among: the
-// flat games, whose results tabs and screen carry the chips.
+// divisionsGame reports whether a game type shows divisions to choose among
+// (games.Definition.Divisions): the formats whose results tabs and screen
+// carry the chips.
 func divisionsGame(gameType string) bool {
-	return gameType == games.OD || gameType == games.KSI || gameType == games.Multi
+	d, ok := games.Lookup(gameType)
+	return ok && d.Divisions
 }
 
 func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
@@ -676,15 +797,22 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			return nil, err
 		}
+		dsl := map[string]string{}
+		for _, d := range games.All() {
+			field, ok := dslFieldOf(d.Code)
+			if !ok {
+				continue
+			}
+			fallback := ""
+			if d.DefaultDSL != nil {
+				fallback = d.DefaultDSL(teamCount)
+			}
+			dsl[d.Code] = kept(field, fallback)
+		}
 		return hostGameCreateDoc(hostGameCreateData{
 			Fest: fest, Error: errMsg, SelectedType: selectedType,
-			BrainDSL:  kept("brain_dsl", gamebuild.DefaultBrainDSL(teamCount, 5)),
-			SIDSL:     kept("si_dsl", defaultSIDSL(teamCount)),
-			TroikaDSL: kept("troika_dsl", defaultTroikaDSL(teamCount)),
-			HamsaDSL:  kept("hamsa_dsl", defaultHamsaDSL(teamCount)),
-			EKDSL:     kept("ek_dsl", ""),
-			ESDSL:     kept("es_dsl", ""),
-			Entrants:  entrants,
+			DSL:      dsl,
+			Entrants: entrants,
 		}), nil
 	})
 }
@@ -811,10 +939,10 @@ func (req GameCreateRequest) form() url.Values {
 	for _, ref := range req.EntrantRefs {
 		form.Add("entrant_id", ref)
 	}
-	if field, ok := dslField[req.GameType]; ok {
+	if field, ok := dslFieldOf(req.GameType); ok {
 		form.Set(field, req.DSL)
 	}
-	if field, ok := schemeJSONField[req.GameType]; ok && len(req.Scheme) > 0 {
+	if field, ok := jsonFieldOf(req.GameType); ok && len(req.Scheme) > 0 {
 		form.Set(field, string(req.Scheme))
 	}
 	setIfGiven := func(key string, v int) {
@@ -857,103 +985,46 @@ func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, fe
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/game/%s/", s.festRefOrID(r.Context(), festID), s.gameRefOrID(r.Context(), gameID)), http.StatusSeeOther)
 }
 
-// dslField names each format's scheme editor on the creation form. Every section
-// is in the document at once and the page merely hides the ones not picked — a
-// hidden field still posts — so one shared name would have handed a brain game's
-// prefilled scheme to whatever type the host actually chose. A format absent
-// here has no scheme of its own and its DSL is empty.
-var dslField = map[string]string{
-	games.Brain:  "brain_dsl",
-	games.SI:     "si_dsl",
-	games.Troika: "troika_dsl",
-	games.Hamsa:  "hamsa_dsl",
-	games.EK:     "ek_dsl",
-	games.ES:     "es_dsl",
-}
-
-// schemeJSONField names each format's pasted-JSON editor, for the two that
-// take a detailed scheme instead of a DSL.
-var schemeJSONField = map[string]string{
-	games.EK: "ek_scheme",
-	games.ES: "es_scheme",
-}
-
 // gameSpecFromForm reads the creation form into what gamebuild needs: the
-// format's label and DSL, the entrants ticked, and for the three pre-DSL
-// formats their own knobs.
+// format's title and DSL, the entrants ticked, and a flat format's own knobs
+// (formatForms).
 func gameSpecFromForm(ctx context.Context, tx *sql.Tx, festID int64, gameType string, form url.Values) (gamebuild.Spec, error) {
 	entrants, err := gamebuild.ResolveEntrantRefsTx(ctx, tx, festID, chosenEntrantRefs(form))
 	if err != nil {
 		return gamebuild.Spec{}, err
 	}
-	spec := gamebuild.Spec{FestID: festID, Type: gameType, Entrants: entrants, DSL: strings.TrimSpace(form.Get(dslField[gameType]))}
-	s := dopestrings.Default
-	switch gameType {
-	case games.OD:
-		if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", s.Host.Games.OdToursLabel(), 1, 20); err != nil {
+	spec := gamebuild.Spec{FestID: festID, Type: gameType, Entrants: entrants}
+	read := formatForms[gameType].read
+	for _, d := range games.All() {
+		if v := formatForms[d.Code].variant; v != nil && v.value == gameType {
+			spec.Type, read = d.Code, v.read
+		}
+	}
+	def := games.Get(spec.Type)
+	spec.Label = def.Title
+	if field, ok := dslFieldOf(spec.Type); ok {
+		spec.DSL = strings.TrimSpace(form.Get(field))
+	}
+	if read != nil {
+		if err := read(&spec, form); err != nil {
 			return spec, err
 		}
-		if spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", s.Host.Games.OdQuestionsLabel(), 1, 100); err != nil {
-			return spec, err
+	}
+	// A format that takes a pasted JSON scheme (EK, Erudit-Sextet) is
+	// describable in the scheme language too, now that an elimination counts
+	// Losses rather than seats, so a DSL wins over the pasted JSON when both
+	// are offered.
+	if field, ok := jsonFieldOf(spec.Type); ok && spec.DSL == "" {
+		s := dopestrings.Default
+		raw := strings.TrimSpace(form.Get(field))
+		if raw == "" {
+			return spec, corei18n.User(s.Host.Games.ErrorEkSchemeMissing())
 		}
-	case games.KD:
-		if spec.ODTours, err = parsePositiveFormInt(form, "kd_tours", s.Host.Games.OdToursLabel(), 1, 20); err != nil {
-			return spec, err
+		var scheme store.FestScheme
+		if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
+			return spec, corei18n.User(s.Host.Games.ErrorJsonParse(err.Error()))
 		}
-		if spec.ODQuestions, err = parsePositiveFormInt(form, "kd_questions", s.Host.Games.OdQuestionsLabel(), 1, 100); err != nil {
-			return spec, err
-		}
-		if spec.KDTables, err = parsePositiveFormInt(form, "kd_tables", s.Host.Games.KdTablesLabel(), 2, 199); err != nil {
-			return spec, err
-		}
-	case games.KSI:
-		if spec.KSIThemes, err = parsePositiveFormInt(form, "ksi_themes", s.Host.Games.ThemesLabel(), 1, 100); err != nil {
-			return spec, err
-		}
-	case ksiStickersGameType:
-		spec.Type = games.KSI
-		if spec.KSIThemes, err = parsePositiveFormInt(form, "ksis_themes", s.Host.Games.ThemesLabel(), 1, 100); err != nil {
-			return spec, err
-		}
-		if spec.KSIStickers, err = ksiStickerConfigFromForm(form); err != nil {
-			return spec, err
-		}
-	case games.Multi:
-		spec.Label = s.Host.Games.TypeMulti()
-		if spec.Minigames, err = games.ParseMultiGames(form.Get("multi_games")); err != nil {
-			return spec, corei18n.User(s.Host.Games.ErrorMinigames(err.Error()))
-		}
-		if spec.MultiSorting, err = games.ParseMultiSorting(spec.Minigames, form.Get("multi_sorting")); err != nil {
-			return spec, corei18n.User(s.Host.Games.ErrorMultiSorting(err.Error()))
-		}
-	case games.Troika:
-		spec.Label = s.Host.Games.TypeTroika()
-	case games.Hamsa:
-		spec.Label = s.Host.Games.TypeHamsa()
-	case games.Brain:
-		spec.Label = s.Host.Games.TypeBrain()
-	case games.SI:
-		spec.Label = s.Host.Games.TypeSi()
-	case games.EK, games.ES:
-		// EK's bracket is describable in the scheme language now that an
-		// elimination counts Losses rather than seats, so a DSL wins over
-		// the pasted JSON when both are offered. Erudit-Sextet plays the
-		// same bracket and takes the same two ways of describing one.
-		spec.Label = s.Host.Games.TypeEk()
-		if gameType == games.ES {
-			spec.Label = s.Host.Games.TypeEs()
-		}
-		if spec.DSL == "" {
-			raw := strings.TrimSpace(form.Get(schemeJSONField[gameType]))
-			if raw == "" {
-				return spec, corei18n.User(s.Host.Games.ErrorEkSchemeMissing())
-			}
-			var scheme store.FestScheme
-			if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
-				return spec, corei18n.User(s.Host.Games.ErrorJsonParse(err.Error()))
-			}
-			spec.Pasted = &scheme
-		}
+		spec.Pasted = &scheme
 	}
 	return spec, nil
 }
@@ -995,42 +1066,6 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 		return journal.WriteGameCheckpoint(ctx, tx, gameID, core.JournalIDForSeqTx(ctx, tx))
 	})
 	return gameID, err
-}
-
-// defaultBrainDSL is the creation form's prefill: today's shortcut — one group
-// over the whole fest — written in the DSL so the host sees something editable.
-// defaultSIDSL is personal SI's shape at its smallest: one table, everyone at it,
-// eight themes. A real tournament edits it into groups and a play-off.
-func defaultSIDSL(players int) string {
-	if players < 3 {
-		players = 3
-	}
-	return fmt.Sprintf("[scheme]\nkind: roundrobin\ngroup_size: %d\nmatch_size: 3\nthemes: 8\nbout.points: seats + 1 - place\nsorting: [points, total, plus]\n", players)
-}
-
-// defaultTroikaDSL is Troika's regulations at their smallest: one group of
-// everybody over six themes, ranked as the regulations rank — a rating score
-// of 1 / 0.5 / 0 per Match plus game points over fifty, then head-to-head,
-// taken, difference. A real tournament edits it into the group stages and the
-// final.
-func defaultTroikaDSL(participants int) string {
-	if participants < 2 {
-		participants = 2
-	}
-	return fmt.Sprintf("[scheme]\nkind: roundrobin\ngroup_size: %d\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\nstandings.rating: points + taken / 50\nsorting: [rating, h2h, taken, diff]\n", participants)
-}
-
-// defaultHamsaDSL is the tournament's own shape at its smallest: a group stage
-// of two Games four to a table, then a final of the four best. The scheme
-// itself is in the Catalog — it is text a host reads and edits — and carries
-// no `[init]` line naming the KSI qualifier, since a fest that has not played
-// one yet would not compile it.
-func defaultHamsaDSL(participants int) string {
-	if participants < 4 {
-		participants = 4
-	}
-	participants -= participants % 4
-	return dopestrings.Default.Host.Games.HamsaScheme(strconv.Itoa(participants))
 }
 
 // ksiStickersGameType is the creation-form value for the "KSI with stickers"

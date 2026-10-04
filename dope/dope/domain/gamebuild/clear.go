@@ -37,14 +37,15 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		gameID, festID).Scan(&gameType, &title, &schemeJSON, &dsl); err != nil {
 		return "", err
 	}
-	// A pre-DSL Brain gets its shortcut scheme re-expressed in the DSL, so a
-	// clear upgrades it onto the one authoring path.
-	if gameType == games.Brain && strings.TrimSpace(dsl) == "" {
+	def, known := games.Lookup(gameType)
+	// A Game made before its format had a DSL gets the format's scheme
+	// re-expressed in the DSL, so a clear moves it onto the one authoring path.
+	if known && def.UpgradeDSL != nil && strings.TrimSpace(dsl) == "" {
 		var count int
 		if err := tx.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count); err != nil {
 			return "", err
 		}
-		dsl = DefaultBrainDSL(count, games.BrainQuestions(schemeJSON))
+		dsl = def.UpgradeDSL(count, schemeJSON)
 		if _, err := tx.ExecContext(ctx, `update games set scheme_dsl = ? where id = ?`, dsl, gameID); err != nil {
 			return "", err
 		}
@@ -56,20 +57,18 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 	if len(seat) > 0 {
 		entrants = seat
 	}
-	// A friendship cup keeps its players through a clear; they live in the
-	// document the deletes below take away.
-	// A load or parse that fails stops the clear: going on would drop them.
-	var keptPlayers json.RawMessage
-	if gameType == games.KD {
+	// A flat Game whose document holds something a clear keeps — a friendship
+	// cup's players, a Multi's guest teams — is read before the deletes below
+	// take its document away. A load that fails stops the clear: going on
+	// would drop what it keeps.
+	var oldState string
+	flat := known && def.Flat && strings.TrimSpace(dsl) == ""
+	if flat && protocol.KeepsOnClear(gameType) {
 		doc, err := store.LoadGameDoc(ctx, tx, festID, gameID)
 		if err != nil {
-			return "", fmt.Errorf("load friendship cup players: %w", err)
+			return "", fmt.Errorf("load %s document to keep: %w", gameType, err)
 		}
-		var fields map[string]json.RawMessage
-		if err := json.Unmarshal([]byte(doc.State), &fields); err != nil {
-			return "", fmt.Errorf("read friendship cup players: %w", err)
-		}
-		keptPlayers = fields["players"]
+		oldState = doc.State
 	}
 	// The rooms the bouts sit at, before the deletes take the bouts away: a
 	// rebuild keeps a room the host renamed (schemeVenuesTx).
@@ -107,74 +106,27 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		if newScheme, err = rebuildTx(ctx, tx, festID, gameID, gameType, dsl, schemeJSON, entrants, own); err != nil {
 			return "", err
 		}
-	case gameType == games.OD:
-		tourComp := games.ParseTourComp(schemeJSON)
-		if len(tourComp) == 0 {
-			tourComp = []int{15}
-		}
+	case flat:
+		// The same builder a new Game of this shape is made with, the shape
+		// read back out of the stored scheme.
 		var state []byte
-		emptyScheme, emptyState := games.ODEmptyGameJSON(meta.Slug, meta.Title, tourComp)
-		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, games.OD, emptyScheme, emptyState); err != nil {
+		emptyScheme, emptyState, ok, err := protocol.PristineGame(gameType, meta.Slug, meta.Title, protocol.ShapeOf(gameType, schemeJSON))
+		if err != nil {
 			return "", err
+		}
+		if !ok {
+			return "", corei18n.User(dopestrings.Default.Gamebuild.Clear.Unsupported())
+		}
+		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, gameType, emptyScheme, emptyState); err != nil {
+			return "", err
+		}
+		if newScheme, state, err = protocol.KeepOnClear(gameType, schemeJSON, oldState, newScheme, state); err != nil {
+			return "", fmt.Errorf("keep %s document: %w", gameType, err)
 		}
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
 			return "", err
 		}
-	case gameType == games.KD:
-		// The tables and the players stay: clearing a friendship cup wipes
-		// the answers, not the registration desk's work.
-		tourComp := games.ParseTourComp(schemeJSON)
-		tables := games.KDTables(schemeJSON)
-		var state []byte
-		newScheme, state = games.KDEmptyGameJSON(meta.Slug, meta.Title, tourComp, tables, kdTableName)
-		if len(keptPlayers) > 0 {
-			var doc map[string]json.RawMessage
-			if err := json.Unmarshal(state, &doc); err != nil {
-				return "", err
-			}
-			doc["players"] = keptPlayers
-			if state, err = json.Marshal(doc); err != nil {
-				return "", err
-			}
-		}
-		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
-			return "", err
-		}
-	case gameType == games.KSI:
-		var sc struct {
-			Themes   int             `json:"themes"`
-			Stickers json.RawMessage `json:"stickers"`
-		}
-		_ = json.Unmarshal([]byte(schemeJSON), &sc)
-		if sc.Themes <= 0 {
-			sc.Themes = 20
-		}
-		// The sticker configuration survives, so a stickers game stays one.
-		var state []byte
-		emptyScheme, emptyState := games.KSIStickersEmptyGameJSON(meta.Slug, meta.Title, sc.Themes, sc.Stickers)
-		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, games.KSI, emptyScheme, emptyState); err != nil {
-			return "", err
-		}
-		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
-			return "", err
-		}
-	case gameType == games.Multi:
-		// The minigames and the fest's tiebreak survive: clearing a game wipes
-		// what was played, not what it is.
-		var sc games.MultiScheme
-		_ = json.Unmarshal([]byte(schemeJSON), &sc)
-		var state []byte
-		emptyScheme, emptyState := games.MultiEmptyGameJSON(meta.Slug, meta.Title, sc.Minigames, sc.Sorting)
-		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, games.Multi, emptyScheme, emptyState); err != nil {
-			return "", err
-		}
-		if newScheme, state, err = protocol.KeepMultiGuests(schemeJSON, newScheme, state); err != nil {
-			return "", err
-		}
-		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
-			return "", err
-		}
-	case games.EKShaped(gameType):
+	case known && def.PastedScheme:
 		status = "pending"
 		if newScheme, err = rebuildTx(ctx, tx, festID, gameID, gameType, "", schemeJSON, nil, own); err != nil {
 			return "", err
@@ -198,17 +150,4 @@ select code from matches where game_id = ? order by position, id limit 1`, gameI
 		"title":  title,
 	}))
 	return first.String, err
-}
-
-// DefaultBrainDSL is a Brain at its plainest: one round-robin of everybody,
-// so many questions a Match. The creation form offers it and Clear upgrades
-// a pre-DSL Brain onto it.
-func DefaultBrainDSL(participants, questions int) string {
-	if participants < 2 {
-		participants = 4
-	}
-	if questions <= 0 {
-		questions = 5
-	}
-	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\nkind: roundrobin\ngroup_size: %d\n", questions, participants)
 }

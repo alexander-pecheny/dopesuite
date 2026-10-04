@@ -76,7 +76,7 @@ func TestFlatFormatRefusesAChosenEntrantList(t *testing.T) {
 // The formats described by a scheme keep the picker: that is what lets one фест
 // hold an ЭК of 48 and a брейн of a different 48 (ADR-0009).
 func TestSchemeFormatsKeepTheEntrantPicker(t *testing.T) {
-	for _, gameType := range []string{games.Brain, games.SI, games.Troika, games.EK} {
+	for _, gameType := range []string{games.Brain, games.SI, games.Troika, games.Hamsa, games.EK, games.ES} {
 		if !hostpages.SeatsChosenEntrants(gameType) {
 			t.Fatalf("%s потерял выбор состава", gameType)
 		}
