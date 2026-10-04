@@ -176,7 +176,6 @@ export type Strings = {
       venues: () => string;
     };
     seats: {
-      empty: () => string;
       label: () => string;
     };
     shootout: {
@@ -1696,6 +1695,10 @@ export type Strings = {
       home: () => string;
       host: () => string;
     };
+  };
+  seat: {
+    empty: () => string;
+    nobody: () => string;
   };
   server: {
     bot: {

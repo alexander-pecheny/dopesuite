@@ -4,7 +4,8 @@
 
 import {cssEscape, formatNumber, formatPlace, isFormControl, option, td, th} from "./cells.js";
 import {buildFlatScoreTable, buildTwoRowScoreTable, canPatchScoreShape, createScoreTableIndex, patchScoreTable, seatingText, setMarkClass} from "./score-table.js";
-import {seatedNames} from "./ek-seating.js";
+import {seatedNames, seatingLabel} from "./ek-seating.js";
+import {SEAT_PICKER_SELECTOR, seatPicker} from "./seat-picker.js";
 import type {NodeIndex, ParticipantView, ThemeView} from "./score-table.js";
 import {boutWhereWhen, buildVenuesTable, formatBattleVenue, formatVenue, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
@@ -18,7 +19,7 @@ import type {PendingOp, WireOp} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {createLocalCache, notifyEmbeddedResize} from "./game-page.js";
 import {bindScrollEdges, bindTabStripWheel, clamp, floatingPopover, fitScrollFade, installCellNavBar} from "./widgets.js";
-import {markNameControl, nameCell} from "./name-cell.js";
+import {nameCell} from "./name-cell.js";
 import type {CellNavBar, ScrollEdgeBinding} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
@@ -209,7 +210,7 @@ const shell = mountGamePage({
   },
   cursorKinds: {
     answer: {selector: ".answer-cell", keys: ["matchCode", "team", "shootout", "theme", "answer"]},
-    player: {selector: "[data-player-select], [data-player-seats]", keys: ["matchCode", "team", "shootout", "theme"]},
+    player: {selector: SEAT_PICKER_SELECTOR, keys: ["matchCode", "team", "shootout", "theme"]},
     place: {selector: ".place-input", keys: ["matchCode", "team"]},
     finish: {selector: ".finish-toggle", keys: ["matchCode"]},
     venue: {selector: ".venue-edit-button", keys: ["matchCode"]},
@@ -2154,262 +2155,35 @@ function readonlyBattleHeader(): HTMLElement {
   return node;
 }
 
+// buildPlayerSelectCell is the host's seat picker (seat-picker.ts) over one
+// theme. The document keeps the seated players' names, so a name is the
+// picker's id; the closed line of an Erudit-Sextet seat is the surnames.
 function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean, matchCode: string): HTMLElement {
   const playerCell = document.createElement("td");
   playerCell.colSpan = state!.questionValues.length;
   playerCell.className = "player-cell theme-block theme-block-top-left";
-
-  const editor = document.createElement("div");
-  editor.className = "player-editor";
-
-  const selectWrap = document.createElement("span");
-  selectWrap.className = "player-select-wrap";
-  // One seat is a <select>, which the platform already draws well on every
-  // phone; more than one is a panel of tickboxes, because a multiple <select>
-  // is unusable on a touch screen.
-  if (seatCap() > 1) {
-    const seated = seatedNames(theme.players);
-    const trigger = seatsTrigger(team, teamIndex, theme, themeIndex, isShootout, matchCode);
-    selectWrap.appendChild(trigger);
-    // The popover lists the seated players whole, one per line; the pass
-    // measures the button's own line (name-cell.ts).
-    const seatsPopover = document.createElement("span");
-    seatsPopover.className = "popover popover-inline";
-    seatsPopover.textContent = seated.join("\n");
-    selectWrap.appendChild(seatsPopover);
-    markNameControl(selectWrap, trigger);
-    editor.appendChild(selectWrap);
-    playerCell.appendChild(editor);
-    return playerCell;
-  }
-  const select = document.createElement("select");
-  select.dataset.playerSelect = "";
-  select.dataset.matchCode = matchCode;
-  select.dataset.team = String(teamIndex);
-  select.dataset.shootout = isShootout ? "1" : "0";
-  select.dataset.theme = String(themeIndex);
-  select.appendChild(option("", ""));
-  const roster = team.roster || [];
-  const seated = seatedNames(theme.players)[0] || "";
-  roster.forEach((player) => select.appendChild(option(player.name, player.name)));
-  if (seated && !roster.some((player) => player.name === seated)) {
-    select.appendChild(option(seated, seated));
-  }
-  select.value = seated;
-  select.disabled = state!.finished;
-  select.addEventListener("change", () => {
-    const payload: EKCellPayload = {team: teamIndex, theme: themeIndex, players: select.value ? [select.value] : []};
-    if (isShootout) payload.shootout = true;
-    queueEKEdits(matchCode, [payload]);
-    // Drop focus off the dropdown so the global keydown handler (which ignores
-    // form controls) takes the arrow keys and moves the active cell, instead of
-    // the native <select> cycling its options.
-    select.blur();
+  const cap = seatCap();
+  const picker = seatPicker({
+    roster: (team.roster || []).map((player) => ({id: player.name, name: player.name})),
+    seated: seatedNames(theme.players),
+    cap,
+    disabled: state!.finished,
+    title: cap > 1 ? S.ek.seats.label() : undefined,
+    line: seatingLabel,
+    dataset: {
+      matchCode,
+      team: String(teamIndex),
+      shootout: isShootout ? "1" : "0",
+      theme: String(themeIndex),
+    },
+    onChange: (players) => {
+      const payload: EKCellPayload = {team: teamIndex, theme: themeIndex, players};
+      if (isShootout) payload.shootout = true;
+      queueEKEdits(matchCode, [payload]);
+    },
   });
-  selectWrap.appendChild(select);
-  // The popover holds the chosen player's name; the pass fills it in and fades
-  // the cell when the name does not fit (name-cell.ts).
-  const playerPopover = document.createElement("span");
-  playerPopover.className = "popover popover-inline";
-  selectWrap.appendChild(playerPopover);
-  markNameControl(selectWrap, select);
-  editor.appendChild(selectWrap);
-
-  playerCell.appendChild(editor);
+  playerCell.appendChild(picker.element);
   return playerCell;
-}
-
-// --- the seating: the seat picker -----------------------------------------
-//
-// Where a theme seats more than one player (Erudit-Sextet), the cell holds a
-// button that reads the seating and opens one panel of the team's roster with
-// a tickbox each. The panel is a single node parked on <body>, moved to
-// whichever cell asked for it: a match draws 48 of these cells and none of them
-// needs its own copy of the roster.
-
-// seatsTrigger is the closed state of one theme's seating.
-function seatsTrigger(team: HostParticipantView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean, matchCode: string): HTMLElement {
-  const trigger = document.createElement("button");
-  trigger.type = "button";
-  trigger.className = "player-seats";
-  trigger.dataset.playerSeats = "";
-  trigger.dataset.matchCode = matchCode;
-  trigger.dataset.team = String(teamIndex);
-  trigger.dataset.shootout = isShootout ? "1" : "0";
-  trigger.dataset.theme = String(themeIndex);
-  trigger.disabled = state!.finished;
-  trigger.setAttribute("aria-haspopup", "true");
-  trigger.setAttribute("aria-expanded", "false");
-  trigger.setAttribute("aria-label", S.ek.seats.label());
-  const text = document.createElement("span");
-  text.className = "player-seats-text";
-  text.textContent = seatingText(theme, state!);
-  trigger.appendChild(text);
-  trigger.addEventListener("click", (event) => {
-    event.preventDefault();
-    toggleSeatsPanel(trigger);
-  });
-  return trigger;
-}
-
-let seatsPanelNode: HTMLElement | null = null;
-let seatsPanelTrigger: HTMLElement | null = null;
-
-function toggleSeatsPanel(trigger: HTMLElement): void {
-  if (seatsPanelTrigger === trigger) {
-    closeSeatsPanel();
-    return;
-  }
-  openSeatsPanel(trigger);
-}
-
-// openSeatsPanel fills the panel from the team the trigger names and shows it
-// under the cell. Everything it needs it reads back out of the match view, so
-// a panel opened after an SSE update is never stale.
-function openSeatsPanel(trigger: HTMLElement): void {
-  const matchCode = trigger.dataset.matchCode || currentMatchCode();
-  const matchState = matchStateFor(matchCode);
-  const teamIndex = Number(trigger.dataset.team);
-  const themeIndex = Number(trigger.dataset.theme);
-  const isShootout = trigger.dataset.shootout === "1";
-  const team = matchState?.participants?.[teamIndex];
-  if (!matchState || !team) return;
-  const themes = isShootout ? shootoutThemesFor(team) : team.themes;
-  const theme = themes?.[themeIndex];
-  if (!theme) return;
-
-  closeSeatsPanel();
-  const panel = document.createElement("div");
-  panel.className = "popover menu-dropdown player-seats-panel";
-  panel.setAttribute("role", "group");
-  panel.setAttribute("aria-label", S.ek.seats.label());
-  const cap = seatCap(matchState);
-  const seated = seatedNames(theme.players);
-  const boxes: HTMLInputElement[] = [];
-  const refreshDisabled = (): void => {
-    const picked = boxes.filter((box) => box.checked).length;
-    for (const box of boxes) box.disabled = !box.checked && picked >= cap;
-  };
-  for (const member of team.roster || []) {
-    const row = document.createElement("label");
-    row.className = "menu-item player-seats-option";
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.value = member.name;
-    box.checked = seated.includes(member.name);
-    box.addEventListener("change", () => {
-      refreshDisabled();
-      const picked = boxes.filter((item) => item.checked).map((item) => item.value);
-      seatPlayers(matchCode, teamIndex, themeIndex, isShootout, picked);
-    });
-    boxes.push(box);
-    const name = document.createElement("span");
-    name.textContent = member.name;
-    row.append(box, name);
-    panel.appendChild(row);
-  }
-  if (boxes.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "menu-item muted";
-    empty.textContent = S.ek.seats.empty();
-    panel.appendChild(empty);
-  }
-  refreshDisabled();
-  document.body.appendChild(panel);
-  seatsPanelNode = panel;
-  seatsPanelTrigger = trigger;
-  trigger.setAttribute("aria-expanded", "true");
-  // The hover popovers stand down while a panel is open: two floating surfaces
-  // over one cell is one too many.
-  document.documentElement.classList.add("seats-panel-open");
-  namePopover.hide();
-  positionSeatsPanel();
-  boxes[0]?.focus();
-  document.addEventListener("pointerdown", onSeatsPointerDown, true);
-  document.addEventListener("keydown", onSeatsKeydown, true);
-  window.addEventListener("scroll", positionSeatsPanel, {capture: true, passive: true});
-  window.addEventListener("resize", positionSeatsPanel);
-}
-
-function closeSeatsPanel(): void {
-  if (!seatsPanelNode) return;
-  seatsPanelNode.remove();
-  seatsPanelNode = null;
-  seatsPanelTrigger?.setAttribute("aria-expanded", "false");
-  seatsPanelTrigger = null;
-  document.documentElement.classList.remove("seats-panel-open");
-  document.removeEventListener("pointerdown", onSeatsPointerDown, true);
-  document.removeEventListener("keydown", onSeatsKeydown, true);
-  window.removeEventListener("scroll", positionSeatsPanel, {capture: true} as EventListenerOptions);
-  window.removeEventListener("resize", positionSeatsPanel);
-}
-
-function onSeatsPointerDown(event: PointerEvent): void {
-  if (!(event.target instanceof Node)) return;
-  if (seatsPanelNode?.contains(event.target) || seatsPanelTrigger?.contains(event.target)) return;
-  closeSeatsPanel();
-}
-
-// Esc closes the panel and hands the focus back to the cell it belongs to, so
-// the next arrow key moves the sheet cursor rather than the tickboxes.
-function onSeatsKeydown(event: KeyboardEvent): void {
-  if (event.key !== "Escape" || !seatsPanelNode) return;
-  const trigger = seatsPanelTrigger;
-  event.preventDefault();
-  event.stopPropagation();
-  closeSeatsPanel();
-  trigger?.focus();
-}
-
-// positionSeatsPanel parks the panel under its cell, kept inside the viewport
-// and flipped above when the cell is near the bottom — the sheet scrolls in
-// both directions, so no fixed side can be assumed.
-function positionSeatsPanel(): void {
-  const panel = seatsPanelNode;
-  const trigger = seatsPanelTrigger;
-  if (!panel || !trigger) return;
-  if (!document.body.contains(trigger)) {
-    closeSeatsPanel();
-    return;
-  }
-  const rect = trigger.getBoundingClientRect();
-  const margin = 8;
-  panel.style.position = "fixed";
-  panel.style.maxHeight = `${Math.max(120, window.innerHeight - 2 * margin)}px`;
-  const width = panel.offsetWidth;
-  const height = panel.offsetHeight;
-  const left = clamp(rect.left, margin, Math.max(margin, window.innerWidth - width - margin));
-  const below = rect.bottom + margin + height <= window.innerHeight;
-  const top = below ? rect.bottom + 2 : Math.max(margin, rect.top - height - 2);
-  panel.style.left = `${left}px`;
-  panel.style.top = `${top}px`;
-}
-
-// seatPlayers queues one edit carrying the theme's whole seating and repaints
-// the cell it came from. It repaints that cell alone rather than the match: a
-// seating moves no points, and rebuilding the sheet under an open panel would
-// pull the panel's own button out of the document.
-function seatPlayers(matchCode: string, teamIndex: number, themeIndex: number, isShootout: boolean, names: string[]): void {
-  const payload: EKCellPayload = {team: teamIndex, theme: themeIndex, players: names};
-  if (isShootout) payload.shootout = true;
-  const matchState = matchStateFor(matchCode);
-  const team = matchState?.participants?.[teamIndex];
-  const themes = team ? (isShootout ? shootoutThemesFor(team) : team.themes) : null;
-  const theme = themes?.[themeIndex];
-  if (theme) theme.players = names;
-  queueEKEdits(matchCode, [payload]);
-  if (seatsPanelTrigger && theme && matchState) refreshSeatsTrigger(seatsPanelTrigger, theme, matchState);
-}
-
-// refreshSeatsTrigger repaints one closed seating: its line and its popover.
-// Whether the line overflows the cell is the pass's to say again.
-function refreshSeatsTrigger(trigger: HTMLElement, theme: HostThemeView, matchState: HostMatchView): void {
-  const seated = seatedNames(theme.players);
-  const text = trigger.querySelector<HTMLElement>(".player-seats-text");
-  if (text) text.textContent = seatingText(theme, matchState);
-  const wrap = trigger.closest(".player-select-wrap");
-  const popover = wrap?.querySelector(".popover-inline");
-  if (popover) popover.textContent = seated.join("\n");
 }
 
 function trailingCells(team: HostParticipantView, teamIndex: number, hasShootout: boolean): HTMLElement[] {

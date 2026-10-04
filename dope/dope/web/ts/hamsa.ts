@@ -12,6 +12,7 @@ import type {CellContent, CellSpec} from "./cells.js";
 import {letteredTitle, standingsTable} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
 import {nameCell} from "./name-cell.js";
+import {seatPicker} from "./seat-picker.js";
 import {mountBoutPage} from "./bout-page.js";
 import type {BoutPage, BoutView} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
@@ -418,36 +419,32 @@ function themeRow(bout: BoutEntry, id: number, seat: number, group: ThemeGroup, 
 }
 
 // playerSelect names who sat for this theme. The document keeps a player id,
-// so the roster the server sent with the seat is what the options come from.
+// 0 for nobody, so the roster the server sent with the seat is what the
+// choices come from, and the picker is given the ids as text.
 function playerSelect(bout: BoutEntry, id: number, seat: number, group: ThemeGroup, editable: boolean): HTMLElement {
   const state = stateOf(bout.code);
   const current = group.kind === "shootout"
     ? hamsa.sectionOf(state, id)?.shootout[0]?.player || 0
     : hamsa.playerAt(state, id, group.theme);
-  const select = document.createElement("select");
-  select.className = "hamsa-player-select";
-  select.disabled = !editable || !id;
-  select.appendChild(option(0, S.hamsa.draw.none()));
-  for (const player of boutRoster(bout.view, seat)) {
-    const node = option(player.id, player.name);
-    node.selected = player.id === current;
-    select.appendChild(node);
-  }
-  select.value = String(current);
-  select.addEventListener("change", () => {
-    const value = Number(select.value) || 0;
-    const path = group.kind === "shootout"
-      ? ["participants", String(id), "shootout", 0, "player"]
-      : ["participants", String(id), "themes", group.theme, "player"];
-    const section = hamsa.sectionOf(state, id);
-    const theme = section && group.kind === "shootout"
-      ? ensureShootout(bout.code, section, id)
-      : section?.themes[group.theme];
-    if (theme) theme.player = value;
-    patch(bout.code, path, value);
-    select.blur();
-  });
-  return select;
+  const roster = boutRoster(bout.view, seat);
+  return seatPicker({
+    roster: roster.map((player) => ({id: String(player.id), name: player.name})),
+    seated: roster.some((player) => player.id === current) ? [String(current)] : [],
+    disabled: !editable || !id,
+    nobody: S.seat.nobody(),
+    onChange: (seated) => {
+      const value = Number(seated[0]) || 0;
+      const path = group.kind === "shootout"
+        ? ["participants", String(id), "shootout", 0, "player"]
+        : ["participants", String(id), "themes", group.theme, "player"];
+      const section = hamsa.sectionOf(state, id);
+      const theme = section && group.kind === "shootout"
+        ? ensureShootout(bout.code, section, id)
+        : section?.themes[group.theme];
+      if (theme) theme.player = value;
+      patch(bout.code, path, value);
+    },
+  }).element;
 }
 
 // betInput is the team round: a number the host types, as the captain

@@ -107,7 +107,7 @@ test("patchScoreTable syncs the per-round player name in place", () => {
 test("scoreCellSpecs declares a sync for every live cell, incl. the player", () => {
   const synced = T.scoreCellSpecs(SCORE_OPTS).filter((s) => s.sync).map((s) => s.name);
   for (const name of ["answer", "themeScore", "total", "plus", "tiebreak", "correctCount",
-    "playerText", "playerSelect", "playerSeats"]) {
+    "playerText", "seatPicker"]) {
     assert.ok(synced.includes(name), `${name} must sync in place`);
   }
 });

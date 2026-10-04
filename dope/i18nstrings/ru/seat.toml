@@ -1,0 +1,8 @@
+# The seat picker (seat-picker.ts), the one control every бой sheet uses to say
+# who sits in a seat: ЭК, Эрудит-Секстет, Тройка, брейн and Хамса.
+
+# The empty choice of a seat, on the formats that show one (Тройка, Хамса).
+# ЭК and брейн show an empty line instead.
+nobody = "—"
+# The tickbox panel's line when the team has no состав to pick from.
+empty = "Состав команды не заполнен"

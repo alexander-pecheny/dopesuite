@@ -177,7 +177,6 @@ export const RU: Strings = {
       venues: () => "Площадки",
     },
     seats: {
-      empty: () => "Состав команды не заполнен",
       label: () => "Кто выходит на тему",
     },
     shootout: {
@@ -1718,6 +1717,10 @@ shootout: true
       home: () => "Главная",
       host: () => "Мои фесты",
     },
+  },
+  seat: {
+    empty: () => "Состав команды не заполнен",
+    nobody: () => "—",
   },
   server: {
     bot: {

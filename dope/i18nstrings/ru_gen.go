@@ -219,7 +219,6 @@ var RU = Strings{
 			Venues: func() string { return "Площадки" },
 		},
 		Seats: EkSeatsStrings{
-			Empty: func() string { return "Состав команды не заполнен" },
 			Label: func() string { return "Кто выходит на тему" },
 		},
 		Shootout: EkShootoutStrings{
@@ -2437,6 +2436,10 @@ var RU = Strings{
 			Home: func() string { return "Главная" },
 			Host: func() string { return "Мои фесты" },
 		},
+	},
+	Seat: SeatStrings{
+		Empty:  func() string { return "Состав команды не заполнен" },
+		Nobody: func() string { return "—" },
 	},
 	Server: ServerStrings{
 		Bot: ServerBotStrings{

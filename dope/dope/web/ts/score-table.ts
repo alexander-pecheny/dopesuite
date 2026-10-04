@@ -4,6 +4,7 @@
 import {applyAttrs, cellFromSpec, formatDisplayText, formatPlace, sameArray, td, th} from "./cells.js";
 import type {CellAttrs, CellContent, CellSpec} from "./cells.js";
 import {seatedNames, seatingLabel} from "./ek-seating.js";
+import {SEAT_PICKER_SELECTOR, seatPickerOf} from "./seat-picker.js";
 import {declarePins} from "./sheet-pins.js";
 import type {Pins} from "./sheet-pins.js";
 import S from "./i18nstrings.js";
@@ -491,30 +492,12 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
         const popover = node.closest(".readonly-player")?.querySelector(".popover-inline");
         if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
       }},
-    {name: "playerSelect", selector: "[data-player-select]", keys: themeKeys,
-      sync: (node, ms) => {
-        const select = node as HTMLSelectElement;
-        const theme = scoreThemeOf(select, ms);
-        if (!theme || document.activeElement === select) return; // don't clobber an open select
-        const value = seatedNames(theme.players)[0] || "";
-        if (value && !Array.from(select.options).some((opt) => opt.value === value)) {
-          select.appendChild(new Option(value, value));
-        }
-        if (select.value !== value) select.value = value;
-        // A new value is no change to the DOM, so the popover's text is set
-        // here; that change is what tells the name-cell pass to measure again.
-        setNodeText(select.closest(".player-select-wrap")?.querySelector(".popover-inline"), select.selectedOptions[0]?.textContent || "");
-      }},
-    // The seat picker's closed state — a match of Erudit-Sextet, where a theme
-    // holds up to three. The panel itself is the page's; here only the button's
-    // line and its popover follow the state.
-    {name: "playerSeats", selector: "[data-player-seats]", keys: themeKeys,
+    // The host's seat picker, one seat or several (Erudit-Sextet): the
+    // picker shows the seating it is told and keeps its own line and popover.
+    {name: "seatPicker", selector: SEAT_PICKER_SELECTOR, keys: themeKeys,
       sync: (node, ms) => {
         const theme = scoreThemeOf(node, ms);
-        if (!theme) return;
-        setNodeText(node.querySelector(".player-seats-text") || node, seatingText(theme, ms));
-        const popover = node.closest(".player-select-wrap")?.querySelector(".popover-inline");
-        if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
+        if (theme) seatPickerOf(node)?.update(seatedNames(theme.players));
       }},
     {name: "total", selector: ".total-cell", keys: teamKeys,
       sync: (node, ms, o) => { const t = scoreTeamOf(node, ms); if (t) setNodeText(node, t.total, o.formatNumber); }},

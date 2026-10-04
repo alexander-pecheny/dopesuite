@@ -212,7 +212,7 @@ test("a cell drawn later, or a name renamed, is measured without the page asking
 test("a seat picker's control is measured by its label, and its popover follows the choice", () => {
   const root = page();
   const wrap = root.appendChild(new FakeElement("span"));
-  wrap.className = "player-select-wrap";
+  wrap.className = "seat-picker";
   const select = wrap.appendChild(new FakeSelect());
   select.clientWidth = 60;
   const popover = wrap.appendChild(new FakeElement("span"));

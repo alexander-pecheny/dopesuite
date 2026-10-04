@@ -77,6 +77,5 @@ bouts = "Игр"
 empty = "Таблица появится, когда сыграют первый бой."
 
 [draw]
-# The empty option of a seat's select, on the бой sheet and in the Жеребьёвка
-# panel alike.
+# The empty option of the жребий select under a shared place.
 none = "—"

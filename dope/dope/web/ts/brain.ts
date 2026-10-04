@@ -17,6 +17,7 @@ import {mountBoutPage} from "./bout-page.js";
 import type {BoutPage, BoutView} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {nameCell} from "./name-cell.js";
+import {SEAT_PICKER_SELECTOR, seatPicker} from "./seat-picker.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {computeBrainPlayerStats} from "./brain-stats.js";
@@ -118,7 +119,7 @@ const page: BoutPage<BrainMatchView, BrainMatchState> = mountBoutPage({
   boutSelector: ".brain-bout",
   cursorKinds: {
     answer: {selector: ".answer-cell", keys: ["match", "side", "q"]},
-    player: {selector: ".brain-player-select", keys: ["match", "side", "q"]},
+    player: {selector: SEAT_PICKER_SELECTOR, keys: ["match", "side", "q"]},
     finish: {selector: ".finish-toggle", keys: ["match"]},
   },
   activeCursorElement: () => cursor.activeCell,
@@ -532,7 +533,6 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
-  table.addEventListener("change", handleTableChange);
   section.appendChild(table);
   const stage = stageByMatch.get(code);
   if (editable && stage && groupRules(stage).tiebreakQuestions) {
@@ -552,35 +552,19 @@ function nameHead(view: BrainMatchView, side: number, planned: BrainSchemeMatch)
   });
 }
 
+// playerCell is who answered question q for one side. The document keeps the
+// player's name, "" for nobody, so a name is the picker's id.
 function playerCell(code: string, view: BrainMatchView, side: number, q: number, editable: boolean): HTMLElement {
   const td = document.createElement("td");
   td.className = "brain-player-cell";
-  const select = document.createElement("select");
-  select.className = "brain-player-select";
-  select.dataset.match = code;
-  select.dataset.side = String(side);
-  select.dataset.q = String(q);
-  select.disabled = !editable;
-  const blank = document.createElement("option");
-  blank.value = "";
-  blank.textContent = "";
-  select.appendChild(blank);
   const current = matchRows(view, side)[q]?.player || "";
-  const roster = rosterFor(teamName(view, side));
-  for (const player of roster) {
-    const opt = document.createElement("option");
-    opt.value = player;
-    opt.textContent = player;
-    select.appendChild(opt);
-  }
-  if (current && !roster.includes(current)) {
-    const opt = document.createElement("option");
-    opt.value = current;
-    opt.textContent = current;
-    select.appendChild(opt);
-  }
-  select.value = current;
-  td.appendChild(select);
+  td.appendChild(seatPicker({
+    roster: rosterFor(teamName(view, side)).map((player) => ({id: player, name: player})),
+    seated: current ? [current] : [],
+    disabled: !editable,
+    dataset: {match: code, side: String(side), q: String(q)},
+    onChange: (seated) => setPlayer(code, side, q, seated[0] || ""),
+  }).element);
   return td;
 }
 
@@ -671,14 +655,14 @@ function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
 
 
 
-function handleTableChange(event: Event): void {
-  const target = event.target;
-  if (target instanceof HTMLSelectElement && target.classList.contains("brain-player-select")) {
-    const ctx = cellContext(target);
-    if (!ctx || viewer || ctx.view.finished) return;
-    matchRows(ctx.view, ctx.side)[ctx.q].player = target.value;
-    sendOps(ctx.code, [{path: ["teams", ctx.side, "rows", ctx.q, "player"], value: target.value}]);
-  }
+// setPlayer writes who answered a question, as the host picked it.
+function setPlayer(code: string, side: number, q: number, player: string): void {
+  const view = page.view(code);
+  if (!view || viewer || view.finished) return;
+  const rows = matchRows(view, side);
+  if (q < 0 || q >= rows.length) return;
+  rows[q].player = player;
+  sendOps(code, [{path: ["teams", side, "rows", q, "player"], value: player}]);
 }
 
 function cellContext(el: HTMLElement): {code: string; view: BrainMatchView; side: number; q: number} | null {

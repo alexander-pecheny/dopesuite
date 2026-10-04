@@ -63,10 +63,8 @@ title = '{{.team}}, {{.theme}}, {{.q}}'
 
 [seats]
 # The выход-на-тему picker a бой of Эрудит-Секстет draws in place of the ЭК
-# player dropdown: the button's aria-label, and the panel's line when the team
-# has no состав to pick from.
+# player dropdown: the button's and the panel's aria-label.
 label = "Кто выходит на тему"
-empty = "Состав команды не заполнен"
 
 [stats]
 # The per-player statistics table's column headers.

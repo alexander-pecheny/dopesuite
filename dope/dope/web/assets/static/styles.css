@@ -157,7 +157,7 @@
 }
 
 /* A seat picker's cell is a name cell around a control: its fade is drawn
-   before the chevron (.player-select-wrap::before), not by the overlay. */
+   before the chevron (.seat-picker::before), not by the overlay. */
 
 .floating-name-popover {
   max-width: min(420px, calc(100vw - 32px));
@@ -842,23 +842,18 @@
   padding: 0;
 }
 
-.player-editor {
-  display: flex;
-  align-items: stretch;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-}
-
-.player-select-wrap {
+/* The seat picker (seat-picker.ts): who sits in a seat, on every бой sheet —
+   ЭК's and Хамса's theme, Эрудит-Секстет's three, Тройка's chair, брейн's
+   question. The wrap is a name cell around the control, with the chevron
+   (::after) and, when the label does not fit, the fade before it (::before). */
+.seat-picker {
   position: relative;
   display: block;
-  flex: 1 1 auto;
   min-width: 0;
   height: 100%;
 }
 
-.player-select-wrap::before {
+.seat-picker::before {
   content: "";
   position: absolute;
   top: 0;
@@ -871,7 +866,7 @@
   pointer-events: none;
 }
 
-.player-select-wrap::after {
+.seat-picker::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -885,16 +880,14 @@
   transform: translateY(-65%) rotate(45deg);
 }
 
-.player-select-wrap.name-cell-truncated::before {
+.seat-picker.name-cell-truncated::before {
   display: block;
 }
 
-/* The seat control: a <select> where a theme seats one player (ЭК), a button
-   opening the tickbox panel where it seats up to three (Эрудит-Секстет). They
-   are the same box — same height, same chevron, same focus ring — because they
-   sit in the same cell and mean the same thing. */
-.player-cell select,
-.player-cell .player-seats {
+/* The control: a <select> for one seat, a button opening the tickbox panel
+   for more. They are the same box — same height, same chevron, same focus
+   ring — because they mean the same thing. */
+.seat-picker-control {
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
@@ -908,17 +901,28 @@
   font-size: var(--text-sm);
 }
 
-.player-cell .player-seats {
+button.seat-picker-control {
   display: block;
   text-align: left;
-  font-family: inherit;
   cursor: var(--cursor-action);
 }
 
-/* The seating line takes the cell's width and never sets it: width 0 keeps
+.seat-picker-control:focus {
+  box-shadow: inset 0 0 0 2px var(--blue);
+}
+
+/* The select is see-through so the cell shows, but its open list takes the
+   options' own colours: without them Chrome draws the theme's pale text on the
+   browser's white list. */
+.seat-picker-control option {
+  background: var(--field-bg);
+  color: var(--text);
+}
+
+/* The button's line takes the cell's width and never sets it: width 0 keeps
    three whole surnames from widening the theme's columns, and min-width
    stretches it back to the button. What does not fit fades (.name-cell-truncated). */
-.player-seats-text {
+.seat-picker-text {
   display: block;
   width: 0;
   min-width: 100%;
@@ -926,16 +930,11 @@
   white-space: nowrap;
 }
 
-.player-cell select:focus,
-.player-cell .player-seats:focus {
-  box-shadow: inset 0 0 0 2px var(--blue);
-}
-
-/* The panel of the team's состав, parked on <body> and positioned by the page
-   (the sheet scrolls in both directions, so no cell can own it). The kit's
-   .menu-dropdown gives it its surface and its rows; only the scroll cap and
-   the pointer-through of a spent tickbox are the seating's own. */
-.player-seats-panel {
+/* The panel of the team's состав, parked on <body> and positioned by the
+   picker (the sheet scrolls in both directions, so no cell can own it). The
+   kit's .menu-dropdown gives it its surface and its rows; only the scroll cap
+   and the pointer-through of a spent tickbox are the seating's own. */
+.seat-picker-panel {
   overflow-y: auto;
   min-width: 180px;
 }
@@ -943,18 +942,18 @@
 /* The row is .menu-item — its box, its gap, its hover are the ☰ menu's. What
    a seat adds is that it is a choice you can spend: the row a full theme will
    not take reads as unavailable. */
-.player-seats-option {
+.seat-picker-option {
   cursor: var(--cursor-action);
 }
 
-.player-seats-option:has(input:disabled) {
+.seat-picker-option:has(input:disabled) {
   color: var(--muted);
   cursor: var(--cursor-disabled);
 }
 
 /* While the panel is open, the hover name popovers stand down: two floating
    surfaces over one cell is one too many. */
-.seats-panel-open .floating-name-popover {
+.seat-picker-open .floating-name-popover {
   display: none;
 }
 
@@ -1749,17 +1748,16 @@ body:not(.embedded-match) .grid-match {
     font-size: var(--text-xs-tight);
   }
 
-  .player-select-wrap::after {
+  .seat-picker::after {
     right: 6px;
   }
 
-  .player-select-wrap::before {
+  .seat-picker::before {
     right: 16px;
     width: 26px;
   }
 
-  .player-cell select,
-  .player-cell .player-seats {
+  .seat-picker-control {
     height: 22px;
     padding-left: 5px;
     padding-right: 18px;
@@ -4068,26 +4066,6 @@ html:has(.game-host-top) {
   min-width: calc(var(--question-col) * 2.5);
 }
 
-.brain-player-select,
-.troika-chair-select {
-  width: 100%;
-  height: 100%;
-  min-height: var(--question-size);
-  padding: var(--space-0) var(--space-1);
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-}
-
-/* The select itself is see-through so the cell shows, but its open list
-   takes the options' own colours: without them Chrome draws the theme's pale
-   text on the browser's white list. */
-.troika-chair-select option {
-  background: var(--field-bg);
-  color: var(--text);
-}
-
 .match-table.brain-detailed .brain-tiebreak-marker {
   font-style: italic;
 }
@@ -5009,18 +4987,6 @@ body.is-fullscreen.od-page .match-main {
    the colgroup gives it instead of the room a name select asks for. */
 .hamsa-sheet .hamsa-bet-cell {
   padding: var(--space-0);
-}
-
-.hamsa-sheet .hamsa-player-select {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-
-.hamsa-sheet .hamsa-player-select:disabled {
-  color: var(--muted);
 }
 
 /* The жребий under a place teams share: a narrow select in the place column,

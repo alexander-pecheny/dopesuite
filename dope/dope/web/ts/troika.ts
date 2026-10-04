@@ -8,7 +8,7 @@
 // bout page (bout-page.ts). A self-booting side-effect module bundled by
 // pages/troika.ts.
 
-import {cssEscape, option, sameArray, td, th} from "./cells.js";
+import {cssEscape, sameArray, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {icon} from "./icons_gen.js";
 import {standingsTable} from "./standings.js";
@@ -17,7 +17,8 @@ import {buildGameRosterView} from "./fest-roster.js";
 import {mountBoutPage} from "./bout-page.js";
 import type {BoutPage, BoutView} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {markNameControl, nameCell} from "./name-cell.js";
+import {nameCell} from "./name-cell.js";
+import {seatPicker} from "./seat-picker.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
@@ -541,41 +542,30 @@ function deleteTurn(bout: BoutEntry, t: number): void {
 // The chair cell names who is sitting there from the theme its column stands
 // before. Seats are a fact per theme, so setting one rewrites that theme and
 // every one after it, leaving the themes already played exactly as they were.
+// The document keeps a player id per chair, 0 for nobody; the picker is given
+// the ids as text and only those on the bout's roster.
 function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
   roster: Array<{id: number; name: string}>, editable: boolean): HTMLElement {
   const state = stateOf(bout.code);
-  const wrap = document.createElement("span");
-  wrap.className = "player-select-wrap";
-  const select = document.createElement("select");
-  select.className = "troika-chair-select";
-  select.dataset.playerSelect = "";
-  select.disabled = !editable;
-  select.title = chair === troika.CHAIRS - 1 ? S.troika.chair.lead() : S.troika.chair.outrider(String(chair + 1));
   const current = troika.chairAt(state, side, from, chair);
-  select.appendChild(option(0, "—"));
-  for (const player of roster) {
-    const node = option(player.id, player.name);
-    node.selected = player.id === current;
-    select.appendChild(node);
-  }
-  select.addEventListener("change", () => {
-    const order: number[] = [];
-    for (let c = 0; c < troika.CHAIRS; c++) {
-      order.push(c === chair ? Number(select.value) || 0 : troika.chairAt(state, side, from, c));
-    }
-    troika.swapFrom(state, side, from, order);
-    for (let t = from; t < state.values.length; t++) {
-      patch(bout.code, ["sides", side, "themes", t, "order"], orderAt(state, side, t));
-    }
-    page.render();
-  });
-  // A chair whose player's name does not fit fades, and the popover gives the
-  // name, as EK's seating cells do (name-cell.ts measures it).
-  const popover = document.createElement("span");
-  popover.className = "popover popover-inline";
-  wrap.append(select, popover);
-  markNameControl(wrap, select);
-  return wrap;
+  return seatPicker({
+    roster: roster.map((player) => ({id: String(player.id), name: player.name})),
+    seated: roster.some((player) => player.id === current) ? [String(current)] : [],
+    disabled: !editable,
+    title: chair === troika.CHAIRS - 1 ? S.troika.chair.lead() : S.troika.chair.outrider(String(chair + 1)),
+    nobody: S.seat.nobody(),
+    onChange: (seated) => {
+      const order: number[] = [];
+      for (let c = 0; c < troika.CHAIRS; c++) {
+        order.push(c === chair ? Number(seated[0]) || 0 : troika.chairAt(state, side, from, c));
+      }
+      troika.swapFrom(state, side, from, order);
+      for (let t = from; t < state.values.length; t++) {
+        patch(bout.code, ["sides", side, "themes", t, "order"], orderAt(state, side, t));
+      }
+      page.render();
+    },
+  }).element;
 }
 
 function markCell(code: string, side: number, theme: number, q: number, chair: number,
