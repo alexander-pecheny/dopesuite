@@ -8,7 +8,6 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/overrides"
-	"dope/dope/domain/protocol"
 	rosterpkg "dope/dope/domain/roster"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
@@ -622,8 +621,8 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 		t.Fatalf("load chgk json: %v", err)
 	}
 	var scheme struct {
-		NTeams int                     `json:"nTeams"`
-		Teams  []protocol.ChgkTeamJSON `json:"teams"`
+		NTeams int                  `json:"nTeams"`
+		Teams  []games.ChgkTeamJSON `json:"teams"`
 	}
 	if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
 		t.Fatalf("decode scheme: %v", err)
@@ -632,8 +631,8 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 		t.Fatalf("scheme teams = %#v, want alphabetically sorted imported teams", scheme)
 	}
 	var state struct {
-		Teams   []protocol.ChgkTeamJSON `json:"teams"`
-		Entries [][]int                 `json:"entries"`
+		Teams   []games.ChgkTeamJSON `json:"teams"`
+		Entries [][]int              `json:"entries"`
 	}
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
 		t.Fatalf("decode state: %v", err)
@@ -1220,7 +1219,7 @@ func TestFestNumbersFlow(t *testing.T) {
 		t.Fatalf("load od state: %v", err)
 	}
 	var state struct {
-		Teams []protocol.ChgkTeamJSON `json:"teams"`
+		Teams []games.ChgkTeamJSON `json:"teams"`
 	}
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
 		t.Fatalf("decode state: %v", err)
@@ -1256,7 +1255,7 @@ func TestFestNumbersFlow(t *testing.T) {
 		t.Fatalf("load od state after clear: %v", err)
 	}
 	state = struct {
-		Teams []protocol.ChgkTeamJSON `json:"teams"`
+		Teams []games.ChgkTeamJSON `json:"teams"`
 	}{}
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
 		t.Fatalf("decode state after clear: %v", err)
@@ -1399,7 +1398,7 @@ func TestHostFestNumbersPage(t *testing.T) {
 		t.Fatalf("load chgk state: %v", err)
 	}
 	var state struct {
-		Teams []protocol.ChgkTeamJSON `json:"teams"`
+		Teams []games.ChgkTeamJSON `json:"teams"`
 	}
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
 		t.Fatalf("decode chgk state: %v", err)

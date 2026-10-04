@@ -7,8 +7,8 @@ import (
 	"slices"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
-	"dope/dope/domain/protocol"
 	"dope/dope/domain/schemedsl"
 	dopestrings "dope/i18nstrings"
 
@@ -58,7 +58,7 @@ select coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`, scope.
 			if applied.Rebuilt, applied.Kept, err = tryReseatTx(ctx, tx, scope, dsl, next.Active()); err != nil {
 				return applied, err
 			}
-		case protocol.CanGrow(current.GameType):
+		case games.CanGrow(current.GameType):
 			seated, err := gameEntrantsTx(ctx, tx, scope.GameID)
 			if err != nil {
 				return applied, err

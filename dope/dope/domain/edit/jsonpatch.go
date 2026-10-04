@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"dope/dope/domain/protocol"
+	"dope/dope/domain/games"
 	dopestrings "dope/i18nstrings"
 )
 
@@ -25,7 +25,7 @@ type JSONPathSegment struct {
 // PatchPathTouchesRatingRoster reports whether a patch path would mutate the
 // immutable rating-imported roster the game's Protocol declares.
 func PatchPathTouchesRatingRoster(gameType string, path []JSONPathSegment) bool {
-	key, ok := protocol.RatingRosterStateKey(gameType)
+	key, ok := games.RatingRosterStateKey(gameType)
 	return ok && len(path) > 0 && !path[0].IsIndex && path[0].Key == key
 }
 

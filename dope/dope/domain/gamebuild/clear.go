@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"dope/dope/domain/games"
-	"dope/dope/domain/protocol"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
@@ -63,7 +62,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 	// would drop what it keeps.
 	var oldState string
 	flat := known && def.Flat && strings.TrimSpace(dsl) == ""
-	if flat && protocol.KeepsOnClear(gameType) {
+	if flat && games.KeepsOnClear(gameType) {
 		doc, err := store.LoadGameDoc(ctx, tx, festID, gameID)
 		if err != nil {
 			return "", fmt.Errorf("load %s document to keep: %w", gameType, err)
@@ -110,7 +109,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		// The same builder a new Game of this shape is made with, the shape
 		// read back out of the stored scheme.
 		var state []byte
-		emptyScheme, emptyState, ok, err := protocol.PristineGame(gameType, meta.Slug, meta.Title, protocol.ShapeOf(gameType, schemeJSON))
+		emptyScheme, emptyState, ok, err := games.PristineGame(gameType, meta.Slug, meta.Title, games.ShapeOf(gameType, schemeJSON))
 		if err != nil {
 			return "", err
 		}
@@ -120,7 +119,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, gameType, emptyScheme, emptyState); err != nil {
 			return "", err
 		}
-		if newScheme, state, err = protocol.KeepOnClear(gameType, schemeJSON, oldState, newScheme, state); err != nil {
+		if newScheme, state, err = games.KeepOnClear(gameType, schemeJSON, oldState, newScheme, state); err != nil {
 			return "", fmt.Errorf("keep %s document: %w", gameType, err)
 		}
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {

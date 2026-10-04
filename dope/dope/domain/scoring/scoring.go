@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"dope/dope/domain/protocol"
+	"dope/dope/domain/games"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 )
@@ -26,13 +26,13 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 		`select game_type, coalesce(scheme_json, '') from games where id = ?`, match.GameID).Scan(&protocolCode, &schemeJSON); err != nil {
 		return err
 	}
-	p, ok := protocol.Get(protocolCode)
+	p, ok := games.ProtocolOf(protocolCode)
 	if !ok {
 		return fmt.Errorf("scoring: no protocol %q", protocolCode)
 	}
 	// A Protocol whose document is keyed by Participant is told who sits where;
 	// every other one answers in slot order out of the document alone.
-	outcomes, err := protocol.ScoreSeats(p, json.RawMessage(schemeJSON), match.ProtocolState(), match.ParticipantIDs)
+	outcomes, err := games.ScoreSeats(p, json.RawMessage(schemeJSON), match.ProtocolState(), match.ParticipantIDs)
 	if err != nil {
 		return err
 	}

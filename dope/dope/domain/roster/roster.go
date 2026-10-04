@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"dope/dope/domain/flatgame"
-	"dope/dope/domain/protocol"
+	"dope/dope/domain/games"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 )
@@ -91,7 +91,7 @@ func SortedFestRosterImportTeams(teams []FestRosterImportTeam) []FestRosterImpor
 }
 
 // PropagateRosterTx folds the fest roster into every Game whose Protocol
-// carries it (protocol.RosterFolder) — OD's teams and entries, KSI's
+// carries it (games.RosterFolder) — OD's teams and entries, KSI's
 // participants and answer rows — and reports the documents it rewrote.
 // entryRemap (old Number → new) renumbers the cells keyed on a Number; nil on
 // a plain re-import.
@@ -103,7 +103,7 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 	folded := RosterTeams(teams)
 	var updates []GameStateBroadcast
 	for _, doc := range docs {
-		schemeJSON, stateJSON, ok, err := protocol.FoldRoster(doc.GameType, doc.SchemeJSON, doc.State, folded, entryRemap)
+		schemeJSON, stateJSON, ok, err := games.FoldRoster(doc.GameType, doc.SchemeJSON, doc.State, folded, entryRemap)
 		if err != nil {
 			return nil, fmt.Errorf("game %d: %w", doc.GameID, err)
 		}
@@ -143,11 +143,11 @@ func ScoredNumbers(ctx context.Context, q store.Queryer, festID int64) (map[int6
 	}
 	scored := make(map[int64][]string)
 	for _, doc := range docs {
-		entered, ok := protocol.EnteredSeats(doc.GameType, json.RawMessage(doc.State))
+		entered, ok := games.EnteredSeats(doc.GameType, json.RawMessage(doc.State))
 		if !ok {
 			continue
 		}
-		seats, _ := protocol.Seats(doc.GameType, json.RawMessage(doc.State))
+		seats, _ := games.Seats(doc.GameType, json.RawMessage(doc.State))
 		for i, seat := range seats {
 			if i < len(entered) && entered[i] && seat.Number > 0 {
 				scored[seat.Number] = append(scored[seat.Number], titles[doc.GameID])
@@ -176,10 +176,10 @@ func gameTitles(ctx context.Context, q store.Queryer, festID int64) (map[int64]s
 }
 
 // RosterTeams is the roster as a flat Protocol folds it.
-func RosterTeams(teams []FestRosterImportTeam) []protocol.RosterTeam {
-	out := make([]protocol.RosterTeam, 0, len(teams))
+func RosterTeams(teams []FestRosterImportTeam) []games.RosterTeam {
+	out := make([]games.RosterTeam, 0, len(teams))
 	for _, team := range teams {
-		out = append(out, protocol.RosterTeam{
+		out = append(out, games.RosterTeam{
 			Name:   team.Name,
 			City:   team.City,
 			Number: team.Number,

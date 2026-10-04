@@ -6,7 +6,7 @@
 //
 // Like domain/games this package is a leaf: storage/store for the shared state
 // vocabulary, never the server, HTTP or DB layers.
-package protocol
+package games
 
 import (
 	"encoding/json"
@@ -67,7 +67,7 @@ type Seater interface {
 // Seats returns the seats a flat document lists, and whether the Protocol is
 // a flat one at all.
 func Seats(code string, state json.RawMessage) ([]Seat, bool) {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return nil, false
 	}
@@ -91,7 +91,7 @@ type Entered interface {
 // already carry something a host entered. ok is false for a Protocol that does
 // not answer.
 func EnteredSeats(code string, state json.RawMessage) ([]bool, bool) {
-	p, found := Get(code)
+	p, found := ProtocolOf(code)
 	if !found {
 		return nil, false
 	}
@@ -117,7 +117,7 @@ type Param struct {
 // Metrics returns the metrics a protocol declares for a match config, or nil
 // for an unknown code.
 func Metrics(code string, cfg json.RawMessage) []string {
-	if p, ok := Get(code); ok {
+	if p, ok := ProtocolOf(code); ok {
 		return p.Metrics(cfg)
 	}
 	return nil
@@ -125,7 +125,7 @@ func Metrics(code string, cfg json.RawMessage) []string {
 
 // Params returns the DSL params a protocol accepts, or nil for an unknown code.
 func Params(code string) []Param {
-	if p, ok := Get(code); ok {
+	if p, ok := ProtocolOf(code); ok {
 		return p.Params()
 	}
 	return nil
@@ -134,21 +134,21 @@ func Params(code string) []Param {
 // Started asks a game's Protocol whether a host has entered anything into a
 // match; an unknown Protocol counts as started, so nothing of it is touched.
 func Started(code, state string) bool {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	return !ok || p.Started(json.RawMessage(state))
 }
 
-// registry is the single source of truth for known protocols. Add a format by
+// protocols is the single source of truth for known protocols. Add a format by
 // registering a Protocol — never by a switch on protocol codes elsewhere.
-var registry = map[string]Protocol{}
+var protocols = map[string]Protocol{}
 
 // Register adds a protocol; duplicate codes are a programming error. The
 // store learns which Protocols are team blobs here, being a leaf that cannot ask.
 func Register(p Protocol) {
-	if _, dup := registry[p.Code()]; dup {
+	if _, dup := protocols[p.Code()]; dup {
 		panic("protocol: duplicate protocol " + p.Code())
 	}
-	registry[p.Code()] = p
+	protocols[p.Code()] = p
 	if p.TeamBlob() {
 		store.RegisterTeamBlob(p.Code())
 	}
@@ -174,8 +174,8 @@ func Register(p Protocol) {
 const SeatsParam = "players"
 
 // Get looks up a registered protocol by code.
-func Get(code string) (Protocol, bool) {
-	p, ok := registry[code]
+func ProtocolOf(code string) (Protocol, bool) {
+	p, ok := protocols[code]
 	return p, ok
 }
 
@@ -207,7 +207,7 @@ type Grower interface {
 
 // CanGrow reports whether a Protocol has bouts that may grow once started.
 func CanGrow(code string) bool {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return false
 	}
@@ -217,7 +217,7 @@ func CanGrow(code string) bool {
 
 // GrowSeats asks a Protocol to give a started bout's document more seats.
 func GrowSeats(code string, state json.RawMessage, seats int) (json.RawMessage, bool, error) {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return nil, false, nil
 	}
@@ -239,7 +239,7 @@ type LateEditor interface {
 // EditableWhenFinished reports whether every one of these paths may be written
 // on a finished bout of the Protocol.
 func EditableWhenFinished(code string, paths [][]json.RawMessage) bool {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return false
 	}
@@ -283,7 +283,7 @@ type FestNumbering interface {
 // teams' numbers. It is true unless the Protocol says otherwise, and for an
 // unknown type.
 func UsesFestNumbers(code string) bool {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return true
 	}
@@ -305,7 +305,7 @@ type EditValidator interface {
 // ValidateEdit asks a game type's Protocol whether an edit of its document
 // may stand. A Protocol that does not validate accepts every edit.
 func ValidateEdit(code string, prev, next []byte) error {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return nil
 	}
@@ -318,7 +318,7 @@ func ValidateEdit(code string, prev, next []byte) error {
 // RatingRosterStateKey returns the protocol's immutable rating-roster state
 // key, if the protocol declares one.
 func RatingRosterStateKey(code string) (string, bool) {
-	if p, ok := Get(code); ok {
+	if p, ok := ProtocolOf(code); ok {
 		if owner, ok := p.(RatingRosterOwner); ok {
 			return owner.RatingRosterStateKey(), true
 		}
@@ -344,7 +344,7 @@ type UsedPlayer struct {
 
 // PlayersUser is a Protocol whose bouts name the players who answered for a
 // team. A hand roster may not drop a player a bout names
-// (games.Definition.HandRoster), so every format with hand rosters has one.
+// (Definition.HandRoster), so every format with hand rosters has one.
 // seats are the bout's Participants by slot index (0 for an empty seat).
 type PlayersUser interface {
 	UsedPlayers(state json.RawMessage, seats []int64) []UsedPlayer
@@ -353,7 +353,7 @@ type PlayersUser interface {
 // UsedPlayers lists the players a bout of the game type names; ok is false
 // for a Protocol that names none.
 func UsedPlayers(code string, state json.RawMessage, seats []int64) ([]UsedPlayer, bool) {
-	p, found := Get(code)
+	p, found := ProtocolOf(code)
 	if !found {
 		return nil, false
 	}
@@ -372,7 +372,7 @@ type GuestHost interface {
 
 // TakesGuests reports whether a game type's document may list guest teams.
 func TakesGuests(code string) bool {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return false
 	}

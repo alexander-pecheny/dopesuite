@@ -9,7 +9,6 @@ import (
 
 	"dope/dope/domain/expr"
 	"dope/dope/domain/games"
-	"dope/dope/domain/protocol"
 	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -101,7 +100,7 @@ func (c *compiler) rankable(kind string, blk Section) map[string]bool {
 	if err != nil {
 		cfg = nil
 	}
-	for _, name := range protocol.Metrics(c.in.GameType, cfg) {
+	for _, name := range games.Metrics(c.in.GameType, cfg) {
 		names[name] = true
 	}
 	for _, name := range structure.RankerMetrics(kind) {
@@ -224,7 +223,7 @@ func keySet(lists ...[]string) map[string]bool {
 
 func (c *compiler) checkKeys() error {
 	params := map[string]bool{}
-	for _, param := range protocol.Params(c.in.GameType) {
+	for _, param := range games.Params(c.in.GameType) {
 		params[param.Key] = true
 	}
 	inDefaults := keySet(structure.SortedNames(defaultsKeys), structure.SortedNames(params))
@@ -562,7 +561,7 @@ func (c *compiler) stageConfig(cfg any, blk Section, blockRounds []string) (json
 // empty means the block default).
 func (c *compiler) protocolConfig(blk Section, blockRounds []string) map[string]any {
 	config := map[string]any{}
-	for _, param := range protocol.Params(c.in.GameType) {
+	for _, param := range games.Params(c.in.GameType) {
 		switch {
 		case param.Bool:
 			if v, ok := paramBool(c.doc.Defaults, blk, param.Key, blockRounds); ok {

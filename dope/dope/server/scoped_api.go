@@ -12,7 +12,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
 	"dope/dope/domain/flatgame"
-	"dope/dope/domain/protocol"
+	"dope/dope/domain/games"
 	"dope/dope/domain/resolver"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
@@ -125,7 +125,7 @@ func (s *server) replaceGameState(reqCtx context.Context, scope festScope, raw [
 		if err := validateImmutableRatingRosterState(doc.GameType, []byte(doc.State), raw); err != nil {
 			return err
 		}
-		if err := protocol.ValidateEdit(doc.GameType, []byte(doc.State), raw); err != nil {
+		if err := games.ValidateEdit(doc.GameType, []byte(doc.State), raw); err != nil {
 			return err
 		}
 		if err := flatgame.SaveDocumentTx(ctx, tx, scope.FestID, scope.GameID, doc.MatchID, string(raw), nil); err != nil {
@@ -149,7 +149,7 @@ func (s *server) rewriteMultiGuests(reqCtx context.Context, scope festScope, app
 		if err != nil {
 			return err
 		}
-		if !protocol.TakesGuests(doc.GameType) {
+		if !games.TakesGuests(doc.GameType) {
 			return corei18n.User(dopestrings.Default.Games.MultiGuest.WrongGame())
 		}
 		schemeJSON, stateJSON, err := apply(doc.SchemeJSON, doc.State)
@@ -174,7 +174,7 @@ update games set scheme_json = ?, updated_at = ? where fest_id = ? and id = ?`, 
 }
 
 func validateImmutableRatingRosterState(gameType string, previousRaw, nextRaw []byte) error {
-	key, ok := protocol.RatingRosterStateKey(gameType)
+	key, ok := games.RatingRosterStateKey(gameType)
 	if !ok {
 		return nil
 	}

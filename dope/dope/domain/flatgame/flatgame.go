@@ -13,7 +13,7 @@ import (
 	"errors"
 	"fmt"
 
-	"dope/dope/domain/protocol"
+	"dope/dope/domain/games"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
 	"dope/dope/platform/util"
@@ -92,7 +92,7 @@ func settleTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64) er
 select g.game_type, m.state_json from matches m join games g on g.id = m.game_id where m.id = ?`, matchID).Scan(&gameType, &state); err != nil {
 		return err
 	}
-	seats, ok := protocol.Seats(gameType, json.RawMessage(state))
+	seats, ok := games.Seats(gameType, json.RawMessage(state))
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrNotFlat, gameType)
 	}
@@ -116,7 +116,7 @@ select g.game_type, m.state_json from matches m join games g on g.id = m.game_id
 // seat. The Game's
 // entrant list follows when every seat is numbered, and is dropped otherwise
 // so the numbering guard falls back to the fest's registry.
-func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seats []protocol.Seat) error {
+func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seats []games.Seat) error {
 	wanted := make([]int64, len(seats))
 	numbered := true
 	for i, seat := range seats {

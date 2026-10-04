@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"dope/dope/domain/games"
-	"dope/dope/domain/protocol"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
@@ -235,7 +234,7 @@ func (u usedPlayers) markID(team, player int64) {
 }
 
 // playersWithResults reads every bout of the Game for the players it names,
-// through the format's Protocol (protocol.PlayersUser).
+// through the format's Protocol (games.PlayersUser).
 func playersWithResults(ctx context.Context, q store.Queryer, gameID int64, gameType string) (usedPlayers, error) {
 	used := usedPlayers{ids: map[int64]map[int64]bool{}, names: map[int64]map[string]bool{}}
 	type match struct {
@@ -273,7 +272,7 @@ join matches m on m.id = ms.match_id where m.game_id = ?`, []any{gameID}, func(r
 		seats[s.match] = row
 	}
 	for _, m := range matches {
-		players, _ := protocol.UsedPlayers(gameType, json.RawMessage(m.state), seats[m.id])
+		players, _ := games.UsedPlayers(gameType, json.RawMessage(m.state), seats[m.id])
 		for _, p := range players {
 			used.markID(p.Team, p.Player)
 			if name := strings.TrimSpace(p.Name); name != "" {

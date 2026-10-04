@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 
-	"dope/dope/domain/protocol"
+	"dope/dope/domain/games"
 	"dope/dope/storage/store"
 )
 
@@ -95,7 +95,7 @@ func GameHasUnnumbered(ctx context.Context, q store.Queryer, festID, gameID int6
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return false, err
 		}
-		if err == nil && !protocol.UsesFestNumbers(gameType) {
+		if err == nil && !games.UsesFestNumbers(gameType) {
 			return false, nil
 		}
 		var entrants, unnumbered int

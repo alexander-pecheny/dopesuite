@@ -15,8 +15,8 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
 	"dope/dope/domain/entrants"
+	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
-	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
 	"dope/dope/export/gameexport"
@@ -470,7 +470,7 @@ func (s *server) scopedGameStatePatch(w http.ResponseWriter, r *http.Request, sc
 	return nil
 }
 
-// A Multi game's guest teams (protocol.AddMultiGuest): the host adds one by
+// A Multi game's guest teams (games.AddMultiGuest): the host adds one by
 // name, renames it, or removes it while nothing is entered for it. Each call
 // returns the new state, which also goes out on the game-state scope.
 type multiGuestRequest struct {
@@ -483,7 +483,7 @@ func (s *server) scopedMultiGuestAdd(w http.ResponseWriter, r *http.Request, sc 
 		return err
 	}
 	return s.editMultiGuests(w, r, sc, func(scheme, state string) ([]byte, []byte, error) {
-		return protocol.AddMultiGuest(scheme, state, req.Name)
+		return games.AddMultiGuest(scheme, state, req.Name)
 	})
 }
 
@@ -497,7 +497,7 @@ func (s *server) scopedMultiGuestRename(w http.ResponseWriter, r *http.Request, 
 		return err
 	}
 	return s.editMultiGuests(w, r, sc, func(scheme, state string) ([]byte, []byte, error) {
-		return protocol.RenameMultiGuest(scheme, state, number, req.Name)
+		return games.RenameMultiGuest(scheme, state, number, req.Name)
 	})
 }
 
@@ -507,7 +507,7 @@ func (s *server) scopedMultiGuestRemove(w http.ResponseWriter, r *http.Request, 
 		return err
 	}
 	return s.editMultiGuests(w, r, sc, func(scheme, state string) ([]byte, []byte, error) {
-		return protocol.RemoveMultiGuest(scheme, state, number)
+		return games.RemoveMultiGuest(scheme, state, number)
 	})
 }
 

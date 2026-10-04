@@ -9,7 +9,6 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/overrides"
-	"dope/dope/domain/protocol"
 	rosterpkg "dope/dope/domain/roster"
 	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
@@ -592,7 +591,7 @@ where fest_id = ? and id = ?`, string(stateJSON), util.UtcNow(), scope.FestID, s
 }
 
 func seedImportStateFromRaw(raw string) (seedImportState, error) {
-	obj, err := protocol.RawJSONObject(raw)
+	obj, err := games.RawJSONObject(raw)
 	if err != nil {
 		return seedImportState{}, err
 	}
@@ -608,7 +607,7 @@ func seedImportStateFromRaw(raw string) (seedImportState, error) {
 }
 
 func putSeedImportState(raw string, state seedImportState) ([]byte, error) {
-	obj, err := protocol.RawJSONObject(raw)
+	obj, err := games.RawJSONObject(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -666,7 +665,7 @@ order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 		// A played match keeps its participants: a decline shifts the ladder
 		// only through matches nobody has started — results already earned
 		// stand, the vacancy propagates to the unplayed part of the scheme.
-		if slot.Status == "finished" || protocol.Started(gameType, slot.State) {
+		if slot.Status == "finished" || games.Started(gameType, slot.State) {
 			continue
 		}
 		basket, number := seedRefKey(slot.SourceRef)
@@ -815,7 +814,7 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 	less := structure.LessBy(order)
 	sort.SliceStable(rows, func(i, j int) bool { return less(rows[i].entry, rows[j].entry) })
 	declined := map[int64]bool{}
-	if seats, ok := protocol.Seats(gameType, json.RawMessage(document)); ok {
+	if seats, ok := games.Seats(gameType, json.RawMessage(document)); ok {
 		for _, seat := range seats {
 			if seat.Declined {
 				declined[seat.Number] = true

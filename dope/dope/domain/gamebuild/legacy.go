@@ -10,7 +10,6 @@ import (
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
-	"dope/dope/domain/protocol"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -31,15 +30,15 @@ func titleOr(label, fallback string) string {
 }
 
 // createFlatGameTx makes a flat Game: its Protocol builds the empty scheme and
-// document for the shape asked (protocol.PristineBuilder), the fest roster is
+// document for the shape asked (games.PristineBuilder), the fest roster is
 // folded in when the Protocol carries one, and the one 'main' Match is
 // written and settled. Clear rebuilds a Game through the same builder.
-func createFlatGameTx(ctx context.Context, tx *sql.Tx, festID int64, def games.Definition, label string, shape protocol.Shape) (int64, error) {
+func createFlatGameTx(ctx context.Context, tx *sql.Tx, festID int64, def games.Definition, label string, shape games.Shape) (int64, error) {
 	identity, err := nextGameIdentityTx(ctx, tx, festID, def.Code, titleOr(label, def.Title))
 	if err != nil {
 		return 0, err
 	}
-	emptyScheme, emptyState, ok, err := protocol.PristineGame(def.Code, identity.Code, identity.Title, shape)
+	emptyScheme, emptyState, ok, err := games.PristineGame(def.Code, identity.Code, identity.Title, shape)
 	if err != nil {
 		return 0, err
 	}
@@ -54,8 +53,8 @@ func createFlatGameTx(ctx context.Context, tx *sql.Tx, festID int64, def games.D
 }
 
 // specShape is the flat Game the creation form's knobs describe.
-func specShape(spec Spec) protocol.Shape {
-	return protocol.Shape{
+func specShape(spec Spec) games.Shape {
+	return games.Shape{
 		Tours:     sameTours(spec.ODTours, spec.ODQuestions),
 		Tables:    spec.KDTables,
 		Themes:    spec.KSIThemes,
@@ -87,7 +86,7 @@ func pristineFlatTx(ctx context.Context, tx *sql.Tx, festID int64, gameType stri
 	if len(teams) == 0 {
 		return schemeJSON, stateJSON, nil
 	}
-	scheme, state, ok, err := protocol.FoldRoster(gameType, string(schemeJSON), string(stateJSON), roster.RosterTeams(teams), nil)
+	scheme, state, ok, err := games.FoldRoster(gameType, string(schemeJSON), string(stateJSON), roster.RosterTeams(teams), nil)
 	if err != nil || !ok {
 		return schemeJSON, stateJSON, err
 	}

@@ -1,10 +1,9 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"strconv"
 
-	"dope/dope/domain/games"
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
@@ -23,7 +22,7 @@ type Shape struct {
 	Stickers json.RawMessage
 	// Minigames and Sorting are a Multi's minigames and the comparators that
 	// break a tie on the total.
-	Minigames []games.MultiGame
+	Minigames []MultiGame
 	Sorting   []string
 }
 
@@ -58,7 +57,7 @@ func ShapeOf(code, schemeJSON string) Shape {
 }
 
 func pristineBuilder(code string) (PristineBuilder, bool) {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return nil, false
 	}
@@ -76,7 +75,7 @@ type ClearKeeper interface {
 // KeepsOnClear reports whether a clear must read the Game's document before it
 // deletes it, to carry part of it over.
 func KeepsOnClear(code string) bool {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return false
 	}
@@ -88,7 +87,7 @@ func KeepsOnClear(code string) bool {
 // pristine scheme and document; a Protocol that keeps nothing returns them
 // as they are.
 func KeepOnClear(code, oldScheme, oldState string, scheme, state []byte) ([]byte, []byte, error) {
-	p, ok := Get(code)
+	p, ok := ProtocolOf(code)
 	if !ok {
 		return scheme, state, nil
 	}
@@ -102,12 +101,12 @@ func KeepOnClear(code, oldScheme, oldState string, scheme, state []byte) ([]byte
 // An OD Game's tours. A stored scheme with none is read as one tour of
 // fifteen, which is what a clear always rebuilt it with.
 func (od) PristineGame(slug, title string, shape Shape) ([]byte, []byte, error) {
-	scheme, state := games.ODEmptyGameJSON(slug, title, shape.Tours)
+	scheme, state := ODEmptyGameJSON(slug, title, shape.Tours)
 	return scheme, state, nil
 }
 
 func (od) ShapeOf(schemeJSON string) Shape {
-	tours := games.ParseTourComp(schemeJSON)
+	tours := ParseTourComp(schemeJSON)
 	if len(tours) == 0 {
 		tours = []int{15}
 	}
@@ -119,20 +118,20 @@ func (od) ShapeOf(schemeJSON string) Shape {
 // more than the tables, since in tour n+1 every card is back at its first
 // table. The tables are named and numbered here; no roster is folded in.
 func (kd) PristineGame(slug, title string, shape Shape) ([]byte, []byte, error) {
-	if !games.IsPrime(shape.Tables) {
+	if !IsPrime(shape.Tables) {
 		return nil, nil, corei18n.User(dopestrings.Default.Gamebuild.Create.KdTablesPrime(strconv.Itoa(shape.Tables)))
 	}
 	if len(shape.Tours) > shape.Tables {
 		return nil, nil, corei18n.User(dopestrings.Default.Gamebuild.Create.KdToursTables(strconv.Itoa(len(shape.Tours)), strconv.Itoa(shape.Tables)))
 	}
-	scheme, state := games.KDEmptyGameJSON(slug, title, shape.Tours, shape.Tables, kdTableName)
+	scheme, state := KDEmptyGameJSON(slug, title, shape.Tours, shape.Tables, kdTableName)
 	return scheme, state, nil
 }
 
 func kdTableName(n int) string { return dopestrings.Default.Gamebuild.Kd.Table(strconv.Itoa(n)) }
 
 func (kd) ShapeOf(schemeJSON string) Shape {
-	return Shape{Tours: games.ParseTourComp(schemeJSON), Tables: games.KDTables(schemeJSON)}
+	return Shape{Tours: ParseTourComp(schemeJSON), Tables: KDTables(schemeJSON)}
 }
 
 // KeepOnClear keeps a friendship cup's players: clearing it wipes the
@@ -159,7 +158,7 @@ func (kd) KeepOnClear(_, oldState string, scheme, state []byte) ([]byte, []byte,
 // A KSI's themes, and its stickers block, which a clear keeps so a stickers
 // game stays one. A stored scheme with no themes is read as twenty.
 func (ksi) PristineGame(slug, title string, shape Shape) ([]byte, []byte, error) {
-	scheme, state := games.KSIStickersEmptyGameJSON(slug, title, shape.Themes, shape.Stickers)
+	scheme, state := KSIStickersEmptyGameJSON(slug, title, shape.Themes, shape.Stickers)
 	return scheme, state, nil
 }
 
@@ -170,7 +169,7 @@ func (ksi) ShapeOf(schemeJSON string) Shape {
 	}
 	_ = json.Unmarshal([]byte(schemeJSON), &sc)
 	if sc.Themes <= 0 {
-		sc.Themes = games.KSIThemeCount
+		sc.Themes = KSIThemeCount
 	}
 	return Shape{Themes: sc.Themes, Stickers: sc.Stickers}
 }
@@ -178,12 +177,12 @@ func (ksi) ShapeOf(schemeJSON string) Shape {
 // A Multi's minigames and the fest's tiebreak, which a clear keeps: it wipes
 // what was played, not what the Game is.
 func (multi) PristineGame(slug, title string, shape Shape) ([]byte, []byte, error) {
-	scheme, state := games.MultiEmptyGameJSON(slug, title, shape.Minigames, shape.Sorting)
+	scheme, state := MultiEmptyGameJSON(slug, title, shape.Minigames, shape.Sorting)
 	return scheme, state, nil
 }
 
 func (multi) ShapeOf(schemeJSON string) Shape {
-	var sc games.MultiScheme
+	var sc MultiScheme
 	_ = json.Unmarshal([]byte(schemeJSON), &sc)
 	return Shape{Minigames: sc.Minigames, Sorting: sc.Sorting}
 }

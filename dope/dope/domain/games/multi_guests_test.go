@@ -1,15 +1,13 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"testing"
-
-	"dope/dope/domain/games"
 )
 
 type multiTestDoc struct {
-	Participants []games.KSIParticipant `json:"participants"`
-	Declined     map[string]bool        `json:"declined"`
+	Participants []KSIParticipant `json:"participants"`
+	Declined     map[string]bool  `json:"declined"`
 	Games        []struct {
 		Cells [][]int `json:"cells"`
 	} `json:"games"`
@@ -52,7 +50,7 @@ func TestAddMultiGuest(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := readMultiDoc(t, next)
-	want := []games.KSIParticipant{{Number: 1, Name: "Альфа"}, {Number: 2, Name: "Бета"}, {Number: -1, Name: "Гости из Пинска"}, {Number: -2, Name: "Жюри"}}
+	want := []KSIParticipant{{Number: 1, Name: "Альфа"}, {Number: 2, Name: "Бета"}, {Number: -1, Name: "Гости из Пинска"}, {Number: -2, Name: "Жюри"}}
 	if len(doc.Participants) != len(want) {
 		t.Fatalf("participants = %+v", doc.Participants)
 	}
@@ -65,7 +63,7 @@ func TestAddMultiGuest(t *testing.T) {
 		t.Fatalf("cells = %v", doc.Games[0].Cells)
 	}
 	var sc struct {
-		Participants []games.KSIParticipant `json:"participants"`
+		Participants []KSIParticipant `json:"participants"`
 	}
 	if err := json.Unmarshal(scheme, &sc); err != nil || len(sc.Participants) != 4 {
 		t.Fatalf("scheme participants = %s", scheme)
@@ -97,7 +95,7 @@ func TestMultiFoldRosterKeepsGuests(t *testing.T) {
 	if cellOf(t, doc, "Жюри") != 1 || cellOf(t, doc, "Бета") != 2 || cellOf(t, doc, "Вега") != 0 {
 		t.Fatalf("cells after fold = %v", doc.Games[0].Cells)
 	}
-	if !games.KSIParticipantDeclined(doc.Declined, doc.Participants[3]) || games.KSIParticipantDeclined(doc.Declined, doc.Participants[2]) {
+	if !KSIParticipantDeclined(doc.Declined, doc.Participants[3]) || KSIParticipantDeclined(doc.Declined, doc.Participants[2]) {
 		t.Fatalf("declined after fold = %v", doc.Declined)
 	}
 	seats := (multi{}).Seats(next)

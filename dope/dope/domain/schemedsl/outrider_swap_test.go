@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"dope/dope/domain/games"
-	"dope/dope/domain/protocol"
 )
 
 // outriderSwapTroika is the Octobearfest Троечка with the asking order turning
@@ -38,7 +37,7 @@ metric: total
 // middle of its own themes: the fourth of six, the fifth of eight.
 func TestSwapOutridersReachesEveryBout(t *testing.T) {
 	scheme := compileSrc(t, outriderSwapTroika, Input{Slug: "troika", Title: "Тройка", GameType: games.Troika, Entrants: troikaEntrants(8)})
-	p, ok := protocol.Get(games.Troika)
+	p, ok := games.ProtocolOf(games.Troika)
 	if !ok {
 		t.Fatal("no troika protocol")
 	}

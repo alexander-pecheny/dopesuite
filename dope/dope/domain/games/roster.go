@@ -1,10 +1,9 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"strings"
 
-	"dope/dope/domain/games"
 	"dope/dope/storage/store"
 )
 
@@ -31,7 +30,7 @@ type RosterFolder interface {
 // FoldRoster folds the roster into a Game's scheme and document through its
 // Protocol; ok is false for a Protocol that carries no roster (EK, brain).
 func FoldRoster(code, schemeJSON, stateJSON string, teams []RosterTeam, entryRemap map[int]int) (scheme, state []byte, ok bool, err error) {
-	p, found := Get(code)
+	p, found := ProtocolOf(code)
 	if !found {
 		return nil, nil, false, nil
 	}
@@ -168,7 +167,7 @@ func ksiRosterScheme(raw string, teams []RosterTeam) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	themesCount := games.KSIThemeCount
+	themesCount := KSIThemeCount
 	if rawThemes, ok := obj["themes"]; ok && len(rawThemes) > 0 {
 		var configured int
 		if err := json.Unmarshal(rawThemes, &configured); err == nil && configured > 0 {
@@ -203,7 +202,7 @@ func ksiRosterState(raw string, teams []RosterTeam, targetThemeCount int) ([]byt
 	// across roster reorders/additions/removals instead of staying at its old
 	// index. Read tolerantly: new states store [{number,name}], legacy states a
 	// bare name array (matched by name for that one transition).
-	oldParticipants := games.ParseKSIParticipants(obj["participants"])
+	oldParticipants := ParseKSIParticipants(obj["participants"])
 	participants := teamParticipantsFromRoster(teams)
 	participantsJSON, err := json.Marshal(participants)
 	if err != nil {
@@ -219,7 +218,7 @@ func ksiRosterState(raw string, teams []RosterTeam, targetThemeCount int) ([]byt
 		targetThemeCount = len(themes)
 	}
 	if targetThemeCount <= 0 {
-		targetThemeCount = games.KSIThemeCount
+		targetThemeCount = KSIThemeCount
 	}
 	if len(themes) > targetThemeCount {
 		themes = themes[:targetThemeCount]
@@ -273,10 +272,10 @@ func chgkTeamsFromRoster(teams []RosterTeam) []ChgkTeamJSON {
 	return out
 }
 
-func teamParticipantsFromRoster(teams []RosterTeam) []games.KSIParticipant {
-	out := make([]games.KSIParticipant, 0, len(teams))
+func teamParticipantsFromRoster(teams []RosterTeam) []KSIParticipant {
+	out := make([]KSIParticipant, 0, len(teams))
 	for _, team := range teams {
-		out = append(out, games.KSIParticipant{Number: int(team.Number), Name: team.Name, City: team.City, Flags: team.Flags})
+		out = append(out, KSIParticipant{Number: int(team.Number), Name: team.Name, City: team.City, Flags: team.Flags})
 	}
 	return out
 }
@@ -301,12 +300,12 @@ func resizeIntSlice(values []int, size int) []int {
 // number, below zero, matches the same way. New teams get an empty
 // row; teams that dropped out lose their row. Each old row is claimed at most
 // once. With no old participants at all, a plain positional resize is used.
-func RemapAnswerMatrix[T any](values [][]T, oldParts, newParts []games.KSIParticipant, cols int) [][]T {
+func RemapAnswerMatrix[T any](values [][]T, oldParts, newParts []KSIParticipant, cols int) [][]T {
 	if len(oldParts) == 0 {
 		return resizeMatrix(values, len(newParts), cols)
 	}
 	consumed := make([]bool, len(oldParts))
-	claim := func(match func(games.KSIParticipant) bool) int {
+	claim := func(match func(KSIParticipant) bool) int {
 		for i, p := range oldParts {
 			if !consumed[i] && match(p) {
 				consumed[i] = true
@@ -320,11 +319,11 @@ func RemapAnswerMatrix[T any](values [][]T, oldParts, newParts []games.KSIPartic
 		idx := -1
 		if p.Number != 0 {
 			num := p.Number
-			idx = claim(func(o games.KSIParticipant) bool { return o.Number == num })
+			idx = claim(func(o KSIParticipant) bool { return o.Number == num })
 		}
 		if idx < 0 && p.Name != "" {
 			name := p.Name
-			idx = claim(func(o games.KSIParticipant) bool { return o.Name == name })
+			idx = claim(func(o KSIParticipant) bool { return o.Name == name })
 		}
 		var srcRow []T
 		if idx >= 0 && idx < len(values) {
@@ -392,14 +391,14 @@ func (multi) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, _ map[
 	if err != nil {
 		return nil, nil, err
 	}
-	oldParticipants := games.ParseKSIParticipants(state["participants"])
-	participants := append(teamParticipantsFromRoster(teams), games.MultiGuests(oldParticipants)...)
+	oldParticipants := ParseKSIParticipants(state["participants"])
+	participants := append(teamParticipantsFromRoster(teams), MultiGuests(oldParticipants)...)
 	return rewriteMultiParticipants(schemeJSON, state, oldParticipants, participants)
 }
 
 // rewriteMultiParticipants writes a new team list into a Multi document, in
 // the scheme and in the state, and moves every team's cells to its new row.
-func rewriteMultiParticipants(schemeJSON string, state map[string]json.RawMessage, oldParticipants, participants []games.KSIParticipant) ([]byte, []byte, error) {
+func rewriteMultiParticipants(schemeJSON string, state map[string]json.RawMessage, oldParticipants, participants []KSIParticipant) ([]byte, []byte, error) {
 	scheme, err := RawJSONObject(schemeJSON)
 	if err != nil {
 		return nil, nil, err
@@ -415,7 +414,7 @@ func rewriteMultiParticipants(schemeJSON string, state map[string]json.RawMessag
 	}
 
 	var minigames struct {
-		Minigames []games.MultiGame `json:"minigames"`
+		Minigames []MultiGame `json:"minigames"`
 	}
 	_ = json.Unmarshal(schemeOut, &minigames)
 

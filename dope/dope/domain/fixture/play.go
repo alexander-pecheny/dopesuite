@@ -16,7 +16,6 @@ import (
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
-	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
 	"dope/dope/storage/store"
@@ -141,7 +140,7 @@ update matches set state_json = ?, status = 'finished', revision = revision + 1 
 // writes them into the blob as the host's places, so the sheet agrees with
 // itself and the next round seats the teams that actually won.
 func pinnedPlaces(match store.DBMatchState) (string, error) {
-	p, ok := protocol.Get(match.GameType)
+	p, ok := games.ProtocolOf(match.GameType)
 	if !ok {
 		return "", fmt.Errorf("fixture: no protocol %q", match.GameType)
 	}

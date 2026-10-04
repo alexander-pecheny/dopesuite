@@ -1,17 +1,16 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"fmt"
 	"strings"
 
-	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
 )
 
 func init() { Register(brain{}) }
 
-// brain wraps games.ComputeBrainResults: state is games.BrainState, the match
+// brain wraps ComputeBrainResults: state is BrainState, the match
 // config is the brain scheme document (its questions count sizes the match).
 // Places track the running score; the rr stage awards group points from them
 // only once the match is finished (matches.status, structure.MatchOutcome).
@@ -22,14 +21,14 @@ func (brain) Code() string { return "brain" }
 // questions is always written: reseed share metrics divide by it.
 func (brain) Params() []Param {
 	return []Param{
-		{Key: "questions", Config: "questions", Default: games.BrainQuestionCount},
+		{Key: "questions", Config: "questions", Default: BrainQuestionCount},
 		{Key: "tiebreak_questions", Config: "tiebreakQuestions", Bool: true},
 	}
 }
 
 func (brain) TeamBlob() bool { return false }
 
-func (brain) Started(state json.RawMessage) bool { return games.BrainStateStarted(string(state)) }
+func (brain) Started(state json.RawMessage) bool { return BrainStateStarted(string(state)) }
 
 // Metrics: questions taken, and the same without the shootout — the share
 // denominator on a reseed counts the match's base questions.
@@ -41,7 +40,7 @@ func (brain) ScoreMetric() string { return "taken" }
 // UsedPlayers: a brain row records the player who buzzed by name, against the
 // side's seat.
 func (brain) UsedPlayers(stateJSON json.RawMessage, seats []int64) []UsedPlayer {
-	var state games.BrainState
+	var state BrainState
 	if json.Unmarshal(stateJSON, &state) != nil {
 		return nil
 	}
@@ -60,11 +59,11 @@ func (brain) UsedPlayers(stateJSON json.RawMessage, seats []int64) []UsedPlayer 
 }
 
 func (brain) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
-	return games.BrainEmptyStateJSON(games.BrainQuestions(string(cfg))), nil
+	return BrainEmptyStateJSON(BrainQuestions(string(cfg))), nil
 }
 
 func (brain) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
-	results, err := games.ComputeBrainResults(string(stateJSON))
+	results, err := ComputeBrainResults(string(stateJSON))
 	if err != nil {
 		return nil, fmt.Errorf("brain score: %w", err)
 	}

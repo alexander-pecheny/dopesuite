@@ -1,11 +1,9 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"reflect"
 	"testing"
-
-	"dope/dope/domain/games"
 )
 
 func team(name string, number int64) RosterTeam { return RosterTeam{Name: name, Number: number} }
@@ -36,7 +34,7 @@ func TestFoldRosterCarriesFlagsIntoBothDocuments(t *testing.T) {
 		t.Fatal(err)
 	}
 	var od struct {
-		Teams []games.ODTeam `json:"teams"`
+		Teams []ODTeam `json:"teams"`
 	}
 	if err := json.Unmarshal(state, &od); err != nil {
 		t.Fatal(err)
@@ -53,7 +51,7 @@ func TestFoldRosterCarriesFlagsIntoBothDocuments(t *testing.T) {
 		t.Fatal(err)
 	}
 	var ksi struct {
-		Participants []games.KSIParticipant `json:"participants"`
+		Participants []KSIParticipant `json:"participants"`
 	}
 	if err := json.Unmarshal(state, &ksi); err != nil {
 		t.Fatal(err)
@@ -100,18 +98,18 @@ func TestApplyRosterToChGKSchemeCountsTeams(t *testing.T) {
 }
 
 func TestRemapAnswerMatrixFollowsTeamsByNumber(t *testing.T) {
-	old := []games.KSIParticipant{{Number: 1, Name: "A"}, {Number: 2, Name: "B"}, {Number: 3, Name: "B"}}
+	old := []KSIParticipant{{Number: 1, Name: "A"}, {Number: 2, Name: "B"}, {Number: 3, Name: "B"}}
 	values := [][]string{{"a1", "a2"}, {"b1"}, {"c1"}}
 	// B (2) drops out, a new D joins, the other B keeps its number — and its row.
-	next := []games.KSIParticipant{{Number: 3, Name: "B"}, {Number: 4, Name: "D"}, {Number: 1, Name: "A"}}
+	next := []KSIParticipant{{Number: 3, Name: "B"}, {Number: 4, Name: "D"}, {Number: 1, Name: "A"}}
 	got := RemapAnswerMatrix(values, old, next, 2)
 	want := [][]string{{"c1", ""}, {"", ""}, {"a1", "a2"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v", got)
 	}
 	// Legacy states carry names only: match by name, once each.
-	legacy := []games.KSIParticipant{{Name: "A"}, {Name: "B"}}
-	got = RemapAnswerMatrix([][]string{{"a"}, {"b"}}, legacy, []games.KSIParticipant{{Number: 7, Name: "B"}, {Number: 8, Name: "B"}}, 1)
+	legacy := []KSIParticipant{{Name: "A"}, {Name: "B"}}
+	got = RemapAnswerMatrix([][]string{{"a"}, {"b"}}, legacy, []KSIParticipant{{Number: 7, Name: "B"}, {Number: 8, Name: "B"}}, 1)
 	if !reflect.DeepEqual(got, [][]string{{"b"}, {""}}) {
 		t.Fatalf("legacy got %v", got)
 	}
@@ -129,7 +127,7 @@ func TestApplyRosterToKSIStateRemapsEveryTheme(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got struct {
-		Participants []games.KSIParticipant `json:"participants"`
+		Participants []KSIParticipant `json:"participants"`
 		Themes       []struct {
 			Title   string     `json:"title"`
 			Answers [][]string `json:"answers"`
@@ -157,7 +155,7 @@ func TestApplyRosterToKSISchemeKeepsConfiguredThemes(t *testing.T) {
 	out, _ = ksiRosterScheme(``, nil)
 	var got map[string]any
 	_ = json.Unmarshal(out, &got)
-	if got["themes"] != float64(games.KSIThemeCount) {
+	if got["themes"] != float64(KSIThemeCount) {
 		t.Fatalf("default themes %v", got["themes"])
 	}
 }

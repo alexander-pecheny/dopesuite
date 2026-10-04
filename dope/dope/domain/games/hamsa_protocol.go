@@ -1,24 +1,23 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"fmt"
 	"strconv"
 
-	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
 )
 
 func init() { Register(hamsa{}) }
 
-// hamsa wraps games.ComputeHamsaResults. A bout's shape — how many themes each
+// hamsa wraps ComputeHamsaResults. A bout's shape — how many themes each
 // game round plays, what a question is worth there, whether the Block allows a
 // shootout — comes from its stage config at build time and is recorded in the
 // document, because what a question paid is a fact about the bout that played
 // it.
 type hamsa struct{}
 
-func (hamsa) Code() string { return games.Hamsa }
+func (hamsa) Code() string { return Hamsa }
 
 func (hamsa) Params() []Param {
 	return []Param{
@@ -48,7 +47,7 @@ func (hamsa) EditableWhenFinished(path []json.RawMessage) bool {
 // UsedPlayers: Hamsa's document keys each side by Participant, and a theme
 // (the shootout's too) names the player who sat it.
 func (hamsa) UsedPlayers(stateJSON json.RawMessage, _ []int64) []UsedPlayer {
-	var state games.HamsaState
+	var state HamsaState
 	if json.Unmarshal(stateJSON, &state) != nil {
 		return nil
 	}
@@ -58,14 +57,14 @@ func (hamsa) UsedPlayers(stateJSON json.RawMessage, _ []int64) []UsedPlayer {
 			continue
 		}
 		team, _ := strconv.ParseInt(key, 10, 64)
-		for _, theme := range append(append([]games.HamsaTheme(nil), side.Themes...), side.Shootout...) {
+		for _, theme := range append(append([]HamsaTheme(nil), side.Themes...), side.Shootout...) {
 			out = append(out, UsedPlayer{Team: team, Player: theme.Player})
 		}
 	}
 	return out
 }
 
-func (hamsa) Started(state json.RawMessage) bool { return games.HamsaStateStarted(string(state)) }
+func (hamsa) Started(state json.RawMessage) bool { return HamsaStateStarted(string(state)) }
 
 // hamsaConfig is the stage config the compiler writes from the DSL params.
 type hamsaConfig struct {
@@ -98,7 +97,7 @@ func (hamsa) Metrics(cfg json.RawMessage) []string {
 		conf = hamsaConfig{}
 	}
 	names := []string{"total", "plus", "shootoutTotal", "first", "advance_place"}
-	for _, value := range games.HamsaBaseValues(games.HamsaGameRounds(conf.GameRounds, conf.Multipliers, conf.Values)) {
+	for _, value := range HamsaBaseValues(HamsaGameRounds(conf.GameRounds, conf.Multipliers, conf.Values)) {
 		names = append(names, fmt.Sprintf("correct_%d", value), fmt.Sprintf("wrong_%d", value))
 	}
 	return names
@@ -112,7 +111,7 @@ func (hamsa) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return games.HamsaEmptyStateJSON(games.HamsaGameRounds(conf.GameRounds, conf.Multipliers, conf.Values)), nil
+	return HamsaEmptyStateJSON(HamsaGameRounds(conf.GameRounds, conf.Multipliers, conf.Values)), nil
 }
 
 func (hamsa) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
@@ -122,7 +121,7 @@ func (hamsa) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, err
 // ScoreSeated scores the bout's seats, in slot order: the document is keyed by
 // Participant, so the scorer hands over who is sitting there.
 func (hamsa) ScoreSeated(_ json.RawMessage, stateJSON json.RawMessage, seats []int64) ([]structure.SlotOutcome, error) {
-	results, err := games.ComputeHamsaResults(string(stateJSON), seats)
+	results, err := ComputeHamsaResults(string(stateJSON), seats)
 	if err != nil {
 		return nil, fmt.Errorf("hamsa score: %w", err)
 	}

@@ -10,7 +10,6 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
-	"dope/dope/domain/protocol"
 	rosterpkg "dope/dope/domain/roster"
 	"dope/dope/domain/schemedsl"
 	"dope/dope/storage/store"
@@ -294,7 +293,7 @@ type startedMatch struct {
 }
 
 func (m startedMatch) begun(gameType string) bool {
-	return m.status == "finished" || protocol.Started(gameType, m.state)
+	return m.status == "finished" || games.Started(gameType, m.state)
 }
 
 func gameMatchesTx(ctx context.Context, q store.Queryer, gameID int64) ([]startedMatch, error) {

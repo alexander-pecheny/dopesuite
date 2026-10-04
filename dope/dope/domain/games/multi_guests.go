@@ -1,16 +1,15 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"strings"
 
-	"dope/dope/domain/games"
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
-// A Multi game's guest teams (games.MultiGuest) are the host's to add, rename
+// A Multi game's guest teams (MultiGuest) are the host's to add, rename
 // and remove on the game's own page. Each edit rewrites the document the way
 // a roster fold does — the list in the scheme and the state, every team's
 // cells following it to its new row — so the fold and these edits never
@@ -31,7 +30,7 @@ func AddMultiGuest(schemeJSON, stateJSON, name string) ([]byte, []byte, error) {
 	for _, p := range participants {
 		number = min(number, p.Number)
 	}
-	next := append(append([]games.KSIParticipant(nil), participants...), games.KSIParticipant{Number: number - 1, Name: name})
+	next := append(append([]KSIParticipant(nil), participants...), KSIParticipant{Number: number - 1, Name: name})
 	return rewriteMultiParticipants(schemeJSON, state, participants, next)
 }
 
@@ -49,7 +48,7 @@ func RenameMultiGuest(schemeJSON, stateJSON string, number int, name string) ([]
 	if name, err = guestName(participants, name, number); err != nil {
 		return nil, nil, err
 	}
-	next := append([]games.KSIParticipant(nil), participants...)
+	next := append([]KSIParticipant(nil), participants...)
 	next[at].Name = name
 	return rewriteMultiParticipants(schemeJSON, state, participants, next)
 }
@@ -70,12 +69,12 @@ func RemoveMultiGuest(schemeJSON, stateJSON string, number int) ([]byte, []byte,
 	if at < len(entered) && entered[at] {
 		return nil, nil, corei18n.User(dopestrings.Default.Games.MultiGuest.Entered(participants[at].Name))
 	}
-	next := append(append([]games.KSIParticipant(nil), participants[:at]...), participants[at+1:]...)
+	next := append(append([]KSIParticipant(nil), participants[:at]...), participants[at+1:]...)
 	var declined map[string]bool
 	if raw, ok := state["declined"]; ok && len(raw) > 0 {
 		_ = json.Unmarshal(raw, &declined)
 	}
-	if key := games.KSIDeclinedKey(number, participants[at].Name); declined != nil {
+	if key := KSIDeclinedKey(number, participants[at].Name); declined != nil {
 		if _, ok := declined[key]; ok {
 			delete(declined, key)
 			raw, err := json.Marshal(declined)
@@ -96,7 +95,7 @@ func KeepMultiGuests(oldSchemeJSON string, schemeJSON, stateJSON []byte) ([]byte
 	if err != nil {
 		return nil, nil, err
 	}
-	guests := games.MultiGuests(games.ParseKSIParticipants(old["participants"]))
+	guests := MultiGuests(ParseKSIParticipants(old["participants"]))
 	if len(guests) == 0 {
 		return schemeJSON, stateJSON, nil
 	}
@@ -104,21 +103,21 @@ func KeepMultiGuests(oldSchemeJSON string, schemeJSON, stateJSON []byte) ([]byte
 	if err != nil {
 		return nil, nil, err
 	}
-	next := append(append([]games.KSIParticipant(nil), participants...), guests...)
+	next := append(append([]KSIParticipant(nil), participants...), guests...)
 	return rewriteMultiParticipants(string(schemeJSON), state, participants, next)
 }
 
-func multiGuestDoc(stateJSON string) (map[string]json.RawMessage, []games.KSIParticipant, error) {
+func multiGuestDoc(stateJSON string) (map[string]json.RawMessage, []KSIParticipant, error) {
 	state, err := RawJSONObject(stateJSON)
 	if err != nil {
 		return nil, nil, err
 	}
-	return state, games.ParseKSIParticipants(state["participants"]), nil
+	return state, ParseKSIParticipants(state["participants"]), nil
 }
 
-func guestIndex(participants []games.KSIParticipant, number int) int {
+func guestIndex(participants []KSIParticipant, number int) int {
 	for i, p := range participants {
-		if games.MultiGuest(p) && p.Number == number {
+		if MultiGuest(p) && p.Number == number {
 			return i
 		}
 	}
@@ -128,7 +127,7 @@ func guestIndex(participants []games.KSIParticipant, number int) int {
 // guestName is the name as a guest team will carry it: trimmed, and not one
 // another team of this game already goes by, since the sheet, the export and
 // a legacy refusal all tell teams apart by name. self is the team being renamed.
-func guestName(participants []games.KSIParticipant, typed string, self int) (string, error) {
+func guestName(participants []KSIParticipant, typed string, self int) (string, error) {
 	name := strings.Join(strings.Fields(typed), " ")
 	if name == "" {
 		return "", corei18n.User(dopestrings.Default.Games.MultiGuest.NameMissing())

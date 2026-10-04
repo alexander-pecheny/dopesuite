@@ -1,16 +1,15 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"fmt"
 
-	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
 )
 
 func init() { Register(troika{}) }
 
-// troika wraps games.ComputeTroikaResults: state is games.TroikaState, and
+// troika wraps ComputeTroikaResults: state is TroikaState, and
 // the match's shape — how many themes, what each is worth — comes from its
 // stage config at build time and is recorded in the document.
 type troika struct{}
@@ -19,7 +18,7 @@ func (troika) Code() string { return "troika" }
 
 func (troika) Params() []Param {
 	return []Param{
-		{Key: "themes", Config: "themes", Default: games.TroikaThemeCount},
+		{Key: "themes", Config: "themes", Default: TroikaThemeCount},
 		{Key: "theme_values", Config: "themeValues", List: true},
 		// written makes the Block's bout the qualifier: one sitting of every troika,
 		// a count of right answers per question instead of chairs and marks.
@@ -36,7 +35,7 @@ func (troika) TeamBlob() bool { return false }
 // A chair holds a player, so a match's seats carry their rosters.
 func (troika) SeatsPlayers() bool { return true }
 
-func (troika) Started(state json.RawMessage) bool { return games.TroikaStateStarted(string(state)) }
+func (troika) Started(state json.RawMessage) bool { return TroikaStateStarted(string(state)) }
 
 // Metrics: game points and correct answers without the nominal. A group sums
 // points into scored/conceded with `metric: total`, and the regulations'
@@ -59,18 +58,18 @@ func (troika) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 			return nil, fmt.Errorf("troika config: %w", err)
 		}
 	}
-	return games.TroikaEmptyStateJSON(games.TroikaThemeValues(conf.Themes, conf.ThemeValues), conf.Participants, conf.Written, conf.Swap), nil
+	return TroikaEmptyStateJSON(TroikaThemeValues(conf.Themes, conf.ThemeValues), conf.Participants, conf.Written, conf.Swap), nil
 }
 
 // A written qualifier takes a late troika as one more row; a bout with chairs
 // takes no other side.
 func (troika) GrowSeats(state json.RawMessage, seats int) (json.RawMessage, bool, error) {
-	grown, ok, err := games.GrowTroikaWritten(string(state), seats)
+	grown, ok, err := GrowTroikaWritten(string(state), seats)
 	return grown, ok, err
 }
 
 func (troika) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
-	results, err := games.ComputeTroikaResults(string(stateJSON))
+	results, err := ComputeTroikaResults(string(stateJSON))
 	if err != nil {
 		return nil, fmt.Errorf("troika score: %w", err)
 	}

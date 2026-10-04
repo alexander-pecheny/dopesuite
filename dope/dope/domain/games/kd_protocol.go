@@ -1,9 +1,8 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 
-	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
 )
 
@@ -17,7 +16,7 @@ func init() { Register(kd{}) }
 // either: a roster import must leave the tables alone.
 type kd struct{}
 
-func (kd) Code() string { return games.KD }
+func (kd) Code() string { return KD }
 
 func (kd) Params() []Param { return od{}.Params() }
 
@@ -36,7 +35,7 @@ func (kd) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 }
 
 func (kd) Seats(stateJSON json.RawMessage) []Seat {
-	var state games.ODState
+	var state ODState
 	_ = json.Unmarshal(stateJSON, &state)
 	seats := make([]Seat, len(state.Teams))
 	for i, table := range state.Teams {
@@ -55,7 +54,7 @@ func (kd) UsesFestNumbers() bool { return false }
 // passed to somebody else while its holder is still registered, a player
 // with no name.
 func (kd) ValidateEdit(prev, next []byte) error {
-	return games.ValidateKDPlayersEdit(prev, next)
+	return ValidateKDPlayersEdit(prev, next)
 }
 
 func (kd) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {

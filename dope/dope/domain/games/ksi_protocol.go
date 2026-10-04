@@ -1,17 +1,16 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"fmt"
 
-	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
 	"dope/dope/storage/store"
 )
 
 func init() { Register(ksi{}) }
 
-// ksi wraps games.ComputeKSIResults: state is games.KSIState, the match config
+// ksi wraps ComputeKSIResults: state is KSIState, the match config
 // is the KSI scheme document (its stickers block selects the stickers
 // variant). Declined teams keep their slot but stay unplaced.
 type ksi struct{}
@@ -40,13 +39,13 @@ func (ksi) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 		}
 	}
 	if conf.Themes <= 0 {
-		conf.Themes = games.KSIThemeCount
+		conf.Themes = KSIThemeCount
 	}
 	var stateJSON []byte
 	if len(conf.Stickers) > 0 {
-		_, stateJSON = games.KSIStickersEmptyGameJSON("", "", conf.Themes, conf.Stickers)
+		_, stateJSON = KSIStickersEmptyGameJSON("", "", conf.Themes, conf.Stickers)
 	} else {
-		_, stateJSON = games.KSIEmptyGameJSON("", "", conf.Themes)
+		_, stateJSON = KSIEmptyGameJSON("", "", conf.Themes)
 	}
 	return stateJSON, nil
 }
@@ -57,10 +56,10 @@ func (ksi) Seats(stateJSON json.RawMessage) []Seat {
 		Declined     map[string]bool `json:"declined"`
 	}
 	_ = json.Unmarshal(stateJSON, &state)
-	participants := games.ParseKSIParticipants(state.Participants)
+	participants := ParseKSIParticipants(state.Participants)
 	seats := make([]Seat, len(participants))
 	for i, p := range participants {
-		seats[i] = Seat{Number: int64(p.Number), Name: p.Name, Declined: games.KSIParticipantDeclined(state.Declined, p)}
+		seats[i] = Seat{Number: int64(p.Number), Name: p.Name, Declined: KSIParticipantDeclined(state.Declined, p)}
 	}
 	return seats
 }
@@ -78,10 +77,10 @@ func (ksi) EnteredSeats(stateJSON json.RawMessage) []bool {
 		} `json:"themes"`
 	}
 	_ = json.Unmarshal(stateJSON, &state)
-	participants := games.ParseKSIParticipants(state.Participants)
+	participants := ParseKSIParticipants(state.Participants)
 	out := make([]bool, len(participants))
 	for i, p := range participants {
-		out[i] = games.KSIParticipantDeclined(state.Declined, p)
+		out[i] = KSIParticipantDeclined(state.Declined, p)
 	}
 	markRow := func(row int, filled bool) {
 		if filled && row < len(out) {
@@ -109,11 +108,11 @@ func anyFilled(cells []string) bool {
 }
 
 func (ksi) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
-	var state games.KSIState
+	var state KSIState
 	if err := json.Unmarshal(stateJSON, &state); err != nil {
 		return nil, fmt.Errorf("ksi state: %w", err)
 	}
-	ranked, err := games.ComputeKSIResults(string(cfg), string(stateJSON), store.QuestionValues[:])
+	ranked, err := ComputeKSIResults(string(cfg), string(stateJSON), store.QuestionValues[:])
 	if err != nil {
 		return nil, fmt.Errorf("ksi score: %w", err)
 	}

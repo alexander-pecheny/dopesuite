@@ -45,8 +45,8 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
 	"dope/dope/domain/flatgame"
+	"dope/dope/domain/games"
 	"dope/dope/domain/matchops"
-	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
 	"dope/dope/platform/metrics"
@@ -597,7 +597,7 @@ func PatchMatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID
 		for i, op := range ops {
 			paths[i] = op.Path
 		}
-		if !protocol.EditableWhenFinished(match.GameType, paths) {
+		if !games.EditableWhenFinished(match.GameType, paths) {
 			return corei18n.User(dopestrings.Default.Edit.Match.Finished())
 		}
 	}
@@ -795,7 +795,7 @@ func applyStateOps(gameType, stateJSON string, ops []edit.PatchOp, sample *metri
 	if metricsOn {
 		sample.Marshal = time.Since(tMarshal)
 	}
-	if err := protocol.ValidateEdit(gameType, []byte(stateJSON), next); err != nil {
+	if err := games.ValidateEdit(gameType, []byte(stateJSON), next); err != nil {
 		return nil, nil, err
 	}
 	return next, blobOps, nil

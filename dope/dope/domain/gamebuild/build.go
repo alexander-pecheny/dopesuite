@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
-	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/schemedsl"
 	"dope/dope/platform/util"
@@ -406,7 +405,7 @@ func stageEmptyState(gameType string, stage store.SchemeStage, seats, fallbackQu
 	if store.TeamBlobShaped(gameType) {
 		return "{}"
 	}
-	p, ok := protocol.Get(gameType)
+	p, ok := games.ProtocolOf(gameType)
 	if !ok {
 		return string(games.BrainEmptyStateJSON(stageQuestions(stage, fallbackQuestions)))
 	}
@@ -694,7 +693,7 @@ select id, stage_id, code, status, coalesce(state_json, '{}') from matches where
 	grown := map[string]json.RawMessage{}
 	othersStarted := false
 	for code, m := range existingMatches {
-		if m.Status != "finished" && !protocol.Started(gameType, m.State) {
+		if m.Status != "finished" && !games.Started(gameType, m.State) {
 			continue
 		}
 		match, survives := planned[code]
@@ -703,7 +702,7 @@ select id, stage_id, code, status, coalesce(state_json, '{}') from matches where
 			continue
 		}
 		if survives && slotIdentitiesExtend(ctx, tx, m.ID, match.Slots) {
-			state, ok, err := protocol.GrowSeats(gameType, json.RawMessage(m.State), len(match.Slots))
+			state, ok, err := games.GrowSeats(gameType, json.RawMessage(m.State), len(match.Slots))
 			if err != nil {
 				return err
 			}
@@ -781,7 +780,7 @@ update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?,
 					}
 					continue
 				}
-				if existing.Status == "finished" || protocol.Started(gameType, existing.State) {
+				if existing.Status == "finished" || games.Started(gameType, existing.State) {
 					if _, err := tx.ExecContext(ctx, `
 update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ? where id = ?`,
 						stageID, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, existing.ID); err != nil {

@@ -1,4 +1,4 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 // the EK plus column) = 10+30 = 40; team B's is wrong/-/-/-/right = -10+50
 // = 40, plus 50. Places are the host-entered ones.
 func TestEKScore(t *testing.T) {
-	p, ok := Get("ek")
+	p, ok := ProtocolOf("ek")
 	if !ok {
 		t.Fatal("ek protocol not registered")
 	}
@@ -38,7 +38,7 @@ func TestEKScore(t *testing.T) {
 	if a.Metrics["correct_10"] != 1 || a.Metrics["correct_30"] != 1 || a.Metrics["wrong_20"] != 1 || b.Metrics["correct_50"] != 1 {
 		t.Errorf("counts = %v / %v", a.Metrics, b.Metrics)
 	}
-	if _, ok := Get("nope"); ok {
+	if _, ok := ProtocolOf("nope"); ok {
 		t.Fatal("unknown protocol reported as registered")
 	}
 }
@@ -56,7 +56,7 @@ func TestEveryProtocolDeclaresWhatItWrites(t *testing.T) {
 		"hamsa": `{"participants":{"1":{"themes":[{"answers":["right","","","",""]}],"bet":{"amount":100,"answer":"right"}}}}`,
 	}
 	for code, state := range states {
-		p, ok := Get(code)
+		p, ok := ProtocolOf(code)
 		if !ok {
 			t.Fatalf("%s: not registered", code)
 		}
@@ -79,7 +79,7 @@ func TestEveryProtocolDeclaresWhatItWrites(t *testing.T) {
 			t.Errorf("%s: TeamBlob = %v", code, p.TeamBlob())
 		}
 	}
-	brain, _ := Get("brain")
+	brain, _ := ProtocolOf("brain")
 	if brain.Started(json.RawMessage(`{"teams":[{"rows":[]},{"rows":[]}]}`)) {
 		t.Error("a pristine брейн бой counts as started")
 	}
@@ -96,7 +96,7 @@ func TestEveryProtocolDeclaresWhatItWrites(t *testing.T) {
 // unscored; B's nowrong theme scores 10 (wrong → 0), its emptywrong theme is
 // five empties = −150, total −140 → A first. C declined → unplaced.
 func TestKSIScore(t *testing.T) {
-	p, ok := Get("ksi")
+	p, ok := ProtocolOf("ksi")
 	if !ok {
 		t.Fatal("ksi protocol not registered")
 	}
@@ -156,7 +156,7 @@ func TestKSIScore(t *testing.T) {
 // team 2 gets 2. The tie variant (q2 taken by nobody) makes totals 1/1/0 →
 // teams 1 and 2 share place 1, team 3 is third.
 func TestODScore(t *testing.T) {
-	p, ok := Get("od")
+	p, ok := ProtocolOf("od")
 	if !ok {
 		t.Fatal("od protocol not registered")
 	}
@@ -199,7 +199,7 @@ func TestODScore(t *testing.T) {
 // Side 1 leads: places 1/2. The tied variant (П cleared) shares 1.5 — group
 // points are the rr stage's concern, gated on matches.status, not scored here.
 func TestBrainScore(t *testing.T) {
-	p, ok := Get("brain")
+	p, ok := ProtocolOf("brain")
 	if !ok {
 		t.Fatal("brain protocol not registered")
 	}
@@ -256,7 +256,7 @@ func TestBrainScore(t *testing.T) {
 // Личная СИ играется на том же бланке, что и ЭК, и место в бою считается по
 // сумме: равные суммы делят место.
 func TestSIScore(t *testing.T) {
-	p, ok := Get("si")
+	p, ok := ProtocolOf("si")
 	if !ok {
 		t.Fatal("si protocol not registered")
 	}
@@ -292,7 +292,7 @@ func TestSIScore(t *testing.T) {
 // Перестрелка ломает равенство сумм: место делится только там, где и сумма, и
 // перестрелка равны. Сама перестрелка в Σ не входит — она отдельная метрика.
 func TestSIShootoutBreaksTies(t *testing.T) {
-	p, _ := Get("si")
+	p, _ := ProtocolOf("si")
 	state := `{"participants":[
 		{"name":"А","themes":[{"player":"А","answers":["right","","","",""]}]},
 		{"name":"Б","themes":[{"player":"Б","answers":["right","","","",""]}],
@@ -318,7 +318,7 @@ func TestSIShootoutBreaksTies(t *testing.T) {
 // a team that entered nothing still took a place, and the outcome says whose
 // it is.
 func TestHamsaScoreSeats(t *testing.T) {
-	p, ok := Get("hamsa")
+	p, ok := ProtocolOf("hamsa")
 	if !ok {
 		t.Fatal("hamsa protocol not registered")
 	}
@@ -438,11 +438,11 @@ func TestEnteredSeats(t *testing.T) {
 // same scoring, a different default выход на тему — and the store learns the
 // cap from the registration rather than by asking a registry it cannot see.
 func TestSextetIsQuartetWithThreeSeats(t *testing.T) {
-	es, ok := Get("es")
+	es, ok := ProtocolOf("es")
 	if !ok {
 		t.Fatal("es protocol not registered")
 	}
-	ek, _ := Get("ek")
+	ek, _ := ProtocolOf("ek")
 	if got, want := es.Metrics(nil), ek.Metrics(nil); len(got) != len(want) {
 		t.Fatalf("metrics = %v, want ЭК's %v", got, want)
 	}

@@ -1,17 +1,16 @@
-package protocol
+package games
 
 import (
 	"encoding/json"
 	"fmt"
 
-	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
 )
 
 func init() { Register(od{}) }
 
-// od wraps the existing OD (ChGK) pure scoring: state is games.ODState, ranked
-// by games.ComputeODResults. The match config is the OD scheme document (its
+// od wraps the existing OD (ChGK) pure scoring: state is ODState, ranked
+// by ComputeODResults. The match config is the OD scheme document (its
 // tourComp drives the tour split). Teams tied on total share a place, matching
 // the results page's tie-grouped labels.
 type od struct{}
@@ -30,12 +29,12 @@ func (od) Metrics(json.RawMessage) []string { return []string{"total", "rating"}
 func (od) RatingRosterStateKey() string { return "teams" }
 
 func (od) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
-	_, stateJSON := games.ODEmptyGameJSON("", "", games.ParseTourComp(string(cfg)))
+	_, stateJSON := ODEmptyGameJSON("", "", ParseTourComp(string(cfg)))
 	return stateJSON, nil
 }
 
 func (od) Seats(stateJSON json.RawMessage) []Seat {
-	var state games.ODState
+	var state ODState
 	_ = json.Unmarshal(stateJSON, &state)
 	seats := make([]Seat, len(state.Teams))
 	for i, team := range state.Teams {
@@ -78,7 +77,7 @@ func (od) EnteredSeats(stateJSON json.RawMessage) []bool {
 }
 
 func (od) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
-	results, err := games.ComputeODResults(string(cfg), string(stateJSON))
+	results, err := ComputeODResults(string(cfg), string(stateJSON))
 	if err != nil {
 		return nil, fmt.Errorf("od score: %w", err)
 	}
@@ -103,7 +102,7 @@ func (od) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error)
 	return outcomes, nil
 }
 
-func resultTeamCount(results games.ODResults) int {
+func resultTeamCount(results ODResults) int {
 	max := 0
 	for _, team := range results.Teams {
 		if team.Index+1 > max {
