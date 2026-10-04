@@ -33,7 +33,7 @@ import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
 import S from "./i18nstrings.js";
-import {declarePins} from "./sheet-pins.js";
+import {declarePins, sheetHead} from "./sheet-pins.js";
 
 // A bout sheet pins the side's name, which is the whole of its pinned block.
 const SIDE_PINS = declarePins([{key: "name", width: "var(--team-col)"}], {start: "var(--sheet-corner-col)"});
@@ -322,7 +322,6 @@ function buildBout(bout: BoutEntry): HTMLElement {
   const editable = !viewer && !bout.view.finished;
   const seatsAt = seatColumns(bout);
 
-  const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
   themeRow.appendChild(SIDE_PINS.mark(th(S.troika.protocol.team(), "col-name troika-team-head"), "name"));
   state.values.forEach((value, t) => {
@@ -336,8 +335,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
   });
   themeRow.appendChild(th("Σ", "troika-total"));
   themeRow.appendChild(th(finishToggle(bout), "troika-finish-head"));
-  thead.appendChild(themeRow);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([{row: themeRow}]));
 
   const body = document.createElement("tbody");
   const sides = state.sides.length;
@@ -691,7 +689,6 @@ function buildWrittenBout(bout: BoutEntry): HTMLElement {
   const table = document.createElement("table");
   table.className = "match-table troika-sheet troika-written-sheet";
   table.classList.toggle("match-finished", Boolean(bout.view.finished));
-  const thead = document.createElement("thead");
   const themeRow = document.createElement("tr");
   themeRow.appendChild(SIDE_PINS.mark(th(S.troika.protocol.team(), "col-name troika-team-head"), "name"));
   state.values.forEach((value, t) => {
@@ -704,8 +701,7 @@ function buildWrittenBout(bout: BoutEntry): HTMLElement {
   themeRow.appendChild(th(S.troika.written.twos(), "troika-total", {title: S.troika.written.twosHint()}));
   themeRow.appendChild(th(S.troika.written.place(), "troika-total"));
   themeRow.appendChild(th(finishToggle(bout), "troika-finish-head"));
-  thead.appendChild(themeRow);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([{row: themeRow}]));
 
   const ranks = new Map<number, number>();
   for (const entry of page.festStage(bout.stage.code || "")?.standings || []) {

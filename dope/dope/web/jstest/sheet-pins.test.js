@@ -77,3 +77,60 @@ test("a sheet that leaves its place unpinned ends the block at Σ", () => {
   assert.deepEqual(pins.keys, ["name", "total"]);
   assert.equal(pins.end, "calc(var(--sheet-corner-col) + var(--team-col) + var(--hamsa-total-col))");
 });
+
+// A head row as the module touches it: its cells, each spanning some rows.
+function fakeRow(...spans) {
+  return {children: spans.map((rowSpan) => Object.assign(fakeCell(), {rowSpan}))};
+}
+
+test("headRowTops sums the heights of the rows above each row", () => {
+  assert.deepEqual(P.headRowTops(["28px", "28px", "22px"]), ["0px", "28px", "calc(28px + 28px)"]);
+  assert.deepEqual(P.headRowTops(["var(--head-row)", undefined]), ["0px", "var(--head-row)"]);
+  assert.deepEqual(P.headRowTops([undefined]), ["0px"]);
+  assert.deepEqual(P.headRowTops([]), []);
+});
+
+test("a head row above another must declare its height", () => {
+  assert.throws(() => P.headRowTops([undefined, "22px"]), /head row 1 of 2 declares no height/);
+  assert.throws(() => P.stackHeadRows([{row: fakeRow(1)}, {row: fakeRow(1)}]));
+});
+
+test("stackHeadRows sticks each row below the ones above it", () => {
+  // Мультиигры: Команда spans both rows, a мини-игра's name the first, its
+  // вопросы the second.
+  const games = fakeRow(2, 1);
+  const values = fakeRow(1, 1);
+  P.stackHeadRows([{row: games, height: "var(--head-row)"}, {row: values}]);
+  const [team, game] = games.children;
+  assert.deepEqual(team.style.values, {position: "sticky", top: "0px"});
+  assert.deepEqual(game.style.values, {position: "sticky", top: "0px", height: "var(--head-row)"});
+  for (const cell of values.children) assert.deepEqual(cell.style.values, {position: "sticky", top: "var(--head-row)"});
+});
+
+test("the third row sticks below the first two, and a row that declares its height gets it", () => {
+  // ОД's shootout entry: the rounds, the numbers, the locks; the controls
+  // head spans all three.
+  const rounds = fakeRow(1, 3);
+  const numbers = fakeRow(1);
+  const locks = fakeRow(1);
+  P.stackHeadRows([{row: rounds, height: "28px"}, {row: numbers, height: "28px"}, {row: locks, height: "22px"}]);
+  assert.equal(rounds.children[1].style.values.top, "0px");
+  assert.equal(rounds.children[1].style.values.height, undefined);
+  assert.deepEqual(numbers.children[0].style.values, {position: "sticky", top: "28px", height: "28px"});
+  assert.deepEqual(locks.children[0].style.values, {position: "sticky", top: "calc(28px + 28px)", height: "22px"});
+});
+
+test("sheetHead builds the thead from its rows in order and stacks them", () => {
+  const made = [];
+  globalThis.document = {createElement: (tag) => {
+    const node = {tag, children: [], appendChild(child) { this.children.push(child); return child; }};
+    made.push(node);
+    return node;
+  }};
+  const round = fakeRow(1);
+  const themes = fakeRow(1);
+  const thead = P.sheetHead([{row: round, height: "var(--head-row)"}, {row: themes}]);
+  assert.equal(thead.tag, "thead");
+  assert.deepEqual(thead.children, [round, themes]);
+  assert.equal(themes.children[0].style.values.top, "var(--head-row)");
+});

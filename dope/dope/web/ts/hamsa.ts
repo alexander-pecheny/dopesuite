@@ -292,6 +292,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
   const table = buildTwoRowScoreTable({
     className: "match-table hamsa-sheet",
     pins: BOUT_PINS,
+    headRowsAbove: [{row: roundHeaderRow(bout, groups), height: "var(--head-row)"}],
     attrs: {dataset: {match: bout.code}},
     nameHeader: boutHeader(bout),
     themes: groups.map((group) => ({
@@ -322,7 +323,6 @@ function buildBout(bout: BoutEntry): HTMLElement {
   });
   table.classList.toggle("match-finished", Boolean(bout.view.finished));
   table.insertBefore(columnGroup(groups), table.firstChild);
-  table.tHead?.insertBefore(roundHeaderRow(bout, groups), table.tHead.firstChild);
 
   box.appendChild(table);
   return box;
@@ -331,7 +331,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 // roundHeaderRow stands over the theme headers and names the five game rounds,
 // each spanning its own themes. The leading columns — the bout, Σ and the
 // place — are the sheet's own and stay blank here.
-function roundHeaderRow(bout: BoutEntry, groups: ThemeGroup[]): HTMLElement {
+function roundHeaderRow(bout: BoutEntry, groups: ThemeGroup[]): HTMLTableRowElement {
   const state = stateOf(bout.code);
   const row = document.createElement("tr");
   row.className = "hamsa-round-row";

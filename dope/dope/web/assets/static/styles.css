@@ -415,6 +415,9 @@
 }
 
 .match-table {
+  /* A head row's height. sheet-pins.ts sheetHead stacks a head of several
+     rows from what each declares, and this is what a sheet's rows say. */
+  --head-row: var(--question-size);
   border-collapse: separate;
   border-spacing: 0;
   margin-left: var(--sheet-corner-col);
@@ -476,7 +479,7 @@
   position: sticky !important;
   top: 0;
   z-index: 4;
-  height: var(--question-size);
+  height: var(--head-row);
   border-color: var(--structure);
   font-weight: var(--fw-regular);
   text-align: center;
@@ -1641,6 +1644,7 @@ body:not(.embedded-match) .grid-match {
 
 @media (max-width: 760px) {
   .match-table {
+    --head-row: 24px;
     --team-col: 90px;
     --total-col: 28px;
     --place-col: 32px;
@@ -1659,10 +1663,6 @@ body:not(.embedded-match) .grid-match {
     height: 24px;
     min-width: 24px;
     padding: 2px 3px;
-  }
-
-  .match-table thead th {
-    height: 24px;
   }
 
   .match-table .battle {
@@ -2052,10 +2052,6 @@ html:has(.game-host-top) {
   font-weight: var(--fw-regular);
   color: var(--text-strong);
 }
-
-.entry-table thead tr:first-child th { top: 0; height: 28px; }
-
-.entry-table thead tr:nth-child(2) th { top: 28px; height: 22px; }
 
 .entry-q-head { font-size: var(--text-xs); }
 
@@ -2449,16 +2445,6 @@ html:has(.game-host-top) {
 .od-shootout-entry-title {
   font-size: var(--text-xs-plus);
   font-weight: var(--fw-bold);
-}
-
-.od-shootout-entry-table thead tr:first-child th { top: 0; height: 28px; }
-
-.od-shootout-entry-table thead tr:nth-child(2) th { top: 28px; height: 28px; }
-
-.od-shootout-entry-table thead tr:nth-child(3) th { top: 56px; height: 22px; }
-
-.entry-table .od-shootout-controls-head {
-  top: 0;
 }
 
 .od-shootout-entry-table .od-shootout-round-head {
@@ -4741,16 +4727,9 @@ body.is-fullscreen.od-page .match-main {
   vertical-align: bottom;
 }
 
-/* Two header rows, both frozen: the мини-игры's names on top, the вопрос
-   numbers below them, stuck where the first row ends rather than on top of
-   it. The numbers read at the bottom line too, level with Команда and Итог. */
-.multi-table thead tr:first-child th {
-  top: 0;
-  height: var(--question-size);
-}
-
+/* The вопрос numbers, under the мини-игры's names (multi.ts stacks the two
+   rows), read at the bottom line too, level with Команда and Итог. */
 .multi-table thead tr:nth-child(2) th {
-  top: var(--question-size);
   vertical-align: bottom;
 }
 

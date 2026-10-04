@@ -7,6 +7,7 @@
 
 import {td, th} from "./cells.js";
 import {resultsPins, resultsTeamCell} from "./standings.js";
+import {sheetHead} from "./sheet-pins.js";
 import {icon, iconed} from "./icons_gen.js";
 import type {IconName} from "./icons_gen.js";
 import S from "./i18nstrings.js";
@@ -305,7 +306,6 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     wrap.className = "table-scroll";
     const node = document.createElement("table");
     node.className = "results-table seed-import-table";
-    const head = document.createElement("thead");
     const headRow = document.createElement("tr");
     headRow.append(
       ENTRANT_PINS.mark(th(S.entrants.head.seed(), "results-place-head seed-number-head"), "place"),
@@ -313,8 +313,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
       th(S.entrants.head.declined(), "seed-declined-head"),
       th("", "entrant-actions-head"),
     );
-    head.appendChild(headRow);
-    node.appendChild(head);
+    node.appendChild(sheetHead([{row: headRow}]));
     const body = document.createElement("tbody");
     let waitlistShown = false;
     rows.forEach((row, index) => {

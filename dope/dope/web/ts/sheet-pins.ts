@@ -18,6 +18,16 @@
 // The cue is one class on the scrolling frame, `pins-scrolled`, which
 // `bindPinnedScroll` keeps in step with the frame's scroll. The game shell
 // binds it on every page's sheet frame.
+//
+// The head rows are pinned the same way, downwards. A sheet's head can be more
+// than one row: Hamsa's rounds over its themes, Multi's minigames over their
+// questions, OD's question numbers over their locks. Every row sticks, and a row after the
+// first sticks where the rows above it end, so the sheet scrolls under all of
+// them and no row covers another. `sheetHead` builds every sheet's thead: each
+// row but the last declares its height as CSS, and the module writes that
+// height on the row's cells and each row's `top` as a calc() of the heights
+// above it. Before this, three sheets restated the offsets in tr:nth-child
+// rules and Hamsa had none, so its themes row stuck over its rounds.
 
 import {bindScrollEdges} from "./widgets.js";
 import type {ScrollEdgeBinding} from "./widgets.js";
@@ -116,4 +126,59 @@ export function bindPinnedScroll(frame: Element | null | undefined): ScrollEdgeB
   return bindScrollEdges(frame, ({left}, el) => {
     el.classList.toggle(PINS_SCROLLED_CLASS, left);
   });
+}
+
+// === head rows ===
+
+export interface HeadRow {
+  row: HTMLTableRowElement;
+  // The row's height as CSS ("28px", "var(--head-row)"). Every row but the
+  // last declares one, because the rows below it stick where it ends; the
+  // last row may leave it to the stylesheet.
+  height?: string;
+}
+
+// headRowTops is the pure arithmetic: where each head row sticks, as CSS.
+// It takes the heights of the rows in order; the last one's is not needed.
+export function headRowTops(heights: readonly (string | undefined)[]): string[] {
+  if (heights.length === 0) return [];
+  const above = heights.slice(0, -1);
+  const missing = above.findIndex((height) => !height);
+  if (missing >= 0) throw new Error(`sheet-pins: head row ${missing + 1} of ${heights.length} declares no height, and the rows below it stick where it ends`);
+  const {offsets, end} = pinOffsets(above as string[]);
+  return [...offsets, end];
+}
+
+interface HeadCellTarget extends PinTarget {
+  rowSpan?: number;
+}
+
+interface HeadRowTarget {
+  children: ArrayLike<HeadCellTarget>;
+}
+
+// stackHeadRows pins each head row below the ones above it: every cell gets
+// `position: sticky` and its row's `top`, and a cell of a row that declares
+// its height, spanning that row alone, gets the height. A cell spanning
+// several rows starts in the first of them and keeps the height the rows give
+// it.
+export function stackHeadRows(rows: readonly HeadRow[]): void {
+  const tops = headRowTops(rows.map((row) => row.height));
+  rows.forEach(({row, height}, index) => {
+    for (const cell of Array.from((row as unknown as HeadRowTarget).children)) {
+      cell.style.setProperty("position", "sticky");
+      cell.style.setProperty("top", tops[index]);
+      if (height && (cell.rowSpan ?? 1) === 1) cell.style.setProperty("height", height);
+    }
+  });
+}
+
+// sheetHead is a sheet's thead: its rows in order, each stuck below the ones
+// above it. Every table a page builds makes its head here, so a sheet that
+// grows a second head row cannot leave it sticking over the first.
+export function sheetHead(rows: readonly HeadRow[]): HTMLTableSectionElement {
+  const thead = document.createElement("thead");
+  for (const {row} of rows) thead.appendChild(row);
+  stackHeadRows(rows);
+  return thead;
 }

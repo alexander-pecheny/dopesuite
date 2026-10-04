@@ -6,7 +6,7 @@ import {formatDisplayText, td, th} from "./cells.js";
 import type {CellContent, CellContentItem} from "./cells.js";
 import S from "./i18nstrings.js";
 import {nameCell} from "./name-cell.js";
-import {declarePins} from "./sheet-pins.js";
+import {declarePins, sheetHead} from "./sheet-pins.js";
 import type {Pins} from "./sheet-pins.js";
 
 export interface StageRef {
@@ -130,7 +130,7 @@ export function standingsTable({className, columns, rows}: StandingsSpec): HTMLT
     else if (column.trailHead) pins.markTrailing(cell);
     head.appendChild(cell);
   });
-  table.appendChild(document.createElement("thead")).appendChild(head);
+  table.appendChild(sheetHead([{row: head}]));
   const body = table.appendChild(document.createElement("tbody"));
   rows.forEach((row, index) => {
     const tr = document.createElement("tr");

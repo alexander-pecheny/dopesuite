@@ -15,7 +15,7 @@ import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {fitScrollFade, renderTabBar} from "./widgets.js";
-import {declarePins} from "./sheet-pins.js";
+import {declarePins, sheetHead} from "./sheet-pins.js";
 import type {Pins} from "./sheet-pins.js";
 import {icon, iconed} from "./icons_gen.js";
 import type {IconName} from "./icons_gen.js";
@@ -170,7 +170,6 @@ function buildTable(): HTMLElement {
   table.className = "match-table compact-score-table multi-table";
   const pins = sheetPins();
 
-  const head = document.createElement("thead");
   const gamesRow = document.createElement("tr");
   gamesRow.appendChild(pins.mark(th(teamHead(), "col-name", {rowSpan: 2}), "name"));
   gamesRow.appendChild(pins.mark(th(S.multi.sheet.total(), "col-total number", {rowSpan: 2}), "total"));
@@ -181,7 +180,6 @@ function buildTable(): HTMLElement {
     gamesRow.appendChild(th(gameHead(game, pins), "theme-block",
       {colSpan: game.columns.length + gapCount(game) + 1, dataset: {game: g}}));
   });
-  head.appendChild(gamesRow);
 
   const valuesRow = document.createElement("tr");
   rules.minigames.forEach((game) => {
@@ -192,8 +190,8 @@ function buildTable(): HTMLElement {
     });
     valuesRow.appendChild(th("Σ", "theme-block-score"));
   });
-  head.appendChild(valuesRow);
-  table.appendChild(head);
+  // The question numbers stick where the minigames' names end.
+  table.appendChild(sheetHead([{row: gamesRow, height: "var(--head-row)"}, {row: valuesRow}]));
 
   const sheetRows = multi.scoreSheet(state!, rules);
   const body = document.createElement("tbody");
@@ -551,14 +549,12 @@ function buildTeamsPanel(): HTMLElement {
 function buildTeamsTable(): HTMLElement {
   const table = document.createElement("table");
   table.className = "match-table";
-  const head = document.createElement("thead");
   const headRow = document.createElement("tr");
   headRow.appendChild(th("№"));
   headRow.appendChild(th(S.multi.refusals.team(), "results-team-head"));
   headRow.appendChild(th(S.multi.refusals.declined()));
   headRow.appendChild(th(""));
-  head.appendChild(headRow);
-  table.appendChild(head);
+  table.appendChild(sheetHead([{row: headRow}]));
   const body = document.createElement("tbody");
   state!.participants.forEach((_, index) => {
     const guest = multi.participantGuest(state!, index);

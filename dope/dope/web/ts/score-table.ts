@@ -5,8 +5,8 @@ import {applyAttrs, cellFromSpec, formatDisplayText, formatPlace, sameArray, td,
 import type {CellAttrs, CellContent, CellSpec} from "./cells.js";
 import {seatedNames, seatingLabel} from "./ek-seating.js";
 import {SEAT_PICKER_SELECTOR, seatPickerOf} from "./seat-picker.js";
-import {declarePins} from "./sheet-pins.js";
-import type {Pins} from "./sheet-pins.js";
+import {declarePins, sheetHead} from "./sheet-pins.js";
+import type {HeadRow, Pins} from "./sheet-pins.js";
 import S from "./i18nstrings.js";
 
 export interface ScoreTableTheme {
@@ -71,6 +71,9 @@ export interface ScoreTableOptions {
   // The sheet's pinned block. Left out, it is scoreSheetPins for the columns
   // the table has.
   pins?: Pins;
+  // Head rows over the table's own, top first, each with its height: Hamsa's
+  // rounds. The table's own head row sticks below them.
+  headRowsAbove?: HeadRow[];
 }
 
 // scoreSheetPins declares a score table's pinned block: the row marker when
@@ -129,7 +132,6 @@ export function buildFlatScoreTable(options: ScoreTableOptions): HTMLTableElemen
   const afterThemeHeaders = options.afterThemeHeaders || [];
   const showPlaceColumn = options.placeColumn !== false;
   const showRowMarker = Boolean(options.rowMarkerColumn);
-  const thead = document.createElement("thead");
   const header = document.createElement("tr");
   const pins = options.pins ?? scoreSheetPins({rowMarker: showRowMarker, place: showPlaceColumn});
   if (showRowMarker) {
@@ -153,8 +155,7 @@ export function buildFlatScoreTable(options: ScoreTableOptions): HTMLTableElemen
   for (const headerCell of afterThemeHeaders) {
     header.appendChild(cellFromSpec("th", headerCell));
   }
-  thead.appendChild(header);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([...(options.headRowsAbove ?? []), {row: header}]));
 
   const tbody = document.createElement("tbody");
   const rows = options.rows || [];
@@ -215,7 +216,6 @@ export function buildTwoRowScoreTable(options: ScoreTableOptions): HTMLTableElem
   const afterThemeHeaders = options.afterThemeHeaders || [];
   const showPlaceColumn = options.placeColumn !== false;
   const showRowMarker = Boolean(options.rowMarkerColumn);
-  const thead = document.createElement("thead");
   const header = document.createElement("tr");
   const pins = options.pins ?? scoreSheetPins({rowMarker: showRowMarker, place: showPlaceColumn});
   if (showRowMarker) {
@@ -239,8 +239,7 @@ export function buildTwoRowScoreTable(options: ScoreTableOptions): HTMLTableElem
   for (const headerCell of afterThemeHeaders) {
     header.appendChild(cellFromSpec("th", headerCell));
   }
-  thead.appendChild(header);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([...(options.headRowsAbove ?? []), {row: header}]));
 
   const tbody = document.createElement("tbody");
   const leadingColumnCount = (showRowMarker ? 1 : 0) + (showPlaceColumn ? 4 : 2);

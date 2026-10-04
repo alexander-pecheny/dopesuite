@@ -7,6 +7,7 @@ import {buildFlatScoreTable, computePlaces, createScoreTableIndex, setMarkClass,
 import type {NodeIndex} from "./score-table.js";
 import {nameCell as clippedNameCell} from "./name-cell.js";
 import {resultsPins, resultsTeamCell} from "./standings.js";
+import {sheetHead} from "./sheet-pins.js";
 import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import {buildRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
@@ -456,13 +457,11 @@ function buildRefusalsTable(): HTMLElement {
   const table = document.createElement("table");
   table.className = "results-table seed-import-table";
 
-  const thead = document.createElement("thead");
   const head = document.createElement("tr");
   head.appendChild(SEED_PINS.mark(th("№", "results-place-head seed-number-head"), "place"));
   head.appendChild(SEED_PINS.mark(th(S.si.refusals.team(), "results-team-head seed-team-head"), "name"));
   head.appendChild(th(S.si.refusals.declined(), "seed-declined-head"));
-  thead.appendChild(head);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([{row: head}]));
 
   const tbody = document.createElement("tbody");
   order.forEach((index, rowIdx) => {
@@ -503,7 +502,6 @@ function buildResultsTableInner(): HTMLTableElement {
   const table = document.createElement("table");
   table.className = "results-table ksi-results-table";
 
-  const thead = document.createElement("thead");
   const head = document.createElement("tr");
   head.appendChild(RESULTS_PINS.mark(th(S.si.results.place(), "results-place-head"), "place"));
   head.appendChild(RESULTS_PINS.mark(th(S.si.results.team(), "results-team-head"), "name"));
@@ -512,8 +510,7 @@ function buildResultsTableInner(): HTMLTableElement {
   for (const value of RESULT_VALUES) {
     head.appendChild(th(value, "results-num-head"));
   }
-  thead.appendChild(head);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([{row: head}]));
 
   const tbody = document.createElement("tbody");
   rows.forEach((row, rowIdx) => {

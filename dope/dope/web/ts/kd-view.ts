@@ -5,6 +5,7 @@
 import {td, th} from "./cells.js";
 import {iconed, icon} from "./icons_gen.js";
 import {resultsPins, resultsTeamCell} from "./standings.js";
+import {sheetHead} from "./sheet-pins.js";
 import * as kd from "./kd-protocol.js";
 import type {KDPlayer, KDState} from "./kd-protocol.js";
 import S from "./i18nstrings.js";
@@ -46,8 +47,6 @@ export function buildPersonalView(ctx: KDViewContext): HTMLElement {
   for (let k = 0; k < kd.TIEBREAKS && size - k > 0; k++) {
     head.appendChild(th(S.od.kd.toursTook(String(size - k)), "results-num-head", {title: S.od.kd.toursTookHint(String(size - k))}));
   }
-  const thead = document.createElement("thead");
-  thead.appendChild(head);
   const tbody = document.createElement("tbody");
   for (const row of rows) {
     const tr = document.createElement("tr");
@@ -64,7 +63,7 @@ export function buildPersonalView(ctx: KDViewContext): HTMLElement {
     for (let k = 0; k < kd.TIEBREAKS && size - k > 0; k++) tr.appendChild(td(row.best[k], "results-num"));
     tbody.appendChild(tr);
   }
-  table.append(thead, tbody);
+  table.append(sheetHead([{row: head}]), tbody);
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
   wrapper.appendChild(table);
@@ -202,8 +201,6 @@ function playersTable(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   head.append(th(S.od.kd.card()), th(S.od.kd.player(), "results-team-head"), th(S.od.kd.team()));
   opts.tourLengths.forEach((_, t) => head.appendChild(th(S.od.detailed.tour(String(t + 1)))));
   if (!opts.viewer) head.appendChild(th(""));
-  const thead = document.createElement("thead");
-  thead.appendChild(head);
   const tbody = document.createElement("tbody");
   for (const player of list) {
     const tr = document.createElement("tr");
@@ -226,7 +223,7 @@ function playersTable(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
     }
     tbody.appendChild(tr);
   }
-  table.append(thead, tbody);
+  table.append(sheetHead([{row: head}]), tbody);
   return table;
 }
 

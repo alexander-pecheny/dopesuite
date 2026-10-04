@@ -9,6 +9,7 @@
 
 import {cssEscape, formatDisplayText, td} from "./cells.js";
 import {standingsTable} from "./standings.js";
+import {sheetHead} from "./sheet-pins.js";
 import {buildCrosstables, crossSlot, slotKey, standingsByParticipant} from "./crosstable.js";
 import type {StageRef} from "./standings.js";
 import {buildGameRosterView, fetchGameRoster} from "./fest-roster.js";
@@ -492,7 +493,6 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   // One head row, everything on one line: the match's letter, a team over its
   // player column, the score over the two mark columns, the other team, and
   // the finished tick. A name wider than its column fades to a popover.
-  const thead = document.createElement("thead");
   const head = document.createElement("tr");
   const corner = document.createElement("th");
   corner.className = "row-marker brain-bout-corner";
@@ -511,8 +511,7 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   finish.appendChild(page.finishToggle(code, {text: S.brain.bout.finished()}));
   if (pencil) finish.prepend(pencil);
   head.appendChild(finish);
-  thead.appendChild(head);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([{row: head}]));
 
   const tbody = document.createElement("tbody");
   const rowCount = matchRows(view, 0).length;

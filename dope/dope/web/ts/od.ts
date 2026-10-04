@@ -6,6 +6,7 @@ import {buildFlatScoreTable, computePlaces, scoreSheetPins} from "./score-table.
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
 import {nameCell} from "./name-cell.js";
 import {resultsPins, resultsTeamCell} from "./standings.js";
+import {sheetHead} from "./sheet-pins.js";
 import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import {buildRosterView} from "./fest-roster.js";
 import {buildPersonalView, buildPlayersView, captureDraft, restoreDraft, showRefusal, tablesOf} from "./kd-view.js";
@@ -873,6 +874,11 @@ function refreshEntryQuestionHead(qIndex: number): void {
   applyEntryQuestionHeadContent(cell, qIndex + 1, questionStats()[qIndex]);
 }
 
+// The entry sheets' head rows: the question numbers (and on the shootout sheet
+// the rounds over them) are a mark's height, the lock toggles under them less.
+const ENTRY_HEAD_ROW = "28px";
+const ENTRY_LOCK_ROW = "22px";
+
 function buildInputTable(): HTMLTableElement {
   const n = state.teams.length;
   if (!viewer) {
@@ -907,7 +913,6 @@ function buildInputTable(): HTMLTableElement {
   table.appendChild(colgroup);
 
   const stats = questionStats();
-  const thead = document.createElement("thead");
   const head = document.createElement("tr");
   let q = 1;
   tourLengths.forEach((tourSize, tourIndex) => {
@@ -918,7 +923,6 @@ function buildInputTable(): HTMLTableElement {
     }
   });
   if (showShootoutControls) head.appendChild(shootoutControlsHeaderCell({rowSpan: 2}));
-  thead.appendChild(head);
 
   const lockRow = document.createElement("tr");
   let qIdx = 0;
@@ -929,8 +933,7 @@ function buildInputTable(): HTMLTableElement {
       qIdx++;
     }
   });
-  thead.appendChild(lockRow);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([{row: head, height: ENTRY_HEAD_ROW}, {row: lockRow, height: ENTRY_LOCK_ROW}]));
 
   const tbody = document.createElement("tbody");
   for (let row = 0; row < n; row++) {
@@ -983,7 +986,6 @@ function buildInputShootoutTable(): HTMLElement | null {
   }
   table.appendChild(colgroup);
 
-  const thead = document.createElement("thead");
   const roundHead = document.createElement("tr");
   roundHead.appendChild(th("", "od-shootout-meta-round-cell"));
   for (const question of questions) {
@@ -993,7 +995,6 @@ function buildInputShootoutTable(): HTMLElement | null {
   if (!viewer) {
     roundHead.appendChild(shootoutControlsHeaderCell({rowSpan: 3}));
   }
-  thead.appendChild(roundHead);
 
   const numberHead = document.createElement("tr");
   numberHead.appendChild(shootoutMetaCell());
@@ -1001,7 +1002,6 @@ function buildInputShootoutTable(): HTMLElement | null {
     const cls = "entry-q-head" + (question.lastInRound ? " entry-tour-end" : "");
     numberHead.appendChild(th(question.number, cls));
   }
-  thead.appendChild(numberHead);
 
   const lockRow = document.createElement("tr");
   lockRow.appendChild(th("", "od-shootout-meta-lock-cell"));
@@ -1009,8 +1009,11 @@ function buildInputShootoutTable(): HTMLElement | null {
     const cls = "entry-lock-cell" + (question.lastInRound ? " entry-tour-end" : "");
     lockRow.appendChild(shootoutLockCell(question.roundIndex, question.questionIndex, cls));
   }
-  thead.appendChild(lockRow);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([
+    {row: roundHead, height: ENTRY_HEAD_ROW},
+    {row: numberHead, height: ENTRY_HEAD_ROW},
+    {row: lockRow, height: ENTRY_LOCK_ROW},
+  ]));
 
   const tbody = document.createElement("tbody");
   const validationCounts = state.shootoutRounds.map((_, roundIndex) => buildShootoutInputValidationCounts(roundIndex));
@@ -2527,14 +2530,12 @@ function currentTourIndex(): number {
 function makeScreenColumn(tourLabel: string | undefined, rowItems: ScreenRowItem[]): HTMLTableElement {
   const table = document.createElement("table");
   table.className = "results-table od-results-table screen-table";
-  const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
   headRow.appendChild(RESULTS_PINS.mark(th(S.od.head.placeShort(), "results-place-head"), "place"));
   headRow.appendChild(RESULTS_PINS.mark(th(S.od.head.team(), "results-team-head"), "name"));
   headRow.appendChild(RESULTS_PINS.mark(th(S.od.head.total(), "results-num-head results-total-head"), "total"));
   headRow.appendChild(th(tourLabel, "results-num-head results-tour-head"));
-  thead.appendChild(headRow);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([{row: headRow}]));
   const tbody = document.createElement("tbody");
   rowItems.forEach((item, i) => {
     if (i > 0 && item.group !== rowItems[i - 1].group) {
@@ -2714,7 +2715,6 @@ function buildResultsTableInner(): HTMLTableElement {
   const table = document.createElement("table");
   table.className = "results-table od-results-table";
 
-  const thead = document.createElement("thead");
   const head = document.createElement("tr");
   head.appendChild(RESULTS_PINS.mark(th(S.od.head.place(), "results-place-head"), "place"));
   head.appendChild(RESULTS_PINS.mark(th(S.od.head.team(), "results-team-head"), "name"));
@@ -2737,8 +2737,7 @@ function buildResultsTableInner(): HTMLTableElement {
     }
   }
   head.appendChild(th("R", "results-num-head"));
-  thead.appendChild(head);
-  table.appendChild(thead);
+  table.appendChild(sheetHead([{row: head}]));
 
   const colCount = 4 + tourLengths.length + shootoutRoundCount +
     expandedResultsQuestionCount() + expandedResultsShootoutQuestionCount();
