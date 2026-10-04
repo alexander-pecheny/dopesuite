@@ -5,13 +5,14 @@
 import {cssEscape, formatDisplayText, td, th} from "./cells.js";
 import {buildFlatScoreTable, computePlaces, createScoreTableIndex, setMarkClass, setNodeText} from "./score-table.js";
 import type {NodeIndex} from "./score-table.js";
-import {resultsTeamCell, teamFlagBadges} from "./standings.js";
+import {nameCell as clippedNameCell} from "./name-cell.js";
+import {resultsTeamCell} from "./standings.js";
 import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import {buildRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, clamp, createTeamNameOverflowController, fitScrollFade, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, clamp, fitScrollFade, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
@@ -45,21 +46,6 @@ const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector<HTMLElement>(".host-top h1");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const teamNameOverflow = createTeamNameOverflowController({
-  root: siRoot,
-  detailed: {
-    cellSelector: "[data-ksi-team-cell]",
-    nameSelector: ".od-detailed-team-name",
-    truncatedClass: "od-detailed-team-cell-truncated",
-  },
-  results: {
-    cellSelector: ".results-team",
-    nameSelector: ".results-team-name",
-    truncatedClass: "results-team-truncated",
-    citySelector: ".results-team-city",
-    cityTruncatedClass: "results-team-city-truncated",
-  },
-});
 // Antu accessories-notes SVG: tick removed, solid fills (no gradient IDs so
 // multiple copies on the same page don't collide). CSS hue-rotate() on the SVG
 // element shifts all shades together, preserving the note's depth and texture.
@@ -188,12 +174,7 @@ function teamBadges(index: number): string[] | undefined {
   return (ksi.participantFlags(state!, index) || []).filter((flag) => !hidden.includes(flag));
 }
 
-window.addEventListener("resize", () => {
-  if (isTeamMode() && (renderedTab === "detailed" || renderedTab === "results")) {
-    teamNameOverflow.schedule();
-  }
-  updateResultsScrollState();
-});
+window.addEventListener("resize", () => updateResultsScrollState());
 
 const doc = mountGameDocument({
   route,
@@ -295,7 +276,6 @@ function render(options: {preserveScroll?: boolean} = {}): void {
     }
   }
   updateResultsScrollState();
-  if (team && (activeTab === "detailed" || activeTab === "results")) teamNameOverflow.schedule();
   if (team && activeTab === "detailed") refreshAllStickerLimits();
   if (!team || activeTab === "detailed") restoreCursor();
   shell.presence.refresh();
@@ -663,42 +643,17 @@ function participantLabel(index: number): string {
 }
 
 function nameCell(name: string, playerIndex: number): HTMLElement {
+  if (isTeamMode()) {
+    const number = participantNumber(playerIndex);
+    return clippedNameCell(name || participantFallback(playerIndex), {
+      className: "sticky sticky-name team-name od-detailed-team-cell",
+      layout: true,
+      number: {text: number > 0 ? String(number) : "", className: "od-detailed-team-number"},
+      badges: teamBadges(playerIndex),
+    });
+  }
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name";
-  if (isTeamMode()) {
-    cell.className = "sticky sticky-name team-name od-detailed-team-cell";
-    cell.dataset.ksiTeamCell = "";
-    const number = participantNumber(playerIndex);
-    const baseName = name || participantFallback(playerIndex);
-    const layout = document.createElement("span");
-    layout.className = "od-detailed-team-layout";
-
-    const numSpan = document.createElement("span");
-    numSpan.className = "od-detailed-team-number";
-    numSpan.textContent = number > 0 ? String(number) : "";
-    layout.appendChild(numSpan);
-
-    const nameWrap = document.createElement("span");
-    nameWrap.className = "od-detailed-team-name-wrap";
-    const label = document.createElement("span");
-    label.className = "od-detailed-team-name";
-    label.textContent = baseName;
-    label.tabIndex = 0;
-    label.setAttribute("aria-label", baseName);
-    nameWrap.appendChild(label);
-    layout.appendChild(nameWrap);
-    // The badges are the layout grid's third column — beside the name, outside
-    // the pill it clips and fades inside.
-    const badges = teamFlagBadges(teamBadges(playerIndex));
-    if (badges) layout.appendChild(badges);
-    cell.appendChild(layout);
-
-    const fullName = document.createElement("span");
-    fullName.className = "popover popover-inline";
-    fullName.textContent = baseName;
-    cell.appendChild(fullName);
-    return cell;
-  }
   const input = document.createElement("input");
   input.type = "text";
   input.className = "venue-input";

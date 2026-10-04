@@ -3,7 +3,6 @@
 
 import {nameNode, td} from "./cells.js";
 import {resultsTeamCell, standingsTable} from "./standings.js";
-import {markNameOverflow} from "./widgets.js";
 import {icon} from "./icons_gen.js";
 import {openGameRosterDialog} from "./game-roster-dialog.js";
 import S from "./i18nstrings.js";
@@ -284,22 +283,6 @@ function fillRosterView(container: HTMLElement, fill: Promise<RosterFill>): void
     .then(({teams, options, after}) => {
       container.replaceChildren(buildRosterTable(teams, options));
       after?.();
-      // Flag clipped team names so the shared fade + popover kick in, and
-      // re-check whenever the container's width changes (tab switch, resize).
-      // The popover itself is already handled: the CSS-only variant on OD/KSI,
-      // and the page-bound floating popover on the EK host/viewer roots.
-      const remeasure = () => markNameOverflow(container, {
-        cellSelector: ".results-team",
-        nameSelector: ".results-team-name",
-        truncatedClass: "results-team-truncated",
-      });
-      requestAnimationFrame(remeasure);
-      // One observer per container: a refill after an edit must not stack
-      // another one on it.
-      if (typeof ResizeObserver === "function" && !observed.has(container)) {
-        observed.add(container);
-        new ResizeObserver(remeasure).observe(container);
-      }
     })
     .catch(() => {
       const error = document.createElement("p");
@@ -309,4 +292,3 @@ function fillRosterView(container: HTMLElement, fill: Promise<RosterFill>): void
     });
 }
 
-const observed = new WeakSet<HTMLElement>();

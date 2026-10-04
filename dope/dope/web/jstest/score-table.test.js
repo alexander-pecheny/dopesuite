@@ -14,7 +14,9 @@ function fakeCell() {
   return {
     textContent: "",
     dataset: {},
+    attributes: {},
     value: "",
+    setAttribute(name, value) { this.attributes[name] = String(value); },
     classList: {
       add: (...xs) => xs.forEach((x) => classes.add(x)),
       remove: (...xs) => xs.forEach((x) => classes.delete(x)),
@@ -96,6 +98,7 @@ test("patchScoreTable syncs the per-round player name in place", () => {
     themes: [{score: 0, answers: [], players: ["Alice"]}, {score: 0, answers: [], players: ["Bob"]}]}]};
   T.patchScoreTable(idx, state, {formatNumber: String});
   assert.equal(player0.textContent, "Alice", "player text patched from MatchView, not just marks");
+  assert.equal(player0.attributes["aria-label"], "Alice", "and what a screen reader says with it");
   assert.equal(player1.textContent, "Bob");
 });
 

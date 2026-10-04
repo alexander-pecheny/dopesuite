@@ -2,9 +2,10 @@
 // rows, the results team cell, group standings, and the fest-view stage refs
 // they hang off (letters, stage type).
 
-import {formatDisplayText, nameNode, td, th} from "./cells.js";
+import {formatDisplayText, td, th} from "./cells.js";
 import type {CellContent, CellContentItem} from "./cells.js";
 import S from "./i18nstrings.js";
+import {nameCell} from "./name-cell.js";
 
 export interface StageRef {
   code: string;
@@ -58,61 +59,20 @@ export interface TeamCellOptions {
   href?: string;
 }
 
-// resultsTeamCell is the one name cell of a results table: the name clips into
-// a fade with the full text on a popover, never an ellipsis. A flag is
-// decoration: the label and the popover carry it, the aria-label does not. The
-// Division badges sit on the second line beside the city — a fact about the
-// team, not part of its name, so the popover and the aria-label ignore them.
+// resultsTeamCell is the name cell of a results table (name-cell.ts): the
+// name clips into a fade with the full text on a popover, never an ellipsis. A
+// flag is decoration: the label and the popover carry it, the aria-label does
+// not. The Division badges sit on the second line beside the city — a fact
+// about the team, not part of its name, so the popover and the aria-label
+// ignore them.
 export function resultsTeamCell(name: string, options: TeamCellOptions = {}): HTMLElement {
-  const cell = td("", classNames("results-team", options.className));
-  const label = options.flag ? `${options.flag} ${name}` : name;
-  const wrap = document.createElement("span");
-  wrap.className = "results-team-name-wrap";
-  const node = nameNode(label, options.href || "", "results-team-name");
-  node.tabIndex = 0;
-  node.setAttribute("aria-label", name);
-  wrap.appendChild(node);
-  const badges = teamFlagBadges(options.badges);
-  if (badges && options.city) {
-    const line = document.createElement("span");
-    line.className = "u-row u-gap-xs u-align-center";
-    line.appendChild(badges);
-    line.appendChild(cityNode(options.city));
-    wrap.appendChild(line);
-  } else if (badges) {
-    wrap.appendChild(badges);
-  } else if (options.city) {
-    wrap.appendChild(cityNode(options.city));
-  }
-  cell.appendChild(wrap);
-  const popover = document.createElement("span");
-  popover.className = "popover popover-inline";
-  popover.textContent = label;
-  cell.appendChild(popover);
-  return cell;
-}
-
-// teamFlagBadges is a team's Flags after its name: small, quiet pills stating a
-// fact about the team. Null when it carries none, so a cell that has nothing to
-// say adds no node.
-export function teamFlagBadges(flags: readonly string[] | undefined): HTMLElement | null {
-  if (!flags || flags.length === 0) return null;
-  const wrap = document.createElement("span");
-  wrap.className = "u-row u-gap-xs u-align-center team-flags";
-  for (const flag of flags) {
-    const badge = document.createElement("span");
-    badge.className = "team-flag";
-    badge.textContent = flag;
-    wrap.appendChild(badge);
-  }
-  return wrap;
-}
-
-function cityNode(city: string): HTMLElement {
-  const node = document.createElement("span");
-  node.className = "results-team-city";
-  node.textContent = city;
-  return node;
+  return nameCell(options.flag ? `${options.flag} ${name}` : name, {
+    className: options.className ? `results-team ${options.className}` : "results-team",
+    ariaLabel: name,
+    href: options.href,
+    badges: options.badges,
+    city: options.city,
+  });
 }
 
 // A column's kind is its role in the results-table skin: the place, the fading

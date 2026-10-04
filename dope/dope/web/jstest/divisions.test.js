@@ -54,7 +54,8 @@ globalThis.document = {createElement: node, activeElement: null};
 globalThis.Node = class {};
 
 const divisions = await import("./dist/divisions.js");
-const {resultsTeamCell, teamFlagBadges} = await import("./dist/standings.js");
+const {resultsTeamCell} = await import("./dist/standings.js");
+const {teamFlagBadges} = await import("./dist/name-cell.js");
 
 const walk = (root, out = []) => {
   out.push(root);
@@ -120,10 +121,10 @@ test("the badges hang off a team name; a team with no зачёт adds no node", 
   const nodes = walk(cell);
   assert.deepEqual(nodes.filter((n) => n.className === "team-flag").map((n) => n.textContent), ["Школ"]);
   // The name and its popover say nothing of the зачёт.
-  assert.equal(nodes.find((n) => n.className === "results-team-name").textContent, "Команда");
+  assert.equal(nodes.find((n) => n.className === "name-cell-text").textContent, "Команда");
   assert.equal(nodes.find((n) => n.className.includes("popover-inline")).textContent, "Команда");
   // The city is still there, on the same line as the badges.
-  assert.equal(nodes.filter((n) => n.className === "results-team-city").length, 1);
+  assert.equal(nodes.filter((n) => n.className.split(" ").includes("results-team-city")).length, 1);
   // And a cell with no зачёт is built exactly as it always was.
   const plain = walk(resultsTeamCell("Команда", {city: "Ереван"}));
   assert.equal(plain.filter((n) => n.className.includes("u-row")).length, 0);

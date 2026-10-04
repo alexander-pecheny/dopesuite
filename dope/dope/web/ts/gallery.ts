@@ -12,7 +12,8 @@ import {buildRosterTable} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
 import {buildEKStatsTable, buildIndividualStatsTable} from "./ek-stats.js";
 import type {EKPlayerStatsRow, IndividualStatsRow} from "./ek-stats.js";
-import {floatingPopover, markNameOverflow} from "./widgets.js";
+import {bindNameCells} from "./name-cell.js";
+import {floatingPopover} from "./widgets.js";
 import { buildFestGrid, buildReseedStagePanel } from "./fest-grid.js";
 import { autocomplete } from "../../../../dopeuikit/assets/ts/suggest.js";
 import type { FestGridMatch, FestGridStage } from "./fest-grid.js";
@@ -233,12 +234,9 @@ function render(root: HTMLElement): void {
     section(S.gallery.section.suggest(), "fits-frame", suggestField()),
     section(S.gallery.section.divisions(), "table-host fits-frame", divisionsDemo()),
   );
+  // The game pages' clipped names, measured and popped over the same way.
+  bindNameCells(root);
   floatingPopover();
-  requestAnimationFrame(() => markNameOverflow(root, {
-    cellSelector: ".results-team",
-    nameSelector: ".results-team-name",
-    truncatedClass: "results-team-truncated",
-  }));
 }
 
 const root = document.getElementById("gallery");

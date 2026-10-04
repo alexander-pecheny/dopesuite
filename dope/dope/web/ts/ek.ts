@@ -6,7 +6,7 @@ import {cssEscape, formatNumber, formatPlace, isFormControl, option, td, th} fro
 import {buildFlatScoreTable, buildTwoRowScoreTable, canPatchScoreShape, createScoreTableIndex, patchScoreTable, seatingText, setMarkClass} from "./score-table.js";
 import {seatedNames} from "./ek-seating.js";
 import type {NodeIndex, ParticipantView, ThemeView} from "./score-table.js";
-import {boutWhereWhen, buildVenuesTable, formatBattleVenue, formatVenue, markVenueOverflow, withStartsAt} from "./venue.js";
+import {boutWhereWhen, buildVenuesTable, formatBattleVenue, formatVenue, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {buildGroupStandingsView, festLetters, letteredTitle, resultsTeamCell, stageType, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
@@ -17,7 +17,8 @@ import {finishControl, venueEditor} from "./bout-page.js";
 import type {PendingOp, WireOp} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import {createLocalCache, notifyEmbeddedResize} from "./game-page.js";
-import {bindScrollEdges, bindTabStripWheel, clamp, controlTextOverflows, fitEKStageTeamName, floatingPopover, fitScrollFade, installCellNavBar, isClipped, markNameOverflow} from "./widgets.js";
+import {bindScrollEdges, bindTabStripWheel, clamp, floatingPopover, fitScrollFade, installCellNavBar} from "./widgets.js";
+import {markNameControl, nameCell} from "./name-cell.js";
 import type {CellNavBar, ScrollEdgeBinding} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
@@ -301,7 +302,6 @@ const stageCache = createStageCache({
     // The cursor follows the active cell into the pane, or has nothing there.
     seatCursor({focus: false});
     bindStageOverflowScroll();
-    scheduleEKTeamNameOverflowUpdate(pane);
   },
   cleanupPane: ({pane}) => {
     (pane as StagePane)._stageObserver?.disconnect();
@@ -323,18 +323,15 @@ let undoApplying = false;
 // reloads the page.
 const entrantsTab = createEntrantsTab({
   apiBase: () => route.apiBase || "",
-  onRender: () => scheduleResultsTeamNameOverflowUpdate(),
   onRebuilt: () => window.location.reload(),
 });
-let gridNameOverflowFrame = 0;
-let ekTeamNameOverflowFrame = 0;
-let resultsTeamNameOverflowFrame = 0;
 let stageOverflowScrollFrame: Element | null = null;
 let stageScroll: ScrollEdgeBinding | null = null;
 let ekTabsScroll: ScrollEdgeBinding | null = null;
 
-// The bout head's popover is the EK page's own; every name family is the page's
-// shared one (widgets.ts NAME_POPOVER_SPECS).
+// The bout head's popover is the EK page's own: a spectator's head holds the
+// bout's title and its venue, not a name. Every name is the page's shared one
+// (widgets.ts NAME_POPOVER_SPECS).
 const floatingPopoverSpecs = [{
   trigger: ".readonly-battle-head.readonly-battle-with-popover",
   popover: ".readonly-battle-popover",
@@ -345,9 +342,6 @@ document.body.classList.toggle("embedded-match", embedded);
 if (!viewer) document.addEventListener("keydown", handleGlobalKeydown);
 const namePopover = floatingPopover(floatingPopoverSpecs);
 window.addEventListener("resize", () => {
-  if (route.mode === "grid") scheduleGridNameOverflowUpdate();
-  if (route.mode === "match" || route.mode === "stage") scheduleEKTeamNameOverflowUpdate();
-  if (route.mode === "seedImport" || route.mode === "stats") scheduleResultsTeamNameOverflowUpdate();
   namePopover.position();
   ekTabsScroll?.refresh();
 });
@@ -999,7 +993,6 @@ function renderFest(): void {
   shell.renderChrome();
   renderEKTabs();
   ekRoot.replaceChildren(buildFestGrid(fest, {viewer, basePath: route.base, groupHref: groupStandingsHref}));
-  scheduleGridNameOverflowUpdate();
   shell.presence.refresh();
 }
 
@@ -1015,10 +1008,8 @@ function renderStage(): void {
   const pane = stageCache.showStage(stageCode);
   if (stageType(stage) === "reseed") {
     pane?.replaceChildren(buildReseedPanes(stageCode));
-    scheduleResultsTeamNameOverflowUpdate();
   } else if (stageType(stage) === "standings") {
     pane?.replaceChildren(buildGroupStandingsPane(stage));
-    scheduleResultsTeamNameOverflowUpdate();
     showHashTarget();
   }
   shell.presence.refresh();
@@ -1058,8 +1049,7 @@ function renderStats(): void {
 }
 
 // rerenderStatsTable recomputes the table from the live stage cache and swaps it
-// in. Cheap (in-memory over the cached MatchViews); no network. Re-runs the
-// results-name overflow pass so long player/team names get the fade + popover.
+// in. Cheap (in-memory over the cached MatchViews); no network.
 function rerenderStatsTable(): void {
   // A personal game has no per-theme players — the participant is the player,
   // so the aggregate is per seat.
@@ -1067,7 +1057,6 @@ function rerenderStatsTable(): void {
     ? buildIndividualStatsTable(computeIndividualPlayerStats(statsStagesFromCache()))
     : buildEKStatsTable(computeEKPlayerStats(statsStagesFromCache()));
   ekRoot.replaceChildren(node);
-  scheduleResultsTeamNameOverflowUpdate();
 }
 
 function renderSeedImport(): void {
@@ -1076,7 +1065,6 @@ function renderSeedImport(): void {
   shell.renderChrome();
   renderEKTabs();
   ekRoot.replaceChildren(entrantsTab.element());
-  scheduleResultsTeamNameOverflowUpdate();
   shell.presence.refresh();
 }
 
@@ -1093,10 +1081,9 @@ function render(): void {
   matchTableIndex = createScoreTableIndex(table, {entity: "team", shootout: true});
   ekRoot.replaceChildren(table);
   notifyEmbeddedResize(embedded);
-  scheduleEKTeamNameOverflowUpdate();
   if (viewer) {
     // The spectator's match is a stage-skinned table with a frozen column, so
-    // it wants the same scrolled-under cue and name refits a stage pane gets.
+    // it wants the same scrolled-under cue a stage pane gets.
     bindStageOverflowScroll();
     return;
   }
@@ -1338,96 +1325,6 @@ function letteredBoutTitle(matchCode: string | undefined, title: string): string
   return letteredTitle(title, letterMap().get(matchCode || ""));
 }
 
-function scheduleGridNameOverflowUpdate(root: ParentNode = ekRoot): void {
-  if (gridNameOverflowFrame) cancelAnimationFrame(gridNameOverflowFrame);
-  gridNameOverflowFrame = requestAnimationFrame(() => {
-    gridNameOverflowFrame = 0;
-    updateGridNameOverflow(root);
-  });
-}
-
-function updateGridNameOverflow(root: ParentNode = ekRoot): void {
-  markNameOverflow(root, {
-    cellSelector: ".grid-slot-team",
-    nameSelector: ".grid-slot-team-name",
-    truncatedClass: "grid-slot-team-truncated",
-  });
-}
-
-function scheduleEKTeamNameOverflowUpdate(root: ParentNode = ekRoot): void {
-  if (ekTeamNameOverflowFrame) cancelAnimationFrame(ekTeamNameOverflowFrame);
-  ekTeamNameOverflowFrame = requestAnimationFrame(() => {
-    ekTeamNameOverflowFrame = 0;
-    updateEKTeamNameOverflow(root);
-  });
-}
-
-function updateEKTeamNameOverflow(root: ParentNode = ekRoot): void {
-  updatePlayerSelectOverflow(root);
-  markVenueOverflow(root);
-  markNameOverflow(root, {
-    cellSelector: ".readonly-player",
-    nameSelector: ".readonly-player-text",
-    truncatedClass: "readonly-player-cell-truncated",
-  });
-  const cells = Array.from(root.querySelectorAll<HTMLElement>(".ek-team-cell"));
-  const stageCells: HTMLElement[] = [];
-  const stageNames: Array<HTMLElement | null> = [];
-  const detailedCells: HTMLElement[] = [];
-  const detailedReadings: boolean[] = [];
-  for (const cell of cells) {
-    const name = cell.querySelector<HTMLElement>(".od-detailed-team-name");
-    if (cell.closest(".ek-stage-table")) {
-      if (isVisibleInScrollFrame(cell)) {
-        stageCells.push(cell);
-        stageNames.push(name);
-      }
-      continue;
-    }
-    detailedCells.push(cell);
-    detailedReadings.push(isClipped(name));
-  }
-  for (let i = 0; i < detailedCells.length; i++) {
-    detailedCells[i].classList.toggle("od-detailed-team-cell-truncated", detailedReadings[i]);
-  }
-  for (let i = 0; i < stageCells.length; i++) {
-    markStageTeamNameTruncated(stageCells[i], stageNames[i]);
-  }
-}
-
-// updatePlayerSelectOverflow marks the seat cells whose text is wider than the
-// cell, which is what turns on the fade and the popover. A cell holds either a
-// native <select> (one seat) or the seat picker's button (more), and both are
-// measured the same way — their own box against their own text.
-function updatePlayerSelectOverflow(root: ParentNode = ekRoot): void {
-  const wraps = root.querySelectorAll<HTMLElement>(".player-select-wrap");
-  const measurements: Array<{wrap: HTMLElement; popover: HTMLElement | null; label: string; truncated: boolean}> = [];
-  for (const wrap of wraps) {
-    if (wrap.closest(".ek-stage-table") && !isVisibleInScrollFrame(wrap)) continue;
-    const seats = wrap.querySelector<HTMLElement>("[data-player-seats]");
-    const select = wrap.querySelector<HTMLSelectElement>("[data-player-select]");
-    const popover = wrap.querySelector<HTMLElement>(".popover-inline");
-    const label = seats ? seats.textContent || "" : selectedPlayerLabel(select);
-    measurements.push({
-      wrap,
-      // A seat picker's popover lists the full names and is the panel's
-      // business, not the measurement's.
-      popover: seats ? null : popover,
-      label,
-      truncated: Boolean(label && controlTextOverflows(seats || select, label)),
-    });
-  }
-  for (const m of measurements) {
-    if (m.popover) m.popover.textContent = m.label;
-    m.wrap.classList.toggle("player-select-truncated", m.truncated);
-  }
-}
-
-function selectedPlayerLabel(select: HTMLSelectElement | null): string {
-  if (!select) return "";
-  return select.selectedOptions?.[0]?.textContent || select.value || "";
-}
-
 function bindStageOverflowScroll(): void {
   const scrollFrame = ekRoot.closest(".sheet-frame");
   if (!scrollFrame) return;
@@ -1437,7 +1334,6 @@ function bindStageOverflowScroll(): void {
   }
   unbindStageOverflowScroll();
   stageScroll = bindScrollEdges(scrollFrame, ({left}, frame) => {
-    scheduleEKTeamNameOverflowUpdate(ekRoot);
     frame.classList.toggle("stage-scroll-left", left);
   });
   stageOverflowScrollFrame = scrollFrame;
@@ -1454,35 +1350,6 @@ function unbindStageOverflowScroll(): void {
 // adding a second listener that toggles the same class and is never removed.
 function bindStatsScrollFade(): void {
   bindStageOverflowScroll();
-}
-
-function isVisibleInScrollFrame(element: Element): boolean {
-  const scrollFrame = element.closest(".sheet-frame");
-  if (!scrollFrame) return true;
-  const rect = element.getBoundingClientRect();
-  const frameRect = scrollFrame.getBoundingClientRect();
-  return rect.bottom >= frameRect.top && rect.top <= frameRect.bottom;
-}
-
-function markStageTeamNameTruncated(cell: HTMLElement, name: HTMLElement | null): void {
-  const truncated = fitEKStageTeamName(cell, name);
-  cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
-}
-
-function scheduleResultsTeamNameOverflowUpdate(root: ParentNode = ekRoot): void {
-  if (resultsTeamNameOverflowFrame) cancelAnimationFrame(resultsTeamNameOverflowFrame);
-  resultsTeamNameOverflowFrame = requestAnimationFrame(() => {
-    resultsTeamNameOverflowFrame = 0;
-    updateResultsTeamNameOverflow(root);
-  });
-}
-
-function updateResultsTeamNameOverflow(root: ParentNode = ekRoot): void {
-  markNameOverflow(root, {
-    cellSelector: ".results-team",
-    nameSelector: ".results-team-name",
-    truncatedClass: "results-team-truncated",
-  });
 }
 
 // buildRankedStageTable draws a ranked stage's table: place, team, and the
@@ -1562,7 +1429,6 @@ function setupStageTableObserver(pane: StagePane): void {
       rendered = renderStageMatchFrameIfReady(pane, frame) || rendered;
       if (frame.dataset.rendered === "1") observer.unobserve(frame);
     });
-    if (rendered) scheduleEKTeamNameOverflowUpdate(pane);
   }, {root, rootMargin: "900px 0px"});
   frames.forEach((frame) => observer.observe(frame));
   pane._stageObserver = observer;
@@ -1578,15 +1444,13 @@ function refreshPaneFrames(pane: StagePane, data: StageData): void {
     pane.replaceChildren(buildReseedPanes(pane.dataset.stageCode!));
     return;
   }
-  let rebuilt = false;
   pane.querySelectorAll<HTMLElement>(".stage-match-frame").forEach((frame) => {
     const matchState = data.stateByCode.get(frame.dataset.matchCode || "") as HostMatchView | undefined;
     if (!matchState) return;
     if (frame.dataset.rendered === "1" || frame.dataset.nearViewport === "1") {
-      rebuilt = updateStageFrame(frame, matchState) || rebuilt;
+      updateStageFrame(frame, matchState);
     }
   });
-  if (rebuilt) scheduleEKTeamNameOverflowUpdate(pane);
 }
 
 function renderStageMatchFrameIfReady(pane: StagePane, frame: StageFrame, options: {force?: boolean} = {}): boolean {
@@ -1736,15 +1600,9 @@ function canPatchMatchShape(previous: HostMatchView | null | undefined, next: Ho
 // patchHostScoreTable patches a built editable score table in place from a
 // MatchView. All cell syncing — including the editable place inputs and player
 // selects, which skip a focused control so a live update never steals the cursor
-// — lives in the shared scoreCellSpecs; the host only injects the callback that
-// refreshes a synced select's overflow chrome.
+// — lives in the shared scoreCellSpecs.
 function patchHostScoreTable(index: NodeIndex | null | undefined, matchState: HostMatchView): void {
-  patchScoreTable(index, matchState, {
-    formatNumber,
-    onPlayerSelectSynced: (select) =>
-      updatePlayerSelectOverflow(select?.closest(".player-select-wrap") || ekRoot),
-  });
-  if (viewer) scheduleEKTeamNameOverflowUpdate();
+  patchScoreTable(index, matchState, {formatNumber});
 }
 
 function indexedNode(name: string, values: Record<string, unknown>): HTMLElement | null {
@@ -2099,6 +1957,8 @@ function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
   const hasShootout = shootoutThemeCount() > 0;
   const showPlaceColumn = true;
   const themes = renderedThemeHeaders();
+  // A spectator sees every match in the compact stage skin, focused or not.
+  const compact = Boolean(options.compact || viewer);
   const rows = state!.participants.map((team, teamIndex) => {
     const themeCellsList: ScoreTableThemeRowSpec[] = [];
     team.themes.forEach((theme, themeIndex) => {
@@ -2109,7 +1969,7 @@ function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
     });
     return {
       rowClassName: isActiveMatchRow(matchCode, teamIndex) ? "active-team-row" : "",
-      nameCell: teamNameCell(team, teamIndex),
+      nameCell: teamNameCell(team, teamIndex, compact),
       totalCell: totalCell(team, teamIndex),
       placeCell: showPlaceColumn ? placeCell(team, teamIndex, matchCode) : null,
       themes: themeCellsList,
@@ -2119,8 +1979,6 @@ function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
 
   const build = individualGame() ? buildFlatScoreTable : buildTwoRowScoreTable;
   const individual = individualGame() ? " individual-blank" : "";
-  // A spectator sees every match in the compact stage skin, focused or not.
-  const compact = options.compact || viewer;
   const table = build({
     className: compact ? `match-table compact-score-table ek-stage-table${viewer ? " readonly-table" : ""}${individual}` : `match-table${individual}`,
     attrs: {dataset: {matchCode}},
@@ -2178,28 +2036,13 @@ function trailingHeaders(hasShootout: boolean): Array<HTMLElement | {content: st
   return headers;
 }
 
-function teamNameCell(team: HostParticipantView, teamIndex: number): HTMLElement {
-  const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: seatRowSpan()});
+// teamNameCell is a team's name, pinned at the sheet's left edge. On the
+// stage sheet four names share a narrow column, so a long one wraps onto a
+// second line and steps its font down before it fades (name-cell.ts shrink).
+function teamNameCell(team: HostParticipantView, teamIndex: number, compact: boolean): HTMLElement {
+  const cell = nameCell(team.name || "", {className: "sticky sticky-name team-name ek-team-cell", layout: true, shrink: compact});
+  (cell as HTMLTableCellElement).rowSpan = seatRowSpan();
   cell.dataset.team = String(teamIndex);
-  const labelText = team.name || "";
-  const layout = document.createElement("span");
-  layout.className = "od-detailed-team-layout";
-
-  const nameWrap = document.createElement("span");
-  nameWrap.className = "od-detailed-team-name-wrap";
-  const label = document.createElement("span");
-  label.className = "od-detailed-team-name";
-  label.textContent = labelText;
-  label.tabIndex = 0;
-  label.setAttribute("aria-label", labelText);
-  nameWrap.appendChild(label);
-  layout.appendChild(nameWrap);
-  cell.appendChild(layout);
-
-  const fullName = document.createElement("span");
-  fullName.className = "popover popover-inline";
-  fullName.textContent = labelText;
-  cell.appendChild(fullName);
   return cell;
 }
 
@@ -2299,28 +2142,18 @@ function themeCells(team: HostParticipantView, teamIndex: number, theme: HostThe
 }
 
 // readonlyPlayerCell is the spectator's player: a name, not a <select>. Its
-// coordinates let patchScoreTable's playerText sync update it in place, and the
-// popover is always there so the sync keeps it in step from and to blank.
+// coordinates let patchScoreTable's playerText sync update it in place; the
+// popover lists the seated players one per line.
 function readonlyPlayerCell(team: HostParticipantView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean): HTMLElement {
-  const playerCell = document.createElement("td");
-  playerCell.colSpan = state!.questionValues.length;
-  playerCell.className = "readonly-player theme-block theme-block-top-left";
-  const seated = seatedNames(theme.players);
-  const playerLabel = seatingText(theme, state!);
-  const playerWrap = document.createElement("span");
-  playerWrap.className = "readonly-player-text-wrap";
-  const playerText = document.createElement("span");
-  playerText.className = "readonly-player-text";
+  const playerCell = nameCell(seatingText(theme, state!), {
+    className: "readonly-player theme-block theme-block-top-left",
+    popoverText: seatedNames(theme.players).join("\n"),
+  });
+  (playerCell as HTMLTableCellElement).colSpan = state!.questionValues.length;
+  const playerText = playerCell.querySelector<HTMLElement>(".name-cell-text")!;
   playerText.dataset.team = String(teamIndex);
   playerText.dataset.shootout = isShootout ? "1" : "0";
   playerText.dataset.theme = String(themeIndex);
-  playerText.textContent = playerLabel;
-  playerWrap.appendChild(playerText);
-  playerCell.appendChild(playerWrap);
-  const playerPopover = document.createElement("span");
-  playerPopover.className = "popover popover-inline";
-  playerPopover.textContent = seated.join("\n");
-  playerCell.appendChild(playerPopover);
   return playerCell;
 }
 
@@ -2375,11 +2208,15 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
   // is unusable on a touch screen.
   if (seatCap() > 1) {
     const seated = seatedNames(theme.players);
-    selectWrap.appendChild(seatsTrigger(team, teamIndex, theme, themeIndex, isShootout, matchCode));
+    const trigger = seatsTrigger(team, teamIndex, theme, themeIndex, isShootout, matchCode);
+    selectWrap.appendChild(trigger);
+    // The popover lists the seated players whole, one per line; the pass
+    // measures the button's own line (name-cell.ts).
     const seatsPopover = document.createElement("span");
     seatsPopover.className = "popover popover-inline";
     seatsPopover.textContent = seated.join("\n");
     selectWrap.appendChild(seatsPopover);
+    markNameControl(selectWrap, trigger);
     editor.appendChild(selectWrap);
     playerCell.appendChild(editor);
     return playerCell;
@@ -2402,7 +2239,6 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
   select.addEventListener("change", () => {
     const payload: EKCellPayload = {team: teamIndex, theme: themeIndex, players: select.value ? [select.value] : []};
     if (isShootout) payload.shootout = true;
-    updatePlayerSelectOverflow(selectWrap);
     queueEKEdits(matchCode, [payload]);
     // Drop focus off the dropdown so the global keydown handler (which ignores
     // form controls) takes the arrow keys and moves the active cell, instead of
@@ -2410,10 +2246,12 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
     select.blur();
   });
   selectWrap.appendChild(select);
+  // The popover holds the chosen player's name; the pass fills it in and fades
+  // the cell when the name does not fit (name-cell.ts).
   const playerPopover = document.createElement("span");
   playerPopover.className = "popover popover-inline";
-  playerPopover.textContent = selectedPlayerLabel(select);
   selectWrap.appendChild(playerPopover);
+  markNameControl(selectWrap, select);
   editor.appendChild(selectWrap);
 
   playerCell.appendChild(editor);
@@ -2602,8 +2440,8 @@ function seatPlayers(matchCode: string, teamIndex: number, themeIndex: number, i
   if (seatsPanelTrigger && theme && matchState) refreshSeatsTrigger(seatsPanelTrigger, theme, matchState);
 }
 
-// refreshSeatsTrigger repaints one closed seating: its line, its popover and
-// whether the line overflows the cell.
+// refreshSeatsTrigger repaints one closed seating: its line and its popover.
+// Whether the line overflows the cell is the pass's to say again.
 function refreshSeatsTrigger(trigger: HTMLElement, theme: HostThemeView, matchState: HostMatchView): void {
   const seated = seatedNames(theme.players);
   const text = trigger.querySelector<HTMLElement>(".player-seats-text");
@@ -2611,7 +2449,6 @@ function refreshSeatsTrigger(trigger: HTMLElement, theme: HostThemeView, matchSt
   const wrap = trigger.closest(".player-select-wrap");
   const popover = wrap?.querySelector(".popover-inline");
   if (popover) popover.textContent = seated.join("\n");
-  updatePlayerSelectOverflow(wrap || ekRoot);
 }
 
 function trailingCells(team: HostParticipantView, teamIndex: number, hasShootout: boolean): HTMLElement[] {

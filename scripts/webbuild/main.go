@@ -199,7 +199,7 @@ func targets() []target {
 				// Library modules as ESM for the test runner (not embedded, not served).
 				{
 					EntryPointsAdvanced: entries("dope/dope/web/ts/",
-						"entry-model", "sheet-cursor", "game-shell", "cells", "score-table", "venue", "standings", "fest-roster", "ek-stats", "ek-seating", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid", "brain-stats", "group-stats", "game-tabs", "multi-protocol", "troika-protocol", "troika-stats", "crosstable", "hamsa-protocol", "hamsa-stats",
+						"entry-model", "sheet-cursor", "game-shell", "cells", "name-cell", "score-table", "venue", "standings", "fest-roster", "ek-stats", "ek-seating", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid", "brain-stats", "group-stats", "game-tabs", "multi-protocol", "troika-protocol", "troika-stats", "crosstable", "hamsa-protocol", "hamsa-stats",
 						"od-protocol", "kd-protocol", "ksi-protocol", "brain-protocol", "screen-board", "url-state", "divisions",
 						// the bout page and what it mounts
 						"bout-page", "entrants", "steady-redraw",

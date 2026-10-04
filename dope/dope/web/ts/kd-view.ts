@@ -4,6 +4,7 @@
 // and every other tab draws them as it draws teams.
 import {td, th} from "./cells.js";
 import {iconed, icon} from "./icons_gen.js";
+import {resultsTeamCell} from "./standings.js";
 import * as kd from "./kd-protocol.js";
 import type {KDPlayer, KDState} from "./kd-protocol.js";
 import S from "./i18nstrings.js";
@@ -42,7 +43,7 @@ export function buildPersonalView(ctx: KDViewContext): HTMLElement {
   for (const row of rows) {
     const tr = document.createElement("tr");
     tr.className = "results-row";
-    tr.append(td(row.place || "—", "results-place"), td(row.player.name, "results-team"), td(row.player.team || ""), td(row.total, "results-num total-cell results-total"));
+    tr.append(td(row.place || "—", "results-place"), resultsTeamCell(row.player.name), td(row.player.team || ""), td(row.total, "results-num total-cell results-total"));
     row.tours.forEach((took, t) => tr.appendChild(started[t]
       ? td(took, "results-tour", {title: S.od.kd.atTable(String(row.tables[t]))})
       : td("·", "results-tour results-tour-pending", {title: S.od.kd.atTable(String(row.tables[t]))})));
@@ -192,7 +193,7 @@ function playersTable(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   const tbody = document.createElement("tbody");
   for (const player of list) {
     const tr = document.createElement("tr");
-    tr.append(td(player.card), td(player.name, "results-team"), td(player.team || ""));
+    tr.append(td(player.card), resultsTeamCell(player.name), td(player.team || ""));
     opts.tourLengths.forEach((_, t) => tr.appendChild(td(kd.kdTable(player.card, t + 1, opts.tables))));
     if (!opts.viewer) {
       const remove = document.createElement("button");

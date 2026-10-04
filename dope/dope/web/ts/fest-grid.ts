@@ -1,8 +1,8 @@
 import {festLetters, letteredTitle, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {markVenueOverflow, normalizeVenue, venueLabel, withStartsAt} from "./venue.js";
+import {normalizeVenue, venueLabel, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
-import { markNameOverflow } from "./widgets.js";
+import {nameCell} from "./name-cell.js";
 import { blockLabel, groupLabel } from "./game-tabs.js";
 import S from "./i18nstrings.js";
 
@@ -841,6 +841,9 @@ function matchHeadCell(match: FestGridMatch, venue: Venue | null, ctx: PaintCont
 function headLayout(title: HTMLElement, venue: Venue | null, startsAt?: string): HTMLElement {
   const layout = document.createElement("span");
   layout.className = "grid-match-head-layout";
+  // A title is a heading, not a name to read whole: a long one fades the
+  // kit's way, with no popover.
+  title.classList.add("u-clip-fade");
   layout.appendChild(title);
   // The venue clips where the head ends; its whole title is a popover away.
   // A start time the host gave the bout stands before it.
@@ -969,19 +972,9 @@ function matchLabel(match: FestGridMatch, letters: Map<string, string> | null): 
   return letteredTitle(match.title, letter);
 }
 
+// slotTeamCell is a seat's team, the grid's clipped name (name-cell.ts).
 function slotTeamCell(label: string): HTMLElement {
-  const cell = gridCell("slot-source grid-slot-team", "");
-  const name = document.createElement("span");
-  name.className = "grid-slot-team-name";
-  name.textContent = label;
-  name.tabIndex = 0;
-  name.setAttribute("aria-label", label);
-  cell.appendChild(name);
-  const fullName = document.createElement("span");
-  fullName.className = "popover popover-inline";
-  fullName.textContent = label;
-  cell.appendChild(fullName);
-  return cell;
+  return nameCell(label, {tag: "div", className: "grid-slot-cell slot-source grid-slot-team"});
 }
 
 function scheduleFestGridUpdate(grid: Grid): void {
@@ -989,21 +982,6 @@ function scheduleFestGridUpdate(grid: Grid): void {
   grid.frame = requestAnimationFrame(() => {
     grid.frame = 0;
     layoutBlockColumns(grid);
-    updateFestGridNameOverflow(grid.root);
-  });
-}
-
-function updateFestGridNameOverflow(root: HTMLElement): void {
-  markVenueOverflow(root);
-  markNameOverflow(root, {
-    cellSelector: ".grid-slot-team",
-    nameSelector: ".grid-slot-team-name",
-    truncatedClass: "grid-slot-team-truncated",
-  });
-  markNameOverflow(root, {
-    cellSelector: ".grid-match-head-layout",
-    nameSelector: ".grid-match-title",
-    truncatedClass: "grid-head-truncated",
   });
 }
 

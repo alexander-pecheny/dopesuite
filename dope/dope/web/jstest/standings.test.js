@@ -71,10 +71,10 @@ test("standingsTable draws the results-table skin from columns and rows", () => 
     ["results-row", "results-group-first"], ["results-row", "results-group-last"],
   ]);
   const cells = rows.map((row) => row.children.map(classes));
-  assert.deepEqual(cells[0], [["results-place"], ["results-team"], ["results-num", "ek-stats-sum"], ["results-num"]]);
+  assert.deepEqual(cells[0], [["results-place"], ["name-cell", "results-team"], ["results-num", "ek-stats-sum"], ["results-num"]]);
   assert.deepEqual(rows[0].children.map((c) => c.textContent), ["1", "", "9", "−3"], "a leading minus is typographic");
   // The name column is the fading name cell, not a bare td.
-  assert.equal(withClass(rows[0].children[1], "results-team-name")[0].textContent, "Ктулху");
+  assert.equal(withClass(rows[0].children[1], "name-cell-text")[0].textContent, "Ктулху");
   assert.equal(withClass(rows[0].children[1], "popover-inline")[0].textContent, "Ктулху");
 });
 
@@ -96,17 +96,17 @@ test("standingsTable takes a built cell and adds the column's classes", () => {
 // full text on a popover; a city under it, a flag before it, a link out of it.
 test("resultsTeamCell carries the city, the flag and the link", () => {
   const cell = resultsTeamCell("Ктулху", {className: "reseed-team", city: "Москва", flag: "🇷🇺", href: "https://rating.chgk.info/teams/1"});
-  assert.deepEqual(classes(cell), ["results-team", "reseed-team"]);
-  const name = withClass(cell, "results-team-name")[0];
+  assert.deepEqual(classes(cell), ["name-cell", "results-team", "reseed-team"]);
+  const name = withClass(cell, "name-cell-text")[0];
   assert.equal(name.tag, "a");
   assert.equal(name.href, "https://rating.chgk.info/teams/1");
   assert.equal(name.textContent, "🇷🇺 Ктулху");
   assert.equal(name.attributes["aria-label"], "Ктулху", "the flag is decoration");
-  assert.deepEqual(classes(name), ["results-team-name", "quiet-link"]);
+  assert.deepEqual(classes(name), ["name-cell-text", "quiet-link"]);
   assert.equal(withClass(cell, "results-team-city")[0].textContent, "Москва");
   assert.equal(withClass(cell, "popover-inline")[0].textContent, "🇷🇺 Ктулху");
   const plain = resultsTeamCell("Ктулху");
-  assert.equal(withClass(plain, "results-team-name")[0].tag, "span");
+  assert.equal(withClass(plain, "name-cell-text")[0].tag, "span");
   assert.equal(withClass(plain, "results-team-city").length, 0);
 });
 

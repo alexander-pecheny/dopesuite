@@ -17,7 +17,7 @@ import {buildGameRosterView} from "./fest-roster.js";
 import {mountBoutPage} from "./bout-page.js";
 import type {BoutPage, BoutView} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {controlTextOverflows, markNameOverflow} from "./widgets.js";
+import {markNameControl, nameCell} from "./name-cell.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
@@ -31,7 +31,6 @@ import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
-import {markVenueOverflow} from "./venue.js";
 import S from "./i18nstrings.js";
 
 interface PageGlobals {
@@ -107,11 +106,6 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   },
   activeCursorElement: () => cursor.activeCell || writtenCursor.activeCell,
   cursors: () => [cursor, writtenCursor],
-  nameOverflow: (sheet) => {
-    markNameOverflow(sheet, {cellSelector: ".troika-team", nameSelector: ".od-detailed-team-name", truncatedClass: "od-detailed-team-cell-truncated"});
-    markChairOverflow(sheet);
-    markVenueOverflow(sheet);
-  },
   afterRender: () => {
     drawnShape.clear();
     for (const code of page.codes()) drawnShape.set(code, shapeOf(code));
@@ -374,39 +368,9 @@ function buildBout(bout: BoutEntry): HTMLElement {
 // themes scroll under it. It is EK's cell: a long name fades at the column's edge
 // and shows whole in the page's popover, never an ellipsis.
 function sideNameCell(name: string, rowSpan = troika.CHAIRS): HTMLElement {
-  const cell = td("", "sticky sticky-name ek-team-cell troika-team", {rowSpan});
-  const layout = document.createElement("span");
-  layout.className = "od-detailed-team-layout";
-  const wrap = document.createElement("span");
-  wrap.className = "od-detailed-team-name-wrap";
-  const label = document.createElement("span");
-  label.className = "od-detailed-team-name";
-  label.textContent = name;
-  label.tabIndex = 0;
-  wrap.appendChild(label);
-  layout.appendChild(wrap);
-  cell.appendChild(layout);
-  const popover = document.createElement("span");
-  popover.className = "popover popover-inline";
-  popover.textContent = name;
-  cell.appendChild(popover);
+  const cell = nameCell(name, {className: "sticky sticky-name ek-team-cell troika-team", layout: true});
+  (cell as HTMLTableCellElement).rowSpan = rowSpan;
   return cell;
-}
-
-// markChairOverflow fades the seating cells whose player's name does not fit,
-// and gives their popover the name, as EK's seating cells do.
-function markChairOverflow(scope: ParentNode): void {
-  const wraps = [...scope.querySelectorAll<HTMLElement>(".troika-sheet .player-select-wrap")];
-  const readings = wraps.map((wrap) => {
-    const select = wrap.querySelector<HTMLSelectElement>("select");
-    const label = select && select.value !== "0" ? select.selectedOptions[0]?.textContent || "" : "";
-    return {label, clipped: controlTextOverflows(select, label)};
-  });
-  wraps.forEach((wrap, i) => {
-    const popover = wrap.querySelector(".popover-inline");
-    if (popover) popover.textContent = readings[i].label;
-    wrap.classList.toggle("player-select-truncated", readings[i].clipped);
-  });
 }
 
 // boutHead names the bout by its letter and title. On a host's open bout whose
@@ -601,9 +565,12 @@ function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
     }
     page.render();
   });
+  // A chair whose player's name does not fit fades, and the popover gives the
+  // name, as EK's seating cells do (name-cell.ts measures it).
   const popover = document.createElement("span");
   popover.className = "popover popover-inline";
   wrap.append(select, popover);
+  markNameControl(wrap, select);
   return wrap;
 }
 

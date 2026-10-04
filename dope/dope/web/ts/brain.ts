@@ -16,7 +16,7 @@ import type {RosterTeam} from "./fest-roster.js";
 import {mountBoutPage} from "./bout-page.js";
 import type {BoutPage, BoutView} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {markNameOverflow} from "./widgets.js";
+import {nameCell} from "./name-cell.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {computeBrainPlayerStats} from "./brain-stats.js";
@@ -124,11 +124,6 @@ const page: BoutPage<BrainMatchView, BrainMatchState> = mountBoutPage({
   activeCursorElement: () => cursor.activeCell,
   cursors: () => [cursor],
   canonical: canonicalKey,
-  nameOverflow: (root) => markNameOverflow(root, {
-    cellSelector: ".brain-name-head",
-    nameSelector: ".brain-name",
-    truncatedClass: "brain-name-truncated",
-  }),
   onRoster: () => loadTeamRosters(),
 });
 const {viewer} = page;
@@ -549,24 +544,12 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
 // nameHead shows the seated team; an unresolved slot shows its source label
 // (seed 5, group 1-2 — the server fills it from the slot ref) muted.
 function nameHead(view: BrainMatchView, side: number, planned: BrainSchemeMatch): HTMLElement {
-  const th = document.createElement("th");
-  th.className = "brain-name-head";
   const label = view.participants?.[side]?.name || planned.slots?.[side]?.label || "—";
-  const wrap = document.createElement("span");
-  wrap.className = "brain-name-wrap";
-  const name = document.createElement("span");
-  name.className = "brain-name";
-  name.textContent = label;
-  name.tabIndex = 0;
-  name.setAttribute("aria-label", label);
-  name.classList.toggle("brain-name-pending", !view.participants?.[side]?.id);
-  wrap.appendChild(name);
-  th.appendChild(wrap);
-  const popover = document.createElement("span");
-  popover.className = "popover popover-inline";
-  popover.textContent = label;
-  th.appendChild(popover);
-  return th;
+  return nameCell(label, {
+    tag: "th",
+    className: "brain-name-head",
+    textClassName: view.participants?.[side]?.id ? undefined : "brain-name-pending",
+  });
 }
 
 function playerCell(code: string, view: BrainMatchView, side: number, q: number, editable: boolean): HTMLElement {

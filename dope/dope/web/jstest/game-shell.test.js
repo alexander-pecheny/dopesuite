@@ -13,12 +13,16 @@ function fakeNode(tag) {
     append(...n) { this.kids.push(...n); },
     appendChild(n) { this.kids.push(n); return n; },
     querySelector: () => null,
+    querySelectorAll: () => [],
+    addEventListener() {},
     contains: () => false,
   };
 }
 const body = fakeNode("body");
 body.classList = {toggle: (c, on) => (on ? body.classes.add(c) : body.classes.delete(c))};
 globalThis.window = {location: {search: ""}, addEventListener() {}};
+// The name-cell pass the shell binds waits for a frame that never comes here.
+globalThis.requestAnimationFrame = () => 0;
 globalThis.location = window.location;
 globalThis.document = {
   body,

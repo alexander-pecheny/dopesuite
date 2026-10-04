@@ -21,7 +21,7 @@ import {mountGamePage} from "./game-shell.js";
 import type {CursorKind, GameShell} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameInitLike, GameRoute} from "./game-page.js";
-import {fitScrollFade, markNameOverflow, renderTabBar} from "./widgets.js";
+import {fitScrollFade, renderTabBar} from "./widgets.js";
 import {gameTabs} from "./game-tabs.js";
 import type {GameKind, GameTab} from "./game-tabs.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
@@ -88,8 +88,6 @@ export interface BoutPageSpec<V extends BoutView, S> {
   cursors?: () => Array<{bind(): void; refresh(): void}>;
   // Old hashes a page still answers to (Brain's, game-tabs.ts canonicalKey).
   canonical?: (tabs: GameTab[], key: string) => string;
-  // The page's own name fades, after the results tables' the module marks.
-  nameOverflow?: (root: HTMLElement) => void;
   // After the module drew a tab (the page's own scroll cues, anchors).
   afterRender?: (tab: GameTab | undefined, node: HTMLElement) => void;
   // A bout's new view arrived: true when the page repainted it in place, so
@@ -127,7 +125,6 @@ export interface BoutPage<V extends BoutView, S> {
   resync(): void;
   // Drop the roster tab, so the next drawing builds it afresh.
   invalidateRoster(): void;
-  scheduleOverflow(): void;
   // The fest's venues, one array kept in place, so a dialog opened from an
   // older drawing still lists the current ones.
   readonly venues: Venue[];
@@ -185,7 +182,6 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   let entrants: EntrantsTab | null = null;
   const entrantsTab = () => (entrants ||= createEntrantsTab({
     apiBase,
-    onRender: () => scheduleOverflow(),
     onChanged: () => resync(),
     onRebuilt: () => window.location.reload(),
   }));
@@ -398,17 +394,6 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
 
   // ---- the render loop ----
 
-  let overflowFrame = 0;
-  function scheduleOverflow(): void {
-    cancelAnimationFrame(overflowFrame);
-    overflowFrame = requestAnimationFrame(() => {
-      overflowFrame = 0;
-      markNameOverflow(root, {cellSelector: ".results-team", nameSelector: ".results-team-name", truncatedClass: "results-team-truncated"});
-      spec.nameOverflow?.(root);
-    });
-  }
-  window.addEventListener("resize", scheduleOverflow);
-
   function buildTab(tab: GameTab | undefined): HTMLElement {
     switch (tab?.kind) {
     case "entrants":
@@ -456,7 +441,6 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     root.classList.toggle("fits-frame", spec.fitsFrame(tab, node));
     // A grid fits the frame's width like EK's, so its columns measure the same.
     root.classList.toggle("grid-host", node.matches(".fest-grid") || Boolean(node.querySelector(".fest-grid")));
-    scheduleOverflow();
     for (const cursor of spec.cursors?.() || []) cursor.refresh();
     shell.presence.refresh();
     spec.afterRender?.(tab, node);
@@ -528,7 +512,6 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     render,
     resync,
     invalidateRoster: () => { rosterView = null; },
-    scheduleOverflow,
     venues,
     festStage: (code) => festStages.get(code),
     gridStages: () => (fest?.stages || []).flatMap((stage) => stage?.code ? [festStages.get(stage.code) || stage] : []),

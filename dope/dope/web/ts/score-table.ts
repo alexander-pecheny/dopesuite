@@ -332,7 +332,6 @@ export interface MatchView {
 
 export interface PatchScoreTableOptions {
   formatNumber?: (value: unknown) => string;
-  onPlayerSelectSynced?: (node: HTMLElement) => void;
 }
 
 export interface NodeIndexSpec {
@@ -440,16 +439,18 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
     // editable <select> on the host; each surface has its own spec so both stay
     // live. (Before, only the host's select was patched — the viewer's text was
     // forgotten, so player changes never reached spectators.)
-    {name: "playerText", selector: ".readonly-player-text", keys: themeKeys,
+    {name: "playerText", selector: ".readonly-player .name-cell-text", keys: themeKeys,
       sync: (node, ms) => {
         const theme = scoreThemeOf(node, ms);
         if (!theme) return;
-        setNodeText(node, seatingText(theme, ms));
+        const text = seatingText(theme, ms);
+        setNodeText(node, text);
+        node.setAttribute("aria-label", text);
         const popover = node.closest(".readonly-player")?.querySelector(".popover-inline");
         if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
       }},
     {name: "playerSelect", selector: "[data-player-select]", keys: themeKeys,
-      sync: (node, ms, o) => {
+      sync: (node, ms) => {
         const select = node as HTMLSelectElement;
         const theme = scoreThemeOf(select, ms);
         if (!theme || document.activeElement === select) return; // don't clobber an open select
@@ -458,19 +459,20 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
           select.appendChild(new Option(value, value));
         }
         if (select.value !== value) select.value = value;
-        o.onPlayerSelectSynced?.(select);
+        // A new value is no change to the DOM, so the popover's text is set
+        // here; that change is what tells the name-cell pass to measure again.
+        setNodeText(select.closest(".player-select-wrap")?.querySelector(".popover-inline"), select.selectedOptions[0]?.textContent || "");
       }},
     // The seat picker's closed state — a match of Erudit-Sextet, where a theme
     // holds up to three. The panel itself is the page's; here only the button's
     // line and its popover follow the state.
     {name: "playerSeats", selector: "[data-player-seats]", keys: themeKeys,
-      sync: (node, ms, o) => {
+      sync: (node, ms) => {
         const theme = scoreThemeOf(node, ms);
         if (!theme) return;
         setNodeText(node.querySelector(".player-seats-text") || node, seatingText(theme, ms));
         const popover = node.closest(".player-select-wrap")?.querySelector(".popover-inline");
         if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
-        o.onPlayerSelectSynced?.(node);
       }},
     {name: "total", selector: ".total-cell", keys: teamKeys,
       sync: (node, ms, o) => { const t = scoreTeamOf(node, ms); if (t) setNodeText(node, t.total, o.formatNumber); }},
@@ -547,8 +549,7 @@ export function canPatchScoreShape(previous: MatchView | null | undefined, next:
 // data-driven: for every spec that declares a `sync` (see scoreCellSpecs), it
 // runs that sync over each indexed cell of that type, each cell reading its own
 // data-* coordinates. Shared verbatim by the host and viewer — whatever cells
-// their tables contain get patched. opts.formatNumber formats numeric text;
-// opts.onPlayerSelectSynced lets the host refresh its select's overflow chrome.
+// their tables contain get patched. opts.formatNumber formats numeric text.
 export function patchScoreTable(index: NodeIndex | null | undefined, matchState: MatchView | null | undefined, opts: PatchScoreTableOptions = {}): void {
   if (!index || !matchState) return;
   const state = matchState;

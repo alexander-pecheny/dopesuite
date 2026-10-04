@@ -11,6 +11,7 @@ import {cssEscape, option, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent, CellSpec} from "./cells.js";
 import {letteredTitle, standingsTable} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
+import {nameCell} from "./name-cell.js";
 import {mountBoutPage} from "./bout-page.js";
 import type {BoutPage, BoutView} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
@@ -150,6 +151,15 @@ function stageBouts(stage: SchemeStage): BoutEntry[] {
 
 function seatName(view: HamsaMatchView, seat: number): string {
   return view.participants?.[seat]?.name || S.hamsa.protocol.seat(String(seat + 1));
+}
+
+// seatNameCell is a team's name on the bout sheet, the EK two-row cell: a long
+// name stays on one line and fades at the column's edge, whole in the popover,
+// rather than wrapping the row taller than its neighbours.
+function seatNameCell(name: string): HTMLElement {
+  const cell = nameCell(name, {className: "sticky sticky-name team-name ek-team-cell", layout: true});
+  (cell as HTMLTableCellElement).rowSpan = 2;
+  return cell;
 }
 
 // boutRoster is the people a team may field. The server sends each seat's
@@ -298,7 +308,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
     })),
     afterThemeHeaders: trailingHeaders(),
     rows: seats.map((id, seat) => ({
-      nameCell: {content: seatName(bout.view, seat), className: "sticky sticky-name team-name"},
+      nameCell: seatNameCell(seatName(bout.view, seat)),
       totalCell: {content: rows[seat].total, className: "sticky sticky-total number total-cell", dataset: {total: `${bout.code}-${seat}`}},
       placeCell: {content: placeContent(bout, seat, rows[seat]), className: "sticky sticky-place number place-cell", dataset: {place: `${bout.code}-${seat}`}},
       themes: groups.map((group) => themeRow(bout, id, seat, group, editable)),

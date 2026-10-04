@@ -1,5 +1,5 @@
 // Interaction widgets shared by the game pages: cell nav bar, virtual keypad,
-// floating popovers, sync-status dot, team-name overflow, cell range selection,
+// floating popovers, sync-status dot, scroll edges and fades, cell range selection,
 // and the viewer counter. DOM-only — no table building, no sync.
 
 import S from "./i18nstrings.js";
@@ -213,19 +213,13 @@ export interface FloatingPopover {
   position(): void;
 }
 
-// NAME_POPOVER_SPECS is every clipped-name family the pages draw: the cell a
-// page marks truncated, the hidden span holding the whole text, and what the
-// popover lines up under. Every game page binds them all (mountGamePage), so a
-// family a page starts drawing has its popover already.
-export const VENUE_POPOVER_SPEC: FloatingPopoverSpec = {trigger: ".venue-label-truncated", popover: ".venue-label-popover", anchor: ".venue-label-name"};
+// NAME_POPOVER_SPECS is the one clipped name (name-cell.ts): a cell its pass
+// marks truncated, the hidden span holding the whole text, and the name the
+// popover lines up under. A seat picker's cell anchors at its control. Every
+// game page binds it (mountGamePage), so a table a page starts drawing has its
+// popover already.
 export const NAME_POPOVER_SPECS: readonly FloatingPopoverSpec[] = [
-  VENUE_POPOVER_SPEC,
-  {trigger: ".results-team-truncated", popover: ".popover-inline", anchor: ".results-team-name"},
-  {trigger: ".grid-slot-team-truncated", popover: ".popover-inline", anchor: ".grid-slot-team-name"},
-  {trigger: ".od-detailed-team-cell-truncated", popover: ".popover-inline", anchor: ".od-detailed-team-name-wrap"},
-  {trigger: ".readonly-player.readonly-player-cell-truncated", popover: ".popover-inline", anchor: ".readonly-player-text-wrap"},
-  {trigger: ".player-select-truncated", popover: ".popover-inline", anchor: "[data-player-select], [data-player-seats]"},
-  {trigger: ".brain-name-head.brain-name-truncated", popover: ".popover-inline", anchor: ".brain-name-wrap"},
+  {trigger: ".name-cell-truncated", popover: ":scope > .popover-inline", anchor: ".name-cell-text, [data-name-control]"},
 ];
 
 let sharedPopover: {specs: FloatingPopoverSpec[]; handle: FloatingPopover} | null = null;
@@ -473,19 +467,6 @@ export function createStatusReporter(statusNode: HTMLElement | null | undefined)
   };
 }
 
-// The standalone ✏️/👀 icons were folded into the ☰ menu (menu.js).
-// These now register the menu's context-aware jump item instead of mounting
-// an icon; .refresh() re-points it after SPA navigation. statusNode is kept
-// for call-site compatibility but unused.
-
-export interface NameOverflowConfig {
-  cellSelector: string;
-  nameSelector: string;
-  truncatedClass: string;
-  citySelector?: string;
-  cityTruncatedClass?: string;
-}
-
 export interface ScrollEdges {
   left: boolean;
   right: boolean;
@@ -554,76 +535,6 @@ export function bindScrollEdges(
       target.removeEventListener("scroll", onScroll);
     },
   };
-}
-
-// isClipped is the one definition of "this text does not fit its box", epsilon
-// included. Every truncation cue in the app — the fade, the popover, the EK
-// stage font-shrink — asks this question, so it gets asked in one place.
-export function isClipped(el: Element | null | undefined): boolean {
-  return Boolean(el && el.scrollWidth > el.clientWidth + 1);
-}
-
-// controlTextOverflows says whether a form control's text is wider than the
-// room inside its padding. A <select> or a button cannot report its own
-// scrollWidth, so the text is measured in the control's font instead.
-let controlMeasureContext: CanvasRenderingContext2D | null = null;
-export function controlTextOverflows(control: HTMLElement | null, label: string): boolean {
-  if (!control || !label) return false;
-  const style = getComputedStyle(control);
-  const available = control.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0");
-  if (available <= 0) return false;
-  controlMeasureContext ||= document.createElement("canvas").getContext("2d");
-  if (!controlMeasureContext) return false;
-  controlMeasureContext.font = style.font;
-  return controlMeasureContext.measureText(label).width > available + 1;
-}
-
-// markNameOverflow flags every cell under `root` whose inner name (and optional
-// city) is clipped, so the page can show a fade + popover. Reads are batched
-// ahead of writes so the measure loop never triggers a reflow mid-pass.
-export function markNameOverflow(root: ParentNode | null | undefined, cfg: NameOverflowConfig): void {
-  if (!root) return;
-  const cells = root.querySelectorAll(cfg.cellSelector);
-  const readings = new Array<boolean>(cells.length);
-  for (let i = 0; i < cells.length; i++) {
-    readings[i] = isClipped(cells[i].querySelector(cfg.nameSelector));
-  }
-  for (let i = 0; i < cells.length; i++) {
-    cells[i].classList.toggle(cfg.truncatedClass, readings[i]);
-    if (cfg.citySelector && cfg.cityTruncatedClass) {
-      const city = cells[i].querySelector(cfg.citySelector);
-      city?.classList.toggle(cfg.cityTruncatedClass, isClipped(city));
-    }
-  }
-}
-
-export interface TeamNameOverflowController {
-  schedule(targetRoot?: ParentNode): void;
-  updateDetailed(targetRoot?: ParentNode): void;
-  updateResults(targetRoot?: ParentNode): void;
-}
-
-export function createTeamNameOverflowController({root, detailed, results}: {
-  root: ParentNode;
-  detailed: NameOverflowConfig;
-  results: NameOverflowConfig;
-}): TeamNameOverflowController {
-  function updateDetailed(targetRoot: ParentNode = root): void {
-    markNameOverflow(targetRoot, detailed);
-  }
-  function updateResults(targetRoot: ParentNode = root): void {
-    markNameOverflow(targetRoot, results);
-  }
-  let frame = 0;
-  function schedule(targetRoot: ParentNode = root): void {
-    if (frame) cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      updateDetailed(targetRoot);
-      updateResults(targetRoot);
-    });
-  }
-  return {schedule, updateDetailed, updateResults};
 }
 
 // createViewerCounter renders a live "NN👀" concurrent-viewer tally
@@ -742,24 +653,4 @@ export function fitScrollFade(frame: Element | null | undefined): void {
   }).observe(el, {childList: true});
   observeChildren();
   apply();
-}
-
-export function fitEKStageTeamName(cell: HTMLElement | null | undefined, nameNode: HTMLElement | null | undefined): boolean {
-  if (!cell || !nameNode) return false;
-  const name = nameNode;
-  const baseSize = parseFloat(getComputedStyle(name).fontSize) || 13;
-  const minSize = 9;
-  const vertOverflows = () => name.scrollHeight > name.clientHeight + 1;
-  const horizOverflows = () => isClipped(name);
-  name.style.fontSize = "";
-  if (vertOverflows()) {
-    let size = Math.floor(baseSize) - 1;
-    while (size >= minSize) {
-      name.style.fontSize = `${size}px`;
-      if (!vertOverflows()) break;
-      size -= 1;
-    }
-    if (size < minSize) name.style.fontSize = `${minSize}px`;
-  }
-  return vertOverflows() || horizOverflows();
 }

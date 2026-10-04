@@ -4,7 +4,8 @@
 import {cssEscape, questionNumberNode, td, th} from "./cells.js";
 import {buildFlatScoreTable, computePlaces} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
-import {resultsTeamCell, teamFlagBadges} from "./standings.js";
+import {nameCell} from "./name-cell.js";
+import {resultsTeamCell} from "./standings.js";
 import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
 import {buildRosterView} from "./fest-roster.js";
 import {buildPersonalView, buildPlayersView, captureDraft, restoreDraft, showRefusal, tablesOf} from "./kd-view.js";
@@ -15,7 +16,7 @@ import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
@@ -81,21 +82,6 @@ const progressNode = document.getElementById("odProgress");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const entryModel = DopeEntryModel;
-const teamNameOverflow = createTeamNameOverflowController({
-  root: odRoot,
-  detailed: {
-    cellSelector: ".od-detailed-team-cell",
-    nameSelector: ".od-detailed-team-name",
-    truncatedClass: "od-detailed-team-cell-truncated",
-  },
-  results: {
-    cellSelector: ".results-team",
-    nameSelector: ".results-team-name",
-    truncatedClass: "results-team-truncated",
-    citySelector: ".results-team-city",
-    cityTruncatedClass: "results-team-city-truncated",
-  },
-});
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 const route = parseGameRoute();
 const gameInit = (window as Window & ODPageGlobals).__GAME_INIT__;
@@ -227,7 +213,6 @@ function divisionChips(): HTMLElement | null {
 }
 
 window.addEventListener("resize", () => {
-  if (renderedTab === "detailed" || renderedTab === "results") teamNameOverflow.schedule();
   if (renderedTab === "screen") scheduleScreenFit();
   updateResultsScrollState();
 });
@@ -454,7 +439,6 @@ function render(): void {
   }
   restoreTabScroll(activeTab);
   updateResultsScrollState();
-  if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule(activePane);
   if (activeTab === "screen") scheduleScreenFit();
   positionInvertOverlay();
   shell.presence.refresh();
@@ -2026,7 +2010,7 @@ function buildDetailedScoreTable(): HTMLTableElement {
     const team = state.teams[teamIndex];
     let qIndex = 0;
     return {
-      nameCell: nameCell(teamIndex),
+      nameCell: teamNameCell(teamIndex),
       totalCell: {
         content: totals[teamIndex],
         className: "sticky sticky-total number total-cell",
@@ -2134,40 +2118,16 @@ function teamLabel(index: number): string {
   return name || S.od.team.fallback(String(index + 1));
 }
 
-function nameCell(teamIndex: number): HTMLTableCellElement {
-  const cell = document.createElement("td");
-  cell.className = "sticky sticky-name team-name od-detailed-team-cell";
-  const label = teamLabel(teamIndex);
+// teamNameCell is a team's name on the detailed sheet: its number in a column
+// of its own, the name fading in a white pill, the division badges beside it.
+function teamNameCell(teamIndex: number): HTMLElement {
   const num = teamNumber(teamIndex);
-  const layout = document.createElement("span");
-  layout.className = "od-detailed-team-layout";
-
-  const numSpan = document.createElement("span");
-  numSpan.className = "od-detailed-team-number";
-  numSpan.textContent = num ? String(num) : "";
-  layout.appendChild(numSpan);
-
-  const nameWrap = document.createElement("span");
-  nameWrap.className = "od-detailed-team-name-wrap";
-  const name = document.createElement("span");
-  name.className = "od-detailed-team-name";
-  name.textContent = label;
-  name.tabIndex = 0;
-  name.setAttribute("aria-label", label);
-  nameWrap.appendChild(name);
-  layout.appendChild(nameWrap);
-  // The badges are the layout grid's third column — beside the name, outside
-  // the pill it clips and fades inside.
-  const badges = teamFlagBadges(teamBadges(teamIndex));
-  if (badges) layout.appendChild(badges);
-  cell.appendChild(layout);
-
-  const fullName = document.createElement("span");
-  fullName.className = "popover popover-inline";
-  fullName.textContent = label;
-  cell.appendChild(fullName);
-
-  return cell;
+  return nameCell(teamLabel(teamIndex), {
+    className: "sticky sticky-name team-name od-detailed-team-cell",
+    layout: true,
+    number: {text: num ? String(num) : "", className: "od-detailed-team-number"},
+    badges: teamBadges(teamIndex),
+  });
 }
 
 // teamBadges are the Divisions shown after a team's name — only while the whole
@@ -2704,10 +2664,6 @@ function scheduleScreenFit(): void {
     const wrapper = pane.querySelector<ScreenWrapper>(".screen-wrapper");
     if (!wrapper) return;
     layoutScreen(wrapper);
-    // Fade + popover for names too long for the (fixed-width) team column,
-    // reusing the results-sheet truncation primitive. Width is in logical px, so the
-    // decision is independent of the zoom applied by layoutScreen.
-    teamNameOverflow.schedule(pane);
   });
 }
 

@@ -8,12 +8,13 @@
 
 import {cssEscape, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
+import {nameCell} from "./name-cell.js";
 import {resultsTeamCell, standingsTable} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {bindScrollEdges, createTeamNameOverflowController, fitScrollFade, renderTabBar} from "./widgets.js";
+import {bindScrollEdges, fitScrollFade, renderTabBar} from "./widgets.js";
 import {icon, iconed} from "./icons_gen.js";
 import type {IconName} from "./icons_gen.js";
 import type {WriteRequest} from "./state-sync.js";
@@ -70,13 +71,6 @@ fitScrollFade(root.closest(".sheet-frame"));
 const sheetScroll = bindScrollEdges(root.closest(".sheet-frame"), ({left}, frame) => {
   frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && left);
 });
-
-const teamNameOverflow = createTeamNameOverflowController({
-  root,
-  detailed: {cellSelector: "[data-multi-team-cell]", nameSelector: ".od-detailed-team-name", truncatedClass: "od-detailed-team-cell-truncated"},
-  results: {cellSelector: ".results-team", nameSelector: ".results-team-name", truncatedClass: "results-team-truncated"},
-});
-window.addEventListener("resize", () => teamNameOverflow.schedule());
 
 let scheme: MultiScheme | null = null;
 let state: MultiState | null = null;
@@ -220,35 +214,20 @@ function buildTable(): HTMLElement {
 
 // The sticky name cell is EK's: the ek-team-cell family brings the clipped
 // name, the fade and the hover popover, so a long team never paints over the
-// scores beside it.
+// scores beside it. The number stands in a column of its own, so the rows read
+// down it as they do in KSI's sheet; the popover and the aria-label carry it
+// too.
 function teamCell(p: number): HTMLElement {
   const number = multi.participantNumber(state!, p);
   const name = multi.participantName(state!, p);
   const labelText = `${number > 0 ? number + ". " : ""}${name}`;
-  const cell = td("", "sticky sticky-name team-name ek-team-cell", {dataset: {multiTeamCell: ""}});
-  const layout = document.createElement("span");
-  layout.className = "od-detailed-team-layout";
-  // The number stands in a column of its own, so the rows read down it as
-  // they do in KSI's sheet.
-  const numberNode = document.createElement("span");
-  numberNode.className = "multi-team-number";
-  numberNode.textContent = number > 0 ? String(number) : "";
-  layout.appendChild(numberNode);
-  const nameWrap = document.createElement("span");
-  nameWrap.className = "od-detailed-team-name-wrap";
-  const label = document.createElement("span");
-  label.className = "od-detailed-team-name";
-  label.textContent = name;
-  label.tabIndex = 0;
-  label.setAttribute("aria-label", labelText);
-  nameWrap.appendChild(label);
-  layout.appendChild(nameWrap);
-  cell.appendChild(layout);
-  const fullName = document.createElement("span");
-  fullName.className = "popover popover-inline";
-  fullName.textContent = labelText;
-  cell.appendChild(fullName);
-  return cell;
+  return nameCell(name, {
+    className: "sticky sticky-name team-name ek-team-cell",
+    layout: true,
+    number: {text: number > 0 ? String(number) : "", className: "multi-team-number"},
+    ariaLabel: labelText,
+    popoverText: labelText,
+  });
 }
 
 // Points taken wear the green fill and points lost the red one — the
@@ -581,7 +560,7 @@ function buildTeamsTable(): HTMLElement {
     tr.appendChild(td(number > 0 ? String(number) : ""));
     tr.appendChild(guest && renaming === number
       ? td(guestRenameField(number, multi.participantName(state!, index)))
-      : td(multi.participantName(state!, index), "results-team"));
+      : resultsTeamCell(multi.participantName(state!, index)));
     const box = document.createElement("input");
     box.type = "checkbox";
     box.checked = multi.participantDeclined(state!, index);
@@ -731,7 +710,6 @@ function render(): void {
   const chips = activeTab === "results" ? divisionChips() : null;
   root.replaceChildren(...(chips ? [chips, node] : [node]));
   root.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "refusals");
-  teamNameOverflow.schedule();
   sheetScroll.refresh();
   if (activeTab === "detailed") sheet.refresh();
 }

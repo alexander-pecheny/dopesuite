@@ -57,6 +57,9 @@
   --grid-metric-col: 36px;
   --grid-place-col: 44px;
   --grid-fade: 34px;
+  /* A clipped name's fade where it sits on the box the name scrolls in (a
+     phone, the EK stage sheet): narrower, since the box is the column. */
+  --name-fade-tight: 28px;
   --grid-stage-head-min: 42px;
   --group-standings-col: 520px;
   --od-detailed-number-digits: 3ch;
@@ -77,14 +80,80 @@
    A name its cell clips fades out at the cell's edge, and its whole text floats
    over the page on hover, tap or focus. That popover is one node on <body>
    (createFloatingPopover in widgets.ts, bound by every game page), placed
-   against the cell. The span a cell carries (.popover-inline, and the venue and
-   bout-head ones) is only where it reads the text from, and is never shown in
+   against the cell. The span a cell carries (.popover-inline, and the EK
+   bout head's) is only where it reads the text from, and is never shown in
    place: a popover drawn inside a cell needs the cell lifted over its
    neighbours, and a lifted cell climbs over the sheet's sticky header.
    classcheck refuses a z-index on :hover or :focus for that reason. */
 .popover-inline {
   display: none;
 }
+
+/* ── clipped names ─────────────────────────────────────────
+   Every name a table can clip is one cell (name-cell.ts nameCell): the cell
+   (.name-cell, beside the classes its table lays it out by), the box the name
+   clips in (.name-cell-wrap) and the name (.name-cell-text). The shell's one
+   pass marks the cell .name-cell-truncated when the name does not fit, and
+   then the name fades at its edge.
+   The fade is one overlay, painted in the cell's paper. It sits on the name,
+   unless the name scrolls under the finger (a phone, the EK stage sheet):
+   then an overlay inside the name would scroll away with the text, so the
+   family moves it to the wrap, which does not scroll. A family says which
+   with --name-fade-on-text and --name-fade-on-wrap (a content value: "" draws
+   it, none does not), and how wide with --name-fade-width. */
+.name-cell-wrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.name-cell-text {
+  position: relative;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  outline-offset: var(--focus-outline-offset-tight);
+}
+
+.name-cell-truncated .name-cell-text::after,
+.name-cell-truncated .name-cell-wrap::after {
+  position: absolute;
+  top: var(--space-0);
+  right: var(--space-0);
+  bottom: var(--space-0);
+  width: var(--name-fade-width, var(--inline-fade-width));
+  background: var(--name-fade-bg, linear-gradient(to right, var(--paper-transparent), var(--paper)));
+  pointer-events: none;
+}
+
+.name-cell-truncated .name-cell-text::after {
+  content: var(--name-fade-on-text, "");
+}
+
+.name-cell-truncated .name-cell-wrap::after {
+  content: var(--name-fade-on-wrap, none);
+}
+
+/* A name on a head's structure fill (a brain side, a bout's venue) fades by
+   a mask: an overlay painted in paper showed as a bar on that fill, and as
+   nothing in the dark theme. */
+.brain-name-head,
+.venue-label {
+  --name-fade-on-text: none;
+}
+
+.brain-name-head.name-cell-truncated .name-cell-text,
+.venue-label.name-cell-truncated .name-cell-text {
+  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+}
+
+/* A seat picker's cell is a name cell around a control: its fade is drawn
+   before the chevron (.player-select-wrap::before), not by the overlay. */
 
 .floating-name-popover {
   max-width: min(420px, calc(100vw - 32px));
@@ -103,7 +172,6 @@
    bites only when the content reaches the edge, so long text fades where an
    «…» used to sit. Table names get the full fade+popover treatment instead. */
 .battle-title,
-.grid-head-truncated .grid-match-title,
 .readonly-battle-venue,
 .numbers-import-raw,
 .public-top h1 {
@@ -434,28 +502,16 @@
 
 /* A bout's venue in a head — the Своячок's sheet, a Тройка bout, a Сетка box:
    one muted line that fades where its column ends; a clipped one floats its
-   whole title on hover (venue.ts, VENUE_POPOVER_SPEC). */
+   whole title on hover (venue.ts venueLabel, a name cell). */
 .venue-label {
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
 }
 
-.venue-label-name {
-  min-width: 0;
-  overflow: hidden;
+.venue-label .name-cell-text {
   color: var(--muted);
   font-weight: var(--fw-regular);
-  white-space: nowrap;
-}
-
-.venue-label-truncated .venue-label-name {
-  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
-  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
-}
-
-.venue-label-popover {
-  display: none;
 }
 
 /* The host's sheet head with its venue: the frozen name column is too narrow
@@ -797,7 +853,7 @@
   transform: translateY(-65%) rotate(45deg);
 }
 
-.player-select-wrap.player-select-truncated::before {
+.player-select-wrap.name-cell-truncated::before {
   display: block;
 }
 
@@ -829,7 +885,7 @@
 
 /* The seating line takes the cell's width and never sets it: width 0 keeps
    three whole surnames from widening the theme's columns, and min-width
-   stretches it back to the button. What does not fit fades (.player-select-truncated). */
+   stretches it back to the button. What does not fit fades (.name-cell-truncated). */
 .player-seats-text {
   display: block;
   width: 0;
@@ -1163,8 +1219,8 @@
   background: var(--surface-tint);
 }
 
-.seed-import-table .seed-declined-row .results-team-truncated .results-team-name::after {
-  background: linear-gradient(to right, transparent, var(--surface-tint));
+.seed-import-table .seed-declined-row .results-team {
+  --name-fade-bg: linear-gradient(to right, transparent, var(--surface-tint));
 }
 
 .seed-import-table .seed-waitlist-cell {
@@ -1487,27 +1543,15 @@ body:not(.embedded-match) .grid-match {
   white-space: nowrap;
 }
 
-.grid-slot-team-name {
-  position: relative;
-  display: block;
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: clip;
-  white-space: nowrap;
-  outline-offset: var(--focus-outline-offset-tight);
+/* The wrap is not a positioned box here: where the fade moves to it (a
+   phone), it runs to the cell's edges, padding and all. */
+.grid-slot-team {
+  --name-fade-width: var(--grid-fade);
 }
 
-.grid-slot-team-truncated .grid-slot-team-name::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: var(--grid-fade);
-  background: linear-gradient(to right, var(--paper-transparent), var(--paper));
-  pointer-events: none;
+.grid-slot-team .name-cell-wrap {
+  position: static;
+  flex: 1 1 auto;
 }
 
 .slot-total,
@@ -2720,7 +2764,7 @@ html:has(.game-host-top) {
 /* Size each name column to its content, capped at --ek-stats-name-col. The cell
    follows its inner wrap, so the column is exactly as wide as the longest name
    (up to the cap) — no dead space, no premature clipping. */
-.ek-stats-table .ek-stats-name .results-team-name-wrap {
+.ek-stats-table .ek-stats-name .name-cell-wrap {
   max-width: var(--ek-stats-name-col);
 }
 
@@ -2918,45 +2962,12 @@ html:has(.game-host-top) {
   overflow: visible;
 }
 
-.results-team-name-wrap {
-  position: relative;
+/* The city under a team's name is chrome text: it clips and fades the kit's
+   way (.u-clip-fade), with no popover. */
+.results-team-city {
   display: block;
   min-width: 0;
   max-width: 100%;
-}
-
-.results-team-name,
-.results-team-city {
-  position: relative;
-  display: block;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: clip;
-  white-space: nowrap;
-}
-
-.results-team-name {
-  outline-offset: var(--focus-outline-offset-tight);
-}
-
-.results-team-truncated .results-team-name::after,
-.results-team-city-truncated::after {
-  content: "";
-  position: absolute;
-  top: var(--space-0);
-  right: var(--space-0);
-  bottom: var(--space-0);
-  width: var(--inline-fade-width);
-  background: var(--inline-fade-bg);
-  pointer-events: none;
-}
-
-.results-team-name:focus {
-  outline: var(--focus-ring-none);
-}
-
-.results-team-city {
   color: var(--muted);
   font-size: var(--text-xs);
 }
@@ -3365,9 +3376,8 @@ html:has(.game-host-top) {
   font-weight: var(--fw-semibold);
 }
 
-.match-table.od-detailed .od-detailed-team-name-wrap,
-.match-table .ek-team-cell .od-detailed-team-name-wrap {
-  position: relative;
+.match-table.od-detailed .od-detailed-team-cell .name-cell-wrap,
+.match-table .ek-team-cell .name-cell-wrap {
   display: flex;
   align-items: center;
   width: 100%;
@@ -3379,22 +3389,22 @@ html:has(.game-host-top) {
   background: var(--paper);
 }
 
-.match-table.od-detailed .od-detailed-team-name,
-.match-table .ek-team-cell .od-detailed-team-name {
-  position: relative;
-  display: block;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: clip;
-  white-space: nowrap;
+.match-table.od-detailed .od-detailed-team-cell .name-cell-text,
+.match-table .ek-team-cell .name-cell-text {
   line-height: var(--leading-snug);
   padding-bottom: 0.12em;
   margin-bottom: -0.12em;
-  outline-offset: var(--focus-outline-offset-tight);
 }
 
-.match-table.ek-stage-table .ek-team-cell .od-detailed-team-name {
+/* The stage sheet's name wraps and scrolls (name-cell.ts shrinks it to fit
+   two lines), so its fade sits on the wrap. */
+.match-table.ek-stage-table .ek-team-cell {
+  --name-fade-on-text: none;
+  --name-fade-on-wrap: "";
+  --name-fade-width: var(--name-fade-tight);
+}
+
+.match-table.ek-stage-table .ek-team-cell .name-cell-text {
   display: block;
   width: 100%;
   min-width: 0;
@@ -3409,48 +3419,22 @@ html:has(.game-host-top) {
   white-space: normal;
 }
 
-.match-table.ek-stage-table .ek-team-cell .od-detailed-team-name::-webkit-scrollbar {
+.match-table.ek-stage-table .ek-team-cell .name-cell-text::-webkit-scrollbar {
   display: none;
 }
 
 /* Личная СИ's бой: one row per player, КСИ-height. The two-line wrap above is
    ЭК's — its name cell spans two rows; here it would inflate the single row,
    so the name keeps one line and fades into its popover instead. */
-.match-table.ek-stage-table.individual-blank .ek-team-cell .od-detailed-team-name,
-.viewer-readonly .match-table.ek-stage-table.readonly-table.individual-blank .ek-team-cell .od-detailed-team-name {
+.match-table.ek-stage-table.individual-blank .ek-team-cell .name-cell-text,
+.viewer-readonly .match-table.ek-stage-table.readonly-table.individual-blank .ek-team-cell .name-cell-text {
   overflow: hidden;
   white-space: nowrap;
 }
 
-.match-table.ek-stage-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name::after {
-  content: none;
-}
-
-.match-table.ek-stage-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name-wrap::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 28px;
-  background: linear-gradient(to right, var(--paper-transparent), var(--paper));
-  pointer-events: none;
-}
-
-.match-table.od-detailed .od-detailed-team-cell-truncated .od-detailed-team-name::after,
-.match-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 34px;
-  background: linear-gradient(to right, var(--paper-transparent), var(--paper));
-  pointer-events: none;
-}
-
-.match-table.od-detailed .od-detailed-team-name:focus,
-.match-table .ek-team-cell .od-detailed-team-name:focus {
+.results-team .name-cell-text:focus,
+.match-table.od-detailed .od-detailed-team-cell .name-cell-text:focus,
+.match-table .ek-team-cell .name-cell-text:focus {
   outline: var(--focus-ring-none);
 }
 
@@ -3572,8 +3556,25 @@ html:has(.game-host-top) {
     --theme-score-col: 40px;
   }
 
-  .match-table.od-detailed .od-detailed-team-name,
-  .match-table .ek-team-cell .od-detailed-team-name {
+  /* A phone scrolls a long name under the finger, so its fade moves from
+     the name to the box it clips in, which stays put. */
+  .match-table.od-detailed .od-detailed-team-cell,
+  .match-table .ek-team-cell,
+  .grid-slot-team,
+  .results-team {
+    --name-fade-on-text: none;
+    --name-fade-on-wrap: "";
+  }
+
+  .match-table.od-detailed .od-detailed-team-cell,
+  .match-table .ek-team-cell {
+    --name-fade-width: var(--name-fade-tight);
+  }
+
+  .match-table.od-detailed .od-detailed-team-cell .name-cell-text,
+  .match-table .ek-team-cell .name-cell-text,
+  .grid-slot-team .name-cell-text,
+  .results-team .name-cell-text {
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
@@ -3581,80 +3582,11 @@ html:has(.game-host-top) {
     overscroll-behavior-x: contain;
   }
 
-  .match-table.od-detailed .od-detailed-team-name::-webkit-scrollbar,
-  .match-table .ek-team-cell .od-detailed-team-name::-webkit-scrollbar {
+  .match-table.od-detailed .od-detailed-team-cell .name-cell-text::-webkit-scrollbar,
+  .match-table .ek-team-cell .name-cell-text::-webkit-scrollbar,
+  .grid-slot-team .name-cell-text::-webkit-scrollbar,
+  .results-team .name-cell-text::-webkit-scrollbar {
     display: none;
-  }
-
-  .match-table.od-detailed .od-detailed-team-cell-truncated .od-detailed-team-name::after,
-  .match-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name::after {
-    content: none;
-  }
-
-  .match-table.od-detailed .od-detailed-team-cell-truncated .od-detailed-team-name-wrap::after,
-  .match-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name-wrap::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 28px;
-    background: linear-gradient(to right, var(--paper-transparent), var(--paper));
-    pointer-events: none;
-  }
-
-  .grid-slot-team-name {
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
-  }
-
-  .grid-slot-team-name::-webkit-scrollbar {
-    display: none;
-  }
-
-  .grid-slot-team-truncated .grid-slot-team-name::after {
-    content: none;
-  }
-
-  .grid-slot-team-truncated::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: var(--grid-fade);
-    background: linear-gradient(to right, var(--paper-transparent), var(--paper));
-    pointer-events: none;
-  }
-
-  .results-team-name {
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
-  }
-
-  .results-team-name::-webkit-scrollbar {
-    display: none;
-  }
-
-  .results-team-truncated .results-team-name::after {
-    content: none;
-  }
-
-  .results-team-truncated .results-team-name-wrap::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: var(--inline-fade-width);
-    background: var(--inline-fade-bg);
-    pointer-events: none;
   }
 
   .results-table th,
@@ -3874,7 +3806,14 @@ html:has(.game-host-top) {
   padding-right: 8px;
 }
 
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-text-wrap {
+/* The spectator's seating fills its cell and scrolls, so its fade sits on the
+   wrap. */
+.readonly-player {
+  --name-fade-on-text: none;
+  --name-fade-on-wrap: "";
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player .name-cell-wrap {
   position: absolute;
   top: 0;
   right: 8px;
@@ -3886,7 +3825,7 @@ html:has(.game-host-top) {
   overflow: hidden;
 }
 
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-text {
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player .name-cell-text {
   display: block;
   max-width: 100%;
   min-width: 0;
@@ -3899,29 +3838,18 @@ html:has(.game-host-top) {
   text-overflow: clip;
 }
 
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-text::-webkit-scrollbar {
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player .name-cell-text::-webkit-scrollbar {
   display: none;
 }
 
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated .readonly-player-text-wrap::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: var(--inline-fade-width);
-  background: var(--inline-fade-bg);
-  pointer-events: none;
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name-wrap {
+.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .name-cell-wrap {
   align-items: center;
   overflow: hidden;
   padding-right: 7px;
   padding-left: 7px;
 }
 
-.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name {
+.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .name-cell-text {
   display: block;
   max-height: 100%;
   overflow-x: auto;
@@ -3936,23 +3864,8 @@ html:has(.game-host-top) {
   word-break: normal;
 }
 
-.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name::-webkit-scrollbar {
+.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .name-cell-text::-webkit-scrollbar {
   display: none;
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name::after {
-  content: none;
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name-wrap::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 28px;
-  background: linear-gradient(to right, var(--paper-transparent), var(--paper));
-  pointer-events: none;
 }
 
 @media (max-width: 760px) {
@@ -4211,32 +4124,16 @@ html:has(.game-host-top) {
   white-space: nowrap;
 }
 
-.brain-name {
-  display: block;
+/* A team name sits over its player column; a longer one clips under a fade
+   (the mask in "clipped names") and carries a popover. */
+.brain-name-head .name-cell-text {
   text-align: center;
   color: var(--text-strong);
-  overflow: hidden;
-  text-overflow: clip;
-  white-space: nowrap;
 }
 
-/* A team name sits over its player column; a longer one clips under a fade
-   and carries a popover. */
-.brain-name-wrap {
-  position: relative;
-  display: block;
+.brain-name-head .name-cell-wrap {
   margin: 0 auto;
-  min-width: 0;
   max-width: var(--team-col);
-}
-
-/* A mask, not a painted gradient: the head cell is structure-coloured, and a
-   fade painted in paper showed as a bar on it (and as nothing in the dark
-   theme). */
-.brain-name-truncated .brain-name {
-  text-overflow: clip;
-  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
-  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
 }
 
 .match-table.brain-detailed .brain-score-head {
@@ -4695,7 +4592,7 @@ body.is-fullscreen.od-page .match-main {
 
 /* The team name is the shared name cell (clip + fade + popover); the roster
    only adds its bold weight on top. */
-.roster-results-table .results-team-name {
+.roster-results-table .results-team .name-cell-text {
   font-weight: var(--fw-semibold);
 }
 
@@ -5180,6 +5077,14 @@ body.is-fullscreen.od-page .match-main {
 .troika-sheet .troika-team {
   font-weight: var(--fw-semibold);
   color: var(--text-strong);
+}
+
+/* Хамса's бой keeps the rows its marks and its seat picker make: ЭК's
+   two-row floor is taller than they are, and on a phone its marks are
+   narrower than --question-size says. The name's pill fills whatever the two
+   rows come to. */
+.match-table.hamsa-sheet .ek-team-cell .od-detailed-team-layout {
+  min-height: 0;
 }
 
 /* The written бой has a row a side, not three. */

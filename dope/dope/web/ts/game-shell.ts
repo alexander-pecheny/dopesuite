@@ -10,6 +10,7 @@
 import {createLiveEvents, createScopedWriter, createSyncIndicator, createHostPresence, gameEventsURL, installClientRecorder, scheduleStaticReload} from "./state-sync.js";
 import S from "./i18nstrings.js";
 import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, SyncIndicator} from "./state-sync.js";
+import {bindNameCells} from "./name-cell.js";
 import {createStatusReporter, createViewerCounter, floatingPopover} from "./widgets.js";
 import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
 import type {GameDataSnapshot, GameRoute} from "./game-page.js";
@@ -79,8 +80,10 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
   const scopeGameID = spec.init?.gameID != null ? String(spec.init.gameID) : spec.gameID || "";
   const embedded = Boolean(spec.embedded);
   document.body.classList.toggle("viewer-readonly", viewer);
-  // Every clipped name on every game page shows whole in the one popover on
-  // <body>; no cell draws its own (widgets.ts floatingPopover).
+  // Every clipped name on every game page is measured by one pass and shows
+  // whole in the one popover on <body>. A page draws its name cells
+  // (name-cell.ts nameCell) and never measures them.
+  bindNameCells(document.body);
   floatingPopover();
 
   let jumpLink: {refresh(): void} | null = null;

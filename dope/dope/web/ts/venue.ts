@@ -1,7 +1,7 @@
 // Venue: the number-plus-title a match is played at, and the venues table.
 
 import {option, td} from "./cells.js";
-import {markNameOverflow} from "./widgets.js";
+import {nameCell} from "./name-cell.js";
 import {standingsTable} from "./standings.js";
 import type {StandingsColumn} from "./standings.js";
 import {icon, iconed} from "./icons_gen.js";
@@ -174,32 +174,13 @@ export function withStartsAt(text: string, startsAt: string | undefined): string
 }
 
 // venueLabel is a bout's venue as a header shows it, number and title,
-// clipped where its column ends, the whole of it in a popover when
-// it is. text overrides the wording (the grid says it its own way).
+// clipped where its column ends, the whole of it in a popover when it is: the
+// one clipped name (name-cell.ts), which the shell measures. text overrides
+// the wording (the grid says it its own way).
 export function venueLabel(venue: VenueLike, className = "", text = ""): HTMLElement | null {
   const label = text || formatBattleVenue(venue);
   if (!label) return null;
-  const wrap = document.createElement("span");
-  wrap.className = className ? `venue-label ${className}` : "venue-label";
-  const name = document.createElement("span");
-  name.className = "venue-label-name";
-  name.textContent = label;
-  name.tabIndex = 0;
-  name.setAttribute("aria-label", label);
-  const popover = document.createElement("span");
-  popover.className = "popover venue-label-popover";
-  popover.textContent = label;
-  wrap.appendChild(name);
-  wrap.appendChild(popover);
-  return wrap;
-}
-
-// A clipped venue label shows its whole title on hover or focus, the way a
-// team's name does: widgets.ts's VENUE_POPOVER_SPEC, bound on every game page.
-
-// markVenueOverflow flags the venue labels their column clips.
-export function markVenueOverflow(root: ParentNode | null | undefined): void {
-  markNameOverflow(root, {cellSelector: ".venue-label", nameSelector: ".venue-label-name", truncatedClass: "venue-label-truncated"});
+  return nameCell(label, {tag: "span", className: className ? `venue-label ${className}` : "venue-label"});
 }
 
 export interface BoutWhereWhenOptions {

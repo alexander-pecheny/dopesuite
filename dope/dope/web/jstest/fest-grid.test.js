@@ -91,7 +91,7 @@ test("a Group renders as a table of place against team", () => {
   // Names lead and wear the box treatment — fade + popover, never «…» —
   // and the rows sit in seating order, not place order: a live группа must
   // not reshuffle under the reader with every закрытый бой.
-  assert.deepEqual(texts(grid, "grid-slot-team-name"), ["ВШЭстером", "Ктулху"]);
+  assert.deepEqual(texts(grid, "name-cell-text"), ["ВШЭстером", "Ктулху"]);
   assert.deepEqual(texts(grid, "popover-inline"), ["ВШЭстером", "Ктулху"]);
   // One metric column, then М last — команда, очки, место: the first of the
   // Ranker's sort rules the server sent, never guessed from the numbers.
@@ -196,7 +196,7 @@ test("a Block of pods draws место against team, not бои", () => {
   assert.equal(withClass(grid, "grid-stage").length, 1);
   assert.equal(withClass(grid, "grid-match").length, 0, "бои в Сетке не рисуются");
   assert.equal(withClass(grid, "grid-standings").length, 1);
-  assert.deepEqual(texts(grid, "grid-slot-team-name"), ["А", "Б", "В", "Г"], "ряды в порядке посева, не мест");
+  assert.deepEqual(texts(grid, "name-cell-text"), ["А", "Б", "В", "Г"], "ряды в порядке посева, не мест");
   assert.deepEqual(column(grid, "place"), ["М", "1", "3", "2", "4"]);
   // A pod's table is М alone: its Ranker sends no sort rules.
   assert.deepEqual(column(grid, "total"), []);
@@ -256,7 +256,7 @@ test("every бой names its venue, however the previous column read", () => {
     matches: [{code: `${code}-m1`, venue: 1, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
   });
   const grid = buildFestGrid({stages: [blockRound("s1-r1"), blockRound("s1-r2")]}, {stageHeaderLink: false});
-  const venues = withClass(grid, "grid-match-venue").map((n) => texts(n, "venue-label-name")[0]);
+  const venues = withClass(grid, "grid-match-venue").map((n) => texts(n, "name-cell-text")[0]);
   assert.deepEqual(venues, ["пл. 1", "пл. 1"]);
 });
 
@@ -410,7 +410,7 @@ test("two grids keep their own rows and letters", () => {
   assert.equal(board.props["--grid-unit-rows"], "3");
   assert.deepEqual(texts(wide, "grid-match-title"), ["Группа 1", "Бой Z"]);
   assert.deepEqual(texts(board, "grid-match-title"), ["Бой s2-m1"]);
-  assert.equal(texts(wide, "grid-slot-team-name")[4], "Бой A, м. 1");
+  assert.equal(texts(wide, "name-cell-text")[4], "Бой A, м. 1");
 });
 
 // Хамса draws the three fourth places of Игра №1 into Игра №2. Those seats
