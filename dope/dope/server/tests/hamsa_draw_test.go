@@ -155,6 +155,7 @@ select participant_id from match_slots where match_id = ? and participant_id is 
 // blind draw: until a host runs it, those seats are empty and the panel
 // offers exactly the three fourth-place teams.
 func TestHamsaDrawSeatsTheFourthPlaces(t *testing.T) {
+	t.Parallel()
 	game, _, _ := hamsaFest(t)
 
 	if slots := drawSlotsOf(t, game, "s1-r2"); len(slots) != 3 {
@@ -217,6 +218,7 @@ func TestHamsaDrawSeatsTheFourthPlaces(t *testing.T) {
 // The Block is one ranking scope: its table is the сумма мест over both Игры,
 // and it is what the Финал seats from.
 func TestHamsaBlockTableRanksBothBlockRounds(t *testing.T) {
+	t.Parallel()
 	game, names, teams := hamsaFest(t)
 	playHamsaBlockRound(t, game, 1)
 	slots := drawSlotsOf(t, game, "s1-r2")
@@ -297,6 +299,7 @@ where s.game_id = ? and s.code = 's2' order by ms.slot_index`,
 // host draws a lot among the tied teams, on the finished bout: it seats
 // them, and leaves the shared place in the sum of places as it was.
 func TestHamsaLotSeatsATieOfIgra1(t *testing.T) {
+	t.Parallel()
 	game, _, _ := hamsaFest(t)
 	playHamsaBlockRound(t, game, 1)
 

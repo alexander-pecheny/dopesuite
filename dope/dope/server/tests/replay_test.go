@@ -123,6 +123,7 @@ func replayFromTranscript(t *testing.T, name, gameType, title string, direct boo
 // Both transports honour the same replay.Game contract: the mini transcript
 // agrees over HTTP and direct alike.
 func TestReplayAgreesWithItsTranscript(t *testing.T) {
+	t.Parallel()
 	script, err := replay.Parse(miniTranscript)
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +148,7 @@ func TestReplayAgreesWithItsTranscript(t *testing.T) {
 // derived, so if the resolver seats somebody else the replay must say so rather
 // than quietly playing the sheet's names into whatever бой it found.
 func TestReplayCatchesAWrongSeating(t *testing.T) {
+	t.Parallel()
 	// Swap the finalists in the transcript. Dope will seat the actual winners,
 	// Ктулху and Ушки на макушке, so both seats disagree.
 	bent := strings.Replace(miniTranscript,
@@ -182,6 +184,7 @@ func TestReplayCatchesAWrongSeating(t *testing.T) {
 // resolver recomputing an earlier round. This is what caught out the first ЭК
 // transfer, where hand-seated rounds kept reverting.
 func TestReplayDrawSurvivesRecompute(t *testing.T) {
+	t.Parallel()
 	script, err := replay.Parse(miniTranscript)
 	if err != nil {
 		t.Fatal(err)
@@ -232,10 +235,12 @@ func TestReplayDrawSurvivesRecompute(t *testing.T) {
 // job it exists for — dope scores what the hosts entered and has to arrive at
 // the same Σ and the same место the tournament published.
 func TestReplayStudchrEK(t *testing.T) {
+	t.Parallel()
 	replayFromTranscript(t, "ek", "ek", "ЭК", true)
 }
 
 func TestReplayStudchrEKOverHTTP(t *testing.T) {
+	t.Parallel()
 	replayFromTranscript(t, "ek", "ek", "ЭК", false)
 }
 
@@ -248,10 +253,12 @@ func TestReplayStudchrEKOverHTTP(t *testing.T) {
 // before. So this replay asserts the entire seating of the tournament, which is
 // what makes it the harder half of the harness.
 func TestReplayStudchrSI(t *testing.T) {
+	t.Parallel()
 	replayFromTranscript(t, "si", "si", "СИ", true)
 }
 
 func TestReplayStudchrSIOverHTTP(t *testing.T) {
+	t.Parallel()
 	replayFromTranscript(t, "si", "si", "СИ", false)
 }
 
@@ -261,6 +268,7 @@ func TestReplayStudchrSIOverHTTP(t *testing.T) {
 // Σ+, then how many 50s, 40s, 30s and 20s each player took, and dope has to
 // derive every one of them.
 func TestReplayStudchrTPSh(t *testing.T) {
+	t.Parallel()
 	game := replayFromTranscript(t, "tpsh", "si", "ТПШ", true)
 	// The Пересев sorts on how many 50s each player took and shows the column,
 	// so what it sorted on has to be what it stored.
@@ -308,6 +316,7 @@ scheme: -
 `
 
 func TestReplayBrainBout(t *testing.T) {
+	t.Parallel()
 	script, err := replay.Parse(miniBrainTranscript)
 	if err != nil {
 		t.Fatal(err)
@@ -348,9 +357,11 @@ select state_json ->> '$.teams[0].rows[0].player' from matches where game_id = ?
 // every finalist is seated from what came before, so this replay asserts the
 // entire structure of the largest game dope runs.
 func TestReplayStudchrBrain(t *testing.T) {
+	t.Parallel()
 	replayFromTranscript(t, "brain", "brain", "КИнСБФ", true)
 }
 
 func TestReplayStudchrBrainOverHTTP(t *testing.T) {
+	t.Parallel()
 	replayFromTranscript(t, "brain", "brain", "КИнСБФ", false)
 }

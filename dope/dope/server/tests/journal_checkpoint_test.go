@@ -19,6 +19,7 @@ import (
 // snapshot, and asserts the game returns to the captured state — the foundation
 // for per-game derived revert.
 func TestGameCheckpointRoundTrip(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -62,6 +63,7 @@ func TestGameCheckpointRoundTrip(t *testing.T) {
 // TestBackfillGameCheckpoints verifies the migration step that gives every
 // existing game a genesis checkpoint (so per-game revert has an anchor).
 func TestBackfillGameCheckpoints(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +104,7 @@ func TestBackfillGameCheckpoints(t *testing.T) {
 
 // TestGameCheckpointEncodeRoundTrip checks compress/serialize round-trips.
 func TestGameCheckpointEncodeRoundTrip(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)

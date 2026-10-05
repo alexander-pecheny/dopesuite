@@ -14,6 +14,7 @@ import (
 // to fall back to the fest roster — Octobearfest's Троечка showed the 56 rating
 // teams instead of its 37 troikas.
 func TestTroikaRosterTabListsTroikasBeforeTheSeed(t *testing.T) {
+	t.Parallel()
 	srv, festID, token, createGame := troikaSeedFest(t)
 	dsl := "[init]\nseed: xlsx\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\n"
 	gameID := createGame(url.Values{"game_type": {"troika"}, "troika_dsl": {dsl}})

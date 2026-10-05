@@ -42,6 +42,7 @@ func newBatchTestServer(t *testing.T) (*dopeserver.Server, dopeserver.MatchScope
 // (a range clear/fill) lands in a single request: every mark is applied and the
 // results are recomputed from the edited blob, not a pre-batch snapshot.
 func TestBatchMatchUpdateAppliesAllEdits(t *testing.T) {
+	t.Parallel()
 	srv, scope := newBatchTestServer(t)
 
 	ids := matchTeamIDs(t, srv, scope)
@@ -86,6 +87,7 @@ func TestBatchMatchUpdateAppliesAllEdits(t *testing.T) {
 // TestBatchMatchUpdateIsAtomic verifies that one bad op rolls back the whole
 // request — no partial state — since a request's ops share a savepoint.
 func TestBatchMatchUpdateIsAtomic(t *testing.T) {
+	t.Parallel()
 	srv, scope := newBatchTestServer(t)
 
 	ids := matchTeamIDs(t, srv, scope)
@@ -111,6 +113,7 @@ func TestBatchMatchUpdateIsAtomic(t *testing.T) {
 // user from the request context (the regression was edits committed under a bare
 // context.Background(), losing attribution).
 func TestScopedMatchUpdateStampsJournal(t *testing.T) {
+	t.Parallel()
 	srv, scope := newBatchTestServer(t)
 
 	var target int64
@@ -146,6 +149,7 @@ func TestScopedMatchUpdateStampsJournal(t *testing.T) {
 // from the scores, but a host's pinned place must survive that recompute — it is
 // Protocol state in the blob, and the scorer honours it (ADR-0005).
 func TestPinBeatsComputedPlace(t *testing.T) {
+	t.Parallel()
 	srv, scope := newBatchTestServer(t)
 	ids := matchTeamIDs(t, srv, scope)
 
@@ -186,6 +190,7 @@ func TestPinBeatsComputedPlace(t *testing.T) {
 // edit writes as it goes, so one that fails halfway must roll back alone and
 // leave its co-editors' edits in the same window committed.
 func TestBadEditDoesNotPoisonItsWindow(t *testing.T) {
+	t.Parallel()
 	srv, scope := newBatchTestServer(t)
 	ids := matchTeamIDs(t, srv, scope)
 

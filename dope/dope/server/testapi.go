@@ -62,6 +62,16 @@ func (s *Server) Eng() *core.Engine { return &s.eng }
 // Metrics returns a pointer to the edit-metrics recorder.
 func (s *Server) Metrics() *metrics.Recorder { return &s.metrics }
 
+// SetEnv shadows one environment variable for this server alone, so a test
+// can give it a bot token (or take it away) without t.Setenv, which would keep
+// the test from running in parallel. Call it before the server serves.
+func (s *Server) SetEnv(key, value string) {
+	if s.envOverride == nil {
+		s.envOverride = map[string]string{}
+	}
+	s.envOverride[key] = value
+}
+
 // SetEditBatchWindow shortens the edit batching window for a test that plays
 // many edits one after another and awaits each.
 func (s *Server) SetEditBatchWindow(d time.Duration) { s.editor().Window = d }

@@ -17,6 +17,7 @@ import (
 // roster does not have, a troika of two or more players of one team counts
 // for that team, and a Тройка Game seats them like any other entrant.
 func TestTroikasAreAssembledFromFestPlayers(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -144,6 +145,7 @@ func saveErr(t *testing.T, db *sql.DB, festID, id int64, in roster.AssembledInpu
 // holds two of its players and follows that team's зачёт, and the host can
 // pick another team or set the зачёт apart from it.
 func TestTroikaHeadTeamAndDivision(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -194,6 +196,7 @@ func TestTroikaHeadTeamAndDivision(t *testing.T) {
 // A Тройка Game that declares a зачёт seats that зачёт's troikas and follows
 // them as they are added, moved or deleted, until something is entered in it.
 func TestTroikaGameFollowsItsDivision(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

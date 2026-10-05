@@ -78,6 +78,7 @@ func siteTeams(teams map[int64][]string) []roster.FestRosterImportTeam {
 // to pick up a late registration. Every fix survives, the late player
 // arrives, the preview says so first, and the import can be undone.
 func TestHostRosterEditsSurviveAReimport(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	srv.SetEditBatchWindow(time.Millisecond)
 	db := srv.Eng().DB
@@ -196,6 +197,7 @@ func TestHostRosterEditsSurviveAReimport(t *testing.T) {
 // The site moves a player the host had placed by hand: the import asks, keeps
 // the host's placement by default, and takes the site's when told to.
 func TestReimportAsksWhenTheSiteMovesAHostsPlayer(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	srv.SetEditBatchWindow(time.Millisecond)
 	db := srv.Eng().DB
@@ -262,6 +264,7 @@ func TestReimportAsksWhenTheSiteMovesAHostsPlayer(t *testing.T) {
 // them. Before, the roster writer deleted them and the save failed on the
 // foreign key.
 func TestTakingAnIndividualPlayerOffATeamKeepsThem(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	srv.SetEditBatchWindow(time.Millisecond)
 	db := srv.Eng().DB
@@ -297,6 +300,7 @@ func TestTakingAnIndividualPlayerOffATeamKeepsThem(t *testing.T) {
 // A team the host makes, renames or takes off by hand reaches the flat games
 // at once: a КСИ played before the roster was complete seats the late team.
 func TestHandRosterEditsReachTheFlatGames(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	srv.SetEditBatchWindow(time.Millisecond)
 	db := srv.Eng().DB

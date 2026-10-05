@@ -32,6 +32,7 @@ import (
 )
 
 func TestDefaultMatchScores(t *testing.T) {
+	t.Parallel()
 	state := dopeserver.DefaultMatch()
 	view := store.BuildView(state)
 
@@ -65,6 +66,7 @@ func TestDefaultMatchScores(t *testing.T) {
 }
 
 func TestShootoutScoresDoNotAffectBattleStats(t *testing.T) {
+	t.Parallel()
 	state := store.MatchState{
 		Participants: []store.ParticipantState{
 			{
@@ -98,6 +100,7 @@ func TestShootoutScoresDoNotAffectBattleStats(t *testing.T) {
 }
 
 func TestShootoutThemeActions(t *testing.T) {
+	// Serial: the DB-less demo path saves match_state.json in the working directory.
 	t.Chdir(t.TempDir())
 	srv := dopeserver.NewTestServer(func(e *core.Engine) {
 		e.State = dopeserver.DefaultMatch()
@@ -140,6 +143,7 @@ func TestShootoutThemeActions(t *testing.T) {
 }
 
 func TestManualStandingsAllowsSplitPlace(t *testing.T) {
+	t.Parallel()
 	state := dopeserver.DefaultMatch()
 	state.Participants[0].Place = 3.5
 	state.Participants[1].Place = 2
@@ -156,6 +160,7 @@ func TestManualStandingsAllowsSplitPlace(t *testing.T) {
 }
 
 func TestFinishedMatchRejectsEditsButCanBeReopened(t *testing.T) {
+	// Serial: the DB-less demo path saves match_state.json in the working directory.
 	t.Chdir(t.TempDir())
 	srv := dopeserver.NewTestServer(func(e *core.Engine) {
 		e.State = dopeserver.DefaultMatch()
@@ -182,6 +187,7 @@ func TestFinishedMatchRejectsEditsButCanBeReopened(t *testing.T) {
 }
 
 func TestNormalizeMark(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"q":     "right",
 		"Й":     "right",
@@ -203,8 +209,8 @@ func TestNormalizeMark(t *testing.T) {
 }
 
 func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
-	t.Chdir(t.TempDir())
-	db, err := dopeserver.OpenFestDB("test.db")
+	t.Parallel()
+	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -254,8 +260,8 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 }
 
 func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
-	t.Chdir(t.TempDir())
-	db, err := dopeserver.OpenFestDB("test.db")
+	t.Parallel()
+	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -322,6 +328,7 @@ func insertTestPlayer(db *sql.DB, festID int64) (int64, error) {
 // and each бой its буква, so the pasted bracket ranks and links like a
 // compiled one.
 func TestImportMultiStageScheme(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
@@ -415,6 +422,7 @@ func importScheme(t *testing.T, srv *dopeserver.Server, festID int64, scheme sto
 }
 
 func TestEmptyDatabaseHasNoFest(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -441,6 +449,7 @@ func TestEmptyDatabaseHasNoFest(t *testing.T) {
 }
 
 func TestLegacyFestSchemaMigration(t *testing.T) {
+	t.Parallel()
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "legacy.db"))
 	if err != nil {
 		t.Fatalf("open legacy db: %v", err)
@@ -515,6 +524,7 @@ values(7, 'next', 'Next', 'ek', 2, '{}', '{}', 'pending', 'fest', 'fest', 1, 'no
 }
 
 func TestImportRejectsTeamSlot(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
@@ -545,6 +555,7 @@ func TestImportRejectsTeamSlot(t *testing.T) {
 }
 
 func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -679,6 +690,7 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 }
 
 func TestImportFestRosterNoOpWhenUnchanged(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -758,6 +770,7 @@ func TestImportFestRosterNoOpWhenUnchanged(t *testing.T) {
 }
 
 func TestImportFestRosterIncrementalKeepsPlayerIDsStable(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -898,6 +911,7 @@ func festTeamID(t *testing.T, db *sql.DB, festID, rating int64) (int64, bool) {
 }
 
 func TestImportFestRosterPreservesPlayerTeamOverrides(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -965,6 +979,7 @@ where o.fest_id = ? and o.game_id = ?`, festID, ksiGameID).Scan(&count, &restore
 // it, saving one moves the player into the game's own roster, and a rating
 // re-import keeps both.
 func TestPlayerOverrideCoversES(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1057,6 +1072,7 @@ where gtp.game_id = ? and pl.last_name = 'Сидорова'`, esGameID).Scan(&so
 }
 
 func TestHostPlayerOverrideRowsGroupGames(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1161,6 +1177,7 @@ values(?, ?, ?, ?, ?, ?, ?)`,
 }
 
 func TestFestNumbersFlow(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1268,6 +1285,7 @@ func TestFestNumbersFlow(t *testing.T) {
 }
 
 func TestHostFestNumbersPage(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, chgkGameID, _ := createRosterPropagationFixture(t, srv.Eng().DB)
 	organizerID, token := createAPITestSession(t, srv, "numbers-host")
@@ -1416,6 +1434,7 @@ func TestHostFestNumbersPage(t *testing.T) {
 }
 
 func TestFestNumbersRemapEntries(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1513,6 +1532,7 @@ where game_id = ? and code = 'main'`, string(entriesJSON), string(shootoutRounds
 // The reassignment must update KSI participant numbers and carry each team's
 // answers along by name (since the number itself changed).
 func TestFestNumbersPropagateToKSI(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1593,6 +1613,7 @@ func itoa(v int64) string { return strconv.FormatInt(v, 10) }
 // out of circulation (no automatic renumbering) so already-printed answer
 // sheets still point at the right team.
 func TestFestNumbersStableAcrossResync(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1729,6 +1750,7 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 // one), deterministically by alphabetical order, and that a later import keeps
 // existing numbers and continues past the largest one for new teams.
 func TestFestNumbersFreshImport(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1795,6 +1817,7 @@ func checkFestTeamNumber(t *testing.T, db *sql.DB, festID, ratingID, want int64)
 // unnumbered team gets a fresh number past the largest ever seen (soft-deleted
 // rows counted), in (position, id) order, leaving already-numbered teams alone.
 func TestBackfillFestTeamNumbers(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1843,6 +1866,7 @@ func TestBackfillFestTeamNumbers(t *testing.T) {
 }
 
 func TestAuthCodeHelpers(t *testing.T) {
+	t.Parallel()
 	a, err := dopeserver.NewInviteCode()
 	if err != nil {
 		t.Fatalf("invite code: %v", err)
@@ -1867,6 +1891,7 @@ func TestAuthCodeHelpers(t *testing.T) {
 }
 
 func TestVersionAssetRefs(t *testing.T) {
+	t.Parallel()
 	s := dopeserver.NewTestServer(func(e *core.Engine) {
 		e.AssetETags = map[string]string{
 			"/static/host.js":    `"abc123"`,
@@ -1906,6 +1931,7 @@ func TestVersionAssetRefs(t *testing.T) {
 }
 
 func TestServeStaticPageVersionsAndNoCache(t *testing.T) {
+	t.Parallel()
 	html := `<!doctype html><link rel="stylesheet" href="/static/styles.css">` +
 		`<script defer src="/static/login.js"></script>`
 	src := fstest.MapFS{"static/login.html": &fstest.MapFile{Data: []byte(html)}}

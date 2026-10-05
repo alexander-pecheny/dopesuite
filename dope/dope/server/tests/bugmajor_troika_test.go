@@ -17,6 +17,7 @@ import (
 // by the server as the бои finish — and the six who reach three wins meet
 // 1–6, 2–5, 3–4 in the play-off, whose winners sit down to a final of three.
 func TestBugMajorTroikaPlaysThrough(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))

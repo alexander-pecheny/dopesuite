@@ -14,6 +14,7 @@ import (
 // one bout or on its whole wave, the bouts of one block, round and wave, and
 // the bout's views carry it. A bout without one carries nothing.
 func TestBoutStartTimeOnABoutAndOnItsWave(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	db := srv.Eng().DB
 	token := createTestSession(t, srv, systemUserID(t, db))

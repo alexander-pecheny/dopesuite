@@ -26,6 +26,7 @@ func drainOne(t *testing.T, ch chan realtime.Event) realtime.Envelope {
 }
 
 func TestMergeOpsArrays(t *testing.T) {
+	t.Parallel()
 	a := []byte(`[{"op":"set","path":["a"],"value":1}]`)
 	b := []byte(`[{"op":"set","path":["b"],"value":2},{"op":"set","path":["a"],"value":3}]`)
 	got := realtime.MergeOpsArrays([][]byte{a, b})
@@ -46,6 +47,7 @@ func TestMergeOpsArrays(t *testing.T) {
 // delta per window. Seqs are per-edit (not collapsed), and the merged viewer
 // delta spans [prevSeq, lastSeq].
 func TestBroadcastStateDeltaCoalescesForViewersImmediateForEditors(t *testing.T) {
+	t.Parallel()
 	srv := dopeserver.NewTestServer(func(e *core.Engine) {
 		e.RT = realtime.NewManager()
 	})
@@ -100,6 +102,7 @@ func TestBroadcastStateDeltaCoalescesForViewersImmediateForEditors(t *testing.T)
 // next seq, so viewers never receive the snapshot ahead of the deltas it
 // supersedes.
 func TestBroadcastStateFlushesBufferedDeltasFirst(t *testing.T) {
+	t.Parallel()
 	srv := dopeserver.NewTestServer(func(e *core.Engine) {
 		e.RT = realtime.NewManager()
 	})

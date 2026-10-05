@@ -20,6 +20,7 @@ import (
 // fest roster never learns of them, so ОД never seats them, and a rating
 // re-import or a clear of the game leaves them where they were.
 func TestMultiGuestTeams(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

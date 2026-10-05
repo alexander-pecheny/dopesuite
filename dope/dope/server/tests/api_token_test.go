@@ -77,6 +77,7 @@ func wantStatus(t *testing.T, resp *httptest.ResponseRecorder, code int, what st
 // An agent with a token builds a fest from nothing through the API alone:
 // the fest, its settings, a game and its settings, access, and the history.
 func TestAPITokenBuildsAFest(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	_, cookie := createAPITestSession(t, srv, "organizer")
 	createAPITestSession(t, srv, "helper")
@@ -181,6 +182,7 @@ func TestAPITokenBuildsAFest(t *testing.T) {
 
 // The host API keeps the host pages' roles: a host may not manage the fest.
 func TestAPITokenKeepsRoles(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	hostID, hostCookie := createAPITestSession(t, srv, "host")
@@ -199,6 +201,7 @@ func TestAPITokenKeepsRoles(t *testing.T) {
 // A token is the user except for the kill switch: it cannot change the
 // password, and changing the password revokes every token.
 func TestAPITokenLifecycle(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	_, cookie := createAPITestSession(t, srv, "owner")
 	token := mintToken(t, srv, cookie)
@@ -235,6 +238,7 @@ func TestAPITokenLifecycle(t *testing.T) {
 
 // The roster pages' forms, through the API: numbers, Flags and troikas.
 func TestAPITokenRoster(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	_, cookie := createAPITestSession(t, srv, "owner")
 	token := mintToken(t, srv, cookie)

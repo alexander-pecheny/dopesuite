@@ -7,6 +7,7 @@ import (
 )
 
 func TestArchiveFestJournal(t *testing.T) {
+	t.Parallel()
 	db := openMemDB(t)
 	ctx := context.Background()
 	mustExec(t, db, `create table journal(

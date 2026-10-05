@@ -25,6 +25,7 @@ func openMemDB(t *testing.T) *sql.DB {
 // TestReplayRowOps applies a hand-built forward history (insert/update/delete)
 // to a table and verifies the resulting rows.
 func TestReplayRowOps(t *testing.T) {
+	t.Parallel()
 	db := openMemDB(t)
 	ctx := context.Background()
 	if _, err := db.Exec(`create table t(id integer primary key, name text, score integer)`); err != nil {
@@ -72,6 +73,7 @@ func TestReplayRowOps(t *testing.T) {
 // convert it to journal segments, then replay those segments into a fresh table
 // and assert the reconstructed state matches the expected final state.
 func TestConvertThenReplay(t *testing.T) {
+	t.Parallel()
 	db := openMemDB(t)
 	ctx := context.Background()
 	mustExec(t, db, `create table widgets(id integer primary key, fest_id integer, label text, val integer)`)
@@ -181,6 +183,7 @@ func mustExec(t *testing.T, db *sql.DB, q string, args ...any) {
 // that still has audit_log. It converts the log and verifies every journal
 // record losslessly reproduces the forward content of its audit_log row.
 func TestConvertReplayEquivalenceRealDB(t *testing.T) {
+	t.Parallel()
 	path := os.Getenv("DOPE_JOURNAL_TEST_DB")
 	if path == "" {
 		t.Skip("set DOPE_JOURNAL_TEST_DB to a fest DB copy to run the real-data canary")

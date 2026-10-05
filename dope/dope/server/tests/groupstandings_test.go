@@ -13,6 +13,7 @@ import (
 // The standings are already computed and already stored — stage_standings, the
 // same table a пересев reads. Only the view never carried them.
 func TestGroupStageCarriesItsStandings(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -70,6 +71,7 @@ func TestGroupStageCarriesItsStandings(t *testing.T) {
 // final twelve, and padding them all to twelve drew empty columns nobody could
 // fill and hid the шапка the sheet prints.
 func TestThemeCountFollowsTheStage(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

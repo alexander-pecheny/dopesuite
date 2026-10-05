@@ -18,6 +18,7 @@ import (
 // stage_standings as the document changes, and the fest view carries the
 // table — ОД by взятые and rating, a КСИ team that declined ranked last.
 func TestFlatGameRanksAsItIsPlayed(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -103,6 +104,7 @@ func createGameThroughForm(t *testing.T, srv *dopeserver.Server, festID int64, t
 // A seed source is a Game's table: [init] sorting re-orders it by any Metric
 // the source's Protocol declares, and a Game of several tables is refused.
 func TestSeedSourceIsAGamesTable(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -170,6 +172,7 @@ func TestSeedSourceIsAGamesTable(t *testing.T) {
 // not have). Each section's editor has its own name, and the type picked says
 // which one is the scheme.
 func TestCreateIgnoresTheOtherFormatsSchemeEditors(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

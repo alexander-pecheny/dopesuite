@@ -122,6 +122,7 @@ func matchRosterOf(t *testing.T, srv *dopeserver.Server, festID, gameID int64, c
 // re-import leaves the hand roster alone; and the fest roster comes back on
 // request.
 func TestGameRosterKeptByHand(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -246,6 +247,7 @@ func TestGameRosterKeptByHand(t *testing.T) {
 // rating re-import leaves the hand roster alone, and giving the team back its
 // roster lets the override apply again.
 func TestGameRosterBeatsOverrides(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -384,6 +386,7 @@ values(?, 'ek', 'ЭК', 'ek', 3, '{}', '{}', 'pending', 'fest', 'fest', 1, ?, ?)
 // buzzer format: брейн records the name that buzzed, Хамса the id that sat a
 // theme.
 func TestGameRosterLocksPlayedPlayers(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

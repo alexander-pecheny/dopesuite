@@ -19,6 +19,7 @@ import (
 //	E2E_DB=/path/to/copy.db E2E_FEST=6 E2E_GAME=8 E2E_MATCH=H \
 //	  go test ./dope -run TestE2EUntickEditRetickRealDB -v
 func TestE2EUntickEditRetickRealDB(t *testing.T) {
+	t.Parallel()
 	path := os.Getenv("E2E_DB")
 	if path == "" {
 		t.Skip("set E2E_DB to a real-DB copy to run this end-to-end check")

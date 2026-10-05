@@ -14,6 +14,7 @@ var pageBundle = regexp.MustCompile(`dist/([a-z]+)\.js`)
 // snapshot serve the same bundle. Личная СИ borrows ЭК's page for its bracket,
 // and lockdown used to hand it КСИ's blank instead.
 func TestLockdownServesTheLivePage(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

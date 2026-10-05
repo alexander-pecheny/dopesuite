@@ -47,6 +47,7 @@ insert into towns values (2046, 'Базель', 48), (1044, 'Севастопо�
 // is looked up in buff by name. A city neither knows is simply absent, and the
 // page falls back to the list it carries itself.
 func TestGamePageCarriesTheCountryOfEachCity(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -94,6 +95,7 @@ insert into fest_teams(fest_id, name, city, country, position, number) values(?,
 
 // Without a mirror the page still renders; it just carries no countries.
 func TestGamePageWithoutAMirror(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

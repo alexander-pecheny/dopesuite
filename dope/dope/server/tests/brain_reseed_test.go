@@ -16,6 +16,7 @@ import (
 // host presses «Пересев», ranks follow the declared points_share/taken_share
 // order, and the next block's seats fill from the ranks.
 func TestBrainReseedFlow(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))

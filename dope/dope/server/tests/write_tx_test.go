@@ -11,6 +11,7 @@ import (
 // a nil return and rolls back (preserving the prior state) on an error, and that
 // the error is returned verbatim so callers can still match sentinels.
 func TestWithWriteTxCommitAndRollback(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	ctx := context.Background()

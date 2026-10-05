@@ -16,6 +16,7 @@ import (
 // had seated the whole rating roster. Rating players are offered as
 // "fp<id>" now, and creating the Game mints them, in the order ticked.
 func TestIndividualGamePicksRatingPlayers(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))

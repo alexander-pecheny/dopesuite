@@ -29,6 +29,7 @@ func (c *countingQueryer) QueryRowContext(ctx context.Context, q string, args ..
 // the Сетка and the export read every one, and the pool is shared with the
 // write path.
 func TestGameMatchesLoadInFourQueries(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

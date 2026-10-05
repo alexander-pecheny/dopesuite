@@ -18,6 +18,7 @@ import (
 // those, is refused on the rest (and watches them as a viewer), and cannot
 // change the limits. A host no admin limited runs every Game, as before.
 func TestAdminLimitsAHostToSomeGames(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -132,6 +133,7 @@ func TestAdminLimitsAHostToSomeGames(t *testing.T) {
 // change carrying games limits the host to them (by id, code or slug), games
 // alone need no role, an empty list lifts the limit, and only a host takes one.
 func TestAccessAPISetsAHostsGames(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -191,6 +193,7 @@ func TestAccessAPISetsAHostsGames(t *testing.T) {
 // to one keeps the limit on the Game that comes back under the same slug,
 // rather than silently running every Game.
 func TestSchemeImportKeepsAHostsGames(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

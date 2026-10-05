@@ -69,7 +69,7 @@ func loginStatus(t *testing.T, srv *dopeserver.Server, username, password string
 }
 
 func TestPasswordResetLinkSetsANewPasswordOnce(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	adminCookie := makeUserWithSession(t, srv, "pecheny")
 	userID := seedPasswordUser(t, srv, "anton", "forgotten-password")
@@ -125,7 +125,7 @@ func TestPasswordResetLinkSetsANewPasswordOnce(t *testing.T) {
 }
 
 func TestPasswordResetNewLinkRetiresTheOldOne(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	adminCookie := makeUserWithSession(t, srv, "pecheny")
 	seedPasswordUser(t, srv, "anton", "forgotten-password")
@@ -140,7 +140,7 @@ func TestPasswordResetNewLinkRetiresTheOldOne(t *testing.T) {
 }
 
 func TestPasswordResetExpiredLinkDoesNotWork(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	adminCookie := makeUserWithSession(t, srv, "pecheny")
 	seedPasswordUser(t, srv, "anton", "forgotten-password")
@@ -158,7 +158,7 @@ func TestPasswordResetExpiredLinkDoesNotWork(t *testing.T) {
 }
 
 func TestPasswordResetIsAdminOnly(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	cookie := makeUserWithSession(t, srv, "someone")
 	seedPasswordUser(t, srv, "anton", "forgotten-password")
@@ -174,7 +174,7 @@ func TestPasswordResetIsAdminOnly(t *testing.T) {
 }
 
 func TestPasswordResetUnknownUser(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	adminCookie := makeUserWithSession(t, srv, "pecheny")
 	resp := httptest.NewRecorder()
@@ -185,6 +185,7 @@ func TestPasswordResetUnknownUser(t *testing.T) {
 }
 
 func TestPasswordLoginIgnoresCase(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	seedPasswordUser(t, srv, "anton", "s3cretpassword")
 	if got := loginStatus(t, srv, "Anton", "s3cretpassword"); got != http.StatusOK {
@@ -199,7 +200,7 @@ insert into users(username, is_system, created_at, updated_at) values('ANTON', 0
 }
 
 func TestSiteAdminReadsAndEditsAPrivateFestWithoutARole(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	if _, err := srv.Eng().DB.Exec(`update fests set is_public = 0 where id = ?`, festID); err != nil {

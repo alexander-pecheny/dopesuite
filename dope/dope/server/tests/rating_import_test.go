@@ -25,6 +25,7 @@ type ksiTestState struct {
 func parts(specs ...games.KSIParticipant) []games.KSIParticipant { return specs }
 
 func TestRemapAnswerMatrixFollowsTeams(t *testing.T) {
+	t.Parallel()
 	old := [][]string{
 		{"", "", "", "", ""},  // A (#1)
 		{"", "x", "", "", ""}, // B (#2)
@@ -54,6 +55,7 @@ func TestRemapAnswerMatrixFollowsTeams(t *testing.T) {
 // name-keyed remap could not handle: two teams share a name but have distinct
 // numbers, and a reorder must keep each team's scores attached by number.
 func TestRemapAnswerMatrixDistinguishesDuplicateNamesByNumber(t *testing.T) {
+	t.Parallel()
 	old := [][]string{
 		{"a", "", "", "", ""}, // #7 "Дубль"
 		{"b", "", "", "", ""}, // #8 "Дубль"
@@ -74,6 +76,7 @@ func TestRemapAnswerMatrixDistinguishesDuplicateNamesByNumber(t *testing.T) {
 // existed (participants have names, no number) still remaps by name onto the new
 // numbered roster for that one transition.
 func TestRemapAnswerMatrixLegacyNameFallback(t *testing.T) {
+	t.Parallel()
 	old := [][]string{
 		{"x", "", "", "", ""}, // "A", no number (legacy)
 		{"y", "", "", "", ""}, // "B", no number (legacy)
@@ -90,6 +93,7 @@ func TestRemapAnswerMatrixLegacyNameFallback(t *testing.T) {
 }
 
 func TestRemapAnswerMatrixLegacyNoParticipantsResizesPositionally(t *testing.T) {
+	t.Parallel()
 	old := [][]string{{"a"}, {"b"}}
 	out := games.RemapAnswerMatrix(old, nil, parts(games.KSIParticipant{Number: 0, Name: "X"}, games.KSIParticipant{Number: 0, Name: "Y"}, games.KSIParticipant{Number: 0, Name: "Z"}), 2)
 	if len(out) != 3 || out[0][0] != "a" || out[1][0] != "b" || out[2][0] != "" {
@@ -102,6 +106,7 @@ func TestRemapAnswerMatrixLegacyNoParticipantsResizesPositionally(t *testing.T) 
 // one team and adds another shifts the alphabetical positions of the survivors,
 // so their scores must follow them by identity instead of staying at a fixed row.
 func TestImportRatingRosterRemapsKSIScoresByTeam(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -202,6 +207,7 @@ func nameIndex(participants []games.KSIParticipant) map[string]int {
 // fresh number, and the results entered under the old number vanished. The
 // import must stop and ask instead, and the two answers must do what they say.
 func TestImportRatingRosterStopsOnTeamWithResults(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -268,6 +274,7 @@ func TestImportRatingRosterStopsOnTeamWithResults(t *testing.T) {
 // TestImportRatingRosterDropsWhenTheHostSaysSo: the other answer. A team that
 // really withdrew goes, results and all, once the host has said as much.
 func TestImportRatingRosterDropsWhenTheHostSaysSo(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -304,6 +311,7 @@ func TestImportRatingRosterDropsWhenTheHostSaysSo(t *testing.T) {
 // TestImportRatingRosterAsksNothingAboutAnEmptyTeam: a team that leaves with
 // nothing entered against it is not worth a question, and goes as it always did.
 func TestImportRatingRosterAsksNothingAboutAnEmptyTeam(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -367,6 +375,7 @@ func festTeamByRatingID(t *testing.T, db *sql.DB, festID, ratingID int64) (int64
 // changed is a change: the import's "unchanged → no-op" short-circuit must not
 // swallow it, or the pages would keep offering yesterday's Divisions.
 func TestImportRatingRosterPropagatesFlags(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

@@ -17,6 +17,7 @@ import (
 // row trigger stays silent about state_json. Reverting past the edit replays
 // the patch and restores the pre-edit blob.
 func TestMatchEditJournalsAsMatchPatch(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

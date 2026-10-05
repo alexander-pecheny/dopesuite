@@ -10,6 +10,7 @@ import (
 // a game whose fest has any active unnumbered team cannot be edited (409), and
 // editing is allowed again once every team is numbered.
 func TestScopedGameStateRejectsUnnumberedTeams(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "guard-patcher")

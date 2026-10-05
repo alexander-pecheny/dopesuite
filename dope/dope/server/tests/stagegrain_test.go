@@ -65,6 +65,7 @@ where s.game_id = ? and s.code = ? order by m.position`, gameID, out[i].code)
 // Личная СИ's групповой этап: six Groups of one Block, each playing four круги
 // at its own стол. The Group is on the stage, the круг is on the бой.
 func TestStageGrainOfGroups(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	seedFestPlayers(t, srv.Eng().DB, festID, 18)
@@ -109,6 +110,7 @@ func TestStageGrainOfGroups(t *testing.T) {
 // ЭК's 1/16 финала on six столов is twelve бои in two заходов — two stage rows
 // of the same Block and the same Round.
 func TestStageGrainOfWaves(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	seedFestTeams(t, srv.Eng().DB, festID, 16)
@@ -147,6 +149,7 @@ func TestStageGrainOfWaves(t *testing.T) {
 // The update branch used to leave the grain untouched, so a game could never be
 // repaired and a moved бой kept a stale круг.
 func TestRecompileRefreshesGrain(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

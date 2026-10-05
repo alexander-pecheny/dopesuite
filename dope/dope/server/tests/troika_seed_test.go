@@ -101,6 +101,7 @@ func assertFestTeamsUntouched(t *testing.T, srv *dopeserver.Server, festID int64
 // the rating teams only, so no troika was ever found. The troika «По коням»
 // shares its name with a rating team and must still seat the troika.
 func TestTroikaSeedFromXLSXNamesTroikas(t *testing.T) {
+	t.Parallel()
 	srv, festID, token, createGame := troikaSeedFest(t)
 	dsl := "[init]\nseed: xlsx\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\n"
 	gameID := createGame(url.Values{"game_type": {"troika"}, "troika_dsl": {dsl}})
@@ -158,6 +159,7 @@ where m.game_id = ? and ms.participant_id is not null`, gameID).Scan(&seated); e
 // seed: random for a Троечка draws its lot over the troikas, not over the
 // rating teams it used to.
 func TestTroikaRandomSeedDrawsTroikas(t *testing.T) {
+	t.Parallel()
 	srv, festID, token, createGame := troikaSeedFest(t)
 	dsl := "[init]\nseed: random\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\n"
 	gameID := createGame(url.Values{"game_type": {"troika"}, "troika_dsl": {dsl}})
@@ -181,6 +183,7 @@ where m.game_id = ? and p.assembled = 0`, gameID).Scan(&notTroika); err != nil {
 // candidates carried the troika's number inside this Game, and the import read
 // that as a fest number: troika №1 found rating team №1 and renamed it.
 func TestTroikaPlayersSeedLeavesFestTeamsAlone(t *testing.T) {
+	t.Parallel()
 	srv, festID, token, createGame := troikaSeedFest(t)
 	db := srv.Eng().DB
 	// Rosters: two players per rating team, the same people the troikas name.
@@ -258,6 +261,7 @@ where m.game_id = ? and p.assembled = 0`, gameID).Scan(&notTroika); err != nil {
 // here — a team Game made it — and adding the troika used to be refused. A
 // team Game's seed import that names «По коням» must still seat the team.
 func TestTroikaMayShareARatingTeamsName(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
@@ -317,6 +321,7 @@ where m.game_id = ? and p.assembled = 1`, brainID).Scan(&troikaSeats)
 // listed first on the tie — was 1 and Берёза 2 whatever the order of
 // applications.
 func TestTroikaPlayersSeedSharesTiedPlaces(t *testing.T) {
+	t.Parallel()
 	srv, festID, token, createGame := troikaSeedFest(t)
 	db := srv.Eng().DB
 	people := map[string][2]string{
@@ -381,6 +386,7 @@ func TestTroikaPlayersSeedSharesTiedPlaces(t *testing.T) {
 // has no places to add up. The seed used to stop there («у команды … нет
 // состава»); it now seeds such a troika last and names it.
 func TestTroikaPlayersSeedPutsUnknownPeopleLast(t *testing.T) {
+	t.Parallel()
 	srv, festID, token, createGame := troikaSeedFest(t)
 	db := srv.Eng().DB
 	people := map[string][2]string{
@@ -458,6 +464,7 @@ func TestTroikaPlayersSeedPutsUnknownPeopleLast(t *testing.T) {
 // taken from the troikas follows that order, and two troikas equal on every
 // metric seed by it.
 func TestTroikaApplicationOrderBreaksTheLastTie(t *testing.T) {
+	t.Parallel()
 	srv, festID, token, createGame := troikaSeedFest(t)
 	db := srv.Eng().DB
 	people := map[string][]string{
@@ -588,6 +595,7 @@ func TestTroikaApplicationOrderBreaksTheLastTie(t *testing.T) {
 // whatever has been played since. tours.<game> keeps a source ОД to those
 // tours: its places are the table after them alone.
 func TestTroikaPlayersSeedReadsTheOdAfterSomeTours(t *testing.T) {
+	t.Parallel()
 	srv, festID, token, createGame := troikaSeedFest(t)
 	db := srv.Eng().DB
 	people := map[string][2]string{

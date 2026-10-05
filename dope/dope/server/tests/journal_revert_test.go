@@ -17,6 +17,7 @@ import (
 // checkpoint+replay reproduces exactly the state the game had at that point.
 // This is the per-game derived-revert correctness canary.
 func TestDerivedRevertReproducesGameState(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

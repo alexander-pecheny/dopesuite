@@ -28,7 +28,7 @@ values(null, null, ?, 0, ?, ?)`, username, now, now)
 }
 
 func TestAdminCreateUsersHappyPath(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	cookie := makeUserWithSession(t, srv, "pecheny")
 
@@ -79,7 +79,7 @@ func TestAdminCreateUsersHappyPath(t *testing.T) {
 }
 
 func TestAdminCreateUsersSkipsExisting(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	cookie := makeUserWithSession(t, srv, "pecheny")
 	// Pre-create "ivanov".
@@ -119,7 +119,7 @@ values(null, null, 'ivanov', 0, ?, ?)`, now, now); err != nil {
 // TestAdminUsersPage checks the account list shows a session-holder's last
 // login and dashes the account that has never logged in.
 func TestAdminUsersPage(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	cookie := makeUserWithSession(t, srv, "pecheny")
 
@@ -161,7 +161,7 @@ values(null, 'ivanov_tg', 'ivanov', 0, ?, ?)`, now, now); err != nil {
 }
 
 func TestAdminPagesRejectNonAdmin(t *testing.T) {
-	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	t.Parallel()
 	srv := newAuthTestServer(t)
 
 	// Logged out → redirect to /login.

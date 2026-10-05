@@ -15,6 +15,7 @@ import (
 // rank refs fill downstream slots only once every bout of the stage is
 // finished — provisional group order must not leak into the playoff.
 func TestKindStageStandingsAndRankResolution(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

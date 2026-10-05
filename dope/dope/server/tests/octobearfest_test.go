@@ -30,6 +30,7 @@ import (
 // writes are synthesized (see playTroika) and the Статистика tab — the one
 // thing that reads кресла — has no oracle here.
 func TestTroikaOctobearfestReplay(t *testing.T) {
+	t.Parallel()
 	script, err := replay.Parse(readFile(t, "../../../testdata/octobearfest2025/troika.transcript"))
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +67,7 @@ func TestTroikaOctobearfestReplay(t *testing.T) {
 // The bug this pins shipped once: the route hardcoded static/ek.html for every
 // InitEK format and ignored what the Definition said its page was.
 func TestBracketGamesAreServedTheirOwnPage(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	db := srv.Eng().DB
 	festID := newFest(t, db, "pages", "Страницы", systemUserID(t, db))

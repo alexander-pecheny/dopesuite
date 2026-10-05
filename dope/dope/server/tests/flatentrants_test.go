@@ -15,6 +15,7 @@ import (
 // and #13 here, and who did not play is marked in «Отказы». The creation form
 // offers a Game its own состав only for the formats described by a scheme.
 func TestFlatFormatSeatsTheWholeRoster(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -45,6 +46,7 @@ func TestFlatFormatSeatsTheWholeRoster(t *testing.T) {
 // A flat format has no way to seat a chosen few, so a chosen list is refused by
 // name rather than dropped on the floor.
 func TestFlatFormatRefusesAChosenEntrantList(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -76,6 +78,7 @@ func TestFlatFormatRefusesAChosenEntrantList(t *testing.T) {
 // The formats described by a scheme keep the picker: that is what lets one фест
 // hold an ЭК of 48 and a брейн of a different 48 (ADR-0009).
 func TestSchemeFormatsKeepTheEntrantPicker(t *testing.T) {
+	t.Parallel()
 	for _, gameType := range []string{games.Brain, games.SI, games.Troika, games.Hamsa, games.EK, games.ES} {
 		if !hostpages.SeatsChosenEntrants(gameType) {
 			t.Fatalf("%s потерял выбор состава", gameType)

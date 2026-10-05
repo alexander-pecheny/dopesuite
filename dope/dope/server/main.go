@@ -92,6 +92,12 @@ type server struct {
 	// telegram instead of a modal that would wait forever.
 	botPolling atomic.Bool
 
+	// envOverride shadows the process environment for this server alone.
+	// Only the test seam (SetEnv) sets it, so tests that need a bot token, or
+	// none, can run in parallel instead of each changing the process's env.
+	// Production leaves it nil and reads os.Getenv.
+	envOverride map[string]string
+
 	// apiTable is the /api/fest route table (routes_api.go), built on first use;
 	// hostPages holds the /host table the same way.
 	apiTable      *route.Table

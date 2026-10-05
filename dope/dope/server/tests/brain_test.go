@@ -19,6 +19,7 @@ import (
 // slots seated; a per-бой PATCH lands in the raw protocol state; finishing the
 // бой scores it into match_results and the rr stage into stage_standings.
 func TestBrainGroupCreateEditFinish(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))

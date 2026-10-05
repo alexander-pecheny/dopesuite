@@ -17,6 +17,7 @@ import (
 )
 
 func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -75,6 +76,7 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 }
 
 func TestSeedImportFromKSIPropagatesDeclines(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -139,6 +141,7 @@ func seedImportRowByName(view imports.SeedImportView, name string) (imports.Seed
 }
 
 func TestSeedLabelsShownBeforeImport(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -164,6 +167,7 @@ func TestSeedLabelsShownBeforeImport(t *testing.T) {
 }
 
 func TestFinishAssignsPlaces(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

@@ -3,7 +3,6 @@ package dopeserver
 import (
 	"context"
 	"log"
-	"os"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -31,7 +30,7 @@ var botTexts = tgbot.Texts{
 // claim on it. It never fails the boot: a fest runs fine with no way in by
 // telegram, and a login that silently goes to another process is worse.
 func (s *server) startBot(ctx context.Context) {
-	token := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
+	token := strings.TrimSpace(s.getenv("TELEGRAM_BOT_TOKEN"))
 	if token == "" {
 		return
 	}

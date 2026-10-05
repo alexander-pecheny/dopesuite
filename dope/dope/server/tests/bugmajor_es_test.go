@@ -22,6 +22,7 @@ func bugMajorESDSL(t *testing.T, odCode string) string {
 // ranked by the stage score over both, and the best eight sent to two
 // semifinals 1-4-5-8 and 2-3-6-7.
 func TestBugMajorESPlaysThrough(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -204,6 +205,7 @@ type esSeedView struct {
 // reads, and each зачёт's Game takes only its own teams: the student Game the
 // teams carrying Студ, the adult Game (division: -Студ) the rest.
 func TestBugMajorESSeedKeepsToItsDivision(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

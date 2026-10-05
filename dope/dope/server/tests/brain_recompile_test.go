@@ -15,6 +15,7 @@ import (
 // pristine бої (new empty state) but leaves a бой with entered marks intact,
 // and a structural edit that would delete that бой is refused, naming it.
 func TestBrainRecompileGuard(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))

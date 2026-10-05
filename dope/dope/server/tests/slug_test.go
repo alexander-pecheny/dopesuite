@@ -12,6 +12,7 @@ import (
 )
 
 func TestValidateSlug(t *testing.T) {
+	t.Parallel()
 	ok := []string{"a", "abc", "a-b", "fest-2026", "team-1", "x9", "9x", "123-abc", "a1b2"}
 	for _, s := range ok {
 		if err := util.ValidateSlug(s); err != nil {
@@ -43,6 +44,7 @@ func TestValidateSlug(t *testing.T) {
 }
 
 func TestResolveFestAndGameSlug(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 
@@ -73,6 +75,7 @@ func TestResolveFestAndGameSlug(t *testing.T) {
 }
 
 func TestScopedAPIAcceptsSlugRefs(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	if _, err := srv.Eng().DB.Exec(`update fests set slug = 'my-fest' where id = ?`, festID); err != nil {
@@ -91,6 +94,7 @@ func TestScopedAPIAcceptsSlugRefs(t *testing.T) {
 }
 
 func TestPublicFestRouterAcceptsSlug(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	if _, err := srv.Eng().DB.Exec(`update fests set slug = 'my-fest', is_public = 1 where id = ?`, festID); err != nil {

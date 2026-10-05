@@ -18,6 +18,7 @@ import (
 // download gunzips to a self-contained EK archive carrying the game's current
 // relational state plus the edit history of an audited cell update.
 func TestScopedGameArchive(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	path := fmt.Sprintf("/api/fest/%d/games/%d/export.json.gz", festID, gameID)

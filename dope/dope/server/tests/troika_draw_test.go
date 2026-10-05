@@ -18,6 +18,7 @@ import (
 // out, then offering every group's first (or second) place, and refusing a
 // runner-up drawn against its own group's winner.
 func TestTroikaPlayOffIsDrawnApartByGroup(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	srv.SetEditBatchWindow(time.Millisecond)
 	db := srv.Eng().DB

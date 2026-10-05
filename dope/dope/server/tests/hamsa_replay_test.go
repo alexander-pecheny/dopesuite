@@ -23,6 +23,7 @@ import (
 // one Game rather than a chain of them, so the roster order here is the seed
 // the отбор produced.
 func TestHamsaReplay(t *testing.T) {
+	t.Parallel()
 	script, err := replay.Parse(readFile(t, "../../../testdata/hamsa2026/hamsa.transcript"))
 	if err != nil {
 		t.Fatal(err)
@@ -59,6 +60,7 @@ func TestHamsaReplay(t *testing.T) {
 // The same day over HTTP: the handlers, the authorisation and the write path,
 // including the draw endpoint a host presses between the two Игры.
 func TestHamsaReplayOverHTTP(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("heavy: the HTTP Хамса replay runs without -short (just test-full)")
 	}

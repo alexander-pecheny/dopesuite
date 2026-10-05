@@ -56,6 +56,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 // очки come from the block's scoring rule rather than from a win/draw/loss
 // triple that a бой of three has no room for.
 func TestMultiSeatGroupPlaysAndRanks(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
@@ -121,6 +122,7 @@ where m.code = ? and m.game_id = ? order by place`, code, gameID)
 // every round, and a Participant is out on its first Loss — which here means
 // finishing third or fourth.
 func TestMultiSeatEliminationAdvancesTwo(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	seedFestPlayers(t, srv.Eng().DB, festID, 16)

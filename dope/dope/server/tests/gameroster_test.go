@@ -22,6 +22,7 @@ import (
 // who plays a Game, under which number, is the Game's own knowledge (ADR-0009),
 // and until it was one фест per Game — which split a championship into three.
 func TestGameSeatsItsOwnEntrants(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -56,6 +57,7 @@ func TestGameSeatsItsOwnEntrants(t *testing.T) {
 
 // A Game created without a selection seats the whole фест, as it always has.
 func TestGameWithoutSelectionSeatsTheFest(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -161,6 +163,7 @@ select number from game_participants where game_id = ? and participant_id = ?`, 
 // carry its own entrant list this needed three фесты, which is what ADR-0009 was
 // written about.
 func TestStudchrGamesShareOneFest(t *testing.T) {
+	t.Parallel()
 	ek := transcriptRoster(t, "ek")
 	brain := transcriptRoster(t, "brain")
 	if len(ek) != 48 || len(brain) != 48 {
@@ -262,6 +265,7 @@ func union(lists ...[]string) []string {
 // would recompile a game of four against a roster of six and refuse the scheme
 // it was created from.
 func TestRecompileKeepsGameEntrants(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -291,6 +295,7 @@ func TestRecompileKeepsGameEntrants(t *testing.T) {
 // A фест may hold two games of one type under names of their own: СтудЧР played
 // личная СИ and ТПШ, and both are `si`. Only a collision earns a suffix.
 func TestGameKeepsItsGivenTitle(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -318,6 +323,7 @@ func TestGameKeepsItsGivenTitle(t *testing.T) {
 // seated 48 — and an unnumbered row it never seats says nothing about whether
 // the ЭК can be scored.
 func TestNumberingGuardAsksTheGame(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -350,6 +356,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, 'Не и
 // by a caller holding the list; the фест page had no way to say it, so every
 // Game seated the whole registry (ADR-0009).
 func TestCreateGameFormPicksEntrants(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -384,6 +391,7 @@ func TestCreateGameFormPicksEntrants(t *testing.T) {
 // kind is a mistake worth naming — the picker offers both, because which kind a
 // Game wants depends on a type chosen in the same form.
 func TestGameRefusesTheWrongKindOfEntrant(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

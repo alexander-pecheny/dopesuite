@@ -44,6 +44,7 @@ func postSheet(t *testing.T, game *serverGame, book []byte, preview bool) *httpt
 // the sheet, and loads it. The preview says what changes and writes nothing;
 // the load sets the teams the sheet names and leaves the rest alone.
 func TestRosterSheetRoundTrip(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	srv.SetEditBatchWindow(time.Millisecond)
 	db := srv.Eng().DB
@@ -110,6 +111,7 @@ func TestRosterSheetRoundTrip(t *testing.T) {
 // same team when the site later lists it: one row, the site's people, and the
 // host's name.
 func TestAHandTeamFromTheRatingSiteIsMatchedByAnImport(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	srv.SetEditBatchWindow(time.Millisecond)
 	db := srv.Eng().DB

@@ -11,6 +11,7 @@ import (
 // own titles were dropped. A titled venue is found by its title, and a new
 // title takes the next free number.
 func TestSchemesShareVenuesByTitle(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

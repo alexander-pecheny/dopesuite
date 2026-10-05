@@ -27,20 +27,21 @@ import (
 
 func newAuthTestServer(t *testing.T) *dopeserver.Server {
 	t.Helper()
-	// The handshake tests play the bot's side themselves; the token only has
-	// to exist for the server to mint codes at all.
-	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "auth.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	createDefaultFestFixture(t, db, dopeserver.DefaultMatch())
-	return dopeserver.NewTestServer(func(e *core.Engine) {
+	srv := dopeserver.NewTestServer(func(e *core.Engine) {
 		e.DB = db
 		e.RT = realtime.NewManager()
 		e.Assets = dopeserver.StaticFiles
 	})
+	// The handshake tests play the bot's side themselves; the token only has
+	// to exist for the server to mint codes at all.
+	srv.SetEnv("TELEGRAM_BOT_TOKEN", "test-token")
+	return srv
 }
 
 func systemUserID(t *testing.T, db *sql.DB) int64 {
@@ -107,6 +108,7 @@ func decodeJSON[T any](t *testing.T, w *httptest.ResponseRecorder) T {
 }
 
 func TestProfilePageAndLogout(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := srv.Eng().DB.Exec(`
@@ -165,6 +167,7 @@ values(null, null, ?, 0, ?, ?)`, "profile_user", now, now)
 }
 
 func TestProfileSetAndChangePassword(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := srv.Eng().DB.Exec(`
@@ -236,6 +239,7 @@ values(null, null, ?, 0, ?, ?)`, "pw_user", now, now)
 }
 
 func TestProfilePasswordRequiresAuth(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	raw, _ := json.Marshal(dopeserver.PasswordRequest{NewPassword: "whatever1"})
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/password", bytes.NewReader(raw))
@@ -247,6 +251,7 @@ func TestProfilePasswordRequiresAuth(t *testing.T) {
 }
 
 func TestHostDashboardDeleteButtonsAndGameDelete(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
@@ -290,6 +295,7 @@ func TestHostDashboardDeleteButtonsAndGameDelete(t *testing.T) {
 }
 
 func TestHostClearGameResetsToPristine(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
@@ -375,6 +381,7 @@ func TestHostClearGameResetsToPristine(t *testing.T) {
 }
 
 func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	creatorID := systemUserID(t, srv.Eng().DB)
@@ -524,6 +531,7 @@ func hiddenAttrPresent(body, marker string) bool {
 }
 
 func TestHostCreateGameFlow(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
@@ -647,6 +655,7 @@ select id from games where fest_id = ? and game_type = 'ek' and title = 'Доб�
 }
 
 func TestHiddenAttributeCSSOverridesLayoutClasses(t *testing.T) {
+	t.Parallel()
 	css, err := os.ReadFile("../../web/assets/static/styles.css")
 	if err != nil {
 		t.Fatalf("read styles: %v", err)
@@ -658,6 +667,7 @@ func TestHiddenAttributeCSSOverridesLayoutClasses(t *testing.T) {
 }
 
 func TestLoginMethodsFollowBotConfig(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	for _, c := range []struct {
 		name    string
@@ -670,7 +680,7 @@ func TestLoginMethodsFollowBotConfig(t *testing.T) {
 		{"a token nobody is polling", "test-token", false, "unreachable"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			t.Setenv("TELEGRAM_BOT_TOKEN", c.token)
+			srv.SetEnv("TELEGRAM_BOT_TOKEN", c.token)
 			srv.SetBotPolling(c.polling)
 			w := httptest.NewRecorder()
 			srv.HandleAuthMethods(w, httptest.NewRequest(http.MethodGet, "/api/auth/methods", nil))
@@ -692,8 +702,9 @@ func TestLoginMethodsFollowBotConfig(t *testing.T) {
 }
 
 func TestTgStartRefusedWithoutToken(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
-	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	srv.SetEnv("TELEGRAM_BOT_TOKEN", "")
 	w := httptest.NewRecorder()
 	srv.HandleAuthTgStart(w, httptest.NewRequest(http.MethodPost, "/api/auth/tg/start", nil))
 	if w.Code != http.StatusServiceUnavailable {
@@ -702,6 +713,7 @@ func TestTgStartRefusedWithoutToken(t *testing.T) {
 }
 
 func TestRegisterFlowHappyPath(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 
 	// Telegram handshake -> code.
@@ -762,6 +774,7 @@ func tgClaim(t *testing.T, srv *dopeserver.Server, code, username, password stri
 }
 
 func TestRegisterLinkPasswordAccount(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	hash, err := dopeserver.HashPassword("dopevetpass1")
 	if err != nil {
@@ -802,6 +815,7 @@ values('dpvet', ?, '', 0, ?, ?)`, hash, now, now); err != nil {
 }
 
 func TestTgClaimRejectsSystemAccount(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	hash, err := dopeserver.HashPassword("syspass12345")
 	if err != nil {
@@ -824,6 +838,7 @@ values('sys', ?, '', 1, ?, ?)`, hash, now, now); err != nil {
 }
 
 func TestRegisterRejectsTakenPasswordlessUsername(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := srv.Eng().DB.Exec(`
@@ -841,6 +856,7 @@ values(999, 'tg', 'taken', 0, ?, ?)`, now, now); err != nil { // telegram-only, 
 }
 
 func TestRegisterStatusReportsExpiry(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	startResp := httptest.NewRecorder()
 	srv.HandleAuthTgStart(startResp, httptest.NewRequest(http.MethodPost, "/api/auth/tg/start", nil))
@@ -858,6 +874,7 @@ func TestRegisterStatusReportsExpiry(t *testing.T) {
 }
 
 func TestPasswordLogin(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	hash, err := dopeserver.HashPassword("s3cretpassword")
 	if err != nil {
@@ -883,6 +900,7 @@ values('boss', ?, '', 0, ?, ?)`, hash, now, now); err != nil {
 }
 
 func TestUsernameValidation(t *testing.T) {
+	t.Parallel()
 	cases := map[string]bool{
 		"alice":                 true,
 		"a":                     false,
@@ -901,6 +919,7 @@ func TestUsernameValidation(t *testing.T) {
 }
 
 func TestUsernameUniqueness(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	systemID := systemUserID(t, srv.Eng().DB)
 
@@ -972,6 +991,7 @@ values(?, ?, null, 0, ?, ?)`, tg, "tg", now, now); err != nil {
 }
 
 func TestSessionSlidingExpiry(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := srv.Eng().DB.Exec(`
@@ -1020,6 +1040,7 @@ values(?, ?, ?, 0, ?, ?)`, 4242, "tg_x", "x", now, now)
 }
 
 func TestRequireSameOriginUnsafeRejectsForwardedHostWithoutTrustedOrigin(t *testing.T) {
+	t.Parallel()
 	req := httptest.NewRequest(http.MethodPost, "https://dope.pecheny.me/api/fest/test/presence", nil)
 	req.Host = "dope.pecheny.me"
 	req.Header.Set("Origin", "https://dope.pecheny.kz")
@@ -1035,6 +1056,7 @@ func TestRequireSameOriginUnsafeRejectsForwardedHostWithoutTrustedOrigin(t *test
 }
 
 func TestRequireSameOriginUnsafeAcceptsTrustedOriginHost(t *testing.T) {
+	// Serial: the route package reads the trusted hosts from the environment.
 	t.Setenv(dopeserver.TrustedOriginHostsEnv, "https://dope.pecheny.kz, dope.pecheny.test")
 	req := httptest.NewRequest(http.MethodPost, "https://dope.pecheny.me/api/fest/test/presence", nil)
 	req.Host = "dope.pecheny.me"
@@ -1047,6 +1069,7 @@ func TestRequireSameOriginUnsafeAcceptsTrustedOriginHost(t *testing.T) {
 }
 
 func TestRequireSameOriginUnsafeRejectsMismatchedForwardedHost(t *testing.T) {
+	t.Parallel()
 	req := httptest.NewRequest(http.MethodPost, "https://dope.pecheny.me/api/fest/test/presence", nil)
 	req.Host = "dope.pecheny.me"
 	req.Header.Set("Origin", "https://evil.example")
@@ -1062,6 +1085,7 @@ func TestRequireSameOriginUnsafeRejectsMismatchedForwardedHost(t *testing.T) {
 }
 
 func TestPasswordHashIsBcryptAndVerifies(t *testing.T) {
+	t.Parallel()
 	hash, err := dopeserver.HashPassword("hunter2")
 	if err != nil {
 		t.Fatalf("hash: %v", err)
@@ -1083,6 +1107,7 @@ func TestPasswordHashIsBcryptAndVerifies(t *testing.T) {
 }
 
 func TestLegacySHA256PasswordVerifiesAndUpgradesToBcrypt(t *testing.T) {
+	t.Parallel()
 	salt := "legacy-salt"
 	legacy := dopeserver.LegacySHA256Password("hunter2", salt)
 	if len(legacy) != 64 {

@@ -16,6 +16,7 @@ import (
 // standings into the ladder and seats every seed slot; a decline moves
 // everyone below up the ladder.
 func TestBrainSeedImportFromOD(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))

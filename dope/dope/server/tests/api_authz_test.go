@@ -97,6 +97,7 @@ func scopedAPIRequest(t *testing.T, srv *dopeserver.Server, method, path string,
 }
 
 func TestScopedAPIRequiresOrganizerForPrivateReadsAndWrites(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	gamePath := fmt.Sprintf("/api/fest/%d/games/%d", festID, gameID)
@@ -145,6 +146,7 @@ func TestScopedAPIRequiresOrganizerForPrivateReadsAndWrites(t *testing.T) {
 }
 
 func TestScopedGameScreenSettings(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	path := fmt.Sprintf("/api/fest/%d/games/%d/screen-settings", festID, gameID)
@@ -200,6 +202,7 @@ func TestScopedGameScreenSettings(t *testing.T) {
 }
 
 func TestHostRoleCanEditGameTablesOnly(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	hostID, hostToken := createAPITestSession(t, srv, "table-host")
@@ -230,6 +233,7 @@ func TestHostRoleCanEditGameTablesOnly(t *testing.T) {
 }
 
 func TestScopedAPIImportRequiresFestOrganizer(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	scheme := store.FestScheme{
@@ -298,6 +302,7 @@ func TestScopedAPIImportRequiresFestOrganizer(t *testing.T) {
 }
 
 func TestScopedGameStatePatchMergesIndependentEdits(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "state-patcher")
@@ -338,6 +343,7 @@ func TestScopedGameStatePatchMergesIndependentEdits(t *testing.T) {
 }
 
 func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "delta-patcher")
@@ -426,6 +432,7 @@ func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
 // SSE instead of gap-resyncing (which repaints the stage skeleton on every
 // edit). Two consecutive edits must produce strictly increasing, chained seqs.
 func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "seq-editor")
@@ -502,6 +509,7 @@ func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
 }
 
 func TestScopedGameStateRejectsRatingRosterEdits(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -553,6 +561,7 @@ func TestScopedGameStateRejectsRatingRosterEdits(t *testing.T) {
 }
 
 func TestHostPresenceRequiresFestOrganizer(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	path := fmt.Sprintf("/api/fest/%d/presence", festID)
@@ -586,6 +595,7 @@ func TestHostPresenceRequiresFestOrganizer(t *testing.T) {
 }
 
 func TestEventsRequireAuthorizedFestScope(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 

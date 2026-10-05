@@ -10,6 +10,7 @@ import (
 // what «none ticked» means for a team game — the fest's teams — and a Тройка
 // never seats those: its Составы showed «Участник 1…8» with nobody in them.
 func TestTroikaWithNoneTickedSeatsTheFestTroikas(t *testing.T) {
+	t.Parallel()
 	srv, festID, _, createGame := troikaSeedFest(t)
 	db := srv.Eng().DB
 	dsl := "[scheme]\nkind: roundrobin\ngroup_size: 4\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\n"

@@ -23,6 +23,7 @@ import (
 // It takes minutes, so it runs on request rather than on every suite: set
 // DOPE_STUDCHR_FEST to the path the finished database should be written to.
 func TestStudchrWholeFest(t *testing.T) {
+	t.Parallel()
 	out := os.Getenv("DOPE_STUDCHR_FEST")
 	if out == "" {
 		t.Skip("установите DOPE_STUDCHR_FEST=<путь к базе>, чтобы собрать фест")

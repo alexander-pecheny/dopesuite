@@ -14,6 +14,7 @@ import (
 // — through handleFestRouter, asserting it returns a real workbook with the
 // attachment headers rather than falling through to the SPA viewer HTML.
 func TestFestRouterServesXLSX(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	_, gameID := scopedAPITestIDs(t, srv)
 	if _, err := srv.Eng().DB.Exec(`update games set slug = 'ek' where id = ?`, gameID); err != nil {

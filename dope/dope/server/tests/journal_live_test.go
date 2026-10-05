@@ -18,6 +18,7 @@ import (
 // row with the right opcode, payload and fest-scoped seq, and no `events` table
 // exists anymore.
 func TestJournalRecordsLiveEdits(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

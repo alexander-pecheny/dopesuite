@@ -11,6 +11,7 @@ import (
 // resolved by number, so two same-named teams stay distinct and re-seeding by
 // number reuses (and refreshes) the existing row instead of duplicating it.
 func TestEnsureSeedTeamByNumberKeysByNumber(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -69,6 +70,7 @@ func TestEnsureSeedTeamByNumberKeysByNumber(t *testing.T) {
 // TestBackfillEKTeamNumbers covers the v14 backfill: unambiguous names get their
 // fest_teams number; an ambiguous (duplicate) name is left null.
 func TestBackfillEKTeamNumbers(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

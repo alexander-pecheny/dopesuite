@@ -11,6 +11,7 @@ import (
 // package-main archive path: encode a segment through the journal codec facade,
 // compress with the shared audit zstd coders, and round-trip back.
 func TestSegmentZstdRoundTrip(t *testing.T) {
+	t.Parallel()
 	recs := []journal.Record{
 		{Seq: 1, Op: journal.OpRowIns, TSUnixMilli: 1700000000000, ActorID: 5, RequestID: 2,
 			Args: journal.EncodeRowArgs(journal.RowArgs{TableID: 1, Cols: []journal.ColVal{{NameID: 1, Val: int64(1)}}})},

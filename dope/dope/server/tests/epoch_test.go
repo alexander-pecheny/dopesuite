@@ -14,6 +14,7 @@ import (
 // client can detect a restart (seq space reset) and resync instead of silently
 // dropping post-restart deltas as "seq <= lastSeq".
 func TestScopedGameStateCarriesEpoch(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	srv.Eng().Epoch = "ep-test-123"
 	festID, gameID := scopedAPITestIDs(t, srv)

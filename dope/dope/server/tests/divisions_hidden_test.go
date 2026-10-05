@@ -18,6 +18,7 @@ import (
 // default; the host hides the ones that mean nothing in this game (ЧР in a
 // КСИ), and the game's view carries the hidden ones for the page to drop.
 func TestAGameHidesTheDivisionsItDoesNotRank(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	srv.SetEditBatchWindow(time.Millisecond)
 	db := srv.Eng().DB

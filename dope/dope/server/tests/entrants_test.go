@@ -113,6 +113,7 @@ order by m.position, m.id limit 1`, gameID, number).Scan(&matchID, &participant)
 }
 
 func TestEntrantListImportsAndEditsByHand(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -249,6 +250,7 @@ func TestEntrantListImportsAndEditsByHand(t *testing.T) {
 // other Game offers it, a fest-wide lookup by its name makes another, and a
 // rating import leaves it where it is.
 func TestOneOffEntrantStaysInItsGame(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -331,6 +333,7 @@ func countMatches(t *testing.T, db *sql.DB, gameID int64) int {
 // list; an import from the зачёт makes it follow again; once the отбор has
 // results a new troika waits on the list for a seat.
 func TestTroikaListFollowsTheDivisionUntilEdited(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -428,6 +431,7 @@ func TestTroikaListFollowsTheDivisionUntilEdited(t *testing.T) {
 // The tab's routes: a host reads the list and edits it over HTTP, and each
 // write answers the tab afresh.
 func TestEntrantRoutes(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -478,6 +482,7 @@ func TestEntrantRoutes(t *testing.T) {
 // player typed by name, and an import from the fest drops a one-off it leaves
 // out.
 func TestPersonalSIListSeatsPlayers(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -534,6 +539,7 @@ func TestPersonalSIListSeatsPlayers(t *testing.T) {
 // Своячок qualifier twice this way: an EK-shaped бой reports itself unstarted,
 // so the rebuild for the new entrant wrote it a fresh, empty state.
 func TestLateEntrantKeepsTheMarksOfAnUnfinishedBout(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -600,6 +606,7 @@ func sheetOf(t *testing.T, numbers ...int) *bytes.Reader {
 // changes (the ОД's results move on): a re-import takes the new order and
 // applies the fixes to it again (ADR-0025), instead of losing them.
 func TestReimportAppliesTheHandEditsToTheNewOrder(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -635,6 +642,7 @@ func TestReimportAppliesTheHandEditsToTheNewOrder(t *testing.T) {
 // keeps who plays but not the places: replaying them would undo the new
 // order without a word. The view says how many moves it left behind.
 func TestImportFromAnotherSourceDropsTheMoves(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -682,6 +690,7 @@ func TestImportFromAnotherSourceDropsTheMoves(t *testing.T) {
 // replacement takes the seed and the bouts of the one it replaces, and
 // nobody else moves. A decline would move everybody below up a seat.
 func TestReplaceKeepsEverybodyElseInTheirSeats(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

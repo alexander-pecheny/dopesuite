@@ -14,6 +14,7 @@ import (
 // is an open redirect. The rule itself is kit.SafeLoginRedirect's test; this is
 // the wiring.
 func TestLoginStampsNext(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	page := func(query string) string {
 		t.Helper()

@@ -23,6 +23,7 @@ import (
 // calculate action sums both games and resolves downstream slots, and
 // un-finishing an upstream bout rolls it all back.
 func TestResolverPropagatesBracket(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -161,6 +162,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 // reports downstream matches as `cascaded`, so the handler can broadcast them
 // and spectators see advancing teams without a reload.
 func TestMatchUpdateBroadcastsCascade(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -361,6 +363,7 @@ select state_json from matches where game_id = ? and code = ?`, gameID, matchCod
 // triggered the original data loss) leaves every downstream bout's protocol data
 // untouched.
 func TestUntickEditRetickPreservesDownstream(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

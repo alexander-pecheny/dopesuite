@@ -34,6 +34,7 @@ values(?, ?, null, 0, ?, ?)`, tgUserID, username, now, now); err != nil {
 // The bot now holds this conversation in the server process: a pasted code goes
 // straight to the registrar, with no secret and no hop in between.
 func TestTelegramBotRegistersThroughTheServer(t *testing.T) {
+	t.Parallel()
 	s := newAuthTestServer(t)
 	seedRegisterCode(t, s, "ABCD2345", time.Now().Add(time.Minute))
 
@@ -59,6 +60,7 @@ func TestTelegramBotRegistersThroughTheServer(t *testing.T) {
 }
 
 func TestTelegramBridgeConsumeRegisterReasons(t *testing.T) {
+	t.Parallel()
 	s := newAuthTestServer(t)
 	ctx := context.Background()
 
@@ -86,6 +88,7 @@ func TestTelegramBridgeConsumeRegisterReasons(t *testing.T) {
 }
 
 func TestTelegramBridgeIssueLogin(t *testing.T) {
+	t.Parallel()
 	s := newAuthTestServer(t)
 	ctx := context.Background()
 

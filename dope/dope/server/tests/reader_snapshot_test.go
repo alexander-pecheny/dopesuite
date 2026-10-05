@@ -16,6 +16,7 @@ import (
 // so a viewer read completes even while a writer holds the global write lock —
 // the whole point of moving cross-game reads onto a WAL snapshot transaction.
 func TestSnapshotReadsDecoupledFromWriteLock(t *testing.T) {
+	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

@@ -14,6 +14,7 @@ import (
 // pinned: a change to any table, index, view or trigger shows up as a diff
 // against testdata/schema.sql. Regenerate with DOPE_UPDATE_SCHEMA=1.
 func TestSchemaIsPinned(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "fresh.db")
 	db, err := dopeserver.OpenFestDB(path)
 	if err != nil {

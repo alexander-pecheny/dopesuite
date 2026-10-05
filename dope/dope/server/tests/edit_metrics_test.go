@@ -13,6 +13,7 @@ import (
 // with metrics on and asserts the per-edit line is emitted with the timing
 // fields populated — guarding the exact handler/patchGameState wiring.
 func TestPatchEmitsEditMetric(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "metric-patcher")

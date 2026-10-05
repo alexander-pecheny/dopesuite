@@ -124,7 +124,7 @@ const (
 // No token means it was never meant to (staging); a token nobody is polling
 // means the bot failed to start or another process holds it.
 func (s *server) telegramStatus() string {
-	if strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")) == "" {
+	if strings.TrimSpace(s.getenv("TELEGRAM_BOT_TOKEN")) == "" {
 		return tgStatusMisconfigured
 	}
 	if !s.botPolling.Load() {
@@ -154,6 +154,15 @@ func (s *server) authTgStart(w http.ResponseWriter, r *http.Request, _ route.Sco
 		return err
 	}
 	return route.JSON(w, session.StartRegisterResponse{Code: res.Code, ExpiresAt: rfc3339(res.ExpiresAt), BotUsername: botUsername()})
+}
+
+// getenv reads the process environment, unless the test seam has shadowed
+// the key for this server (envOverride).
+func (s *server) getenv(key string) string {
+	if v, ok := s.envOverride[key]; ok {
+		return v
+	}
+	return os.Getenv(key)
 }
 
 // botUsername is the login bot's @handle, used to build the t.me deep link the

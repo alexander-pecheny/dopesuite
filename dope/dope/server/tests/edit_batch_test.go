@@ -25,6 +25,7 @@ func festRevision(t *testing.T, srv *dopeserver.Server, festID int64) int64 {
 // seq bump) rather than one broadcast per edit, and the final state reflects
 // every edit.
 func TestEditBatchCoalescesConcurrentEdits(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "batch-editor")
@@ -91,6 +92,7 @@ func TestEditBatchCoalescesConcurrentEdits(t *testing.T) {
 // own (its caller gets a 4xx) without rolling back the valid edits sharing the
 // window.
 func TestEditBatchErrorIsolation(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "iso-editor")

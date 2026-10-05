@@ -60,6 +60,7 @@ where m.game_id = ?`, gameID)
 // sit at no venue. Adding venue 2 from the venues tab seats the bouts the
 // scheme puts at table 2 there, and leaves the rest alone.
 func TestAddVenueLinksTheSchemesBouts(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB

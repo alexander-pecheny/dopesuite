@@ -29,6 +29,7 @@ import (
 //
 //	DOPE_BUGMAJOR_DEMO=$PWD/.tmp/bm.db go test ./dope/server/tests -run BugMajorDemo
 func TestBugMajorDemoFest(t *testing.T) {
+	t.Parallel()
 	path := os.Getenv("DOPE_BUGMAJOR_DEMO")
 	if path == "" {
 		t.Skip("DOPE_BUGMAJOR_DEMO names the database to build")

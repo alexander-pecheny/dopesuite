@@ -11,6 +11,7 @@ import (
 // no Kind and бои with no буква; opening the DB once more reads the Kinds back
 // from the scheme and deals the буквы, and never touches a game that has them.
 func TestV25BackfillRepairsImportedGames(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "old.db")
 	db, err := dopeserver.OpenFestDB(path)
 	if err != nil {
@@ -47,6 +48,7 @@ delete from schema_versions where version = 25;`); err != nil {
 // seats and no table; opening the DB once more makes it the flat Kind,
 // seats the document's teams and ranks them.
 func TestV26BackfillSeatsFlatGames(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "old.db")
 	db, err := dopeserver.OpenFestDB(path)
 	if err != nil {

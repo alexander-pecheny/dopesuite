@@ -14,6 +14,7 @@ import (
 // to the snapshot's path; the file is copied first and never written. Set
 // DOPE_REHEARSE_KEEP to a path to keep the migrated copy for a look.
 func TestRehearseMigrations(t *testing.T) {
+	t.Parallel()
 	src := os.Getenv("DOPE_REHEARSE_DB")
 	if src == "" {
 		t.Skip("установите DOPE_REHEARSE_DB=<снимок базы>, чтобы прогнать миграции")

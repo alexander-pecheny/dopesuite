@@ -17,6 +17,7 @@ import (
 // tables, a player scores the tables his route card sends him to, and a clear
 // keeps the players the registration desk entered.
 func TestFriendshipCupScoresPlayersByTheirRouteCards(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
@@ -218,6 +219,7 @@ func (c kdCup) standings(t *testing.T) string {
 // A friendship cup's tables are nobody on the fest roster, so a fest team
 // without a number must not stop the registration desk or the answers.
 func TestFriendshipCupIgnoresTheFestNumbering(t *testing.T) {
+	t.Parallel()
 	cup := newKDCup(t)
 	cup.exec(`insert into fest_teams(fest_id, name, city, position, number)
 select fest_id, 'Без номера', '', 99, null from games where id = ?`)
@@ -233,6 +235,7 @@ select fest_id, 'Без номера', '', 99, null from games where id = ?`)
 // overwrites the other. A card already held is refused to the second host,
 // and an entry that is no player is refused with a line the host can read.
 func TestFriendshipCupRegistrationsAreSeparatePatches(t *testing.T) {
+	t.Parallel()
 	cup := newKDCup(t)
 	for _, op := range []map[string]any{kdSet("4", map[string]any{"name": "Anna"}), kdSet("5", map[string]any{"name": "Boris", "team": "Участник 2"})} {
 		if resp := cup.patch(op); resp.Code != http.StatusOK {
@@ -282,6 +285,7 @@ func TestFriendshipCupRegistrationsAreSeparatePatches(t *testing.T) {
 // checked) still answers its standings. The bad entries are left out, as the
 // page leaves them out, and answers still go in.
 func TestFriendshipCupStandingsSkipBadEntries(t *testing.T) {
+	t.Parallel()
 	cup := newKDCup(t)
 	cup.exec(`update matches set state_json = json_set(state_json, '$.players', json('[{"card":"2","name":"String"},{"card":0,"name":"Zero"},{"card":3,"name":""},{"card":4,"name":"Good"},{"card":4,"name":"Twice"},{"card":1,"name":"Joker"}]')) where game_id = ?`)
 	if got := cup.standings(t); got != "1 Joker, 4 Good" {
@@ -295,6 +299,7 @@ func TestFriendshipCupStandingsSkipBadEntries(t *testing.T) {
 // Two players share a table at most once only while the tours are no more
 // than the tables.
 func TestFriendshipCupRefusesMoreToursThanTables(t *testing.T) {
+	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
