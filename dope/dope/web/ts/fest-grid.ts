@@ -63,8 +63,8 @@ export interface FestGridMatch {
   participants?: FestGridLiveParticipant[];
   participantCount?: number | string;
   // bracket is a double elimination's bracket for the Match, "upper" or
-  // "lower" (the compiler's store.SchemeMatch.Bracket); the box is ringed in
-  // its colour.
+  // "lower" (the compiler's store.SchemeMatch.Bracket); the box's title sits
+  // in a pill of its colour.
   bracket?: string;
   // row pins the Match to a row of the grid's shared row layout (1-based);
   // unset, it flows under the Match before it.
@@ -772,12 +772,7 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
   const box = document.createElement("article");
   box.className = `grid-box grid-match ${liveMatch?.status || "pending"}`;
   box.dataset.matchCode = match.code || "";
-  if (match.bracket) {
-    box.dataset.bracket = match.bracket;
-    // The ring runs round the seats, not the filler row a three-seat bout
-    // takes to line up with the four-seat ones beside it.
-    box.style.setProperty("--grid-seat-rows", String(Math.min(item.rows - 1, (match.slots || []).length)));
-  }
+  if (match.bracket) box.dataset.bracket = match.bracket;
 
   const venue = firstVenue(liveMatch?.venue, match.venue);
   const grid = document.createElement("div");

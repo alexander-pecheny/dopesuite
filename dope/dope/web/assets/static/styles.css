@@ -5098,33 +5098,20 @@ body.is-fullscreen.od-page .match-main {
   font-weight: var(--fw-bold);
 }
 
-
-/* A double elimination's bouts in the Сетка are ringed by their bracket
-   (fest-grid.ts, the scheme's bracket): green the upper, red the lower. The
-   ring is laid over the seats below the head, so no box moves off the shared
-   rows, and stops at the last seat, short of a box's spare height. */
+/* A double elimination's bouts in the Сетка say their bracket on their title
+   (fest-grid.ts, the scheme's bracket): «Бой BW» sits in a green pill in the
+   upper bracket and a red one in the lower. The venue beside it stays plain. */
 :root {
   --bracket-upper: var(--uchu-green-7);
   --bracket-lower: var(--uchu-red-5);
-  --bracket-ring-w: 1px;
+  --bracket-pill-mix: 30%;
 }
 
 .grid-box[data-bracket="upper"] { --bracket-accent: var(--bracket-upper); }
 .grid-box[data-bracket="lower"] { --bracket-accent: var(--bracket-lower); }
 
-.grid-box[data-bracket] .grid-slot-grid {
-  position: relative;
-}
-
-.grid-box[data-bracket] .grid-slot-grid::after {
-  content: "";
-  position: absolute;
-  top: var(--grid-row);
-  left: 0;
-  right: 0;
-  height: calc(var(--grid-seat-rows) * var(--grid-row));
-  box-sizing: border-box;
-  border: var(--bracket-ring-w) solid var(--bracket-accent);
-  border-radius: var(--radius-md);
-  pointer-events: none;
+.grid-box[data-bracket] .grid-match-title {
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--bracket-accent) var(--bracket-pill-mix), transparent);
 }
