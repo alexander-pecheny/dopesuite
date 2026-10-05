@@ -14,8 +14,8 @@ import {buildCrosstables, crossSlot, slotKey, standingsByParticipant} from "./cr
 import type {StageRef} from "./standings.js";
 import {buildGameRosterView, fetchGameRoster} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
-import {mountBoutPage} from "./bout-page.js";
-import type {BoutPage, BoutView} from "./bout-page.js";
+import {mountBoutPage, tabStages, stageBouts} from "./bout-page.js";
+import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {nameCell} from "./name-cell.js";
 import {SEAT_PICKER_SELECTOR, seatPicker} from "./seat-picker.js";
@@ -132,10 +132,6 @@ const {viewer} = page;
 
 let teamRosters: RosterTeam[] = [];
 
-function tabStages(tab: GameTab): BrainSchemeStage[] {
-  return (scheme.stages || []).filter((stage) => tab.stages.includes(stage.code || ""));
-}
-
 function stageKind(stage: BrainSchemeStage): string {
   return stage.kind || stage.stage_type || "";
 }
@@ -229,27 +225,12 @@ function rosterFor(name: string): string[] {
     .filter(Boolean);
 }
 
-interface BoutEntry {
-  code: string;
-  view: BrainMatchView;
-  planned: BrainSchemeMatch;
-  stage: BrainSchemeStage;
-}
-
-function stageBouts(stage: BrainSchemeStage): BoutEntry[] {
-  const out: BoutEntry[] = [];
-  for (const planned of stage.matches || []) {
-    const code = planned.code || "";
-    const view = page.view(code);
-    if (view) out.push({code, view, planned, stage});
-  }
-  return out;
-}
+type BoutEntry = BoutEntryOf<BrainMatchView, BrainSchemeStage, BrainSchemeMatch>;
 
 // allBouts flattens every protocol stage's matches in scheme order — the selection
 // grid's column space spans them all.
 function allBouts(): BoutEntry[] {
-  return protocolStages().flatMap(stageBouts);
+  return protocolStages().flatMap((stage) => stageBouts(page, stage));
 }
 
 function buildTab(tab: GameTab | undefined): HTMLElement {
@@ -257,13 +238,13 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   case "stats":
     return buildStatsView();
   case "reseed":
-    return buildReseedTab(tabStages(tab));
+    return buildReseedTab(tabStages(scheme.stages, tab));
   case "block":
-    return buildCrosstable(tabStages(tab));
+    return buildCrosstable(tabStages(scheme.stages, tab));
   case "pods":
-    return buildPodBoard(tabStages(tab));
+    return buildPodBoard(tabStages(scheme.stages, tab));
   case "protocol":
-    return buildProtocols(tabStages(tab));
+    return buildProtocols(tabStages(scheme.stages, tab));
   default:
     return buildGrid();
   }
@@ -324,7 +305,7 @@ function buildProtocols(stages: BrainSchemeStage[]): HTMLElement {
   const multi = stages.length > 1;
   let rendered = 0;
   for (const stage of stages) {
-    const bouts = stageBouts(stage);
+    const bouts = stageBouts(page, stage);
     if (!bouts.length) continue;
     rendered++;
     if (multi) wrap.appendChild(protocolStageHead(stage));

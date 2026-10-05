@@ -13,8 +13,8 @@ import {letteredTitle, standingsTable} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
 import {nameCell} from "./name-cell.js";
 import {seatPicker} from "./seat-picker.js";
-import {mountBoutPage} from "./bout-page.js";
-import type {BoutPage, BoutView} from "./bout-page.js";
+import {mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
+import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
@@ -110,10 +110,6 @@ const {viewer} = page;
 
 const boutLetters = page.letters;
 
-function tabStages(tab: GameTab): SchemeStage[] {
-  return (scheme.stages || []).filter((stage) => tab.stages.includes(stage.code || ""));
-}
-
 // === the document ===
 
 // seatsOf is who is sitting at a bout, in slot order. An empty seat keeps its
@@ -132,21 +128,7 @@ function patch(code: string, path: Array<string | number>, value: unknown): void
 
 // === the bout sheet ===
 
-interface BoutEntry {
-  code: string;
-  view: HamsaMatchView;
-  stage: SchemeStage;
-}
-
-function stageBouts(stage: SchemeStage): BoutEntry[] {
-  const out: BoutEntry[] = [];
-  for (const planned of stage.matches || []) {
-    const code = planned.code || "";
-    const view = page.view(code);
-    if (view) out.push({code, view, stage});
-  }
-  return out;
-}
+type BoutEntry = BoutEntryOf<HamsaMatchView, SchemeStage, SchemeMatch>;
 
 function seatName(view: HamsaMatchView, seat: number): string {
   return view.participants?.[seat]?.name || S.hamsa.protocol.seat(String(seat + 1));
@@ -159,16 +141,6 @@ function seatNameCell(name: string): HTMLElement {
   const cell = nameCell(name, {className: "team-name ek-team-cell", layout: true});
   (cell as HTMLTableCellElement).rowSpan = 2;
   return cell;
-}
-
-// boutRoster is the people a team may field. The server sends each seat's
-// roster with real player ids (store.SeatsPlayers), which is what a theme
-// records — a name matched off the fest registry would not survive two players
-// sharing one.
-function boutRoster(view: HamsaMatchView, seat: number): Array<{id: number; name: string}> {
-  return (view.participants?.[seat]?.roster || [])
-    .filter((player) => player && typeof player.id === "number" && player.id > 0)
-    .map((player) => ({id: Number(player.id), name: player.name || ""}));
 }
 
 // A block allows a shootout where its scheme says so; a bout that already has
@@ -429,7 +401,7 @@ function playerSelect(bout: BoutEntry, id: number, seat: number, group: ThemeGro
   const current = group.kind === "shootout"
     ? hamsa.sectionOf(state, id)?.shootout[0]?.player || 0
     : hamsa.playerAt(state, id, group.theme);
-  const roster = boutRoster(bout.view, seat);
+  const roster = seatRoster(bout.view, seat);
   return seatPicker({
     roster: roster.map((player) => ({id: String(player.id), name: player.name})),
     seated: roster.some((player) => player.id === current) ? [String(current)] : [],
@@ -552,7 +524,7 @@ function boutHeader(bout: BoutEntry): CellContent {
 function sheetBouts(): BoutEntry[] {
   const tab = page.tab();
   if (!tab || tab.kind !== "protocol") return [];
-  return tabStages(tab).flatMap(stageBouts);
+  return tabStages(scheme.stages, tab).flatMap((stage) => stageBouts(page, stage));
 }
 
 interface SheetRow {
@@ -702,7 +674,7 @@ function buildProtocols(stages: SchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "u-col u-gap-lg";
   for (const stage of stages) {
-    const bouts = stageBouts(stage);
+    const bouts = stageBouts(page, stage);
     if (!bouts.length) {
       const empty = document.createElement("p");
       empty.className = "empty";
@@ -778,7 +750,7 @@ function buildStats(): HTMLElement {
   const bouts: HamsaBout[] = [];
   let values: number[] = [];
   for (const stage of scheme.stages || []) {
-    for (const entry of stageBouts(stage)) {
+    for (const entry of stageBouts(page, stage)) {
       const state = stateOf(entry.code);
       if (!values.length) values = hamsa.baseValues(state);
       bouts.push({
@@ -786,7 +758,7 @@ function buildStats(): HTMLElement {
         seats: seatsOf(entry.view).map((id, seat) => ({
           id,
           team: seatName(entry.view, seat),
-          players: new Map(boutRoster(entry.view, seat).map((player) => [player.id, player.name])),
+          players: new Map(seatRoster(entry.view, seat).map((player) => [player.id, player.name])),
         })),
       });
     }
@@ -809,11 +781,11 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   case "stats":
     return buildStats();
   case "block":
-    return buildBlockTable(tabStages(tab));
+    return buildBlockTable(tabStages(scheme.stages, tab));
   case "reseed":
-    return buildReseeds(tabStages(tab));
+    return buildReseeds(tabStages(scheme.stages, tab));
   case "protocol":
-    return buildProtocols(tabStages(tab));
+    return buildProtocols(tabStages(scheme.stages, tab));
   default:
     return buildGrid();
   }

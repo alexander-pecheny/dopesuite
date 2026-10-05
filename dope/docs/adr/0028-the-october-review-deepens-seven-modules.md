@@ -117,3 +117,23 @@ the web package. None of them had a test of their own.
 - `scoring` stays as it is. It is not a pass-through: `flatgame`,
   `imports/ek` and the server's match view write `match_results` through it
   too.
+
+## 5. The bout pages share their helpers, and ЭК's edits have a Protocol module
+
+Brain, Хамса and Тройка mount one bout page, but each still kept its own
+copy of `tabStages`, `stageBouts` and the seat roster (word for word in
+Хамса and Тройка). ЭК's translation of a cell edit into the wire op (a slot
+becomes a team id, a place a pin, a name a player id) lived inside the
+2,600-line page, where no test could reach it.
+
+- `bout-page.ts` exports `tabStages`, `stageBouts` (with `BoutEntry`) and
+  `seatRoster`, and the three pages import them.
+- `ek-protocol.ts` holds `opPath`, `opValue` and `blobOp`, and
+  `jstest/ek-protocol.test.js` drives them.
+- **Not done: ЭК mounting the bout page.** The review proposed it, but ЭК's
+  page is a different shape: a router over grid, bout and stage modes, the
+  stage-pane cache with its prefetch, and an undo stack. `bout-page.ts`
+  already records that ЭК keeps its own router and stage cache. Moving the
+  most-used format onto the bout page means rewriting it, which needs its
+  own plan and a hand test before a fest. A refactor series is not the place
+  for it.

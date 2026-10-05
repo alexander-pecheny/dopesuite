@@ -2,6 +2,7 @@
 // stage tabs, SSE sync. A /host/… URL edits and a /fest/… URL reads (the
 // `viewer` flag), the way brain.ts serves both. Bundled by pages/ek.ts.
 
+import * as ekProtocol from "./ek-protocol.js";
 import {cssEscape, formatNumber, formatPlace, isFormControl, option, td, th} from "./cells.js";
 import {buildFlatScoreTable, buildTwoRowScoreTable, canPatchScoreShape, createScoreTableIndex, patchScoreTable, seatingText, setMarkClass} from "./score-table.js";
 import {seatedNames, seatingLabel} from "./ek-seating.js";
@@ -147,25 +148,6 @@ type StageFrame = HTMLElement & {
   __scoreIndex?: NodeIndex;
   __matchState?: HostMatchView;
 };
-
-type EKCellPayload = {
-  team: number;
-  theme?: number;
-  answer?: number;
-  mark?: string;
-  // The theme's whole seating, by display name — a seat edit sends the list it
-  // leaves behind, never a difference.
-  players?: string[];
-  place?: number;
-  shootout?: boolean;
-};
-
-// BlobOp is one wire operation against a match's Protocol state blob: a path of
-// object keys / array indices, and the value to set there. Team sections are
-// keyed by team id (a string), theme players are player ids, and a host's place
-// is a pin — the server resolves nothing by name (ADR-0005).
-type BlobOp = {op?: "set" | "remove"; path: Array<string | number>; value?: unknown};
-
 
 type UndoEditItem = {team: number; theme: number; answer: number; shootout: boolean; previous: string};
 type UndoGroup = {matchCode: string; items: UndoEditItem[]};
@@ -319,8 +301,6 @@ const UNDO_LIMIT = 200;
 // A host edit reloads the match after this pause, so a burst of edits costs
 // one reload.
 const RELOAD_DEBOUNCE_MS = 120;
-// A place op's view path is participants/slot/place.
-const PLACE_OP_PATH_LEN = 3;
 // Space kept between the active tab and the edge of the tab strip.
 const TAB_SCROLL_MARGIN_PX = 8;
 // A theme's question values, in the order the table shows them.
@@ -810,7 +790,7 @@ const writer = createScopedWriter({
   encode: (scope, ops) => {
     const view = matchBase(matchCodeFromScope(scope));
     if (!view) return null; // no base to resolve team/player ids against; retry on reload
-    return ops.map((op) => opToBlobOp(op, view)).filter((op): op is WireOp => op !== null);
+    return ops.map((op) => ekProtocol.blobOp(op, view)).filter((op): op is WireOp => op !== null);
   },
   adopt: (scope, response) => {
     if (scope.startsWith(matchScopeFor(""))) applyUpdatedMatch(response as HostMatchView, matchCodeFromScope(scope));
@@ -827,9 +807,9 @@ function matchURL(matchCode: string, suffix: string): string {
 // shootoutThemeOps builds the ops that add or drop one shootout theme across
 // every team of a match — the grid stays in lockstep, so one theme index is
 // touched on every team at once.
-function shootoutThemeOps(matchCode: string, themeIndex: number, remove: boolean): BlobOp[] {
+function shootoutThemeOps(matchCode: string, themeIndex: number, remove: boolean): ekProtocol.BlobOp[] {
   const view = matchBase(matchCode);
-  const ops: BlobOp[] = [];
+  const ops: ekProtocol.BlobOp[] = [];
   for (const team of view?.participants || []) {
     if (!team.id) continue;
     const path = ["participants", String(team.id), "shootoutThemes", themeIndex];
@@ -841,7 +821,7 @@ function shootoutThemeOps(matchCode: string, themeIndex: number, remove: boolean
 // sendStructuralOps applies ops that aren't tracked cell edits (adding or
 // dropping a shootout theme) — they have no optimistic overlay, so they go out
 // on their own rather than through the pending queue.
-function sendStructuralOps(matchCode: string, ops: BlobOp[]): void {
+function sendStructuralOps(matchCode: string, ops: ekProtocol.BlobOp[]): void {
   if (ops.length === 0) return;
   void writer.send(matchScopeFor(matchCode), {url: matchURL(matchCode, "state"), method: "PATCH", body: {ops}});
 }
@@ -898,60 +878,14 @@ function recoverMatchPendingEdits(): void {
   applyUpdatedMatch(state, state.code); // overlays pending → re-renders with them
 }
 
-// payloadToOpPath maps an /update cell payload to its MatchView path (matching
-// the server's matchDeltaOps shape). Returns null for non-cell (structural)
-// payloads, which must not be overlay-tracked.
-function payloadToOpPath(payload: EKCellPayload): Array<string | number> | null {
-  if (payload.place !== undefined) return ["participants", payload.team, "place"];
-  const themesKey = payload.shootout ? "shootoutThemes" : "themes";
-  if (payload.players !== undefined) return ["participants", payload.team, themesKey, payload.theme!, "players"];
-  if (payload.mark !== undefined) return ["participants", payload.team, themesKey, payload.theme!, "answers", payload.answer!];
-  return null;
-}
-
-function payloadToOpValue(payload: EKCellPayload): unknown {
-  if (payload.place !== undefined) return payload.place;
-  if (payload.players !== undefined) return payload.players;
-  return payload.mark;
-}
-
-// opToBlobOp translates a queued view-path op into the blob path the server
-// stores it at: the team's slot index becomes its id, a place becomes a pin,
-// and a player name becomes that player's id. Returns null when the view the op
-// was queued against no longer holds that team — the op is then unsendable and
-// is dropped rather than retried forever.
-function opToBlobOp(op: PendingOp, view: HostMatchView): BlobOp | null {
-  const [, slot, key, theme, leaf, answer] = op.path;
-  const team = view.participants?.[slot as number];
-  if (!team?.id) return null;
-  const teamKey = String(team.id);
-  if (op.path.length === PLACE_OP_PATH_LEN) {
-    // Emptying the place box clears the pin rather than pinning zero, handing
-    // the place back to the scorer at the next recompute.
-    const path = ["participants", teamKey, "pin"];
-    return op.value ? {path, value: op.value} : {op: "remove", path};
-  }
-  if (leaf === "players") {
-    const names = (op.value as string[]) || [];
-    const ids: number[] = [];
-    for (const name of names) {
-      const member = (team.roster || []).find((player) => player.name === name);
-      if (!member) return null; // a seating the view can no longer resolve: drop it
-      ids.push(member.id);
-    }
-    return {path: ["participants", teamKey, key as string, theme as number, "players"], value: ids};
-  }
-  return {path: ["participants", teamKey, key as string, theme as number, "answers", answer as number], value: op.value};
-}
-
 // queueEKEdits records cell edits as pending ops; the writer batches the flush.
-function queueEKEdits(matchCode: string, payloads: EKCellPayload[]): void {
+function queueEKEdits(matchCode: string, payloads: ekProtocol.EKCellPayload[]): void {
   const scope = matchScopeFor(matchCode);
   let queued = false;
   for (const payload of payloads) {
-    const path = payloadToOpPath(payload);
+    const path = ekProtocol.opPath(payload);
     if (!path) continue;
-    writer.patch(scope, path, payloadToOpValue(payload));
+    writer.patch(scope, path, ekProtocol.opValue(payload));
     queued = true;
   }
   if (queued) refreshMatchPendingMarkers(matchCode);
@@ -1793,7 +1727,7 @@ function ekApplyValues(matchCode: string, matchState: HostMatchView, edits: Cell
       });
     }
   }
-  const payloads: EKCellPayload[] = [];
+  const payloads: ekProtocol.EKCellPayload[] = [];
   for (const {cell, value} of edits) {
     const mark = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
     setMarkClass(cell, mark);
@@ -1803,7 +1737,7 @@ function ekApplyValues(matchCode: string, matchState: HostMatchView, edits: Cell
     const shootout = (cell as HTMLElement).dataset.shootout === "1";
     const target = shootout ? shootoutThemesFor(matchState.participants[team])[theme] : matchState.participants[team]?.themes?.[theme];
     if (target?.answers) target.answers[answer] = mark;
-    const payload: EKCellPayload = {team, theme, answer, mark};
+    const payload: ekProtocol.EKCellPayload = {team, theme, answer, mark};
     if (shootout) payload.shootout = true;
     payloads.push(payload);
   }
@@ -2198,7 +2132,7 @@ function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, the
       theme: String(themeIndex),
     },
     onChange: (players) => {
-      const payload: EKCellPayload = {team: teamIndex, theme: themeIndex, players};
+      const payload: ekProtocol.EKCellPayload = {team: teamIndex, theme: themeIndex, players};
       if (isShootout) payload.shootout = true;
       queueEKEdits(matchCode, [payload]);
     },

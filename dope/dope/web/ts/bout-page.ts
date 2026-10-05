@@ -562,6 +562,46 @@ export interface FinishControlOptions {
   onChange: (finished: boolean) => void;
 }
 
+// tabStages is a tab's stages, in the scheme's order.
+export function tabStages<T extends {code?: string}>(stages: readonly T[] | undefined, tab: GameTab | undefined): T[] {
+  return (stages || []).filter((stage) => (tab?.stages || []).includes(stage.code || ""));
+}
+
+// BoutEntry is one bout of a stage that the page has a view of: its code, its
+// view, the scheme's match it was planned as, and its stage.
+export interface BoutEntry<V, St, M> {
+  code: string;
+  view: V;
+  planned: M;
+  stage: St;
+}
+
+// stageBouts is a stage's bouts that the page has a view of, in the scheme's
+// order.
+export function stageBouts<V extends BoutView, S, M extends {code?: string}, St extends {matches?: M[]}>(
+  page: BoutPage<V, S>, stage: St,
+): Array<BoutEntry<V, St, M>> {
+  const out: Array<BoutEntry<V, St, M>> = [];
+  for (const planned of stage.matches || []) {
+    const code = planned.code || "";
+    const view = page.view(code);
+    if (view) out.push({code, view, planned, stage});
+  }
+  return out;
+}
+
+// seatRoster is the people a seat may field. The server sends each seat's
+// roster with real player ids (store.SeatsPlayers), which is what a theme or a
+// chair records: a name matched off the fest registry would not survive two
+// players sharing one.
+export function seatRoster(
+  view: {participants?: Array<{roster?: Array<{id?: number; name?: string}>} | null | undefined>}, seat: number,
+): Array<{id: number; name: string}> {
+  return (view.participants?.[seat]?.roster || [])
+    .filter((player) => player && typeof player.id === "number" && player.id > 0)
+    .map((player) => ({id: Number(player.id), name: player.name || ""}));
+}
+
 // finishControl is a bout's finished tick: a finished bout's sheet is
 // read-only until the host unticks it, and the server rejects edits to it.
 export function finishControl(options: FinishControlOptions): HTMLLabelElement {

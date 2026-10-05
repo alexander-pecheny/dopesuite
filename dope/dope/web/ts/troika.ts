@@ -14,8 +14,8 @@ import {icon} from "./icons_gen.js";
 import {standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
-import {mountBoutPage} from "./bout-page.js";
-import type {BoutPage, BoutView} from "./bout-page.js";
+import {mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
+import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {nameCell} from "./name-cell.js";
 import {seatPicker} from "./seat-picker.js";
@@ -139,10 +139,6 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
 const {viewer} = page;
 
 const boutLetters = page.letters;
-
-function tabStages(tab: GameTab): SchemeStage[] {
-  return (scheme.stages || []).filter((stage) => tab.stages.includes(stage.code || ""));
-}
 
 function stageKind(stage: SchemeStage): string {
   return stage.kind || stage.stage_type || "";
@@ -272,39 +268,14 @@ function patch(code: string, path: Array<string | number>, value: unknown): void
 }
 // === the protocol sheet ===
 
-interface BoutEntry {
-  code: string;
-  view: TroikaMatchView;
-  planned: SchemeMatch;
-  stage: SchemeStage;
-}
+type BoutEntry = BoutEntryOf<TroikaMatchView, SchemeStage, SchemeMatch>;
 
 function protocolStages(): SchemeStage[] {
   return (scheme.stages || []).filter((stage) => (stage.matches || []).length > 0);
 }
 
-function stageBouts(stage: SchemeStage): BoutEntry[] {
-  const out: BoutEntry[] = [];
-  for (const planned of stage.matches || []) {
-    const code = planned.code || "";
-    const view = page.view(code);
-    if (view) out.push({code, view, planned, stage});
-  }
-  return out;
-}
-
 function seatName(view: TroikaMatchView, side: number): string {
   return view.participants?.[side]?.name || S.troika.team.fallback(String(side + 1));
-}
-
-// boutRoster is the three (or more) people a side may field. The server sends
-// each seat's roster with real player ids (store.SeatsPlayers), which is what
-// a chair records — a name matched off the fest registry would not survive
-// two players sharing one.
-function boutRoster(view: TroikaMatchView, side: number): Array<{id: number; name: string}> {
-  return (view.participants?.[side]?.roster || [])
-    .filter((player) => player && typeof player.id === "number" && player.id > 0)
-    .map((player) => ({id: Number(player.id), name: player.name || ""}));
 }
 
 // One bout: a block per side of three chair rows by themes × three questions, with
@@ -343,7 +314,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
   const body = document.createElement("tbody");
   const sides = state.sides.length;
   for (let side = 0; side < sides; side++) {
-    const roster = boutRoster(bout.view, side);
+    const roster = seatRoster(bout.view, side);
     for (let chair = 0; chair < troika.CHAIRS; chair++) {
       const tr = document.createElement("tr");
       if (chair === 0) tr.appendChild(sideNameCell(seatName(bout.view, side)));
@@ -592,7 +563,7 @@ function paintMark(cell: HTMLElement, mark: Mark): void {
 function sheetBouts(): BoutEntry[] {
   const tab = page.tab();
   if (!tab || tab.kind !== "protocol") return [];
-  return tabStages(tab).flatMap(stageBouts).filter((bout) => !stateOf(bout.code).written);
+  return tabStages(scheme.stages, tab).flatMap((stage) => stageBouts(page, stage)).filter((bout) => !stateOf(bout.code).written);
 }
 
 function sheetRows(): Array<{code: string; side: number; chair: number}> {
@@ -751,7 +722,7 @@ function writtenTotals(state: TroikaState, side: number): {total: number; threes
 function writtenBout(): BoutEntry | null {
   const tab = page.tab();
   if (!tab || tab.kind !== "protocol") return null;
-  return tabStages(tab).flatMap(stageBouts).find((bout) => stateOf(bout.code).written) || null;
+  return tabStages(scheme.stages, tab).flatMap((stage) => stageBouts(page, stage)).find((bout) => stateOf(bout.code).written) || null;
 }
 
 const writtenCursor = createSheetCursor({
@@ -841,7 +812,7 @@ function buildProtocols(stages: SchemeStage[]): HTMLElement {
   wrap.className = "troika-protocol";
   const many = stages.length > 1;
   for (const stage of stages) {
-    const bouts = stageBouts(stage);
+    const bouts = stageBouts(page, stage);
     if (!bouts.length) continue;
     if (many) {
       const head = document.createElement("h2");
@@ -942,14 +913,14 @@ function swissTable(stage: SchemeStage): HTMLElement {
 function buildStats(): HTMLElement {
   const bouts: TroikaBout[] = [];
   for (const stage of protocolStages()) {
-    for (const entry of stageBouts(stage)) {
+    for (const entry of stageBouts(page, stage)) {
       const state = stateOf(entry.code);
       if (state.written) continue;
       bouts.push({
         state,
         sides: state.sides.map((_, side) => ({
           team: seatName(entry.view, side),
-          players: new Map(boutRoster(entry.view, side).map((player) => [player.id, player.name])),
+          players: new Map(seatRoster(entry.view, side).map((player) => [player.id, player.name])),
         })),
       });
     }
@@ -1013,14 +984,14 @@ function buildReseeds(stages: SchemeStage[]): HTMLElement {
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "reseed":
-    return buildReseeds(tabStages(tab));
+    return buildReseeds(tabStages(scheme.stages, tab));
   case "stats":
     return buildStats();
   case "block":
   case "pods":
-    return buildGroups(tabStages(tab));
+    return buildGroups(tabStages(scheme.stages, tab));
   case "protocol":
-    return buildProtocols(tabStages(tab));
+    return buildProtocols(tabStages(scheme.stages, tab));
   default:
     return buildGrid();
   }

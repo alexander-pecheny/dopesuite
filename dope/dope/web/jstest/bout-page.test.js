@@ -20,7 +20,7 @@ globalThis.cancelAnimationFrame = () => {};
 const store = new Map();
 window.localStorage = {getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k)};
 
-const {mountBoutPage} = await import("./dist/bout-page.js");
+const {mountBoutPage, tabStages, stageBouts, seatRoster} = await import("./dist/bout-page.js");
 const {createSyncIndicator} = await import("./dist/state-sync.js");
 
 const API = "/api/fest/f/games/g";
@@ -241,4 +241,21 @@ test("finish, the draw and the reseed go out as the host's structural writes", a
     ["PUT", `${API}/draw`, {slot: "d1", participant: 42}],
     ["POST", `${API}/stages/r1/reseed`, undefined],
   ]);
+});
+
+test("a tab's stages and a stage's bouts come in the scheme's order", () => {
+  const stages = [{code: "s1", matches: [{code: "s1-m2"}, {code: "s1-m1"}]}, {code: "s2", matches: [{code: "s2-m1"}]}];
+  const tab = {stages: ["s2", "s1"]};
+  assert.deepEqual(tabStages(stages, tab).map((stage) => stage.code), ["s1", "s2"]);
+  const views = {"s1-m1": {code: "s1-m1"}, "s1-m2": {code: "s1-m2"}};
+  const page = {view: (code) => views[code]};
+  assert.deepEqual(stageBouts(page, stages[0]).map((bout) => bout.code), ["s1-m2", "s1-m1"]);
+  // A bout the page has no view of yet is left out.
+  assert.deepEqual(stageBouts(page, stages[1]), []);
+});
+
+test("a seat fields only the people with a real player id", () => {
+  const view = {participants: [{roster: [{id: 7, name: "Анна"}, {id: 0, name: "Никто"}, {name: "Без id"}]}]};
+  assert.deepEqual(seatRoster(view, 0), [{id: 7, name: "Анна"}]);
+  assert.deepEqual(seatRoster(view, 1), []);
 });
