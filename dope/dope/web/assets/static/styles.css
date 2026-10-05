@@ -5004,3 +5004,9 @@ body.is-fullscreen.od-page .match-main {
     break-inside: avoid;
   }
 }
+
+/* The empty tail a jump to one of a sheet's last bouts adds below it, so the
+   bout can reach the top (steady-redraw.ts makeRoomBelow). */
+.anchor-tail {
+  pointer-events: none;
+}

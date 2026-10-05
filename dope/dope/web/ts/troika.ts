@@ -32,6 +32,7 @@ import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
+import {scrollIntoViewSteady} from "./steady-redraw.js";
 import S from "./i18nstrings.js";
 import {declarePins, sheetHead} from "./sheet-pins.js";
 
@@ -178,7 +179,7 @@ function showAnchor(): void {
   const node = document.getElementById(`bout-${anchor}`) || document.getElementById(groupAnchorID(anchor));
   if (!node) return;
   shownAnchor = key;
-  node.scrollIntoView({block: "start"});
+  scrollIntoViewSteady(node);
   flashTarget(node);
 }
 

@@ -68,3 +68,57 @@ export function redrawSteady(root: HTMLElement, selector: string, swap: () => vo
   const drift = same.getBoundingClientRect().top - frameTop(scroller) - anchor.offset;
   if (Math.abs(drift) >= 1) scroller.scrollTop += drift;
 }
+
+// makeRoomBelow lets the last bouts of a sheet reach the top too. A frame
+// that has nothing left to scroll stops short with the bout halfway down the
+// screen, under the ones before it, and on a phone the reader sees those first
+// and thinks the link went wrong. So the frame gets what it lacked as an empty
+// tail, which the next drawing of the tab drops. It returns where the node now
+// stands.
+function makeRoomBelow(node: HTMLElement): number {
+  const frame = node.closest<HTMLElement>(".sheet-frame");
+  const content = node.closest<HTMLElement>(".table-host");
+  if (!frame || !content) return node.getBoundingClientRect().top;
+  const short = node.getBoundingClientRect().top - frame.getBoundingClientRect().top - Number.parseFloat(getComputedStyle(node).scrollMarginTop || "0");
+  if (short <= STEADY_SCROLL_SLACK_PX) return node.getBoundingClientRect().top;
+  let tail = content.querySelector<HTMLElement>(":scope > .anchor-tail");
+  if (!tail) {
+    tail = document.createElement("div");
+    tail.className = "anchor-tail";
+    tail.setAttribute("aria-hidden", "true");
+    content.appendChild(tail);
+  }
+  tail.style.height = `${(tail.offsetHeight || 0) + short}px`;
+  node.scrollIntoView({block: "start"});
+  return node.getBoundingClientRect().top;
+}
+
+// How long a jump keeps the bout in place while the ones above it lay out,
+// and how far it may drift before it is put back.
+const STEADY_SCROLL_MS = 2000;
+const STEADY_SCROLL_SLACK_PX = 2;
+
+// scrollIntoViewSteady scrolls to a bout or a group a link named, and keeps it
+// there. The bouts above it are sized by the guess until they come near the
+// view; the first scroll brings some of them near, they lay out at their real
+// size, and the target slides away (a crosstable's link on a phone landed
+// half a screen low). So the node is put back each frame it drifts, until the
+// page settles or the reader takes over: a touch, a wheel or a key stops it.
+export function scrollIntoViewSteady(node: HTMLElement): void {
+  node.scrollIntoView({block: "start"});
+  const wanted = makeRoomBelow(node);
+  const started = performance.now();
+  let stopped = false;
+  const stop = () => {
+    stopped = true;
+    for (const type of ["pointerdown", "wheel", "keydown", "touchstart"]) window.removeEventListener(type, stop, true);
+  };
+  for (const type of ["pointerdown", "wheel", "keydown", "touchstart"]) window.addEventListener(type, stop, {capture: true, passive: true});
+  const check = () => {
+    if (stopped || !node.isConnected) return;
+    if (Math.abs(node.getBoundingClientRect().top - wanted) > STEADY_SCROLL_SLACK_PX) node.scrollIntoView({block: "start"});
+    if (performance.now() - started < STEADY_SCROLL_MS) requestAnimationFrame(check);
+    else stop();
+  };
+  requestAnimationFrame(check);
+}

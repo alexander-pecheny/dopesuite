@@ -34,6 +34,7 @@ import type {StageRef} from "./standings.js";
 import {buildEKStatsTable, buildIndividualStatsTable, computeEKPlayerStats, computeIndividualPlayerStats} from "./ek-stats.js";
 import * as ek from "./ek-protocol.js";
 import type {EKState, Mark, ThemeKind} from "./ek-protocol.js";
+import {scrollIntoViewSteady} from "./steady-redraw.js";
 import S from "./i18nstrings.js";
 
 // The question values the trailing counts run over, hardest first.
@@ -682,7 +683,7 @@ function showLinked(): void {
     : root.querySelector<HTMLElement>(`[data-bout-anchor="${cssEscape(boutCodeOf(anchor))}"]`);
   if (!node) return;
   shownLink = anchor;
-  node.scrollIntoView({block: "start"});
+  scrollIntoViewSteady(node);
 }
 
 // buildRankedStageTable draws a ranked stage's table: place, team, and the
