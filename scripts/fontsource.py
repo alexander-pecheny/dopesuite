@@ -23,7 +23,7 @@ TMP = ROOT / ".tmp"
 # fonts-fixing (code.pecheny.me/pecheny/fonts-fixing) holds the fixes and the two
 # models, and its fonts/ holds faces already built there.
 FIXING_URL = "https://code.pecheny.me/pecheny/fonts-fixing.git"
-FIXING_COMMIT = "ecf69f75b91d6fcbcea2f687c6edbac26d36a8a6"
+FIXING_COMMIT = "6ab0f113860aac8c429e7a2ae1449b7db4778fcb"
 
 DOWNLOAD_TIMEOUT = 180  # seconds
 
