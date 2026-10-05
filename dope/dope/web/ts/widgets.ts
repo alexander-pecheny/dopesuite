@@ -594,34 +594,138 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
 const tabBarScrollBindings = new WeakMap<HTMLElement, ScrollEdgeBinding>();
 const tabBarActiveKeys = new WeakMap<HTMLElement, string>();
 
-// A strip with more tabs than this gets the list of all of them beside it.
-const TAB_PICKER_MIN = 6;
+// Space the tab list keeps from the viewport edge, and its smallest height.
+const TAB_LIST_MARGIN_PX = 8;
+const TAB_LIST_MIN_HEIGHT_PX = 120;
 
-// tabPicker is the button at the head of a long tab strip that lists every
-// tab, as a spreadsheet's list of sheets does: a personal SI's dozen round
-// tabs took a long scroll to reach. It is a native select laid over an icon,
-// so a phone opens its own picker, and it is pinned to the strip's left edge
-// while the tabs scroll past it.
+// tabPicker is what a tab strip becomes when its tabs do not all fit: one
+// button naming the open tab, which drops a list of every tab. A strip shows
+// either all its tabs or this button, never a scrolled part of the tabs.
 function tabPicker(tabs: Array<{key: string; label: string}>, activeKey: string, onSelect: (key: string) => void): HTMLElement {
-  const picker = document.createElement("label");
-  picker.className = "tab-picker";
-  picker.title = S.widgets.tabPicker.label();
-  picker.appendChild(icon("list"));
-  const select = document.createElement("select");
-  select.setAttribute("aria-label", S.widgets.tabPicker.label());
-  select.replaceChildren(...tabs.map((tab) => {
-    const option = document.createElement("option");
-    option.value = tab.key;
-    option.textContent = tab.label;
-    return option;
-  }));
-  select.value = activeKey;
-  select.addEventListener("change", () => {
-    if (select.value !== activeKey) onSelect(select.value);
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "match-tab active tab-picker";
+  trigger.title = S.widgets.tabPicker.label();
+  trigger.setAttribute("aria-haspopup", "menu");
+  trigger.setAttribute("aria-expanded", "false");
+  const text = document.createElement("span");
+  text.className = "u-clip-fade";
+  text.textContent = tabs.find((tab) => tab.key === activeKey)?.label || "";
+  trigger.append(text, icon("chevron-down"));
+  trigger.addEventListener("click", () => {
+    if (tabList?.trigger === trigger) closeTabList();
+    else openTabList(trigger, tabs, activeKey, onSelect);
   });
-  picker.appendChild(select);
-  return picker;
+  return trigger;
 }
+
+let tabList: {panel: HTMLElement; trigger: HTMLElement} | null = null;
+
+function openTabList(trigger: HTMLElement, tabs: Array<{key: string; label: string}>, activeKey: string,
+  onSelect: (key: string) => void): void {
+  closeTabList();
+  const panel = document.createElement("div");
+  panel.className = "popover menu-dropdown tab-picker-panel";
+  panel.setAttribute("role", "menu");
+  panel.setAttribute("aria-label", S.widgets.tabPicker.label());
+  const items = tabs.map((tab) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "menu-item";
+    item.setAttribute("role", "menuitemradio");
+    item.setAttribute("aria-checked", tab.key === activeKey ? "true" : "false");
+    item.textContent = tab.label;
+    item.addEventListener("click", () => {
+      closeTabList();
+      trigger.focus();
+      if (tab.key !== activeKey) onSelect(tab.key);
+    });
+    return item;
+  });
+  panel.replaceChildren(...items);
+  document.body.appendChild(panel);
+  tabList = {panel, trigger};
+  trigger.setAttribute("aria-expanded", "true");
+  positionTabList();
+  const current = items[tabs.findIndex((tab) => tab.key === activeKey)] || items[0];
+  current?.focus();
+  current?.scrollIntoView({block: "nearest"});
+  document.addEventListener("pointerdown", onTabListPointerDown, true);
+  document.addEventListener("keydown", onTabListKeydown, true);
+  window.addEventListener("scroll", positionTabList, {capture: true, passive: true});
+  window.addEventListener("resize", positionTabList);
+}
+
+function closeTabList(): void {
+  if (!tabList) return;
+  tabList.panel.remove();
+  tabList.trigger.setAttribute("aria-expanded", "false");
+  tabList = null;
+  document.removeEventListener("pointerdown", onTabListPointerDown, true);
+  document.removeEventListener("keydown", onTabListKeydown, true);
+  window.removeEventListener("scroll", positionTabList, {capture: true} as EventListenerOptions);
+  window.removeEventListener("resize", positionTabList);
+}
+
+function onTabListPointerDown(event: PointerEvent): void {
+  if (!(event.target instanceof Node) || !tabList) return;
+  if (tabList.panel.contains(event.target) || tabList.trigger.contains(event.target)) return;
+  closeTabList();
+}
+
+// Esc closes the list and gives the focus back to its button; the arrows walk
+// the tabs, the way a select's own list does.
+function onTabListKeydown(event: KeyboardEvent): void {
+  if (!tabList) return;
+  const items = Array.from(tabList.panel.querySelectorAll<HTMLElement>(".menu-item"));
+  const at = items.indexOf(document.activeElement as HTMLElement);
+  let next = -1;
+  if (event.key === "ArrowDown") next = at < 0 ? 0 : Math.min(items.length - 1, at + 1);
+  else if (event.key === "ArrowUp") next = at < 0 ? items.length - 1 : Math.max(0, at - 1);
+  else if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = items.length - 1;
+  else if (event.key === "Escape" || event.key === "Tab") {
+    const trigger = tabList.trigger;
+    if (event.key === "Escape") event.preventDefault();
+    event.stopPropagation();
+    closeTabList();
+    trigger.focus();
+    return;
+  } else return;
+  event.preventDefault();
+  event.stopPropagation();
+  items[next]?.focus();
+}
+
+// positionTabList parks the list under its button, inside the viewport. A
+// redraw that takes the button away takes the list with it.
+function positionTabList(): void {
+  if (!tabList) return;
+  const {panel, trigger} = tabList;
+  if (!trigger.isConnected) {
+    closeTabList();
+    return;
+  }
+  const rect = trigger.getBoundingClientRect();
+  const margin = TAB_LIST_MARGIN_PX;
+  panel.style.position = "fixed";
+  panel.style.right = "auto";
+  panel.style.maxHeight = `${Math.max(TAB_LIST_MIN_HEIGHT_PX, window.innerHeight - rect.bottom - 2 * margin)}px`;
+  const width = panel.offsetWidth;
+  panel.style.left = `${clamp(rect.left, margin, Math.max(margin, window.innerWidth - width - margin))}px`;
+  panel.style.top = `${rect.bottom + 2}px`;
+}
+
+// fitTabBar shows every tab when they all fit the strip and only the picker
+// when they do not. It measures with the tabs shown, before the next paint, so
+// the strip never flashes the wrong state.
+function fitTabBar(root: HTMLElement): void {
+  root.classList.remove("tabs-collapsed");
+  const overflows = root.scrollWidth > root.clientWidth + 1;
+  root.classList.toggle("tabs-collapsed", overflows);
+}
+
+const tabBarFitted = new WeakSet<HTMLElement>();
 
 export function renderTabBar(
   root: HTMLElement,
@@ -631,7 +735,8 @@ export function renderTabBar(
   options: {picker?: boolean} = {},
 ): void {
   root.replaceChildren();
-  if (options.picker !== false && tabs.length >= TAB_PICKER_MIN) root.appendChild(tabPicker(tabs, activeKey, onSelect));
+  if (tabList && root.contains(tabList.trigger)) closeTabList();
+  if (options.picker !== false && tabs.length > 1) root.appendChild(tabPicker(tabs, activeKey, onSelect));
   for (const tab of tabs) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -644,8 +749,22 @@ export function renderTabBar(
     });
     root.appendChild(btn);
   }
-  // A dozen tabs overflow at any width — fade whichever edge hides more, the
-  // same treatment the EK tab bar gets.
+  if (options.picker !== false) fitTabBar(root);
+  if (options.picker !== false && !tabBarFitted.has(root)) {
+    // The room the strip has follows the window; the fonts arriving late
+    // change the tabs' own widths.
+    tabBarFitted.add(root);
+    let frame = 0;
+    window.addEventListener("resize", () => {
+      if (!frame) frame = requestAnimationFrame(() => {
+        frame = 0;
+        fitTabBar(root);
+      });
+    });
+    void document.fonts?.ready.then(() => fitTabBar(root));
+  }
+  // A strip without a picker can still overflow: fade whichever edge hides
+  // more, the same treatment the EK tab bar gets.
   let binding = tabBarScrollBindings.get(root);
   if (!binding) {
     binding = bindScrollEdges(root, ({left, right}, bar) => {

@@ -1847,7 +1847,8 @@ body:not(.embedded-match) .grid-match {
   text-decoration: none;
 }
 
-.game-host-top .match-tab:first-child {
+.game-host-top .match-tab:first-child,
+.game-host-top .tab-picker + .match-tab {
   margin-left: 0;
   border-top-left-radius: var(--cell-radius);
   border-bottom-left-radius: var(--cell-radius);
@@ -5057,39 +5058,46 @@ body.is-fullscreen.od-page .match-main {
   content: " ↑";
 }
 
-/* The list of every tab at the head of a long tab strip (widgets.ts
-   tabPicker): an icon with a native select laid invisibly over it, so a click
-   opens the browser's own list. It stays at the strip's left edge while the
-   tabs scroll under it. */
-.tab-picker {
-  position: sticky;
-  left: var(--space-0);
-  /* Above the active tab, which stands one level up over its neighbours. */
-  z-index: 2;
+/* A tab strip whose tabs do not all fit (widgets.ts fitTabBar) shows only
+   its picker: one tab naming the open one, with a chevron, that drops the list
+   of every tab. A strip that fits shows its tabs and no picker. */
+.match-tabs:not(.tabs-collapsed) > .tab-picker,
+.match-tabs.tabs-collapsed > .match-tab:not(.tab-picker) {
+  display: none;
+}
+
+.match-tab.tab-picker {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.game-host-top .match-tab.tab-picker {
+  border-radius: var(--cell-radius);
+}
+
+/* The chevron is as tall as the tab's own letters. */
+.tab-picker svg {
   flex: none;
-  align-self: stretch;
-  min-width: var(--control-h-sm);
-  border-radius: var(--radius-sm);
-  background: var(--page);
-  color: var(--muted);
-  cursor: pointer;
+  width: 1em;
+  height: 1em;
 }
 
-.tab-picker:hover,
-.tab-picker:focus-within {
-  color: var(--text-strong);
-  background: var(--wash-emphasis);
+.tab-picker[aria-expanded="true"] svg {
+  transform: rotate(180deg);
 }
 
-.tab-picker select {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
+.tab-picker-panel {
+  overflow-y: auto;
 }
+
+.tab-picker-panel .menu-item[aria-checked="true"] {
+  background: var(--hover-bg);
+  font-weight: var(--fw-bold);
+}
+
 
 /* A double elimination's bouts in the Сетка are ringed by their bracket
    (fest-grid.ts, the scheme's bracket): green the upper, red the lower. The

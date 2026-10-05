@@ -79,6 +79,6 @@ no_token = 'нет {{.token}}'
 pick_suggestion = "Выберите значение из подсказки"
 
 [tab_picker]
-# The button beside a long tab strip that lists every tab to jump to one:
-# its tooltip and aria-label.
+# The button a tab strip turns into when its tabs do not fit, which lists
+# every tab to jump to one: its tooltip and aria-label.
 label = "Все вкладки"
