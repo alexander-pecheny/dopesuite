@@ -259,3 +259,38 @@ test("a seat fields only the people with a real player id", () => {
   assert.deepEqual(seatRoster(view, 0), [{id: 7, name: "Анна"}]);
   assert.deepEqual(seatRoster(view, 1), []);
 });
+
+test("undo takes back this host's edit, and never another host's", async () => {
+  store.clear();
+  const bouts = {m1: {code: "m1", seq: 3, state: {a: 1, b: 1}}};
+  const calls = serve(bouts);
+  const {page, streams} = mount();
+  page.start();
+  await settle();
+  // This host sets a and b in one action; the writer sends them.
+  page.patch("m1", ["a"], 2);
+  page.patch("m1", ["b"], 2);
+  await settle();
+  assert.deepEqual(page.stateOf("m1"), {a: 2, b: 2, parsed: true});
+  // Another host then changes b.
+  streams[0].emit({scope: "match:7:m1", ops: [{op: "set", path: ["state", "b"], value: 7}], seq: bouts.m1.seq + 1, prevSeq: bouts.m1.seq});
+  bouts.m1.state.b = 7;
+  bouts.m1.seq += 1;
+  const result = page.undo();
+  assert.deepEqual(result, {codes: ["m1"], skipped: 1}, "b is the other host's now, so it is skipped");
+  await settle();
+  const undone = calls.filter((c) => c.method === "PATCH").at(-1);
+  assert.deepEqual(undone.body.ops.map((op) => [op.path, op.value]), [[["a"], 1]], "only a goes back");
+  assert.deepEqual(page.stateOf("m1"), {a: 1, b: 7, parsed: true});
+  assert.equal(page.undo(), null, "nothing is left to undo");
+});
+
+test("a spectator has nothing to undo", async () => {
+  store.clear();
+  serve({m1: {code: "m1", seq: 3, state: {a: 1}}});
+  const {page} = mount({viewer: true});
+  page.start();
+  await settle();
+  page.patch("m1", ["a"], 2);
+  assert.equal(page.undo(), null);
+});

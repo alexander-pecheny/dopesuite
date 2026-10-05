@@ -32,6 +32,8 @@ import type {FestGridStage} from "./fest-grid.js";
 import {boutWhereWhen, buildVenuesTable} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
+import {createUndo, isUndoKey, valueAt} from "./undo.js";
+import type {UndoResult} from "./undo.js";
 import type {EntrantsTab} from "./entrants.js";
 
 // A resync or a fest refresh waits this long, so a burst of events costs one
@@ -120,8 +122,14 @@ export interface BoutPage<V extends BoutView, S> {
   view(code: string): V | undefined;
   stateOf(code: string): S;
   codes(): string[];
-  // One cell edit of a bout's document, coalesced and retried by the writer.
+  // One cell edit of a bout's document, coalesced and retried by the writer,
+  // and remembered for this host's undo.
   patch(code: string, path: PatchPath, value: unknown): void;
+  // Take back this host's last edit (undo.ts): only what this page wrote, and
+  // no cell another host has changed since. Ctrl+Z (⌘Z) calls it.
+  undo(): UndoResult | null;
+  // Whether an edit of this page at the path still waits for the server.
+  isPending(code: string, path: PatchPath): boolean;
   // A structural write on a bout's scope.
   send(code: string, request: WriteRequest, intent?: WriteIntent): Promise<SendResult>;
   render(): void;
@@ -383,6 +391,44 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     },
   });
 
+  // ---- this host's undo ----
+
+  const currentAt = (code: string, path: PatchPath) => {
+    const view = views.get(code);
+    return view ? valueAt((writer.overlay(matchScope(code), view) as {state?: unknown}).state, path) : undefined;
+  };
+  const undoStack = createUndo({
+    current: currentAt,
+    apply: (code, path, value) => writer.patch(matchScope(code), path, value ?? null),
+  });
+
+  function patch(code: string, path: PatchPath, value: unknown): void {
+    if (!viewer) undoStack.record(code, path, currentAt(code, path), value);
+    writer.patch(matchScope(code), path, value);
+  }
+
+  function undo(): UndoResult | null {
+    const result = undoStack.undo();
+    if (!result) return null;
+    for (const code of result.codes) {
+      const view = views.get(code);
+      if (view) states.set(code, spec.parse(writer.overlay(matchScope(code), view)));
+    }
+    if (result.skipped) shell.recorder?.event("undo-skipped", {skipped: result.skipped});
+    if (result.codes.length === 1) show(result.codes[0]);
+    else if (result.codes.length) render();
+    return result;
+  }
+
+  function onUndoKey(event: KeyboardEvent): void {
+    if (!isUndoKey(event)) return;
+    // A text box keeps its own undo.
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("input, textarea, [contenteditable]")) return;
+    event.preventDefault();
+    undo();
+  }
+
   const venueEdits = venueEditor({
     writer,
     festID: String(route.festID || ""),
@@ -485,6 +531,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
 
   function start(): void {
     for (const cursor of spec.cursors?.() || []) cursor.bind();
+    if (!viewer) document.addEventListener("keydown", onUndoKey);
     render();
     fitScrollFade(root.closest(".sheet-frame"));
     live.connect();
@@ -511,7 +558,9 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     view: (code) => views.get(code),
     stateOf: (code) => states.get(code) || spec.blank(),
     codes: () => [...views.keys()],
-    patch: (code, path, value) => writer.patch(matchScope(code), path, value),
+    patch,
+    undo,
+    isPending: (code, path) => writer.isPending(matchScope(code), path),
     send: (code, request, intent) => writer.send(matchScope(code), request, intent),
     render,
     resync,
