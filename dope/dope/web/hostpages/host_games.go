@@ -459,7 +459,7 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	if data.HasDSL {
 		form = append(form,
 			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
-				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SchemeDSL))),
+				dopeui.Editor(dopeui.Name("scheme_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SchemeDSL))),
 			dopeui.Hint(dopeui.Text(s.Host.Games.RebuildHint())),
 		)
 	}
@@ -584,7 +584,7 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	g := GameSettings{Title: r.Form.Get("title"), Slug: r.Form.Get("slug"), SchemeDSL: r.Form.Get("brain_dsl")}
+	g := GameSettings{Title: r.Form.Get("title"), Slug: r.Form.Get("slug"), SchemeDSL: r.Form.Get("scheme_dsl")}
 	if r.Form.Get("divisions_present") != "" {
 		// The boxes say which offered divisions are shown; the rest of the offered
 		// ones are hidden, and one hidden before that no team carries now

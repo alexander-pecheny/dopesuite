@@ -122,7 +122,7 @@ whole_roster_hint = "Играют все команды феста, под те�
 # The settings-page form: name and slug fields, the scheme-rebuild hint, submit.
 title_label = "Название"
 slug_label = "Slug (необязательно, a-z, 0-9, дефис)"
-rebuild_hint = "Пересборка меняет только не начатые бои: можно поменять число вопросов или добавить блок, но начатый бой должен сохраниться без изменений."
+rebuild_hint = "Пересборка меняет только бои, в которых ещё ничего не внесено. Бой с внесёнными данными должен остаться таким же, иначе новая схема не применится."
 save_submit = "Сохранить"
 # Field name the sticker max-count validation errors use.
 sticker_max_field = "Максимум стикеров"

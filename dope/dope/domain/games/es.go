@@ -9,7 +9,7 @@ import dopestrings "dope/i18nstrings"
 // alone.
 var esFormat = Definition{Code: ES, Label: dopestrings.Default.Games.Es.Label(), Title: dopestrings.Default.Host.Games.TypeEs(),
 	Page: "static/ek.html", Init: InitEK, EKBout: true, HandRoster: true, PlayerOverrides: true,
-	DSL: DSLAccepted, PastedScheme: true, Sheets: SheetsEK, Journal: JournalEvents, Protocol: es{}}
+	DSL: DSLEditable, PastedScheme: true, Sheets: SheetsEK, Journal: JournalEvents, Protocol: es{}}
 
 // ESPlayersPerTheme is how many players a team seats on a theme when the
 // scheme is silent — the regulations' "up to three".

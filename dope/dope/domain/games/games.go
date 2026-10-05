@@ -125,8 +125,9 @@ type DSLUse int
 
 const (
 	_ DSLUse = iota
-	// DSLAccepted: a Game may be created from a DSL, and its settings page does
-	// not edit it.
+	// DSLAccepted: a flat Game may be created from a DSL, and its settings page
+	// does not edit it. Its document is one sitting shaped by the creation
+	// form's own fields, which a recompile would deal again from scratch.
 	DSLAccepted
 	// DSLEditable: a Game's settings page edits its DSL and recompiles it.
 	DSLEditable

@@ -181,3 +181,14 @@ handler. Both were reachable only through `server/tests`.
   the same stage for a bout with no Round), and `matchedit.SetStartsAtTx`
   writes a start time on a bout or on its Wave. The handler only commits
   and broadcasts.
+
+## Follow-up: every scheme-built format's DSL is edited on its settings page
+
+ADR-0027 left open that only brain's settings page edited its DSL. The
+recompile was never brain-specific, and since §2 it refuses anything that
+would lose an entry. So ЭК, ЭС, личная СИ, Тройка and Хамса are
+`DSLEditable` too, and the form field is `scheme_dsl`. The flat formats
+(ОД, КСИ, Кубок Дружбы) stay `DSLAccepted`. A flat Game's document is one
+sitting shaped by the creation form's own fields, and a recompile would deal
+it again from scratch. Reshaping a flat document in place (more tours, the
+answers kept) is a separate piece of work.

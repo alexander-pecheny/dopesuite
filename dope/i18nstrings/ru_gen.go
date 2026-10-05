@@ -1022,7 +1022,7 @@ var RU = Strings{
 			OdQuestionsLabel: func() string { return "Количество вопросов в туре" },
 			OdToursLabel:     func() string { return "Количество туров" },
 			RebuildHint: func() string {
-				return "Пересборка меняет только не начатые бои: можно поменять число вопросов или добавить блок, но начатый бой должен сохраниться без изменений."
+				return "Пересборка меняет только бои, в которых ещё ничего не внесено. Бой с внесёнными данными должен остаться таким же, иначе новая схема не применится."
 			},
 			SaveSubmit:  func() string { return "Сохранить" },
 			SchemeLabel: func() string { return "Схема" },

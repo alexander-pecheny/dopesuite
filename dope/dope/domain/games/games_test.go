@@ -119,7 +119,7 @@ func TestTheFormatListsThatUsedToDisagree(t *testing.T) {
 		{"individual", func(d Definition) bool { return d.Individual }, []string{SI}},
 		{"EK's bout", func(d Definition) bool { return d.EKBout }, []string{EK, ES}},
 		{"DSL refused", func(d Definition) bool { return d.DSL == DSLRefused }, []string{Multi}},
-		{"DSL edited on the settings page", func(d Definition) bool { return d.DSL == DSLEditable }, []string{Brain}},
+		{"DSL edited on the settings page", func(d Definition) bool { return d.DSL == DSLEditable }, []string{Brain, EK, ES, SI, Troika, Hamsa}},
 	}
 	for _, c := range cases {
 		got := Codes(c.pred)
