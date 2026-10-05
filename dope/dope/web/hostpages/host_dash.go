@@ -600,16 +600,32 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 	if festRef == "" {
 		festRef = fmt.Sprintf("%d", festID)
 	}
-	hostGames := make([]PublicFestGame, len(gameRows))
-	for i, g := range gameRows {
-		hostGames[i] = PublicFestGame{
+	currentRole, userID := "", int64(0)
+	if user, ok := s.h.Engine().LookupSession(r); ok {
+		userID = user.UserID
+		currentRole, err = festaccess.FestUserRoleFromQuery(r.Context(), s.h.Engine().DB, festID, userID)
+		if err != nil {
+			route.WriteError(w, r, err)
+			return
+		}
+	}
+	hostGames := make([]PublicFestGame, 0, len(gameRows))
+	for _, g := range gameRows {
+		// A host an admin limited to some Games sees those alone.
+		if may, err := festaccess.MayRunGame(r.Context(), s.h.Engine().DB, festID, g.ID, userID, currentRole); err != nil {
+			route.WriteError(w, r, err)
+			return
+		} else if !may && roles.CanEditGameTables(currentRole) {
+			continue
+		}
+		hostGames = append(hostGames, PublicFestGame{
 			ID:    g.ID,
 			Slug:  g.Slug,
 			Code:  g.Code,
 			Title: g.Title,
 			Type:  games.Label(g.Type),
 			URL:   fmt.Sprintf("/host/fest/%s/game/%s/", festRef, g.Ref()),
-		}
+		})
 	}
 	teamCount, playerCount, troikaCount, err := s.loadHostFestRosterCounts(r.Context(), festID)
 	if err != nil {
@@ -622,14 +638,6 @@ select coalesce(sum(case when number is not null then 1 else 0 end), 0)
 from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigned); err != nil {
 		route.WriteError(w, r, err)
 		return
-	}
-	currentRole := ""
-	if user, ok := s.h.Engine().LookupSession(r); ok {
-		currentRole, err = festaccess.FestUserRoleFromQuery(r.Context(), s.h.Engine().DB, festID, user.UserID)
-		if err != nil {
-			route.WriteError(w, r, err)
-			return
-		}
 	}
 	canManageFest := roles.CanManageFest(currentRole)
 	canManageAccess := roles.CanManageAccess(currentRole)

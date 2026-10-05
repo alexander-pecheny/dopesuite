@@ -92,6 +92,16 @@ func TestAdminLimitsAHostToSomeGames(t *testing.T) {
 	if code := write(adminToken, other); code != http.StatusOK {
 		t.Fatalf("admin on the other game: %d", code)
 	}
+	// The fest's dashboard lists a limited host's own Games alone; an admin's
+	// lists every Game.
+	gameLink := func(gameID int64) string { return fmt.Sprintf("/game/%d/", gameID) }
+	dash := get(hostToken, fmt.Sprintf("/host/fest/%d", festID), srv.HostPageServer().HandleHostRouter).Body.String()
+	if !strings.Contains(dash, gameLink(troika)) || strings.Contains(dash, gameLink(other)) {
+		t.Fatalf("a limited host's dashboard should list their own Game alone")
+	}
+	if dash := get(adminToken, fmt.Sprintf("/host/fest/%d", festID), srv.HostPageServer().HandleHostRouter).Body.String(); !strings.Contains(dash, gameLink(other)) {
+		t.Fatal("the admin's dashboard lost a Game")
+	}
 	// The other Game's host page sends the host to its viewer page, which a
 	// private fest now opens to its organizers — and still not to strangers.
 	page := get(hostToken, fmt.Sprintf("/host/fest/%d/game/%d/", festID, other), srv.HostPageServer().HandleHostRouter)
