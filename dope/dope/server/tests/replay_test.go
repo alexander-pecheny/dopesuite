@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -80,17 +81,9 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	return game
 }
 
-// replayFromTranscript runs a committed transcript against the scheme it names
-// and reports every disagreement, so one failing бой does not hide the rest.
-// The direct transport is the conformance gate on every `just test`; the HTTP
-// one proves the handlers, the write path and authorisation over the same
-// transcript, once per game type, and only without -short (`just test-full`),
-// where a championship costs a minute and a half.
-func replayFromTranscript(t *testing.T, name, gameType, title string, direct bool) *serverGame {
+// loadTranscript reads a committed studchr transcript and the scheme it names.
+func loadTranscript(t *testing.T, name string) (replay.Script, string) {
 	t.Helper()
-	if !direct && testing.Short() {
-		t.Skip("heavy: the HTTP studchr replay runs without -short (just test-full)")
-	}
 	src, err := os.ReadFile("../../../testdata/studchr2026/" + name + ".transcript")
 	if err != nil {
 		t.Skipf("стенограммы нет: %v", err)
@@ -103,11 +96,18 @@ func replayFromTranscript(t *testing.T, name, gameType, title string, direct boo
 	if err != nil {
 		t.Fatal(err)
 	}
+	return script, string(dsl)
+}
+
+// playTranscript runs a script against the scheme and reports every
+// disagreement, so one failing бой does not hide the rest.
+func playTranscript(t *testing.T, script replay.Script, dsl, gameType, title string, direct bool) *serverGame {
+	t.Helper()
 	names := make([]string, len(script.Roster))
 	for i, entrant := range script.Roster {
 		names[i] = entrant.Name
 	}
-	game := newReplayGame(t, string(dsl), gameType, title, names, direct)
+	game := newReplayGame(t, dsl, gameType, title, names, direct)
 	findings, err := replay.Run(script, game)
 	// Findings first even when the run died: a бой that could not be played at
 	// all is usually explained by the disagreements that came before it.
@@ -118,6 +118,96 @@ func replayFromTranscript(t *testing.T, name, gameType, title string, direct boo
 		t.Fatalf("прогон: %v", err)
 	}
 	return game
+}
+
+// replayFromTranscript runs a whole committed transcript over the direct
+// transport. This is the conformance gate (ADR-0010): every бой, the
+// statistics and the tables.
+func replayFromTranscript(t *testing.T, name, gameType, title string) *serverGame {
+	t.Helper()
+	script, dsl := loadTranscript(t, name)
+	return playTranscript(t, script, dsl, gameType, title, true)
+}
+
+// replayTwinOverHTTP is a direct replay's twin over HTTP. It is there to prove
+// the handlers, authorisation and the write path, and those do not care how
+// many бои a tournament has, so it plays over HTTP only the first бой of
+// each kind of input in the transcript (replay.Bout.Kinds): every way a
+// seating arrives, every kind of state patch, a finish. Every other бой up to
+// the last of those is played direct, because each бой is seated from the
+// ones before it. Scoring and seating the whole tournament is the direct
+// replay's job. A new kind of input in a transcript gets its own бой over
+// HTTP without anyone editing this test.
+//
+// The reseed is the one endpoint no kind can name: a reseed ranks only once
+// the round before it has closed. So the first time one is ready,
+// «рассчитать» goes over HTTP, and the twin plays on (direct) until then.
+//
+// It asserts that the бои it sent over HTTP carried every kind the
+// transcript has, and that every endpoint the full replay calls answered 200
+// at least once.
+func replayTwinOverHTTP(t *testing.T, name, gameType, title string) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("heavy: the HTTP studchr replay runs without -short (just test-full)")
+	}
+	script, dsl := loadTranscript(t, name)
+	names := make([]string, len(script.Roster))
+	for i, entrant := range script.Roster {
+		names[i] = entrant.Name
+	}
+	game := newReplayGame(t, dsl, gameType, title, names, false)
+	via := &twinTransport{http: httpTransport{game}, direct: directTransport{game}}
+	game.via = via
+	stages, err := game.reseedStages()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	covered := map[string]bool{}
+	var overHTTP int
+	played := 0
+	for played < script.CoveringPrefix() || (len(stages) > 0 && game.served["reseed"] == 0 && played < len(script.Bouts)) {
+		via.overHTTP = false
+		for _, kind := range script.Bouts[played].Kinds() {
+			if !covered[kind] {
+				covered[kind], via.overHTTP = true, true
+			}
+		}
+		if via.overHTTP {
+			overHTTP++
+		}
+		findings, err := replay.Run(script.Slice(played, played+1), game)
+		for _, f := range findings {
+			t.Errorf("%s", f)
+		}
+		if err != nil {
+			t.Fatalf("прогон: %v", err)
+		}
+		played++
+	}
+
+	var kinds []string
+	for kind := range covered {
+		kinds = append(kinds, kind)
+	}
+	slices.Sort(kinds)
+	if want := script.Kinds(); !slices.Equal(kinds, want) {
+		t.Errorf("по HTTP сыграны виды %v, а в стенограмме %v", kinds, want)
+	}
+	want := []string{"state", "finish"}
+	if covered["draw"] {
+		want = append(want, "draw")
+	}
+	if len(stages) > 0 {
+		want = append(want, "reseed")
+	}
+	for _, endpoint := range want {
+		if game.served[endpoint] == 0 {
+			t.Errorf("ни один запрос %s не прошёл", endpoint)
+		}
+	}
+	t.Logf("%d боёв из %d, по HTTP %d: %v", played, len(script.Bouts), overHTTP, kinds)
 }
 
 // Both transports honour the same replay.Game contract: the mini transcript
@@ -236,12 +326,12 @@ func TestReplayDrawSurvivesRecompute(t *testing.T) {
 // the same Σ and the same место the tournament published.
 func TestReplayStudchrEK(t *testing.T) {
 	t.Parallel()
-	replayFromTranscript(t, "ek", "ek", "ЭК", true)
+	replayFromTranscript(t, "ek", "ek", "ЭК")
 }
 
 func TestReplayStudchrEKOverHTTP(t *testing.T) {
 	t.Parallel()
-	replayFromTranscript(t, "ek", "ek", "ЭК", false)
+	replayTwinOverHTTP(t, "ek", "ek", "ЭК")
 }
 
 // Личная СИ, the longest game of the championship: 54 players, six групп of
@@ -254,12 +344,12 @@ func TestReplayStudchrEKOverHTTP(t *testing.T) {
 // what makes it the harder half of the harness.
 func TestReplayStudchrSI(t *testing.T) {
 	t.Parallel()
-	replayFromTranscript(t, "si", "si", "СИ", true)
+	replayFromTranscript(t, "si", "si", "СИ")
 }
 
 func TestReplayStudchrSIOverHTTP(t *testing.T) {
 	t.Parallel()
-	replayFromTranscript(t, "si", "si", "СИ", false)
+	replayTwinOverHTTP(t, "si", "si", "СИ")
 }
 
 // ТПШ: 91 players write one common отбор, and the best 24 play a bracket that
@@ -269,7 +359,7 @@ func TestReplayStudchrSIOverHTTP(t *testing.T) {
 // derive every one of them.
 func TestReplayStudchrTPSh(t *testing.T) {
 	t.Parallel()
-	game := replayFromTranscript(t, "tpsh", "si", "ТПШ", true)
+	game := replayFromTranscript(t, "tpsh", "si", "ТПШ")
 	// The Пересев sorts on how many 50s each player took and shows the column,
 	// so what it sorted on has to be what it stored.
 	var stageCode string
@@ -358,10 +448,10 @@ select state_json ->> '$.teams[0].rows[0].player' from matches where game_id = ?
 // entire structure of the largest game dope runs.
 func TestReplayStudchrBrain(t *testing.T) {
 	t.Parallel()
-	replayFromTranscript(t, "brain", "brain", "КИнСБФ", true)
+	replayFromTranscript(t, "brain", "brain", "КИнСБФ")
 }
 
 func TestReplayStudchrBrainOverHTTP(t *testing.T) {
 	t.Parallel()
-	replayFromTranscript(t, "brain", "brain", "КИнСБФ", false)
+	replayTwinOverHTTP(t, "brain", "brain", "КИнСБФ")
 }

@@ -36,6 +36,9 @@ type serverGame struct {
 	gameType string
 	token    string
 	via      transport
+	// served counts the requests the HTTP transport had answered 200, by
+	// endpoint, so a twin can assert it reached every one.
+	served map[string]int
 }
 
 // transport is what differs between the HTTP and the direct replay: how a
@@ -49,6 +52,13 @@ type transport interface {
 
 type httpTransport struct{ g *serverGame }
 
+func (h httpTransport) count(endpoint string) {
+	if h.g.served == nil {
+		h.g.served = map[string]int{}
+	}
+	h.g.served[endpoint]++
+}
+
 func (h httpTransport) patch(_ int64, code string, ops []map[string]any) error {
 	g := h.g
 	resp := scopedAPIRequest(g.t, g.srv, http.MethodPatch,
@@ -57,6 +67,7 @@ func (h httpTransport) patch(_ int64, code string, ops []map[string]any) error {
 	if resp.Code != http.StatusOK {
 		return fmt.Errorf("отметки %s: %d %s", code, resp.Code, resp.Body.String())
 	}
+	h.count("state")
 	return nil
 }
 
@@ -68,6 +79,7 @@ func (h httpTransport) finish(_ int64, code string) error {
 	if resp.Code != http.StatusOK {
 		return fmt.Errorf("закрытие %s: %d %s", code, resp.Code, resp.Body.String())
 	}
+	h.count("finish")
 	return nil
 }
 
@@ -89,6 +101,9 @@ func (h httpTransport) reseeds() error {
 		if resp.Code != http.StatusOK && resp.Code != http.StatusBadRequest {
 			return fmt.Errorf("пересев %s: %d %s", code, resp.Code, resp.Body.String())
 		}
+		if resp.Code == http.StatusOK {
+			h.count("reseed")
+		}
 	}
 	return nil
 }
@@ -101,7 +116,87 @@ func (h httpTransport) draw(slot string, participantID int64) error {
 	if resp.Code != http.StatusOK {
 		return fmt.Errorf("жребий %s: %d %s", slot, resp.Code, resp.Body.String())
 	}
+	h.count("draw")
 	return nil
+}
+
+// twinTransport is the HTTP twin's: a бой goes over HTTP when overHTTP is
+// set and direct otherwise, and «рассчитать» goes over HTTP the first time a
+// reseed is ready (replayTwinOverHTTP).
+type twinTransport struct {
+	http     httpTransport
+	direct   directTransport
+	overHTTP bool
+}
+
+func (w *twinTransport) via() transport {
+	if w.overHTTP {
+		return w.http
+	}
+	return w.direct
+}
+
+func (w *twinTransport) patch(matchID int64, code string, ops []map[string]any) error {
+	return w.via().patch(matchID, code, ops)
+}
+
+func (w *twinTransport) finish(matchID int64, code string) error {
+	return w.via().finish(matchID, code)
+}
+
+func (w *twinTransport) draw(slot string, participantID int64) error {
+	return w.via().draw(slot, participantID)
+}
+
+// reseeds presses «рассчитать» over HTTP the first time a reseed is ready.
+// Asking first matters: a reseed that is not ready still ranks its sources
+// before it answers 400, and a group stage of 72 бои asked that after every
+// one of them would cost more than the бои.
+func (w *twinTransport) reseeds() error {
+	if w.http.g.served["reseed"] == 0 {
+		ready, err := w.reseedReady()
+		if err != nil {
+			return err
+		}
+		if ready {
+			return w.http.reseeds()
+		}
+	}
+	return w.via().reseeds()
+}
+
+// reseedReady reports whether any of the game's reseed stages could be
+// calculated now.
+func (w *twinTransport) reseedReady() (bool, error) {
+	g := w.http.g
+	rows, err := g.db().Query(`
+select config_json from stages where game_id = ? and stage_type = 'reseed' order by position`, g.gameID)
+	if err != nil {
+		return false, err
+	}
+	var configs [][]byte
+	for rows.Next() {
+		var config []byte
+		if err := rows.Scan(&config); err != nil {
+			rows.Close()
+			return false, err
+		}
+		configs = append(configs, config)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	for _, config := range configs {
+		state, err := resolver.ReseedPrerequisites(g.t.Context(), g.db(), config, g.gameID)
+		if err != nil {
+			return false, err
+		}
+		if state.Ready {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // directTransport applies each patch in its own transaction and scores the

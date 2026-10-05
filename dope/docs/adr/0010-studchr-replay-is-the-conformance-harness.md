@@ -67,3 +67,39 @@ second tournament asked for that the first had not:
   count how many of the three answered a вопрос and never which — so the кресла
   are synthesized, and the Статистика tab, the one thing that reads them, has
   no oracle. A sheet is evidence of what it recorded and of nothing else.
+
+## Amended 5 Oct 2026 (the HTTP twins play the first бой of each kind)
+
+The HTTP twins replayed their whole transcript a second time. On this box
+that was 45 s for СИ and 34 s for брейн, most of `go test ./...`, and it
+proved nothing the direct replay had not: the twins are there for the
+handlers, authorisation and the write path, and those do the same thing on
+the fortieth бой of a kind as on the first.
+
+- A twin now sends over HTTP only the first бой of each **kind of input**
+  (`replay.Bout.Kinds`): how the seating arrives (a Draw written in, derived
+  and checked, a lot drawn through the draw endpoint), which kinds of state
+  patch its seats carry (marks, theme players, брейн's buzzer and each
+  question count, so a перестрелка's extra rows are one, Троечка's counts,
+  a перестрелка, a ставка, a pinned place) and the finish. The бои between
+  are played direct, because every бой is seated from the ones before it.
+  It stops after the last first-of-a-kind (`Script.CoveringPrefix`), so the
+  stats and the tables are left to the direct replay, which stays whole and
+  is still the conformance gate.
+- The reseed is the one endpoint no kind names: it ranks only once the round
+  before it has closed. The twin presses «рассчитать» over HTTP the first
+  time a reseed is ready, and plays on until one has been.
+- Each twin asserts that the бои it sent over HTTP carried every kind the
+  transcript has, and that every endpoint the full replay calls (the state
+  patch, the finish, the draw where there is one, the reseed where the scheme
+  has one) answered 200 at least once. A new kind of input in a transcript
+  gets its own бой over HTTP without anybody editing a test;
+  `TestKindsReadsEveryInputField` fails if a new field of a Bout or a Seat is
+  neither a kind nor declared not to be input.
+- What each twin plays now: ЭК 18 of 25 бои, one over HTTP (every бой is a
+  Draw with the same kinds; the rest is played to reach the first ready
+  reseed); СИ 76 of 96, two over HTTP; брейн 127 of 132, three over HTTP
+  (its longest перестрелка is in a semifinal, s5/r1/w1/m2). Хамса's twin is unchanged:
+  its seventh and last бой is the first to carry a kind, so the opening
+  that covers it is the whole transcript. Measured alone: СИ 45 s to 9 s, брейн 34 s to 13 s,
+  ЭК 3 s to 1 s.

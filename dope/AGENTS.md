@@ -69,7 +69,7 @@ directly. Each of its files covers one concern:
 | `server/static_mode.go` | ~440 | The "DDoS lockdown". `staticGovernor.step` is the pure hysteresis logic, `lockdownServes` decides per request whether to serve the static copy, `spliceInit` is the one place the init payload is spliced in, and there is a snapshot cache |
 | `server/serve_html.go` | ~360 | Builds the HTML init payloads for the host, viewer and game pages, and versions the assets. `canEdit` is the only place where the init payload looks at the role |
 | `server/host_accessors.go` | ~190 | Dependency-inversion adapter (`*server` → leaf `Host` interfaces) |
-| `server/testapi.go` | ~185 | The single exported test seam for `server/tests/` |
+| `server/testapi.go` | ~215 | The single exported test seam for `server/tests/`. `OpenFestDB` opens without fsync (`dopecore/sqlitex/sqlitextest`); production's `openFestDB` keeps `synchronous(FULL)`, and `durable_test.go` holds both apart. `SetEnv` shadows an env var for one server, and the request wrappers `Settle` the edit batcher before they return |
 
 The heavy domain and persistence logic lives in the leaf groups:
 `storage/store` (schema, queries, the view and scheme types, and pure scoring),
@@ -137,8 +137,8 @@ emitted to `web/jstest/dist/`.
 ## How to Run / Build / Test
 ```bash
 just dev              # Server (hot reload from disk); polls telegram if TELEGRAM_BOT_TOKEN is set
-just test             # Go tests plus the deno JS tests, including the studchr replays over the direct transport (~25 s). This is the conformance gate.
-just test-full        # the same, plus the studchr replays over HTTP (~90 s, covering the handlers, auth and the write path). Run this before a merge.
+just test             # Go tests plus the deno JS tests, including the whole studchr replays over the direct transport. This is the conformance gate. `go test -short ./...` takes ~45 s.
+just test-full        # the same, plus the replays' HTTP twins: each plays over HTTP the first бой of every kind of input its transcript carries, and the бои between direct (ADR-0010). They cover the handlers, auth and the write path. `go test ./...` takes ~60 s. Run this before a merge.
 just test-js          # Frontend tests only
 just fmt              # gofmt
 just vet              # go vet
@@ -148,6 +148,12 @@ just cli              # build dope-cli into ~/.local/bin (the dope-api skill)
 just deploy           # SSH deploy to VPS
 just invite [days]    # Generate invite code
 ```
+
+The tests in `dope/server/tests` run in parallel: a new one starts with
+`t.Parallel()`, opens its database with `dopeserver.OpenFestDB` (no fsync) and,
+if it needs a bot token, sets it with `srv.SetEnv` rather than `t.Setenv`,
+which a parallel test cannot call. A `TestMain` clears the server's env vars
+first. The few serial tests say why in a comment.
 
 Server listens on port **9672** by default (override with `$PORT`). Database defaults to `fest.db` (override with `$DOPE_DB`).
 
