@@ -133,7 +133,6 @@ const page: BoutPage<EKMatchView, EKState> = mountBoutPage({
   // An old stage code or a Block's old @-spelling still opens its tab.
   canonical: canonicalKey,
   afterRender: () => showLinked(),
-  downloads: true,
 });
 const {viewer} = page;
 const boutLetters = page.letters;

@@ -14,7 +14,7 @@ import (
 // what it has always been given, though its Games are brackets on EK's page.
 var siFormat = Definition{Code: SI, Label: dopestrings.Default.Games.Si.Label(), Title: dopestrings.Default.Host.Games.TypeSi(),
 	Individual: true, Page: "static/ek.html", DSL: DSLEditable,
-	DefaultDSL: SIDefaultDSL, Sheets: SheetsKSI, Journal: JournalEvents, Protocol: si{}}
+	DefaultDSL: SIDefaultDSL, Sheets: SheetsEK, Journal: JournalEvents, Protocol: si{}}
 
 // si is individual jeopardy: three or four players at a table over six, eight
 // or twelve themes, each theme five questions at 10..50.

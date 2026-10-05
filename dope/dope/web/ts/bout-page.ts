@@ -105,8 +105,6 @@ export interface BoutPageSpec<V extends BoutView, S> {
   onFest?: () => void;
   // A team's roster in this Game changed (the roster tab, a player override).
   onRoster?: () => void;
-  // Whether the menu offers the Game's downloads (EK's sheets).
-  downloads?: boolean;
   // Test seams: the shell, the route, the stream.
   shell?: GameShell;
   route?: GameRoute;
@@ -179,7 +177,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     viewer,
     apiBase: route.apiBase,
     init: spec.init,
-    downloads: Boolean(spec.downloads),
+    // Every bout format exports its sheets (games.Definition.Sheets).
     chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || spec.title()}),
     cursorKinds: spec.cursorKinds,
     activeCursorElement: spec.activeCursorElement,
