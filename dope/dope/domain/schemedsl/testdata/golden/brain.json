@@ -2618,6 +2618,7 @@
      "letter": "BU",
      "venue": 1,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -2642,6 +2643,7 @@
      "letter": "BV",
      "venue": 1,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -2666,6 +2668,7 @@
      "letter": "BW",
      "venue": 1,
      "round": 2,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -2688,6 +2691,7 @@
      "letter": "BX",
      "venue": 1,
      "round": 2,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -2710,6 +2714,7 @@
      "letter": "BY",
      "venue": 1,
      "round": 3,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -2755,6 +2760,7 @@
      "letter": "BZ",
      "venue": 2,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -2779,6 +2785,7 @@
      "letter": "CA",
      "venue": 2,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -2803,6 +2810,7 @@
      "letter": "CB",
      "venue": 2,
      "round": 2,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -2825,6 +2833,7 @@
      "letter": "CC",
      "venue": 2,
      "round": 2,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -2847,6 +2856,7 @@
      "letter": "CD",
      "venue": 2,
      "round": 3,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -2892,6 +2902,7 @@
      "letter": "CE",
      "venue": 3,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -2916,6 +2927,7 @@
      "letter": "CF",
      "venue": 3,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -2940,6 +2952,7 @@
      "letter": "CG",
      "venue": 3,
      "round": 2,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -2962,6 +2975,7 @@
      "letter": "CH",
      "venue": 3,
      "round": 2,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -2984,6 +2998,7 @@
      "letter": "CI",
      "venue": 3,
      "round": 3,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -3029,6 +3044,7 @@
      "letter": "CJ",
      "venue": 4,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -3053,6 +3069,7 @@
      "letter": "CK",
      "venue": 4,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -3077,6 +3094,7 @@
      "letter": "CL",
      "venue": 4,
      "round": 2,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -3099,6 +3117,7 @@
      "letter": "CM",
      "venue": 4,
      "round": 2,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -3121,6 +3140,7 @@
      "letter": "CN",
      "venue": 4,
      "round": 3,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -3166,6 +3186,7 @@
      "letter": "CO",
      "venue": 5,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -3190,6 +3211,7 @@
      "letter": "CP",
      "venue": 5,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -3214,6 +3236,7 @@
      "letter": "CQ",
      "venue": 5,
      "round": 2,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -3236,6 +3259,7 @@
      "letter": "CR",
      "venue": 5,
      "round": 2,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -3258,6 +3282,7 @@
      "letter": "CS",
      "venue": 5,
      "round": 3,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -3303,6 +3328,7 @@
      "letter": "CT",
      "venue": 6,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -3327,6 +3353,7 @@
      "letter": "CU",
      "venue": 6,
      "round": 1,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -3351,6 +3378,7 @@
      "letter": "CV",
      "venue": 6,
      "round": 2,
+     "bracket": "upper",
      "participantCount": 2,
      "slots": [
       {
@@ -3373,6 +3401,7 @@
      "letter": "CW",
      "venue": 6,
      "round": 2,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {
@@ -3395,6 +3424,7 @@
      "letter": "CX",
      "venue": 6,
      "round": 3,
+     "bracket": "lower",
      "participantCount": 2,
      "slots": [
       {

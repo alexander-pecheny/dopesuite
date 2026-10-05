@@ -9,6 +9,7 @@ import (
 	"regexp"
 
 	"dope/dope/domain/flatgame"
+	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/schemedsl"
@@ -942,6 +943,36 @@ create index if not exists fest_roster_snapshots_fest_idx on fest_roster_snapsho
 	{Version: 41, Name: "a bout's start time", Up: func(db *sql.DB) error {
 		return store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{{Name: "starts_at", Type: "TEXT"}})
 	}},
+	{Version: 42, Name: "a double elimination's bouts know their bracket", Up: bracketsBackfill},
+}
+
+// bracketsBackfill gives the bouts of every double elimination compiled
+// before bouts carried a bracket theirs (gamebuild.FillBracketsTx), one game
+// at a time.
+func bracketsBackfill(db *sql.DB) error {
+	ctx := context.Background()
+	ids, err := store.CollectRows(ctx, db, `select id from games where scheme_dsl like '%double_elimination%' order by id`, nil,
+		func(rows *sql.Rows) (int64, error) {
+			var id int64
+			return id, rows.Scan(&id)
+		})
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if err := gamebuild.FillBracketsTx(ctx, tx, id); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("game %d: %w", id, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // troikaApplicationOrder gives every troika its place in the order its

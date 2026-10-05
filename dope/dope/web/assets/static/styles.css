@@ -5091,43 +5091,32 @@ body.is-fullscreen.od-page .match-main {
   cursor: pointer;
 }
 
-/* Block accents: a Game of several Blocks gives each its colour (game-tabs.ts
-   blockAccents), so a bout shows which one it belongs to, the way the СЧР
-   sheets colour their brackets. An element marked data-block sets
-   --block-accent for itself and everything in it. */
+/* A double elimination's bouts in the Сетка are ringed by their bracket
+   (fest-grid.ts, the scheme's bracket): green the upper, red the lower. The
+   ring is laid over the seats below the head, so no box moves off the shared
+   rows, and stops at the last seat, short of a box's spare height. */
 :root {
-  --block-accent-0: var(--uchu-blue-5);
-  --block-accent-1: var(--uchu-orange-5);
-  --block-accent-2: var(--uchu-purple-5);
-  --block-accent-3: var(--uchu-green-5);
-  --block-accent-4: var(--uchu-pink-5);
-  --block-accent-5: var(--uchu-yellow-5);
-  --block-accent-w: 2px;
+  --bracket-upper: var(--uchu-green-7);
+  --bracket-lower: var(--uchu-red-5);
+  --bracket-ring-w: 1px;
 }
 
-[data-block="0"] { --block-accent: var(--block-accent-0); }
-[data-block="1"] { --block-accent: var(--block-accent-1); }
-[data-block="2"] { --block-accent: var(--block-accent-2); }
-[data-block="3"] { --block-accent: var(--block-accent-3); }
-[data-block="4"] { --block-accent: var(--block-accent-4); }
-[data-block="5"] { --block-accent: var(--block-accent-5); }
+.grid-box[data-bracket="upper"] { --bracket-accent: var(--bracket-upper); }
+.grid-box[data-bracket="lower"] { --bracket-accent: var(--bracket-lower); }
 
-/* In the Сетка the accent rings a box's rows, below its head: an overlay laid
-   over the rows, so no box moves off the shared row grid. On the tab strip a
-   tab's bottom edge carries it. */
-[data-block] .grid-box .grid-slot-grid {
+.grid-box[data-bracket] .grid-slot-grid {
   position: relative;
 }
 
-[data-block] .grid-box .grid-slot-grid::after {
+.grid-box[data-bracket] .grid-slot-grid::after {
   content: "";
   position: absolute;
-  inset: var(--grid-row) 0 0;
-  border: var(--block-accent-w) solid var(--block-accent);
+  top: var(--grid-row);
+  left: 0;
+  right: 0;
+  height: calc(var(--grid-seat-rows) * var(--grid-row));
+  box-sizing: border-box;
+  border: var(--bracket-ring-w) solid var(--bracket-accent);
   border-radius: var(--radius-md);
   pointer-events: none;
-}
-
-.match-tab[data-block] {
-  box-shadow: inset 0 calc(-1 * var(--block-accent-w)) 0 var(--block-accent);
 }

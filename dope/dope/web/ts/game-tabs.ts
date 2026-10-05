@@ -245,34 +245,6 @@ function shortStageTitle(stage: StageRef): string {
 }
 
 // A Block is a run of stages sharing a grain.block; a reseed ends the run.
-// How many accent colours the Blocks take turns at (styles.css, "Block
-// accents"); a seventh Block wears the first one again.
-export const BLOCK_ACCENTS = 6;
-
-// blockAccents is the accent colour each stage wears, by its code, so a bout
-// shows which Block it belongs to: the Сетка's boxes and the tabs carry it.
-// A Block here is the scheme's own (grain.block), not a run between reseeds:
-// a single bracket that reseeds between its rounds is still one grid. A Game
-// of one Block has nothing to tell apart and gets none, and neither does a
-// reseed, which belongs to no Block.
-export function blockAccents(stages: readonly StageRef[]): Map<string, number> {
-  const out = new Map<string, number>();
-  const codes: string[] = [];
-  for (const stage of stages) {
-    if (isPool(stage) || isReseed(stage)) continue;
-    const code = stage.grain?.block || "";
-    if (!codes.includes(code)) codes.push(code);
-    out.set(stage.code, codes.indexOf(code) % BLOCK_ACCENTS);
-  }
-  return codes.length < 2 ? new Map() : out;
-}
-
-// tabAccent is the accent a tab wears: its stages' one Block's, if they share one.
-export function tabAccent(tab: GameTab, accents: ReadonlyMap<string, number>): number | undefined {
-  const worn = new Set(tab.stages.map((code) => accents.get(code)));
-  return worn.size === 1 ? [...worn][0] : undefined;
-}
-
 function blocks(stages: StageRef[]): Array<{code: string; stages: StageRef[]}> {
   const out: Array<{code: string; stages: StageRef[]}> = [];
   for (const stage of stages) {

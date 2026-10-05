@@ -213,6 +213,27 @@ type deSource struct {
 type deBout struct {
 	losses  int
 	sources []deSource
+	// final is the one Match that seats every survivor, of every bracket.
+	final bool
+}
+
+// Brackets of a double elimination, as SchemeMatch.Bracket records them.
+const (
+	BracketUpper = "upper"
+	BracketLower = "lower"
+)
+
+// bracketOf is the bracket a planned Match is played in, where the plan has
+// two: none in a single elimination, and none for the final that seats both.
+func (plan *dePlan) bracketOf(boutIndex int) string {
+	bout := plan.bouts[boutIndex]
+	if plan.lives != 2 || bout.final {
+		return ""
+	}
+	if bout.losses == 0 {
+		return BracketUpper
+	}
+	return BracketLower
 }
 
 // dePlan is a whole elimination with lives: Matches in play order, grouped
@@ -304,7 +325,7 @@ func planLivesEntered(entrants, lower, lives, winning, proceeding int, sizeFor f
 		}
 		if size := sizeFor(blockRound, alive); alive <= size {
 			seats := rankSources(flattenBrackets(brackets))
-			plan.bouts = append(plan.bouts, deBout{losses: 0, sources: seats})
+			plan.bouts = append(plan.bouts, deBout{losses: 0, sources: seats, final: true})
 			plan.blockRounds = append(plan.blockRounds, []int{len(plan.bouts) - 1})
 			plan.alive = append(plan.alive, aliveNow)
 			plan.aliveBands = append(plan.aliveBands, bandsNow)

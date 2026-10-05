@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"dope/dope/domain/structure"
 	"dope/dope/storage/store"
 )
 
@@ -256,5 +257,23 @@ func TestRRDealNeedsARanking(t *testing.T) {
 	in := Input{Slug: "rr", GameType: "brain"}
 	if _, err := Compile(doc, in); err == nil || !strings.Contains(err.Error(), "deal") {
 		t.Fatalf("deal на блоке без reseed: %v, want ошибку про deal", err)
+	}
+}
+
+// A double elimination's bouts say which bracket they are played in, for the
+// Сетка to colour, as appendix 3 letters them (W upper, L lower); the grand
+// final seats both brackets, so it is in neither.
+func TestDEBoutsKnowTheirBracket(t *testing.T) {
+	de := matchStages(compileSrc(t, octobearfestSISrc, octobearfestSIInput()))[7:]
+	u, l := structure.BracketUpper, structure.BracketLower
+	want := [][]string{{u, u, u, l, l, l}, {u, u, l, l, l}, {u, l, l}, {l, l}, {l}, {""}}
+	for r, brackets := range want {
+		got := make([]string, len(de[r].Matches))
+		for i, match := range de[r].Matches {
+			got[i] = match.Bracket
+		}
+		if fmt.Sprint(got) != fmt.Sprint(brackets) {
+			t.Errorf("round %d (%s): brackets %q, want %q", r+1, de[r].Title, got, brackets)
+		}
 	}
 }

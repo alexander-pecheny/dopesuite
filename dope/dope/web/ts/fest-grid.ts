@@ -3,7 +3,7 @@ import type {StageRef} from "./standings.js";
 import {normalizeVenue, venueLabel, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {nameCell} from "./name-cell.js";
-import { blockAccents, blockLabel, groupLabel } from "./game-tabs.js";
+import { blockLabel, groupLabel } from "./game-tabs.js";
 import S from "./i18nstrings.js";
 import {PERCENT, roundTo} from "./cells.js";
 
@@ -62,6 +62,10 @@ export interface FestGridMatch {
   slots?: FestGridSlot[];
   participants?: FestGridLiveParticipant[];
   participantCount?: number | string;
+  // bracket is a double elimination's bracket for the Match, "upper" or
+  // "lower" (the compiler's store.SchemeMatch.Bracket); the box is ringed in
+  // its colour.
+  bracket?: string;
   // row pins the Match to a row of the grid's shared row layout (1-based);
   // unset, it flows under the Match before it.
   row?: number;
@@ -183,15 +187,10 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
   const columns = document.createElement("div");
   columns.className = "fest-columns";
   const grid: Grid = {root, blocks: [], frame: 0};
-  const accents = blockAccents(stages as StageRef[]);
   for (const section of plan.sections) {
-    let column: HTMLElement;
-    if (section.kind === "block") column = buildBlockColumn(section, grid, ctx);
-    else if (section.kind === "standings") column = buildStandingsStage(section, ctx);
-    else column = buildMatchesStage(section, ctx);
-    const accent = accents.get(String((section.kind === "block" ? section.stages[0] : section.stage)?.code || ""));
-    if (accent !== undefined) column.dataset.block = String(accent);
-    columns.appendChild(column);
+    if (section.kind === "block") columns.appendChild(buildBlockColumn(section, grid, ctx));
+    else if (section.kind === "standings") columns.appendChild(buildStandingsStage(section, ctx));
+    else columns.appendChild(buildMatchesStage(section, ctx));
   }
   root.appendChild(columns);
   grids.add(grid);
@@ -773,6 +772,12 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
   const box = document.createElement("article");
   box.className = `grid-box grid-match ${liveMatch?.status || "pending"}`;
   box.dataset.matchCode = match.code || "";
+  if (match.bracket) {
+    box.dataset.bracket = match.bracket;
+    // The ring runs round the seats, not the filler row a three-seat bout
+    // takes to line up with the four-seat ones beside it.
+    box.style.setProperty("--grid-seat-rows", String(Math.min(item.rows - 1, (match.slots || []).length)));
+  }
 
   const venue = firstVenue(liveMatch?.venue, match.venue);
   const grid = document.createElement("div");

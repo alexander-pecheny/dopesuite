@@ -210,6 +210,7 @@ func emitLivesBracket(b Block, group, groups int, plan *dePlan, entrants []store
 				Venue:            lanes.Pick(boutIndex + 1),
 				ParticipantCount: len(slots),
 				Slots:            slots,
+				Bracket:          plan.bracketOf(boutIndex),
 			})
 		}
 		if groups > 1 {
@@ -322,6 +323,7 @@ func podMatch(plan *dePlan, codes []string, boutIndex int, entrants []store.Sche
 		Venue:            venue,
 		ParticipantCount: len(slots),
 		Slots:            slots,
+		Bracket:          plan.bracketOf(boutIndex),
 	}
 }
 

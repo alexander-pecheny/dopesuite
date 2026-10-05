@@ -132,12 +132,16 @@ func (g SchemeGrain) Normalized() SchemeGrain {
 }
 
 type SchemeMatch struct {
-	Code             string       `json:"code"`
-	Title            string       `json:"title"`
-	Letter           string       `json:"letter,omitempty"` // The match's letter, dealt at compile time; "" for a match that has none
-	Venue            int          `json:"venue"`
-	BlockRound       int          `json:"round,omitempty"` // 1-based Round within the Block
-	Wave             int          `json:"wave,omitempty"`  // 1-based wave, set where the stage spans several
+	Code       string `json:"code"`
+	Title      string `json:"title"`
+	Letter     string `json:"letter,omitempty"` // The match's letter, dealt at compile time; "" for a match that has none
+	Venue      int    `json:"venue"`
+	BlockRound int    `json:"round,omitempty"` // 1-based Round within the Block
+	Wave       int    `json:"wave,omitempty"`  // 1-based wave, set where the stage spans several
+	// Bracket is a double elimination's bracket for the Match, "upper" or
+	// "lower"; "" for every other Match, the grand final included, which
+	// seats both. The fest grid colours the two apart.
+	Bracket          string       `json:"bracket,omitempty"`
 	ParticipantCount int          `json:"participantCount"`
 	Slots            []SchemeSlot `json:"slots"`
 }
