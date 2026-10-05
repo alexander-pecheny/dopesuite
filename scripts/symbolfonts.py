@@ -12,32 +12,29 @@ pinned to one google/fonts commit and checksummed, so a rerun is byte-stable.
 
 Two outputs, one glyph list:
   - the four TTFs embedded in xy's PDF/handout pipeline get the glyphs MERGED
-    in, so typst finds them in the face it is already using;
+    in, so typst finds them in the face it is already using. handoutfonts.py
+    builds those faces and calls `merge` below;
   - the kit gets a tiny standalone woff2 subset, declared in core.css as a
     same-family face scoped by unicode-range — the variable webfonts stay the
-    deliberately-cut files their header comment documents.
+    deliberately-cut files their header comment documents. This script writes it.
 
 Run from the repo root:  uv run scripts/symbolfonts.py
-Idempotent: a target that already has every codepoint is skipped.
 """
 
-import hashlib
 import io
 import sys
-import urllib.request
-from pathlib import Path
 
 from fontTools import subset
 from fontTools.merge import Merger
 from fontTools.ttLib import TTFont
+
+from fontsource import ROOT, fetch
 
 DONOR_COMMIT = "3b1480ea4b6e15fed70a42f4cb29216476a044ed"  # google/fonts main, 2026-08
 DONOR_URL = (
     "https://raw.githubusercontent.com/google/fonts/"
     f"{DONOR_COMMIT}/ofl/notosanssymbols2/NotoSansSymbols2-Regular.ttf"
 )
-DOWNLOAD_TIMEOUT = 60  # seconds
-
 DONOR_SHA256 = "7d5fb73b7ca67a6798101741f5d280a3d016a56a197afcd4199dbb57b4b82a21"
 
 # The curated set (ADR discussion, 2026-08-20): media controls a ЧГК author
@@ -52,11 +49,6 @@ CODEPOINTS = [
     0x231A, 0x231B, 0x23F1, 0x23F2, 0x23F3,  # ⌚ ⌛ ⏱ ⏲ ⏳
 ]
 
-ROOT = Path(__file__).resolve().parent.parent
-PDF_FONTS = [
-    ROOT / "xy/internal/chgk/handout/assets" / n
-    for n in ("NotoSans-Regular.ttf", "NotoSans-Bold.ttf", "NotoSans-Italic.ttf", "NotoSans-BoldItalic.ttf")
-]
 WEB_SUBSET = ROOT / "dopeuikit/assets/fonts/noto-sans-symbols.woff2"
 # The web subset is declared in core.css as a "Noto Sans" face, so a line that
 # shows one of its glyphs unions its metrics into the line box. It must carry
@@ -65,17 +57,7 @@ WEB_BODY = ROOT / "dopeuikit/assets/fonts/noto-sans-var.woff2"
 
 
 def fetch_donor() -> bytes:
-    cache = ROOT / ".tmp" / "NotoSansSymbols2-Regular.ttf"
-    if cache.exists():
-        data = cache.read_bytes()
-    else:
-        data = urllib.request.urlopen(DONOR_URL, timeout=DOWNLOAD_TIMEOUT).read()
-        cache.parent.mkdir(exist_ok=True)
-        cache.write_bytes(data)
-    got = hashlib.sha256(data).hexdigest()
-    if got != DONOR_SHA256:
-        sys.exit(f"donor checksum mismatch: {got} (delete {cache} if the pin moved)")
-    return data
+    return fetch("NotoSansSymbols2-Regular.ttf", DONOR_URL, DONOR_SHA256)
 
 
 def donor_subset(data: bytes, flavor: str | None, metrics: dict | None = None) -> bytes:
@@ -99,8 +81,8 @@ def donor_subset(data: bytes, flavor: str | None, metrics: dict | None = None) -
     return out.getvalue()
 
 
-def covered(path: Path) -> bool:
-    cmap = TTFont(path).getBestCmap()
+def covered(font: TTFont) -> bool:
+    cmap = font.getBestCmap()
     return all(cp in cmap for cp in CODEPOINTS)
 
 
@@ -127,30 +109,26 @@ def _stamp(font: TTFont, keep: dict) -> None:
             setattr(font[tbl], f, keep[tbl][f])
 
 
-def merge_into(target: Path, piece: bytes) -> None:
-    keep = _snapshot(TTFont(str(target)))
-    tmp = target.with_suffix(".donor.ttf")
-    tmp.write_bytes(piece)
-    try:
-        merged = Merger().merge([str(target), str(tmp)])
-        # The merger unions cmap and glyphs but keeps the first font's
-        # identity; nothing of the donor's name table survives.
-        _stamp(merged, keep)
-        merged.save(str(target))
-    finally:
-        tmp.unlink()
+def merge(target: bytes, piece: bytes) -> TTFont:
+    """`target` with the donor glyphs in `piece` merged in, at its own line metrics."""
+    original = TTFont(io.BytesIO(target))
+    keep = _snapshot(original)
+    merged = Merger().merge([io.BytesIO(target), io.BytesIO(piece)])
+    # The merger unions cmap and glyphs but keeps the first font's
+    # identity; nothing of the donor's name table survives. It does stamp
+    # the dates with the time of the run, and a committed artifact keeps its
+    # upstream's, so a rerun writes the same bytes.
+    _stamp(merged, keep)
+    merged["head"].created = original["head"].created
+    merged["head"].modified = original["head"].modified
+    merged.recalcTimestamp = False
+    if not covered(merged):
+        sys.exit("merged face still lacks a symbol")
+    return merged
 
 
 def main() -> None:
     data = fetch_donor()
-    piece = donor_subset(data, flavor=None)
-    for path in PDF_FONTS:
-        if covered(path):
-            print(f"= {path.relative_to(ROOT)} (already covered)")
-            continue
-        merge_into(path, piece)
-        assert covered(path)
-        print(f"+ {path.relative_to(ROOT)}")
     web_metrics = _snapshot(TTFont(WEB_BODY, lazy=True))
     WEB_SUBSET.write_bytes(donor_subset(data, flavor="woff2", metrics=web_metrics))
     print(f"+ {WEB_SUBSET.relative_to(ROOT)} ({WEB_SUBSET.stat().st_size} bytes)")

@@ -6,10 +6,10 @@ import (
 	"golang.org/x/image/font/sfnt"
 )
 
-// The symbols scripts/symbolfonts.py transplants into the bundled faces from
+// The symbols scripts/handoutfonts.py transplants into the bundled faces from
 // Noto Sans Symbols 2. Stock Noto Sans has none of them, so an author's ⏸ used
 // to come out of the PDF export as tofu — typst only sees these embedded
-// fonts. If this fails after a font rebuild, rerun the script.
+// fonts. If this fails after a font rebuild, rerun that script.
 var transplantedSymbols = []rune("⏸⏹⏺⏯⏩⏪⏭⏮▶◀✓✔✖✗⌚⌛⏱⏲⏳")
 
 func TestBundledFontsCoverTransplantedSymbols(t *testing.T) {

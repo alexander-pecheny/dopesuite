@@ -51,12 +51,8 @@ the repo root, and expect a couple of minutes per face:
 from __future__ import annotations
 
 import copy
-import hashlib
 import io
-import subprocess
 import sys
-import urllib.request
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -66,20 +62,15 @@ from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
 
+from fontsource import ROOT, fixing, load, member, models
+from fontsource import fetch as fetch_pinned
 from symbolfonts import CODEPOINTS as SYMBOLS, DONOR_COMMIT as GOOGLE_FONTS_COMMIT
 
-ROOT = Path(__file__).resolve().parent.parent
-TMP = ROOT / ".tmp"
 OUT = ROOT / "dopeuikit/assets/fonts"
 # The default face every alternative is measured against: its cmap is the
 # coverage contract of a kit body font, and core.css keeps it behind whichever
 # face a reader picks, so what an alternative does not answer it still answers.
 REFERENCE = OUT / "noto-sans-var.woff2"
-
-# fonts-fixing (code.pecheny.me/pecheny/fonts-fixing) holds the fixes and the two
-# models, and its fonts/ holds the one face here that is already built variable.
-FIXING_URL = "https://code.pecheny.me/pecheny/fonts-fixing.git"
-FIXING_COMMIT = "989635233b1e4abee12e94f8afa51038ac73dc15"
 
 PINS = {
     # rsms/inter's release zip: InterVariable.ttf + InterVariable-Italic.ttf.
@@ -122,8 +113,6 @@ WEIGHTS = (400, 400, 700)
 REGULAR = 400  # the weight x-heights are measured at
 PERCENT = 100
 
-DOWNLOAD_TIMEOUT = 180  # seconds
-
 # OpenType name table ids that carry the family name.
 NAME_FAMILY = 1
 NAME_UNIQUE_ID = 3
@@ -138,55 +127,17 @@ NORMAL_WIDTH = 100
 
 
 def fetch(name: str) -> bytes:
-    url, digest = PINS[name]
-    cache = TMP / name
-    if cache.exists():
-        data = cache.read_bytes()
-    else:
-        data = urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT).read()
-        cache.parent.mkdir(exist_ok=True)
-        cache.write_bytes(data)
-    got = hashlib.sha256(data).hexdigest()
-    if got != digest:
-        sys.exit(f"{name} checksum mismatch: {got} (delete {cache} if the pin moved)")
-    return data
+    return fetch_pinned(name, *PINS[name])
 
 
 def unzip(archive: str, suffix: str) -> bytes:
-    """The one member of a release zip whose path ends in `suffix`."""
-    zf = zipfile.ZipFile(io.BytesIO(fetch(archive)))
-    hits = [n for n in zf.namelist() if n.endswith(suffix)]
-    if len(hits) != 1:
-        sys.exit(f"{archive}: {len(hits)} members end in {suffix!r}")
-    return zf.read(hits[0])
-
-
-def fixing() -> Path:
-    """The fonts-fixing checkout, at the pinned commit, importable."""
-    path = TMP / "fonts-fixing"
-    if not path.exists():
-        subprocess.run(["git", "clone", "--quiet", FIXING_URL, str(path)], check=True)
-    subprocess.run(["git", "-C", str(path), "checkout", "--quiet", FIXING_COMMIT], check=True)
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-    return path
+    """The one member of a pinned release zip whose path ends in `suffix`."""
+    return member(fetch(archive), archive, suffix)
 
 
 def built(name: str) -> bytes:
     """A face fonts-fixing has already built and committed, from that checkout."""
     return (fixing() / "fonts" / name).read_bytes()
-
-
-def load(data: bytes) -> TTFont:
-    """A font that will not restamp its own modification date.
-
-    These faces are committed artifacts, and a rebuild that changes nothing should
-    change no bytes — `head.modified` is written at save time, and the spacing
-    passes save the font three times on their way through it.
-    """
-    font = TTFont(io.BytesIO(data) if isinstance(data, bytes) else data)
-    font.recalcTimestamp = False
-    return font
 
 
 def reload(font: TTFont) -> TTFont:
@@ -498,11 +449,7 @@ def main() -> None:
     if unknown:
         sys.exit(f"no such face: {', '.join(unknown)} (have {', '.join(known)})")
 
-    checkout = fixing()
-    import joblib  # noqa: E402 — the pinned checkout is where the models live
-
-    model = joblib.load(checkout / "spacing-model.joblib")
-    pairs = joblib.load(checkout / "pair-model.joblib")
+    model, pairs = models()
     for face in FACES:
         if not wanted or face.id in wanted:
             build(face, model, pairs)
