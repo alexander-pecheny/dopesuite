@@ -26,6 +26,8 @@ import (
 	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/session"
 
+	"dope/dope/domain/core"
+	"dope/dope/domain/festops"
 	"dope/dope/web/route"
 )
 
@@ -367,30 +369,28 @@ func (s *Server) CreateFest(reqCtx context.Context, userID int64, f FestSettings
 		}
 		slugValue = slug
 	}
-	now := util.UtcNow()
-	tx, err := s.h.Engine().BeginWriteTx(reqCtx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-	festID, err := store.InsertReturningID(reqCtx, tx, `
+	var festID int64
+	_, err := s.commit(reqCtx, 0, "fest-create", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		now := util.UtcNow()
+		var err error
+		festID, err = store.InsertReturningID(ctx, tx, `
 insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public)
 values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
-		slugValue, f.Title, f.Description, f.ratingValue(), userID, now, now,
-		util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic))
-	if util.IsUniqueViolation(err) {
-		// Another fest took the slug between the check and the insert.
-		return 0, corei18n.User(dopestrings.Default.Host.Dash.ErrorSlugTaken())
-	}
-	if err != nil {
-		return 0, err
-	}
-	if _, err := tx.ExecContext(reqCtx, `
+			slugValue, f.Title, f.Description, f.ratingValue(), userID, now, now,
+			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic))
+		if util.IsUniqueViolation(err) {
+			// Another fest took the slug between the check and the insert.
+			return core.FestWrite{}, corei18n.User(dopestrings.Default.Host.Dash.ErrorSlugTaken())
+		}
+		if err != nil {
+			return core.FestWrite{}, err
+		}
+		_, err = tx.ExecContext(ctx, `
 insert into fest_organizers(fest_id, user_id, role, added_at)
-values(?, ?, 'creator', ?)`, festID, userID, now); err != nil {
-		return 0, err
-	}
-	return festID, tx.Commit()
+values(?, ?, 'creator', ?)`, festID, userID, now)
+		return core.FestWrite{}, err
+	})
+	return festID, err
 }
 
 func (s *Server) handleHostCreateFest(w http.ResponseWriter, r *http.Request, user session.User) {
@@ -440,17 +440,17 @@ func (s *Server) UpdateFest(reqCtx context.Context, festID int64, f FestSettings
 		}
 		slugValue = slug
 	}
-	if _, err := s.h.Engine().WriteExec(reqCtx, `
+	_, err := s.commit(reqCtx, festID, "fest-settings", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		_, err := tx.ExecContext(ctx, `
 update fests
 set title = ?, slug = ?, description = ?, rating_id = ?, start_date = ?, end_date = ?, is_public = ?, updated_at = ?
 where id = ?`,
-		f.Title, slugValue, f.Description, f.ratingValue(),
-		util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic),
-		util.UtcNow(), festID); err != nil {
-		return err
-	}
-	s.h.Engine().InvalidateFestViewCache(festID)
-	return nil
+			f.Title, slugValue, f.Description, f.ratingValue(),
+			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic),
+			util.UtcNow(), festID)
+		return core.FestWrite{}, err
+	})
+	return err
 }
 
 func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -475,13 +475,26 @@ func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, fe
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", redirectRef), http.StatusSeeOther)
 }
 
+// saveAccess runs one change to the fest's access through the commit step,
+// recorded as fest:access.
+func (s *Server) saveAccess(ctx context.Context, festID int64, write func(ctx context.Context, tx *sql.Tx) error) error {
+	_, err := s.commit(ctx, festID, "fest-access", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		return core.FestWrite{Event: "fest:access"}, write(ctx, tx)
+	})
+	return err
+}
+
 func (s *Server) handleHostSaveAccess(w http.ResponseWriter, r *http.Request, festID, actorID int64) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
 	if r.Form.Get("bulk_access") == "1" {
-		count, err := festaccess.SaveFestAccessBulk(s.h.Engine(), r.Context(), festID, actorID, r.Form.Get("bulk_access_lines"))
+		var count int
+		err := s.saveAccess(r.Context(), festID, func(ctx context.Context, tx *sql.Tx) (err error) {
+			count, err = festaccess.SaveFestAccessBulkTx(ctx, tx, festID, actorID, r.Form.Get("bulk_access_lines"))
+			return err
+		})
 		if err != nil {
 			s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessError: err.Error()})
 			return
@@ -489,7 +502,9 @@ func (s *Server) handleHostSaveAccess(w http.ResponseWriter, r *http.Request, fe
 		s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessNotice: dopestrings.Default.Host.Dash.BulkDoneNotice(strconv.Itoa(count))})
 		return
 	}
-	if err := festaccess.SaveFestAccess(s.h.Engine(), r.Context(), festID, actorID, r.Form); err != nil {
+	if err := s.saveAccess(r.Context(), festID, func(ctx context.Context, tx *sql.Tx) error {
+		return festaccess.SaveFestAccessTx(ctx, tx, festID, actorID, r.Form)
+	}); err != nil {
 		s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessError: err.Error()})
 		return
 	}
@@ -542,22 +557,10 @@ func (s *Server) DeleteFest(ctx context.Context, festID, userID int64) error {
 	if !creator {
 		return route.Forbid(dopestrings.Default.Host.Dash.ErrorDeleteCreatorOnly())
 	}
-	eng := s.h.Engine()
-	eng.Mu.Lock()
-	defer eng.Mu.Unlock()
-	result, err := eng.WriteExec(ctx, `delete from fests where id = ? and created_by = ?`, festID, userID)
-	if err != nil {
-		return err
-	}
-	if affected, _ := result.RowsAffected(); affected == 0 {
-		return sql.ErrNoRows
-	}
-	if eng.FestID == festID {
-		eng.FestID = 0
-		eng.ActiveGameID = 0
-		eng.ActiveMatchCode = ""
-	}
-	return nil
+	_, err = s.commit(ctx, festID, "fest-delete", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		return festops.DeleteFestTx(ctx, tx, festID, userID)
+	})
+	return err
 }
 
 func (s *Server) handleHostDeleteFest(w http.ResponseWriter, r *http.Request, festID, userID int64) {

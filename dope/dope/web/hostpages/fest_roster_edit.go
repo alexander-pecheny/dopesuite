@@ -13,7 +13,6 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
-	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
@@ -32,17 +31,13 @@ const maxRosterUploadBytes = 4 << 20
 // Troika games that follow a division, the fest revision, then the broadcasts.
 func (s *Server) editFestRoster(reqCtx context.Context, festID int64, label string, edit func(ctx context.Context, tx *sql.Tx) (imports.RosterWrite, error)) error {
 	var written imports.RosterWrite
-	var revision int64
-	err := s.h.Engine().WithWriteTx(reqCtx, festID, label, func(ctx context.Context, tx *sql.Tx) error {
+	revision, err := s.commit(reqCtx, festID, label, nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
 		var err error
 		if written, err = edit(ctx, tx); err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
-		if _, err := entrants.FollowDivisionsTx(ctx, tx, festID, 0); err != nil {
-			return err
-		}
-		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, label, "{}")
-		return err
+		_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
+		return core.FestWrite{Event: label}, err
 	})
 	if err != nil {
 		return err

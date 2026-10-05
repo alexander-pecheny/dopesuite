@@ -167,7 +167,7 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 
 **Assets**: the `web/assets` package embeds them with `//go:embed static`, and `server` serves them. ETags are content hashes, which is what busts the cache. In dev mode the files are read from `dope/web/assets/static` on disk instead, so they reload without a rebuild.
 
-**Writes**: there is a single global write lock, and SQLite runs in WAL mode, so writes are serialised. Broadcasts are sent only after the transaction commits. A slow-write canary reports when writes start contending.
+**Writes**: there is a single global write lock, and SQLite runs in WAL mode, so writes are serialised. A write to a fest goes through `core.Engine.CommitFestWrite` (or `WithWriteTx`): the pooled connection before the lock, one transaction, the revision its `core.FestWrite` names, the cached view dropped. A new fest write uses one of the two rather than taking `Engine.Mu` or calling `BeginWriteTx` by hand. Broadcasts are sent only after the transaction commits. A slow-write canary reports when writes start contending.
 
 **Game types**: each format (EK, ES, OD, KSI, SI, brain, Multi, Troika, Hamsa, the friendship cup) is a `games.Definition` carrying its Protocol, and all of a format lives in `domain/games`: its document and arithmetic in `<format>.go`, its Definition and Protocol in `<format>_protocol.go`. Everything the rest of the code asks about a format is a fact on the Definition or a capability of the Protocol (`games.As[games.Seater](gameType)` and the like), and nothing outside `domain/games` compares or switches on a game-type code (ADR-0027, enforced by `domain/games/guard_test.go`). ARCHITECTURE.md lists what adding a format takes.
 

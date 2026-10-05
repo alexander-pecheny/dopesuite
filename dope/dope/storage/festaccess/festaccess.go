@@ -12,7 +12,6 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/platform/roles"
 	"dope/dope/platform/util"
-	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
@@ -163,13 +162,10 @@ join users u on u.id = member.user_id
 order by case member.role when 'creator' then 0 when 'admin' then 1 else 2 end,
          lower(nickname), member.user_id`
 
-func SaveFestAccess(eng *core.Engine, ctx context.Context, festID, actorID int64, form url.Values) error {
-	tx, err := eng.BeginWriteTx(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
+// SaveFestAccessTx applies the dashboard's access form: each member's role or
+// removal, the Games each host may run, and a member added by nickname. The
+// caller records the revision (fest:access).
+func SaveFestAccessTx(ctx context.Context, tx *sql.Tx, festID, actorID int64, form url.Values) error {
 	creatorID, current, err := accessEditTx(ctx, tx, festID, actorID)
 	if err != nil {
 		return err
@@ -235,14 +231,13 @@ func SaveFestAccess(eng *core.Engine, ctx context.Context, festID, actorID int64
 			return err
 		}
 	}
-
-	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:access", "{}"); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return nil
 }
 
-func SaveFestAccessBulk(eng *core.Engine, ctx context.Context, festID, actorID int64, raw string) (int, error) {
+// SaveFestAccessBulkTx applies access changes written as lines of
+// "nickname:role" (or "nickname:remove") and says how many there were. The
+// caller records the revision (fest:access).
+func SaveFestAccessBulkTx(ctx context.Context, tx *sql.Tx, festID, actorID int64, raw string) (int, error) {
 	changes, err := roles.ParseBulkLines(raw)
 	if err != nil {
 		return 0, err
@@ -251,23 +246,11 @@ func SaveFestAccessBulk(eng *core.Engine, ctx context.Context, festID, actorID i
 		return 0, corei18n.User(dopestrings.Default.Festaccess.Bulk.Empty())
 	}
 
-	tx, err := eng.BeginWriteTx(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
 	creatorID, current, err := accessEditTx(ctx, tx, festID, actorID)
 	if err != nil {
 		return 0, err
 	}
 	if err := applyBulkChangesTx(ctx, tx, festID, creatorID, current, changes); err != nil {
-		return 0, err
-	}
-	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:access", "{}"); err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	return len(changes), nil
@@ -422,17 +405,13 @@ func lookupUserIDByNicknameTx(ctx context.Context, tx *sql.Tx, nickname string) 
 	return store.UserIDByTelegramName(ctx, tx, nickname)
 }
 
-// SetHostGames sets, per host nickname, the Games that host may run, each named
+// SetHostGamesTx sets, per host nickname, the Games that host may run, each named
 // by its id, code or slug in this fest; an empty list is every Game. It is the
 // API's twin of the Games boxes under a host on the dashboard, and like them
-// only an admin or the creator may use it, and only on a host.
-func SetHostGames(eng *core.Engine, ctx context.Context, festID, actorID int64, games map[string][]string) error {
+// only an admin or the creator may use it, and only on a host. The caller
+// records the revision (fest:access).
+func SetHostGamesTx(ctx context.Context, tx *sql.Tx, festID, actorID int64, games map[string][]string) error {
 	s := dopestrings.Default
-	tx, err := eng.BeginWriteTx(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 	actorRole, err := FestUserRoleFromQuery(ctx, tx, festID, actorID)
 	if err != nil {
 		return err
@@ -478,10 +457,7 @@ select id from games where fest_id = ? and (cast(id as text) = ? or code = ? or 
 			return err
 		}
 	}
-	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:access", "{}"); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return nil
 }
 
 // setHostGamesTx replaces the Games a host may run with gameIDs; none is every

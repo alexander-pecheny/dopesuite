@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"dope/dope/domain/core"
 	"dope/dope/platform/util"
-	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
@@ -40,40 +40,21 @@ type venueChange struct {
 
 // writeVenues runs one venue write in the fest's write transaction and
 // journals it under venues:update.
-func (s *server) writeVenues(reqCtx context.Context, festID int64, label string, payload map[string]any,
+func (s *server) writeVenues(ctx context.Context, festID int64, label string, payload map[string]any,
 	write func(ctx context.Context, tx *sql.Tx) ([]matchScope, error)) (venueChange, error) {
-	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
-	defer cancel()
-	conn, err := s.eng.AcquireWriteConn(ctx, label)
-	if err != nil {
-		return venueChange{}, err
-	}
-	defer conn.Close()
-
-	defer s.eng.LockWrite(label)()
-
-	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
-	if err != nil {
-		return venueChange{}, err
-	}
-	defer tx.Rollback()
-
-	seated, err := write(ctx, tx)
-	if err != nil {
-		return venueChange{}, err
-	}
-	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "venues:update", util.MustJSON(payload))
-	if err != nil {
-		return venueChange{}, err
-	}
-	venues, err := store.LoadVenues(ctx, tx, festID)
-	if err != nil {
-		return venueChange{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return venueChange{}, err
-	}
-	return venueChange{Venues: venues, Revision: revision, Seated: seated}, nil
+	var change venueChange
+	revision, err := s.eng.CommitFestWrite(ctx, festID, label, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		var err error
+		if change.Seated, err = write(ctx, tx); err != nil {
+			return core.FestWrite{}, err
+		}
+		if change.Venues, err = store.LoadVenues(ctx, tx, festID); err != nil {
+			return core.FestWrite{}, err
+		}
+		return core.FestWrite{Event: "venues:update", Payload: payload}, nil
+	})
+	change.Revision = revision
+	return change, err
 }
 
 func venueUserError(msg string) error { return corei18n.User(msg) }

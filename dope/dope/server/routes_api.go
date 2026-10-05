@@ -608,7 +608,6 @@ func (s *server) answerEntrants(w http.ResponseWriter, sc route.Scope, result en
 	if err != nil {
 		return route.BadUser(err)
 	}
-	s.eng.InvalidateFestViewCache(sc.FestID)
 	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), result.Revision, result.StateJSON)
 	s.broadcastFestView(festScope{FestID: sc.FestID, GameID: sc.GameID}, result.Revision)
 	return route.JSON(w, struct {

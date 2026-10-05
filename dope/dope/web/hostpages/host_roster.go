@@ -10,7 +10,6 @@ import (
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
-	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	dopeui "dope/dope/web/ui"
@@ -638,11 +637,10 @@ func (s *Server) SaveTeamFlags(ctx context.Context, festID int64, typed map[int6
 
 func (s *Server) saveFestTeamFlags(reqCtx context.Context, festID int64, flagsByTeam map[int64][]roster.FestRosterFlag) error {
 	var updates []roster.GameStateBroadcast
-	var revision int64
-	err := s.h.Engine().WithWriteTx(reqCtx, festID, "fest-team-flags", func(ctx context.Context, tx *sql.Tx) error {
+	revision, err := s.commit(reqCtx, festID, "fest-team-flags", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
 		before, err := roster.LoadFestTeamFlags(ctx, tx, festID)
 		if err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
 		for teamID, flags := range flagsByTeam {
 			// Flags the host typed are the host's: an import leaves them alone
@@ -652,28 +650,23 @@ func (s *Server) saveFestTeamFlags(reqCtx context.Context, festID int64, flagsBy
 				continue
 			}
 			if err := roster.SetHandFlagsTx(ctx, tx, festID, teamID, flags); err != nil {
-				return err
+				return core.FestWrite{}, err
 			}
 		}
 		if err := imports.ForgetRosterSnapshotsTx(ctx, tx, festID); err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
 		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 		if err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
 		if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, nil); err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
 		// A troika follows its team's division, so a Troika that takes one may
 		// have gained or lost troikas.
-		if _, err := entrants.FollowDivisionsTx(ctx, tx, festID, 0); err != nil {
-			return err
-		}
-		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:team-flags", util.MustJSON(map[string]any{
-			"teams": len(flagsByTeam),
-		}))
-		return err
+		_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
+		return core.FestWrite{Event: "fest:team-flags", Payload: map[string]any{"teams": len(flagsByTeam)}}, err
 	})
 	if err != nil {
 		return err

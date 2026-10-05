@@ -17,6 +17,8 @@ import (
 	"net/http"
 	"sync"
 
+	"context"
+	"dope/dope/domain/core"
 	"dope/dope/domain/view"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
@@ -58,4 +60,19 @@ func (s *Server) festPage(w http.ResponseWriter, r *http.Request, festID int64, 
 	default:
 		pages.RenderDoc(w, s.h.Engine().AssetETags, doc)
 	}
+}
+
+// commit runs one write to a fest through the engine's commit step
+// (core.Engine.CommitFestWrite) and then tells the open pages of each game in
+// views that its fest view changed. It returns the revision the write
+// reached.
+func (s *Server) commit(ctx context.Context, festID int64, label string, views []int64, fn func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error)) (int64, error) {
+	revision, err := s.h.Engine().CommitFestWrite(ctx, festID, label, fn)
+	if err != nil || revision == 0 {
+		return revision, err
+	}
+	for _, gameID := range views {
+		s.h.BroadcastFestView(festID, gameID, revision)
+	}
+	return revision, nil
 }

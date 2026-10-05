@@ -314,15 +314,19 @@ func (s *Server) apiSaveAccess(w http.ResponseWriter, r *http.Request, sc route.
 			lines += "\n" + c.User + ":" + role
 		}
 	}
-	if strings.TrimSpace(lines) != "" || len(games) == 0 {
-		if _, err := festaccess.SaveFestAccessBulk(s.h.Engine(), r.Context(), sc.FestID, sc.User.UserID, lines); err != nil {
-			return err
+	err := s.saveAccess(r.Context(), sc.FestID, func(ctx context.Context, tx *sql.Tx) error {
+		if strings.TrimSpace(lines) != "" || len(games) == 0 {
+			if _, err := festaccess.SaveFestAccessBulkTx(ctx, tx, sc.FestID, sc.User.UserID, lines); err != nil {
+				return err
+			}
 		}
-	}
-	if len(games) > 0 {
-		if err := festaccess.SetHostGames(s.h.Engine(), r.Context(), sc.FestID, sc.User.UserID, games); err != nil {
-			return err
+		if len(games) > 0 {
+			return festaccess.SetHostGamesTx(ctx, tx, sc.FestID, sc.User.UserID, games)
 		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	return s.apiAccess(w, r, sc)
 }

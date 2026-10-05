@@ -13,13 +13,10 @@ import (
 	"strings"
 
 	"dope/dope/domain/core"
-	"dope/dope/domain/entrants"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
-	"dope/dope/storage/festwrite"
-	"dope/dope/storage/journal"
 	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	dopeui "dope/dope/web/ui"
@@ -29,6 +26,7 @@ import (
 	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopeuikit/palette"
 
+	"dope/dope/domain/festops"
 	"dope/dope/web/route"
 )
 
@@ -513,80 +511,16 @@ select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_d
 	})
 }
 
-// GameSettings is what a game's settings page edits: its title, its slug,
-// and for a game built from the scheme language its scheme. An empty
-// SchemeDSL leaves the scheme as it is.
-type GameSettings struct {
-	Title     string `json:"title"`
-	Slug      string `json:"slug"`
-	SchemeDSL string `json:"scheme_dsl"`
-	// HiddenDivisions are the Flags whose divisions the game does not show; nil
-	// leaves them as they are.
-	HiddenDivisions *[]string `json:"hidden_divisions"`
-}
+// GameSettings is what a game's settings page edits (festops.Settings).
+type GameSettings = festops.Settings
 
-// UpdateGameSettings saves a game's settings. A changed scheme recompiles the
-// game, in the same transaction as the rename, so a refused recompile leaves
-// nothing half-applied.
-func (s *Server) UpdateGameSettings(reqCtx context.Context, festID, gameID int64, g GameSettings) error {
-	title := strings.TrimSpace(g.Title)
-	if title == "" {
-		return corei18n.User(dopestrings.Default.Host.Games.ErrorTitleRequired())
-	}
-	slug := strings.TrimSpace(g.Slug)
-	var slugValue any
-	if slug != "" {
-		if err := util.ValidateSlug(slug); err != nil {
-			return corei18n.User(dopestrings.Default.Host.Games.ErrorSlugInvalid(err.Error()))
-		}
-		var count int
-		if err := s.h.Engine().DB.QueryRowContext(reqCtx, `
-select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, slug, gameID).Scan(&count); err != nil {
-			return err
-		}
-		if count > 0 {
-			return corei18n.User(dopestrings.Default.Host.Games.ErrorSlugTaken())
-		}
-		slugValue = slug
-	}
-	err := s.h.Engine().WithWriteTx(reqCtx, festID, "game-settings", func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `
-update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = ?`,
-			title, slugValue, util.UtcNow(), gameID, festID); err != nil {
-			return err
-		}
-		if g.HiddenDivisions != nil {
-			var hidden any
-			if cleaned := cleanDivisions(*g.HiddenDivisions); len(cleaned) > 0 {
-				hidden = util.MustJSON(cleaned)
-			}
-			if _, err := tx.ExecContext(ctx, `update games set hidden_divisions = ? where id = ? and fest_id = ?`, hidden, gameID, festID); err != nil {
-				return err
-			}
-		}
-		if strings.TrimSpace(g.SchemeDSL) == "" {
-			return nil
-		}
-		var stored string
-		if err := tx.QueryRowContext(ctx, `
-select coalesce(scheme_dsl, '') from games where id = ?`, gameID).Scan(&stored); err != nil {
-			return err
-		}
-		if strings.TrimSpace(stored) == strings.TrimSpace(g.SchemeDSL) {
-			return nil
-		}
-		if err := gamebuild.Recompile(ctx, tx, festID, gameID, g.SchemeDSL); err != nil {
-			return err
-		}
-		// A Troika that now takes a division, or another one, seats its troikas.
-		_, err := entrants.FollowDivisionsTx(ctx, tx, festID, 0)
-		return err
+// UpdateGameSettings saves a game's settings (festops.UpdateSettingsTx) and
+// tells the game's open pages.
+func (s *Server) UpdateGameSettings(ctx context.Context, festID, gameID int64, g GameSettings) error {
+	_, err := s.commit(ctx, festID, "game-settings", []int64{gameID}, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		return festops.UpdateSettingsTx(ctx, tx, festID, gameID, g)
 	})
-	if err != nil {
-		return err
-	}
-	s.h.Engine().InvalidateFestViewCache(festID)
-	return nil
+	return err
 }
 
 // hiddenFromForm is the hidden divisions the settings form means: every offered
@@ -617,23 +551,7 @@ func (s *Server) hiddenFromForm(ctx context.Context, festID, gameID int64, shown
 			hidden = append(hidden, d)
 		}
 	}
-	return cleanDivisions(hidden), nil
-}
-
-// cleanDivisions is a list of Flag short names trimmed, without blanks or
-// repeats, in the order given.
-func cleanDivisions(in []string) []string {
-	var out []string
-	seen := map[string]bool{}
-	for _, d := range in {
-		d = strings.TrimSpace(d)
-		if d == "" || seen[d] {
-			continue
-		}
-		seen[d] = true
-		out = append(out, d)
-	}
-	return out
+	return festops.CleanDivisions(hidden), nil
 }
 
 // festDivisions is every Flag the fest's teams carry, by short name, in the
@@ -650,7 +568,7 @@ order by t.position, t.id, f.position`, []any{festID}, func(rows *sql.Rows) (str
 	if err != nil {
 		return nil, err
 	}
-	return cleanDivisions(flags), nil
+	return festops.CleanDivisions(flags), nil
 }
 
 // divisionsGame reports whether a game type shows divisions to choose among
@@ -690,67 +608,12 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 }
 
 // DeleteGame deletes one game of the fest and moves the active-game pointer
-// off it.
-func (s *Server) DeleteGame(reqCtx context.Context, festID, gameID int64) error {
-	// Acquire the pooled connection BEFORE the write lock and bound the whole
-	// write with festwrite.WriteTxTimeout, so a starved pool can never pin s.h.Engine().Mu (the
-	// 2026-06-13 freeze). The lock is held across the post-commit active-game
-	// pointer update, which is why this uses the lower-level trio rather than
-	// withWriteTx.
-	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
-	defer cancel()
-	conn, err := s.h.Engine().AcquireWriteConn(ctx, "game-delete")
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	defer s.h.Engine().LockWrite("game-delete")()
-
-	tx, err := s.h.Engine().BeginWriteTxConn(ctx, conn)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var title string
-	if err := tx.QueryRowContext(ctx, `
-select title from games where id = ? and fest_id = ?`, gameID, festID).Scan(&title); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `delete from games where id = ? and fest_id = ?`, gameID, festID); err != nil {
-		return err
-	}
-	var nextGameID sql.NullInt64
-	var nextMatchCode sql.NullString
-	if err := tx.QueryRowContext(ctx, `
-select g.id, coalesce((
-  select m.code from matches m where m.game_id = g.id order by m.position, m.id limit 1
-), '')
-from games g
-where g.fest_id = ?
-order by g.position, g.id
-limit 1`, festID).Scan(&nextGameID, &nextMatchCode); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "game:delete", util.MustJSON(map[string]any{
-		"gameID": gameID,
-		"title":  title,
-	})); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	if s.h.Engine().FestID == festID && s.h.Engine().ActiveGameID == gameID {
-		if nextGameID.Valid {
-			s.h.Engine().ActiveGameID = nextGameID.Int64
-			s.h.Engine().ActiveMatchCode = nextMatchCode.String
-		} else {
-			s.h.Engine().ActiveGameID = 0
-			s.h.Engine().ActiveMatchCode = ""
-		}
-	}
-	return nil
+// off it (festops.DeleteGameTx).
+func (s *Server) DeleteGame(ctx context.Context, festID, gameID int64) error {
+	_, err := s.commit(ctx, festID, "game-delete", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		return festops.DeleteGameTx(ctx, tx, festID, gameID)
+	})
+	return err
 }
 
 func (s *Server) handleHostDeleteGame(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
@@ -761,36 +624,17 @@ func (s *Server) handleHostDeleteGame(w http.ResponseWriter, r *http.Request, fe
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
 }
 
-// ClearGame resets a game to its just-created state: it drops every
-// game-scoped derived row (results, imported seeds/rosters, EK bracket
-// resolution) and regenerates the pristine scheme/state — the same content a
-// fresh game of this type would have — while keeping the game's id, code, slug
-// and title so its URLs stay valid. Fest-scoped teams/players and the audit log
-// are left intact (the latter is fest-scoped, like the delete path leaves it).
+// ClearGame resets a game to its just-created state (festops.ClearGameTx)
+// and tells its open pages.
 func (s *Server) ClearGame(ctx context.Context, festID, gameID int64) error {
-	s.h.Engine().Mu.Lock()
-	defer s.h.Engine().Mu.Unlock()
-
-	tx, err := s.h.Engine().BeginWriteTx(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	firstMatchCode, err := gamebuild.Clear(ctx, tx, festID, gameID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	if err != nil {
-		return route.BadUser(err)
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	if s.h.Engine().FestID == festID && s.h.Engine().ActiveGameID == gameID {
-		s.h.Engine().ActiveMatchCode = firstMatchCode
-	}
-	s.h.Engine().InvalidateFestViewCache(festID)
-	return nil
+	_, err := s.commit(ctx, festID, "game-clear", []int64{gameID}, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		written, err := festops.ClearGameTx(ctx, tx, festID, gameID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			err = route.BadUser(err)
+		}
+		return written, err
+	})
+	return err
 }
 
 func (s *Server) handleHostClearGame(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
@@ -1065,48 +909,20 @@ func pastedScheme(raw string) (*store.FestScheme, error) {
 	return &scheme, nil
 }
 
-// festExistsTx returns sql.ErrNoRows when there is no fest festID.
-func festExistsTx(ctx context.Context, tx *sql.Tx, festID int64) error {
-	var exists int
-	if err := tx.QueryRowContext(ctx, `select count(*) from fests where id = ?`, festID).Scan(&exists); err != nil {
-		return err
-	}
-	if exists == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType string, form url.Values) (int64, error) {
-	if s.h.Engine().DB == nil {
-		return 0, errors.New("sqlite is not enabled")
-	}
+func (s *Server) createHostGame(ctx context.Context, festID int64, gameType string, form url.Values) (int64, error) {
 	gameType = strings.TrimSpace(gameType)
 	if !games.Known(gameType) && gameType != ksiStickersGameType {
 		return 0, corei18n.User(dopestrings.Default.Host.Games.ErrorTypeMissing())
 	}
-
 	var gameID int64
-	err := s.h.Engine().WithWriteTx(reqCtx, festID, "game-create", func(ctx context.Context, tx *sql.Tx) error {
-		if err := festExistsTx(ctx, tx, festID); err != nil {
-			return err
-		}
+	_, err := s.commit(ctx, festID, "game-create", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
 		spec, err := gameSpecFromForm(ctx, tx, festID, gameType, form)
 		if err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
-		if gameID, err = gamebuild.Create(ctx, tx, spec); err != nil {
-			return err
-		}
-		if _, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "game:create", util.MustJSON(map[string]any{
-			"gameID":   gameID,
-			"gameType": gameType,
-		})); err != nil {
-			return err
-		}
-		// Genesis checkpoint: anchor per-game derived revert at the freshly-created
-		// game so replay always has a checkpoint at or before any future edit.
-		return journal.WriteGameCheckpoint(ctx, tx, gameID, core.JournalIDForSeqTx(ctx, tx))
+		var written core.FestWrite
+		gameID, written, err = festops.CreateGameTx(ctx, tx, spec)
+		return written, err
 	})
 	return gameID, err
 }

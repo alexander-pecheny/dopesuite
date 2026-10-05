@@ -60,3 +60,33 @@ the last 19 commits to `build.go` were seating rules.
   as a clear does, and hands everything to the writer.
 - Who a Game created from a DSL seats (a зачёт's troikas, every troika of
   the fest, or empty seats) is `createEntrantsTx` in `seating.go`.
+
+## 3. A write to a fest goes through one commit step
+
+The sequence a write needs was copied by hand, in five different ways: take
+the pooled connection before the lock (the 2026-06-13 freeze), run one
+transaction, record the revision, drop the cached view, broadcast. The copies
+did not agree. `ClearGame` and `DeleteFest` took the raw mutex without
+acquiring the connection first. The game settings recorded no revision and
+told no open page. The three access writes in `festaccess` took no write
+lock at all. The API's access route committed its roles and its hosts' Games
+in two separate transactions. The rules for a Game's settings, clear and
+delete were methods on `*hostpages.Server`, with their SQL inline.
+
+- `core.Engine.CommitFestWrite(ctx, festID, label, fn)` is the step. `fn`
+  returns a `core.FestWrite`: the event the revision records (or the revision
+  a domain call already recorded) and `Settled`, which runs after the commit,
+  still under the lock. That is where the active-game pointer moves and where
+  a reload that no other write may come between is read. `hostpages`'
+  `commit` adds the fest-view broadcast, which only the server can build.
+- `domain/festops` holds the Game writes (`CreateGameTx`,
+  `UpdateSettingsTx`, `ClearGameTx`, `DeleteGameTx`) and `DeleteFestTx`.
+  The form handler and its JSON twin both call them.
+- The fest's create, settings and access writes, the troika, roster and Flags
+  writes, the venues, the start times and the reseed all go through the
+  step. The access writes are `festaccess.*Tx` bodies, and the API's twin
+  makes its whole change in one transaction.
+- Left as they are: the creation form's per-format readers. The JSON twin
+  still converts its request to the form's fields so that one parser checks
+  both. `pages.Host.Engine()` stays as well, and so do the server's
+  `Lock`/`Unlock`, which the Telegram bridge uses.

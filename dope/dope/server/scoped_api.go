@@ -314,44 +314,41 @@ func (s *server) calculateScopedReseed(ctx context.Context, scope festScope, sta
 // reloads what every caller of it needs afterwards: the fest view, the
 // Matches whose seats the write moved, and the revision it bumped.
 func (s *server) writeAndReloadFest(ctx context.Context, scope festScope, label, event string, payload map[string]any, write func(context.Context, *sql.Tx) ([]int64, error)) ([]byte, []store.MatchView, int64, error) {
-	txCtx, cancel := festwrite.AuditDetachedContext(ctx, scope.FestID)
-	defer cancel()
-	conn, err := s.eng.AcquireWriteConn(txCtx, label)
+	var data []byte
+	var cascaded []store.MatchView
+	var reloadErr error
+	revision, err := s.eng.CommitFestWrite(ctx, scope.FestID, label, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		affected, err := write(ctx, tx)
+		if err != nil {
+			return core.FestWrite{}, err
+		}
+		// The views are read while the write lock is still held, so no other
+		// write lands between the commit and what the callers broadcast.
+		return core.FestWrite{Event: event, Payload: payload, Settled: func(_ *core.Engine, revision int64) {
+			data, cascaded, reloadErr = s.reloadAfterWrite(scope, revision, affected)
+		}}, nil
+	})
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	defer conn.Close()
-
-	defer s.eng.LockWrite(label)()
-
-	tx, err := s.eng.BeginWriteTxConn(txCtx, conn)
-	if err != nil {
-		return nil, nil, 0, err
+	if reloadErr != nil {
+		return nil, nil, 0, reloadErr
 	}
-	defer tx.Rollback()
+	return data, cascaded, revision, nil
+}
 
-	affected, err := write(txCtx, tx)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	revision, err := festwrite.BumpFestRevisionTx(txCtx, tx, scope.FestID, event, util.MustJSON(payload))
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, nil, 0, err
-	}
-
+// reloadAfterWrite reads the fest view and the Matches a write moved, under
+// the write lock.
+func (s *server) reloadAfterWrite(scope festScope, revision int64, affected []int64) ([]byte, []store.MatchView, error) {
 	view, err := s.loadFestViewLocked(scope.FestID, scope.GameID)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, err
 	}
 	view.Revision = util.MaxInt64(view.Revision, revision)
 	data, err := json.Marshal(view)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, err
 	}
-
 	var cascaded []store.MatchView
 	for _, mid := range affected {
 		cv, err := s.loadMatchViewByIDLocked(scope.FestID, scope.GameID, mid)
@@ -360,5 +357,5 @@ func (s *server) writeAndReloadFest(ctx context.Context, scope festScope, label,
 		}
 		cascaded = append(cascaded, cv)
 	}
-	return data, cascaded, revision, nil
+	return data, cascaded, nil
 }

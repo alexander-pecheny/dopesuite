@@ -8,11 +8,10 @@ import (
 	"strconv"
 	"strings"
 
+	"dope/dope/domain/core"
 	"dope/dope/domain/entrants"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
-	"dope/dope/platform/util"
-	"dope/dope/storage/festwrite"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
 	dopeui "dope/dope/web/ui"
@@ -345,22 +344,17 @@ func (s *Server) DeleteTroika(ctx context.Context, festID, id int64) ([]entrants
 // Troika pages, whose seat rosters it may have changed.
 func (s *Server) troikaWrite(ctx context.Context, festID int64, label string, exclude int64, fn func(ctx context.Context, tx *sql.Tx) error) ([]entrants.DivisionGame, error) {
 	var synced []entrants.DivisionGame
-	var revision int64
-	err := s.h.Engine().WithWriteTx(ctx, festID, "troikas-"+label, func(ctx context.Context, tx *sql.Tx) error {
+	revision, err := s.commit(ctx, festID, "troikas-"+label, nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
 		if err := fn(ctx, tx); err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
 		var err error
-		if synced, err = entrants.FollowDivisionsTx(ctx, tx, festID, exclude); err != nil {
-			return err
-		}
-		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "troikas:"+label, util.MustJSON(map[string]any{"label": label}))
-		return err
+		synced, err = entrants.FollowDivisionsTx(ctx, tx, festID, exclude)
+		return core.FestWrite{Event: "troikas:" + label, Payload: map[string]any{"label": label}}, err
 	})
 	if err != nil {
 		return nil, err
 	}
-	s.h.Engine().InvalidateFestViewCache(festID)
 	s.broadcastTroikaGames(ctx, festID, revision)
 	return synced, nil
 }

@@ -157,6 +157,10 @@ here when it needs type metadata.
   import (`ImportFestRoster`, which follows in the import's own transaction).
   All of them save the list through one `applyListTx`: `gamebuild.FollowListTx`
   rebuilds a Game sized by its entrants, then `imports` seats the list.
+- `festops` — the host's writes to a fest's Games (create, settings, clear,
+  delete) and the fest's delete, each the body of one transaction that says
+  what it did (`core.FestWrite`). The host form and its JSON twin both run it
+  through `core.Engine.CommitFestWrite`.
 - `numbering` — team-number assignment. `edit` — match-edit value types.
 - `towns` — which country a town is in, as the ISO code the screen draws a flag
   from: buff answers for every town it has mirrored, and one it has not is asked
