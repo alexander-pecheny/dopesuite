@@ -22,7 +22,7 @@ import type {CursorKind, GameShell} from "./game-shell.js";
 import {notifyEmbeddedResize, parseGameRoute} from "./game-page.js";
 import type {GameInitLike, GameRoute} from "./game-page.js";
 import {fitScrollFade, renderTabBar} from "./widgets.js";
-import {gameTabs} from "./game-tabs.js";
+import {blockAccents, gameTabs, tabAccent} from "./game-tabs.js";
 import type {GameKind, GameTab} from "./game-tabs.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import {redrawSteady} from "./steady-redraw.js";
@@ -479,7 +479,8 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     shell.renderChrome();
     if (spec.tabsRoot && !embedded) {
       spec.tabsRoot.hidden = false;
-      renderTabBar(spec.tabsRoot, tabs(), activeTab, (key) => {
+      const accents = blockAccents((scheme.stages || []) as StageRef[]);
+      renderTabBar(spec.tabsRoot, tabs().map((tab) => ({...tab, accent: tabAccent(tab, accents)})), activeTab, (key) => {
         activeTab = key;
         setHashTab(key);
         render();

@@ -157,3 +157,17 @@ test("groupLabel is the «Группа N» tail, else the title, else the grain"
   assert.equal(groupLabel({title: "DE 1", grain: {block: "s2", group: "1"}}), "DE 1");
   assert.equal(groupLabel({grain: {block: "s2", group: "4"}}), "Группа 4");
 });
+
+test("each Block wears its own accent; a Game of one Block, or a reseed, wears none", async () => {
+  const {blockAccents, tabAccent} = await import("./dist/game-tabs.js");
+  const final = {code: "s3-r1", title: "Финал", stage_type: "matches", kind: "playoff", matches: []};
+  const reseed = {code: "s2", title: "Пересев", stage_type: "reseed", matches: []};
+  const accents = blockAccents([group(1), group(2), reseed, final]);
+  assert.equal(accents.get("s1-g1"), 0);
+  assert.equal(accents.get("s1-g2"), 0);
+  assert.equal(accents.get("s3-r1"), 1);
+  assert.equal(accents.has("s2"), false);
+  assert.equal(blockAccents([group(1), group(2)]).size, 0);
+  assert.equal(tabAccent({key: "x", label: "", kind: "stage", stages: ["s1-g1", "s1-g2"]}, accents), 0);
+  assert.equal(tabAccent({key: "x", label: "", kind: "stage", stages: ["s1-g1", "s3-r1"]}, accents), undefined);
+});

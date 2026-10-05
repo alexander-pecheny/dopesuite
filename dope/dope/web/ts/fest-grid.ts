@@ -3,7 +3,7 @@ import type {StageRef} from "./standings.js";
 import {normalizeVenue, venueLabel, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {nameCell} from "./name-cell.js";
-import { blockLabel, groupLabel } from "./game-tabs.js";
+import { blockAccents, blockLabel, groupLabel } from "./game-tabs.js";
 import S from "./i18nstrings.js";
 import {PERCENT, roundTo} from "./cells.js";
 
@@ -183,10 +183,15 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
   const columns = document.createElement("div");
   columns.className = "fest-columns";
   const grid: Grid = {root, blocks: [], frame: 0};
+  const accents = blockAccents(stages as StageRef[]);
   for (const section of plan.sections) {
-    if (section.kind === "block") columns.appendChild(buildBlockColumn(section, grid, ctx));
-    else if (section.kind === "standings") columns.appendChild(buildStandingsStage(section, ctx));
-    else columns.appendChild(buildMatchesStage(section, ctx));
+    let column: HTMLElement;
+    if (section.kind === "block") column = buildBlockColumn(section, grid, ctx);
+    else if (section.kind === "standings") column = buildStandingsStage(section, ctx);
+    else column = buildMatchesStage(section, ctx);
+    const accent = accents.get(String((section.kind === "block" ? section.stages[0] : section.stage)?.code || ""));
+    if (accent !== undefined) column.dataset.block = String(accent);
+    columns.appendChild(column);
   }
   root.appendChild(columns);
   grids.add(grid);

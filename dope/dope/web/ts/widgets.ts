@@ -625,7 +625,7 @@ function tabPicker(tabs: Array<{key: string; label: string}>, activeKey: string,
 
 export function renderTabBar(
   root: HTMLElement,
-  tabs: Array<{key: string; label: string}>,
+  tabs: Array<{key: string; label: string; accent?: number}>,
   activeKey: string,
   onSelect: (key: string) => void,
   options: {picker?: boolean} = {},
@@ -637,6 +637,7 @@ export function renderTabBar(
     btn.type = "button";
     btn.className = "match-tab" + (activeKey === tab.key ? " active" : "");
     btn.textContent = tab.label;
+    if (tab.accent !== undefined) btn.dataset.block = String(tab.accent);
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-selected", activeKey === tab.key ? "true" : "false");
     btn.addEventListener("click", () => {
