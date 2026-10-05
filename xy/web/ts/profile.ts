@@ -120,6 +120,7 @@ passwordForm.addEventListener("submit", async (e) => {
 // a to-scale wireframe of a monitor with lists of "text line" bars.
 
 const sizesBoardW = byId<HTMLInputElement>("sizesBoardW");
+const sizesBoardGrow = byId<HTMLInputElement>("sizesBoardGrow");
 const sizesListW = byId<HTMLInputElement>("sizesListW");
 const sizesCardH = byId<HTMLInputElement>("sizesCardH");
 const sizesCardFont = byId<HTMLInputElement>("sizesCardFont");
@@ -132,8 +133,9 @@ const PREVIEW_SCREEN_W = 2000;
 // clamp visibly cuts some cards and not others.
 const PREVIEW_CARDS = [3, 6, 1, 9, 2, 4, 7, 2];
 // Few enough lists that they fit inside the default width, so the slider has
-// something to move: past the point where they stop fitting the board takes the
-// whole screen and the width no longer decides anything (.kanban in styles.css).
+// something to move: past the point where they stop fitting, a board with
+// boardGrow on takes the whole screen and the width no longer decides anything
+// (.kanban in styles.css).
 const PREVIEW_LISTS = 4;
 
 function renderPreview(): void {
@@ -141,6 +143,7 @@ function renderPreview(): void {
   preview.style.setProperty("--pv-board-w", sizes.boardW == null ? "none" : Math.round(sizes.boardW * k) + "px");
   preview.style.setProperty("--pv-list-w", Math.round(sizes.listW * k) + "px");
   preview.style.setProperty("--pv-list-count", String(PREVIEW_LISTS));
+  preview.style.setProperty("--kanban-grow", sizes.boardGrow ? "1" : "0");
   // A text line is ~1.4× the font size; scale it like everything else so the
   // font knob visibly re-packs the wireframe cards.
   preview.style.setProperty("--pvb-line-h", Math.max(1.5, sizes.cardFont * 1.4 * k).toFixed(1) + "px");
@@ -164,6 +167,7 @@ function renderPreview(): void {
 function syncSizesUI(): void {
   const s = sizes;
   sizesBoardW.value = String(s.boardW == null ? xySizes.BOARD_W_MAX : s.boardW);
+  sizesBoardGrow.checked = s.boardGrow;
   sizesListW.value = String(s.listW);
   sizesCardH.value = String(s.cardLines == null ? xySizes.CARD_LINES_MAX : s.cardLines);
   sizesCardFont.value = String(s.cardFont);
@@ -190,6 +194,7 @@ function commitSizes(): void {
   const boardW = Number(sizesBoardW.value), lines = Number(sizesCardH.value);
   sizes = {
     boardW: boardW >= xySizes.BOARD_W_MAX ? null : boardW,
+    boardGrow: sizesBoardGrow.checked,
     listW: Number(sizesListW.value),
     cardLines: lines >= xySizes.CARD_LINES_MAX ? null : lines,
     cardFont: Number(sizesCardFont.value),
@@ -199,6 +204,7 @@ function commitSizes(): void {
 }
 
 sizesBoardW.addEventListener("input", commitSizes);
+sizesBoardGrow.addEventListener("change", commitSizes);
 sizesListW.addEventListener("input", commitSizes);
 sizesCardH.addEventListener("input", commitSizes);
 sizesCardFont.addEventListener("input", commitSizes);

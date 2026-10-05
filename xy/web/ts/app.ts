@@ -174,12 +174,16 @@ async function requireLogin(): Promise<AuthMe | { offline: true } | null> {
 // laptop and stays a centred column on anything wider.
 export interface Sizes {
   boardW: number | null;
+  // When the lists outgrow boardW: true lets the board take the whole screen
+  // (centring a board that scrolls anyway only adds margins), false keeps the
+  // cap and scrolls inside it.
+  boardGrow: boolean;
   listW: number;
   cardLines: number | null;
   cardFont: number;
 }
 
-const SIZES_DEFAULT: Sizes = { boardW: 1512, listW: 280, cardLines: 3, cardFont: 14 };
+const SIZES_DEFAULT: Sizes = { boardW: 1512, boardGrow: true, listW: 280, cardLines: 3, cardFont: 14 };
 const SIZES_RANGE = {
   BOARD_W_MIN: 800, BOARD_W_MAX: 3200,   // MAX = "full width"
   LIST_W_MIN: 200, LIST_W_MAX: 640,
@@ -201,6 +205,8 @@ function sanitizeSizes(s: unknown): Sizes {
   const raw = s as Partial<Record<keyof Sizes, unknown>>;
   return {
     boardW: pickSize(raw.boardW, SIZES_RANGE.BOARD_W_MIN, SIZES_RANGE.BOARD_W_MAX, SIZES_DEFAULT.boardW),
+    // absent (sizes saved before this knob) or null reads as the default
+    boardGrow: typeof raw.boardGrow === "boolean" ? raw.boardGrow : SIZES_DEFAULT.boardGrow,
     listW: pickSize(raw.listW, SIZES_RANGE.LIST_W_MIN, SIZES_RANGE.LIST_W_MAX + 1, SIZES_DEFAULT.listW) ?? SIZES_DEFAULT.listW,
     cardLines: pickSize(raw.cardLines, 1, SIZES_RANGE.CARD_LINES_MAX, SIZES_DEFAULT.cardLines),
     // no null sentinel here — sizes saved before this knob existed carry
@@ -214,6 +220,7 @@ function sanitizeSizes(s: unknown): Sizes {
 // the profile preview passes its own container instead.
 function applySizes(s: Sizes, root: HTMLElement = document.documentElement): void {
   root.style.setProperty("--kanban-max-w", s.boardW == null ? "none" : s.boardW + "px");
+  root.style.setProperty("--kanban-grow", s.boardGrow ? "1" : "0");
   root.style.setProperty("--klist-w", s.listW + "px");
   root.style.setProperty("--kcard-lines", s.cardLines == null ? "none" : String(s.cardLines));
   root.style.setProperty("--kcard-font", s.cardFont + "px");

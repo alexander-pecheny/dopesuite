@@ -603,10 +603,11 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 // absent field doesn't collapse to a spurious zero; the client clamps ranges on
 // read, so the server only validates the shape.
 type displaySizes struct {
-	BoardW    *int `json:"boardW"`
-	ListW     *int `json:"listW"`
-	CardLines *int `json:"cardLines"`
-	CardFont  *int `json:"cardFont"`
+	BoardW    *int  `json:"boardW"`
+	BoardGrow *bool `json:"boardGrow"`
+	ListW     *int  `json:"listW"`
+	CardLines *int  `json:"cardLines"`
+	CardFont  *int  `json:"cardFont"`
 }
 
 func (s *server) handleSetSizes(w http.ResponseWriter, r *http.Request) {

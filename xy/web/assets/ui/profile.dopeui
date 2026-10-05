@@ -85,6 +85,7 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
   modal id="sizesOverlay" label=@profile.sizes.name title=@profile.sizes.name variant="sizes"
     mount id="sizesPreview" kind="sizes-preview"
     sliderrow id="sizesBoardW" label=@profile.sizes.board_w valueid="sizesBoardWVal" min="800" max="3200" step="50" hint=@profile.sizes.board_w_hint
+    checkbox id="sizesBoardGrow" @profile.sizes.board_grow
     sliderrow id="sizesListW" label=@profile.sizes.list_w valueid="sizesListWVal" min="200" max="640" step="10"
     sliderrow id="sizesCardH" label=@profile.sizes.card_h valueid="sizesCardHVal" min="1" max="12" step="1" hint=@profile.sizes.card_h_hint
     sliderrow id="sizesCardFont" label=@profile.sizes.font valueid="sizesCardFontVal" min="10" max="18" step="1" hint=@profile.sizes.font_hint

@@ -427,13 +427,15 @@
   padding-bottom: var(--space-2);
   /* On a wide monitor a full-bleed board strands the reader at the screen edge,
      so the workspace is a centred column with a user-set cap («Изменить размеры»).
-     The cap holds only while the lists fit inside it: a board that has to scroll
-     anyway takes the whole screen, because centring it would add margins to
-     scroll past and nothing else. CSS cannot measure the row, so board.js sets
-     --klist-count and the lists' own width follows from it. With
+     By default the cap holds only while the lists fit inside it: a board that
+     has to scroll anyway takes the whole screen, because centring it would add
+     margins to scroll past and nothing else. A user who wants the cap to hold
+     regardless turns that off, and --kanban-grow: 0 zeroes the lists' term.
+     CSS cannot measure the row, so board.js sets --klist-count and the lists'
+     own width follows from it. With
      --kanban-max-w: none the max() has no valid value and max-width falls back
      to its initial none, which is the full bleed that «none» means. */
-  max-width: max(var(--kanban-max-w), calc(var(--klist-count, 0) * (var(--klist-w) + var(--space-3))));
+  max-width: max(var(--kanban-max-w), calc(var(--kanban-grow, 1) * var(--klist-count, 0) * (var(--klist-w) + var(--space-3))));
   margin-inline: auto;
   /* An auto cross-axis margin cancels a flex item's stretch, so without an
      explicit width the box sizes to its lists and overflows .board-main's
@@ -1753,7 +1755,7 @@ textarea.fld-src {
   gap: 3px;
   width: 100%;
   /* the same width rule as the real board (.kanban), at preview scale */
-  max-width: max(var(--pv-board-w), calc(var(--pv-list-count, 0) * (var(--pv-list-w, 70px) + 3px)));
+  max-width: max(var(--pv-board-w), calc(var(--kanban-grow, 1) * var(--pv-list-count, 0) * (var(--pv-list-w, 70px) + 3px)));
   padding: 5px;
   overflow: hidden;
 }

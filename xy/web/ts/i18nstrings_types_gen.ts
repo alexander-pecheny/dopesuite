@@ -1762,6 +1762,7 @@ export type Strings = {
     save: () => string;
     saved: () => string;
     sizes: {
+      boardGrow: () => string;
       boardW: () => string;
       boardWHint: () => string;
       boardWMax: () => string;

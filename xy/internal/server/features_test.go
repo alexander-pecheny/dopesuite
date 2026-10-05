@@ -3,6 +3,7 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"image"
 	"image/color"
 	"image/png"
@@ -829,5 +830,25 @@ func TestTourDeclarationReplacesTourTesters(t *testing.T) {
 	snap = getSnapshotFor(t, c, boardID)
 	if len(snap.TourDeclarations) != 0 {
 		t.Fatalf("grouping the list should drop its declaration: %+v", snap.TourDeclarations)
+	}
+}
+
+// TestSizesKeepBoardGrow checks that the workspace "take the whole screen when
+// the lists do not fit" choice survives the server's re-marshal of the sizes.
+func TestSizesKeepBoardGrow(t *testing.T) {
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 770101, "sizes")
+	mustStatus(t, c.do("POST", "/api/auth/sizes", map[string]any{
+		"boardW": 1200, "boardGrow": false, "listW": 280, "cardLines": 3, "cardFont": 14,
+	}), 204)
+	resp := c.do("GET", "/api/auth/me", nil)
+	mustStatus(t, resp, 200)
+	var me struct {
+		Sizes json.RawMessage `json:"sizes"`
+	}
+	c.decode(resp, &me)
+	want := `{"boardW":1200,"boardGrow":false,"listW":280,"cardLines":3,"cardFont":14}`
+	if string(me.Sizes) != want {
+		t.Fatalf("sizes = %s, want %s", me.Sizes, want)
 	}
 }

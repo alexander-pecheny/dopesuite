@@ -2319,9 +2319,12 @@ var RU = Strings{
 		Save:  func() string { return "Сохранить" },
 		Saved: func() string { return "Сохранено." },
 		Sizes: ProfileSizesStrings{
+			BoardGrow: func() string {
+				return "Если списки не помещаются, занимать весь экран"
+			},
 			BoardW: func() string { return "Ширина рабочей области" },
 			BoardWHint: func() string {
-				return "Пока списки помещаются в эту ширину, доска центрируется на экране. Если их больше, доска занимает весь экран."
+				return "Доска центрируется на экране и не становится шире этого значения."
 			},
 			BoardWMax: func() string { return "вся ширина" },
 			CardH:     func() string { return "Текст карточки" },
