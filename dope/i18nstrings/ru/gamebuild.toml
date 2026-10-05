@@ -61,6 +61,9 @@ scheme_refuses = 'схема игры не подходит для {{.n}} {{plur
 [recompile]
 # A recompile that would change bouts already started; the bout codes follow.
 started_bouts = 'нельзя менять начатые бои: {{.names}} — уберите их изменения или снимите отметку «Закончен» и очистите протокол'
+# A recompile that would reseat or drop bouts nobody has started but where
+# something is already entered (a seat, a pin); the bout codes follow.
+entered_bouts = 'В боях {{.names}} уже есть внесённые данные. Новая схема их сотрёт, поэтому она не применена. Очистите эти бои или оставьте схему прежней.'
 
 [clear]
 # Clearing a game type that has no clear path.

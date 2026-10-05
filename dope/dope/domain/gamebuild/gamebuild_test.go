@@ -399,3 +399,41 @@ func TestRecompileSeatsNewBoutsAtTheirVenue(t *testing.T) {
 		t.Fatalf("%d бои without a venue after the recompile (%v)", unseated, err)
 	}
 }
+
+// A recompile never throws away what a host entered. ЭК's Protocol calls a
+// bout unstarted until it is finished, so a bout with marks in it could be
+// dropped by a new scheme without a word. It is refused instead, naming the
+// bout, and goes through once nothing is entered.
+func TestRecompileRefusesToDropEnteredBouts(t *testing.T) {
+	db, festID := newFest(t, 8)
+	const before = "[scheme]\nkind: single_elimination\nparticipants: 8\nmatch_size: 4\nwinning_places: 2\n"
+	const after = "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\n"
+	var gameID int64
+	inTx(t, db, func(tx *sql.Tx) (err error) {
+		gameID, err = gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "ek", Label: "ЭК", DSL: before})
+		return err
+	})
+	var code, state string
+	if err := db.QueryRow(`select code, state_json from matches where game_id = ? order by position, id limit 1`, gameID).Scan(&code, &state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`update matches set state_json = json_set(state_json, '$.entered', 1) where game_id = ? and code = ?`, gameID, code); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = gamebuild.Recompile(context.Background(), tx, festID, gameID, after)
+	tx.Rollback()
+	if err == nil || !strings.Contains(err.Error(), code) {
+		t.Fatalf("recompile over an entered bout: %v, want a refusal naming %s", err, code)
+	}
+
+	if _, err := db.Exec(`update matches set state_json = ? where game_id = ? and code = ?`, state, gameID, code); err != nil {
+		t.Fatal(err)
+	}
+	inTx(t, db, func(tx *sql.Tx) error {
+		return gamebuild.Recompile(context.Background(), tx, festID, gameID, after)
+	})
+}

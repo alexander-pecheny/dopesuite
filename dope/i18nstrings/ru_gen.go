@@ -713,6 +713,9 @@ var RU = Strings{
 			Table: func(n string) string { return fmt.Sprintf("Стол %s", n) },
 		},
 		Recompile: GamebuildRecompileStrings{
+			EnteredBouts: func(names string) string {
+				return fmt.Sprintf("В боях %s уже есть внесённые данные. Новая схема их сотрёт, поэтому она не применена. Очистите эти бои или оставьте схему прежней.", names)
+			},
 			StartedBouts: func(names string) string {
 				return fmt.Sprintf("нельзя менять начатые бои: %s — уберите их изменения или снимите отметку «Закончен» и очистите протокол", names)
 			},

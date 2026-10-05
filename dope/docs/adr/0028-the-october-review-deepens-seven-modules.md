@@ -60,6 +60,15 @@ the last 19 commits to `build.go` were seating rules.
   as a clear does, and hands everything to the writer.
 - Who a Game created from a DSL seats (a зачёт's troikas, every troika of
   the fest, or empty seats) is `createEntrantsTx` in `seating.go`.
+- **A recompile never throws away what a host entered.** A bout's Protocol
+  decides whether it has begun, and ЭК's, ЭС's and личная СИ's say no until
+  the bout is finished. So a new scheme could drop an ЭК bout with marks in
+  it, or reseat a brain bout from its pristine document, without a word.
+  `refuseLosingEntries` compares each bout that would be dealt again or
+  dropped with the pristine document its old scheme wrote. If they differ,
+  the recompile is refused and the message names those bouts. When the
+  trigger was an Entrant list edit, the list waits and the entrants tab
+  says why.
 
 ## 3. A write to a fest goes through one commit step
 

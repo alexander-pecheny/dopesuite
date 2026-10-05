@@ -14,6 +14,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -768,6 +769,9 @@ select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_i
 	if err := planGrowthTx(ctx, tx, gameType, scheme, live); err != nil {
 		return err
 	}
+	if err := refuseLosingEntries(gameType, oldSchemeJSON, scheme, live); err != nil {
+		return err
+	}
 	seat, err := seedSeaterTx(ctx, tx, festID, gameID, gameType)
 	if err != nil {
 		return err
@@ -851,6 +855,64 @@ func planGrowthTx(ctx context.Context, tx *sql.Tx, gameType string, scheme store
 		return corei18n.User(dopestrings.Default.Gamebuild.Recompile.StartedBouts(strings.Join(blocked, ", ")))
 	}
 	return nil
+}
+
+// refuseLosingEntries refuses a recompile that would throw away something a
+// host entered. A bout nobody has started is dealt again from its pristine
+// document, or deleted when the new scheme drops it, and its Protocol may
+// call it unstarted while it already holds a seat, a pin or a рассадка. Such
+// a bout is told apart by its document: it is no longer the one its old
+// scheme wrote. A team-blob bout the new scheme keeps is not at risk, since
+// it keeps its marks through the reseat.
+func refuseLosingEntries(gameType, oldSchemeJSON string, scheme store.FestScheme, live *liveStructure) error {
+	var old store.FestScheme
+	_ = json.Unmarshal([]byte(oldSchemeJSON), &old)
+	pristine := map[string]string{}
+	for _, stage := range old.Stages {
+		for _, match := range stage.Matches {
+			pristine[match.Code] = stageEmptyState(gameType, stage, len(match.Slots), old.Questions)
+		}
+	}
+	kept := map[string]bool{}
+	for _, stage := range scheme.Stages {
+		for _, match := range stage.Matches {
+			kept[match.Code] = true
+		}
+	}
+	var entered []string
+	for code, m := range live.matches {
+		if m.begun(gameType) || live.grown[code] != nil {
+			continue
+		}
+		if kept[code] && store.TeamBlobShaped(gameType) {
+			continue
+		}
+		empty, known := pristine[code]
+		if !known {
+			empty = "{}"
+		}
+		if !sameDocument(m.state, empty) {
+			entered = append(entered, code)
+		}
+	}
+	if len(entered) == 0 {
+		return nil
+	}
+	sort.Strings(entered)
+	return corei18n.User(dopestrings.Default.Gamebuild.Recompile.EnteredBouts(strings.Join(entered, ", ")))
+}
+
+// sameDocument compares two JSON documents by what they hold, not by how
+// they are spelled.
+func sameDocument(a, b string) bool {
+	if a == b {
+		return true
+	}
+	var x, y any
+	if json.Unmarshal([]byte(a), &x) != nil || json.Unmarshal([]byte(b), &y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
 }
 
 // sameSlotIdentities compares a live match's slot sources with the planned

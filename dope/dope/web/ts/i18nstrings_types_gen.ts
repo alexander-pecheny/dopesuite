@@ -564,6 +564,7 @@ export type Strings = {
       table: (n: string) => string;
     };
     recompile: {
+      enteredBouts: (names: string) => string;
       startedBouts: (names: string) => string;
     };
     seating: {
