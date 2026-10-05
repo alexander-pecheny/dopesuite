@@ -120,6 +120,7 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   },
   activeCursorElement: () => cursor.activeCell || writtenCursor.activeCell,
   cursors: () => [cursor, writtenCursor],
+  beforeFinish: fillUnmarked,
   afterRender: () => {
     drawnShape.clear();
     for (const code of page.codes()) drawnShape.set(code, shapeOf(code));
@@ -428,6 +429,16 @@ function shootoutThemeEmpty(state: TroikaState, t: number): boolean {
 
 // The finished tick: a finished bout's sheet is read-only until the host
 // unticks it — the server rejects edits to a finished bout.
+// fillUnmarked marks wrong the answers a host left blank in the themes a side
+// played, as the bout is finished (troika-protocol unmarkedInPlayedThemes).
+function fillUnmarked(code: string): void {
+  const state = stateOf(code);
+  for (const cell of troika.unmarkedInPlayedThemes(state)) {
+    state.sides[cell.side].themes[cell.theme].answers[cell.question][cell.chair] = "wrong";
+    patch(code, ["sides", cell.side, "themes", cell.theme, "answers", cell.question, cell.chair], "wrong");
+  }
+}
+
 function finishToggle(bout: BoutEntry): CellContent {
   return page.finishToggle(bout.code, {text: S.troika.bout.finished()});
 }

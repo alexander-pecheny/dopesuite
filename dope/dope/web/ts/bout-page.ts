@@ -96,6 +96,10 @@ export interface BoutPageSpec<V extends BoutView, S> {
   canonical?: (tabs: GameTab[], key: string) => string;
   // After the module drew a tab (the page's own scroll cues, anchors).
   afterRender?: (tab: GameTab | undefined, node: HTMLElement) => void;
+  // A host is finishing a bout: what the page writes first (Troika fills the
+  // wrong answers a host left blank), in the same gesture, so one undo takes
+  // it back with the finish's own effect.
+  beforeFinish?: (code: string) => void;
   // A bout's new view arrived: true when the page repainted it in place, so
   // the tab need not be drawn again.
   repaint?: (code: string) => boolean;
@@ -506,6 +510,17 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   // ---- the host's writes ----
 
   function finish(code: string, finished: boolean): void {
+    if (finished && !viewer && spec.beforeFinish) {
+      // What the page writes first must land before the bout is finished,
+      // since a finished bout takes no more marks.
+      spec.beforeFinish(code);
+      void writer.flush().then(() => sendFinish(code, finished));
+      return;
+    }
+    sendFinish(code, finished);
+  }
+
+  function sendFinish(code: string, finished: boolean): void {
     void writer.send(matchScope(code), {url: matchURL(code, "finish"), body: {finished}}, {path: ["finished"], value: finished});
   }
 

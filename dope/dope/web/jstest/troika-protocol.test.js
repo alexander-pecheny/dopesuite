@@ -179,3 +179,19 @@ Deno.test("parseState keeps no turn outside the бой", () => {
   assertEquals(troika.parseState({values: [1, 1], swap: 1, written: true}).swap, 0);
   assertEquals(troika.parseState({values: [1, 1]}).swap, 0);
 });
+
+Deno.test("finishing marks wrong the blanks of a played тема, and nothing else", () => {
+  const state = troika.parseState({values: [1, 1], sides: [
+    // Side 0 played тема 1 (one right answer), left тема 2 untouched.
+    {themes: [theme([1, 2, 3], ["right", "", ""], none, none), theme([1, 2, 3], none, none, none)]},
+    // Side 1 played тема 1, its seating not recorded.
+    {themes: [theme([0, 0, 0], none, ["", "wrong", ""], none), theme([0, 0, 0], none, none, none)]},
+  ]});
+  const cells = troika.unmarkedInPlayedThemes(state);
+  const key = (c) => `${c.side}:${c.theme}:${c.question}:${c.chair}`;
+  // Each side's тема 1: 9 cells, one marked. Neither side's тема 2.
+  assertEquals(cells.length, 8 + 8);
+  assertEquals(cells.some((c) => c.theme === 1), false);
+  assertEquals(cells.map(key).includes("0:0:0:0"), false, "a marked answer stays as it is");
+  assertEquals(troika.unmarkedInPlayedThemes(troika.parseState({values: [1], written: true})), []);
+});
