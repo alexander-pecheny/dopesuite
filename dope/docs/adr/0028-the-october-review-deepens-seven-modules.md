@@ -99,3 +99,21 @@ delete were methods on `*hostpages.Server`, with their SQL inline.
   still converts its request to the form's fields so that one parser checks
   both. `pages.Host.Engine()` stays as well, and so do the server's
   `Lock`/`Unlock`, which the Telegram bridge uses.
+
+## 4. A Match edit is a domain module, and the batcher only batches
+
+`web/editbatch` (884 lines) held two things: the batching clock, savepoints
+and broadcasts, and also the domain writes, which were the patch, the finish,
+the venue, the flat document's patch and the score-then-resolve after a
+window. The replay harness called those writes as exported `*Tx` functions of
+the web package. None of them had a test of their own.
+
+- `domain/matchedit` is the Match edit: `PatchTx`, `FinishTx`, `SetVenueTx`,
+  `PatchGameTx` (a flat Game's document), `ApplyStateOps`, and `SettleTx`,
+  which takes the `Change`s a set of edits made and turns them into results
+  once per bout, with one resolve. `editbatch` keeps the window, the
+  savepoints, the pre- and post-images and the broadcasts. The replay's
+  direct transport calls `matchedit` as the batcher does.
+- `scoring` stays as it is. It is not a pass-through: `flatgame`,
+  `imports/ek` and the server's match view write `match_results` through it
+  too.

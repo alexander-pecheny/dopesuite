@@ -13,9 +13,9 @@ import (
 	"dope/dope/domain/edit"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
+	"dope/dope/domain/matchedit"
 	"dope/dope/domain/replay"
 	"dope/dope/domain/resolver"
-	"dope/dope/web/editbatch"
 	dopestrings "dope/i18nstrings"
 
 	corestrings "pecheny.me/dopecore/i18nstrings"
@@ -83,16 +83,17 @@ where match_id = ? and slot_index = ?`, registry[seat.Name], matchID, index); er
 				continue
 			}
 			if err := inTx(db, func(tx *sql.Tx) error {
-				return editbatch.PatchMatchTx(ctx, tx, scope, matchID, ops)
+				return matchedit.PatchTx(ctx, tx, scope, matchID, ops)
 			}); err != nil {
 				return fmt.Errorf("%s, %s: %w", bout.At, seat.Name, err)
 			}
 		}
 		if err := inTx(db, func(tx *sql.Tx) error {
-			if err := editbatch.FinishMatchTx(ctx, tx, matchID, true); err != nil {
+			if err := matchedit.FinishTx(ctx, tx, matchID, true); err != nil {
 				return err
 			}
-			_, err := editbatch.RecomputeMatchTx(ctx, tx, scope, matchID, true, "", "")
+			finished := true
+			_, err := matchedit.SettleTx(ctx, tx, scope, []*matchedit.Change{{MatchID: matchID, Code: bout.At.String(), FinishTo: &finished}})
 			return err
 		}); err != nil {
 			return corestrings.User(s.Octobearfest.Error.Finish(bout.At.String(), err.Error()))

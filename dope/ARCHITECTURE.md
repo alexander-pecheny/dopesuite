@@ -76,7 +76,8 @@ possible to break the package up without creating import cycles.
 
 - `pages` — public + admin page handlers (register, admin, host journal/numbers).
 - `hostpages` — host editor page handlers (dashboard, roster, numbers, games).
-- `editbatch` — coalesces per-game PATCH edits into one locked write tx per window.
+- `editbatch` — coalesces per-game PATCH edits into one locked write tx per window,
+  and broadcasts the result. What each edit does is `domain/matchedit`'s.
 - `telegrambridge` — the login conversation's answers, called by the in-process bot.
 - `assets` — the `//go:embed static` package; the FS keeps the `static/` prefix.
   Frontend source lives under `web/ts/` (built into `static/dist/`); deno tests under `web/jstest/`.
@@ -161,6 +162,10 @@ here when it needs type metadata.
   delete) and the fest's delete, each the body of one transaction that says
   what it did (`core.FestWrite`). The host form and its JSON twin both run it
   through `core.Engine.CommitFestWrite`.
+- `matchedit` — a Match edit: a host's ops on a bout's or a flat Game's
+  document, a finish, a venue, and the settle once per touched bout (score,
+  revision and journal event, slots resolved). The batcher and the replay
+  harness call the same functions.
 - `numbering` — team-number assignment. `edit` — match-edit value types.
 - `towns` — which country a town is in, as the ISO code the screen draws a flag
   from: buff answers for every town it has mirrored, and one it has not is asked

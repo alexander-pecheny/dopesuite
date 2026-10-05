@@ -11,11 +11,11 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
+	"dope/dope/domain/matchedit"
 	"dope/dope/domain/replay"
 	"dope/dope/domain/resolver"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
-	"dope/dope/web/editbatch"
 )
 
 // serverGame drives a real dope game from a transcript: it resolves a
@@ -199,8 +199,8 @@ select config_json from stages where game_id = ? and stage_type = 'reseed' order
 	return false, nil
 }
 
-// directTransport applies each patch in its own transaction and scores the
-// бой once, when it closes — the same engine the batcher runs per window,
+// directTransport applies each patch in its own transaction and settles the
+// бой once, when it closes: the same matchedit the batcher runs per window,
 // without a window per seat.
 type directTransport struct{ g *serverGame }
 
@@ -220,7 +220,7 @@ func (d directTransport) patch(matchID int64, code string, ops []map[string]any)
 		return err
 	}
 	return d.tx(func(ctx context.Context, tx *sql.Tx) error {
-		if err := editbatch.PatchMatchTx(ctx, tx, d.scope(), matchID, typed); err != nil {
+		if err := matchedit.PatchTx(ctx, tx, d.scope(), matchID, typed); err != nil {
 			return fmt.Errorf("отметки %s: %w", code, err)
 		}
 		return nil
@@ -229,15 +229,14 @@ func (d directTransport) patch(matchID int64, code string, ops []map[string]any)
 
 func (d directTransport) finish(matchID int64, code string) error {
 	return d.tx(func(ctx context.Context, tx *sql.Tx) error {
-		if err := editbatch.FinishMatchTx(ctx, tx, matchID, true); err != nil {
+		if err := matchedit.FinishTx(ctx, tx, matchID, true); err != nil {
 			return err
 		}
-		event, payload := editbatch.FinishEvent(code, true)
-		if _, err := editbatch.RecomputeMatchTx(ctx, tx, d.scope(), matchID, true, event, payload); err != nil {
+		finished := true
+		if _, err := matchedit.SettleTx(ctx, tx, d.scope(), []*matchedit.Change{{MatchID: matchID, Code: code, FinishTo: &finished}}); err != nil {
 			return fmt.Errorf("закрытие %s: %w", code, err)
 		}
-		_, err := resolver.ResolveGameSlotsTx(ctx, tx, d.g.gameID)
-		return err
+		return nil
 	})
 }
 

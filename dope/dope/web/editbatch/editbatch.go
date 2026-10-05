@@ -20,9 +20,10 @@
 // SAVEPOINT, so one that fails halfway (per-match edits write as they go) rolls
 // back alone without poisoning the window.
 //
-// Per-match Protocol edits additionally get, ONCE per window per touched match,
-// the semantic recompute their per-edit endpoints used to run each: the scorer
-// materialises match_results, then the resolver advances bracket slots.
+// What an edit does is domain/matchedit's: the patch, the finish, the venue,
+// and ONCE per window per touched match the settle (the scorer materialises
+// match_results, then the resolver advances bracket slots). This package owns
+// the window, the savepoints, the pre- and post-images and the broadcasts.
 //
 // A 200 is returned to an editor only once the whole window's transaction has
 // committed (and that editor's own ops applied) — exactly the "200 only when the
@@ -38,41 +39,18 @@ import (
 	"log"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
-	"dope/dope/domain/flatgame"
-	"dope/dope/domain/games"
-	"dope/dope/domain/matchops"
-	"dope/dope/domain/resolver"
-	"dope/dope/domain/scoring"
+	"dope/dope/domain/matchedit"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
-	dopestrings "dope/i18nstrings"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 )
-
-// pointerFromSegments renders a parsed patch path as the JSON pointer an
-// OpMatchPatch record carries.
-func pointerFromSegments(path []edit.JSONPathSegment) string {
-	var b strings.Builder
-	for _, seg := range path {
-		b.WriteByte('/')
-		if seg.IsIndex {
-			b.WriteString(strconv.Itoa(seg.Index))
-			continue
-		}
-		escaped := strings.ReplaceAll(seg.Key, "~", "~0")
-		b.WriteString(strings.ReplaceAll(escaped, "/", "~1"))
-	}
-	return b.String()
-}
 
 // editBatchWindow bounds how long game-state edits buffer before the batch is
 // applied. Matches the viewer-side deltaCoalesceWindow so editor and viewer
@@ -309,15 +287,12 @@ func (b *Batcher) flushEditBatch(gameID int64) {
 // diff against, whether a finish transition needs computed places, and the
 // revision the match ended up at.
 type touched struct {
-	matchID  int64
-	code     string
-	oldData  []byte
-	changed  bool // at least one job on this match committed
-	finishTo *bool
-	venue    int
-	revision int64
-	data     []byte
-	view     store.MatchView
+	// Change is what the window did to the match, as matchedit settles it.
+	matchedit.Change
+	oldData []byte
+	changed bool // at least one job on this match committed
+	data    []byte
+	view    store.MatchView
 }
 
 // applyEditBatch applies a window's edits under a single lock acquisition in one
@@ -457,7 +432,7 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 				// than hand the editor an empty body it cannot parse.
 				results[i] = editResult{err: errors.New("edit committed but its match view could not be loaded")}
 			} else {
-				results[i] = editResult{next: t.data, revision: t.revision, seq: t.view.Seq}
+				results[i] = editResult{next: t.data, revision: t.Revision, seq: t.view.Seq}
 			}
 		}
 		b.deliver(job, results[i], metricsOn, acquired, hold)
@@ -495,15 +470,15 @@ func (b *Batcher) broadcastTouched(scope core.FestScope, order []int64, byMatch 
 	var festRevision int64
 	for _, matchID := range order {
 		t := byMatch[matchID]
-		if t.finishTo != nil {
+		if t.FinishTo != nil {
 			finished = true
 		}
-		festRevision = util.MaxInt64(festRevision, t.revision)
-		scopeKey := MatchScopeKey(scope.GameID, t.code)
+		festRevision = util.MaxInt64(festRevision, t.Revision)
+		scopeKey := MatchScopeKey(scope.GameID, t.Code)
 		if deltaOps, _ := realtime.MatchDeltaOps(t.oldData, t.data); len(deltaOps) > 0 {
-			t.view.Seq = b.Eng.BroadcastStateDelta(scope.FestID, scopeKey, t.revision, deltaOps)
+			t.view.Seq = b.Eng.BroadcastStateDelta(scope.FestID, scopeKey, t.Revision, deltaOps)
 		} else {
-			t.view.Seq = b.Eng.BroadcastState(scope.FestID, scopeKey, t.revision, t.data)
+			t.view.Seq = b.Eng.BroadcastState(scope.FestID, scopeKey, t.Revision, t.data)
 		}
 		if stamped, err := json.Marshal(t.view); err == nil {
 			t.data = stamped
@@ -527,7 +502,7 @@ func (b *Batcher) preImages(ctx context.Context, q store.Queryer, scope core.Fes
 		if job.kind == kindGamePatch || byMatch[job.matchID] != nil {
 			continue
 		}
-		t := &touched{matchID: job.matchID, code: job.code}
+		t := &touched{Change: matchedit.Change{MatchID: job.matchID, Code: job.code}}
 		if view, err := loadMatchView(ctx, q, scope, job.matchID); err == nil {
 			t.oldData, _ = json.Marshal(view)
 		}
@@ -550,7 +525,7 @@ func postImages(ctx context.Context, q store.Queryer, scope core.FestScope, orde
 		if err != nil {
 			continue
 		}
-		view.Revision = util.MaxInt64(view.Revision, t.revision)
+		view.Revision = util.MaxInt64(view.Revision, t.Revision)
 		t.view = view
 		t.data, _ = json.Marshal(view)
 	}
@@ -608,152 +583,37 @@ func (b *Batcher) runJob(ctx context.Context, tx *sql.Tx, job *editJob, byMatch 
 		if err := b.applyMatchVenueTx(job.ctx, tx, job); err != nil {
 			return editResult{}, nil, err
 		}
-		byMatch[job.matchID].venue = job.venue
+		byMatch[job.matchID].Venue = job.venue
 		return editResult{}, nil, nil
 	}
 	return editResult{}, nil, fmt.Errorf("unknown edit job kind %d", job.kind)
 }
 
-// PatchMatchTx applies one editor's ops to a match's Protocol state: EK ops
-// address blob paths, every other Protocol's document takes the generic set
-// ops, and either way the recorded BlobOps become the journal's record.
-// Exported with FinishMatchTx and RecomputeMatchTx for a caller that brings
-// its own transaction and window — the replay drives the same engine without
-// the batcher's clock.
-func PatchMatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64, ops []edit.PatchOp) error {
-	match, err := loadMatchTx(ctx, tx, scope, matchID)
-	if err != nil {
-		return err
-	}
-	if match.State.Finished {
-		paths := make([][]json.RawMessage, len(ops))
-		for i, op := range ops {
-			paths[i] = op.Path
-		}
-		if !games.EditableWhenFinished(match.GameType, paths) {
-			return corei18n.User(dopestrings.Default.Edit.Match.Finished())
-		}
-	}
-	if !store.TeamBlobShaped(match.GameType) {
-		next, blobOps, err := applyStateOps(match.GameType, match.RawState, ops, nil, false)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `update matches set state_json = ? where id = ?`, string(next), matchID); err != nil {
-			return err
-		}
-		return festwrite.JournalMatchPatchTx(ctx, tx, matchID, blobOps)
-	}
-	recorded, err := store.MutateMatchBlobTx(ctx, tx, matchID, func(blob *store.MatchBlob) error {
-		return matchops.Apply(blob, match, ops)
-	})
-	if err != nil {
-		return err
-	}
-	return festwrite.JournalMatchPatchTx(ctx, tx, matchID, recorded)
-}
-
 func (b *Batcher) applyMatchPatchTx(ctx context.Context, tx *sql.Tx, job *editJob) error {
-	return PatchMatchTx(ctx, tx, job.scope, job.matchID, job.req.Ops)
-}
-
-// FinishMatchTx flips a match's finished/active status; RecomputeMatchTx then
-// turns the grid into a result.
-func FinishMatchTx(ctx context.Context, tx *sql.Tx, matchID int64, finished bool) error {
-	status := "active"
-	if finished {
-		status = "finished"
-	}
-	_, err := tx.ExecContext(ctx, `update matches set status = ? where id = ?`, status, matchID)
-	return err
+	return matchedit.PatchTx(ctx, tx, job.scope, job.matchID, job.req.Ops)
 }
 
 func (b *Batcher) applyMatchFinishTx(ctx context.Context, tx *sql.Tx, job *editJob, t *touched) error {
-	if err := FinishMatchTx(ctx, tx, job.matchID, job.finished); err != nil {
+	if err := matchedit.FinishTx(ctx, tx, job.matchID, job.finished); err != nil {
 		return err
 	}
 	value := job.finished
-	t.finishTo = &value
+	t.FinishTo = &value
 	return nil
 }
 
 func (b *Batcher) applyMatchVenueTx(ctx context.Context, tx *sql.Tx, job *editJob) error {
-	var venueID int64
-	if err := tx.QueryRowContext(ctx, `
-select id from venues where fest_id = ? and number = ?`, job.scope.FestID, job.venue).Scan(&venueID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return errors.New("unknown venue")
-		}
-		return err
-	}
-	_, err := tx.ExecContext(ctx, `update matches set venue_id = ? where id = ?`, venueID, job.matchID)
-	return err
+	return matchedit.SetVenueTx(ctx, tx, job.scope, job.matchID, job.venue)
 }
 
-func loadMatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64) (store.DBMatchState, error) {
-	return store.LoadMatchState(ctx, tx, store.MatchSelector{FestID: scope.FestID, GameID: scope.GameID, MatchID: matchID})
-}
-
-// RecomputeMatchTx rescores one match after a window's edits — computed places
-// when it is being finished, then the Protocol's scorer with any pin over them
-// — and bumps its revision under the named journal event. The caller resolves
-// the game's slots once afterwards.
-func RecomputeMatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64, finishing bool, eventType, payload string) (int64, error) {
-	match, err := loadMatchTx(ctx, tx, scope, matchID)
-	if err != nil {
-		return 0, err
-	}
-	if finishing {
-		store.AssignComputedPlaces(&match.State)
-	}
-	if err := scoring.RecalculateMatchResultsTx(ctx, tx, match); err != nil {
-		return 0, err
-	}
-	return bumpMatchRevisionTx(ctx, tx, scope.FestID, matchID, eventType, payload)
-}
-
-// recomputeTouched scores every match the window changed and then resolves the
-// game's slots once, returning the matches the cascade moved.
+// recomputeTouched settles every match the window changed (matchedit.SettleTx),
+// returning the matches the cascade moved.
 func (b *Batcher) recomputeTouched(ctx context.Context, tx *sql.Tx, scope core.FestScope, order []int64, byMatch map[int64]*touched) ([]int64, error) {
-	if len(order) == 0 {
-		return nil, nil
+	changes := make([]*matchedit.Change, len(order))
+	for i, matchID := range order {
+		changes[i] = &byMatch[matchID].Change
 	}
-	for _, matchID := range order {
-		t := byMatch[matchID]
-		eventType, payload := journalEventFor(t)
-		revision, err := RecomputeMatchTx(ctx, tx, scope, matchID, t.finishTo != nil && *t.finishTo, eventType, payload)
-		if err != nil {
-			return nil, err
-		}
-		t.revision = revision
-	}
-	return resolver.ResolveGameSlotsTx(ctx, tx, scope.GameID)
-}
-
-// journalEventFor names the coarse live event for a window's effect on one
-// match. A window that also flipped a Structure transition records that, since
-// the Protocol ops are already journaled per edit as OpMatchPatch records.
-func journalEventFor(t *touched) (string, string) {
-	switch {
-	case t.finishTo != nil:
-		return FinishEvent(t.code, *t.finishTo)
-	case t.venue != 0:
-		return "match:venue", util.MustJSON(map[string]any{"code": t.code, "venue": t.venue})
-	}
-	return "game:state-patch", util.MustJSON(map[string]any{"match": t.code})
-}
-
-func FinishEvent(code string, finished bool) (string, string) {
-	return "match:update", util.MustJSON(map[string]any{"code": code, "finished": finished})
-}
-
-// bumpMatchRevisionTx advances the match's and the fest's revision once for the
-// whole window and records the semantic journal event for it.
-func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64, eventType, payload string) (int64, error) {
-	if _, err := tx.ExecContext(ctx, `update matches set revision = revision + 1 where id = ?`, matchID); err != nil {
-		return 0, err
-	}
-	return festwrite.BumpFestRevisionTx(ctx, tx, festID, eventType, payload)
+	return matchedit.SettleTx(ctx, tx, scope, changes)
 }
 
 // deliver hands a job its result, records its metric sample, and releases its
@@ -777,102 +637,20 @@ func (b *Batcher) failBatch(jobs []*editJob, err error) {
 	}
 }
 
-// applyStateOps validates and applies generic set ops to a Protocol state
-// document, returning the updated JSON and the semantic journal ops. Shared by
-// the flat-game and per-match patch paths so live writes and journal replay
-// (the generic branch of storage/journal ApplyMatchPatch) stay one engine.
-func applyStateOps(gameType, stateJSON string, ops []edit.PatchOp, sample *metrics.Sample, metricsOn bool) ([]byte, []store.BlobOp, error) {
-	if stateJSON == "" {
-		stateJSON = "{}"
-	}
-	var root any
-	tUnmarshal := metrics.NowIf(metricsOn)
-	if err := json.Unmarshal([]byte(stateJSON), &root); err != nil {
-		return nil, nil, fmt.Errorf("stored game state is invalid json: %w", err)
-	}
-	if metricsOn {
-		sample.Unmarshal = time.Since(tUnmarshal)
-	}
-	if root == nil {
-		root = map[string]any{}
-	}
-
-	blobOps := make([]store.BlobOp, 0, len(ops))
-	for _, op := range ops {
-		if op.Op != "" && op.Op != "set" {
-			return nil, nil, fmt.Errorf("unsupported patch op %q", op.Op)
-		}
-		path, err := edit.ParseJSONPatchPath(op.Path)
-		if err != nil {
-			return nil, nil, err
-		}
-		if edit.PatchPathTouchesRatingRoster(gameType, path) {
-			return nil, nil, edit.ErrRatingRosterImmutable
-		}
-		value, err := edit.DecodePatchValue(op.Value)
-		if err != nil {
-			return nil, nil, err
-		}
-		root, err = edit.ApplyJSONSet(root, path, value)
-		if err != nil {
-			return nil, nil, err
-		}
-		blobOps = append(blobOps, store.BlobOp{Kind: "set", Path: pointerFromSegments(path), Value: value, Parts: op.Path})
-	}
-
-	tMarshal := metrics.NowIf(metricsOn)
-	next, err := json.Marshal(root)
-	if err != nil {
-		return nil, nil, err
-	}
-	if metricsOn {
-		sample.Marshal = time.Since(tMarshal)
-	}
-	if err := games.ValidateEdit(gameType, []byte(stateJSON), next); err != nil {
-		return nil, nil, err
-	}
-	return next, blobOps, nil
-}
-
-// applyGamePatchTx applies one flat game's state PATCH within an existing
-// transaction: read the current state, apply the ops, write it back and bump
-// the fest revision (which appends the journal event). It performs no locking,
-// no begin/commit — the batcher owns those — so several edits share one tx. It
-// returns the new state, the assigned revision and the marshaled ops (for the
-// merged broadcast). Ops are validated and applied before any write, so a
-// returned error means nothing was written for this edit.
+// applyGamePatchTx applies one flat game's state PATCH within the window's
+// transaction (matchedit.PatchGameTx) and returns the new state, the assigned
+// revision and the marshaled ops for the merged broadcast.
 func (b *Batcher) applyGamePatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, req edit.PatchRequest, payload string, sample *metrics.Sample) ([]byte, int64, []byte, error) {
-	if len(req.Ops) == 0 {
-		return nil, 0, nil, errors.New("missing patch ops")
+	if !b.Rec.On {
+		sample = nil
 	}
-	metricsOn := b.Rec.On && sample != nil
-	if metricsOn {
+	if sample != nil {
 		sample.Fest, sample.Game = scope.FestID, scope.GameID
 		sample.Ops = len(req.Ops)
 	}
-
-	doc, err := store.LoadGameDoc(ctx, tx, scope.FestID, scope.GameID)
+	next, revision, err := matchedit.PatchGameTx(ctx, tx, scope, req.Ops, payload, sample)
 	if err != nil {
 		return nil, 0, nil, err
-	}
-	next, blobOps, err := applyStateOps(doc.GameType, doc.State, req.Ops, sample, metricsOn)
-	if err != nil {
-		return nil, 0, nil, err
-	}
-	tDB := metrics.NowIf(metricsOn)
-	if blobOps == nil {
-		blobOps = []store.BlobOp{}
-	}
-	if err := flatgame.SaveDocumentTx(ctx, tx, scope.FestID, scope.GameID, doc.MatchID, string(next), blobOps); err != nil {
-		return nil, 0, nil, err
-	}
-	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, "game:state-patch", payload)
-	if err != nil {
-		return nil, 0, nil, err
-	}
-	if metricsOn {
-		sample.DB = time.Since(tDB)
-		sample.Bytes = len(next)
 	}
 	// req.Ops came from valid request JSON, so this marshal effectively never
 	// fails; on the off chance it does, signal a snapshot fallback with nil ops.
