@@ -450,6 +450,13 @@
     0 0;
 }
 
+/* The Сетка keeps no scroll shadows at all. Every column head is opaque, so
+   the top and bottom shadows only ever showed in the gaps between columns: a
+   dark smudge over each gap once the grid was scrolled sideways. */
+.sheet-frame:has(> .grid-host) {
+  background-image: none;
+}
+
 .fight-frame .match-table {
   margin: var(--space-0);
 }
