@@ -213,3 +213,33 @@ export function started(state: TroikaState): boolean {
   }
   return false;
 }
+
+// UnmarkedCell is one answer a host left blank: side, theme, question, chair.
+export interface UnmarkedCell {
+  side: number;
+  theme: number;
+  question: number;
+  chair: number;
+}
+
+// unmarkedInPlayedThemes is what finishing a bout marks wrong. A host marks
+// every right answer, and some leave the wrong ones blank; so in a theme where
+// a side has any mark at all, its blank answers are the wrong ones (a wrong
+// answer scores nothing, so a chair nobody sat in loses nothing by it). A
+// theme a side has no mark in was not played by it and stays blank. A written
+// bout counts answers rather than marking them.
+export function unmarkedInPlayedThemes(state: TroikaState): UnmarkedCell[] {
+  if (state.written) return [];
+  const out: UnmarkedCell[] = [];
+  state.sides.forEach((side, s) => {
+    side.themes.forEach((theme, t) => {
+      if (!theme.answers.some((row) => row.some((mark) => mark !== ""))) return;
+      theme.answers.forEach((row, q) => {
+        row.forEach((mark, chair) => {
+          if (mark === "") out.push({side: s, theme: t, question: q, chair});
+        });
+      });
+    });
+  });
+  return out;
+}

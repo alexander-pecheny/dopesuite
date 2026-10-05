@@ -174,6 +174,36 @@ func TestGamePagePath(t *testing.T) {
 	}
 }
 
+// Every old sub-path of a game page lands on its tab or bout of the one page.
+func TestGamePageTarget(t *testing.T) {
+	cases := []struct {
+		parts []string
+		want  string
+		ok    bool
+	}{
+		{[]string{"game", "g"}, "", false},
+		{[]string{"game", "g", "venues"}, "#venues", true},
+		{[]string{"game", "g", "stats"}, "#stats", true},
+		{[]string{"game", "g", "roster"}, "#roster", true},
+		{[]string{"game", "g", "seed-import"}, "#entrants", true},
+		{[]string{"game", "g", "entrants"}, "#entrants", true},
+		{[]string{"game", "g", "stage", "s1-r1"}, "#stage:s1-r1", true},
+		{[]string{"game", "g", "matches", "AB"}, "#@AB", true},
+	}
+	for _, c := range cases {
+		if got, ok := GamePageTarget(c.parts); got != c.want || ok != c.ok {
+			t.Errorf("%v: %q %v, want %q %v", c.parts, got, ok, c.want, c.ok)
+		}
+	}
+	rec := httptest.NewRecorder()
+	if !RedirectToGamePage(rec, httptest.NewRequest(http.MethodGet, "/fest/f/game/g/matches/A/static", nil), "/fest/f", []string{"game", "g", "matches", "A"}, true) {
+		t.Fatal("an old bout address was not redirected")
+	}
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/fest/f/game/g/static#@A" {
+		t.Fatalf("redirect = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
 // A JSONStatus refusal carries its body as JSON under its own status, so the
 // caller can act on the details.
 func TestWriteErrorJSONStatus(t *testing.T) {

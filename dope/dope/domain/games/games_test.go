@@ -6,32 +6,31 @@ import (
 )
 
 // A game type's page is one datum: the viewer route, the host route and the
-// lockdown snapshot all serve the same HTML and boot the same init payload.
+// lockdown snapshot all serve the same HTML, and every page boots the game init.
 func TestPageOfEveryGameType(t *testing.T) {
 	cases := []struct {
 		code string
 		page string
-		init InitKind
 	}{
-		{EK, "static/ek.html", InitEK},
-		{OD, "static/od.html", InitGame},
-		{KD, "static/od.html", InitGame},
-		{KSI, "static/si.html", InitGame},
-		{Brain, "static/brain.html", InitGame},
+		{EK, "static/ek.html"},
+		{OD, "static/od.html"},
+		{KD, "static/od.html"},
+		{KSI, "static/si.html"},
+		{Brain, "static/brain.html"},
 		// Личная СИ borrows ЭК's page for its bracket, not КСИ's blank.
-		{SI, "static/ek.html", InitEK},
-		// Мультиигры is a flat game like КСИ; Тройка plays a bracket, so it
-		// boots the bracket init on a page of its own.
-		{Multi, "static/multi.html", InitGame},
-		{Troika, "static/troika.html", InitGame},
+		{SI, "static/ek.html"},
+		// Мультиигры is a flat game like КСИ; Тройка plays a bracket on a page
+		// of its own.
+		{Multi, "static/multi.html"},
+		{Troika, "static/troika.html"},
 		// An unknown or empty type falls back to the default format's page.
-		{"", "static/ek.html", InitEK},
-		{"kvrm", "static/ek.html", InitEK},
+		{"", "static/ek.html"},
+		{"kvrm", "static/ek.html"},
 	}
 	for _, c := range cases {
 		d := Get(c.code)
-		if d.Page != c.page || d.Init != c.init {
-			t.Errorf("Get(%q) = page %q init %v; want %q %v", c.code, d.Page, d.Init, c.page, c.init)
+		if d.Page != c.page {
+			t.Errorf("Get(%q) = page %q, want %q", c.code, d.Page, c.page)
 		}
 	}
 }
@@ -119,7 +118,7 @@ func TestTheFormatListsThatUsedToDisagree(t *testing.T) {
 		{"individual", func(d Definition) bool { return d.Individual }, []string{SI}},
 		{"EK's bout", func(d Definition) bool { return d.EKBout }, []string{EK, ES}},
 		{"DSL refused", func(d Definition) bool { return d.DSL == DSLRefused }, []string{Multi}},
-		{"DSL edited on the settings page", func(d Definition) bool { return d.DSL == DSLEditable }, []string{Brain}},
+		{"DSL edited on the settings page", func(d Definition) bool { return d.DSL == DSLEditable }, []string{Brain, EK, ES, SI, Troika, Hamsa}},
 	}
 	for _, c := range cases {
 		got := Codes(c.pred)

@@ -432,8 +432,7 @@ func (s *Server) apiUpdateGame(w http.ResponseWriter, r *http.Request, sc route.
 	}
 	if settings.SchemeDSL != "" && games.Get(current.Type).DSL != games.DSLEditable {
 		// The settings page offers the scheme only to a format whose DSL it
-		// edits (brain); the others are rebuilt by deleting and creating
-		// them again.
+		// edits (games.DSLEditable); a flat Game is shaped by its own fields.
 		if strings.TrimSpace(settings.SchemeDSL) != strings.TrimSpace(current.SchemeDSL) {
 			return corei18n.User(dopestrings.Default.Host.Games.ErrorSchemeNotEditable(games.Label(current.Type)))
 		}

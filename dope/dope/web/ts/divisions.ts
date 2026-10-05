@@ -73,6 +73,7 @@ export function divisionChipRow(
     [{key: ALL_DIVISIONS, label: S.screen.division.all()}, ...divisions.map((division) => ({key: division, label: division}))],
     active,
     onPick,
+    {picker: false},
   );
   return row;
 }

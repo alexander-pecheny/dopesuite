@@ -32,6 +32,7 @@ import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
+import {scrollIntoViewSteady} from "./steady-redraw.js";
 import S from "./i18nstrings.js";
 import {declarePins, sheetHead} from "./sheet-pins.js";
 
@@ -39,7 +40,12 @@ import {declarePins, sheetHead} from "./sheet-pins.js";
 const FLASH_MS = 2500;
 
 // A bout sheet pins the side's name, which is the whole of its pinned block.
-const SIDE_PINS = declarePins([{key: "name", width: "var(--team-col)"}], {start: "var(--sheet-corner-col)"});
+// A side's name and, on the bout sheet, its Σ stay at the left edge while the
+// themes scroll under them, as on the SI sheets.
+const SIDE_PINS = declarePins([
+  {key: "name", width: "var(--team-col)"},
+  {key: "total", width: "var(--total-col)"},
+], {start: "var(--sheet-corner-col)"});
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -57,6 +63,7 @@ interface FestInfo {
 interface SchemeMatch {
   code?: string;
   title?: string;
+  round?: number;
   slots?: SchemeSlotRef[];
 }
 
@@ -114,6 +121,7 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   },
   activeCursorElement: () => cursor.activeCell || writtenCursor.activeCell,
   cursors: () => [cursor, writtenCursor],
+  beforeFinish: fillUnmarked,
   afterRender: () => {
     drawnShape.clear();
     for (const code of page.codes()) drawnShape.set(code, shapeOf(code));
@@ -178,7 +186,7 @@ function showAnchor(): void {
   const node = document.getElementById(`bout-${anchor}`) || document.getElementById(groupAnchorID(anchor));
   if (!node) return;
   shownAnchor = key;
-  node.scrollIntoView({block: "start"});
+  scrollIntoViewSteady(node);
   flashTarget(node);
 }
 
@@ -298,6 +306,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const themeRow = document.createElement("tr");
   themeRow.appendChild(SIDE_PINS.mark(th(S.troika.protocol.team(), "col-name troika-team-head"), "name"));
+  themeRow.appendChild(SIDE_PINS.mark(th("Σ", "col-total troika-total"), "total"));
   state.values.forEach((value, t) => {
     // The gap parts themes BEFORE any seating column, which sits flush
     // against the theme it seats.
@@ -307,7 +316,6 @@ function buildBout(bout: BoutEntry): HTMLElement {
       troika.isShootoutTheme(state, t) ? "theme-block troika-shootout-head" : "theme-block",
       {colSpan: troika.THEME_QUESTIONS}));
   });
-  themeRow.appendChild(th("Σ", "troika-total"));
   themeRow.appendChild(th(finishToggle(bout), "troika-finish-head"));
   table.appendChild(sheetHead([{row: themeRow}]));
 
@@ -317,17 +325,17 @@ function buildBout(bout: BoutEntry): HTMLElement {
     const roster = seatRoster(bout.view, side);
     for (let chair = 0; chair < troika.CHAIRS; chair++) {
       const tr = document.createElement("tr");
-      if (chair === 0) tr.appendChild(sideNameCell(seatName(bout.view, side)));
+      if (chair === 0) {
+        tr.appendChild(sideNameCell(seatName(bout.view, side)));
+        tr.appendChild(SIDE_PINS.mark(td(String(troika.sideTotal(state, side)), "number col-total troika-total",
+          {rowSpan: troika.CHAIRS, dataset: {total: `${bout.code}-${side}`}}), "total"));
+      }
       state.values.forEach((_value, t) => {
         if (t > 0) tr.appendChild(td("", "gap"));
         if (seatsAt.has(t)) tr.appendChild(td(chairPicker(bout, side, t, chair, roster, editable), "player-cell"));
         for (let q = 0; q < troika.THEME_QUESTIONS; q++) tr.appendChild(markCell(bout.code, side, t, q, chair, state));
       });
-      if (chair === 0) {
-        tr.appendChild(td(String(troika.sideTotal(state, side)), "number troika-total",
-          {rowSpan: troika.CHAIRS, dataset: {total: `${bout.code}-${side}`}}));
-        tr.appendChild(td("", "troika-finish-gap", {rowSpan: troika.CHAIRS}));
-      }
+      if (chair === 0) tr.appendChild(td("", "troika-finish-gap", {rowSpan: troika.CHAIRS}));
       body.appendChild(tr);
     }
     if (side < sides - 1) {
@@ -422,6 +430,16 @@ function shootoutThemeEmpty(state: TroikaState, t: number): boolean {
 
 // The finished tick: a finished bout's sheet is read-only until the host
 // unticks it — the server rejects edits to a finished bout.
+// fillUnmarked marks wrong the answers a host left blank in the themes a side
+// played, as the bout is finished (troika-protocol unmarkedInPlayedThemes).
+function fillUnmarked(code: string): void {
+  const state = stateOf(code);
+  for (const cell of troika.unmarkedInPlayedThemes(state)) {
+    state.sides[cell.side].themes[cell.theme].answers[cell.question][cell.chair] = "wrong";
+    patch(code, ["sides", cell.side, "themes", cell.theme, "answers", cell.question, cell.chair], "wrong");
+  }
+}
+
 function finishToggle(bout: BoutEntry): CellContent {
   return page.finishToggle(bout.code, {text: S.troika.bout.finished()});
 }
@@ -862,6 +880,8 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
           finished: Boolean(view.finished),
           started: troika.started(state),
           href: boutHref(planned.code || ""),
+          label: boutLetters.get(planned.code || "") || planned.code || "",
+          blockRound: Number(planned.round) || undefined,
         }];
       }),
       standings: standingsByParticipant(page.festStage(stage.code || "")),

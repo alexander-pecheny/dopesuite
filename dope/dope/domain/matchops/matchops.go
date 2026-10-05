@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"dope/dope/domain/edit"
 	"dope/dope/storage/store"
@@ -56,6 +57,11 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 	remove := op.Op == "remove"
 	if op.Op != "" && op.Op != "set" && !remove {
 		return fmt.Errorf("unsupported patch op %q", op.Op)
+	}
+	// Setting a field to null clears it: a host's undo puts back a pin or a
+	// seating that was never there as null.
+	if !remove && strings.TrimSpace(string(op.Value)) == "null" {
+		remove = true
 	}
 	// `teams` is the pre-rename spelling (ADR-0007): a browser holding a cached
 	// bundle mid-tournament keeps working.

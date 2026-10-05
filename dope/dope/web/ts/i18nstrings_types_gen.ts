@@ -171,9 +171,11 @@ export type Strings = {
     bout: {
       finished: () => string;
     };
-    crumb: {
-      stats: () => string;
-      venues: () => string;
+    place: {
+      title: (name: string) => string;
+    };
+    seat: {
+      fallback: (n: string) => string;
     };
     seats: {
       label: () => string;
@@ -189,7 +191,6 @@ export type Strings = {
     };
     stage: {
       empty: () => string;
-      matchFallback: (code: string) => string;
     };
     stats: {
       battles: () => string;
@@ -1777,6 +1778,15 @@ export type Strings = {
       player: () => string;
       points: () => string;
     };
+    groupBouts: {
+      bout: () => string;
+      round: () => string;
+      score: () => string;
+      sides: () => string;
+    };
+    sort: {
+      by: (column: string) => string;
+    };
   };
   storage: {
     match: {
@@ -1992,6 +2002,9 @@ export type Strings = {
       reconnecting: () => string;
       saved: () => string;
       saving: () => string;
+    };
+    tabPicker: {
+      label: () => string;
     };
     venue: {
       add: () => string;

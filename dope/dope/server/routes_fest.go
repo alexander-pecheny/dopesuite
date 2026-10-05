@@ -56,6 +56,9 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 	if !route.GamePagePath(parts, false) {
 		return route.NotFound
 	}
+	if route.RedirectToGamePage(w, r, "/fest/"+r.PathValue("fest"), parts, forceStatic) {
+		return nil
+	}
 	// A public fest's pages are anyone's; a private fest's, its organizers' —
 	// a host an admin limited to other Games watches the rest from here.
 	if _, ok := s.fest().Admit(w, r, route.Read, sc.FestID, 0); !ok {
@@ -63,22 +66,17 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 	}
 	gameID, err := resolveGameID(r.Context(), s.eng.DB, sc.FestID, parts[1])
 	if err != nil || gameID <= 0 {
-		s.serveEKHTML(w, r, games.Get("").Page)
+		s.serveAppHTML(w, r, games.Get("").Page)
 		return nil
 	}
 	var gameType string
 	if err := s.eng.DB.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, sc.FestID).Scan(&gameType); err != nil {
-		s.serveEKHTML(w, r, games.Get("").Page)
+		s.serveAppHTML(w, r, games.Get("").Page)
 		return nil
 	}
 	scope := festScope{FestID: sc.FestID, GameID: gameID}
 	def := games.Get(gameType)
-	initRoute := parseEKInitRoute(parts, scope)
-	if def.Init == games.InitGame {
-		// A page on the flat game init renders the whole game regardless of
-		// sub-route, so collapse to one snapshot cache key.
-		initRoute = ekInitRoute{Mode: "grid", FestID: sc.FestID, GameID: gameID}
-	}
+	initRoute := staticRoute{FestID: sc.FestID, GameID: gameID}
 	// A static snapshot is served Cache-Control: public — an edge may keep it
 	// for anyone. A private fest's page reaches only its organizers, so it is
 	// always the live one (no-cache), never a snapshot.
@@ -90,11 +88,7 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 		if forceStatic {
 			return route.NotFound
 		}
-		if def.Init == games.InitEK {
-			s.serveEKHTMLWithInit(w, r, scope, parts, def.Page)
-		} else {
-			s.serveGameHTMLWithInit(w, r, def.Page, scope)
-		}
+		s.serveGameHTMLWithInit(w, r, def.Page, scope)
 		return nil
 	}
 	serveStatic, release := lockdownServes(forceStatic, s.eng.StaticMode.Load(), session.HasCookie(r), &s.eng.LiveFallthrough)
@@ -103,10 +97,6 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 		s.serveStaticSnapshot(w, r, initRoute)
 		return nil
 	}
-	if def.Init == games.InitEK {
-		s.serveEKHTMLWithInit(w, r, scope, parts, def.Page)
-	} else {
-		s.serveGameHTMLWithInit(w, r, def.Page, scope)
-	}
+	s.serveGameHTMLWithInit(w, r, def.Page, scope)
 	return nil
 }

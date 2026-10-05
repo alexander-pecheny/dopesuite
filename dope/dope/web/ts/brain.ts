@@ -432,6 +432,7 @@ function buildStatsView(): HTMLElement {
   // its numbers sit tight — with the buzzer's columns in place of the themes'.
   wrapper.appendChild(standingsTable({
     className: "ek-stats-table",
+    sortKey: "brain-stats",
     columns: [
       {label: S.brain.stats.player(), kind: "name", className: "ek-stats-name ek-stats-player"},
       {label: S.brain.stats.team(), kind: "name", className: "ek-stats-name"},

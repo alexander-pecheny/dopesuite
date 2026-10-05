@@ -11,7 +11,7 @@ import (
 // troikaFormat plays a bracket of matches, as brain does, and boots the same
 // payload: its page fetches the matches itself and draws them its own way.
 var troikaFormat = Definition{Code: Troika, Label: dopestrings.Default.Games.Troika.Label(), Title: dopestrings.Default.Host.Games.TypeTroika(),
-	Troikas: true, Page: "static/troika.html", DSL: DSLAccepted,
+	Troikas: true, Page: "static/troika.html", DSL: DSLEditable,
 	DefaultDSL: TroikaDefaultDSL, Sheets: SheetsTroika, Journal: JournalEvents, Protocol: troika{}}
 
 // troika wraps ComputeTroikaResults: state is TroikaState, and

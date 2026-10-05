@@ -8,7 +8,7 @@ export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "kd" | "tro
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
-  | "stats" | "roster" | "venues" | "entrants" | "seedImport"
+  | "stats" | "roster" | "venues" | "entrants"
   | "results" | "detailed" | "input" | "screen" | "refusals"
   | "personal" | "players";
 
@@ -35,7 +35,8 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "es":
   case "si":
     return [
-      ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()], ...when(host, ["seedImport", S.entrants.tab()])),
+      ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()]),
+      ...entrantsTab(host),
       ...foldReseeds(stages.flatMap((stage) => blockRoundTabs(stage, stages))),
       ...fixedTabs(["stats", S.screen.tabs.stats()], ...when(options.game !== "si", ["roster", S.screen.tabs.roster()])),
     ];
@@ -244,6 +245,30 @@ function shortStageTitle(stage: StageRef): string {
 }
 
 // A Block is a run of stages sharing a grain.block; a reseed ends the run.
+// How many accent colours the Blocks take turns at (styles.css, "Block
+// accents"); a seventh Block wears the first one again.
+export const BLOCK_ACCENTS = 6;
+
+// blockAccents is the accent colour each stage wears, by its code, so a bout
+// shows which Block it belongs to: the Сетка's boxes and the tabs carry it. A
+// Game of one Block has nothing to tell apart and gets none, and neither
+// does a reseed, which belongs to no Block.
+export function blockAccents(stages: readonly StageRef[]): Map<string, number> {
+  const out = new Map<string, number>();
+  const all = blocks([...stages]);
+  if (all.length < 2) return out;
+  all.forEach((block, index) => {
+    for (const stage of block.stages) out.set(stage.code, index % BLOCK_ACCENTS);
+  });
+  return out;
+}
+
+// tabAccent is the accent a tab wears: its stages' one Block's, if they share one.
+export function tabAccent(tab: GameTab, accents: ReadonlyMap<string, number>): number | undefined {
+  const worn = new Set(tab.stages.map((code) => accents.get(code)));
+  return worn.size === 1 ? [...worn][0] : undefined;
+}
+
 function blocks(stages: StageRef[]): Array<{code: string; stages: StageRef[]}> {
   const out: Array<{code: string; stages: StageRef[]}> = [];
   for (const stage of stages) {

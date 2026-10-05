@@ -14,7 +14,7 @@ import (
 // payload, as Troika does: the page fetches its matches and draws them its
 // own way.
 var hamsaFormat = Definition{Code: Hamsa, Label: dopestrings.Default.Games.Hamsa.Label(), Title: dopestrings.Default.Host.Games.TypeHamsa(),
-	Page: "static/hamsa.html", HandRoster: true, DSL: DSLAccepted,
+	Page: "static/hamsa.html", HandRoster: true, DSL: DSLEditable,
 	DefaultDSL: HamsaDefaultDSL, Sheets: SheetsHamsa, Journal: JournalEvents, Protocol: hamsa{}}
 
 // hamsa wraps ComputeHamsaResults. A bout's shape — how many themes each

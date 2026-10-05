@@ -9,6 +9,7 @@ import * as od from "./dist/od-protocol.js";
 import * as ksi from "./dist/ksi-protocol.js";
 import * as multi from "./dist/multi-protocol.js";
 import * as hamsa from "./dist/hamsa-protocol.js";
+import * as ek from "./dist/ek-protocol.js";
 import cases from "./testdata/places.json" with {type: "json"};
 
 
@@ -57,7 +58,20 @@ function ranking(places) {
   return places.map((p) => (p ? 1 + places.filter((q) => q && q < p).length : 0));
 }
 
-for (const c of cases) {
+// The ЭК family's page draws the server's places but reckons Σ and Σ+ from
+// the document while a write is in flight.
+const VALUES = [10, 20, 30, 40, 50];
+
+for (const c of cases.filter((c) => c.totals)) {
+  Deno.test(`${c.format} ${c.bout}: the page scores the sheet as the server does`, () => {
+    const state = ek.parseState(c.state, c.seats, c.themes);
+    const scored = c.seats.map((id) => ek.scoreSection(state.sections.get(id), VALUES));
+    assertEquals(scored.map((s) => s.total), c.totals);
+    assertEquals(scored.map((s) => s.plus), c.plus);
+  });
+}
+
+for (const c of cases.filter((c) => !c.totals)) {
   Deno.test(`${c.format} ${c.bout}: the page ranks as the server does`, () => {
     assertEquals(ranking(mirrors[c.format](c)), ranking(c.places));
   });

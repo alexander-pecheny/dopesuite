@@ -5,11 +5,6 @@
 # The page's fallback game title when neither the fest view nor the scheme names it.
 title = "ЭК"
 
-[crumb]
-# The breadcrumb crumb naming the current sub-page: the venues tab, the stats
-# tab and the seed-import tab.
-venues = "Площадки"
-stats = "Статистика"
 
 [table]
 # A Block's own table on the stage tab (Эрудит-секстет's group stage): the
@@ -20,8 +15,6 @@ team = "Команда"
 [stage]
 # The empty message of a stage pane with no bouts at all.
 empty = "В этом этапе нет боёв."
-# The fallback title of a bout the scheme neither titled nor named: «Бой A».
-match_fallback = 'Бой {{.code}}'
 
 [theme]
 # The score sheet's column label of the n-th regular theme: Т1, Т2, …
@@ -77,3 +70,11 @@ share = "% от команды"
 empty = "Пока нет данных: ни одного ответа не отмечено."
 # The individual (personal-game) table before any theme is played.
 individual_empty = "Пока нет ни одной сыгранной темы."
+
+[seat]
+# The name of a seat nobody sits in yet, by its number in the bout.
+fallback = 'Участник {{.n}}'
+
+[place]
+# The place box of a seat on the host's sheet: its tooltip and aria-label.
+title = 'Место: {{.name}}. Впишите место, чтобы закрепить его, или очистите поле, чтобы место снова считалось по очкам.'

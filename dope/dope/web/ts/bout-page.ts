@@ -19,10 +19,10 @@ import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReloa
 import type {PatchPath, ScopedWriter, SendResult, WriteIntent, WriteRequest} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import type {CursorKind, GameShell} from "./game-shell.js";
-import {parseGameRoute} from "./game-page.js";
+import {notifyEmbeddedResize, parseGameRoute} from "./game-page.js";
 import type {GameInitLike, GameRoute} from "./game-page.js";
 import {fitScrollFade, renderTabBar} from "./widgets.js";
-import {gameTabs} from "./game-tabs.js";
+import {blockAccents, gameTabs, tabAccent} from "./game-tabs.js";
 import type {GameKind, GameTab} from "./game-tabs.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import {redrawSteady} from "./steady-redraw.js";
@@ -32,6 +32,8 @@ import type {FestGridStage} from "./fest-grid.js";
 import {boutWhereWhen, buildVenuesTable} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
+import {createUndo, isUndoKey, valueAt} from "./undo.js";
+import type {UndoResult} from "./undo.js";
 import type {EntrantsTab} from "./entrants.js";
 
 // A resync or a fest refresh waits this long, so a burst of events costs one
@@ -64,7 +66,7 @@ export interface BoutFest {
 }
 
 export interface BoutPageSpec<V extends BoutView, S> {
-  app: "brain" | "hamsa" | "troika";
+  app: "brain" | "hamsa" | "troika" | "ek" | "es" | "si";
   // The sheet the tabs draw into, and the strip the tab bar goes in.
   root: HTMLElement;
   tabsRoot: HTMLElement | null;
@@ -94,6 +96,10 @@ export interface BoutPageSpec<V extends BoutView, S> {
   canonical?: (tabs: GameTab[], key: string) => string;
   // After the module drew a tab (the page's own scroll cues, anchors).
   afterRender?: (tab: GameTab | undefined, node: HTMLElement) => void;
+  // A host is finishing a bout: what the page writes first (Troika fills the
+  // wrong answers a host left blank), in the same gesture, so one undo takes
+  // it back with the finish's own effect.
+  beforeFinish?: (code: string) => void;
   // A bout's new view arrived: true when the page repainted it in place, so
   // the tab need not be drawn again.
   repaint?: (code: string) => boolean;
@@ -120,8 +126,14 @@ export interface BoutPage<V extends BoutView, S> {
   view(code: string): V | undefined;
   stateOf(code: string): S;
   codes(): string[];
-  // One cell edit of a bout's document, coalesced and retried by the writer.
+  // One cell edit of a bout's document, coalesced and retried by the writer,
+  // and remembered for this host's undo.
   patch(code: string, path: PatchPath, value: unknown): void;
+  // Take back this host's last edit (undo.ts): only what this page wrote, and
+  // no cell another host has changed since. Ctrl+Z (⌘Z) calls it.
+  undo(): UndoResult | null;
+  // Whether an edit of this page at the path still waits for the server.
+  isPending(code: string, path: PatchPath): boolean;
   // A structural write on a bout's scope.
   send(code: string, request: WriteRequest, intent?: WriteIntent): Promise<SendResult>;
   render(): void;
@@ -153,8 +165,14 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   const {root, scheme, fest} = spec;
   const route = spec.route || parseGameRoute();
   const viewer = Boolean(route.viewer);
+  // An embedded view (?embed=1, a bout in another site's frame) is the sheet
+  // alone: no tabs, no menu items, no presence; it tells its frame its height.
+  const embedded = new URLSearchParams(window.location?.search || "").get("embed") === "1";
+  if (embedded) document.body?.classList.add("embedded-match");
   const shell = spec.shell || mountGamePage({
-    app: spec.app,
+    embedded,
+    // Erudit-Sextet and individual SI are EK's page to the shell.
+    app: spec.app === "es" || spec.app === "si" ? "ek" : spec.app,
     root,
     statusNode: document.getElementById("status"),
     breadcrumbsNode: document.getElementById("gameBreadcrumbs"),
@@ -163,7 +181,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     viewer,
     apiBase: route.apiBase,
     init: spec.init,
-    downloads: false,
+    // Every bout format exports its sheets (games.Definition.Sheets).
     chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || spec.title()}),
     cursorKinds: spec.cursorKinds,
     activeCursorElement: spec.activeCursorElement,
@@ -383,6 +401,44 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     },
   });
 
+  // ---- this host's undo ----
+
+  const currentAt = (code: string, path: PatchPath) => {
+    const view = views.get(code);
+    return view ? valueAt((writer.overlay(matchScope(code), view) as {state?: unknown}).state, path) : undefined;
+  };
+  const undoStack = createUndo({
+    current: currentAt,
+    apply: (code, path, value) => writer.patch(matchScope(code), path, value ?? null),
+  });
+
+  function patch(code: string, path: PatchPath, value: unknown): void {
+    if (!viewer) undoStack.record(code, path, currentAt(code, path), value);
+    writer.patch(matchScope(code), path, value);
+  }
+
+  function undo(): UndoResult | null {
+    const result = undoStack.undo();
+    if (!result) return null;
+    for (const code of result.codes) {
+      const view = views.get(code);
+      if (view) states.set(code, spec.parse(writer.overlay(matchScope(code), view)));
+    }
+    if (result.skipped) shell.recorder?.event("undo-skipped", {skipped: result.skipped});
+    if (result.codes.length === 1) show(result.codes[0]);
+    else if (result.codes.length) render();
+    return result;
+  }
+
+  function onUndoKey(event: KeyboardEvent): void {
+    if (!isUndoKey(event)) return;
+    // A text box keeps its own undo.
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("input, textarea, [contenteditable]")) return;
+    event.preventDefault();
+    undo();
+  }
+
   const venueEdits = venueEditor({
     writer,
     festID: String(route.festID || ""),
@@ -421,9 +477,10 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
 
   function render(): void {
     shell.renderChrome();
-    if (spec.tabsRoot) {
+    if (spec.tabsRoot && !embedded) {
       spec.tabsRoot.hidden = false;
-      renderTabBar(spec.tabsRoot, tabs(), activeTab, (key) => {
+      const accents = blockAccents((scheme.stages || []) as StageRef[]);
+      renderTabBar(spec.tabsRoot, tabs().map((tab) => ({...tab, accent: tabAccent(tab, accents)})), activeTab, (key) => {
         activeTab = key;
         setHashTab(key);
         render();
@@ -448,11 +505,23 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     for (const cursor of spec.cursors?.() || []) cursor.refresh();
     shell.presence.refresh();
     spec.afterRender?.(tab, node);
+    notifyEmbeddedResize(embedded);
   }
 
   // ---- the host's writes ----
 
   function finish(code: string, finished: boolean): void {
+    if (finished && !viewer && spec.beforeFinish) {
+      // What the page writes first must land before the bout is finished,
+      // since a finished bout takes no more marks.
+      spec.beforeFinish(code);
+      void writer.flush().then(() => sendFinish(code, finished));
+      return;
+    }
+    sendFinish(code, finished);
+  }
+
+  function sendFinish(code: string, finished: boolean): void {
     void writer.send(matchScope(code), {url: matchURL(code, "finish"), body: {finished}}, {path: ["finished"], value: finished});
   }
 
@@ -485,6 +554,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
 
   function start(): void {
     for (const cursor of spec.cursors?.() || []) cursor.bind();
+    if (!viewer) document.addEventListener("keydown", onUndoKey);
     render();
     fitScrollFade(root.closest(".sheet-frame"));
     live.connect();
@@ -511,7 +581,9 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     view: (code) => views.get(code),
     stateOf: (code) => states.get(code) || spec.blank(),
     codes: () => [...views.keys()],
-    patch: (code, path, value) => writer.patch(matchScope(code), path, value),
+    patch,
+    undo,
+    isPending: (code, path) => writer.isPending(matchScope(code), path),
     send: (code, request, intent) => writer.send(matchScope(code), request, intent),
     render,
     resync,

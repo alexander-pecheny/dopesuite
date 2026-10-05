@@ -14,7 +14,6 @@ dope/dope/server/main.go
 dope/dope/server/migrations.go
 dope/dope/storage/store/matchstate.go
 dope/dope/web/pages/numbers_import.go
-dope/dope/web/ts/ek.ts
 dope/dope/web/ts/gallery.ts
 dope/dope/web/ts/game-tabs.ts
 dope/dope/web/ts/group-stats.ts

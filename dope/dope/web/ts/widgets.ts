@@ -2,6 +2,7 @@
 // floating popovers, sync-status dot, scroll edges and fades, cell range selection,
 // and the viewer counter. DOM-only — no table building, no sync.
 
+import {icon} from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
 // The keypad's digit keys run from 1 to this.
@@ -593,18 +594,50 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
 const tabBarScrollBindings = new WeakMap<HTMLElement, ScrollEdgeBinding>();
 const tabBarActiveKeys = new WeakMap<HTMLElement, string>();
 
+// A strip with more tabs than this gets the list of all of them beside it.
+const TAB_PICKER_MIN = 6;
+
+// tabPicker is the button at the head of a long tab strip that lists every
+// tab, as a spreadsheet's list of sheets does: a personal SI's dozen round
+// tabs took a long scroll to reach. It is a native select laid over an icon,
+// so a phone opens its own picker, and it is pinned to the strip's left edge
+// while the tabs scroll past it.
+function tabPicker(tabs: Array<{key: string; label: string}>, activeKey: string, onSelect: (key: string) => void): HTMLElement {
+  const picker = document.createElement("label");
+  picker.className = "tab-picker";
+  picker.title = S.widgets.tabPicker.label();
+  picker.appendChild(icon("list"));
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", S.widgets.tabPicker.label());
+  select.replaceChildren(...tabs.map((tab) => {
+    const option = document.createElement("option");
+    option.value = tab.key;
+    option.textContent = tab.label;
+    return option;
+  }));
+  select.value = activeKey;
+  select.addEventListener("change", () => {
+    if (select.value !== activeKey) onSelect(select.value);
+  });
+  picker.appendChild(select);
+  return picker;
+}
+
 export function renderTabBar(
   root: HTMLElement,
-  tabs: Array<{key: string; label: string}>,
+  tabs: Array<{key: string; label: string; accent?: number}>,
   activeKey: string,
   onSelect: (key: string) => void,
+  options: {picker?: boolean} = {},
 ): void {
   root.replaceChildren();
+  if (options.picker !== false && tabs.length >= TAB_PICKER_MIN) root.appendChild(tabPicker(tabs, activeKey, onSelect));
   for (const tab of tabs) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "match-tab" + (activeKey === tab.key ? " active" : "");
     btn.textContent = tab.label;
+    if (tab.accent !== undefined) btn.dataset.block = String(tab.accent);
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-selected", activeKey === tab.key ? "true" : "false");
     btn.addEventListener("click", () => {

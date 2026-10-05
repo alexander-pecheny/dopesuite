@@ -5,7 +5,7 @@
 
 import {formatDisplayText, roundTo, td} from "./cells.js";
 import type {CellContent} from "./cells.js";
-import {standingsTable} from "./standings.js";
+import {groupBoutsTable, standingsTable} from "./standings.js";
 import S from "./i18nstrings.js";
 
 // A seat ref as a scheme writes it, before anyone sits in it.
@@ -60,6 +60,10 @@ export interface CrossBout {
   // href is the bout's own page, where the page has one: the cell links
   // there, played or not.
   href?: string;
+  // label is the bout's letter; a group whose bouts carry one lists them
+  // under its table (standings.ts groupBoutsTable).
+  label?: string;
+  blockRound?: number;
 }
 
 export interface CrossGroup {
@@ -124,6 +128,16 @@ export function buildCrosstables(spec: CrosstableSpec): HTMLElement {
     wrapper.className = "results-wrapper";
     wrapper.appendChild(buildCrosstable(group, spec.columns || CANON_COLUMNS));
     item.appendChild(wrapper);
+    const listed = group.bouts.filter((bout) => bout.label);
+    if (listed.length) {
+      item.appendChild(groupBoutsTable(listed.map((bout) => ({
+        label: bout.label || "",
+        href: bout.href,
+        blockRound: bout.blockRound,
+        sides: bout.sides.map((side) => ({name: side?.name || "", score: side?.score})),
+        started: Boolean(bout.finished || bout.started),
+      }))));
+    }
     wrap.appendChild(item);
   }
   return wrap;

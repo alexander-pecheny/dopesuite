@@ -214,9 +214,13 @@ var RU = Strings{
 		Bout: EkBoutStrings{
 			Finished: func() string { return "Закончен" },
 		},
-		Crumb: EkCrumbStrings{
-			Stats:  func() string { return "Статистика" },
-			Venues: func() string { return "Площадки" },
+		Place: EkPlaceStrings{
+			Title: func(name string) string {
+				return fmt.Sprintf("Место: %s. Впишите место, чтобы закрепить его, или очистите поле, чтобы место снова считалось по очкам.", name)
+			},
+		},
+		Seat: EkSeatStrings{
+			Fallback: func(n string) string { return fmt.Sprintf("Участник %s", n) },
 		},
 		Seats: EkSeatsStrings{
 			Label: func() string { return "Кто выходит на тему" },
@@ -231,8 +235,7 @@ var RU = Strings{
 			RemoveLabel:   func() string { return "−П" },
 		},
 		Stage: EkStageStrings{
-			Empty:         func() string { return "В этом этапе нет боёв." },
-			MatchFallback: func(code string) string { return fmt.Sprintf("Бой %s", code) },
+			Empty: func() string { return "В этом этапе нет боёв." },
 		},
 		Stats: EkStatsStrings{
 			Battles: func() string { return "Бои" },
@@ -1022,7 +1025,7 @@ var RU = Strings{
 			OdQuestionsLabel: func() string { return "Количество вопросов в туре" },
 			OdToursLabel:     func() string { return "Количество туров" },
 			RebuildHint: func() string {
-				return "Пересборка меняет только не начатые бои: можно поменять число вопросов или добавить блок, но начатый бой должен сохраниться без изменений."
+				return "Пересборка меняет только бои, в которых ещё ничего не внесено. Бой с внесёнными данными должен остаться таким же, иначе новая схема не применится."
 			},
 			SaveSubmit:  func() string { return "Сохранить" },
 			SchemeLabel: func() string { return "Схема" },
@@ -2528,6 +2531,17 @@ var RU = Strings{
 			Player:     func() string { return "Игрок" },
 			Points:     func() string { return "Очки" },
 		},
+		GroupBouts: StandingsGroupBoutsStrings{
+			Bout:  func() string { return "Бой" },
+			Round: func() string { return "Круг" },
+			Score: func() string { return "Счёт" },
+			Sides: func() string { return "Участники" },
+		},
+		Sort: StandingsSortStrings{
+			By: func(column string) string {
+				return fmt.Sprintf("Сортировать по столбцу «%s»", column)
+			},
+		},
 	},
 	Storage: StorageStrings{
 		Match: StorageMatchStrings{
@@ -2821,6 +2835,9 @@ var RU = Strings{
 			Reconnecting: func() string { return "Переподключение" },
 			Saved:        func() string { return "Синхронизировано" },
 			Saving:       func() string { return "Синхронизация" },
+		},
+		TabPicker: WidgetsTabPickerStrings{
+			Label: func() string { return "Все вкладки" },
 		},
 		Venue: WidgetsVenueStrings{
 			Add:         func() string { return "Добавить" },

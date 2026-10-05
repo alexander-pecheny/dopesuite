@@ -205,6 +205,7 @@ export function buildIndividualStatsTable(rows: IndividualStatsRow[] | null | un
   }
   wrapper.appendChild(standingsTable({
     className: "ek-stats-table",
+    sortKey: "individual-stats",
     columns: [
       {label: S.ek.stats.player(), kind: "name", className: "ek-stats-name ek-stats-player"},
       {label: "Σ", kind: "num", className: "ek-stats-sum"},
@@ -236,6 +237,7 @@ export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined, v
 
   wrapper.appendChild(standingsTable({
     className: "ek-stats-table",
+    sortKey: "ek-stats",
     columns: [
       {label: S.ek.stats.player(), kind: "name", className: "ek-stats-name ek-stats-player"},
       {label: S.ek.stats.team(), kind: "name", className: "ek-stats-name"},

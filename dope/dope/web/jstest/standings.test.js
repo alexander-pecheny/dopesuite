@@ -152,3 +152,14 @@ test("letteredTitle rewrites the «Бой N» part and leaves the rest", () => {
   assert.equal(letteredTitle("Письменный отбор", "A"), "Письменный отбор");
   assert.equal(letteredTitle("Бой 3", undefined), "Бой 3");
 });
+
+test("a statistics column sorts numbers biggest first and names from А, either way round", async () => {
+  const {sortedOrder, sortValue} = await import("./dist/standings.js");
+  const sums = ["300", "−10", "1,5", "300"].map((text) => sortValue({textContent: text}));
+  assert.deepEqual(sums, [300, -10, 1.5, 300]);
+  assert.deepEqual(sortedOrder(sums, false), {order: [0, 3, 2, 1], numeric: true}, "a tie keeps its order");
+  assert.deepEqual(sortedOrder(sums, true).order, [1, 2, 0, 3]);
+  const names = ["Вера", "анна", "Борис"].map((text) => sortValue({textContent: text}));
+  assert.deepEqual(sortedOrder(names, false), {order: [1, 2, 0], numeric: false});
+  assert.deepEqual(sortedOrder(names, true).order, [0, 2, 1]);
+});

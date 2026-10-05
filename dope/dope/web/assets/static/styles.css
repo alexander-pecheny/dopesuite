@@ -19,6 +19,9 @@
      in. */
   --hamsa-bout-w: 4400px;
   --hamsa-bout-h: 200px;
+  /* An EK bout's sheet: four seats of two rows by twelve themes. */
+  --ek-bout-w: 3600px;
+  --ek-bout-h: 300px;
   /* A Хамса бой is scored in thousands, so the columns that hold a number are
      wider than the 10..50 ones: Σ takes five figures and a тема's score four.
      The mark cells are ЭК's, because a mark is a mark — the sheet's colgroup
@@ -74,6 +77,7 @@
   --od-detailed-name-extra-col: 3em;
   --results-place-col-mobile: 48px;
   --results-team-col-mobile: 101px;
+  --group-bouts-pairing-col-mobile: 210px;
   --results-team-pad-mobile: var(--space-1-5);
   --results-total-col-mobile: 42px;
   --results-num-col-mobile: 40px;
@@ -176,7 +180,6 @@
    bites only when the content reaches the edge, so long text fades where an
    «…» used to sit. Table names get the full fade+popover treatment instead. */
 .battle-title,
-.readonly-battle-venue,
 .numbers-import-raw,
 .public-top h1 {
   -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
@@ -781,15 +784,6 @@
   border-radius: 0;
 }
 
-.match-table .shootout-adjacent-gap,
-.match-table .shootout-adjacent-gap-head {
-  width: 2px;
-  min-width: 2px;
-  max-width: 2px;
-  padding: 0;
-  border: 0;
-}
-
 .shootout-controls-head .shootout-add-button,
 .shootout-controls-head .theme-delete-button {
   display: flex;
@@ -1377,6 +1371,12 @@ button.seat-picker-control {
   --results-team-col: 260px;
 }
 
+/* The list of a group's bouts: the pairing is as wide as two names, and a
+   longer one fades. */
+.results-table.group-bouts-table {
+  --results-team-col: 420px;
+}
+
 /* The folded «Пересев» tab: every этап's table stacked, each under the name
    of the round it seats. */
 .reseed-fold {
@@ -1592,33 +1592,6 @@ body:not(.embedded-match) .grid-match {
 .slot-place {
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-.stage-table-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 14px;
-  min-width: max-content;
-}
-
-.stage-match-frame {
-  width: max-content;
-  content-visibility: auto;
-  contain-intrinsic-size: 1180px 220px;
-}
-
-.stage-match-placeholder {
-  display: flex;
-  align-items: center;
-  width: min(960px, calc(100vw - 48px));
-  min-width: 520px;
-  min-height: 132px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: var(--paper);
-  color: var(--muted);
-  font-size: var(--text-sm);
 }
 
 .embedded-match {
@@ -2820,6 +2793,8 @@ html:has(.game-host-top) {
 .stage-standings-table .results-team,
 .group-standings-table thead th.results-team-head,
 .group-standings-table .results-team,
+.group-bouts-table thead th.results-team-head,
+.group-bouts-table .results-team,
 .troika-swiss-table thead th.results-team-head,
 .troika-swiss-table .results-team {
   width: var(--results-team-col);
@@ -3102,27 +3077,6 @@ html:has(.game-host-top) {
   padding-left: 8px;
 }
 
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-head {
-  padding-right: 8px;
-  padding-left: 8px;
-}
-
-.readonly-battle-title {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-.readonly-battle-venue {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  text-overflow: clip;
-  white-space: nowrap;
-}
-
 .match-table.od-detailed .od-detailed-team-cell,
 .match-table .ek-team-cell {
   --cell-fill: var(--structure);
@@ -3401,6 +3355,11 @@ html:has(.game-host-top) {
     --results-total-col: var(--results-total-col-mobile);
   }
 
+  /* A bout's pairing is two names; it takes the row a phone has left. */
+  .results-table.group-bouts-table {
+    --results-team-col: var(--group-bouts-pairing-col-mobile);
+  }
+
   .match-table.od-detailed {
     --od-detailed-name-col: calc(var(--od-detailed-name-base-col-compact) + var(--od-detailed-name-extra-col));
   }
@@ -3515,14 +3474,6 @@ html:has(.game-host-top) {
   }
 }
 
-/* Public EK viewer tuning. The frame used to add a static right-edge inset
-   shadow as a "more content" cue; the kit's scroll fade now covers that
-   (content-capped, gone at scroll end), and the full-height shadow painted
-   past short tables' bottom edge. */
-.readonly-battle-popover {
-  display: none;
-}
-
 .viewer-readonly .match-table.ek-stage-table.readonly-table {
   --question-size: 26px;
   --team-col: 158px;
@@ -3559,49 +3510,6 @@ html:has(.game-host-top) {
   width: var(--narrow-col);
   min-width: var(--narrow-col);
   max-width: var(--narrow-col);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-head {
-  padding-right: 6px;
-  padding-left: 6px;
-  font-size: var(--text-xs);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-title {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-title:focus {
-  outline: var(--focus-ring-none);
-  outline-offset: var(--focus-outline-offset-tight);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-name {
-  flex: 0 0 auto;
-}
-
-/* With its venue's whole title the head is two lines: the bout, then where
-   it is played, fading at the column's end (the head's popover has it all). */
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-title:has(.readonly-battle-venue) {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  line-height: var(--leading-tight);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-venue {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  text-overflow: clip;
-  white-space: nowrap;
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player {
@@ -3772,10 +3680,6 @@ html:has(.game-host-top) {
   }
 
   .viewer-readonly .match-table.ek-stage-table.readonly-table .team-name {
-    font-size: var(--text-xs);
-  }
-
-  .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-head {
     font-size: var(--text-xs);
   }
 
@@ -3988,15 +3892,19 @@ html:has(.game-host-top) {
   color: var(--blue);
 }
 
-/* A player's round in the groups tab leads to the bout he played it in. */
-.group-standings-table .group-round-link {
+/* A player's round in the groups tab leads to the bout he played it in, and
+   so does a bout's letter in the list under a group's table. */
+.group-standings-table .group-round-link,
+.group-bouts-table .group-round-link {
   display: block;
   color: inherit;
   text-decoration: none;
 }
 
 .group-standings-table .group-round-link:hover,
-.group-standings-table .group-round-link:focus {
+.group-standings-table .group-round-link:focus,
+.group-bouts-table .group-round-link:hover,
+.group-bouts-table .group-round-link:focus {
   color: var(--blue);
 }
 
@@ -4781,6 +4689,11 @@ body.is-fullscreen.od-page .match-main {
   font-size: var(--text-xs);
 }
 
+/* The list of a группа's bouts under its table reads at the table's size. */
+.troika-groups .group-bouts-table {
+  font-size: var(--text-xs);
+}
+
 .troika-groups .crosstable .results-num {
   width: 32px;
   min-width: 32px;
@@ -4833,6 +4746,14 @@ body.is-fullscreen.od-page .match-main {
    name, and a бой seats two of them beside a column of кресла. */
 .troika-sheet .troika-team-head {
   text-align: left;
+}
+
+/* The pinned columns are as wide as the pins say (troika.ts SIDE_PINS), so
+   the Σ beside the name stands right against it. */
+.troika-sheet .col-name {
+  width: var(--team-col);
+  min-width: var(--team-col);
+  max-width: var(--team-col);
 }
 
 .troika-sheet .troika-team {
@@ -4908,6 +4829,14 @@ body.is-fullscreen.od-page .match-main {
 .hamsa-bout {
   content-visibility: auto;
   contain-intrinsic-size: auto var(--hamsa-bout-w) var(--hamsa-bout-h);
+}
+
+/* An EK round tab stacks every bout of the round, sixteen at a 64-team fest;
+   sizing the ones out of view without laying them out keeps its first paint
+   quick, as the old page's lazy frames did. */
+.ek-bout {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--ek-bout-w) var(--ek-bout-h);
 }
 
 /* The раунды stand over their темы in a header row of their own: one cell per
@@ -5058,7 +4987,6 @@ body.is-fullscreen.od-page .match-main {
   max-width: var(--hamsa-theme-score-col);
 }
 
-
 /* Кубок Дружбы (ADR-0026): the players' remove buttons fit the row as the
    guest teams' do, and the route cards print one per player. The sheet lives
    under <body> only while the print dialog is open; everything else hides. */
@@ -5106,4 +5034,91 @@ body.is-fullscreen.od-page .match-main {
     border-bottom: 1px dashed var(--structure);
     break-inside: avoid;
   }
+}
+
+/* The empty tail a jump to one of a sheet's last bouts adds below it, so the
+   bout can reach the top (steady-redraw.ts makeRoomBelow). */
+.anchor-tail {
+  pointer-events: none;
+}
+
+/* A statistics table sorts by a click on a column's head (standings.ts
+   makeSortable); the column it is sorted by carries an arrow. */
+.results-table .sortable-head {
+  cursor: pointer;
+  user-select: none;
+}
+
+.results-table .sortable-head[aria-sort="descending"]::after {
+  content: " ↓";
+}
+
+.results-table .sortable-head[aria-sort="ascending"]::after {
+  content: " ↑";
+}
+
+/* The list of every tab at the head of a long tab strip (widgets.ts
+   tabPicker): an icon with a native select laid invisibly over it, so a click
+   opens the browser's own list. It stays at the strip's left edge while the
+   tabs scroll under it. */
+.tab-picker {
+  position: sticky;
+  left: var(--space-0);
+  /* Above the active tab, which stands one level up over its neighbours. */
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  align-self: stretch;
+  min-width: var(--control-h-sm);
+  border-radius: var(--radius-sm);
+  background: var(--page);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab-picker:hover,
+.tab-picker:focus-within {
+  color: var(--text-strong);
+  background: var(--wash-emphasis);
+}
+
+.tab-picker select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Block accents: a Game of several Blocks gives each its colour (game-tabs.ts
+   blockAccents), so a bout shows which one it belongs to, the way the СЧР
+   sheets colour their brackets. An element marked data-block sets
+   --block-accent for itself and everything in it. */
+:root {
+  --block-accent-0: var(--uchu-blue-5);
+  --block-accent-1: var(--uchu-orange-5);
+  --block-accent-2: var(--uchu-purple-5);
+  --block-accent-3: var(--uchu-green-5);
+  --block-accent-4: var(--uchu-pink-5);
+  --block-accent-5: var(--uchu-yellow-5);
+  --block-accent-w: 3px;
+}
+
+[data-block="0"] { --block-accent: var(--block-accent-0); }
+[data-block="1"] { --block-accent: var(--block-accent-1); }
+[data-block="2"] { --block-accent: var(--block-accent-2); }
+[data-block="3"] { --block-accent: var(--block-accent-3); }
+[data-block="4"] { --block-accent: var(--block-accent-4); }
+[data-block="5"] { --block-accent: var(--block-accent-5); }
+
+/* In the Сетка a box's head carries it along its top edge, drawn inside the
+   cell so no box moves off the shared rows; on the tab strip a tab's bottom
+   edge does. */
+[data-block] .grid-box .grid-slot-head {
+  box-shadow: inset 0 var(--block-accent-w) 0 var(--block-accent);
+}
+
+.match-tab[data-block] {
+  box-shadow: inset 0 calc(-1 * var(--block-accent-w)) 0 var(--block-accent);
 }

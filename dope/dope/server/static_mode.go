@@ -25,7 +25,7 @@ import (
 // endpoint — viewer pages are served from a precomputed, in-memory HTML snapshot
 // with NO SSE connection. Each request becomes a memory copy + socket write, and
 // the pages become edge-cacheable. The live realtime path (editors, SSE deltas)
-// is untouched; only anonymous viewers are degraded. See serve_html.go (buildEKInit/
+// is untouched; only anonymous viewers are degraded. See serve_html.go (buildGameInit/
 // buildGameInit), main.go (handleEvents shedding) and pages_public.go (routing).
 
 // staticEntry is a precomputed viewer-page snapshot: the spliced HTML (raw) and
@@ -228,7 +228,7 @@ func (s *server) runStaticRegen() {
 
 // partitionStatic splits the cached routes into those read within retention
 // (hot) and the rest (stale).
-func (s *server) partitionStatic(retention time.Duration) (hot, stale []ekInitRoute) {
+func (s *server) partitionStatic(retention time.Duration) (hot, stale []staticRoute) {
 	now := time.Now().UnixNano()
 	s.staticMu.RLock()
 	defer s.staticMu.RUnlock()
@@ -244,7 +244,7 @@ func (s *server) partitionStatic(retention time.Duration) (hot, stale []ekInitRo
 
 // refreshStatic rebuilds one cached snapshot, keeping its last-access time. A
 // failed build leaves the old snapshot in place.
-func (s *server) refreshStatic(route ekInitRoute) {
+func (s *server) refreshStatic(route staticRoute) {
 	e, err := s.buildStaticEntry(context.Background(), route)
 	if err != nil || e == nil {
 		return
@@ -260,12 +260,12 @@ func (s *server) refreshStatic(route ekInitRoute) {
 // buildStaticEntry renders one viewer-page snapshot for a route: it resolves the
 // game type, reuses the existing init builders (with Static=true, CanEdit=false),
 // splices into the shell, and precomputes both raw and gzipped bytes.
-func (s *server) buildStaticEntry(ctx context.Context, route ekInitRoute) (*staticEntry, error) {
+func (s *server) buildStaticEntry(ctx context.Context, route staticRoute) (*staticEntry, error) {
 	var gameType string
 	_ = s.eng.DB.QueryRowContext(ctx, `select game_type from games where id = ? and fest_id = ?`, route.GameID, route.FestID).Scan(&gameType)
 
 	def := games.Get(gameType)
-	payload, marker, err := s.staticInit(ctx, route, def.Init == games.InitEK)
+	payload, marker, err := s.staticInit(ctx, route)
 	if err != nil {
 		return nil, err
 	}
@@ -283,16 +283,7 @@ func (s *server) buildStaticEntry(ctx context.Context, route ekInitRoute) (*stat
 
 // staticInit builds a route's init payload as a read-only viewer sees it, and
 // names the marker it replaces in the page.
-func (s *server) staticInit(ctx context.Context, route ekInitRoute, ek bool) (payload any, marker string, err error) {
-	if ek {
-		p, err := s.buildEKInit(ctx, route)
-		if err != nil {
-			return nil, "", err
-		}
-		p.Static = true
-		p.CanEdit = false
-		return p, ekInitMarker, nil
-	}
+func (s *server) staticInit(ctx context.Context, route staticRoute) (payload any, marker string, err error) {
 	p, err := s.buildGameInit(ctx, festScope{FestID: route.FestID, GameID: route.GameID})
 	if err != nil {
 		return nil, "", err
@@ -331,7 +322,7 @@ func (s *server) renderInjectedBytes(htmlPath, marker string, payload []byte) ([
 
 // staticSnapshot returns the cached snapshot for a route, building it once on a
 // miss. Concurrent misses for the same route share a single build (singleflight).
-func (s *server) staticSnapshot(ctx context.Context, route ekInitRoute) *staticEntry {
+func (s *server) staticSnapshot(ctx context.Context, route staticRoute) *staticEntry {
 	if e := s.cachedStatic(route); e != nil {
 		return e
 	}
@@ -349,7 +340,7 @@ func (s *server) staticSnapshot(ctx context.Context, route ekInitRoute) *staticE
 	call := &staticBuildCall{}
 	call.wg.Add(1)
 	if s.staticBuilds == nil {
-		s.staticBuilds = make(map[ekInitRoute]*staticBuildCall)
+		s.staticBuilds = make(map[staticRoute]*staticBuildCall)
 	}
 	s.staticBuilds[route] = call
 	s.staticMu.Unlock()
@@ -362,20 +353,20 @@ func (s *server) staticSnapshot(ctx context.Context, route ekInitRoute) *staticE
 }
 
 // cachedStatic is the cached snapshot for a route, or nil.
-func (s *server) cachedStatic(route ekInitRoute) *staticEntry {
+func (s *server) cachedStatic(route staticRoute) *staticEntry {
 	s.staticMu.RLock()
 	defer s.staticMu.RUnlock()
 	return s.staticCache[route]
 }
 
 // finishStaticBuild ends a route's in-flight build and caches what it built.
-func (s *server) finishStaticBuild(route ekInitRoute, e *staticEntry, err error) {
+func (s *server) finishStaticBuild(route staticRoute, e *staticEntry, err error) {
 	s.staticMu.Lock()
 	defer s.staticMu.Unlock()
 	delete(s.staticBuilds, route)
 	if err == nil && e != nil {
 		if s.staticCache == nil {
-			s.staticCache = make(map[ekInitRoute]*staticEntry)
+			s.staticCache = make(map[staticRoute]*staticEntry)
 		}
 		s.staticCache[route] = e
 	}
@@ -384,12 +375,12 @@ func (s *server) finishStaticBuild(route ekInitRoute, e *staticEntry, err error)
 // serveStaticSnapshot writes the cached snapshot for a route. It serves the
 // pre-gzipped bytes directly and sets Content-Encoding itself, so the gzip
 // middleware passes the response through untouched (no per-request gzip CPU).
-func (s *server) serveStaticSnapshot(w http.ResponseWriter, r *http.Request, route ekInitRoute) {
+func (s *server) serveStaticSnapshot(w http.ResponseWriter, r *http.Request, route staticRoute) {
 	e := s.staticSnapshot(r.Context(), route)
 	if e == nil {
 		// Build failed (e.g. the game vanished mid-request); fall back to the live
 		// viewer shell so the request still gets a usable page.
-		s.serveEKHTML(w, r, games.Get("").Page)
+		s.serveAppHTML(w, r, games.Get("").Page)
 		return
 	}
 	e.lastAccess.Store(time.Now().UnixNano())

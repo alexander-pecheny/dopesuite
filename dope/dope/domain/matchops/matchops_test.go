@@ -80,6 +80,25 @@ func TestApplyRemove(t *testing.T) {
 	}
 }
 
+// A null clears what it is set on, as a remove does: an undo puts back a pin
+// or a seating that was never there as null.
+func TestApplyNullClears(t *testing.T) {
+	blob := store.MatchBlob{}
+	place := 2.0
+	blob.SetPin(11, &place)
+	blob.SetPlayers(11, "regular", 0, []int64{101})
+	if err := Apply(&blob, testMatch(), []edit.PatchOp{
+		op("set", `null`, "participants", "11", "pin"),
+		op("set", `null`, "participants", "11", "themes", 0, "players"),
+		op("set", `null`, "participants", "11", "themes", 0, "answers", 1),
+	}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if blob.Pin(11) != nil || len(blob.Participants["11"].Themes[0].Players) != 0 {
+		t.Fatalf("a null did not clear: %+v", blob.Participants["11"])
+	}
+}
+
 // Anything outside the blob's vocabulary is a shape error. Intent is never
 // inspected — only whether the path can exist and what it may hold.
 func TestApplyRejects(t *testing.T) {

@@ -252,8 +252,8 @@ type MatchView struct {
 	Players      int               `json:"players,omitempty"`
 	Participants []ParticipantView `json:"participants"`
 	Standings    []StandingView    `json:"standings"`
-	// State carries a non-EK match's Protocol document verbatim; the per-protocol
-	// renderer owns its shape. Empty for EK, whose state is projected into Participants.
+	// State carries the match's Protocol document verbatim; the per-protocol
+	// renderer owns its shape. EK's is also projected into Participants.
 	State json.RawMessage `json:"state,omitempty"`
 	// Seq is the match scope's current SSE sequence. GET responses carry the
 	// seq at fetch time, and mutating responses (update/finish/venue) carry the

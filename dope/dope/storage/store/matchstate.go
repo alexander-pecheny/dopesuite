@@ -160,6 +160,10 @@ func MatchViewFrom(match DBMatchState) MatchView {
 		}
 	}
 	view := BuildView(match.State)
+	// The document itself rides along, as for every other Protocol: the page
+	// writes its paths and scores it while a write is in flight. The
+	// projection above is what the stats, the export and the grid read.
+	view.State = json.RawMessage(NonEmptyJSON(match.RawState))
 	view.Players = match.Players
 	view.Code = match.Code
 	view.StageCode = match.StageCode

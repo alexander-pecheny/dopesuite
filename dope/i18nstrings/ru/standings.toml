@@ -8,3 +8,16 @@ place = "М"
 player = "Игрок"
 points = "Очки"
 block_round = 'Круг {{.n}}'
+
+[sort]
+# A sortable column's head: its tooltip and aria-label. A click sorts the
+# table by the column, a second click the other way round.
+by = 'Сортировать по столбцу «{{.column}}»'
+
+[group_bouts]
+# The list of a group's bouts under its table, one row a bout: the column
+# headers. A bout not started yet has no score.
+bout = "Бой"
+round = "Круг"
+sides = "Участники"
+score = "Счёт"
