@@ -347,8 +347,13 @@ export type Strings = {
       title: () => string;
     };
     grid: {
+      bracketLower: () => string;
+      bracketUpper: () => string;
+      cardOpen: () => string;
+      cardStartsAt: (time: string) => string;
       colPlace: () => string;
       matchDefault: (code: string) => string;
+      matchInfo: () => string;
       slotBasket: (basket: string, number: string) => string;
       slotReseed: () => string;
       slotReseedRanked: (rank: string) => string;

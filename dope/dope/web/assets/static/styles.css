@@ -5105,20 +5105,64 @@ body.is-fullscreen.od-page .match-main {
   font-weight: var(--fw-bold);
 }
 
-/* A double elimination's bouts in the Сетка say their bracket on their title
-   (fest-grid.ts, the scheme's bracket): «Бой BW» sits in a green pill in the
-   upper bracket and a red one in the lower. The venue beside it stays plain. */
+/* A double elimination's bouts in the Сетка wear their bracket on their head
+   row (fest-grid.ts, the scheme's bracket): green in the upper bracket, red in
+   the lower. The row fills the box's rounded top, and the seats under it lose
+   their own top corners so the two read as one box. */
 :root {
   --bracket-upper: var(--uchu-green-7);
   --bracket-lower: var(--uchu-red-5);
-  --bracket-pill-mix: 30%;
+  --bracket-head-mix: 45%;
+  /* The ⓘ in a bout's head is as tall as the head's letters. */
+  --grid-info-icon: 1em;
 }
 
-.grid-box[data-bracket="upper"] { --bracket-accent: var(--bracket-upper); }
-.grid-box[data-bracket="lower"] { --bracket-accent: var(--bracket-lower); }
+.grid-box[data-bracket="upper"],
+.grid-match-card[data-bracket="upper"] { --bracket-accent: var(--bracket-upper); }
 
-.grid-box[data-bracket] .grid-match-title {
-  padding: 0 var(--space-1-5);
-  border-radius: var(--radius-pill);
-  background: color-mix(in oklab, var(--bracket-accent) var(--bracket-pill-mix), transparent);
+.grid-box[data-bracket="lower"],
+.grid-match-card[data-bracket="lower"] { --bracket-accent: var(--bracket-lower); }
+
+.grid-box[data-bracket] .grid-slot-head {
+  background: color-mix(in oklab, var(--bracket-accent) var(--bracket-head-mix), var(--structure));
+}
+
+.grid-box[data-bracket] .grid-slot-top-left { border-top-left-radius: 0; }
+
+.grid-box[data-bracket] .grid-slot-top-right { border-top-right-radius: 0; }
+
+/* The ⓘ at the end of a bout's head, which opens its card. */
+.grid-match-info {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: var(--cursor-action);
+}
+
+.grid-match-info:hover,
+.grid-match-info[aria-expanded="true"] {
+  color: var(--text);
+}
+
+.grid-match-info svg {
+  width: var(--grid-info-icon);
+  height: var(--grid-info-icon);
+}
+
+/* A bout's card: what its head has no room for. */
+.grid-match-card {
+  max-width: min(var(--fest-col-max), calc(100vw - var(--space-4)));
+  padding: var(--space-2) var(--space-2-5);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+
+.grid-match-card-bracket {
+  color: var(--bracket-accent);
+  font-weight: var(--fw-bold);
 }

@@ -348,8 +348,13 @@ export const RU: Strings = {
       title: () => "Жеребьёвка",
     },
     grid: {
+      bracketLower: () => "Нижняя сетка",
+      bracketUpper: () => "Верхняя сетка",
+      cardOpen: () => "Открыть бой",
+      cardStartsAt: (time: string) => `Начало в ${time}`,
       colPlace: () => "М",
       matchDefault: (code: string) => `Бой ${code}`,
+      matchInfo: () => "Подробнее о бое",
       slotBasket: (basket: string, number: string) => `К${basket}-${number}`,
       slotReseed: () => "Пересев",
       slotReseedRanked: (rank: string) => `Пересев-${rank}`,

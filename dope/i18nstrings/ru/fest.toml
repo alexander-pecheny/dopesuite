@@ -57,6 +57,16 @@ slot_reseed_ranked = 'Пересев-{{.rank}}'
 venue = 'пл. {{.n}}'
 # The table a bout plays at, when the venue has its own title.
 venue_titled = 'пл. {{.n}} ({{.title}})'
+# The ⓘ in a bout box's head that opens the bout's card: its tooltip and
+# aria-label.
+match_info = "Подробнее о бое"
+# The bracket of a double elimination's bout, on its card.
+bracket_upper = "Верхняя сетка"
+bracket_lower = "Нижняя сетка"
+# When a bout starts, on its card.
+card_starts_at = 'Начало в {{.time}}'
+# The link on a bout's card to the bout itself.
+card_open = "Открыть бой"
 
 [metric]
 # Column names the reseed panel uses, keyed by the sort metric. The symbol

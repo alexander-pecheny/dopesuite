@@ -27,6 +27,7 @@
         "flask-conical",
         "funnel",
         "house",
+        "info",
         "link",
         "list",
         "list-checks",

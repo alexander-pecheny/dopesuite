@@ -191,6 +191,7 @@ var IconFileUp = base.IconFileUp
 var IconFlaskConical = base.IconFlaskConical
 var IconFunnel = base.IconFunnel
 var IconHouse = base.IconHouse
+var IconInfo = base.IconInfo
 var IconLink = base.IconLink
 var IconList = base.IconList
 var IconListChecks = base.IconListChecks

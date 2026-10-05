@@ -39,7 +39,8 @@ function node(tag) {
 
 globalThis.window = {addEventListener() {}};
 globalThis.requestAnimationFrame = () => 0;
-globalThis.document = {createElement: node};
+// createElementNS too: a бой head carries the ⓘ glyph, an SVG.
+globalThis.document = {createElement: node, createElementNS: (_ns, tag) => node(tag)};
 globalThis.HTMLAnchorElement = class {};
 globalThis.Node = class {}; // cells.ts asks `instanceof Node`; text never is one
 
@@ -408,8 +409,10 @@ test("two grids keep their own rows and letters", () => {
   const board = buildFestGrid({stages: [{code: "r1", title: "Раунд 1", stage_type: "matches", matches: [bout]}]}, {stageHeaderLink: false});
   assert.equal(wide.props["--grid-unit-rows"], "5");
   assert.equal(board.props["--grid-unit-rows"], "3");
-  assert.deepEqual(texts(wide, "grid-match-title"), ["Группа 1", "Бой Z"]);
-  assert.deepEqual(texts(board, "grid-match-title"), ["Бой s2-m1"]);
+  // A бой's head says its handle alone; «Бой Z» in full is on its card.
+  assert.deepEqual(texts(wide, "grid-match-title"), ["Группа 1", "Z"]);
+  assert.deepEqual(texts(board, "grid-match-title"), ["s2-m1"]);
+  assert.equal(walk(board).filter((n) => n.className === "grid-match-info").length, 1);
   assert.equal(texts(wide, "name-cell-text")[4], "Бой A, м. 1");
 });
 
@@ -523,5 +526,5 @@ test("matchHref and groupHref make the titles links", () => {
     groupHref: (stage) => `#block:${stage.grain.block}`,
   });
   const links = walk(grid).filter((n) => n.tag === "a").map((n) => [n.textContent, n.href]);
-  assert.deepEqual(links, [["Группа 1", "#block:s1"], ["Бой s2-r1-m1", "#protocol:s2@s2-r1-m1"]]);
+  assert.deepEqual(links, [["Группа 1", "#block:s1"], ["s2-r1-m1", "#protocol:s2@s2-r1-m1"]]);
 });

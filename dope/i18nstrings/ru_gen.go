@@ -438,8 +438,13 @@ var RU = Strings{
 			Title:       func() string { return "Жеребьёвка" },
 		},
 		Grid: FestGridStrings{
+			BracketLower:     func() string { return "Нижняя сетка" },
+			BracketUpper:     func() string { return "Верхняя сетка" },
+			CardOpen:         func() string { return "Открыть бой" },
+			CardStartsAt:     func(time string) string { return fmt.Sprintf("Начало в %s", time) },
 			ColPlace:         func() string { return "М" },
 			MatchDefault:     func(code string) string { return fmt.Sprintf("Бой %s", code) },
+			MatchInfo:        func() string { return "Подробнее о бое" },
 			SlotBasket:       func(basket string, number string) string { return fmt.Sprintf("К%s-%s", basket, number) },
 			SlotReseed:       func() string { return "Пересев" },
 			SlotReseedRanked: func(rank string) string { return fmt.Sprintf("Пересев-%s", rank) },

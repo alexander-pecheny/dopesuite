@@ -3,6 +3,8 @@ import type {StageRef} from "./standings.js";
 import {normalizeVenue, venueLabel, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {nameCell} from "./name-cell.js";
+import {icon} from "./icons_gen.js";
+import {toggleAnchoredPanel} from "./widgets.js";
 import { blockLabel, groupLabel } from "./game-tabs.js";
 import S from "./i18nstrings.js";
 import {PERCENT, roundTo} from "./cells.js";
@@ -63,8 +65,8 @@ export interface FestGridMatch {
   participants?: FestGridLiveParticipant[];
   participantCount?: number | string;
   // bracket is a double elimination's bracket for the Match, "upper" or
-  // "lower" (the compiler's store.SchemeMatch.Bracket); the box's title sits
-  // in a pill of its colour.
+  // "lower" (the compiler's store.SchemeMatch.Bracket); the box's head row
+  // wears its colour.
   bracket?: string;
   // row pins the Match to a row of the grid's shared row layout (1-based);
   // unset, it flows under the Match before it.
@@ -616,7 +618,7 @@ function buildStandingsTable({stage, live, entries, order, sort, item}: GridTabl
   const box = el("article", `grid-box grid-standings${metric ? "" : " grid-standings-bare"}`, "");
   const grid = el("div", "grid-slot-grid", "");
   const title = gridCell("grid-slot-head grid-match-head-cell", "");
-  title.appendChild(headLayout(groupTitleNode(stage, head.title, options), head.venue));
+  title.appendChild(headLayout(groupTitleNode(stage, head.title, options), venueText(head.venue)));
   grid.appendChild(title);
   if (metric) grid.appendChild(gridHeadCell("slot-total-head", standingsMetricLabel(metric)));
   grid.appendChild(gridHeadCell("slot-place-head", S.fest.grid.colPlace()));
@@ -842,13 +844,19 @@ function decorateGridSlotRows(rows: HTMLElement[][]): void {
   last[last.length - 1].classList.add("grid-slot-bottom-right");
 }
 
+// A bout's head holds what fits a narrow column: the letter, the start time
+// and the venue's number. Everything else about the bout (its whole title,
+// its bracket, the venue's name) is on the card its ⓘ opens.
 function matchHeadCell(match: FestGridMatch, venue: Venue | null, ctx: PaintContext, startsAt?: string): HTMLElement {
   const cell = gridCell("grid-slot-head grid-match-head-cell", "");
-  cell.appendChild(headLayout(matchTitleNode(match, ctx), venue, startsAt));
+  const where = venue ? S.fest.grid.venue(String(venue.number)) : "";
+  const layout = headLayout(matchTitleNode(match, ctx), withStartsAt(where, startsAt));
+  layout.appendChild(matchInfoButton(match, venue, ctx, startsAt));
+  cell.appendChild(layout);
   return cell;
 }
 
-function headLayout(title: HTMLElement, venue: Venue | null, startsAt?: string): HTMLElement {
+function headLayout(title: HTMLElement, where: string): HTMLElement {
   const layout = document.createElement("span");
   layout.className = "grid-match-head-layout";
   // A title is a heading, not a name to read whole: a long one fades the
@@ -856,10 +864,50 @@ function headLayout(title: HTMLElement, venue: Venue | null, startsAt?: string):
   title.classList.add("u-clip-fade");
   layout.appendChild(title);
   // The venue clips where the head ends; its whole title is a popover away.
-  // A start time the host gave the bout stands before it.
-  const label = venueLabel(venue, "grid-match-venue", withStartsAt(venueText(venue), startsAt));
+  const label = venueLabel(null, "grid-match-venue", where);
   if (label) layout.appendChild(label);
   return layout;
+}
+
+function matchInfoButton(match: FestGridMatch, venue: Venue | null, ctx: PaintContext, startsAt?: string): HTMLElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "grid-match-info";
+  button.title = S.fest.grid.matchInfo();
+  button.setAttribute("aria-label", S.fest.grid.matchInfo());
+  button.setAttribute("aria-haspopup", "dialog");
+  button.setAttribute("aria-expanded", "false");
+  button.appendChild(icon("info"));
+  button.addEventListener("click", () => {
+    toggleAnchoredPanel(button, () => matchCard(match, venue, ctx, startsAt));
+  });
+  return button;
+}
+
+// matchCard is the whole of what the grid knows about a bout: its title in
+// full, its bracket, when and where it is played, and the way to it.
+function matchCard(match: FestGridMatch, venue: Venue | null, ctx: PaintContext, startsAt?: string): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "popover grid-match-card u-col u-gap-xs";
+  card.setAttribute("role", "dialog");
+  const title = fullMatchLabel(match, ctx.letters);
+  card.setAttribute("aria-label", title);
+  card.appendChild(el("strong", "", title));
+  const bracket = match.bracket === "upper" ? S.fest.grid.bracketUpper() : match.bracket === "lower" ? S.fest.grid.bracketLower() : "";
+  if (bracket) {
+    card.dataset.bracket = String(match.bracket);
+    card.appendChild(el("span", "grid-match-card-bracket", bracket));
+  }
+  const time = (startsAt || "").trim();
+  if (time) card.appendChild(el("span", "", S.fest.grid.cardStartsAt(time)));
+  if (venue) card.appendChild(el("span", "", venueText(venue)));
+  const href = matchTitleHref(match, ctx);
+  if (href) {
+    const link = el("a", "", S.fest.grid.cardOpen());
+    link.href = href;
+    card.appendChild(link);
+  }
+  return card;
 }
 
 // groupTitleNode is a group table's name, a link where the page says where
@@ -874,18 +922,20 @@ function groupTitleNode(stage: FestGridStage, title: string, options: FestGridOp
 
 function matchTitleNode(match: FestGridMatch, ctx: PaintContext): HTMLElement {
   const label = matchLabel(match, ctx.letters);
-  const own = ctx.options.matchHref?.(String(match.code || "")) || "";
-  if (own) {
-    const link = el("a", "grid-match-title grid-match-title-link", label);
-    link.href = own;
-    return link;
-  }
-  if (!ctx.options.basePath || ctx.options.matchTitleLink === false) {
-    return el("span", "grid-match-title", label);
-  }
+  const href = matchTitleHref(match, ctx);
+  if (!href) return el("span", "grid-match-title", label);
   const link = el("a", "grid-match-title grid-match-title-link", label);
-  link.href = matchHref(match, ctx);
+  link.href = href;
   return link;
+}
+
+// matchTitleHref is where a bout's title leads: the page's own link for it,
+// else the bout's page, unless the page draws its titles without links.
+function matchTitleHref(match: FestGridMatch, ctx: PaintContext): string {
+  const own = ctx.options.matchHref?.(String(match.code || "")) || "";
+  if (own) return own;
+  if (!ctx.options.basePath || ctx.options.matchTitleLink === false) return "";
+  return matchHref(match, ctx);
 }
 
 export function parseScheme(raw: unknown): FestScheme | null {
@@ -978,12 +1028,25 @@ function basePath(options: FestGridOptions = {}): string {
 
 // The Matches wear their letter — the sheets' A..Z, AA.. handle — as the
 // compiler dealt them and the fest view carries them; a URL says the letter too.
+// A bout with no title of its own is its letter alone in a box's head, where
+// the column is narrow, and the full default title on its card.
 function matchLabel(match: FestGridMatch, letters: Map<string, string> | null): string {
+  const full = fullMatchLabel(match, letters);
+  // Whatever wears the default wording keeps only its handle: the
+  // letter the grid dealt, or the one a scheme already wrote into the title.
+  const prefix = S.fest.grid.matchDefault("");
+  const handle = full.startsWith(prefix) ? full.slice(prefix.length) : "";
+  return handle && !/\s/.test(handle) ? handle : full;
+}
+
+function fullMatchLabel(match: FestGridMatch, letters: Map<string, string> | null): string {
   const letter = letters?.get(match.code || "");
-  if (!match.title || match.title === S.fest.grid.matchDefault(String(match.code))) {
-    return S.fest.grid.matchDefault(String(letter || match.code));
-  }
-  return letteredTitle(match.title, letter);
+  if (hasDefaultTitle(match)) return S.fest.grid.matchDefault(String(letter || match.code));
+  return letteredTitle(String(match.title), letter);
+}
+
+function hasDefaultTitle(match: FestGridMatch): boolean {
+  return !match.title || match.title === S.fest.grid.matchDefault(String(match.code));
 }
 
 // slotTeamCell is a seat's team, the grid's clipped name (name-cell.ts).

@@ -594,9 +594,95 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
 const tabBarScrollBindings = new WeakMap<HTMLElement, ScrollEdgeBinding>();
 const tabBarActiveKeys = new WeakMap<HTMLElement, string>();
 
-// Space the tab list keeps from the viewport edge, and its smallest height.
-const TAB_LIST_MARGIN_PX = 8;
-const TAB_LIST_MIN_HEIGHT_PX = 120;
+// Space an anchored panel keeps from the viewport edge, and its smallest height.
+const ANCHORED_MARGIN_PX = 8;
+const ANCHORED_MIN_HEIGHT_PX = 120;
+
+// An anchored panel is a popover parked on <body> under the button that
+// opened it: the tab strip's list of tabs, the grid's card of a bout. One is
+// open at a time. A click outside or Esc closes it, Esc giving the focus back
+// to its button; a redraw that takes the button away takes the panel with it.
+// onKey sees every other key first and says whether it took it.
+type AnchoredKeys = (event: KeyboardEvent, panel: HTMLElement) => boolean;
+
+let anchored: {panel: HTMLElement; trigger: HTMLElement; onKey?: AnchoredKeys} | null = null;
+
+export function openAnchoredPanel(trigger: HTMLElement, panel: HTMLElement, onKey?: AnchoredKeys): void {
+  closeAnchoredPanel();
+  document.body.appendChild(panel);
+  anchored = {panel, trigger, onKey};
+  trigger.setAttribute("aria-expanded", "true");
+  positionAnchoredPanel();
+  document.addEventListener("pointerdown", onAnchoredPointerDown, true);
+  document.addEventListener("keydown", onAnchoredKeydown, true);
+  window.addEventListener("scroll", positionAnchoredPanel, {capture: true, passive: true});
+  window.addEventListener("resize", positionAnchoredPanel);
+}
+
+export function closeAnchoredPanel(): void {
+  if (!anchored) return;
+  anchored.panel.remove();
+  anchored.trigger.setAttribute("aria-expanded", "false");
+  anchored = null;
+  document.removeEventListener("pointerdown", onAnchoredPointerDown, true);
+  document.removeEventListener("keydown", onAnchoredKeydown, true);
+  window.removeEventListener("scroll", positionAnchoredPanel, {capture: true} as EventListenerOptions);
+  window.removeEventListener("resize", positionAnchoredPanel);
+}
+
+// toggleAnchoredPanel closes the panel its button opened, or opens a new one.
+// It answers whether a panel is open now.
+export function toggleAnchoredPanel(trigger: HTMLElement, build: () => HTMLElement, onKey?: AnchoredKeys): boolean {
+  if (anchored?.trigger === trigger) {
+    closeAnchoredPanel();
+    return false;
+  }
+  openAnchoredPanel(trigger, build(), onKey);
+  return true;
+}
+
+function anchoredWithin(root: Element): boolean {
+  return !!anchored && root.contains(anchored.trigger);
+}
+
+function onAnchoredPointerDown(event: PointerEvent): void {
+  if (!(event.target instanceof Node) || !anchored) return;
+  if (anchored.panel.contains(event.target) || anchored.trigger.contains(event.target)) return;
+  closeAnchoredPanel();
+}
+
+function onAnchoredKeydown(event: KeyboardEvent): void {
+  if (!anchored) return;
+  if (event.key === "Escape" || event.key === "Tab") {
+    const trigger = anchored.trigger;
+    if (event.key === "Escape") event.preventDefault();
+    event.stopPropagation();
+    closeAnchoredPanel();
+    trigger.focus();
+    return;
+  }
+  if (anchored.onKey?.(event, anchored.panel)) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+
+function positionAnchoredPanel(): void {
+  if (!anchored) return;
+  const {panel, trigger} = anchored;
+  if (!trigger.isConnected) {
+    closeAnchoredPanel();
+    return;
+  }
+  const rect = trigger.getBoundingClientRect();
+  const margin = ANCHORED_MARGIN_PX;
+  panel.style.position = "fixed";
+  panel.style.right = "auto";
+  panel.style.maxHeight = `${Math.max(ANCHORED_MIN_HEIGHT_PX, window.innerHeight - rect.bottom - 2 * margin)}px`;
+  const width = panel.offsetWidth;
+  panel.style.left = `${clamp(rect.left, margin, Math.max(margin, window.innerWidth - width - margin))}px`;
+  panel.style.top = `${rect.bottom + 2}px`;
+}
 
 // tabPicker is what a tab strip becomes when its tabs do not all fit: one
 // button naming the open tab, which drops a list of every tab. A strip shows
@@ -613,22 +699,21 @@ function tabPicker(tabs: Array<{key: string; label: string}>, activeKey: string,
   text.textContent = tabs.find((tab) => tab.key === activeKey)?.label || "";
   trigger.append(text, icon("chevron-down"));
   trigger.addEventListener("click", () => {
-    if (tabList?.trigger === trigger) closeTabList();
-    else openTabList(trigger, tabs, activeKey, onSelect);
+    if (!toggleAnchoredPanel(trigger, () => tabList(trigger, tabs, activeKey, onSelect), menuKeys)) return;
+    const current = document.querySelector<HTMLElement>('.tab-picker-panel [aria-checked="true"]');
+    current?.focus();
+    current?.scrollIntoView({block: "nearest"});
   });
   return trigger;
 }
 
-let tabList: {panel: HTMLElement; trigger: HTMLElement} | null = null;
-
-function openTabList(trigger: HTMLElement, tabs: Array<{key: string; label: string}>, activeKey: string,
-  onSelect: (key: string) => void): void {
-  closeTabList();
+function tabList(trigger: HTMLElement, tabs: Array<{key: string; label: string}>, activeKey: string,
+  onSelect: (key: string) => void): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "popover menu-dropdown tab-picker-panel";
   panel.setAttribute("role", "menu");
   panel.setAttribute("aria-label", S.widgets.tabPicker.label());
-  const items = tabs.map((tab) => {
+  panel.replaceChildren(...tabs.map((tab) => {
     const item = document.createElement("button");
     item.type = "button";
     item.className = "menu-item";
@@ -636,84 +721,28 @@ function openTabList(trigger: HTMLElement, tabs: Array<{key: string; label: stri
     item.setAttribute("aria-checked", tab.key === activeKey ? "true" : "false");
     item.textContent = tab.label;
     item.addEventListener("click", () => {
-      closeTabList();
+      closeAnchoredPanel();
       trigger.focus();
       if (tab.key !== activeKey) onSelect(tab.key);
     });
     return item;
-  });
-  panel.replaceChildren(...items);
-  document.body.appendChild(panel);
-  tabList = {panel, trigger};
-  trigger.setAttribute("aria-expanded", "true");
-  positionTabList();
-  const current = items[tabs.findIndex((tab) => tab.key === activeKey)] || items[0];
-  current?.focus();
-  current?.scrollIntoView({block: "nearest"});
-  document.addEventListener("pointerdown", onTabListPointerDown, true);
-  document.addEventListener("keydown", onTabListKeydown, true);
-  window.addEventListener("scroll", positionTabList, {capture: true, passive: true});
-  window.addEventListener("resize", positionTabList);
+  }));
+  return panel;
 }
 
-function closeTabList(): void {
-  if (!tabList) return;
-  tabList.panel.remove();
-  tabList.trigger.setAttribute("aria-expanded", "false");
-  tabList = null;
-  document.removeEventListener("pointerdown", onTabListPointerDown, true);
-  document.removeEventListener("keydown", onTabListKeydown, true);
-  window.removeEventListener("scroll", positionTabList, {capture: true} as EventListenerOptions);
-  window.removeEventListener("resize", positionTabList);
-}
-
-function onTabListPointerDown(event: PointerEvent): void {
-  if (!(event.target instanceof Node) || !tabList) return;
-  if (tabList.panel.contains(event.target) || tabList.trigger.contains(event.target)) return;
-  closeTabList();
-}
-
-// Esc closes the list and gives the focus back to its button; the arrows walk
-// the tabs, the way a select's own list does.
-function onTabListKeydown(event: KeyboardEvent): void {
-  if (!tabList) return;
-  const items = Array.from(tabList.panel.querySelectorAll<HTMLElement>(".menu-item"));
+// menuKeys walks a menu's items with the arrows, Home and End, the way a
+// select's own list does.
+function menuKeys(event: KeyboardEvent, panel: HTMLElement): boolean {
+  const items = Array.from(panel.querySelectorAll<HTMLElement>(".menu-item"));
   const at = items.indexOf(document.activeElement as HTMLElement);
   let next = -1;
   if (event.key === "ArrowDown") next = at < 0 ? 0 : Math.min(items.length - 1, at + 1);
   else if (event.key === "ArrowUp") next = at < 0 ? items.length - 1 : Math.max(0, at - 1);
   else if (event.key === "Home") next = 0;
   else if (event.key === "End") next = items.length - 1;
-  else if (event.key === "Escape" || event.key === "Tab") {
-    const trigger = tabList.trigger;
-    if (event.key === "Escape") event.preventDefault();
-    event.stopPropagation();
-    closeTabList();
-    trigger.focus();
-    return;
-  } else return;
-  event.preventDefault();
-  event.stopPropagation();
+  else return false;
   items[next]?.focus();
-}
-
-// positionTabList parks the list under its button, inside the viewport. A
-// redraw that takes the button away takes the list with it.
-function positionTabList(): void {
-  if (!tabList) return;
-  const {panel, trigger} = tabList;
-  if (!trigger.isConnected) {
-    closeTabList();
-    return;
-  }
-  const rect = trigger.getBoundingClientRect();
-  const margin = TAB_LIST_MARGIN_PX;
-  panel.style.position = "fixed";
-  panel.style.right = "auto";
-  panel.style.maxHeight = `${Math.max(TAB_LIST_MIN_HEIGHT_PX, window.innerHeight - rect.bottom - 2 * margin)}px`;
-  const width = panel.offsetWidth;
-  panel.style.left = `${clamp(rect.left, margin, Math.max(margin, window.innerWidth - width - margin))}px`;
-  panel.style.top = `${rect.bottom + 2}px`;
+  return true;
 }
 
 // fitTabBar shows every tab when they all fit the strip and only the picker
@@ -735,7 +764,7 @@ export function renderTabBar(
   options: {picker?: boolean} = {},
 ): void {
   root.replaceChildren();
-  if (tabList && root.contains(tabList.trigger)) closeTabList();
+  if (anchoredWithin(root)) closeAnchoredPanel();
   if (options.picker !== false && tabs.length > 1) root.appendChild(tabPicker(tabs, activeKey, onSelect));
   for (const tab of tabs) {
     const btn = document.createElement("button");
