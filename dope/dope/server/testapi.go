@@ -72,6 +72,14 @@ func (s *Server) SetEnv(key, value string) {
 	s.envOverride[key] = value
 }
 
+// Settle waits for every edit window the server has opened to be applied in
+// full. An editor is answered before its window is done: the broadcasts and
+// the fest view refresh after a finish still read the database. The request
+// wrappers below settle before they return, so a test that closes its
+// database right after a request cannot pull the files out from under the
+// batcher.
+func (s *Server) Settle() { s.editor().Wait() }
+
 // SetEditBatchWindow shortens the edit batching window for a test that plays
 // many edits one after another and awaits each.
 func (s *Server) SetEditBatchWindow(d time.Duration) { s.editor().Window = d }
@@ -136,11 +144,13 @@ func (s *Server) ApplyUpdate(req UpdateRequest) (store.MatchView, []byte, error)
 func (s *Server) SubmitMatchEdit(ctx context.Context, scope MatchScope, ops []edit.PatchOp) (store.MatchView, error) {
 	req := edit.PatchRequest{Ops: ops}
 	data, _, err := s.editor().SubmitMatchEdit(ctx, core.FestScope(scope.festScope), scope.MatchID, scope.Code, req, util.MustJSON(req), nil)
+	s.Settle()
 	return decodeMatchView(data, err)
 }
 
 func (s *Server) SubmitMatchFinish(ctx context.Context, scope MatchScope, finished bool) (store.MatchView, error) {
 	data, _, err := s.editor().SubmitMatchFinish(ctx, core.FestScope(scope.festScope), scope.MatchID, scope.Code, finished)
+	s.Settle()
 	return decodeMatchView(data, err)
 }
 
@@ -182,11 +192,17 @@ func (s *Server) HandleAuthTgClaim(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleAuthUsername(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthUsername(w, r)
 }
-func (s *Server) HandleEvents(w http.ResponseWriter, r *http.Request)     { s.handleEvents(w, r) }
-func (s *Server) HandleFestRouter(w http.ResponseWriter, r *http.Request) { s.handleFestRouter(w, r) }
-func (s *Server) HandleImport(w http.ResponseWriter, r *http.Request)     { s.handleImport(w, r) }
-func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request)      { s.handleLogin(w, r) }
-func (s *Server) HandleScopedAPI(w http.ResponseWriter, r *http.Request)  { s.handleScopedAPI(w, r) }
+func (s *Server) HandleEvents(w http.ResponseWriter, r *http.Request) { s.handleEvents(w, r) }
+func (s *Server) HandleFestRouter(w http.ResponseWriter, r *http.Request) {
+	s.handleFestRouter(w, r)
+	s.Settle()
+}
+func (s *Server) HandleImport(w http.ResponseWriter, r *http.Request) { s.handleImport(w, r) }
+func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request)  { s.handleLogin(w, r) }
+func (s *Server) HandleScopedAPI(w http.ResponseWriter, r *http.Request) {
+	s.handleScopedAPI(w, r)
+	s.Settle()
+}
 
 func (s *Server) LoadFestViewLocked(festID, gameID int64) (store.FestView, error) {
 	return s.loadFestViewLocked(festID, gameID)
