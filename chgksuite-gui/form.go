@@ -9,6 +9,10 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// maxRadioChoices is the most choices shown as radio buttons; a longer list
+// becomes a drop-down.
+const maxRadioChoices = 4
+
 // A pane is one command's form: a row per positional argument, then a row per
 // flag, with the widget chosen by what the flag says it takes.
 
@@ -145,7 +149,7 @@ func (g *gui) flagItem(p *pane, f flagSpec) *widget.FormItem {
 		})
 		check.SetChecked(f.Default == "true")
 		w = check
-	case len(f.Choices) > 4:
+	case len(f.Choices) > maxRadioChoices:
 		sel := widget.NewSelect(f.Choices, set)
 		sel.SetSelected(f.Default)
 		w = sel

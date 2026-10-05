@@ -63,8 +63,13 @@ func (s *server) lookupSession(w http.ResponseWriter, r *http.Request) (session.
 // is checked separately so the two refusals can say different things.
 var usernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
+const (
+	minUsernameLen = 3
+	maxUsernameLen = 64
+)
+
 func validNewUsername(name string) bool {
-	return len(name) >= 3 && len(name) <= 64 && usernameRe.MatchString(name)
+	return len(name) >= minUsernameLen && len(name) <= maxUsernameLen && usernameRe.MatchString(name)
 }
 
 // ---- what the login page asks ----

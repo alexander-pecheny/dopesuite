@@ -16,6 +16,12 @@ import (
 	spliffstrings "spliff/i18nstrings"
 )
 
+// The long poll, and the HTTP timeout that lets it finish first.
+const (
+	botPollTimeout = 60 * time.Second
+	botHTTPTimeout = botPollTimeout + 10*time.Second
+)
+
 // Spliff's login bot polls in the server process (root ADR-0005).
 // SPLIFF_BOT_TOKEN is the switch: an instance that holds one polls, an instance
 // that does not, does not — and says telegram login is not on offer. That is
@@ -44,8 +50,8 @@ func (s *server) startBot(ctx context.Context) {
 	}
 	s.bot = tgbot.New(tgbot.Config{
 		Token:          token,
-		PollTimeout:    60 * time.Second,
-		HTTPTimeout:    70 * time.Second,
+		PollTimeout:    botPollTimeout,
+		HTTPTimeout:    botHTTPTimeout,
 		AllowedUpdates: []string{"message"},
 	})
 	log.Printf("telegram bot %s polling (token %s)", buildinfo.Version(), tgbot.TokenHash(token))

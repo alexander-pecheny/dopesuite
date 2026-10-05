@@ -36,6 +36,8 @@ DONOR_URL = (
     "https://raw.githubusercontent.com/google/fonts/"
     f"{DONOR_COMMIT}/ofl/notosanssymbols2/NotoSansSymbols2-Regular.ttf"
 )
+DOWNLOAD_TIMEOUT = 60  # seconds
+
 DONOR_SHA256 = "7d5fb73b7ca67a6798101741f5d280a3d016a56a197afcd4199dbb57b4b82a21"
 
 # The curated set (ADR discussion, 2026-08-20): media controls a ЧГК author
@@ -67,7 +69,7 @@ def fetch_donor() -> bytes:
     if cache.exists():
         data = cache.read_bytes()
     else:
-        data = urllib.request.urlopen(DONOR_URL, timeout=60).read()
+        data = urllib.request.urlopen(DONOR_URL, timeout=DOWNLOAD_TIMEOUT).read()
         cache.parent.mkdir(exist_ok=True)
         cache.write_bytes(data)
     got = hashlib.sha256(data).hexdigest()

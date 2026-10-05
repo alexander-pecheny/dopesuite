@@ -29,6 +29,9 @@ import {
   type Row,
 } from "./txform";
 
+// The length of a "YYYY-MM-DD" day at the head of an ISO timestamp.
+const ISO_DAY_LEN = 10;
+
 const path = window.location.pathname.split("/").filter(Boolean);
 // /group/{id}/new when a bill is being entered, /transaction/{id} when one is
 // being read or changed.
@@ -150,7 +153,7 @@ async function load(): Promise<void> {
       // The picker opens on what this Group deals in: its Base currency, then
       // the currencies its Transactions are already written in.
       fillCurrencies(baseCurrency, [baseCurrency, ...group.live.map((t) => t.currency)]);
-      dayField.value = new Date().toISOString().slice(0, 10);
+      dayField.value = new Date().toISOString().slice(0, ISO_DAY_LEN);
       setText(txCrumb, S.page.transaction.newTitle());
       show(photoSection, false);
       show(historySection, false);

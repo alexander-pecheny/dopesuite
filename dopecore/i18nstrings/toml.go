@@ -57,8 +57,10 @@ func Parse(text string) ([]Pair, error) {
 	return out, nil
 }
 
+const tripleQuote = `"""`
+
 func isMultiline(v string) bool {
-	return len(v) >= 6 && strings.HasPrefix(v, `"""`) && strings.HasSuffix(v, `"""`)
+	return len(v) >= 2*len(tripleQuote) && strings.HasPrefix(v, tripleQuote) && strings.HasSuffix(v, tripleQuote)
 }
 
 func unquote(v string) (string, error) {
@@ -68,12 +70,17 @@ func unquote(v string) (string, error) {
 	body := ""
 	switch {
 	case isMultiline(v):
-		body = strings.TrimPrefix(v[3:len(v)-3], "\n")
+		body = strings.TrimPrefix(v[len(tripleQuote):len(v)-len(tripleQuote)], "\n")
 	case len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"':
 		body = v[1 : len(v)-1]
 	default:
 		return "", fmt.Errorf("value %q is not a quoted string", v)
 	}
+	return unescape(body), nil
+}
+
+// unescape reads \n and \t; any other escaped byte stands for itself.
+func unescape(body string) string {
 	var out strings.Builder
 	for i := 0; i < len(body); i++ {
 		if body[i] != '\\' || i+1 >= len(body) {
@@ -90,5 +97,5 @@ func unquote(v string) (string, error) {
 			out.WriteByte(body[i])
 		}
 	}
-	return out.String(), nil
+	return out.String()
 }

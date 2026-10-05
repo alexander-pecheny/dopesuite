@@ -14,6 +14,9 @@ import (
 	spliffstrings "spliff/i18nstrings"
 )
 
+// maxJSONBody caps a JSON request body.
+const maxJSONBody = 1 << 20
+
 // writeJSON marshals v and writes it as application/json. API payloads are
 // per-session and read-your-writes sensitive — the Group page must never show
 // a balance from before the bill that was just entered — so nothing may cache
@@ -31,7 +34,7 @@ func writeJSON(w http.ResponseWriter, v any) error {
 
 // readJSON decodes the request body into v, rejecting unknown fields.
 func readJSON(r *http.Request, v any) error {
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxJSONBody))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		return corei18n.User(spliffstrings.Default.Server.Error.BadRequest())

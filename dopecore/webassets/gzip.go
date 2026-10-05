@@ -134,7 +134,7 @@ func acceptsGzip(r *http.Request) bool {
 }
 
 func shouldGzip(status int, h http.Header) bool {
-	if status < 200 || status == http.StatusNoContent || status == http.StatusNotModified {
+	if status < http.StatusOK || status == http.StatusNoContent || status == http.StatusNotModified {
 		return false
 	}
 	if h.Get("Content-Encoding") != "" {

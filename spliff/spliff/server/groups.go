@@ -6,11 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 
 	"spliff/spliff/domain/ledger"
 	"spliff/spliff/domain/money"
@@ -340,18 +340,11 @@ func ledgerTx(t store.Transaction, table rates.Table) ledger.Transaction {
 
 func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	ctx := r.Context()
-	g, err := store.GroupByID(ctx, s.db, sc.GroupID)
-	if err != nil {
-		return notFound(err)
-	}
-	book, err := s.rates.Book(ctx)
+	st, err := s.groupState(ctx, sc.GroupID)
 	if err != nil {
 		return err
 	}
-	balances, members, err := s.balancesOf(ctx, g, book)
-	if err != nil && !errors.Is(err, rates.ErrNoTable) {
-		return err
-	}
+	g, book, balances, members := st.group, st.book, st.balances, st.members
 
 	out := groupDTO{
 		ID: g.ID, Name: g.Name, BaseCurrency: g.BaseCurrency,
@@ -362,6 +355,58 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request, sc route
 	}
 	names := memberNames(members)
 	actors := userNames(members)
+	out.fillBalances(balances, names, g.BaseCurrency)
+	if err := s.fillFeeds(ctx, &out, st, names, actors); err != nil {
+		return err
+	}
+	return writeJSON(w, out)
+}
+
+// fillFeeds writes the live and deleted Transactions and the History feed.
+func (s *server) fillFeeds(ctx context.Context, out *groupDTO, st groupState, names, actors map[int64]string) error {
+	var err error
+	if out.Live, err = s.feed(ctx, st.group, st.book, names, actors, true); err != nil {
+		return err
+	}
+	if out.Deleted, err = s.feed(ctx, st.group, st.book, names, actors, false); err != nil {
+		return err
+	}
+	history, err := store.GroupHistory(ctx, s.db, st.group.ID, store.DefaultHistoryLimit)
+	if err != nil {
+		return err
+	}
+	out.History = historyDTOs(history, actors, s.descriptions(out.Live, out.Deleted))
+	return nil
+}
+
+// groupState is a Group with its Members and their Net balances. The balances
+// are empty while there is no rate table yet.
+type groupState struct {
+	group    store.Group
+	book     *Book
+	balances []ledger.Balance
+	members  []store.Member
+}
+
+func (s *server) groupState(ctx context.Context, groupID int64) (groupState, error) {
+	g, err := store.GroupByID(ctx, s.db, groupID)
+	if err != nil {
+		return groupState{}, notFound(err)
+	}
+	book, err := s.rates.Book(ctx)
+	if err != nil {
+		return groupState{}, err
+	}
+	balances, members, err := s.balancesOf(ctx, g, book)
+	if err != nil && !errors.Is(err, rates.ErrNoTable) {
+		return groupState{}, err
+	}
+	return groupState{group: g, book: book, balances: balances, members: members}, nil
+}
+
+// fillBalances writes each Member's Net balance and the transfers that settle
+// the Group, in the Base currency.
+func (out *groupDTO) fillBalances(balances []ledger.Balance, names map[int64]string, base string) {
 	byMember := map[int64]int64{}
 	for _, b := range balances {
 		byMember[b.MemberID] = b.Minor
@@ -369,27 +414,14 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request, sc route
 	for i := range out.Members {
 		id := out.Members[i].ID
 		out.Members[i].BalanceMinor = byMember[id]
-		out.Members[i].Balance = money.Format(byMember[id], g.BaseCurrency)
+		out.Members[i].Balance = money.Format(byMember[id], base)
 	}
 	for _, t := range ledger.Transfers(balances) {
 		out.Transfers = append(out.Transfers, transferDTO{
 			FromID: t.From, FromName: names[t.From], ToID: t.To, ToName: names[t.To],
-			Minor: t.Minor, Amount: money.Format(t.Minor, g.BaseCurrency),
+			Minor: t.Minor, Amount: money.Format(t.Minor, base),
 		})
 	}
-
-	if out.Live, err = s.feed(ctx, g, book, names, actors, true); err != nil {
-		return err
-	}
-	if out.Deleted, err = s.feed(ctx, g, book, names, actors, false); err != nil {
-		return err
-	}
-	history, err := store.GroupHistory(ctx, s.db, g.ID, 200)
-	if err != nil {
-		return err
-	}
-	out.History = historyDTOs(history, actors, s.descriptions(out.Live, out.Deleted))
-	return writeJSON(w, out)
 }
 
 func (s *server) descriptions(lists ...[]transactionDTO) map[int64]string {
@@ -467,7 +499,7 @@ func photoDTOs(photos []store.Photo, names map[int64]string) []photoDTO {
 	out := make([]photoDTO, 0, len(photos))
 	for _, p := range photos {
 		out = append(out, photoDTO{
-			ID: p.ID, URL: "/api/photos/" + strconv.FormatInt(p.ID, 10),
+			ID: p.ID, URL: "/api/photos/" + idstr.Format(p.ID),
 			Width: p.Width, Height: p.Height, Uploader: names[p.UploaderID],
 		})
 	}
@@ -564,18 +596,11 @@ func (s *server) handleHandOver(w http.ResponseWriter, r *http.Request, sc route
 // message that sends somebody hunting.
 func (s *server) handleDeleteGroup(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	ctx := r.Context()
-	g, err := store.GroupByID(ctx, s.db, sc.GroupID)
-	if err != nil {
-		return notFound(err)
-	}
-	book, err := s.rates.Book(ctx)
+	st, err := s.groupState(ctx, sc.GroupID)
 	if err != nil {
 		return err
 	}
-	balances, members, err := s.balancesOf(ctx, g, book)
-	if err != nil && !errors.Is(err, rates.ErrNoTable) {
-		return err
-	}
+	g, balances, members := st.group, st.balances, st.members
 	names := memberNames(members)
 	for _, b := range balances {
 		if b.Minor != 0 {
@@ -618,7 +643,7 @@ func (s *server) handleLeaveGroup(w http.ResponseWriter, r *http.Request, sc rou
 // handleKickMember takes a MEMBER ROW id, not an account: a Phantom has no
 // account, and removing one is the same act under the same rule.
 func (s *server) handleKickMember(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	id, err := strconv.ParseInt(r.PathValue("memberId"), 10, 64)
+	id, err := idstr.Parse(r.PathValue("memberId"))
 	if err != nil {
 		return route.NotFound(spliffstrings.Default.Group.Error.NotAMember())
 	}
@@ -650,6 +675,22 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request, sc route.S
 	if member.IsOwner {
 		return corei18n.User(str.Group.Error.OwnerMustHandOver())
 	}
+	if err := s.checkLevel(ctx, g, member); err != nil {
+		return err
+	}
+	if err := s.withWriteTx(ctx, "remove-member", func(ctx context.Context, tx *sql.Tx) error {
+		return store.RemoveMember(ctx, tx, sc.GroupID, memberID)
+	}); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// checkLevel refuses to remove a Member whose Net balance is not zero, or who
+// is still named on a live Transaction.
+func (s *server) checkLevel(ctx context.Context, g store.Group, member store.Member) error {
+	str := spliffstrings.Default
 	book, err := s.rates.Book(ctx)
 	if err != nil {
 		return err
@@ -659,24 +700,18 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request, sc route.S
 		return err
 	}
 	for _, b := range balances {
-		if b.MemberID == memberID && b.Minor != 0 {
+		if b.MemberID == member.ID && b.Minor != 0 {
 			return corei18n.User(str.Group.Error.NotSettled(
 				member.Name, money.Format(b.Minor, g.BaseCurrency)+" "+g.BaseCurrency))
 		}
 	}
-	named, err := store.MemberHasEntries(ctx, s.db, sc.GroupID, memberID)
+	named, err := store.MemberHasEntries(ctx, s.db, g.ID, member.ID)
 	if err != nil {
 		return err
 	}
 	if named {
 		return corei18n.User(str.Group.Error.StillNamed(member.Name))
 	}
-	if err := s.withWriteTx(ctx, "remove-member", func(ctx context.Context, tx *sql.Tx) error {
-		return store.RemoveMember(ctx, tx, sc.GroupID, memberID)
-	}); err != nil {
-		return err
-	}
-	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
 

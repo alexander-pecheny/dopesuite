@@ -29,6 +29,13 @@ export interface Suggest {
 // nudged back inside them.
 const PAD = 8;
 
+// How long after a pointer pick its ghost click is swallowed.
+const GHOST_CLICK_MS = 400;
+
+// How long a blur waits before closing the list, so a click on a row lands
+// before the row is gone.
+const BLUR_CLOSE_MS = 150;
+
 export function autocomplete(
   inp: HTMLInputElement,
   choices: (q: string) => Choice[],
@@ -100,7 +107,7 @@ export function autocomplete(
       clearTimeout(timer);
       document.removeEventListener("click", stop, true);
     };
-    const timer = setTimeout(done, 400);
+    const timer = setTimeout(done, GHOST_CLICK_MS);
     document.addEventListener("click", stop, true);
   }
 
@@ -163,7 +170,7 @@ export function autocomplete(
 
   inp.addEventListener("input", draw);
   inp.addEventListener("focus", draw);
-  inp.addEventListener("blur", () => setTimeout(dismiss, 150));
+  inp.addEventListener("blur", () => setTimeout(dismiss, BLUR_CLOSE_MS));
   inp.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key === "Escape") {
       if (pop) event.stopPropagation();

@@ -49,39 +49,53 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request, sc ro
 	}
 	now := rfc3339(time.Now())
 	err = s.withWriteTx(r.Context(), "set-password", func(ctx context.Context, tx *sql.Tx) error {
-		var current, salt sql.NullString
-		if err := tx.QueryRowContext(ctx,
-			`select password_hash, password_salt from users where id = ?`, sc.User.UserID).
-			Scan(&current, &salt); err != nil {
+		if err := proveCurrentPassword(ctx, tx, sc.User.UserID, req.CurrentPassword); err != nil {
 			return err
 		}
-		if current.Valid && current.String != "" {
-			ok, _, err := authcred.VerifyPasswordUpgrading(current.String, salt.String, req.CurrentPassword)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return corei18n.User(str.Profile.Password.CurrentWrong())
-			}
-		}
-		// The salt goes with the old hash: it belongs to the legacy scheme, and
-		// what is written here is always bcrypt.
-		if _, err := tx.ExecContext(ctx,
-			`update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
-			hash, now, sc.User.UserID); err != nil {
-			return err
-		}
-		// authcred forgets one session at a time (DeleteSession), which is what
-		// logging out is; "every other one" is a single statement and has this
-		// one caller, so it stays here rather than becoming a shared helper.
-		_, err := tx.ExecContext(ctx, `delete from sessions where user_id = ? and id <> ?`,
-			sc.User.UserID, sc.User.SessionID)
-		return err
+		return replacePassword(ctx, tx, sc.User.UserID, sc.User.SessionID, hash, now)
 	})
 	if err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// replacePassword writes the new hash and logs out every other session.
+func replacePassword(ctx context.Context, tx *sql.Tx, userID, keepSession int64, hash, now string) error {
+	// The salt goes with the old hash: it belongs to the legacy scheme, and
+	// what is written here is always bcrypt.
+	if _, err := tx.ExecContext(ctx,
+		`update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
+		hash, now, userID); err != nil {
+		return err
+	}
+	// authcred forgets one session at a time (DeleteSession), which is what
+	// logging out is; "every other one" is a single statement and has this
+	// one caller, so it stays here rather than becoming a shared helper.
+	_, err := tx.ExecContext(ctx, `delete from sessions where user_id = ? and id <> ?`,
+		userID, keepSession)
+	return err
+}
+
+// proveCurrentPassword checks the password an account has now, if it has one.
+func proveCurrentPassword(ctx context.Context, tx *sql.Tx, userID int64, password string) error {
+	var current, salt sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		`select password_hash, password_salt from users where id = ?`, userID).
+		Scan(&current, &salt); err != nil {
+		return err
+	}
+	if !current.Valid || current.String == "" {
+		return nil
+	}
+	ok, _, err := authcred.VerifyPasswordUpgrading(current.String, salt.String, password)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return corei18n.User(spliffstrings.Default.Profile.Password.CurrentWrong())
+	}
 	return nil
 }
 

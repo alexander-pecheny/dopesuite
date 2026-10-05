@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"pecheny.me/dopecore/authcred"
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/invitelink"
 
 	"spliff/spliff/storage/store"
@@ -174,17 +174,26 @@ type createInviteRequest struct {
 	RequiresApproval bool   `json:"requires_approval"`
 }
 
-func (s *server) handleCreateInvite(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	var req createInviteRequest
-	if err := readJSON(r, &req); err != nil {
-		return err
-	}
+// options is the request as invitelink reads it, validated.
+func (req createInviteRequest) options() (invitelink.Options, error) {
 	opt := invitelink.Options{
 		Label: req.Label, MaxUses: req.MaxUses, TTLHours: req.TTLHours,
 		RequiresApproval: req.RequiresApproval,
 	}
 	if err := opt.Validate(); err != nil {
-		return corei18n.User(inviteBadRequest(err))
+		return opt, corei18n.User(inviteBadRequest(err))
+	}
+	return opt, nil
+}
+
+func (s *server) handleCreateInvite(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req createInviteRequest
+	if err := readJSON(r, &req); err != nil {
+		return err
+	}
+	opt, err := req.options()
+	if err != nil {
+		return err
 	}
 	code, err := authcred.NewInviteCode()
 	if err != nil {
@@ -221,7 +230,7 @@ func inviteBadRequest(err error) string {
 // Group. It cannot go through the dispatcher's {group}, because a link's URL
 // names the link and nothing else.
 func (s *server) requireOwnedInvite(r *http.Request, sc route.Scope) (invitelink.Link, error) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, err := idstr.Parse(r.PathValue("id"))
 	if err != nil {
 		return invitelink.Link{}, route.NotFound(spliffstrings.Default.Invite.Error.NotFound())
 	}
@@ -280,7 +289,7 @@ type decideRequest struct {
 
 func (s *server) handleDecideJoinRequest(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	str := spliffstrings.Default
-	requesterID, err := strconv.ParseInt(r.PathValue("userId"), 10, 64)
+	requesterID, err := idstr.Parse(r.PathValue("userId"))
 	if err != nil {
 		return route.NotFound(str.Invite.Error.RequestNotFound())
 	}

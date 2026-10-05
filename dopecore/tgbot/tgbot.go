@@ -19,9 +19,19 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"pecheny.me/dopecore/idstr"
 )
 
 const defaultAPIBase = "https://api.telegram.org"
+
+// Defaults for the zero fields of a Config.
+const (
+	defaultPollTimeout   = 30 * time.Second
+	httpTimeoutMargin    = 10 * time.Second // on top of the long poll, so the server answers first
+	defaultRetryDelay    = 3 * time.Second
+	defaultConflictDelay = 60 * time.Second
+)
 
 // ErrConflict is Telegram answering getUpdates with 409: another process is
 // polling this same token. It is not a transient network hiccup — retrying it
@@ -106,16 +116,16 @@ func New(cfg Config) *Client {
 		cfg.APIBase = defaultAPIBase
 	}
 	if cfg.PollTimeout <= 0 {
-		cfg.PollTimeout = 30 * time.Second
+		cfg.PollTimeout = defaultPollTimeout
 	}
 	if cfg.HTTPTimeout <= 0 {
-		cfg.HTTPTimeout = cfg.PollTimeout + 10*time.Second
+		cfg.HTTPTimeout = cfg.PollTimeout + httpTimeoutMargin
 	}
 	if cfg.RetryDelay <= 0 {
-		cfg.RetryDelay = 3 * time.Second
+		cfg.RetryDelay = defaultRetryDelay
 	}
 	if cfg.ConflictDelay <= 0 {
-		cfg.ConflictDelay = 60 * time.Second
+		cfg.ConflictDelay = defaultConflictDelay
 	}
 	return &Client{
 		token:          cfg.Token,
@@ -231,20 +241,29 @@ func (c *Client) RunAll(ctx context.Context, h Handler) error {
 	}
 }
 
-func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error) {
+// updatesQuery is the long poll's query string.
+func (c *Client) updatesQuery(offset int64) (string, error) {
 	values := url.Values{}
 	values.Set("timeout", strconv.Itoa(int(c.pollTimeout/time.Second)))
 	if offset > 0 {
-		values.Set("offset", strconv.FormatInt(offset, 10))
+		values.Set("offset", idstr.Format(offset))
 	}
 	if len(c.allowedUpdates) > 0 {
 		allowed, err := json.Marshal(c.allowedUpdates)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		values.Set("allowed_updates", string(allowed))
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.method("getUpdates")+"?"+values.Encode(), nil)
+	return values.Encode(), nil
+}
+
+func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error) {
+	query, err := c.updatesQuery(offset)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.method("getUpdates")+"?"+query, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -257,11 +276,16 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode == http.StatusConflict {
+	return parseUpdates(resp.StatusCode, body)
+}
+
+// parseUpdates reads getUpdates' answer.
+func parseUpdates(status int, body []byte) ([]Update, error) {
+	if status == http.StatusConflict {
 		return nil, fmt.Errorf("%w: %s", ErrConflict, strings.TrimSpace(string(body)))
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("status %d: %s", status, string(body))
 	}
 	var parsed struct {
 		OK     bool     `json:"ok"`
@@ -289,7 +313,7 @@ func (c *Client) SendHTML(ctx context.Context, chatID int64, text string) {
 
 func (c *Client) send(ctx context.Context, chatID int64, text, parseMode string) {
 	values := url.Values{}
-	values.Set("chat_id", strconv.FormatInt(chatID, 10))
+	values.Set("chat_id", idstr.Format(chatID))
 	values.Set("text", text)
 	if parseMode != "" {
 		values.Set("parse_mode", parseMode)

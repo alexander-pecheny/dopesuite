@@ -326,11 +326,14 @@ func TransactionHistory(ctx context.Context, q Querier, txID int64) ([]HistoryEn
 	return historyRows(ctx, q, `where h.transaction_id = ? order by h.id`, txID)
 }
 
+// DefaultHistoryLimit is how many entries a Group's feed shows.
+const DefaultHistoryLimit = 200
+
 // GroupHistory is the whole Group's changes, newest first — the feed a Member
 // scrolls to see what everybody has been doing.
 func GroupHistory(ctx context.Context, q Querier, groupID int64, limit int) ([]HistoryEntry, error) {
 	if limit <= 0 {
-		limit = 200
+		limit = DefaultHistoryLimit
 	}
 	return historyRows(ctx, q, `
 join transactions t on t.id = h.transaction_id

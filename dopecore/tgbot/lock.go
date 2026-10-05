@@ -57,9 +57,10 @@ func TokenHash(token string) string {
 // So: widen the mode when we are the owner, settle for read-only when we are
 // not. flock needs an fd, not write permission.
 func open(path string) (*os.File, error) {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o666)
+	const sharedMode = 0o666 // any user on the box may open the lock
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, sharedMode)
 	if err == nil {
-		_ = f.Chmod(0o666)
+		_ = f.Chmod(sharedMode)
 		return f, nil
 	}
 	if !errors.Is(err, os.ErrPermission) {

@@ -7,6 +7,12 @@
 // claim) is the state machine in package tglogin.
 package tgbridge
 
+// A register code is 4 to 64 base32 characters.
+const (
+	minCodeLen = 4
+	maxCodeLen = 64
+)
+
 // ConsumeRegisterSQL marks a pending 'register' code as consumed by the telegram
 // account that sent it. Params: telegram_user_id, telegram_username, telegram_name,
 // now, code, now. It affects one row exactly when the code exists, is a register
@@ -19,7 +25,7 @@ where code = ? and kind = 'register' and consumed_at is null and expires_at > ?`
 // LooksLikeRegisterCode is a cheap shape check (base32 alphabet, sane length) so
 // an obviously-bogus message never reaches the database.
 func LooksLikeRegisterCode(s string) bool {
-	if len(s) < 4 || len(s) > 64 {
+	if len(s) < minCodeLen || len(s) > maxCodeLen {
 		return false
 	}
 	for _, r := range s {

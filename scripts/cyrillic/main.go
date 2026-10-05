@@ -16,6 +16,13 @@ import (
 	"unicode"
 )
 
+// A source line may be long (a minified bundle), so the scanner may grow its
+// buffer well past bufio's default.
+const (
+	initialLineBuf = 64 << 10
+	maxLineBytes   = 4 << 20
+)
+
 var roots = []string{"dopecore", "dopeuikit", "xy", "dope", "spliff", "scripts"}
 
 // Skipped wholesale: generated files carry what a Catalog put there, tests
@@ -145,7 +152,7 @@ func scan(path string) (*hit, error) {
 	}
 	defer f.Close()
 	s := bufio.NewScanner(f)
-	s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	s.Buffer(make([]byte, 0, initialLineBuf), maxLineBytes)
 	for n := 1; s.Scan(); n++ {
 		line := s.Text()
 		if strings.IndexFunc(line, isCyrillic) >= 0 {

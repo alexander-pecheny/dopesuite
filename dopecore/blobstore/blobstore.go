@@ -13,13 +13,19 @@ import (
 	"time"
 )
 
+const (
+	dirMode  = 0o700 // blobs are readable by the server's user only
+	blobMode = 0o600
+	refBytes = 16 // random bytes in a ref, before hex encoding
+)
+
 type Store struct {
 	root string
 }
 
 // New opens (creating if needed) a blob store rooted at dir.
 func New(dir string) (*Store, error) {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return nil, err
 	}
 	return &Store{root: dir}, nil
@@ -29,7 +35,7 @@ func New(dir string) (*Store, error) {
 func (s *Store) Root() string { return s.root }
 
 func newRef() (string, error) {
-	b := make([]byte, 16)
+	b := make([]byte, refBytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
@@ -52,10 +58,10 @@ func (s *Store) Put(r io.Reader) (string, int64, error) {
 		return "", 0, err
 	}
 	p := s.path(ref)
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), dirMode); err != nil {
 		return "", 0, err
 	}
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, blobMode)
 	if err != nil {
 		return "", 0, err
 	}

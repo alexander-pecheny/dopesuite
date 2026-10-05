@@ -56,7 +56,7 @@ func lexTS(src string) []tsToken {
 			if j := strings.Index(src[i+2:], "*/"); j < 0 {
 				i = len(src)
 			} else {
-				i += j + 4
+				i += j + len("/*") + len("*/")
 			}
 		case c == '/' && regexCanStart(toks):
 			i = skipRegex(src, i)

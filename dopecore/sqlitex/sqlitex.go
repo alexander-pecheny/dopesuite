@@ -14,6 +14,9 @@ import (
 // parallel with writes.
 const MaxOpenConns = 8
 
+// connMaxIdle closes a pooled connection that has sat unused this long.
+const connMaxIdle = 30 * time.Minute
+
 // pragmas ship with every new pool connection. journal_mode is database-wide and
 // only takes effect once, but resetting it per connection is harmless and lets a
 // freshly-deleted/recreated DB land in WAL without a separate Exec.
@@ -84,6 +87,6 @@ func OpenDSN(dsn string, migrate func(*sql.DB) error) (*sql.DB, error) {
 	}
 	db.SetMaxOpenConns(MaxOpenConns)
 	db.SetMaxIdleConns(MaxOpenConns)
-	db.SetConnMaxIdleTime(30 * time.Minute)
+	db.SetConnMaxIdleTime(connMaxIdle)
 	return db, nil
 }

@@ -2,6 +2,7 @@ package spliffserver
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,9 @@ import (
 	"pecheny.me/dopecore/authcred"
 	"pecheny.me/dopecore/sqlitex"
 )
+
+// maxPasswordInput caps what adduser reads from stdin.
+const maxPasswordInput = 1 << 10
 
 // adduser mints a password account from the shell. Registration is otherwise
 // telegram-only, and an instance with no bot — staging, a dev checkout, the
@@ -27,7 +31,25 @@ func runAddUser(args []string) {
 	if !validNewUsername(username) {
 		log.Fatal("a username is 3-64 characters of letters, digits and ._-")
 	}
-	raw, err := io.ReadAll(io.LimitReader(os.Stdin, 1024))
+	hash := readPasswordHash()
+
+	path := os.Getenv("SPLIFF_DB")
+	if path == "" {
+		path = dbFile
+	}
+	db, err := openDB(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	upsertPassword(db, username, hash)
+	fmt.Printf("password set for %s in %s\n", username, path)
+}
+
+// readPasswordHash reads the password from stdin and hashes it.
+func readPasswordHash() string {
+	raw, err := io.ReadAll(io.LimitReader(os.Stdin, maxPasswordInput))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -40,19 +62,13 @@ func runAddUser(args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	return hash
+}
 
-	path := os.Getenv("SPLIFF_DB")
-	if path == "" {
-		path = dbFile
-	}
-	db, err := openDB(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
+// upsertPassword creates the account, or sets the password of an existing one.
+func upsertPassword(db *sql.DB, username, hash string) {
 	now := rfc3339(time.Now())
-	_, err = db.ExecContext(context.Background(), `
+	_, err := db.ExecContext(context.Background(), `
 insert into users(username, password_hash, created_at, updated_at) values(?, ?, ?, ?)
 on conflict(username) do update set password_hash = excluded.password_hash, updated_at = excluded.updated_at`,
 		username, hash, now, now)
@@ -62,5 +78,4 @@ on conflict(username) do update set password_hash = excluded.password_hash, upda
 		}
 		log.Fatal(err)
 	}
-	fmt.Printf("password set for %s in %s\n", username, path)
 }

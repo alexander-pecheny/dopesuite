@@ -14,9 +14,9 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/session"
 )
 
@@ -131,32 +131,8 @@ func (t *Table) resolve(w http.ResponseWriter, r *http.Request, access Access) (
 		}
 	}
 
-	if raw := r.PathValue("tx"); raw != "" {
-		id, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			return sc, NoGroup, nil
-		}
-		sc.TxID = id
-		groupID, err := t.Deps.GroupOfTransaction(r.Context(), id)
-		if err != nil {
-			return sc, 0, err
-		}
-		if groupID == 0 {
-			return sc, NoGroup, nil
-		}
-		sc.GroupID = groupID
-	}
-	if raw := r.PathValue("group"); raw != "" {
-		id, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			return sc, NoGroup, nil
-		}
-		// A route carrying both must agree: a Transaction reached through
-		// another Group's URL is not that Group's business.
-		if sc.GroupID != 0 && sc.GroupID != id {
-			return sc, NoGroup, nil
-		}
-		sc.GroupID = id
+	if d, err := t.resolvePath(r, &sc); d != 0 || err != nil {
+		return sc, d, err
 	}
 
 	if access < Member || sc.GroupID == 0 {
@@ -177,6 +153,38 @@ func (t *Table) resolve(w http.ResponseWriter, r *http.Request, access Access) (
 		return sc, NotOwner, nil
 	}
 	return sc, 0, nil
+}
+
+// resolvePath fills the Transaction and Group the URL names.
+func (t *Table) resolvePath(r *http.Request, sc *Scope) (Denial, error) {
+	if raw := r.PathValue("tx"); raw != "" {
+		id, err := idstr.Parse(raw)
+		if err != nil {
+			return NoGroup, nil
+		}
+		sc.TxID = id
+		groupID, err := t.Deps.GroupOfTransaction(r.Context(), id)
+		if err != nil {
+			return 0, err
+		}
+		if groupID == 0 {
+			return NoGroup, nil
+		}
+		sc.GroupID = groupID
+	}
+	if raw := r.PathValue("group"); raw != "" {
+		id, err := idstr.Parse(raw)
+		if err != nil {
+			return NoGroup, nil
+		}
+		// A route carrying both must agree: a Transaction reached through
+		// another Group's URL is not that Group's business.
+		if sc.GroupID != 0 && sc.GroupID != id {
+			return NoGroup, nil
+		}
+		sc.GroupID = id
+	}
+	return 0, nil
 }
 
 // DenyAPI writes a refusal as a status the page's fetch can read.

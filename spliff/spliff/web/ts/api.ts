@@ -2,6 +2,8 @@
 // writes was written for the person who caused it (root docs/adr/0006), so the
 // body is the message — the page shows it and invents nothing of its own.
 
+const HTTP_NO_CONTENT = 204;
+
 export interface EntryDTO {
   member_id: number;
   name: string;
@@ -172,7 +174,7 @@ export async function request<T>(method: string, url: string, body?: unknown): P
     const text = (await response.text()).trim();
     throw new ApiError(text || `HTTP ${response.status}`, response.status);
   }
-  if (response.status === 204) return null as T;
+  if (response.status === HTTP_NO_CONTENT) return null as T;
   const text = await response.text();
   return (text ? JSON.parse(text) : null) as T;
 }

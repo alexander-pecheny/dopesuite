@@ -17,6 +17,12 @@ import (
 	"strings"
 )
 
+const (
+	decimalBase = 10
+	int64Bits   = 64
+	codeLen     = 3 // an ISO 4217 code is three letters
+)
+
 // Amount is a quantity of one currency, counted in that currency's minor
 // units: 1234 USD minor units is $12.34, 1234 JPY minor units is ¥1234.
 type Amount struct {
@@ -48,7 +54,7 @@ func Exponent(currency string) int {
 func Scale(currency string) int64 {
 	scale := int64(1)
 	for range Exponent(currency) {
-		scale *= 10
+		scale *= decimalBase
 	}
 	return scale
 }
@@ -63,7 +69,7 @@ func Normalise(currency string) string {
 // about 160 of them and the set changes without us.
 func ValidCode(currency string) bool {
 	c := Normalise(currency)
-	if len(c) != 3 {
+	if len(c) != codeLen {
 		return false
 	}
 	for _, r := range c {
@@ -84,20 +90,7 @@ func Parse(s, currency string) (Amount, error) {
 		return Amount{}, ErrUnknownCurrency
 	}
 	currency = Normalise(currency)
-	raw := strings.TrimSpace(s)
-	raw = strings.ReplaceAll(raw, " ", "")
-	raw = strings.ReplaceAll(raw, " ", "")
-	raw = strings.ReplaceAll(raw, ",", ".")
-	if raw == "" {
-		return Amount{}, ErrBadAmount
-	}
-	neg := false
-	switch raw[0] {
-	case '-':
-		neg, raw = true, raw[1:]
-	case '+':
-		raw = raw[1:]
-	}
+	raw, neg := clean(s)
 	whole, frac, hasFrac := strings.Cut(raw, ".")
 	if whole == "" && !hasFrac {
 		return Amount{}, ErrBadAmount
@@ -112,7 +105,7 @@ func Parse(s, currency string) (Amount, error) {
 	if whole == "" {
 		whole = "0"
 	}
-	minor, err := strconv.ParseInt(whole+frac+strings.Repeat("0", exp-len(frac)), 10, 64)
+	minor, err := strconv.ParseInt(whole+frac+strings.Repeat("0", exp-len(frac)), decimalBase, int64Bits)
 	if err != nil {
 		return Amount{}, ErrBadAmount
 	}
@@ -120,6 +113,25 @@ func Parse(s, currency string) (Amount, error) {
 		minor = -minor
 	}
 	return Amount{Minor: minor, Currency: currency}, nil
+}
+
+// clean drops the spaces people type between digit groups, reads a comma as
+// the decimal point, and splits off the sign.
+func clean(s string) (raw string, neg bool) {
+	raw = strings.TrimSpace(s)
+	raw = strings.ReplaceAll(raw, " ", "")
+	raw = strings.ReplaceAll(raw, " ", "")
+	raw = strings.ReplaceAll(raw, ",", ".")
+	if raw == "" {
+		return "", false
+	}
+	switch raw[0] {
+	case '-':
+		neg, raw = true, raw[1:]
+	case '+':
+		raw = raw[1:]
+	}
+	return raw, neg
 }
 
 func digitsOnly(s string) bool {
@@ -146,12 +158,13 @@ func Format(minor int64, currency string) string {
 		minor = -minor
 	}
 	if exp == 0 {
-		return sign + strconv.FormatInt(minor, 10)
+		return sign + strconv.FormatInt(minor, decimalBase)
 	}
 	scale := Scale(currency)
 	whole, frac := minor/scale, minor%scale
-	return sign + strconv.FormatInt(whole, 10) + "." +
-		strings.Repeat("0", exp-len(strconv.FormatInt(frac, 10))) + strconv.FormatInt(frac, 10)
+	fracDigits := strconv.FormatInt(frac, decimalBase)
+	return sign + strconv.FormatInt(whole, decimalBase) + "." +
+		strings.Repeat("0", exp-len(fracDigits)) + fracDigits
 }
 
 // WithCode is the amount as a person reads it on a line of its own: "12.34 EUR".

@@ -45,6 +45,11 @@ type param struct {
 	isInt bool
 }
 
+// A plural call is the function name, the count, then one string per form.
+const pluralArgs = 2 + pluralForms
+
+const pluralForms = 3 // one, few, many
+
 const (
 	chunkText = iota
 	chunkField
@@ -53,9 +58,9 @@ const (
 
 type chunk struct {
 	kind  int
-	text  string    // chunkText
-	param string    // chunkField, chunkPlural
-	forms [3]string // chunkPlural
+	text  string              // chunkText
+	param string              // chunkField, chunkPlural
+	forms [pluralForms]string // chunkPlural
 }
 
 var (
@@ -228,7 +233,7 @@ func action(n *parse.ActionNode) (chunk, error) {
 		return chunk{kind: chunkField, param: f.Ident[0]}, nil
 	}
 	fn, ok := args[0].(*parse.IdentifierNode)
-	if !ok || fn.Ident != "plural" || len(args) != 5 {
+	if !ok || fn.Ident != "plural" || len(args) != pluralArgs {
 		return bad()
 	}
 	count, ok := args[1].(*parse.FieldNode)
@@ -236,7 +241,7 @@ func action(n *parse.ActionNode) (chunk, error) {
 		return bad()
 	}
 	c := chunk{kind: chunkPlural, param: count.Ident[0]}
-	for i := 0; i < 3; i++ {
+	for i := range pluralForms {
 		s, ok := args[2+i].(*parse.StringNode)
 		if !ok {
 			return bad()

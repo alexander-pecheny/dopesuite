@@ -6,6 +6,8 @@
 
 // Every ISO 4217 code whose exponent is NOT 2. Everything else is two decimal
 // places, so listing the exceptions keeps the table short and honest.
+const DECIMAL_BASE = 10;
+
 const EXPONENTS: Record<string, number> = {
   BIF: 0, CLP: 0, DJF: 0, GNF: 0, ISK: 0, JPY: 0, KMF: 0, KRW: 0, PYG: 0,
   RWF: 0, UGX: 0, UYI: 0, VND: 0, VUV: 0, XAF: 0, XOF: 0, XPF: 0,
@@ -21,7 +23,7 @@ export function exponentOf(currency: string): number {
 }
 
 export function scaleOf(currency: string): number {
-  return 10 ** exponentOf(currency);
+  return DECIMAL_BASE ** exponentOf(currency);
 }
 
 // formatMinor writes a count of minor units in the currency's own precision,
@@ -32,7 +34,7 @@ export function formatMinor(minor: number, currency: string): string {
   const sign = minor < 0 ? "-" : "";
   const abs = Math.abs(minor);
   if (exp === 0) return sign + String(abs);
-  const scale = 10 ** exp;
+  const scale = DECIMAL_BASE ** exp;
   const whole = Math.floor(abs / scale);
   const frac = abs % scale;
   return `${sign}${whole}.${String(frac).padStart(exp, "0")}`;

@@ -9,6 +9,10 @@
 import S from "./i18nstrings.js";
 import { claimOutcome, errorMessage, loginMethods, pollTelegram, tgStartView } from "./login-model";
 
+// How long a copied code shows its "copied" mark.
+const COPIED_FLASH_MS = 1000;
+const HTTP_NO_CONTENT = 204;
+
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
   if (!node) throw new Error(`login page is missing #${id}`);
@@ -143,7 +147,7 @@ function makeCopyable(el: HTMLElement): void {
       return;
     }
     el.classList.add("copied");
-    setTimeout(() => el.classList.remove("copied"), 1000);
+    setTimeout(() => el.classList.remove("copied"), COPIED_FLASH_MS);
   };
   el.addEventListener("click", () => void copy());
   el.addEventListener("keydown", (event) => {
@@ -264,7 +268,7 @@ async function fetchJSON(url: string, init?: RequestInit): Promise<unknown> {
     const text = (await response.text()).trim();
     throw new Error(text || `HTTP ${response.status}`);
   }
-  if (response.status === 204) return null;
+  if (response.status === HTTP_NO_CONTENT) return null;
   return response.json();
 }
 

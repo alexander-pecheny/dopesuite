@@ -19,6 +19,8 @@ import (
 	"pecheny.me/dopeuikit/ui/uigen"
 )
 
+const fileMode = 0o644
+
 func main() {
 	core := flag.String("core", "vocab.json", "core/base vocab.json path")
 	overlay := flag.String("overlay", "", "overlay vocab.json path (overlay mode)")
@@ -31,7 +33,7 @@ func main() {
 	if err != nil {
 		die(err)
 	}
-	if err := os.WriteFile(*out, src, 0o644); err != nil {
+	if err := os.WriteFile(*out, src, fileMode); err != nil {
 		die(err)
 	}
 }

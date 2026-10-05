@@ -25,6 +25,50 @@ import (
 //go:embed uchu.json sets.json
 var source embed.FS
 
+const (
+	RungsPerRamp = 9 // a ramp runs 1..9, light to dark
+	mixArity     = 3 // "mix": [from, to, t]
+	desatArity   = 2 // "desat": [ramp, k]
+
+	fullTurn = 360.0
+	halfTurn = 180.0
+
+	// sRGB transfer function (IEC 61966-2-1).
+	srgbLinearCutoff  = 0.0031308
+	srgbEncodedCutoff = 0.04045
+	srgbLinearSlope   = 12.92
+	srgbGammaScale    = 1.055
+	srgbGammaOffset   = 0.055
+	srgbGamma         = 2.4
+	channelMax        = 255 // one sRGB channel as a byte
+
+	// OKLab → LMS (Ottosson's M2 inverse). Each cone response is cubed.
+	lmsCube = 3
+	lFromA  = 0.3963377774
+	lFromB  = 0.2158037573
+	mFromA  = 0.1055613458
+	mFromB  = 0.0638541728
+	sFromA  = 0.0894841775
+	sFromB  = 1.2914855480
+
+	// LMS → linear sRGB (Ottosson's M1 inverse).
+	rFromL = 4.0767416621
+	rFromM = 3.3077115913
+	rFromS = 0.2309699292
+	gFromL = 1.2684380046
+	gFromM = 2.6097574011
+	gFromS = 0.3413193965
+	bFromL = 0.0041960863
+	bFromM = 0.7034186147
+	bFromS = 1.7076147010
+
+	// WCAG 2.1 relative luminance weights and the contrast ratio's flare term.
+	lumWeightR    = 0.2126
+	lumWeightG    = 0.7152
+	lumWeightB    = 0.0722
+	contrastFlare = 0.05
+)
+
 // Generated regions in a stylesheet, keyed by name so one generator can fill
 // several — the ramps in core.css, the sticker swatches in dope's layer. Both
 // palettegen (which writes them) and palette_test.go (which refuses to look for
@@ -290,7 +334,7 @@ func (c colorSpec) ramp() []OKLCH {
 	switch {
 	case c.Ramp != "":
 		return baseRamp(c.Ramp)
-	case len(c.Mix) == 3:
+	case len(c.Mix) == mixArity:
 		a, b := baseRamp(c.Mix[0].(string)), baseRamp(c.Mix[1].(string))
 		t := c.Mix[2].(float64)
 		out := make([]OKLCH, len(a))
@@ -302,7 +346,7 @@ func (c colorSpec) ramp() []OKLCH {
 			})
 		}
 		return out
-	case len(c.Desat) == 2:
+	case len(c.Desat) == desatArity:
 		a, k := baseRamp(c.Desat[0].(string)), c.Desat[1].(float64)
 		out := make([]OKLCH, len(a))
 		for i := range a {
@@ -314,7 +358,7 @@ func (c colorSpec) ramp() []OKLCH {
 }
 
 func baseRamp(hue string) []OKLCH {
-	out := make([]OKLCH, 9)
+	out := make([]OKLCH, RungsPerRamp)
 	for i := range out {
 		out[i] = Rung("base", hue, i+1)
 	}
@@ -324,8 +368,8 @@ func baseRamp(hue string) []OKLCH {
 // lerpHue walks the SHORT way round the wheel. Green to blue the long way is
 // through red, which is not a colour between them.
 func lerpHue(a, b, t float64) float64 {
-	d := math.Mod(b-a+540, 360) - 180
-	return math.Mod(a+d*t+360, 360)
+	d := math.Mod(b-a+fullTurn+halfTurn, fullTurn) - halfTurn
+	return math.Mod(a+d*t+fullTurn, fullTurn)
 }
 
 // fitGamut drops chroma until the rung fits sRGB, holding lightness and hue —
@@ -413,17 +457,17 @@ func Lookup(name string) OKLCH {
 // ---- colour maths: OKLCH → sRGB, and WCAG contrast ----------------------
 
 func linToSRGB(c float64) float64 {
-	if c <= 0.0031308 {
-		return c * 12.92
+	if c <= srgbLinearCutoff {
+		return c * srgbLinearSlope
 	}
-	return 1.055*math.Pow(c, 1/2.4) - 0.055
+	return srgbGammaScale*math.Pow(c, 1/srgbGamma) - srgbGammaOffset
 }
 
 func srgbToLin(c float64) float64 {
-	if c <= 0.04045 {
-		return c / 12.92
+	if c <= srgbEncodedCutoff {
+		return c / srgbLinearSlope
 	}
-	return math.Pow((c+0.055)/1.055, 2.4)
+	return math.Pow((c+srgbGammaOffset)/srgbGammaScale, srgbGamma)
 }
 
 func clamp(v float64) float64 { return math.Min(1, math.Max(0, v)) }
@@ -431,16 +475,15 @@ func clamp(v float64) float64 { return math.Min(1, math.Max(0, v)) }
 // linearRGB converts a rung to linear sRGB, unclamped — a channel outside 0..1
 // means the rung is outside the screen's gamut, which is what fitGamut reads.
 func (o OKLCH) linearRGB() (r, g, b float64) {
-	a := o.C * math.Cos(o.H*math.Pi/180)
-	bb := o.C * math.Sin(o.H*math.Pi/180)
+	a, bb := o.Lab()
 
-	l := math.Pow(o.L+0.3963377774*a+0.2158037573*bb, 3)
-	m := math.Pow(o.L-0.1055613458*a-0.0638541728*bb, 3)
-	s := math.Pow(o.L-0.0894841775*a-1.2914855480*bb, 3)
+	l := math.Pow(o.L+lFromA*a+lFromB*bb, lmsCube)
+	m := math.Pow(o.L-mFromA*a-mFromB*bb, lmsCube)
+	s := math.Pow(o.L-sFromA*a-sFromB*bb, lmsCube)
 
-	return +4.0767416621*l - 3.3077115913*m + 0.2309699292*s,
-		-1.2684380046*l + 2.6097574011*m - 0.3413193965*s,
-		-0.0041960863*l - 0.7034186147*m + 1.7076147010*s
+	return +rFromL*l - rFromM*m + rFromS*s,
+		-gFromL*l + gFromM*m - gFromS*s,
+		-bFromL*l - bFromM*m + bFromS*s
 }
 
 // Lab is the rung's position on the OKLab colour plane — chroma and hue as a
@@ -448,7 +491,7 @@ func (o OKLCH) linearRGB() (r, g, b float64) {
 // colours is this one nearest?" is asked in, since two rungs of the same hue are
 // the same colour at different lightnesses.
 func (o OKLCH) Lab() (a, b float64) {
-	r := o.H * math.Pi / 180
+	r := o.H * math.Pi / halfTurn
 	return o.C * math.Cos(r), o.C * math.Sin(r)
 }
 
@@ -475,7 +518,7 @@ func (o OKLCH) RGB() (r, g, b float64) {
 // pickers (which do their own contrast maths on hex).
 func (o OKLCH) Hex() string {
 	r, g, b := o.RGB()
-	return fmt.Sprintf("#%02x%02x%02x", round(r*255), round(g*255), round(b*255))
+	return fmt.Sprintf("#%02x%02x%02x", round(r*channelMax), round(g*channelMax), round(b*channelMax))
 }
 
 // CSS renders a rung as an oklch() function — what core.css carries, so the
@@ -504,7 +547,7 @@ func num(f float64) string {
 // Luminance is WCAG 2.1 relative luminance.
 func (o OKLCH) Luminance() float64 {
 	r, g, b := o.RGB()
-	return 0.2126*srgbToLin(r) + 0.7152*srgbToLin(g) + 0.0722*srgbToLin(b)
+	return lumWeightR*srgbToLin(r) + lumWeightG*srgbToLin(g) + lumWeightB*srgbToLin(b)
 }
 
 // Distance is how far apart two rungs are on the OKLab solid — lightness AND
@@ -524,5 +567,5 @@ func Contrast(a, b OKLCH) float64 {
 	if la < lb {
 		la, lb = lb, la
 	}
-	return (la + 0.05) / (lb + 0.05)
+	return (la + contrastFlare) / (lb + contrastFlare)
 }

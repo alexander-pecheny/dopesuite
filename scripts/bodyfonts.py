@@ -119,6 +119,22 @@ PINS = {
 # outside is interpolation the page can never ask for, and it is the bulk of a
 # variable font's deltas \u2014 the same cut core.css documents for Noto Sans.
 WEIGHTS = (400, 400, 700)
+REGULAR = 400  # the weight x-heights are measured at
+PERCENT = 100
+
+DOWNLOAD_TIMEOUT = 180  # seconds
+
+# OpenType name table ids that carry the family name.
+NAME_FAMILY = 1
+NAME_UNIQUE_ID = 3
+NAME_FULL = 4
+NAME_POSTSCRIPT = 6
+NAME_TYPO_FAMILY = 16
+
+# Optical sizes the faces are cut at, and Plex's default width.
+INTER_OPSZ = 14
+LITERATA_OPSZ = 12
+NORMAL_WIDTH = 100
 
 
 def fetch(name: str) -> bytes:
@@ -127,7 +143,7 @@ def fetch(name: str) -> bytes:
     if cache.exists():
         data = cache.read_bytes()
     else:
-        data = urllib.request.urlopen(url, timeout=180).read()
+        data = urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT).read()
         cache.parent.mkdir(exist_ok=True)
         cache.write_bytes(data)
     got = hashlib.sha256(data).hexdigest()
@@ -196,9 +212,9 @@ def rename(font: TTFont, old: str, new: str) -> None:
     joined_old, joined_new = old.replace(" ", ""), new.replace(" ", "")
     names = font["name"]
     for record in names.names:
-        if record.nameID in (1, 4, 16):
+        if record.nameID in (NAME_FAMILY, NAME_FULL, NAME_TYPO_FAMILY):
             value = str(record).replace(old, new)
-        elif record.nameID in (3, 6):
+        elif record.nameID in (NAME_UNIQUE_ID, NAME_POSTSCRIPT):
             value = str(record).replace(joined_old, joined_new)
         else:
             continue
@@ -245,7 +261,8 @@ def take(font: TTFont, donor: TTFont, name: str) -> int:
     return delta
 
 
-PAUSE, STOP = "uni23F8", 0x25A0
+PAUSE = "uni23F8"
+STOP = 0x25A0
 
 
 def settle_pause(font: TTFont) -> None:
@@ -285,7 +302,7 @@ def patch_inter(font: TTFont, italic: bool) -> str:
         # Raveo has no italics, and Inter's italic a is single-storey, so the
         # italic keeps Inter's a and takes only the 1 — through Inter's own cv01
         # above, which reaches the tabular and superscript forms Raveo never drew.
-        raveo = cut(fetch("RaveoVF.ttf"), {"opsz": 14, "wght": WEIGHTS})
+        raveo = cut(fetch("RaveoVF.ttf"), {"opsz": INTER_OPSZ, "wght": WEIGHTS})
         deltas = [take(font, raveo, name) for name in ("a", "one")]
         report += "  " + "  ".join(f"{n} {d:+d}" for n, d in zip(("a", "one"), deltas))
     rename(font, "InterVariable", "Inter")
@@ -352,7 +369,7 @@ FACES = (
     Face(
         id="inter-fix-ra",
         family="Inter Fix RA",
-        axes={"opsz": 14, "wght": WEIGHTS},
+        axes={"opsz": INTER_OPSZ, "wght": WEIGHTS},
         sources=lambda: (unzip("Inter-4.1.zip", "InterVariable.ttf"),
                          unzip("Inter-4.1.zip", "InterVariable-Italic.ttf")),
         patch=patch_inter,
@@ -364,7 +381,7 @@ FACES = (
     Face(
         id="ibm-plex-sans-fix",
         family="IBM Plex Sans Fix",
-        axes={"wdth": 100, "wght": WEIGHTS},
+        axes={"wdth": NORMAL_WIDTH, "wght": WEIGHTS},
         sources=lambda: (unzip("plex-sans-variable.zip", "ttf/IBM Plex Sans Var-Roman.ttf"),
                          unzip("plex-sans-variable.zip", "ttf/IBM Plex Sans Var-Italic.ttf")),
         patch=lambda font, italic: patch_plex(font, italic, "Sans"),
@@ -383,7 +400,7 @@ FACES = (
         # Literata's optical size runs 7..72 and defaults to 12, which is the
         # text end of it; a page of the suite is set at 13..17px and asks for
         # nothing else.
-        axes={"opsz": 12, "wght": WEIGHTS},
+        axes={"opsz": LITERATA_OPSZ, "wght": WEIGHTS},
         sources=lambda: (built("LiterataFix/LiterataFix[opsz,wght].ttf"),
                          built("LiterataFix/LiterataFix-Italic[opsz,wght].ttf")),
         patch=patch_literata,
@@ -437,7 +454,7 @@ def xheight(path: Path) -> float:
     Not OS/2.sxHeight, which a font may round, leave stale or not set at all: the
     ink is what a reader sees, so the ink is what is measured.
     """
-    font = instancer.instantiateVariableFont(TTFont(path), {"wght": 400}, updateFontNames=False)
+    font = instancer.instantiateVariableFont(TTFont(path), {"wght": REGULAR}, updateFontNames=False)
     glyphs = font.getGlyphSet()
     pen = BoundsPen(glyphs)
     glyphs[font.getBestCmap()[ord("x")]].draw(pen)
@@ -453,7 +470,7 @@ def size_adjust(path: Path) -> float:
     @font-face as `size-adjust`, and this prints it on every build so the
     stylesheet can be checked against the file it describes.
     """
-    return xheight(REFERENCE) / xheight(path) * 100
+    return xheight(REFERENCE) / xheight(path) * PERCENT
 
 
 def build(face: Face, model, pairs) -> None:

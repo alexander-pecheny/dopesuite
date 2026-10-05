@@ -15,6 +15,11 @@ import (
 	"pecheny.me/dopecore/webassets"
 )
 
+const (
+	readHeaderTimeout = 5 * time.Second
+	idleTimeout       = 120 * time.Second
+)
+
 // Spliff's deployed environment names its own production switch.
 func init() { session.ProdEnvVar = "SPLIFF_ENV" }
 
@@ -23,41 +28,14 @@ func init() { session.ProdEnvVar = "SPLIFF_ENV" }
 // existing database.
 func Main() {
 	if len(os.Args) > 1 {
-		switch cmd := os.Args[1]; cmd {
-		case "version":
-			fmt.Println(buildinfo.Version())
-		case "adduser":
-			runAddUser(os.Args[2:])
-		default:
-			log.Fatalf("unknown command %q (adduser, version)", cmd)
-		}
+		runCommand(os.Args[1], os.Args[2:])
 		return
 	}
 
-	if err := checkPublicURL(session.SecureCookies(), os.Getenv("SPLIFF_PUBLIC_URL")); err != nil {
-		log.Fatal(err)
-	}
-
-	srv, err := newServer()
-	if err != nil {
-		log.Fatal(err)
-	}
-	srv.assets, srv.pages = newAssets()
-	if err := srv.pages.Warm(pagePaths...); err != nil {
-		log.Fatal(err)
-	}
-
+	srv := mustServer()
 	mux := routes(srv)
 
-	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
-	if port == "" {
-		port = "9676"
-	}
-	addr := ":" + port
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("bind %s: %v", addr, err)
-	}
+	listener, addr := listen()
 
 	ctx := context.Background()
 	srv.startBot(ctx)
@@ -72,8 +50,50 @@ func Main() {
 
 	httpSrv := &http.Server{
 		Handler:           webassets.Gzip(mux),
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 	log.Fatal(httpSrv.Serve(listener))
+}
+
+// runCommand runs one maintenance subcommand.
+func runCommand(cmd string, args []string) {
+	switch cmd {
+	case "version":
+		fmt.Println(buildinfo.Version())
+	case "adduser":
+		runAddUser(args)
+	default:
+		log.Fatalf("unknown command %q (adduser, version)", cmd)
+	}
+}
+
+// listen binds the port named by $PORT, or spliff's default one.
+func listen() (net.Listener, string) {
+	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
+	if port == "" {
+		port = "9676"
+	}
+	addr := ":" + port
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("bind %s: %v", addr, err)
+	}
+	return listener, addr
+}
+
+// mustServer checks the environment, opens the server and warms its pages.
+func mustServer() *server {
+	if err := checkPublicURL(session.SecureCookies(), os.Getenv("SPLIFF_PUBLIC_URL")); err != nil {
+		log.Fatal(err)
+	}
+	srv, err := newServer()
+	if err != nil {
+		log.Fatal(err)
+	}
+	srv.assets, srv.pages = newAssets()
+	if err := srv.pages.Warm(pagePaths...); err != nil {
+		log.Fatal(err)
+	}
+	return srv
 }

@@ -26,6 +26,8 @@ import (
 	"strings"
 )
 
+const fileMode = 0o644
+
 type pathList []string
 
 func (p *pathList) String() string     { return strings.Join(*p, ",") }
@@ -71,10 +73,10 @@ func main() {
 	if *goPath != "" {
 		src, err := format.Source([]byte(renderGo(names, bodies)))
 		must(err)
-		must(os.WriteFile(*goPath, src, 0o644))
+		must(os.WriteFile(*goPath, src, fileMode))
 	}
 	for _, p := range tsPaths {
-		must(os.WriteFile(p, []byte(renderTS(names, bodies)), 0o644))
+		must(os.WriteFile(p, []byte(renderTS(names, bodies)), fileMode))
 	}
 	if *vocabPath != "" {
 		must(patchVocab(*vocabPath, names))
@@ -192,7 +194,7 @@ func patchVocab(path string, names []string) error {
 	if !json.Valid([]byte(out)) {
 		return fmt.Errorf("%s: splice produced invalid JSON", path)
 	}
-	return os.WriteFile(path, []byte(out), 0o644)
+	return os.WriteFile(path, []byte(out), fileMode)
 }
 
 func must(err error) {

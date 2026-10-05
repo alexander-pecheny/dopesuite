@@ -30,6 +30,15 @@ const RateSource = "https://open.er-api.com/v6/latest/USD"
 // would turn one bad hour into a rate-limit ban.
 const retryAfterFailure = 10 * time.Minute
 
+const (
+	rateFetchTimeout = 15 * time.Second
+	maxRateBody      = 4 << 20
+	day              = 24 * time.Hour
+	// afterMidnight is how long after a UTC midnight the daily fetch runs, to
+	// give the source time to publish.
+	afterMidnight = 5 * time.Minute
+)
+
 type rateService struct {
 	s      *server
 	client *http.Client
@@ -42,7 +51,7 @@ type rateService struct {
 
 func newRateService(s *server, client *http.Client) *rateService {
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = &http.Client{Timeout: rateFetchTimeout}
 	}
 	return &rateService{s: s, client: client, url: RateSource, now: time.Now}
 }
@@ -57,7 +66,7 @@ func (rs *rateService) Start(ctx context.Context) {
 	go func() {
 		for {
 			now := rs.now().UTC()
-			next := now.Truncate(24 * time.Hour).Add(24*time.Hour + 5*time.Minute)
+			next := now.Truncate(day).Add(day + afterMidnight)
 			select {
 			case <-ctx.Done():
 				return
@@ -125,7 +134,7 @@ func (rs *rateService) fetch(ctx context.Context) (map[string]string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("rates: %s answered %d", rs.url, resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRateBody))
 	if err != nil {
 		return nil, err
 	}

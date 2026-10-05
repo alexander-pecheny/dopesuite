@@ -22,6 +22,12 @@ const (
 	IntentHelp                       // text that is not a code: explain, no server round-trip
 )
 
+// A login code is 4 to 64 base32 characters.
+const (
+	minCodeLen = 4
+	maxCodeLen = 64
+)
+
 type Intent struct {
 	Kind IntentKind
 	Code string // set when Kind == IntentRegister
@@ -60,7 +66,7 @@ func classifyCode(raw string) Intent {
 
 // LooksLikeCode is the shape of a login code: base32 (A–Z, 2–7), 4–64 chars.
 func LooksLikeCode(s string) bool {
-	if len(s) < 4 || len(s) > 64 {
+	if len(s) < minCodeLen || len(s) > maxCodeLen {
 		return false
 	}
 	for _, r := range s {

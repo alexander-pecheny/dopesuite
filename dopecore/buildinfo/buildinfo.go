@@ -29,6 +29,9 @@ var Version = sync.OnceValue(func() string {
 	return describe(stamped, revision, modified)
 })
 
+// shortRevision is how many characters of a git hash a dev version shows.
+const shortRevision = 7
+
 func describe(stamped, revision string, modified bool) string {
 	if stamped != "" {
 		return stamped
@@ -36,7 +39,7 @@ func describe(stamped, revision string, modified bool) string {
 	if revision == "" {
 		return "dev"
 	}
-	out := "dev-" + revision[:min(7, len(revision))]
+	out := "dev-" + revision[:min(shortRevision, len(revision))]
 	if modified {
 		out += "-dirty"
 	}

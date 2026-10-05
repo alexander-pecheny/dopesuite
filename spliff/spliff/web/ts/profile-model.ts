@@ -9,6 +9,10 @@
 
 import S from "./i18nstrings.js";
 
+// The bot gets three minutes to answer: 120 polls, 1.5 s apart.
+const LINK_POLL_ATTEMPTS = 120;
+const LINK_POLL_INTERVAL_MS = 1500;
+
 export interface MeDTO {
   user_id: number;
   username?: string | null;
@@ -82,8 +86,8 @@ export async function pollLink(
   isCurrent: () => boolean,
   deps: LinkPollDeps,
 ): Promise<LinkOutcome> {
-  for (let i = 0; i < 120; i++) {
-    await deps.sleep(1500);
+  for (let i = 0; i < LINK_POLL_ATTEMPTS; i++) {
+    await deps.sleep(LINK_POLL_INTERVAL_MS);
     if (!isCurrent()) return { kind: "stale" };
     let status: LinkStatus;
     try {

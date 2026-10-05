@@ -193,7 +193,7 @@ func (c *Client) Do(method, target string, body any) *httptest.ResponseRecorder 
 func (c *Client) JSON(method, target string, body, out any) {
 	c.ts.t.Helper()
 	w := c.Do(method, target, body)
-	if w.Code < 200 || w.Code > 299 {
+	if w.Code < http.StatusOK || w.Code >= http.StatusMultipleChoices {
 		c.ts.t.Fatalf("%s %s = %d: %s", method, target, w.Code, w.Body.String())
 	}
 	if out == nil || w.Body.Len() == 0 {

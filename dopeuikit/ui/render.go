@@ -114,7 +114,7 @@ func printNode(b *strings.Builder, n Node, depth int) {
 		b.WriteString(indent(depth))
 		b.WriteString("<!-- ")
 		b.WriteString(v.Lines[0])
-		contIndent := strings.Repeat(" ", depth*2+5)
+		contIndent := strings.Repeat(" ", len(indent(depth))+len("<!-- "))
 		for _, line := range v.Lines[1:] {
 			b.WriteString("\n")
 			b.WriteString(contIndent)

@@ -24,6 +24,20 @@ import (
 
 const logLines = 2000
 
+const (
+	windowWidth  = 1080
+	windowHeight = 800
+
+	// Where the two dividers start, as a fraction of the window.
+	defaultSidebarSplit = 0.16
+	defaultLogSplit     = 0.6
+
+	// The CLI may print a long line (a whole question as JSON), so the
+	// scanner may grow its buffer well past bufio's default.
+	initialLineBuf = 64 << 10
+	maxLineBytes   = 4 << 20
+)
+
 type gui struct {
 	app   fyne.App
 	win   fyne.Window
@@ -49,7 +63,7 @@ type gui struct {
 func main() {
 	a := app.NewWithID("me.pecheny.chgksuite.gui")
 	w := a.NewWindow("chgksuite")
-	w.Resize(fyne.NewSize(1080, 800))
+	w.Resize(fyne.NewSize(windowWidth, windowHeight))
 	g := &gui{app: a, win: w, panes: map[string]*pane{}}
 
 	cli, err := findCLI()
@@ -99,8 +113,8 @@ func (g *gui) build() {
 	// The dividers start where the widest command name needs them and stay
 	// wherever they are dragged to.
 	prefs := g.app.Preferences()
-	split.Offset = prefs.FloatWithFallback("sidebar", 0.16)
-	right.Offset = prefs.FloatWithFallback("logsplit", 0.6)
+	split.Offset = prefs.FloatWithFallback("sidebar", defaultSidebarSplit)
+	right.Offset = prefs.FloatWithFallback("logsplit", defaultLogSplit)
 	g.win.SetOnClosed(func() {
 		prefs.SetFloat("sidebar", split.Offset)
 		prefs.SetFloat("logsplit", right.Offset)
@@ -257,7 +271,7 @@ func (g *gui) start() {
 
 	go func() {
 		scanner := bufio.NewScanner(read)
-		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		scanner.Buffer(make([]byte, 0, initialLineBuf), maxLineBytes)
 		for scanner.Scan() {
 			line := scanner.Text()
 			fyne.Do(func() { g.appendLine(line) })

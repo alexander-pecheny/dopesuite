@@ -25,6 +25,13 @@ import (
 	"pecheny.me/dopeuikit/palette"
 )
 
+const (
+	fileMode = 0o644
+	// legacyLabelRung is the pastel rung the label picker offered as a raw hex
+	// before labels were named.
+	legacyLabelRung = 5
+)
+
 type pathList []string
 
 func (p *pathList) String() string     { return strings.Join(*p, ",") }
@@ -86,7 +93,7 @@ func fillRegions(path string, regions map[string]func() string) error {
 	if string(src) == body {
 		return nil
 	}
-	return os.WriteFile(path, []byte(body), 0o644)
+	return os.WriteFile(path, []byte(body), fileMode)
 }
 
 // ramps emits every rung of both variants. All 164 ship, not just the ones a
@@ -105,7 +112,7 @@ func ramps() string {
 		}
 		for _, hue := range palette.Hues(variant) {
 			b.WriteByte('\n')
-			for n := 1; n <= 9; n++ {
+			for n := 1; n <= palette.RungsPerRamp; n++ {
 				fmt.Fprintf(&b, "  --uchu-%s%s-%d: %s;\n", prefix, hue, n, palette.Rung(variant, hue, n).CSS())
 			}
 		}
@@ -185,7 +192,7 @@ func tsSets(only []string) string {
 	b.WriteString("\n/** Hex → name for labels stored before the palette was named. */\n")
 	b.WriteString("export const LEGACY_LABEL_HEX: Readonly<Record<string, string>> = {\n")
 	for _, hue := range []string{"red", "orange", "yellow", "green", "blue", "purple", "pink", "gray"} {
-		fmt.Fprintf(&b, "  %q: %q,\n", palette.Rung("pastel", hue, 5).Hex(), hue)
+		fmt.Fprintf(&b, "  %q: %q,\n", palette.Rung("pastel", hue, legacyLabelRung).Hex(), hue)
 	}
 	b.WriteString("};\n")
 	// Each name's position on the OKLab colour plane, so a hex the palette does
@@ -221,7 +228,7 @@ func exported(s string) string {
 }
 
 func write(path, body string) {
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), fileMode); err != nil {
 		die(err)
 	}
 }

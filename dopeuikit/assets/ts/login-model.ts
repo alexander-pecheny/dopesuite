@@ -4,6 +4,10 @@
 
 import S from "./i18nstrings.js";
 
+// The bot gets three minutes to answer: 120 polls, 1.5 s apart.
+const TG_POLL_ATTEMPTS = 120;
+const TG_POLL_INTERVAL_MS = 1500;
+
 export type LoginStep = "method" | "code" | "username" | "link" | "password";
 
 export interface TgStartView {
@@ -69,8 +73,8 @@ export interface TgPollDeps {
 // errors are transient (keep polling); a code restarted mid-poll goes stale
 // silently so the old loop can't clobber the new code's messages.
 export async function pollTelegram(code: string, isCurrent: () => boolean, deps: TgPollDeps): Promise<PollOutcome> {
-  for (let i = 0; i < 120; i++) {
-    await deps.sleep(1500);
+  for (let i = 0; i < TG_POLL_ATTEMPTS; i++) {
+    await deps.sleep(TG_POLL_INTERVAL_MS);
     if (!isCurrent()) return { kind: "stale" };
     let st: { status?: string };
     try {

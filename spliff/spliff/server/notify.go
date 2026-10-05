@@ -2,13 +2,17 @@ package spliffserver
 
 import (
 	"context"
-	"strconv"
 	"time"
+
+	"pecheny.me/dopecore/idstr"
 
 	"spliff/spliff/storage/store"
 
 	spliffstrings "spliff/i18nstrings"
 )
+
+// noticeTimeout bounds one notification: the lookups and the send.
+const noticeTimeout = 10 * time.Second
 
 // Spliff sends exactly three telegram DMs, and there is no settings page for
 // them (spliff/docs/spec-v1.md):
@@ -26,11 +30,11 @@ import (
 // groupLink is where a DM points. It is built from SPLIFF_PUBLIC_URL, which is
 // required outside development precisely so that this cannot be a guess.
 func groupLink(groupID int64) string {
-	return publicURL() + "/group/" + strconv.FormatInt(groupID, 10)
+	return publicURL() + "/group/" + idstr.Format(groupID)
 }
 
 func transactionLink(txID int64) string {
-	return publicURL() + "/transaction/" + strconv.FormatInt(txID, 10)
+	return publicURL() + "/transaction/" + idstr.Format(txID)
 }
 
 // notifyJoinRequest is rule 1. Nothing waits for it: the Owner's Invite Links
@@ -40,7 +44,7 @@ func (s *server) notifyJoinRequest(groupID, requesterID int64) {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), noticeTimeout)
 		defer cancel()
 		group, err := store.GroupByID(ctx, s.db, groupID)
 		if err != nil {
@@ -81,7 +85,7 @@ func (s *server) notifyTransaction(n transactionNotice) {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), noticeTimeout)
 		defer cancel()
 
 		tx, err := store.TransactionByID(ctx, s.db, n.TxID)

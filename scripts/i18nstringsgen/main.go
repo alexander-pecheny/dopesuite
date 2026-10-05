@@ -17,6 +17,8 @@ import (
 // written in; a module whose UI is in another one passes -default-lang.
 const fallbackLang = "ru"
 
+const fileMode = 0o644
+
 func main() {
 	dir := flag.String("dir", "", "catalog and Go output directory, relative to the repo root")
 	ts := flag.String("ts", "", "TypeScript output directory, relative to the repo root")
@@ -86,7 +88,7 @@ func generate(dir, ts, defLang string, unused bool) error {
 		}
 	}
 	for path, body := range files {
-		if err := os.WriteFile(path, body, 0o644); err != nil {
+		if err := os.WriteFile(path, body, fileMode); err != nil {
 			return err
 		}
 	}

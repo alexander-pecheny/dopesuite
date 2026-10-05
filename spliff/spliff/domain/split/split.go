@@ -15,6 +15,9 @@ import (
 	"sort"
 )
 
+// percentWhole is the whole bill, in percent.
+const percentWhole = 100
+
 // Share is one Member's computed part of a derived split.
 type Share struct {
 	MemberID int64
@@ -51,6 +54,7 @@ func ByPercent(total int64, members []int64, percents []*big.Rat, payers []int64
 	if len(percents) != len(members) {
 		return nil, ErrWeights
 	}
+	whole := big.NewRat(percentWhole, 1)
 	sum := new(big.Rat)
 	weights := make([]*big.Rat, len(percents))
 	for i, p := range percents {
@@ -58,9 +62,9 @@ func ByPercent(total int64, members []int64, percents []*big.Rat, payers []int64
 			return nil, ErrPercent
 		}
 		sum.Add(sum, p)
-		weights[i] = new(big.Rat).Quo(p, big.NewRat(100, 1))
+		weights[i] = new(big.Rat).Quo(p, whole)
 	}
-	if sum.Cmp(big.NewRat(100, 1)) > 0 {
+	if sum.Cmp(whole) > 0 {
 		return nil, ErrPercent
 	}
 	return Allocate(total, members, weights, payers)

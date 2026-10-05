@@ -9,6 +9,11 @@ import (
 	"github.com/ncruces/zenity"
 )
 
+const (
+	pickerWidth  = 880
+	pickerHeight = 620
+)
+
 // Choosing a file goes through the system's own panel: the one people know,
 // and the only one that takes several files at once. zenity draws it with
 // osascript on macOS and the Win32 dialogs on Windows, both of which are always
@@ -130,5 +135,5 @@ func (g *gui) openDialog(d *dialog.FileDialog) {
 		}
 	}
 	d.Show()
-	d.Resize(fyne.NewSize(880, 620))
+	d.Resize(fyne.NewSize(pickerWidth, pickerHeight))
 }

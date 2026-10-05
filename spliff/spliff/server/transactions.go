@@ -42,6 +42,40 @@ type transactionRequest struct {
 	Shares      []entryRequest `json:"shares"`
 }
 
+// validateHeader checks everything but the entries, and returns the
+// description and currency in their stored form.
+func validateHeader(req transactionRequest) (description, currency string, err error) {
+	str := spliffstrings.Default
+	description = strings.TrimSpace(req.Description)
+	if description == "" {
+		return "", "", corei18n.User(str.Transaction.Error.DescriptionRequired())
+	}
+	if len([]rune(description)) > MaxDescriptionRunes {
+		return "", "", corei18n.User(str.Transaction.Error.DescriptionTooLong())
+	}
+	if _, err := time.Parse(rates.DayFormat, req.Day); err != nil {
+		return "", "", corei18n.User(str.Transaction.Error.DayInvalid())
+	}
+	currency = money.Normalise(req.Currency)
+	if !money.ValidCode(currency) {
+		return "", "", corei18n.User(str.Transaction.Error.CurrencyInvalid())
+	}
+	if req.TotalMinor <= 0 {
+		return "", "", corei18n.User(str.Transaction.Error.TotalPositive())
+	}
+	return description, currency, nil
+}
+
+// memberRowIDs is the set every Payment and Share must name from: current
+// MEMBER ROWS, which is what lets a Phantom hold one.
+func memberRowIDs(members []store.Member) map[int64]bool {
+	current := map[int64]bool{}
+	for _, m := range members {
+		current[m.ID] = true
+	}
+	return current
+}
+
 // validate is the whole rule set, in the order a person would hit it. Every
 // refusal is a User Error naming the number that is wrong, because "the shares
 // do not add up" sends somebody hunting and "12.00 is left to claim" does not.
@@ -49,31 +83,12 @@ func validate(req transactionRequest, members []store.Member) (store.Write, erro
 	str := spliffstrings.Default
 	out := store.Write{}
 
-	description := strings.TrimSpace(req.Description)
-	if description == "" {
-		return out, corei18n.User(str.Transaction.Error.DescriptionRequired())
-	}
-	if len([]rune(description)) > MaxDescriptionRunes {
-		return out, corei18n.User(str.Transaction.Error.DescriptionTooLong())
-	}
-	if _, err := time.Parse(rates.DayFormat, req.Day); err != nil {
-		return out, corei18n.User(str.Transaction.Error.DayInvalid())
-	}
-	currency := money.Normalise(req.Currency)
-	if !money.ValidCode(currency) {
-		return out, corei18n.User(str.Transaction.Error.CurrencyInvalid())
-	}
-	if req.TotalMinor <= 0 {
-		return out, corei18n.User(str.Transaction.Error.TotalPositive())
+	description, currency, err := validateHeader(req)
+	if err != nil {
+		return out, err
 	}
 
-	// Every Payment and Share names a current MEMBER ROW — which is what lets a
-	// Phantom hold one.
-	current := map[int64]bool{}
-	for _, m := range members {
-		current[m.ID] = true
-	}
-
+	current := memberRowIDs(members)
 	payments, paid, err := checkEntries(req.Payments, current, currency, false)
 	if err != nil {
 		return out, err
@@ -216,23 +231,30 @@ func (s *server) handleCreateTransaction(w http.ResponseWriter, r *http.Request,
 	return writeJSON(w, map[string]any{"id": id})
 }
 
+// checkEdit loads the Transaction an edit replaces and validates the edit
+// against the Group's current Members.
+func (s *server) checkEdit(ctx context.Context, sc route.Scope, req transactionRequest) (store.Transaction, store.Write, error) {
+	before, err := store.TransactionByID(ctx, s.db, sc.TxID)
+	if err != nil {
+		return before, store.Write{}, notFound(err)
+	}
+	if before.Deleted() {
+		return before, store.Write{}, corei18n.User(spliffstrings.Default.Transaction.Error.Deleted())
+	}
+	members, err := store.Members(ctx, s.db, sc.GroupID)
+	if err != nil {
+		return before, store.Write{}, err
+	}
+	write, err := validate(req, members)
+	return before, write, err
+}
+
 func (s *server) handleUpdateTransaction(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	var req transactionRequest
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	before, err := store.TransactionByID(r.Context(), s.db, sc.TxID)
-	if err != nil {
-		return notFound(err)
-	}
-	if before.Deleted() {
-		return corei18n.User(spliffstrings.Default.Transaction.Error.Deleted())
-	}
-	members, err := store.Members(r.Context(), s.db, sc.GroupID)
-	if err != nil {
-		return err
-	}
-	write, err := validate(req, members)
+	before, write, err := s.checkEdit(r.Context(), sc, req)
 	if err != nil {
 		return err
 	}
@@ -330,6 +352,14 @@ func (s *server) handleGetTransaction(w http.ResponseWriter, r *http.Request, sc
 		},
 		Members: memberDTOs(members),
 	}
+	if err := s.fillTransactionView(ctx, &out, t, g, names, actors); err != nil {
+		return err
+	}
+	return writeJSON(w, out)
+}
+
+// fillTransactionView writes the Transaction itself and its History.
+func (s *server) fillTransactionView(ctx context.Context, out *transactionViewDTO, t store.Transaction, g store.Group, names, actors map[int64]string) error {
 	book, err := s.rates.Book(ctx)
 	if err != nil {
 		return err
@@ -337,12 +367,12 @@ func (s *server) handleGetTransaction(w http.ResponseWriter, r *http.Request, sc
 	if out.Transaction, err = s.transactionDTO(t, g, book, names, actors); err != nil {
 		return err
 	}
-	history, err := store.TransactionHistory(ctx, s.db, sc.TxID)
+	history, err := store.TransactionHistory(ctx, s.db, t.ID)
 	if err != nil {
 		return err
 	}
 	out.History = historyDTOs(history, actors, map[int64]string{t.ID: t.Description})
-	return writeJSON(w, out)
+	return nil
 }
 
 // groupOfTransaction is what the dispatcher resolves a {tx} through. It answers
