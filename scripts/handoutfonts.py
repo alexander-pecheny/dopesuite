@@ -23,6 +23,9 @@ The upstream zip and the fonts-fixing commit are pinned, so a rerun is
 byte-stable. Run from the repo root:
 
     uv run scripts/handoutfonts.py
+
+The .docx template embeds the same four faces: after a rebuild, run
+docxfonts.py to put them there too.
 """
 
 from __future__ import annotations
