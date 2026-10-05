@@ -114,6 +114,9 @@ order by position, id`, stageArgs...)
 			if err != nil {
 				return store.FestView{}, err
 			}
+			if err := fillDrawOptions(ctx, q, matches); err != nil {
+				return store.FestView{}, err
+			}
 			record.Stage.Matches = matches
 			// A Kind that ranks keeps its own table — the grid draws a Group as
 			// place against team, the way the sheets do, and the Matches stay for the
@@ -129,4 +132,22 @@ order by position, id`, stageArgs...)
 		view.Stages = append(view.Stages, record.Stage)
 	}
 	return view, nil
+}
+
+// fillDrawOptions says, for every Draw Slot of the bouts, whom the host may
+// seat in it: its candidates, and its substitutes once those are known.
+func fillDrawOptions(ctx context.Context, q store.Queryer, matches []store.FestMatchView) error {
+	for _, match := range matches {
+		for _, team := range match.Participants {
+			if team.Draw == nil {
+				continue
+			}
+			var err error
+			team.Draw.Candidates, team.Draw.Substitutes, err = resolver.DrawOptions(ctx, q, match.GameID, match.ID, team.Draw.Draw)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

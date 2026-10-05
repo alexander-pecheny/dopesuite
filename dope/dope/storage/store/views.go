@@ -190,6 +190,10 @@ type FestMatchView struct {
 	// StartsAt is when the bout starts, as the host typed it ("10:30"), or "".
 	StartsAt     string                    `json:"startsAt,omitempty"`
 	Participants []MatchParticipantSummary `json:"participants"`
+	// ID and GameID are the bout's row and its Game's, for the readers that
+	// fill in what its seats may hold (domain/festview, the Draw options).
+	ID     int64 `json:"-"`
+	GameID int64 `json:"-"`
 }
 
 type MatchParticipantSummary struct {
@@ -218,6 +222,8 @@ type DrawSlotView struct {
 	// out: the teams of the same tables that went through on no place. They
 	// are listed only once Candidates are.
 	Substitutes []DrawCandidateView `json:"substitutes,omitempty"`
+	// Draw is the Slot's declared Draw, which resolver.DrawOptions reads.
+	Draw *SchemeDraw `json:"-"`
 }
 
 type DrawCandidateView struct {

@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"dope/dope/domain/core"
-	"dope/dope/storage/store"
+	"dope/dope/domain/matchedit"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
 
@@ -110,34 +110,12 @@ func (s *server) scopedMatchStartsAt(w http.ResponseWriter, r *http.Request, sc 
 func (s *server) setStartsAt(ctx context.Context, mscope matchScope, at string, wave bool) ([]matchScope, int64, error) {
 	var targets []matchScope
 	revision, err := s.eng.CommitFestWrite(ctx, mscope.FestID, "match-starts-at", func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
-		where := `m.id = ?`
-		args := []any{mscope.MatchID}
-		if wave {
-			// The bouts of one wave: the same block, round and wave of this Game.
-			// A bout with no round of its own has only its stage to go by.
-			where = `m.game_id = ? and exists (
-  select 1 from matches o join stages os on os.id = o.stage_id
-  where o.id = ? and (
-    (o.round > 0 and os.block_code = s.block_code and o.round = m.round and o.wave = m.wave)
-    or (o.round = 0 and o.stage_id = m.stage_id)))`
-			args = []any{mscope.GameID, mscope.MatchID}
-		}
-		var err error
-		targets, err = store.CollectRows(ctx, tx, `
-select m.id, m.code from matches m join stages s on s.id = m.stage_id
-where `+where+` and coalesce(m.starts_at, '') != ?
-order by m.position, m.id`, append(args, at), func(rows *sql.Rows) (matchScope, error) {
-			bout := matchScope{festScope: festScope{FestID: mscope.FestID, GameID: mscope.GameID}}
-			return bout, rows.Scan(&bout.MatchID, &bout.Code)
-		})
+		changed, err := matchedit.SetStartsAtTx(ctx, tx, mscope.festScope, mscope.MatchID, at, wave)
 		if err != nil {
 			return core.FestWrite{}, err
 		}
-		for _, bout := range targets {
-			if _, err := tx.ExecContext(ctx, `
-update matches set starts_at = ?, revision = revision + 1 where id = ?`, nullableString(at), bout.MatchID); err != nil {
-				return core.FestWrite{}, err
-			}
+		for _, bout := range changed {
+			targets = append(targets, matchScope{festScope: mscope.festScope, MatchID: bout.ID, Code: bout.Code})
 		}
 		payload := map[string]any{"code": mscope.Code, "time": at}
 		if wave {
@@ -146,11 +124,4 @@ update matches set starts_at = ?, revision = revision + 1 where id = ?`, nullabl
 		return core.FestWrite{Event: "match:starts-at", Payload: payload}, nil
 	})
 	return targets, revision, err
-}
-
-func nullableString(value string) any {
-	if value == "" {
-		return nil
-	}
-	return value
 }

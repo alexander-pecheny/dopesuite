@@ -160,3 +160,24 @@ was called by nothing but its own test.
   15 and in Хамса as 15.5, and a page writes "15–16".
 - Тройка's `places()` is deleted. Its page draws the places the bout's view
   carries.
+
+## 7. The Draw and Wave rules live in the domain, over facts
+
+Who an admin may seat in a Draw Slot as a substitute, and the cut-off of
+drawn ranks behind it, were SQL inside `store`'s fest-view builder. What
+counts as "the same Wave" for a start time was a SQL predicate inside an HTTP
+handler. Both were reachable only through `server/tests`.
+
+- `resolver/drawrules.go` holds the Draw rules (`drawCandidates`,
+  `drawSubstitutes`) over a `DrawFacts` seam: the places finished bouts
+  dealt, the stages' tables and which of them are played out, the Draws the
+  Game declares, and who already sits in a stage. `sqlDrawFacts` is the
+  database adapter and the tests give the facts by hand, so the seam has two
+  adapters. `resolver.DrawOptions` answers both lists. `domain/festview`
+  calls it for every Draw Slot of the view, which is why `store` now carries
+  the Slot's `Draw` and the bout's ids on the view without resolving
+  anything.
+- `matchedit.SameWave` is the Wave rule (the same Block, Round and Wave, or
+  the same stage for a bout with no Round), and `matchedit.SetStartsAtTx`
+  writes a start time on a bout or on its Wave. The handler only commits
+  and broadcasts.

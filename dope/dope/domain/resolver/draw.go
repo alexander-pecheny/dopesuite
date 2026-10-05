@@ -45,7 +45,7 @@ func Draws(ctx context.Context, q store.Queryer, gameID int64) ([]Draw, error) {
 	}
 	out := make([]Draw, 0, len(rows))
 	for _, row := range rows {
-		candidates, err := store.LoadDrawCandidates(ctx, q, gameID, row.draw)
+		candidates, err := drawCandidates(sqlDrawFacts{ctx: ctx, q: q, gameID: gameID}, row.draw)
 		if err != nil {
 			return nil, err
 		}
@@ -158,15 +158,8 @@ func sameRound(a, b drawSlotRow) bool {
 // A substitute keeps its table as its source, so a Slot set Apart refuses one
 // from the table of the team it would meet just as it refuses a candidate.
 func slotOptions(ctx context.Context, q store.Queryer, gameID int64, slot drawSlotRow) ([]store.DrawCandidateView, error) {
-	candidates, err := store.LoadDrawCandidates(ctx, q, gameID, slot.draw)
-	if err != nil || len(candidates) == 0 {
-		return candidates, err
-	}
-	substitutes, err := store.LoadDrawSubstitutes(ctx, q, gameID, slot.matchID, slot.draw)
-	if err != nil {
-		return nil, err
-	}
-	return append(candidates, substitutes...), nil
+	candidates, substitutes, err := DrawOptions(ctx, q, gameID, slot.matchID, slot.draw)
+	return append(candidates, substitutes...), err
 }
 
 // drawnFromSource reports whether another drawn seat of the slot's Match

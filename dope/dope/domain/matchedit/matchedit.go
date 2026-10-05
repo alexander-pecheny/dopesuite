@@ -281,3 +281,69 @@ func PatchGameTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, ops []ed
 	}
 	return next, revision, nil
 }
+
+// Bout is a bout's place in the schedule, as the Wave rule reads it: its
+// stage, its Block, its Round and its Wave (CONTEXT.md).
+type Bout struct {
+	ID      int64
+	Code    string
+	StageID int64
+	Block   string
+	Round   int
+	Wave    int
+}
+
+// SameWave reports whether two bouts are played in one Wave: the same Block,
+// Round and Wave. A bout with no Round of its own, a flat Block's sitting,
+// has only its stage to go by.
+func SameWave(a, b Bout) bool {
+	if a.Round == 0 {
+		return a.StageID == b.StageID
+	}
+	return a.Block == b.Block && a.Round == b.Round && a.Wave == b.Wave
+}
+
+// SetStartsAtTx writes when a bout starts, as the host typed it, or on its
+// whole Wave when wave is set, and returns the bouts whose time it changed.
+// An empty at clears the time.
+func SetStartsAtTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64, at string, wave bool) ([]Bout, error) {
+	type row struct {
+		bout Bout
+		at   string
+	}
+	rows, err := store.CollectRows(ctx, tx, `
+select m.id, m.code, m.stage_id, coalesce(s.block_code, ''), m.round, m.wave, coalesce(m.starts_at, '')
+from matches m join stages s on s.id = m.stage_id
+where m.game_id = ? order by m.position, m.id`, []any{scope.GameID}, func(rows *sql.Rows) (row, error) {
+		var r row
+		return r, rows.Scan(&r.bout.ID, &r.bout.Code, &r.bout.StageID, &r.bout.Block, &r.bout.Round, &r.bout.Wave, &r.at)
+	})
+	if err != nil {
+		return nil, err
+	}
+	var target *Bout
+	for i := range rows {
+		if rows[i].bout.ID == matchID {
+			target = &rows[i].bout
+		}
+	}
+	if target == nil {
+		return nil, sql.ErrNoRows
+	}
+	var changed []Bout
+	for _, r := range rows {
+		inScope := r.bout.ID == matchID || (wave && SameWave(*target, r.bout))
+		if !inScope || r.at == at {
+			continue
+		}
+		var value any
+		if at != "" {
+			value = at
+		}
+		if _, err := tx.ExecContext(ctx, `update matches set starts_at = ?, revision = revision + 1 where id = ?`, value, r.bout.ID); err != nil {
+			return nil, err
+		}
+		changed = append(changed, r.bout)
+	}
+	return changed, nil
+}
