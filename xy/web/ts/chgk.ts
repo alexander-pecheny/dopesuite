@@ -1150,6 +1150,39 @@ function ownsLine(t: string, start: number, end: number): boolean {
   return t.slice(lineStart, start).trim() === "" && t.slice(end, lineEnd).trim() === "";
 }
 
+// A stretch of question text, or a handout cut out of it.
+export type HandoutPiece = { kind: "text"; text: string } | { kind: "handout"; label: string; text: string };
+
+// splitHandouts cuts question text at the handouts that stand on lines of their
+// own (chgksuite's split_handouts, inline.SplitHandouts in Go): the exports set
+// such a handout apart as a captioned box, and so does the preview. One in the
+// middle of a sentence stays text, and so does a bracket with nothing after its
+// label. The text pieces lose only the line breaks that separated them from
+// the handouts; text with no such handout comes back as the one piece it is.
+export function splitHandouts(s: string): HandoutPiece[] {
+  const pieces: HandoutPiece[] = [];
+  let prev = 0;
+  for (const [start, end, body] of bracketSpans(s)) {
+    const colon = body.indexOf(":");
+    if (!isHandoutBody(body) || colon < 0 || !ownsLine(s, start, end)) continue;
+    const text = body.slice(colon + 1).trim();
+    if (!text) continue;
+    pieces.push({ kind: "text", text: s.slice(prev, start) }, { kind: "handout", label: body.slice(0, colon).trim(), text });
+    prev = end;
+  }
+  if (!pieces.length) return [{ kind: "text", text: s }];
+  pieces.push({ kind: "text", text: s.slice(prev) });
+  const out: HandoutPiece[] = [];
+  pieces.forEach((p, i) => {
+    if (p.kind === "handout") { out.push(p); return; }
+    let t = p.text;
+    if (i > 0) t = t.replace(/^[ \t]*\n/, "");
+    if (i < pieces.length - 1) t = t.replace(/\n[ \t]*$/, "");
+    if (t.trim()) out.push({ kind: "text", text: t });
+  });
+  return out;
+}
+
 // composeInlineHandout renders the handout field as the inline question-text
 // bracket. A handout on its own line takes the block form, label and closing
 // bracket each on a line of their own, which is how the exporters set it apart
@@ -1316,5 +1349,5 @@ export const xyChgk = {
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
   splitFields, composeFields, parseHandoutBlock, authorBlock, composeAuthors, AUTHOR_LABELS,
-  copyTargets, QUESTION_LABELS, fieldCaption, fieldKeepsBrackets,
+  copyTargets, QUESTION_LABELS, fieldCaption, fieldKeepsBrackets, splitHandouts,
 };

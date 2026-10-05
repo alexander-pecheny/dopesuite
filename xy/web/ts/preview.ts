@@ -9,7 +9,7 @@ import { xyApp } from "./app.js";
 import { xyChgk } from "./chgk.js";
 import { splitTheme } from "./themes.js";
 import S from "./i18nstrings.js";
-import type { ScreenValue } from "./chgk.js";
+import type { HandoutPiece, ScreenValue } from "./chgk.js";
 import type { BoardCard } from "./unlock.js";
 
 const { el } = xyApp;
@@ -126,6 +126,14 @@ function pvField(field: string, text: string, imgMap: Map<string, string>, scree
   return node;
 }
 
+// pvHandoutBox is a handout set apart from its question, as the exports set it:
+// a small caption tight above the handout in a frame.
+function pvHandoutBox(label: string, text: string, imgMap: Map<string, string>, screen: boolean): HTMLElement {
+  const frame = el("div", { class: "pv-handout-frame" });
+  frame.append(renderFieldBody(text, imgMap, fieldOpts("handout", screen)));
+  return el("div", { class: "pv-handout-box u-col" }, el("div", { class: "pv-handout-caption", text: label }), frame);
+}
+
 // renderPreviewCard renders one card the way the docx export would: a question
 // card becomes a numbered question with its answer/zachet/etc.; meta/heading/
 // section/editor/date cards become their corresponding paragraphs/headings.
@@ -136,19 +144,33 @@ function pvField(field: string, text: string, imgMap: Map<string, string>, scree
 function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: Map<string, string>, screen: boolean, edit?: (card: BoardCard) => HTMLElement, bareNumber?: boolean): HTMLElement {
   const find = (t: string): { type: string; text: string } | undefined => xyChgk.parseBlocks(desc).find((b) => b.type === t);
   const wrap = el("article", { class: "pv-q", dataset: { cardId: card.id } });
-  const handout = find("handout");
-  if (handout) wrap.append(pvField("handout", handout.text, imgMap, screen, "pv-handout"));
   // Question line: small inline ✏️ (edit lists only) + bold "Question N." label
   // (overridable) + question text (which may itself be a blitz/duplet list).
   const qov = xyChgk.applyOverride(xyChgk.questionText(desc));
   // A rung of a theme is labelled by its bare point value, the way si_mode sets
   // it; an OD question by its «question N» label.
   const qLabel = bareNumber ? "" : qov.label || S.chgk.label.question();
-  const qline = el("div", { class: "pv-q-text" });
+  let qline = el("div", { class: "pv-q-text" });
   if (edit) qline.append(edit(card as BoardCard));
   qline.append(el("strong", { class: "pv-label", text: `${qLabel}${number ? (qLabel ? " " : "") + number : ""}. ` }));
-  qline.append(renderFieldBody(qov.text, imgMap, fieldOpts("question", screen)));
   wrap.append(qline);
+  // The handouts are set apart as the exports set them (question_pieces): the
+  // legacy "> " field first, then the ones the text holds on lines of their own.
+  const pieces: HandoutPiece[] = [];
+  const handout = find("handout");
+  if (handout) pieces.push({ kind: "handout", label: S.chgk.label.handout(), text: handout.text });
+  pieces.push(...xyChgk.splitHandouts(qov.text));
+  let fresh = false; // qline holds only the label: the text after a box opens a new one
+  for (const p of pieces) {
+    if (p.kind === "handout") {
+      wrap.append(pvHandoutBox(p.label, p.text, imgMap, screen));
+      qline = el("div", { class: "pv-q-text" });
+      fresh = true;
+      continue;
+    }
+    if (fresh) { wrap.append(qline); fresh = false; }
+    qline.append(renderFieldBody(p.text, imgMap, fieldOpts("question", screen)));
+  }
   for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
     const b = find(f);
     if (b) wrap.append(pvField(f, b.text, imgMap, screen, pvSmallCls(f)));

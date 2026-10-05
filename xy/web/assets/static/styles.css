@@ -1200,7 +1200,12 @@
 .pv-list-item { display: flex; gap: 0.4em; margin-bottom: var(--space-0-5); }
 .pv-list-num { flex: 0 0 auto; font-weight: var(--fw-regular); }
 .pv-list-body { min-width: 0; flex: 1; overflow-wrap: anywhere; }
-.pv-handout { color: var(--muted); }
+/* A handout set apart from its question, as the .docx/.pdf set it: the caption
+   at the source size, tight above a 1px frame, its text lined up with the
+   handout's. The box keeps the question lines' own rhythm (.pv-q-text). */
+.pv-handout-box { gap: var(--space-0-5); margin-bottom: var(--space-2); }
+.pv-handout-caption { font-size: calc(10em / 12); padding-left: calc(var(--space-2) + 1px); }
+.pv-handout-frame { border: 1px solid currentColor; padding: var(--space-1) var(--space-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 /* sources/authors set smaller, matching the exports' 12pt → 10pt. The block after
    a body-size one starts one BODY line below, not one small line: the lost height
    is 1.55 × (2/12) body-em = 0.31 of the small block's own em. */

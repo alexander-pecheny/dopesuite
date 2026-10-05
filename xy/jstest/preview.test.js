@@ -46,3 +46,13 @@ test("renderRich: marks, a link, a screen alternative in print vs screen mode, a
   assert.equal(root.querySelectorAll(".pv-img-missing").length, 0);
   assert.equal(root.querySelectorAll(".pv-img").length, 1);
 });
+
+test("a handout on its own lines is a captioned frame, as the exports set it; one mid-sentence stays text", () => {
+  const desc = "? Сначала текст.\n[Раздаточный материал:\nстрока\n]\nПотом [Раздаточный материал: АБВ] ещё.\n! х";
+  const node = renderPreviewCard({ id: 3, kind: "question", desc }, "2", new Map(), false);
+  const parts = node.kids.map((n) => n.className.split(" ")[0]);
+  assert.deepEqual(parts, ["pv-q-text", "pv-handout-box", "pv-q-text", "pv-field"]);
+  assert.equal(node.querySelector(".pv-handout-caption").textContent, "Раздаточный материал");
+  assert.equal(node.querySelector(".pv-handout-frame").textContent, "строка");
+  assert.ok(node.querySelectorAll(".pv-q-text")[1].textContent.includes("[Раздаточный материал: АБВ]"));
+});
