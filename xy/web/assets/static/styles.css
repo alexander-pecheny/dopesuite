@@ -1749,11 +1749,11 @@ textarea.fld-src {
 .pvb-board {
   display: flex;
   align-items: flex-start;
-  gap: 3px;
+  gap: var(--pv-gap, 3px);
   width: 100%;
   /* the same width rule as the real board (.kanban), at preview scale */
-  max-width: max(var(--pv-board-w), calc(var(--kanban-grow, 1) * var(--pv-list-count, 0) * (var(--pv-list-w, 70px) + 3px)));
-  padding: 5px;
+  max-width: max(var(--pv-board-w), calc(var(--kanban-grow, 1) * var(--pv-list-count, 0) * (var(--pv-list-w, 70px) + var(--pv-gap, 3px))));
+  padding: 5px 0;
   overflow: hidden;
 }
 .pvb-list {

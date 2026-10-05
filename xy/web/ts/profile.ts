@@ -132,11 +132,13 @@ const PREVIEW_SCREEN_W = 2000;
 // Fake cards, as question lengths in text lines — varied so the card-height
 // clamp visibly cuts some cards and not others.
 const PREVIEW_CARDS = [3, 6, 1, 9, 2, 4, 7, 2];
-// Few enough lists that they fit inside the default width, so the slider has
-// something to move: past the point where they stop fitting, a board with
-// boardGrow on takes the whole screen and the width no longer decides anything
-// (.kanban in styles.css).
-const PREVIEW_LISTS = 4;
+// The preview draws as many lists as fit inside the workspace width, so both
+// width sliders always change something. With a fixed count, wide lists stopped
+// fitting, a board with boardGrow on took the whole screen (.kanban in
+// styles.css), and the workspace slider moved nothing.
+const PREVIEW_LISTS_MAX = 8;
+// The real board's gap between lists (--space-3), for counting what fits.
+const BOARD_LIST_GAP_PX = 12;
 const PREVIEW_CARDS_PER_LIST = 3;
 // The preview's width before it has been laid out.
 const PREVIEW_FALLBACK_W = 360;
@@ -146,14 +148,29 @@ const MIN_LINE_PX = 1.5; // a wireframe bar never gets thinner than this
 function renderPreview(): void {
   const k = (preview.clientWidth || PREVIEW_FALLBACK_W) / PREVIEW_SCREEN_W;
   preview.style.setProperty("--pv-board-w", sizes.boardW == null ? "none" : Math.round(sizes.boardW * k) + "px");
-  preview.style.setProperty("--pv-list-w", Math.round(sizes.listW * k) + "px");
-  preview.style.setProperty("--pv-list-count", String(PREVIEW_LISTS));
+  // Rounded down, with the gap at the same scale, so lists that fit the real
+  // workspace also fit the preview's.
+  preview.style.setProperty("--pv-list-w", Math.floor(sizes.listW * k) + "px");
+  preview.style.setProperty("--pv-gap", (BOARD_LIST_GAP_PX * k).toFixed(1) + "px");
+  const lists = previewLists();
+  preview.style.setProperty("--pv-list-count", String(lists.length));
   preview.style.setProperty("--kanban-grow", sizes.boardGrow ? "1" : "0");
   // Scale the line height like everything else so the font knob visibly
   // re-packs the wireframe cards.
   preview.style.setProperty("--pvb-line-h", Math.max(MIN_LINE_PX, sizes.cardFont * LINE_HEIGHT_RATIO * k).toFixed(1) + "px");
+  preview.replaceChildren(el("div", { class: "pvb-screen" }, el("div", { class: "pvb-board" }, lists)));
+}
+
+// How many lists of the chosen width fit inside the chosen workspace.
+function previewListCount(): number {
+  const boardW = Math.min(sizes.boardW ?? PREVIEW_SCREEN_W, PREVIEW_SCREEN_W);
+  const fit = Math.floor((boardW + BOARD_LIST_GAP_PX) / (sizes.listW + BOARD_LIST_GAP_PX));
+  return Math.max(1, Math.min(PREVIEW_LISTS_MAX, fit));
+}
+
+function previewLists(): HTMLElement[] {
   const lists = [];
-  for (let i = 0; i < PREVIEW_LISTS; i++) {
+  for (let i = 0; i < previewListCount(); i++) {
     const cards = [];
     for (let j = 0; j < PREVIEW_CARDS_PER_LIST; j++) {
       const total = PREVIEW_CARDS[(i + j * PREVIEW_CARDS_PER_LIST) % PREVIEW_CARDS.length];
@@ -166,7 +183,7 @@ function renderPreview(): void {
     }
     lists.push(el("div", { class: "pvb-list" }, el("div", { class: "pvb-title" }), cards));
   }
-  preview.replaceChildren(el("div", { class: "pvb-screen" }, el("div", { class: "pvb-board" }, lists)));
+  return lists;
 }
 
 function syncSizesUI(): void {
