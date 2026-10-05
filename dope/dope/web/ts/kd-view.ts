@@ -10,6 +10,13 @@ import * as kd from "./kd-protocol.js";
 import type {KDPlayer, KDState} from "./kd-protocol.js";
 import S from "./i18nstrings.js";
 
+// Visible widths, in characters, of the player form's fields.
+const CARD_FIELD_SIZE = 4;
+const NAME_FIELD_SIZE = 28;
+const TEAM_FIELD_SIZE = 24;
+// Blank cards to print per table when no player holds a higher number.
+const BLANK_CARDS_PER_TABLE = 6;
+
 // The personal standings pin the place, the player and the total; the
 // player's team scrolls under them.
 const PERSONAL_PINS = resultsPins({total: true});
@@ -165,7 +172,7 @@ function printRow(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   count.type = "text";
   count.inputMode = "numeric";
   count.className = "input";
-  count.size = 4;
+  count.size = CARD_FIELD_SIZE;
   count.value = String(blankCardCount(opts, list));
   count.setAttribute("aria-label", S.od.kd.blankCount());
   count.title = S.od.kd.blankCount();
@@ -191,7 +198,7 @@ function printRow(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
 // year's sheet sat them, never fewer than the highest card given out, and
 // never more than the tables tell apart.
 function blankCardCount(opts: KDPlayersOptions, list: KDPlayer[]): number {
-  return Math.min(kd.maxCard(opts.tables), Math.max(opts.tables * 6, ...list.map((p) => p.card)));
+  return Math.min(kd.maxCard(opts.tables), Math.max(opts.tables * BLANK_CARDS_PER_TABLE, ...list.map((p) => p.card)));
 }
 
 function playersTable(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
@@ -237,7 +244,7 @@ function addForm(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   card.type = "text";
   card.inputMode = "numeric";
   card.className = "input";
-  card.size = 4;
+  card.size = CARD_FIELD_SIZE;
   card.value = String(kd.nextFreeCard(list));
   card.setAttribute("aria-label", S.od.kd.card());
   card.dataset.kdField = "card";
@@ -247,7 +254,7 @@ function addForm(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   const name = document.createElement("input");
   name.type = "text";
   name.className = "input";
-  name.size = 28;
+  name.size = NAME_FIELD_SIZE;
   name.placeholder = S.od.kd.namePlaceholder();
   name.setAttribute("aria-label", S.od.kd.namePlaceholder());
   name.dataset.kdName = "";
@@ -255,7 +262,7 @@ function addForm(opts: KDPlayersOptions, list: KDPlayer[]): HTMLElement {
   const team = document.createElement("input");
   team.type = "text";
   team.className = "input";
-  team.size = 24;
+  team.size = TEAM_FIELD_SIZE;
   team.placeholder = S.od.kd.teamPlaceholder();
   team.setAttribute("aria-label", S.od.kd.teamPlaceholder());
   team.dataset.kdField = "team";

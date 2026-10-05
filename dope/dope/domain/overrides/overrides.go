@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"dope/dope/domain/games"
@@ -23,6 +22,7 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	core "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 type HostPlayerOverrideOption struct {
@@ -240,7 +240,7 @@ func containsInt64(values []int64, needle int64) bool {
 }
 
 func ParseHostOverrideID(raw, label string) (int64, error) {
-	id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	id, err := idstr.Parse(strings.TrimSpace(raw))
 	if err != nil || id <= 0 {
 		return 0, core.User(dopestrings.Default.Override.Entry.PickFromHint(label))
 	}
@@ -250,7 +250,7 @@ func ParseHostOverrideID(raw, label string) (int64, error) {
 func ParseHostOverrideGameIDs(values []string) ([]int64, error) {
 	var out []int64
 	for _, raw := range values {
-		id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		id, err := idstr.Parse(strings.TrimSpace(raw))
 		if err != nil || id <= 0 {
 			return nil, core.User(dopestrings.Default.Override.Entry.GameInvalid())
 		}
@@ -576,7 +576,7 @@ order by player_id`, festID, gameID)
 		return nil, err
 	}
 	for _, team := range teams {
-		if len(team.Players) > 9 {
+		if len(team.Players) > roster.MaxSquad {
 			return nil, core.User(dopestrings.Default.Override.Save.TeamTooBig(team.Name))
 		}
 	}

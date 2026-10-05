@@ -69,14 +69,7 @@ func KDTable(card, tour, n int) int {
 // KDEmptyGameJSON is a pristine Friendship Cup: the OD scheme and state with
 // n tables for teams and no players.
 func KDEmptyGameJSON(slug, title string, tourComp []int, n int, tableName func(int) string) ([]byte, []byte) {
-	totalQuestions := 0
-	for _, size := range tourComp {
-		totalQuestions += size
-	}
-	entries := make([][]int, totalQuestions)
-	for i := range entries {
-		entries[i] = []int{}
-	}
+	entries, totalQuestions := emptyEntries(tourComp)
 	tables := make([]ODTeam, n)
 	for i := range tables {
 		tables[i] = ODTeam{Name: tableName(i + 1), Number: int64(i + 1)}

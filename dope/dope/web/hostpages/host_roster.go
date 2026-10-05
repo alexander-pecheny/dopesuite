@@ -29,6 +29,7 @@ import (
 	"dope/dope/web/route"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 type hostFestTeam struct {
@@ -129,7 +130,7 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 					dopeui.Placeholder(s.Host.Roster.FlagsPlaceholder()), dopeui.Autocomplete("off"),
 				)),
 				dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditTeamLabel(t.Name)),
-					dopeui.Data("team-edit", strconv.FormatInt(t.ID, 10)))),
+					dopeui.Data("team-edit", idstr.Format(t.ID)))),
 			))
 		}
 		page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/teams"), dopeui.Autocomplete("off"),
@@ -147,7 +148,7 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 // teamFlagsField names one team's Flags input; the save handler reads the id
 // back off the name, so the form needs no parallel list of team ids.
 func teamFlagsField(teamID int64) string {
-	return "flags_" + strconv.FormatInt(teamID, 10)
+	return "flags_" + idstr.Format(teamID)
 }
 
 // optionalID renders a rating id, or "" when it is 0 (matching {{if .RatingID}}).
@@ -155,7 +156,7 @@ func optionalID(id int64) string {
 	if id == 0 {
 		return ""
 	}
-	return strconv.FormatInt(id, 10)
+	return idstr.Format(id)
 }
 
 // hostPlayersDoc builds the fest players page: the add-override dialog (datalist
@@ -198,17 +199,17 @@ func hostAddOverrideDialog(data hostFestRosterData, ref string) *dopeui.Element 
 	s := dopestrings.Default
 	playerOpts := make([]dopeui.Item, 0, len(data.OverridePlayers))
 	for _, o := range data.OverridePlayers {
-		playerOpts = append(playerOpts, dopeui.Option(dopeui.Value(o.Label), dopeui.Data("id", strconv.FormatInt(o.ID, 10))))
+		playerOpts = append(playerOpts, dopeui.Option(dopeui.Value(o.Label), dopeui.Data("id", idstr.Format(o.ID))))
 	}
 	teamOpts := make([]dopeui.Item, 0, len(data.OverrideTeams))
 	for _, o := range data.OverrideTeams {
-		teamOpts = append(teamOpts, dopeui.Option(dopeui.Value(o.Label), dopeui.Data("id", strconv.FormatInt(o.ID, 10))))
+		teamOpts = append(teamOpts, dopeui.Option(dopeui.Value(o.Label), dopeui.Data("id", idstr.Format(o.ID))))
 	}
 	var gamePicker dopeui.Item
 	if len(data.OverrideGames) > 0 {
 		boxes := make([]dopeui.Item, 0, len(data.OverrideGames))
 		for _, g := range data.OverrideGames {
-			boxes = append(boxes, dopeui.Checkbox(dopeui.Name("game_id"), dopeui.Value(strconv.FormatInt(g.ID, 10)), dopeui.Text(g.Label)))
+			boxes = append(boxes, dopeui.Checkbox(dopeui.Name("game_id"), dopeui.Value(idstr.Format(g.ID)), dopeui.Text(g.Label)))
 		}
 		gamePicker = dopeui.Col(append([]dopeui.Item{dopeui.SpaceSM}, boxes...)...)
 	} else {
@@ -259,16 +260,22 @@ func hostOverridesSection(data hostFestRosterData, ref string) *dopeui.Element {
 	return dopeui.Section(sect...)
 }
 
-func hostOverrideEditDialog(data hostFestRosterData, ref string, o overrides.HostPlayerOverrideRow) *dopeui.Element {
-	s := dopestrings.Default
+// overrideGameBoxes is a checkbox per game, ticked for the games o covers.
+func overrideGameBoxes(data hostFestRosterData, o overrides.HostPlayerOverrideRow) []dopeui.Item {
 	boxes := make([]dopeui.Item, 0, len(data.OverrideGames))
 	for _, g := range data.OverrideGames {
-		items := []dopeui.Item{dopeui.Name("game_id"), dopeui.Value(strconv.FormatInt(g.ID, 10))}
+		items := []dopeui.Item{dopeui.Name("game_id"), dopeui.Value(idstr.Format(g.ID))}
 		if o.HasGame(g.ID) {
 			items = append(items, dopeui.Checked())
 		}
 		boxes = append(boxes, dopeui.Checkbox(append(items, dopeui.Text(g.Label))...))
 	}
+	return boxes
+}
+
+func hostOverrideEditDialog(data hostFestRosterData, ref string, o overrides.HostPlayerOverrideRow) *dopeui.Element {
+	s := dopestrings.Default
+	boxes := overrideGameBoxes(data, o)
 	summary := dopeui.Row(dopeui.SpaceMD, dopeui.Wrap(),
 		dopeui.Col(dopeui.SpaceNone, dopeui.Muted(dopeui.Text(s.Host.Roster.PlayerLabel())), dopeui.Strong(dopeui.Text(o.Player))),
 		dopeui.Col(dopeui.SpaceNone, dopeui.Muted(dopeui.Text(s.Host.Roster.ColFromTeam())), dopeui.Strong(dopeui.Text(o.SourceTeam))),
@@ -278,9 +285,9 @@ func hostOverrideEditDialog(data hostFestRosterData, ref string, o overrides.Hos
 		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/players/overrides"), dopeui.Autocomplete("off"),
 			dopeui.Subhead(dopeui.Text(s.Host.Roster.OverrideTitle())),
 			dopeui.Hiddenfield(dopeui.Name("mode"), dopeui.Value("edit")),
-			dopeui.Hiddenfield(dopeui.Name("player_id"), dopeui.Value(strconv.FormatInt(o.PlayerID, 10))),
-			dopeui.Hiddenfield(dopeui.Name("source_team_id"), dopeui.Value(strconv.FormatInt(o.SourceTeamID, 10))),
-			dopeui.Hiddenfield(dopeui.Name("team_id"), dopeui.Value(strconv.FormatInt(o.OverrideTeamID, 10))),
+			dopeui.Hiddenfield(dopeui.Name("player_id"), dopeui.Value(idstr.Format(o.PlayerID))),
+			dopeui.Hiddenfield(dopeui.Name("source_team_id"), dopeui.Value(idstr.Format(o.SourceTeamID))),
+			dopeui.Hiddenfield(dopeui.Name("team_id"), dopeui.Value(idstr.Format(o.OverrideTeamID))),
 			summary,
 			dopeui.Pickgroup(append([]dopeui.Item{dopeui.Label(s.Host.Roster.GamesLabel())}, dopeui.Col(append([]dopeui.Item{dopeui.SpaceSM}, boxes...)...))...),
 			dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
@@ -309,7 +316,7 @@ func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 	var sect []dopeui.Item
 	if data.RatingID != 0 {
 		sect = []dopeui.Item{
-			dopeui.Note(dopeui.Text(s.Host.Roster.RatingSource(strconv.FormatInt(data.RatingID, 10)))),
+			dopeui.Note(dopeui.Text(s.Host.Roster.RatingSource(idstr.Format(data.RatingID)))),
 			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+festRef+"/rating/import"), dopeui.Autocomplete("off"),
 				dopeui.Note(dopeui.Text(s.Host.Roster.RatingImportNote())),
 				dopeui.Hiddenfield(dopeui.Name("preview"), dopeui.Value("1")),
@@ -450,7 +457,7 @@ func hostRosterConflictTeam(team imports.DroppedTeam, added []imports.AddedTeam)
 	field := rosterChoiceField(team.TeamID)
 	card := []dopeui.Item{
 		dopeui.DirCol, dopeui.SpaceSM,
-		dopeui.Strong(dopeui.Text(s.Host.Roster.ConflictTeam(strconv.FormatInt(team.Number, 10), teamDisplayName(team.Name, team.City)))),
+		dopeui.Strong(dopeui.Text(s.Host.Roster.ConflictTeam(idstr.Format(team.Number), teamDisplayName(team.Name, team.City)))),
 		dopeui.Muted(dopeui.Text(s.Host.Roster.ConflictGames(strings.Join(team.Games, ", ")))),
 	}
 	if len(added) == 0 {
@@ -462,7 +469,7 @@ func hostRosterConflictTeam(team imports.DroppedTeam, added []imports.AddedTeam)
 	choices := []dopeui.Item{dopeui.SpaceSM}
 	for _, candidate := range added {
 		items := []dopeui.Item{dopeui.Name(field), dopeui.Value(rosterChoiceMerge(candidate.RatingID)),
-			dopeui.Text(s.Host.Roster.ConflictChoiceMerge(strconv.FormatInt(candidate.RatingID, 10), teamDisplayName(candidate.Name, candidate.City)))}
+			dopeui.Text(s.Host.Roster.ConflictChoiceMerge(idstr.Format(candidate.RatingID), teamDisplayName(candidate.Name, candidate.City)))}
 		// Nothing is preselected but the incoming team of the same name: a team
 		// whose id changed keeps its name, which is the case this dialog exists for.
 		if candidate.Name == team.Name {
@@ -487,11 +494,11 @@ func teamDisplayName(name, city string) string {
 const rosterChoiceDrop = "drop"
 
 func rosterChoiceField(teamID int64) string {
-	return "team_" + strconv.FormatInt(teamID, 10)
+	return "team_" + idstr.Format(teamID)
 }
 
 func rosterChoiceMerge(ratingID int64) string {
-	return "merge:" + strconv.FormatInt(ratingID, 10)
+	return "merge:" + idstr.Format(ratingID)
 }
 
 // parseRosterChoice reads the reconcile form back into the answer the import
@@ -507,7 +514,7 @@ func parseRosterChoice(form url.Values) imports.RosterChoice {
 		if !ok || len(values) == 0 {
 			continue
 		}
-		teamID, err := strconv.ParseInt(teamText, 10, 64)
+		teamID, err := idstr.Parse(teamText)
 		if err != nil || teamID <= 0 {
 			continue
 		}
@@ -519,7 +526,7 @@ func parseRosterChoice(form url.Values) imports.RosterChoice {
 		if !ok {
 			continue
 		}
-		if ratingID, err := strconv.ParseInt(ratingText, 10, 64); err == nil && ratingID > 0 {
+		if ratingID, err := idstr.Parse(ratingText); err == nil && ratingID > 0 {
 			choice.Merge[teamID] = ratingID
 		}
 	}
@@ -622,7 +629,7 @@ func (s *Server) SaveTeamFlags(ctx context.Context, festID int64, typed map[int6
 	flags := make(map[int64][]roster.FestRosterFlag, len(typed))
 	for teamID, value := range typed {
 		if !known[teamID] {
-			return corei18n.User(dopestrings.Default.Host.Roster.ErrorFlagsForeignTeam(strconv.FormatInt(teamID, 10)))
+			return corei18n.User(dopestrings.Default.Host.Roster.ErrorFlagsForeignTeam(idstr.Format(teamID)))
 		}
 		flags[teamID] = parseTypedFlags(value)
 	}
@@ -890,6 +897,12 @@ order by tt.position, tt.id, ttp.roster_order, p.id`, []any{festID}, func(rows *
 	if err != nil {
 		return nil, err
 	}
+	sortHostFestPlayers(players)
+	return players, nil
+}
+
+// sortHostFestPlayers orders players by team, then name, then rating id.
+func sortHostFestPlayers(players []hostFestPlayer) {
 	sort.SliceStable(players, func(i, j int) bool {
 		if cmp := util.CompareAlpha(players[i].Team, players[j].Team); cmp != 0 {
 			return cmp < 0
@@ -899,7 +912,6 @@ order by tt.position, tt.id, ttp.roster_order, p.id`, []any{festID}, func(rows *
 		}
 		return players[i].RatingID < players[j].RatingID
 	})
-	return players, nil
 }
 
 func (s *Server) handleHostImportScheme(w http.ResponseWriter, r *http.Request, festID int64) {

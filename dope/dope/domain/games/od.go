@@ -47,10 +47,9 @@ type ODResults struct {
 	Teams    []ODResultsTeam `json:"teams"` // ranked: total desc, then roster index
 }
 
-// ODEmptyGameJSON builds the pristine scheme/state for an OD game (no teams, no
-// entries). Shared by game creation and the clear-to-pristine path so the two
-// can't drift.
-func ODEmptyGameJSON(slug, title string, tourComp []int) ([]byte, []byte) {
+// emptyEntries is a blank entry list for every question of the tours, and
+// how many questions that is.
+func emptyEntries(tourComp []int) ([][]int, int) {
 	totalQuestions := 0
 	for _, n := range tourComp {
 		totalQuestions += n
@@ -59,6 +58,14 @@ func ODEmptyGameJSON(slug, title string, tourComp []int) ([]byte, []byte) {
 	for i := range entries {
 		entries[i] = []int{}
 	}
+	return entries, totalQuestions
+}
+
+// ODEmptyGameJSON builds the pristine scheme/state for an OD game (no teams, no
+// entries). Shared by game creation and the clear-to-pristine path so the two
+// can't drift.
+func ODEmptyGameJSON(slug, title string, tourComp []int) ([]byte, []byte) {
+	entries, totalQuestions := emptyEntries(tourComp)
 	schemeJSON := []byte(mustJSON(map[string]any{
 		"schemaVersion": 2,
 		"slug":          slug,

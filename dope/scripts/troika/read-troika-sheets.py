@@ -19,6 +19,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "studchr"))
 from transcript import table  # noqa: E402
 
 QUESTIONS = 3
+# Bouts in each final: the final itself and the match for third place.
+BOUTS_PER_FINAL = 3
+
+# How far find() looks for a heading, and how far a group table's header row is
+# scanned for its columns.
+SEARCH_ROWS = 40
+SEARCH_COLS = 60
+TABLE_SCAN_COLS = 40
+# Where a group table starts when its heading cannot be found.
+GROUP_TABLE_FALLBACK_ROW = 3
+# A protocol row: team id, team name, then the cells from FIRST_MARK_COL on,
+# followed by the total and the place.
+PROTOCOL_ID_COL = 2
+PROTOCOL_NAME_COL = 3
+FIRST_MARK_COL = 5
 
 # Блок за блоком: лист с таблицами групп, лист с протоколами, и сколько групп на
 # листе. Второй этап держит по две группы на листе, третий — по одной.
@@ -37,7 +52,7 @@ def cell(ws, row, col):
     return ws.cell(row=row, column=col).value
 
 
-def find(ws, text, rows=range(1, 40), cols=range(1, 60)):
+def find(ws, text, rows=range(1, SEARCH_ROWS), cols=range(1, SEARCH_COLS)):
     """Первая клетка с таким текстом — заголовки стоят в разных местах листов."""
     for r in rows:
         for c in cols:
@@ -48,13 +63,13 @@ def find(ws, text, rows=range(1, 40), cols=range(1, 60)):
 
 def group_table(ws, letter):
     """Строки таблицы группы: id, название, забито, пропущено, очки, место."""
-    head = find(ws, f"Таблица группы {letter}") or (3, 1)
+    head = find(ws, f"Таблица группы {letter}") or (GROUP_TABLE_FALLBACK_ROW, 1)
     hrow = head[0] + (2 if find(ws, f"Таблица группы {letter}") else 0)
     # Заголовок таблицы — строка, где стоит «Команда» под её названием.
     while str(cell(ws, hrow, 2) or "").strip() != "Команда":
         hrow += 1
     columns = {}
-    for c in range(1, 40):
+    for c in range(1, TABLE_SCAN_COLS):
         name = str(cell(ws, hrow, c) or "").strip()
         if name in ("Заб.", "Проп.", "Очки", "Место"):
             columns[name] = c
@@ -77,6 +92,24 @@ def group_table(ws, letter):
     return rows
 
 
+def mark_count(ws, head):
+    """How many cells a bout plays, read off the nominal row under its header."""
+    cells = 0
+    while cell(ws, head + 1, FIRST_MARK_COL + cells) not in (None, ""):
+        cells += 1
+    return cells
+
+
+def protocol_seat(ws, row, cells):
+    """One team row of a protocol: its marks, total and place."""
+    marks = [cell(ws, row, FIRST_MARK_COL + i) for i in range(cells)]
+    return {
+        "marks": [int(m) if m else 0 for m in marks],
+        "total": int(cell(ws, row, FIRST_MARK_COL + cells) or 0),
+        "place": float(cell(ws, row, FIRST_MARK_COL + cells + 1) or 0),
+    }
+
+
 def bouts(ws, names):
     """Бои листа протоколов, по порядку: две команды с клетками, суммой и местом.
 
@@ -96,24 +129,15 @@ def bouts(ws, names):
             continue
         # Сколько тем играет бой, говорит его собственная строка номиналов:
         # третий групповой этап играет восемь, первые два — шесть.
-        cells = 0
-        while cell(ws, head + 1, 5 + cells) not in (None, ""):
-            cells += 1
+        cells = mark_count(ws, head)
         first = head + 2  # шапка, строка номиналов, затем команды
         seats = []
         for k in range(2):
             row = first + k
-            ident = str(cell(ws, row, 2) or "").strip()
+            ident = str(cell(ws, row, PROTOCOL_ID_COL) or "").strip()
             if not ident or ident not in names:
                 break
-            marks = [cell(ws, row, 5 + i) for i in range(cells)]
-            seats.append({
-                "id": ident,
-                "name": names[ident],
-                "marks": [int(m) if m else 0 for m in marks],
-                "total": int(cell(ws, row, 5 + cells) or 0),
-                "place": float(cell(ws, row, 6 + cells) or 0),
-            })
+            seats.append({"id": ident, "name": names[ident], **protocol_seat(ws, row, cells)})
         if len(seats) == 2:
             out.append(seats)
     return out
@@ -193,22 +217,15 @@ def main(path):
         head = r
         while head < ws.max_row and str(cell(ws, head, 1) or "").strip() != "№":
             head += 1
-        cells = 0
-        while cell(ws, head + 1, 5 + cells) not in (None, ""):
-            cells += 1
+        cells = mark_count(ws, head)
         seats = []
         for k in range(2):
             row = head + 2 + k
-            marks = [cell(ws, row, 5 + i) for i in range(cells)]
-            seats.append({
-                "name": str(cell(ws, row, 3) or "").strip(),
-                "marks": [int(m) if m else 0 for m in marks],
-                "total": int(cell(ws, row, 5 + cells) or 0),
-                "place": float(cell(ws, row, 6 + cells) or 0),
-            })
+            seats.append({"name": str(cell(ws, row, PROTOCOL_NAME_COL) or "").strip(),
+                          **protocol_seat(ws, row, cells)})
         finals[label] = seats
     for prefix, first in FINALS:
-        for k in (1, 2, 3):
+        for k in range(1, BOUTS_PER_FINAL + 1):
             seats = finals.get(f"{prefix}{k}")
             if not seats:
                 continue

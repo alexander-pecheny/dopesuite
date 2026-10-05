@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
@@ -15,6 +14,8 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/web/route"
+
+	"pecheny.me/dopecore/idstr"
 )
 
 // A Game's roster tab reads who the Game seats and the roster each team plays
@@ -33,25 +34,7 @@ func (s *server) scopedGameRoster(w http.ResponseWriter, r *http.Request, sc rou
 		return err
 	}
 	if roster.HandRoster(gameType) {
-		teams, err := roster.LoadGameRosters(ctx, s.eng.DB, sc.FestID, sc.GameID)
-		if err != nil {
-			return err
-		}
-		if len(teams) > 0 {
-			out := map[string]any{"teams": teams, "game": true}
-			if r.URL.Query().Get("choices") == "1" {
-				choices, err := roster.LoadFestPlayerChoices(ctx, s.eng.DB, sc.FestID)
-				if err != nil {
-					return err
-				}
-				if choices == nil {
-					choices = []roster.FestPlayerChoice{}
-				}
-				out["choices"] = choices
-			}
-			return route.JSON(w, out)
-		}
-		return s.scopedFestRoster(w, r, sc)
+		return s.handGameRoster(w, r, sc)
 	}
 	if !games.SeatsTroikas(gameType) {
 		return s.scopedFestRoster(w, r, sc)
@@ -64,6 +47,31 @@ func (s *server) scopedGameRoster(w http.ResponseWriter, r *http.Request, sc rou
 		entrants = []roster.GameEntrantView{}
 	}
 	return route.JSON(w, map[string]any{"teams": entrants, "entrants": true})
+}
+
+// handGameRoster serves the roster tab of a team buzzer format: the Game's own
+// teams if it has any, else the fest roster.
+func (s *server) handGameRoster(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	ctx := r.Context()
+	teams, err := roster.LoadGameRosters(ctx, s.eng.DB, sc.FestID, sc.GameID)
+	if err != nil {
+		return err
+	}
+	if len(teams) == 0 {
+		return s.scopedFestRoster(w, r, sc)
+	}
+	out := map[string]any{"teams": teams, "game": true}
+	if r.URL.Query().Get("choices") == "1" {
+		choices, err := roster.LoadFestPlayerChoices(ctx, s.eng.DB, sc.FestID)
+		if err != nil {
+			return err
+		}
+		if choices == nil {
+			choices = []roster.FestPlayerChoice{}
+		}
+		out["choices"] = choices
+	}
+	return route.JSON(w, out)
 }
 
 // troikaRoster is who a Troika's roster tab lists: the troikas it seats; while
@@ -125,7 +133,7 @@ func (s *server) scopedGameRosterReset(w http.ResponseWriter, r *http.Request, s
 }
 
 func rosterParticipant(r *http.Request) (int64, error) {
-	id, err := strconv.ParseInt(r.PathValue("participant"), 10, 64)
+	id, err := idstr.Parse(r.PathValue("participant"))
 	if err != nil || id <= 0 {
 		return 0, route.BadRequest("bad participant")
 	}

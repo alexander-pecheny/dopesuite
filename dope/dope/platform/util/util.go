@@ -14,12 +14,14 @@ import (
 	"time"
 	"unicode"
 
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/sqlitex"
 )
 
 const (
 	usernameMinLen = 2
 	usernameMaxLen = 32
+	slugMaxLen     = 64
 )
 
 // UtcNow returns the current time as an RFC3339 UTC string.
@@ -50,7 +52,7 @@ func ValidateSlug(slug string) error {
 	if len(slug) == 0 {
 		return errors.New("slug is empty")
 	}
-	if len(slug) > 64 {
+	if len(slug) > slugMaxLen {
 		return errors.New("slug is longer than 64 characters")
 	}
 	allDigit := true
@@ -195,7 +197,7 @@ func ParseOptionalInt64(s string) any {
 	if s == "" {
 		return nil
 	}
-	v, err := strconv.ParseInt(s, 10, 64)
+	v, err := idstr.Parse(s)
 	if err != nil {
 		return nil
 	}
@@ -255,14 +257,7 @@ func HumanizeFestDates(start, end string, currentYear int) string {
 		sy, sm, sd, sok = ey, em, ed, true
 	}
 
-	day := func(y, m, d int, withYear bool) string {
-		out := fmt.Sprintf("%d %s", d, festMonthsGenitive[m-1])
-		if withYear {
-			out += fmt.Sprintf(" %d", y)
-		}
-		return out
-	}
-
+	day := humanFestDay
 	// Single date.
 	if sy == ey && sm == em && sd == ed {
 		return day(sy, sm, sd, sy != currentYear)
@@ -281,6 +276,16 @@ func HumanizeFestDates(start, end string, currentYear int) string {
 	}
 	// Same year, different month: "31 июля — 1 августа".
 	return day(sy, sm, sd, false) + " — " + day(ey, em, ed, false) + yearSuffix
+}
+
+// humanFestDay writes one date as "5 марта", with the year after it when
+// withYear.
+func humanFestDay(y, m, d int, withYear bool) string {
+	out := fmt.Sprintf("%d %s", d, festMonthsGenitive[m-1])
+	if withYear {
+		out += fmt.Sprintf(" %d", y)
+	}
+	return out
 }
 
 // Fest date buckets returned by ClassifyFestDate.

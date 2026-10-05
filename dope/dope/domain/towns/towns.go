@@ -9,9 +9,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/idstr"
 
 	"dope/dope/storage/buffdb"
 	"dope/dope/storage/store"
@@ -25,6 +26,12 @@ const townURL = "https://api.rating.chgk.net/towns/"
 // fix that.
 const fetchLimit = 25
 
+const (
+	fetchTimeout = 10 * time.Second
+	// drainLimit is how much of a failed response is read before closing it.
+	drainLimit = 512
+)
+
 // Resolver reads buff and, for what buff lacks, the rating site. With buff
 // disabled it resolves nothing at all: every town would count as new, and a
 // roster import would turn into a few hundred API calls.
@@ -34,7 +41,7 @@ type Resolver struct {
 }
 
 func NewResolver(buff *buffdb.Store) *Resolver {
-	return &Resolver{buff: buff, client: &http.Client{Timeout: 10 * time.Second}}
+	return &Resolver{buff: buff, client: &http.Client{Timeout: fetchTimeout}}
 }
 
 // Countries maps each town id to its country's ISO code. A town the rating site
@@ -74,28 +81,9 @@ func (r *Resolver) Countries(ctx context.Context, townIDs []int64) map[int64]str
 // imported; a city typed by hand is looked up in buff by name. A city neither
 // knows is absent, and the page falls back to its own list.
 func FestCityCountries(ctx context.Context, q store.Queryer, buff *buffdb.Store, festID int64) map[string]string {
-	rows, err := q.QueryContext(ctx, `
-select city, coalesce(country, '') from fest_teams
-where fest_id = ? and deleted = 0 and trim(city) <> ''`, festID)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	out := map[string]string{}
-	var unresolved []string
-	for rows.Next() {
-		var city, iso string
-		if err := rows.Scan(&city, &iso); err != nil {
-			return out
-		}
-		key := strings.ToLower(strings.TrimSpace(city))
-		if iso != "" {
-			out[key] = iso
-			continue
-		}
-		if _, done := out[key]; !done {
-			unresolved = append(unresolved, city)
-		}
+	out, unresolved, ok := festCityRows(ctx, q, festID)
+	if !ok {
+		return out
 	}
 	for city, iso := range buff.TownCountries(ctx, unresolved) {
 		if _, done := out[city]; !done {
@@ -108,6 +96,35 @@ where fest_id = ? and deleted = 0 and trim(city) <> ''`, festID)
 	return out
 }
 
+// festCityRows reads the fest's team cities: the ones whose country is known,
+// keyed by lowercased city, and the ones still to look up. ok is false when
+// the read failed; out is then nil, or what was read before a bad row.
+func festCityRows(ctx context.Context, q store.Queryer, festID int64) (out map[string]string, unresolved []string, ok bool) {
+	rows, err := q.QueryContext(ctx, `
+select city, coalesce(country, '') from fest_teams
+where fest_id = ? and deleted = 0 and trim(city) <> ''`, festID)
+	if err != nil {
+		return nil, nil, false
+	}
+	defer rows.Close()
+	out = map[string]string{}
+	for rows.Next() {
+		var city, iso string
+		if err := rows.Scan(&city, &iso); err != nil {
+			return out, nil, false
+		}
+		key := strings.ToLower(strings.TrimSpace(city))
+		if iso != "" {
+			out[key] = iso
+			continue
+		}
+		if _, done := out[key]; !done {
+			unresolved = append(unresolved, city)
+		}
+	}
+	return out, unresolved, true
+}
+
 type ratingTown struct {
 	ID      int64 `json:"id"`
 	Country *struct {
@@ -117,7 +134,7 @@ type ratingTown struct {
 }
 
 func (r *Resolver) fetch(ctx context.Context, townID int64) (string, bool) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, townURL+strconv.FormatInt(townID, 10), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, townURL+idstr.Format(townID), nil)
 	if err != nil {
 		return "", false
 	}
@@ -128,7 +145,7 @@ func (r *Resolver) fetch(ctx context.Context, townID int64) (string, bool) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 512))
+		io.Copy(io.Discard, io.LimitReader(resp.Body, drainLimit))
 		return "", false
 	}
 	var town ratingTown

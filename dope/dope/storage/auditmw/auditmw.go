@@ -9,8 +9,9 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
-	"strconv"
 	"strings"
+
+	"pecheny.me/dopecore/idstr"
 
 	"dope/dope/domain/core"
 	"dope/dope/storage/festwrite"
@@ -82,7 +83,7 @@ func auditFestIDFromPath(eng *core.Engine, ctx context.Context, path string) int
 	// would otherwise run on every mutating request (including frequent presence
 	// POSTs). Stamping a non-existent id is harmless — handlers reject unknown
 	// fests before any audited mutation, so it never reaches audit_log.
-	if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
+	if id, err := idstr.Parse(ref); err == nil {
 		if id <= 0 {
 			return 0
 		}

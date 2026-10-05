@@ -5,6 +5,9 @@
 // reads, so the page's renderers call it with theirs and a test with a fixture.
 import {computePlaces} from "./score-table.js";
 
+// A game with no tour composition plays one tour of this many questions.
+const DEFAULT_TOUR_QUESTIONS = 15;
+
 export interface ODTeam {
   name: string;
   city: string;
@@ -76,7 +79,7 @@ export function parseTourComp(value: unknown): number[] {
     }
     return out;
   }
-  return [15];
+  return [DEFAULT_TOUR_QUESTIONS];
 }
 
 // tourLengthsOf is the scheme's tour composition, from the game or its one stage.

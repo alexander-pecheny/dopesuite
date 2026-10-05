@@ -3,7 +3,8 @@ package pages
 import (
 	"context"
 	"database/sql"
-	"strconv"
+
+	"pecheny.me/dopecore/idstr"
 
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
@@ -61,7 +62,7 @@ func Trail(prefix []dopeui.Item, title string) dopeui.Item {
 func FestTitle(ctx context.Context, db *sql.DB, festID int64) string {
 	var title string
 	if err := db.QueryRowContext(ctx, `select coalesce(title, '') from fests where id = ?`, festID).Scan(&title); err != nil || title == "" {
-		return dopestrings.Default.Pages.Crumbs.FestFallback(strconv.FormatInt(festID, 10))
+		return dopestrings.Default.Pages.Crumbs.FestFallback(idstr.Format(festID))
 	}
 	return title
 }

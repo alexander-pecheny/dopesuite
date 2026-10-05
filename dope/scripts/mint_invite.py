@@ -14,6 +14,12 @@ import secrets
 import sqlite3
 import sys
 
+# Matches the server's newInviteCode.
+INVITE_CODE_BYTES = 12
+DEFAULT_LIFETIME_DAYS = 7
+# How many random codes to try before giving up on a free one.
+CODE_ATTEMPTS = 5
+
 
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -25,7 +31,22 @@ def utc_in(days: int) -> str:
 
 def new_code() -> str:
     # Match db.go newInviteCode: 12 random bytes, RFC 4648 base32, uppercase, strip padding.
-    return base64.b32encode(secrets.token_bytes(12)).decode("ascii").rstrip("=").upper()
+    return base64.b32encode(secrets.token_bytes(INVITE_CODE_BYTES)).decode("ascii").rstrip("=").upper()
+
+
+def ensure_system_user(cur) -> int:
+    """The system user's id. It is created lazily on first import, so bootstrap
+    one if there is none yet."""
+    row = cur.execute("select id from users where is_system = 1 limit 1").fetchone()
+    if row is not None:
+        return row[0]
+    now = utc_now()
+    cur.execute(
+        "insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at) "
+        "values(null, null, 'system', 1, ?, ?)",
+        (now, now),
+    )
+    return cur.lastrowid
 
 
 def main() -> int:
@@ -34,7 +55,7 @@ def main() -> int:
         sys.stderr.write(f"db not found: {db_path}\n")
         return 1
 
-    days = 7
+    days = DEFAULT_LIFETIME_DAYS
     if len(sys.argv) > 1:
         days = int(sys.argv[1])
 
@@ -42,20 +63,9 @@ def main() -> int:
     con.execute("PRAGMA foreign_keys = ON")
     cur = con.cursor()
 
-    row = cur.execute("select id from users where is_system = 1 limit 1").fetchone()
-    if row is None:
-        # System user is created lazily on first import. Bootstrap one.
-        now = utc_now()
-        cur.execute(
-            "insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at) "
-            "values(null, null, 'system', 1, ?, ?)",
-            (now, now),
-        )
-        system_id = cur.lastrowid
-    else:
-        system_id = row[0]
+    system_id = ensure_system_user(cur)
 
-    for _ in range(5):
+    for _ in range(CODE_ATTEMPTS):
         code = new_code()
         try:
             cur.execute(

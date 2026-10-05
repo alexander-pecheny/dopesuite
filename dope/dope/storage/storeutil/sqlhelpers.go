@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
+
+	"pecheny.me/dopecore/idstr"
 )
 
 // Generic SQL/JSON helpers shared by the journal row codec, the converters and
@@ -56,7 +57,7 @@ func JSONToSQLValue(v any) any {
 	case json.Number:
 		str := n.String()
 		if !strings.ContainsAny(str, ".eE") {
-			if i, err := strconv.ParseInt(str, 10, 64); err == nil {
+			if i, err := idstr.Parse(str); err == nil {
 				return i
 			}
 		}

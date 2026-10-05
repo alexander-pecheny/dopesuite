@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"dope/dope/domain/games"
@@ -24,6 +23,7 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // APIRoutes adds the host pages' JSON twins to the /api table: every form on
@@ -492,7 +492,7 @@ func (s *Server) apiTeamFlags(w http.ResponseWriter, r *http.Request, sc route.S
 	}
 	typed := make(map[int64]string, len(req.Flags))
 	for key, value := range req.Flags {
-		id, err := strconv.ParseInt(key, 10, 64)
+		id, err := idstr.Parse(key)
 		if err != nil || id <= 0 {
 			return route.BadRequest("bad team id " + key)
 		}
@@ -606,7 +606,7 @@ func (s *Server) apiReplaceOverride(w http.ResponseWriter, r *http.Request, sc r
 // source_team_id and team_id, as GET …/players lists them.
 func (s *Server) apiDeleteOverride(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	q := r.URL.Query()
-	id := func(key string) int64 { v, _ := strconv.ParseInt(q.Get(key), 10, 64); return v }
+	id := func(key string) int64 { v, _ := idstr.Parse(q.Get(key)); return v }
 	if err := s.ReplacePlayerOverride(r.Context(), sc.FestID, id("player_id"), id("source_team_id"), id("team_id"), nil); err != nil {
 		return err
 	}
@@ -666,7 +666,7 @@ func (s *Server) apiAddTroikas(w http.ResponseWriter, r *http.Request, sc route.
 }
 
 func troikaID(r *http.Request) (int64, error) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, err := idstr.Parse(r.PathValue("id"))
 	if err != nil || id <= 0 {
 		return 0, route.BadRequest("bad id")
 	}
@@ -748,7 +748,7 @@ func (s *Server) apiRatingImport(w http.ResponseWriter, r *http.Request, sc rout
 		choice.AcceptSite[key] = true
 	}
 	for key, ratingID := range req.Merge {
-		teamID, err := strconv.ParseInt(key, 10, 64)
+		teamID, err := idstr.Parse(key)
 		if err != nil || teamID <= 0 {
 			return route.BadRequest("bad team id " + key)
 		}

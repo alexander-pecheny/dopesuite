@@ -23,6 +23,10 @@ import {markNameControl} from "./name-cell.js";
 import {clamp, floatingPopover} from "./widgets.js";
 import S from "./i18nstrings.js";
 
+// Space the panel keeps from the viewport edge, and its smallest height.
+const PANEL_MARGIN_PX = 8;
+const PANEL_MIN_HEIGHT_PX = 120;
+
 export interface SeatOption {
   id: string;
   name: string;
@@ -293,9 +297,9 @@ function positionPanel(): void {
     return;
   }
   const rect = trigger.getBoundingClientRect();
-  const margin = 8;
+  const margin = PANEL_MARGIN_PX;
   panel.style.position = "fixed";
-  panel.style.maxHeight = `${Math.max(120, window.innerHeight - 2 * margin)}px`;
+  panel.style.maxHeight = `${Math.max(PANEL_MIN_HEIGHT_PX, window.innerHeight - 2 * margin)}px`;
   const width = panel.offsetWidth;
   const height = panel.offsetHeight;
   const left = clamp(rect.left, margin, Math.max(margin, window.innerWidth - width - margin));

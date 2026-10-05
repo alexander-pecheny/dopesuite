@@ -35,6 +35,9 @@ import type {TroikaBout} from "./troika-stats.js";
 import S from "./i18nstrings.js";
 import {declarePins, sheetHead} from "./sheet-pins.js";
 
+// How long a linked-to node stays marked.
+const FLASH_MS = 2500;
+
 // A bout sheet pins the side's name, which is the whole of its pinned block.
 const SIDE_PINS = declarePins([{key: "name", width: "var(--team-col)"}], {start: "var(--sheet-corner-col)"});
 
@@ -192,7 +195,7 @@ function flashTarget(node: HTMLElement): void {
     window.clearTimeout(timer);
     document.removeEventListener("pointerdown", clear, true);
   };
-  const timer = window.setTimeout(clear, 2500);
+  const timer = window.setTimeout(clear, FLASH_MS);
   document.addEventListener("pointerdown", clear, true);
 }
 
@@ -902,33 +905,38 @@ function buildSwissTables(stages: SchemeStage[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "troika-protocol";
   for (const stage of stages) {
-    const entries = page.festStage(stage.code || "")?.standings || [];
     const head = document.createElement("h2");
     head.className = "troika-stage-head";
     head.textContent = stage.title || stage.code || "";
     wrap.appendChild(head);
-    const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? String(value) : "");
-    // The name column has the width every results table's has (narrower on a
-    // phone), so the table fits the screen and a long name fades into its popover.
-    wrap.appendChild(standingsTable({
-      className: "troika-swiss-table",
-      columns: [
-        {label: S.troika.swiss.place(), kind: "place"},
-        {label: S.troika.protocol.team(), kind: "name"},
-        {label: S.troika.swiss.wins(), kind: "num"},
-        {label: S.troika.swiss.losses(), kind: "num"},
-        {label: S.troika.swiss.seed(), kind: "num"},
-      ],
-      rows: entries.map((entry) => [
-        number(entry.rank),
-        entry.name || "",
-        number(entry.metrics?.wins),
-        number(entry.metrics?.losses),
-        number(entry.metrics?.seed),
-      ]),
-    }));
+    wrap.appendChild(swissTable(stage));
   }
   return wrap;
+}
+
+// swissTable is one Swiss stage's standings. The name column has the width
+// every results table's has (narrower on a phone), so the table fits the
+// screen and a long name fades into its popover.
+function swissTable(stage: SchemeStage): HTMLElement {
+  const entries = page.festStage(stage.code || "")?.standings || [];
+  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? String(value) : "");
+  return standingsTable({
+    className: "troika-swiss-table",
+    columns: [
+      {label: S.troika.swiss.place(), kind: "place"},
+      {label: S.troika.protocol.team(), kind: "name"},
+      {label: S.troika.swiss.wins(), kind: "num"},
+      {label: S.troika.swiss.losses(), kind: "num"},
+      {label: S.troika.swiss.seed(), kind: "num"},
+    ],
+    rows: entries.map((entry) => [
+      number(entry.rank),
+      entry.name || "",
+      number(entry.metrics?.wins),
+      number(entry.metrics?.losses),
+      number(entry.metrics?.seed),
+    ]),
+  });
 }
 
 function buildStats(): HTMLElement {

@@ -21,6 +21,9 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
+// maxRosterUploadBytes is how much of a roster sheet upload is kept in memory.
+const maxRosterUploadBytes = 4 << 20
+
 // The host's edits to the fest roster (ADR-0024): a team added, edited or
 // taken off by hand, and the undo of a rating import. Each goes through the
 // same writer an import uses, and then tells the open pages.
@@ -134,11 +137,15 @@ func (s *Server) loadFestTeamDetail(ctx context.Context, festID, teamID int64) (
 	if !found && teamID != 0 {
 		return festTeamDetail{}, route.NotFound
 	}
-	sort.SliceStable(out.Choices, func(i, j int) bool {
-		return util.CompareAlpha(store.JoinPlayerName(out.Choices[i].FirstName, out.Choices[i].LastName),
-			store.JoinPlayerName(out.Choices[j].FirstName, out.Choices[j].LastName)) < 0
-	})
+	sortPlayersByName(out.Choices)
 	return out, nil
+}
+
+func sortPlayersByName(players []festTeamPlayer) {
+	sort.SliceStable(players, func(i, j int) bool {
+		return util.CompareAlpha(store.JoinPlayerName(players[i].FirstName, players[i].LastName),
+			store.JoinPlayerName(players[j].FirstName, players[j].LastName)) < 0
+	})
 }
 
 // editedTeams is every team the host changed by hand: made, renamed, its
@@ -355,21 +362,30 @@ func (s *Server) apiTeamsXLSX(w http.ResponseWriter, r *http.Request, sc route.S
 	return err
 }
 
-// apiImportTeamsXLSX reads a roster sheet (field "file") and sets the teams it
-// names. With ?preview=1 it runs in a transaction it rolls back, and answers
-// only what it would change.
-func (s *Server) apiImportTeamsXLSX(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	if err := r.ParseMultipartForm(4 << 20); err != nil {
-		return route.BadRequest("bad form")
+// readRosterUpload parses the roster sheet uploaded in field "file".
+func readRosterUpload(r *http.Request) ([]imports.SheetTeam, error) {
+	if err := r.ParseMultipartForm(maxRosterUploadBytes); err != nil {
+		return nil, route.BadRequest("bad form")
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		return route.BadRequest("no file")
+		return nil, route.BadRequest("no file")
 	}
 	defer file.Close()
 	teams, err := imports.ParseRosterXLSX(file)
 	if err != nil {
-		return route.BadUser(err)
+		return nil, route.BadUser(err)
+	}
+	return teams, nil
+}
+
+// apiImportTeamsXLSX reads a roster sheet (field "file") and sets the teams it
+// names. With ?preview=1 it runs in a transaction it rolls back, and answers
+// only what it would change.
+func (s *Server) apiImportTeamsXLSX(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	teams, err := readRosterUpload(r)
+	if err != nil {
+		return err
 	}
 	var plan imports.ImportPlan
 	if r.URL.Query().Get("preview") == "1" {

@@ -48,6 +48,33 @@ type pendingDelta struct {
 	timer    *time.Timer
 }
 
+// pendingDeltaLocked is the scope's viewer buffer, started with its flush
+// timer when the scope has none open. The caller holds SeqMu.
+func (e *Engine) pendingDeltaLocked(festID int64, scope string, prev uint64) *pendingDelta {
+	if e.DeltaBuf == nil {
+		e.DeltaBuf = map[string]*pendingDelta{}
+	}
+	if pd := e.DeltaBuf[scope]; pd != nil {
+		return pd
+	}
+	pd := &pendingDelta{festID: festID, prevSeq: prev}
+	e.DeltaBuf[scope] = pd
+	// This fires in a detached timer goroutine with no net/http recover
+	// above it, so any panic here would crash the whole process. The
+	// close-race that caused exactly that is fixed in removeSubscriber, but
+	// keep a recover as defense-in-depth: a stray panic in the viewer
+	// fan-out must degrade to a dropped broadcast, never a server crash.
+	pd.timer = time.AfterFunc(deltaCoalesceWindow, func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("recovered panic in delta flush for scope %s: %v", scope, r)
+			}
+		}()
+		e.FlushDelta(scope)
+	})
+	return pd
+}
+
 // BroadcastStateDelta fans out a scoped DELTA (the ops that produced the new
 // state) instead of the whole state — the core fan-out win: every client gets a
 // ~100-byte op list rather than the full game blob. Editors receive the delta
@@ -65,28 +92,7 @@ func (e *Engine) BroadcastStateDelta(festID int64, scope string, revision int64,
 	e.RT.BroadcastTo(realtime.Event{FestID: festID, Revision: revision,
 		Data: realtime.EventDeltaJSON(scope, e.Epoch, revision, seq, prev, ops)}, realtime.AudEditors)
 	// Viewers: buffer for a merged broadcast at window end.
-	if e.DeltaBuf == nil {
-		e.DeltaBuf = map[string]*pendingDelta{}
-	}
-	pd := e.DeltaBuf[scope]
-	if pd == nil {
-		pd = &pendingDelta{festID: festID, prevSeq: prev}
-		e.DeltaBuf[scope] = pd
-		sc := scope
-		// This fires in a detached timer goroutine with no net/http recover
-		// above it, so any panic here would crash the whole process. The
-		// close-race that caused exactly that is fixed in removeSubscriber, but
-		// keep a recover as defense-in-depth: a stray panic in the viewer
-		// fan-out must degrade to a dropped broadcast, never a server crash.
-		pd.timer = time.AfterFunc(deltaCoalesceWindow, func() {
-			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("recovered panic in delta flush for scope %s: %v", sc, r)
-				}
-			}()
-			e.FlushDelta(sc)
-		})
-	}
+	pd := e.pendingDeltaLocked(festID, scope, prev)
 	pd.festID = festID
 	pd.revision = revision
 	pd.lastSeq = seq

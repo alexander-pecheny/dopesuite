@@ -12,6 +12,10 @@ import {icon, iconed} from "./icons_gen.js";
 import type {IconName} from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
+const DECIMAL_RADIX = 10;
+// Visible width, in characters, of the entrant name field.
+const NAME_FIELD_SIZE = 32;
+
 // The list pins the seed number and the name.
 const ENTRANT_PINS = resultsPins();
 
@@ -301,11 +305,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
 
   // ---- the list ----
 
-  function table(rows: EntrantRow[]): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.className = "table-scroll";
-    const node = document.createElement("table");
-    node.className = "results-table seed-import-table";
+  function entrantsHeadRow(): HTMLTableRowElement {
     const headRow = document.createElement("tr");
     headRow.append(
       ENTRANT_PINS.mark(th(S.entrants.head.seed(), "results-place-head seed-number-head"), "place"),
@@ -313,6 +313,15 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
       th(S.entrants.head.declined(), "seed-declined-head"),
       th("", "entrant-actions-head"),
     );
+    return headRow;
+  }
+
+  function table(rows: EntrantRow[]): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "table-scroll";
+    const node = document.createElement("table");
+    node.className = "results-table seed-import-table";
+    const headRow = entrantsHeadRow();
     node.appendChild(sheetHead([{row: headRow}]));
     const body = document.createElement("tbody");
     let waitlistShown = false;
@@ -320,7 +329,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
       if (row.waitlist && !waitlistShown) {
         waitlistShown = true;
         const divider = document.createElement("tr");
-        divider.appendChild(td(S.entrants.row.waitlist(), "seed-waitlist-cell", {colSpan: 4}));
+        divider.appendChild(td(S.entrants.row.waitlist(), "seed-waitlist-cell", {colSpan: headRow.cells.length}));
         body.appendChild(divider);
       }
       body.appendChild(entrantRow(rows, row, index));
@@ -351,7 +360,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     seed.disabled = busy || Boolean(row.played);
     seed.setAttribute("aria-label", S.entrants.row.seedLabel(name));
     seed.addEventListener("change", () => {
-      const wanted = Number.parseInt(seed.value, 10);
+      const wanted = Number.parseInt(seed.value, DECIMAL_RADIX);
       if (!Number.isFinite(wanted) || wanted <= 0 || wanted === row.seedNumber) {
         seed.value = row.seedNumber ? String(row.seedNumber) : "";
         return;
@@ -530,7 +539,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     const input = document.createElement("input");
     input.type = "text";
     input.className = "input";
-    input.size = 32;
+    input.size = NAME_FIELD_SIZE;
     input.setAttribute("list", listID);
     input.placeholder = troika ? S.entrants.add.pickTroika() : S.entrants.add.pick();
     input.setAttribute("aria-label", input.placeholder);

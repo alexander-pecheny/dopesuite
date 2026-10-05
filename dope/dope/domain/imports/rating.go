@@ -22,6 +22,12 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
+const (
+	ratingResultsTimeout = 20 * time.Second
+	// errorBodyLimit is how much of a failed response is read for the message.
+	errorBodyLimit = 512
+)
+
 const ratingResultsURL = "https://api.rating.chgk.net/tournaments/%d/results.json?includeTeamMembers=1&includeTeamFlags=1"
 
 type RatingRosterImportResult struct {
@@ -157,7 +163,7 @@ func fetchRatingFestRoster(ctx context.Context, ratingID int64) ([]roster.FestRo
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	client := &http.Client{Timeout: ratingResultsTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, corei18n.User(dopestrings.Default.Imports.Rating.FetchFailed(err.Error()))
@@ -165,7 +171,7 @@ func fetchRatingFestRoster(ctx context.Context, ratingID int64) ([]roster.FestRo
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyLimit))
 		detail := strings.TrimSpace(string(body))
 		if detail == "" {
 			detail = resp.Status
@@ -221,7 +227,7 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 			})
 		}
 		team.Flags = roster.NormalizeFlags(team.Flags)
-		if len(team.Players) > 9 {
+		if len(team.Players) > roster.MaxSquad {
 			return nil, corei18n.User(dopestrings.Default.Imports.Rating.SquadTooBig(name))
 		}
 		teams = append(teams, team)

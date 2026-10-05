@@ -34,6 +34,10 @@ import type {Venue} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
 import type {EntrantsTab} from "./entrants.js";
 
+// A resync or a fest refresh waits this long, so a burst of events costs one
+// fetch.
+const REFETCH_DEBOUNCE_MS = 250;
+
 // What every bout's view carries, whatever its format: the server's match view
 // with the Protocol's document under `state`.
 export interface BoutView {
@@ -251,7 +255,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     window.setTimeout(() => {
       resyncScheduled = false;
       fetchMatches().catch(() => indicator.fail());
-    }, 250);
+    }, REFETCH_DEBOUNCE_MS);
   }
 
   // refreshFest reads the fest view again: the grid's heads carry each bout's
@@ -268,7 +272,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
       } catch (error) {
         console.error(error);
       }
-    }, 250);
+    }, REFETCH_DEBOUNCE_MS);
   }
 
   function adoptVenues(list: unknown): boolean {

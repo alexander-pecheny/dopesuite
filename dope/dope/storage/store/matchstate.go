@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strconv"
+	"maps"
+	"slices"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/idstr"
 
 	dopestrings "dope/i18nstrings"
 )
@@ -19,8 +22,24 @@ import (
 // nobody can fill.
 const ThemeCount = 12
 
-// QuestionValues is the EK/KSI per-answer point scale (lowest to highest).
-var QuestionValues = [5]int{10, 20, 30, 40, 50}
+const (
+	// QuestionCount is how many questions an EK/KSI theme has.
+	QuestionCount = 5
+	// QuestionValueStep is the gap between neighbouring question values.
+	QuestionValueStep = 10
+)
+
+// QuestionValues is the EK/KSI per-answer point scale (lowest to highest):
+// 10, 20, 30, 40, 50.
+var QuestionValues = questionScale()
+
+func questionScale() [QuestionCount]int {
+	var values [QuestionCount]int
+	for i := range values {
+		values[i] = (i + 1) * QuestionValueStep
+	}
+	return values
+}
 
 // DBMatchState is a match's full state as loaded from the DB: the match header,
 // its venue, the scored MatchState, and the per-slot team ids.
@@ -394,7 +413,7 @@ order by s.position, s.id, m.position, m.id`, args...)
 			}
 			id := slot.ParticipantID.Int64
 			match.State.Participants[slot.Index] = ParticipantStateFromBlob(
-				match.Blob.Participants[strconv.FormatInt(id, 10)],
+				match.Blob.Participants[idstr.Format(id)],
 				id, slot.Name, rosters[rosterKey{match.GameID, id}], slot.Place, playerName)
 			match.ParticipantIDs[slot.Index] = id
 		}
@@ -458,6 +477,19 @@ type rosterKey struct {
 	gameID, participantID int64
 }
 
+// addSeatedTeams records the Participants seated in slots as playing gameID.
+func addSeatedTeams(teams map[int64]map[int64]bool, gameID int64, slots []slotRecord) {
+	for _, slot := range slots {
+		if !slot.ParticipantID.Valid {
+			continue
+		}
+		if teams[gameID] == nil {
+			teams[gameID] = map[int64]bool{}
+		}
+		teams[gameID][slot.ParticipantID.Int64] = true
+	}
+}
+
 // loadRosters reads the roster of every seated team of every team-blob match in
 // one statement per roster source in play — a fest-wide roster or a game's own.
 func loadRosters(ctx context.Context, q Queryer, matches []DBMatchState, slots map[int64][]slotRecord) (map[rosterKey][]RosterMember, error) {
@@ -470,20 +502,10 @@ func loadRosters(ctx context.Context, q Queryer, matches []DBMatchState, slots m
 			continue
 		}
 		byGame[match.GameID] = match
-		for _, slot := range slots[match.MatchID] {
-			if slot.ParticipantID.Valid {
-				if teams[match.GameID] == nil {
-					teams[match.GameID] = map[int64]bool{}
-				}
-				teams[match.GameID][slot.ParticipantID.Int64] = true
-			}
-		}
+		addSeatedTeams(teams, match.GameID, slots[match.MatchID])
 	}
 	for gameID, ids := range teams {
-		list := make([]int64, 0, len(ids))
-		for id := range ids {
-			list = append(list, id)
-		}
+		list := slices.Collect(maps.Keys(ids))
 		game, err := GameRosters(ctx, q, gameID, byGame[gameID].RosterSource, list)
 		if err != nil {
 			return nil, err

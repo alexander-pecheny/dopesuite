@@ -18,6 +18,7 @@ import (
 	"dope/dope/web/route"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // The per-game journal page lists a game's edits newest-first, each rendered as
@@ -33,6 +34,16 @@ import (
 const (
 	journalPageGroups = 200
 	journalMaxLines   = 16
+
+	// idQueryBatch keeps each "where id in (...)" query under SQLite's
+	// bound-parameter limit.
+	idQueryBatch = 400
+	// maxValueBytes is where a long patch value is cut off for display.
+	maxValueBytes = 60
+	// ksiAnswerPathLen is themes/t/answers/player/question.
+	ksiAnswerPathLen = 5
+	// odAnswerPathLen is entries/question/slot.
+	odAnswerPathLen = 3
 )
 
 // JournalChange is one entry of a game's history as the history page shows
@@ -101,7 +112,7 @@ order by j.id`, gameID)
 		}
 		key := reqID
 		if key == "" {
-			key = "id:" + strconv.FormatInt(id, 10)
+			key = "id:" + idstr.Format(id)
 		}
 		g := groups[key]
 		if g == nil {
@@ -305,7 +316,7 @@ func (r *nameResolver) prepareEK(ctx context.Context, db store.Queryer, allOps [
 		}
 	}
 	// answers -> theme/team/match/indices
-	for _, batch := range chunkIDs(keysOfInt(answerIDs), 400) {
+	for _, batch := range chunkIDs(keysOfInt(answerIDs), idQueryBatch) {
 		rows, err := db.QueryContext(ctx, `
 select a.id, t.participant_id, t.theme_index, a.answer_index, t.match_id
 from answers a join themes t on a.theme_id = t.id
@@ -326,7 +337,7 @@ where a.id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 		}
 		rows.Close()
 	}
-	for _, batch := range chunkIDs(keysOfInt(teamIDs), 400) {
+	for _, batch := range chunkIDs(keysOfInt(teamIDs), idQueryBatch) {
 		rows, err := db.QueryContext(ctx, `select id, name from participants where id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 		if err != nil {
 			continue
@@ -340,7 +351,7 @@ where a.id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 		}
 		rows.Close()
 	}
-	for _, batch := range chunkIDs(keysOfInt(matchIDs), 400) {
+	for _, batch := range chunkIDs(keysOfInt(matchIDs), idQueryBatch) {
 		rows, err := db.QueryContext(ctx, `select id, code from matches where id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 		if err != nil {
 			continue
@@ -354,7 +365,7 @@ where a.id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 		}
 		rows.Close()
 	}
-	for _, batch := range chunkIDs(keysOfInt(playerIDs), 400) {
+	for _, batch := range chunkIDs(keysOfInt(playerIDs), idQueryBatch) {
 		rows, err := db.QueryContext(ctx, `select id, trim(first_name || ' ' || last_name) from players where id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 		if err != nil {
 			continue
@@ -430,7 +441,7 @@ func (r *nameResolver) ksiPatchLine(op edit.PatchOp) string {
 	segs := patchSegs(op.Path)
 	s := dopestrings.Default
 	switch {
-	case len(segs) == 5 && segs[0].s == "themes" && segs[2].s == "answers" &&
+	case len(segs) == ksiAnswerPathLen && segs[0].s == "themes" && segs[2].s == "answers" &&
 		segs[1].num && segs[3].num && segs[4].num:
 		who := r.name(segs[3].n)
 		if who == "" {
@@ -457,7 +468,7 @@ func (r *nameResolver) odPatchLine(op edit.PatchOp) string {
 	segs := patchSegs(op.Path)
 	s := dopestrings.Default
 	switch {
-	case len(segs) == 3 && segs[0].s == "entries" && segs[1].num && segs[2].num:
+	case len(segs) == odAnswerPathLen && segs[0].s == "entries" && segs[1].num && segs[2].num:
 		num := patchInt(op.Value)
 		if num <= 0 {
 			return s.Journal.Od.AnswerClear(strconv.Itoa(segs[1].n + 1))
@@ -522,14 +533,14 @@ func (r *nameResolver) describeEK(ops []journalOpRow) []string {
 			matchID, _ := rowInt(row, "match_id")
 			if rank, ok := rowInt(row, "rank"); ok {
 				lines = append(lines, s.Journal.Ek.Rank(
-					matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), strconv.FormatInt(rank, 10)))
+					matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), idstr.Format(rank)))
 			}
 		case "themes":
 			teamID, _ := rowInt(row, "participant_id")
 			matchID, _ := rowInt(row, "match_id")
 			theme, _ := rowInt(row, "theme_index")
 			prefix := s.Journal.Ek.ThemePrefix(
-				matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), strconv.FormatInt(theme+1, 10))
+				matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), idstr.Format(theme+1))
 			if playerID, ok := rowInt(row, "player_id"); ok && playerID != 0 {
 				if name := strings.TrimSpace(r.ekPlayer[playerID]); name != "" {
 					lines = append(lines, prefix+s.Journal.Ek.PlayerPlays(name))
@@ -643,8 +654,8 @@ func patchValue(v json.RawMessage) (raw, display string) {
 			return str, str
 		}
 	}
-	if len(s) > 60 {
-		return s, s[:57] + "…"
+	if len(s) > maxValueBytes {
+		return s, s[:maxValueBytes-len("…")] + "…"
 	}
 	return s, s
 }
@@ -795,7 +806,7 @@ func journalDoc(festID, gameID int64, title, festTitle, errMsg, notice string, g
 
 	page := []ui.Item{
 		ui.Title(s.Journal.Page.Title(title)), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
-		ui.Publictopbar(Trail(append(FestCrumbs(strconv.FormatInt(festID, 10), festTitle),
+		ui.Publictopbar(Trail(append(FestCrumbs(idstr.Format(festID), festTitle),
 			ui.Crumb(ui.Href(fmt.Sprintf("/host/fest/%d/audit", festID)), ui.Text(s.Journal.Index.Title()))), title)),
 	}
 	page = append(page, main...)
@@ -818,7 +829,7 @@ func journalRow(festID, gameID int64, g JournalChange) *ui.Element {
 	revert := ui.Cell(ui.Form(
 		ui.Method("post"), ui.Action(fmt.Sprintf("/host/fest/%d/audit/%d/revert", festID, gameID)),
 		ui.Data("confirm", s.Journal.Page.RevertConfirm()),
-		ui.Hiddenfield(ui.Name("target"), ui.Value(strconv.FormatInt(g.RevertTo, 10))),
+		ui.Hiddenfield(ui.Name("target"), ui.Value(idstr.Format(g.RevertTo))),
 		ui.Button(ui.Danger, ui.Submit(), ui.Text(s.Journal.Page.RevertSubmit())),
 	))
 	return ui.Trow(ui.Cell(ui.Muted(ui.Text(g.When))), actor, ui.Cell(lines...), revert)
@@ -828,7 +839,7 @@ func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festI
 	var title string
 	_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select coalesce(title, code) from games where id = ? and fest_id = ?`, gameID, festID).Scan(&title)
 	if title == "" {
-		title = dopestrings.Default.Journal.Page.DefaultTitle(strconv.FormatInt(gameID, 10))
+		title = dopestrings.Default.Journal.Page.DefaultTitle(idstr.Format(gameID))
 	}
 	groups, err := s.LoadGameJournal(r.Context(), festID, gameID)
 	if err != nil {
@@ -843,7 +854,7 @@ func (s *Server) HandleGameRevert(w http.ResponseWriter, r *http.Request, festID
 		s.RenderGameJournal(w, r, festID, gameID, "bad form", "")
 		return
 	}
-	target, err := strconv.ParseInt(strings.TrimSpace(r.Form.Get("target")), 10, 64)
+	target, err := idstr.Parse(strings.TrimSpace(r.Form.Get("target")))
 	if err != nil {
 		s.RenderGameJournal(w, r, festID, gameID, "bad target", "")
 		return

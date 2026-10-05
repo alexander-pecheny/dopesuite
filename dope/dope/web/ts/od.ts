@@ -26,12 +26,32 @@ import { icon } from "./icons_gen.js";
 import * as od from "./od-protocol.js";
 import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, readCityCountry, teamFlag} from "./screen-board.js";
-import type {ScreenSettings} from "./screen-board.js";
+import type {ScreenMetrics, ScreenSettings} from "./screen-board.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import S from "./i18nstrings.js";
 
 // The results sheet and the screen board pin the place, the team and the total.
 const RESULTS_PINS = resultsPins({total: true});
+
+// Width of the sticky row marker; a column whose center is this close to the
+// frozen edge counts as scrolled under it.
+const STICKY_MARKER_PX = 12;
+// The shootout controls cell spans the round, number and lock header rows.
+const SHOOTOUT_HEAD_ROWS = 3;
+const ENTRY_INPUT_MAX_LENGTH = 80;
+// Space kept between a focused cell and the virtual keypad.
+const KEYPAD_MARGIN_PX = 8;
+const ENTRY_SUGGEST_LIMIT = 8;
+const ENTRY_SUGGEST_MIN_WIDTH_PX = 220;
+const SCREEN_SAVE_DEBOUNCE_MS = 400;
+// The screen overlay shows in the top-right cell of a 3x3 grid.
+const SCREEN_CORNER_GRID = 3;
+const SCREEN_FONT_SCALE_MIN = 0.4;
+const SCREEN_FONT_SCALE_MAX = 2;
+// Columns a screen table always has: place, team, total and the tour.
+const SCREEN_TABLE_COLS = 4;
+// Columns the results table always has: place, team, total and rating.
+const RESULTS_FIXED_COLS = 4;
 
 interface ODPageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -612,7 +632,7 @@ function positionInvertOverlay(): void {
   const borderRight = parseFloat(cs.borderRightWidth) || 0;
   const center = r.left + borderLeft + (r.width - borderLeft - borderRight) / 2;
   // Hide when the column is scrolled under the sticky row-marker or past the edge.
-  if (center < f.left + 12 || center > f.right) return hide();
+  if (center < f.left + STICKY_MARKER_PX || center > f.right) return hide();
   overlay.dataset.q = String(q);
   overlay.hidden = false; // unhide first so offsetWidth/Height are measurable
   overlay.style.left = `${Math.round(center - overlay.offsetWidth / 2)}px`;
@@ -993,7 +1013,7 @@ function buildInputShootoutTable(): HTMLElement | null {
     roundHead.appendChild(th(question.firstInRound ? S.od.shootout.round(String(question.roundIndex + 1)) : "", cls));
   }
   if (!viewer) {
-    roundHead.appendChild(shootoutControlsHeaderCell({rowSpan: 3}));
+    roundHead.appendChild(shootoutControlsHeaderCell({rowSpan: SHOOTOUT_HEAD_ROWS}));
   }
 
   const numberHead = document.createElement("tr");
@@ -1201,6 +1221,19 @@ function shootoutLockCell(roundIndex: number, questionIndex: number, className: 
   return cell;
 }
 
+function shootoutCheckbox(roundIndex: number, questionIndex: number, rowIndex: number, checked: boolean): HTMLInputElement {
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.className = "shootout-entry-checkbox";
+  checkbox.dataset.entryKind = "shootout";
+  checkbox.dataset.round = String(roundIndex);
+  checkbox.dataset.question = String(questionIndex);
+  checkbox.dataset.row = String(rowIndex);
+  checkbox.checked = checked;
+  makeViewerCheckboxReadonly(checkbox);
+  return checkbox;
+}
+
 function shootoutEntryCell(roundIndex: number, questionIndex: number, rowIndex: number, validationCounts: Map<number, number> | undefined, tourEnd = false): HTMLTableCellElement {
   const cell = document.createElement("td");
   cell.className = "entry-cell od-shootout-check-cell" + (tourEnd ? " entry-tour-end" : "");
@@ -1213,16 +1246,7 @@ function shootoutEntryCell(roundIndex: number, questionIndex: number, rowIndex: 
   const value = shootoutEntryValue(roundIndex, questionIndex, rowIndex);
   const label = document.createElement("label");
   label.className = "shootout-entry-check-label";
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.className = "shootout-entry-checkbox";
-  checkbox.dataset.entryKind = "shootout";
-  checkbox.dataset.round = String(roundIndex);
-  checkbox.dataset.question = String(questionIndex);
-  checkbox.dataset.row = String(rowIndex);
-  checkbox.checked = Boolean(value && value === round?.teams?.[rowIndex]);
-  makeViewerCheckboxReadonly(checkbox);
-  label.appendChild(checkbox);
+  label.appendChild(shootoutCheckbox(roundIndex, questionIndex, rowIndex, Boolean(value && value === round?.teams?.[rowIndex])));
   cell.appendChild(label);
   markShootoutEntryCellValidity(cell, validationCounts);
   return cell;
@@ -1692,7 +1716,7 @@ function openEntryEditor(cell: HTMLElement): void {
     input.dataset.q = String(qIndex);
   }
   input.dataset.row = String(rowIndex);
-  input.maxLength = 80;
+  input.maxLength = ENTRY_INPUT_MAX_LENGTH;
   input.autocomplete = "off";
   input.spellcheck = false;
   input.setAttribute("aria-autocomplete", "list");
@@ -1723,7 +1747,7 @@ function scrollCellAboveKeypad(cell: HTMLElement): void {
   const viewBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
   const padTop = viewBottom - padHeight;
   const rect = cell.getBoundingClientRect();
-  const margin = 8;
+  const margin = KEYPAD_MARGIN_PX;
   if (rect.bottom > padTop - margin) {
     frame.scrollTop += rect.bottom - (padTop - margin);
   }
@@ -1784,7 +1808,7 @@ function updateEntrySuggest(input: HTMLInputElement): void {
   const matches = entrySuggestOptions(input)
     .filter((option) => option.label.toLocaleLowerCase("ru").includes(query))
     .sort((a, b) => teamNameCollator.compare(a.label, b.label) || a.number - b.number)
-    .slice(0, 8);
+    .slice(0, ENTRY_SUGGEST_LIMIT);
   if (matches.length === 0) {
     closeEntrySuggest();
     return;
@@ -1802,32 +1826,34 @@ function updateEntrySuggest(input: HTMLInputElement): void {
   renderEntrySuggest();
 }
 
+function entrySuggestButton(option: EntrySuggestOption, index: number, active: boolean): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "entry-suggest-option" + (active ? " active" : "");
+  button.dataset.index = String(index);
+  button.innerHTML = "";
+  const badge = document.createElement("span");
+  badge.className = "team-number-badge";
+  badge.textContent = String(option.number);
+  const name = document.createElement("span");
+  name.textContent = option.label;
+  button.append(badge, name);
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    chooseEntrySuggest(index);
+  });
+  return button;
+}
+
 function renderEntrySuggest(): void {
   if (!entrySuggest) return;
   const {input, list, items, active} = entrySuggest;
   list.replaceChildren();
-  items.forEach((option, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "entry-suggest-option" + (index === active ? " active" : "");
-    button.dataset.index = String(index);
-    button.innerHTML = "";
-    const badge = document.createElement("span");
-    badge.className = "team-number-badge";
-    badge.textContent = String(option.number);
-    const name = document.createElement("span");
-    name.textContent = option.label;
-    button.append(badge, name);
-    button.addEventListener("mousedown", (event) => {
-      event.preventDefault();
-      chooseEntrySuggest(index);
-    });
-    list.appendChild(button);
-  });
+  items.forEach((option, index) => list.appendChild(entrySuggestButton(option, index, index === active)));
   const rect = input.getBoundingClientRect();
   list.style.left = `${Math.round(rect.left)}px`;
   list.style.top = `${Math.round(rect.bottom + 2)}px`;
-  list.style.width = `${Math.max(220, Math.round(rect.width))}px`;
+  list.style.width = `${Math.max(ENTRY_SUGGEST_MIN_WIDTH_PX, Math.round(rect.width))}px`;
 }
 
 function closeEntrySuggest(): void {
@@ -2331,7 +2357,7 @@ function saveScreenSettings(): void {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(screenSettings),
     }).catch(() => {});
-  }, 400);
+  }, SCREEN_SAVE_DEBOUNCE_MS);
 }
 
 // applyScreenColors pushes the palette onto the wrapper as inline CSS vars; the
@@ -2350,7 +2376,7 @@ function screenPointerInCorner(wrapper: HTMLElement, e: MouseEvent): boolean {
   const r = wrapper.getBoundingClientRect();
   const x = e.clientX - r.left;
   const y = e.clientY - r.top;
-  return x >= r.width * (2 / 3) && x <= r.width && y >= 0 && y <= r.height / 3;
+  return x >= r.width * (2 / SCREEN_CORNER_GRID) && x <= r.width && y >= 0 && y <= r.height / SCREEN_CORNER_GRID;
 }
 function setScreenOverlayActive(wrapper: HTMLElement, corner: boolean): void {
   wrapper.classList.toggle("screen-overlay-active", corner || screenPanelOpen);
@@ -2444,7 +2470,7 @@ function buildScreenPanel(wrapper: ScreenWrapper): HTMLElement {
   fontInput.step = "0.05";
   fontInput.value = String(s.fontScale);
   fontInput.addEventListener("input", () => {
-    s.fontScale = Math.min(Math.max(parseFloat(fontInput.value) || 1, 0.4), 2);
+    s.fontScale = Math.min(Math.max(parseFloat(fontInput.value) || 1, SCREEN_FONT_SCALE_MIN), SCREEN_FONT_SCALE_MAX);
     scheduleScreenFit();
     saveScreenSettings();
   });
@@ -2541,7 +2567,7 @@ function makeScreenColumn(tourLabel: string | undefined, rowItems: ScreenRowItem
     if (i > 0 && item.group !== rowItems[i - 1].group) {
       const gap = document.createElement("tr");
       gap.className = "results-group-gap";
-      gap.appendChild(td("", "results-group-gap-cell", {colSpan: 4}));
+      gap.appendChild(td("", "results-group-gap-cell", {colSpan: SCREEN_TABLE_COLS}));
       tbody.appendChild(gap);
     }
     tbody.appendChild(item.tr);
@@ -2658,6 +2684,22 @@ function scheduleScreenFit(): void {
   });
 }
 
+// measureScreen reads the probe column cols holds and the room frame offers.
+function measureScreen(cols: HTMLElement, frame: HTMLElement): ScreenMetrics {
+  const MARGIN = 6; // px of breathing room inside the frame (kept small to use all space)
+  const probe = cols.firstChild as HTMLTableElement;
+  const gapRow = probe.querySelector("tbody tr.results-group-gap");
+  return {
+    headH: probe.querySelector("thead")!.getBoundingClientRect().height,
+    rowH: probe.querySelector("tbody tr.results-row")!.getBoundingClientRect().height,
+    gapH: gapRow ? gapRow.getBoundingClientRect().height : 0,
+    colW: probe.getBoundingClientRect().width,
+    gapPx: parseFloat(getComputedStyle(cols).columnGap) || 0,
+    availW: Math.max(1, frame.clientWidth - MARGIN),
+    availH: Math.max(1, frame.clientHeight - MARGIN),
+  };
+}
+
 // layoutScreen measures one probe column at zoom 1, lets planScreen choose the
 // columns and zoom, then renders the plan.
 function layoutScreen(wrapper: ScreenWrapper): void {
@@ -2666,22 +2708,11 @@ function layoutScreen(wrapper: ScreenWrapper): void {
   const frame = scrollFrame();
   if (!cols || !frame || !rowItems || !rowItems.length) return;
 
-  const MARGIN = 6; // px of breathing room inside the frame (kept small to use all space)
   wrapper.style.height = `${frame.clientHeight}px`;
   cols.style.removeProperty("--screen-team-col");
   cols.style.zoom = "1";
   cols.replaceChildren(makeScreenColumn(wrapper._screenTourLabel, rowItems));
-  const probe = cols.firstChild as HTMLTableElement;
-  const gapRow = probe.querySelector("tbody tr.results-group-gap");
-  const plan = planScreen(rowItems, {
-    headH: probe.querySelector("thead")!.getBoundingClientRect().height,
-    rowH: probe.querySelector("tbody tr.results-row")!.getBoundingClientRect().height,
-    gapH: gapRow ? gapRow.getBoundingClientRect().height : 0,
-    colW: probe.getBoundingClientRect().width,
-    gapPx: parseFloat(getComputedStyle(cols).columnGap) || 0,
-    availW: Math.max(1, frame.clientWidth - MARGIN),
-    availH: Math.max(1, frame.clientHeight - MARGIN),
-  }, screenSettings);
+  const plan = planScreen(rowItems, measureScreen(cols, frame), screenSettings);
   if (!plan) return;
   if (plan.teamCol !== null) cols.style.setProperty("--screen-team-col", `${plan.teamCol}px`);
   cols.replaceChildren(...plan.columns.map((colRows) => makeScreenColumn(wrapper._screenTourLabel, colRows)));
@@ -2739,7 +2770,7 @@ function buildResultsTableInner(): HTMLTableElement {
   head.appendChild(th("R", "results-num-head"));
   table.appendChild(sheetHead([{row: head}]));
 
-  const colCount = 4 + tourLengths.length + shootoutRoundCount +
+  const colCount = RESULTS_FIXED_COLS + tourLengths.length + shootoutRoundCount +
     expandedResultsQuestionCount() + expandedResultsShootoutQuestionCount();
   const groups: Array<{placeText: string; rows: RankKey[]}> = [];
   sortKeys.forEach((row) => {

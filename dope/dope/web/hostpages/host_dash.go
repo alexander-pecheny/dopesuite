@@ -23,6 +23,7 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/session"
 
 	"dope/dope/web/route"
@@ -117,7 +118,7 @@ func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
 	s := dopestrings.Default
 	ratingID := ""
 	if data.RatingID != 0 {
-		ratingID = strconv.FormatInt(data.RatingID, 10)
+		ratingID = idstr.Format(data.RatingID)
 	}
 	pub := dopeui.Checkbox(dopeui.Name("is_public"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.PublicLabel()))
 	if data.Fest.IsPublic {
@@ -136,30 +137,37 @@ func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
 	)
 }
 
+// hostDashGameRow links to one game and, for a host who manages games, offers
+// its settings, clear and delete.
+func hostDashGameRow(g PublicFestGame, ref string, canManage bool) *dopeui.Element {
+	s := dopestrings.Default
+	base := "/host/fest/" + ref + "/game/" + g.Ref()
+	link := []dopeui.Item{dopeui.Href(base + "/"), dopeui.Listtitle(dopeui.Text(g.Title))}
+	if g.Slug != "" {
+		link = append(link, dopeui.Muted(dopeui.Text(g.Slug)))
+	}
+	row := []dopeui.Item{dopeui.Rowlink(link...)}
+	if canManage {
+		row = append(row,
+			dopeui.Button(dopeui.Href(base+"/settings"), dopeui.Text(s.Host.Dash.SettingsBtn())),
+			dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/clear"),
+				dopeui.Data("confirm", s.Host.Dash.ClearConfirm()),
+				dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text(s.Host.Dash.ClearBtn()))),
+			dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/delete"),
+				dopeui.Data("confirm", s.Host.Dash.DeleteGameConfirm()),
+				dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text(s.Host.Dash.DeleteBtn()))),
+		)
+	}
+	return dopeui.Actionrow(row...)
+}
+
 func hostDashGamesSection(data hostFestDashData, ref string) *dopeui.Element {
 	s := dopestrings.Default
 	sect := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.Dash.GamesSubhead()))}
 	if len(data.Games) > 0 {
 		rows := make([]dopeui.Item, 0, len(data.Games))
 		for _, g := range data.Games {
-			base := "/host/fest/" + ref + "/game/" + g.Ref()
-			link := []dopeui.Item{dopeui.Href(base + "/"), dopeui.Listtitle(dopeui.Text(g.Title))}
-			if g.Slug != "" {
-				link = append(link, dopeui.Muted(dopeui.Text(g.Slug)))
-			}
-			row := []dopeui.Item{dopeui.Rowlink(link...)}
-			if data.CanManageGames {
-				row = append(row,
-					dopeui.Button(dopeui.Href(base+"/settings"), dopeui.Text(s.Host.Dash.SettingsBtn())),
-					dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/clear"),
-						dopeui.Data("confirm", s.Host.Dash.ClearConfirm()),
-						dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text(s.Host.Dash.ClearBtn()))),
-					dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/delete"),
-						dopeui.Data("confirm", s.Host.Dash.DeleteGameConfirm()),
-						dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text(s.Host.Dash.DeleteBtn()))),
-				)
-			}
-			rows = append(rows, dopeui.Actionrow(row...))
+			rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames))
 		}
 		sect = append(sect, dopeui.Actionlist(rows...))
 	} else {
@@ -201,7 +209,7 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 		dopeui.Hcell(dopeui.Text(s.Host.Dash.ColNickname())), dopeui.Hcell(dopeui.Text(s.Host.Dash.ColRole())), dopeui.Hcell(),
 	)}
 	for _, m := range data.Access {
-		uid := strconv.FormatInt(m.UserID, 10)
+		uid := idstr.Format(m.UserID)
 		var roleCell, actionCell *dopeui.Element
 		if m.IsCreator {
 			roleCell = dopeui.Cell(dopeui.Hiddenfield(dopeui.Name("role_"+uid), dopeui.Value("creator")), dopeui.Text("creator"))
@@ -239,7 +247,7 @@ func hostGames(data hostFestDashData, m festaccess.HostAccessMember) *dopeui.Ele
 	if m.Role != roles.Host || len(data.Games) == 0 {
 		return dopeui.Col()
 	}
-	uid := strconv.FormatInt(m.UserID, 10)
+	uid := idstr.Format(m.UserID)
 	limited := map[int64]bool{}
 	for _, id := range data.HostGames[m.UserID] {
 		limited[id] = true
@@ -247,7 +255,7 @@ func hostGames(data hostFestDashData, m festaccess.HostAccessMember) *dopeui.Ele
 	boxes := []dopeui.Item{dopeui.Hiddenfield(dopeui.Name("games_present_"+uid), dopeui.Value("1"))}
 	var chosen []string
 	for _, game := range data.Games {
-		items := []dopeui.Item{dopeui.Name("games_" + uid), dopeui.Value(strconv.FormatInt(game.ID, 10)), dopeui.Text(game.Title)}
+		items := []dopeui.Item{dopeui.Name("games_" + uid), dopeui.Value(idstr.Format(game.ID)), dopeui.Text(game.Title)}
 		if limited[game.ID] {
 			items = append(items, dopeui.Checked())
 			chosen = append(chosen, game.Title)
@@ -300,7 +308,7 @@ func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
 	}
 	ratingStatus := s.Host.Dash.RatingStatusNone()
 	if data.RatingID != 0 {
-		ratingStatus = "rating " + strconv.FormatInt(data.RatingID, 10)
+		ratingStatus = "rating " + idstr.Format(data.RatingID)
 	}
 	rows = append(rows,
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/rating/import"),
@@ -749,12 +757,13 @@ func groupHostFests(fests []view.HostFest, today string) []hostFestGroup {
 	sortHostFests(current)
 	sortHostFests(future)
 	sortHostFests(past)
-	groups := make([]hostFestGroup, 0, 3)
-	for _, g := range []hostFestGroup{
+	all := []hostFestGroup{
 		{Title: s.Host.Pages.GroupCurrent(), Fests: current},
 		{Title: s.Host.Pages.GroupFuture(), Fests: future},
 		{Title: s.Host.Pages.GroupPast(), Fests: past},
-	} {
+	}
+	groups := make([]hostFestGroup, 0, len(all))
+	for _, g := range all {
 		if len(g.Fests) > 0 {
 			groups = append(groups, g)
 		}

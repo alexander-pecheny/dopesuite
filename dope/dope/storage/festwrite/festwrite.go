@@ -19,9 +19,10 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/idstr"
 
 	"dope/dope/platform/util"
 	"dope/dope/storage/journal"
@@ -74,7 +75,7 @@ func AuditGameIDFromPath(path string) int64 {
 	if j := strings.IndexByte(rest, '/'); j >= 0 {
 		rest = rest[:j]
 	}
-	id, err := strconv.ParseInt(rest, 10, 64)
+	id, err := idstr.Parse(rest)
 	if err != nil || id <= 0 {
 		return 0
 	}

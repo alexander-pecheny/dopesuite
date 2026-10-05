@@ -11,7 +11,13 @@ it — that check is the only reason to trust the decoding at all.
 """
 RIGHT = {"й", "q", "y", "+"}
 WRONG = {"ц", "w", "-"}
-THEME_STRIDE, FIRST_VALUE_COL, VALUES = 7, 4, 5
+THEME_STRIDE = 7
+FIRST_VALUE_COL = 4
+VALUES = 5
+# Question i of a theme (from 0) is worth NOMINAL_STEP * (i + 1).
+NOMINAL_STEP = 10
+# theme_count stops looking after this many themes.
+MAX_THEMES = 20
 
 MISREADS = []
 
@@ -49,7 +55,7 @@ def theme_count(header):
     eight in its play-off, twelve in the grand final, nine in ТПШ's. Everything
     to the right of them is the statistics block, not marks."""
     count = 0
-    for t in range(20):
+    for t in range(MAX_THEMES):
         base = FIRST_VALUE_COL + t * THEME_STRIDE
         if base + VALUES >= len(header):
             break
@@ -57,6 +63,26 @@ def theme_count(header):
         if isinstance(label, str) and label.strip().startswith("Тема"):
             count += 1
     return count
+
+
+def read_themes(head, row, themes_here):
+    """A player row's marks, theme by theme. A theme whose marks do not add up to
+    the sheet's own total for it goes on MISREADS."""
+    themes = []
+    for t in range(themes_here):
+        base = FIRST_VALUE_COL + t * THEME_STRIDE
+        if base + VALUES > len(row):
+            break
+        answers = [mark(row[base + i]) for i in range(VALUES)]
+        themes.append(answers)
+        stated = row[base + VALUES]
+        if isinstance(stated, (int, float)):
+            got = sum((NOMINAL_STEP * (i + 1)) * (1 if a == "right" else -1 if a == "wrong" else 0)
+                      for i, a in enumerate(answers))
+            if got != round(stated):
+                MISREADS.append((head, t + 1, got, round(stated),
+                                 [str(row[base + i]) for i in range(VALUES)]))
+    return themes
 
 
 def read_bouts(ws):
@@ -77,20 +103,7 @@ def read_bouts(ws):
         if not head or current is None:
             current = None
             continue
-        themes = []
-        for t in range(themes_here):
-            base = FIRST_VALUE_COL + t * THEME_STRIDE
-            if base + VALUES > len(row):
-                break
-            answers = [mark(row[base + i]) for i in range(VALUES)]
-            themes.append(answers)
-            stated = row[base + VALUES]
-            if isinstance(stated, (int, float)):
-                got = sum((10 * (i + 1)) * (1 if a == "right" else -1 if a == "wrong" else 0)
-                          for i, a in enumerate(answers))
-                if got != round(stated):
-                    MISREADS.append((head, t + 1, got, round(stated),
-                                     [str(row[base + i]) for i in range(VALUES)]))
+        themes = read_themes(head, row, themes_here)
         # Σ and место as the sheet printed them. They are what the replay holds
         # dope against, so they are read verbatim and never recomputed here.
         shootout = number(row[shootout_col]) if shootout_col is not None else None

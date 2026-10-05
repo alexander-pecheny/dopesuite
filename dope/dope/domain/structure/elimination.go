@@ -10,6 +10,19 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
+const (
+	// semifinalEntrants is how many a halving bracket's semifinal takes.
+	semifinalEntrants = 4
+	// blockRoundLimit bounds a block, so a bad scheme cannot plan forever.
+	blockRoundLimit = 64
+	// minBestOf is the shortest series best_of may set: an odd number of
+	// bouts, at least three.
+	minBestOf = 3
+	// elimKeyBand spreads the elimination sort key: the round a Participant
+	// went out in outweighs any count of losses.
+	elimKeyBand = 1000
+)
+
 // The elimination rounds, for both Kinds.
 //
 // An elimination is defined by how many Losses end a Participant's tournament —
@@ -59,30 +72,50 @@ func planElimBlockRounds(entrants, winning, maxBlockRounds int, sizeFor func(blo
 			return blockRounds, nil
 		}
 		size := sizeFor(blockRound, entering)
-		if size < 2 {
-			return nil, fmt.Errorf("%s", s.Structure.Elimination.MatchSizeMin())
-		}
-		if size <= winning {
-			return nil, fmt.Errorf("%s", s.Structure.Elimination.BoutCannotOutput(strconv.Itoa(size), strconv.Itoa(winning)))
+		if err := checkElimBoutSize(size, winning); err != nil {
+			return nil, err
 		}
 		if entering <= size {
 			blockRounds = append(blockRounds, elimBlockRound{entering: entering, size: entering, bouts: 1, terminal: true})
 			return blockRounds, nil
 		}
-		if entering%size != 0 {
-			return nil, fmt.Errorf("%s", s.Structure.Elimination.BlockRoundNotDivisible(strconv.Itoa(blockRound), strconv.Itoa(entering), strconv.Itoa(size)))
+		round, err := elimRound(blockRound, entering, size, winning)
+		if err != nil {
+			return nil, err
 		}
-		bouts := entering / size
-		blockRounds = append(blockRounds, elimBlockRound{entering: entering, size: size, bouts: bouts})
-		next := bouts * winning
-		if next >= entering {
-			return nil, fmt.Errorf("%s", s.Structure.Elimination.BlockRoundEliminateNothing(strconv.Itoa(blockRound), strconv.Itoa(entering), strconv.Itoa(next)))
-		}
-		entering = next
-		if len(blockRounds) > 64 {
+		blockRounds = append(blockRounds, round)
+		entering = round.bouts * winning
+		if len(blockRounds) > blockRoundLimit {
 			return nil, fmt.Errorf("%s", s.Structure.Elimination.TooManyBlockRounds())
 		}
 	}
+}
+
+// checkElimBoutSize refuses a Match too small to be a bout, or one that sends
+// everybody on.
+func checkElimBoutSize(size, winning int) error {
+	s := dopestrings.Default
+	if size < 2 {
+		return fmt.Errorf("%s", s.Structure.Elimination.MatchSizeMin())
+	}
+	if size <= winning {
+		return fmt.Errorf("%s", s.Structure.Elimination.BoutCannotOutput(strconv.Itoa(size), strconv.Itoa(winning)))
+	}
+	return nil
+}
+
+// elimRound is one non-final round of entering Participants in Matches of
+// size, refused when they do not split evenly or nobody would go out.
+func elimRound(blockRound, entering, size, winning int) (elimBlockRound, error) {
+	s := dopestrings.Default
+	if entering%size != 0 {
+		return elimBlockRound{}, fmt.Errorf("%s", s.Structure.Elimination.BlockRoundNotDivisible(strconv.Itoa(blockRound), strconv.Itoa(entering), strconv.Itoa(size)))
+	}
+	bouts := entering / size
+	if next := bouts * winning; next >= entering {
+		return elimBlockRound{}, fmt.Errorf("%s", s.Structure.Elimination.BlockRoundEliminateNothing(strconv.Itoa(blockRound), strconv.Itoa(entering), strconv.Itoa(next)))
+	}
+	return elimBlockRound{entering: entering, size: size, bouts: bouts}, nil
 }
 
 // elimBlockRoundNames are the dotted-override keys a round answers to: `r{N}` by
@@ -96,7 +129,7 @@ func elimBlockRoundNames(r elimBlockRound, index int, winning int) []string {
 		switch r.entering {
 		case 2:
 			return []string{"final", ordinal}
-		case 4:
+		case semifinalEntrants:
 			return []string{"semifinal", ordinal}
 		}
 	}
@@ -340,7 +373,7 @@ func planLivesEntered(entrants, lower, lives, winning, proceeding int, sizeFor f
 		plan.alive = append(plan.alive, aliveNow)
 		plan.aliveBands = append(plan.aliveBands, bandsNow)
 		brackets = next
-		if blockRound > 64 {
+		if blockRound > blockRoundLimit {
 			return nil, fmt.Errorf("%s", s.Structure.Elimination.TooManyBlockRounds())
 		}
 	}
@@ -428,9 +461,9 @@ func eliminationStandings(lives, winningPlaces int, results []MatchOutcome) []Ra
 	}
 	key := func(id int64) int {
 		if blockRound, out := eliminated[id]; out {
-			return 1000*(1000-blockRound) + losses[id]
+			return elimKeyBand*(elimKeyBand-blockRound) + losses[id]
 		}
-		return losses[id] - 1000
+		return losses[id] - elimKeyBand
 	}
 	ranked := make([]int64, len(order))
 	copy(ranked, order)

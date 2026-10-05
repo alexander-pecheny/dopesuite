@@ -3,7 +3,7 @@
 // Brain and Troika both read it; a format that adds a column names the metric
 // it wants rather than restating the table.
 
-import {formatDisplayText, td} from "./cells.js";
+import {formatDisplayText, roundTo, td} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {standingsTable} from "./standings.js";
 import S from "./i18nstrings.js";
@@ -99,7 +99,7 @@ export interface CrosstableSpec {
 // binary noise every such sum has — 1.8599999999999999 for 1.86. Ranking uses
 // the full value; what is printed is exact in two places.
 function round(value: number): number {
-  return Math.round(value * 100) / 100;
+  return roundTo(value, 2);
 }
 
 export function buildCrosstables(spec: CrosstableSpec): HTMLElement {

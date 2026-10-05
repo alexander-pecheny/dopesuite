@@ -14,9 +14,9 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strconv"
 
 	"pecheny.me/dopecore/adminusers"
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/session"
 	kit "pecheny.me/dopeuikit/kit"
 )
@@ -107,7 +107,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 					ui.Text(s.Admin.PasswordReset.ResetLink())))
 			}
 			rows = append(rows, ui.Trow(
-				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
+				ui.Cell(ui.Text(idstr.Format(u.ID))),
 				nameCell,
 				ui.Cell(ui.Text(u.Telegram)),
 				ui.Cell(ui.Text(kit.AdminTime(u.LastSeenAt))),

@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"io"
-	"strconv"
 	"strings"
 
 	"dope/dope/domain/roster"
@@ -14,11 +13,24 @@ import (
 
 	"github.com/xuri/excelize/v2"
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // The fest roster as a spreadsheet (ADR-0024): exported one row per person,
 // and read back in the same layout as the host's edits. A team the sheet
 // names is set to the people it lists; a team it does not name is left alone.
+
+// The sheet's columns, in order.
+const (
+	colNumber = iota
+	colTeam
+	colCity
+	colTeamID
+	colFlags
+	colPlayer
+	colPlayerID
+	rosterColumnCount
+)
 
 // rosterColumns are the sheet's columns in order, as the Catalog names them.
 func rosterColumns() []string {
@@ -40,6 +52,18 @@ func BuildRosterXLSX(ctx context.Context, q store.Queryer, festID int64) ([]byte
 	teams := roster.SortedFestRosterImportTeams(activeRoster(state))
 	book := excelize.NewFile()
 	defer book.Close()
+	if err := writeRosterSheet(book, teams); err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	if err := book.Write(&out); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+// writeRosterSheet fills the book's first sheet: the header, then each team's rows.
+func writeRosterSheet(book *excelize.File, teams []roster.FestRosterImportTeam) error {
 	sheet := book.GetSheetName(0)
 	write := func(row int, values []any) error {
 		cell, err := excelize.CoordinatesToCellName(1, row)
@@ -48,37 +72,37 @@ func BuildRosterXLSX(ctx context.Context, q store.Queryer, festID int64) ([]byte
 		}
 		return book.SetSheetRow(sheet, cell, &values)
 	}
-	header := make([]any, 0, 7)
+	header := make([]any, 0, rosterColumnCount)
 	for _, col := range rosterColumns() {
 		header = append(header, col)
 	}
 	if err := write(1, header); err != nil {
-		return nil, err
+		return err
 	}
 	row := 2
 	for _, team := range teams {
-		flags := strings.Join(roster.FlagShortNames(team.Flags), ", ")
-		base := []any{team.Number, team.Name, team.City, optionalInt(team.RatingID), flags}
-		if len(team.Players) == 0 {
-			if err := write(row, append(base, "", "")); err != nil {
-				return nil, err
-			}
-			row++
-			continue
-		}
-		for _, p := range team.Players {
-			values := append(append([]any{}, base...), store.JoinPlayerName(p.FirstName, p.LastName), optionalInt(p.RatingID))
+		for _, values := range rosterRows(team) {
 			if err := write(row, values); err != nil {
-				return nil, err
+				return err
 			}
 			row++
 		}
 	}
-	var out bytes.Buffer
-	if err := book.Write(&out); err != nil {
-		return nil, err
+	return nil
+}
+
+// rosterRows are a team's sheet rows: one per person, or one with nobody on it.
+func rosterRows(team roster.FestRosterImportTeam) [][]any {
+	flags := strings.Join(roster.FlagShortNames(team.Flags), ", ")
+	base := []any{team.Number, team.Name, team.City, optionalInt(team.RatingID), flags}
+	if len(team.Players) == 0 {
+		return [][]any{append(base, "", "")}
 	}
-	return out.Bytes(), nil
+	rows := make([][]any, 0, len(team.Players))
+	for _, p := range team.Players {
+		rows = append(rows, append(append([]any{}, base...), store.JoinPlayerName(p.FirstName, p.LastName), optionalInt(p.RatingID)))
+	}
+	return rows
 }
 
 func optionalInt(v int64) any {
@@ -129,13 +153,13 @@ func ParseRosterXLSX(r io.Reader) ([]SheetTeam, error) {
 				}
 			}
 		}
-		if _, ok := found[1]; ok {
+		if _, ok := found[colTeam]; ok {
 			col, headerAt = found, i
 			break
 		}
 	}
 	if headerAt < 0 {
-		return nil, corei18n.User(dopestrings.Default.Imports.RosterXlsx.NoHeader(names[1]))
+		return nil, corei18n.User(dopestrings.Default.Imports.RosterXlsx.NoHeader(names[colTeam]))
 	}
 	get := func(row []string, k int) string {
 		j, ok := col[k]
@@ -144,38 +168,38 @@ func ParseRosterXLSX(r io.Reader) ([]SheetTeam, error) {
 		}
 		return strings.TrimSpace(row[j])
 	}
-	_, hasFlags := col[4]
+	_, hasFlags := col[colFlags]
 	var out []SheetTeam
 	index := map[string]int{}
 	for i := headerAt + 1; i < len(rows); i++ {
 		row := rows[i]
-		name := get(row, 1)
+		name := get(row, colTeam)
 		if name == "" {
 			continue
 		}
-		ratingID, _ := strconv.ParseInt(get(row, 3), 10, 64)
-		city := get(row, 2)
+		ratingID, _ := idstr.Parse(get(row, colTeamID))
+		city := get(row, colCity)
 		key := "name:" + strings.ToLower(name) + "|" + strings.ToLower(city)
 		if ratingID > 0 {
-			key = "rating:" + strconv.FormatInt(ratingID, 10)
+			key = "rating:" + idstr.Format(ratingID)
 		}
 		at, seen := index[key]
 		if !seen {
 			team := SheetTeam{RatingID: ratingID, Name: name, City: city}
 			if hasFlags {
-				flags := get(row, 4)
+				flags := get(row, colFlags)
 				team.Flags = &flags
 			}
 			out = append(out, team)
 			at = len(out) - 1
 			index[key] = at
 		}
-		person := get(row, 5)
+		person := get(row, colPlayer)
 		if person == "" {
 			continue
 		}
 		words := strings.Fields(person)
-		playerID, _ := strconv.ParseInt(get(row, 6), 10, 64)
+		playerID, _ := idstr.Parse(get(row, colPlayerID))
 		out[at].Players = append(out[at].Players, roster.FestRosterImportPlayer{
 			RatingID: playerID, FirstName: words[0], LastName: strings.Join(words[1:], " "),
 		})

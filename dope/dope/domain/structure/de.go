@@ -29,6 +29,9 @@ func (pod) Keys() []Key {
 	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "participants"}, {Name: "match_size"}, {Name: "winning_places"}, {Name: "lower_entrants"}, {Name: "opening"}}
 }
 
+// dePodSize is KINSBF's classic pod: four to a group.
+const dePodSize = 4
+
 // Expand is an elimination where two Losses end a tournament —
 // KINSBF's pods of four and individual SI's whole play-off are the same Kind,
 // told apart only by their size and by how many Participants leave the block.
@@ -59,12 +62,12 @@ func (pod) Expand(b Block) (Outputs, error) {
 		groups = participants / perGroup
 	case hasTeams && size == 2 && winning == 1:
 		// The classic pod: four to a group unless the scheme says otherwise.
-		if participants%4 != 0 {
+		if participants%dePodSize != 0 {
 			return Outputs{}, errors.New(s.Structure.De.GroupsNeeded())
 		}
-		groups, perGroup = participants/4, 4
+		groups, perGroup = participants/dePodSize, dePodSize
 	case hasGroups && !hasTeams && !hasSize && size == 2 && winning == 1:
-		perGroup = 4
+		perGroup = dePodSize
 	case hasTeams:
 		groups, perGroup = 1, participants
 	default:

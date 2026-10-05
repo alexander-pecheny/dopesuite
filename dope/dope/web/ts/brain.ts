@@ -7,7 +7,7 @@
 // page (bout-page.ts). A self-booting side-effect module bundled by
 // pages/brain.ts.
 
-import {cssEscape, formatDisplayText, td} from "./cells.js";
+import {cssEscape, formatDisplayText, percentText, td} from "./cells.js";
 import {standingsTable} from "./standings.js";
 import {sheetHead} from "./sheet-pins.js";
 import {buildCrosstables, crossSlot, slotKey, standingsByParticipant} from "./crosstable.js";
@@ -327,12 +327,7 @@ function buildProtocols(stages: BrainSchemeStage[]): HTMLElement {
     const bouts = stageBouts(stage);
     if (!bouts.length) continue;
     rendered++;
-    if (multi) {
-      const head = document.createElement("h2");
-      head.className = "brain-stage-head";
-      head.textContent = stage.title || stage.code || "";
-      wrap.appendChild(head);
-    }
+    if (multi) wrap.appendChild(protocolStageHead(stage));
     const row = document.createElement("div");
     row.className = "brain-bouts";
     for (const bout of bouts) {
@@ -349,6 +344,13 @@ function buildProtocols(stages: BrainSchemeStage[]): HTMLElement {
   return wrap;
 }
 
+function protocolStageHead(stage: BrainSchemeStage): HTMLElement {
+  const head = document.createElement("h2");
+  head.className = "brain-stage-head";
+  head.textContent = stage.title || stage.code || "";
+  return head;
+}
+
 // buildGrid is the grid tab: the whole Game at a glance from the same fest data
 // the EK pages draw — every Block one column, place-grain, no protocol detail.
 function buildGrid(): HTMLElement {
@@ -362,13 +364,12 @@ function buildGrid(): HTMLElement {
 // a row band: its matches of every block round sit in the band, so a block round
 // with one match per pod leaves the pod's other slot blank and the columns read
 // across.
-function buildPodBoard(pods: BrainSchemeStage[]): HTMLElement {
-  type GridMatch = NonNullable<FestGridStage["matches"]>[number];
-  const byBlockRound = new Map<number, GridMatch[]>();
-  const blockRoundOf = (planned: BrainSchemeMatch) => Number((planned as {round?: number}).round || 1);
-  // slots[pod][i] is the match's slot within its pod's block round; podRows is
-  // the widest.
-  const slots = pods.map((stage) => {
+function blockRoundOf(planned: BrainSchemeMatch): number {
+  return Number((planned as {round?: number}).round || 1);
+}
+
+function podSlots(pods: BrainSchemeStage[]): number[][] {
+  return pods.map((stage) => {
     const seen = new Map<number, number>();
     return (stage.matches || []).map((planned) => {
       const slot = seen.get(blockRoundOf(planned)) || 0;
@@ -376,6 +377,14 @@ function buildPodBoard(pods: BrainSchemeStage[]): HTMLElement {
       return slot;
     });
   });
+}
+
+function buildPodBoard(pods: BrainSchemeStage[]): HTMLElement {
+  type GridMatch = NonNullable<FestGridStage["matches"]>[number];
+  const byBlockRound = new Map<number, GridMatch[]>();
+  // slots[pod][i] is the match's slot within its pod's block round; podRows is
+  // the widest.
+  const slots = podSlots(pods);
   const podRows = Math.max(0, ...slots.flat()) + 1;
   pods.forEach((stage, pod) => {
     const live = new Map((page.festStage(stage.code || "")?.matches || []).map((m) => [m.code, m]));
@@ -456,7 +465,7 @@ function buildStatsView(): HTMLElement {
       row.attempts,
       row.right,
       row.wrong,
-      row.attempts ? `${Math.round((row.right / row.attempts) * 100)}%` : "",
+      row.attempts ? percentText(row.right / row.attempts) : "",
     ]),
   }));
   return wrapper;

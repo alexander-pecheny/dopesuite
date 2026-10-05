@@ -13,15 +13,20 @@ import openpyxl
 import sheetgrid
 
 SRC = "sheets/sheet-1HOqiPxINFxW3NVu6QAOKuU8yOyXB3IwjGCrO6AqHtK4.xlsx"
+# «Регистрация» runs to the seed in column E; «Группы» lays its groups across
+# this many columns; «Группы A-B» and the like keep the sorted table in column H.
+REGISTRATION_COLS = 5
+GROUPS_SHEET_COLS = 24
+SORTED_TABLE_COL = 8
 
 wb = openpyxl.load_workbook(SRC, read_only=True, data_only=True)
 players = []
-for row in wb["Регистрация"].iter_rows(min_row=2, max_col=5, values_only=True):
+for row in wb["Регистрация"].iter_rows(min_row=2, max_col=REGISTRATION_COLS, values_only=True):
     if row[0]:
         players.append({"name": str(row[0]).strip(), "seed": int(row[4]) if row[4] else None})
 
 groups, header = {}, None
-for row in wb["Группы"].iter_rows(max_col=24, values_only=True):
+for row in wb["Группы"].iter_rows(max_col=GROUPS_SHEET_COLS, values_only=True):
     cells = [str(c).strip() if c else "" for c in row]
     if any(c.startswith("Группа ") for c in cells):
         header = {i: c.split()[-1] for i, c in enumerate(cells) if c.startswith("Группа ")}
@@ -37,8 +42,8 @@ for row in wb["Группы"].iter_rows(max_col=24, values_only=True):
 tables = {}
 for title in ["Группы A-B", "Группы C-D", "Группы E-F"]:
     letter = None
-    for row in wb[title].iter_rows(max_col=8, values_only=True):
-        cell = str(row[7]).strip() if row[7] is not None else ""
+    for row in wb[title].iter_rows(max_col=SORTED_TABLE_COL, values_only=True):
+        cell = str(row[SORTED_TABLE_COL - 1]).strip() if row[SORTED_TABLE_COL - 1] is not None else ""
         if cell.startswith("Группа "):
             letter = cell.split()[-1]
             tables[letter] = []
@@ -78,11 +83,12 @@ for bouts in list(rounds.values()) + [playoff]:
             entry[2] += 1
             for theme in seat["themes"]:
                 for k, m in enumerate(theme):
+                    nominal = sheetgrid.NOMINAL_STEP * (k + 1)
                     if m == "right":
-                        entry[0] += 10 * (k + 1)
-                        entry[1] += 10 * (k + 1)
+                        entry[0] += nominal
+                        entry[1] += nominal
                     elif m == "wrong":
-                        entry[0] -= 10 * (k + 1)
+                        entry[0] -= nominal
 sheet_by = {s["player"]: [s["sum"], s["plus"], s["bouts"]] for s in stats}
 bad = [name for name in set(computed) | set(sheet_by)
        if computed.get(name) != sheet_by.get(name) and name not in KNOWN_BAD]

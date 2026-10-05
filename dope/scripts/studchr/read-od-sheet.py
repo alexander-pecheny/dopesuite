@@ -6,12 +6,14 @@ have been entered. «Подробно» carries the team list with its numbers."
 import json, openpyxl
 
 SRC = "sheets/sheet-1RbdnnqT1NyAvPJeg8FcN4Lej1bkH4nveBpr-Ac5jeVI.xlsx"
+# «Подробно»: №, ID, team name and one more column.
+DETAIL_COLS = 4
 
 wb = openpyxl.load_workbook(SRC, read_only=True, data_only=True)
 teams = []
 # № is the tournament number the «Ввод» grid keys on; ID is the team's
 # rating.chgk.info id and means nothing here.
-for row in wb["Подробно"].iter_rows(min_row=2, max_col=4, values_only=True):
+for row in wb["Подробно"].iter_rows(min_row=2, max_col=DETAIL_COLS, values_only=True):
     if row[0] and row[2]:
         teams.append({"number": int(row[0]), "name": str(row[2]).strip(),
                       "city": str(row[3]).strip() if row[3] else ""})

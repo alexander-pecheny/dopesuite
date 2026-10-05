@@ -11,13 +11,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
+
+	"pecheny.me/dopecore/idstr"
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
+	"dope/dope/domain/structure"
 	"dope/dope/storage/store"
 )
 
@@ -139,25 +141,20 @@ update matches set state_json = ?, status = 'finished', revision = revision + 1 
 // pinnedPlaces ranks a played EK match by the totals it was just dealt and
 // writes them into the blob as the host's places, so the sheet agrees with
 // itself and the next round seats the teams that actually won.
-func pinnedPlaces(match store.DBMatchState) (string, error) {
-	p, ok := games.ProtocolOf(match.GameType)
-	if !ok {
-		return "", fmt.Errorf("fixture: no protocol %q", match.GameType)
-	}
-	outcomes, err := p.Score(nil, match.ProtocolState())
-	if err != nil {
-		return "", err
-	}
-	type seat struct {
-		id          int64
-		total, plus float64
-	}
-	var seats []seat
-	for index, id := range match.ParticipantIDs {
+// pinSeat is one seated Participant and the two metrics that rank it.
+type pinSeat struct {
+	id          int64
+	total, plus float64
+}
+
+// rankedSeats orders a match's seated Participants by total, then plus.
+func rankedSeats(ids []int64, outcomes []structure.SlotOutcome) []pinSeat {
+	var seats []pinSeat
+	for index, id := range ids {
 		if id == 0 || index >= len(outcomes) {
 			continue
 		}
-		seats = append(seats, seat{id: id, total: outcomes[index].Metrics["total"], plus: outcomes[index].Metrics["plus"]})
+		seats = append(seats, pinSeat{id: id, total: outcomes[index].Metrics["total"], plus: outcomes[index].Metrics["plus"]})
 	}
 	// Ties are broken all the way down to the id: a fixture needs one order,
 	// not a shared place the bracket cannot resolve.
@@ -170,6 +167,19 @@ func pinnedPlaces(match store.DBMatchState) (string, error) {
 		}
 		return seats[i].id < seats[j].id
 	})
+	return seats
+}
+
+func pinnedPlaces(match store.DBMatchState) (string, error) {
+	p, ok := games.ProtocolOf(match.GameType)
+	if !ok {
+		return "", fmt.Errorf("fixture: no protocol %q", match.GameType)
+	}
+	outcomes, err := p.Score(nil, match.ProtocolState())
+	if err != nil {
+		return "", err
+	}
+	seats := rankedSeats(match.ParticipantIDs, outcomes)
 	blob := match.Blob
 	for index, s := range seats {
 		place := float64(index + 1)
@@ -286,7 +296,7 @@ func hamsaDocument(match store.DBMatchState, base int64) (string, error) {
 			answer = games.HamsaBetWrong
 		}
 		section.Bet = &games.HamsaBet{Amount: &amount, Answer: answer}
-		state.Participants[strconv.FormatInt(participantID, 10)] = section
+		state.Participants[idstr.Format(participantID)] = section
 	}
 	return marshal(state)
 }
@@ -297,6 +307,20 @@ const (
 	hamsaBetSpread = 5
 	hamsaBetLost   = 3
 )
+
+// The buzzer's dial: how much a side wants a question, and by how much it must
+// want it more than the other side to answer.
+const (
+	buzzerSeedStride = 37
+	buzzerRowStride  = 11
+	buzzerSpan       = 23
+	buzzerMargin     = 3
+)
+
+// buzzerReach is how much a side wants a question.
+func buzzerReach(participantID int64, row int) int {
+	return (int(participantID)*buzzerSeedStride + row*buzzerRowStride) % buzzerSpan
+}
 
 func brainDocument(match store.DBMatchState) (string, error) {
 	var state games.BrainState
@@ -311,13 +335,12 @@ func brainDocument(match store.DBMatchState) (string, error) {
 	for row := range state.Teams[0].Rows {
 		// A buzzer question goes to whichever side wants it more on this
 		// question, or to neither: both sides cannot answer the same one.
-		reach := func(side int) int { return (int(match.ParticipantIDs[side])*37 + row*11) % 23 }
-		a, b := reach(0), reach(1)
+		a, b := buzzerReach(match.ParticipantIDs[0], row), buzzerReach(match.ParticipantIDs[1], row)
 		switch {
-		case a > b+3:
+		case a > b+buzzerMargin:
 			state.Teams[0].Rows[row].Mark = "right"
 			taken[0]++
-		case b > a+3:
+		case b > a+buzzerMargin:
 			state.Teams[1].Rows[row].Mark = "right"
 			taken[1]++
 		case a == b:
@@ -351,25 +374,30 @@ func brainDocument(match store.DBMatchState) (string, error) {
 	return marshal(state)
 }
 
-func troikaDocument(match store.DBMatchState) (string, error) {
-	var state games.TroikaState
-	if err := json.Unmarshal([]byte(match.RawState), &state); err != nil {
-		return "", err
-	}
+// dealTroikaAnswers marks every chair's answer on each side's sheet.
+func dealTroikaAnswers(state *games.TroikaState, ids []int64) {
 	for side := range state.Sides {
 		seat := 0
-		if side < len(match.ParticipantIDs) {
-			seat = int(match.ParticipantIDs[side])
+		if side < len(ids) {
+			seat = int(ids[side])
 		}
 		for theme := range state.Sides[side].Themes {
 			answers := state.Sides[side].Themes[theme].Answers
 			for question := range answers {
 				for chair := range answers[question] {
-					answers[question][chair] = mark(seat, seat, theme*3+question, chair)
+					answers[question][chair] = mark(seat, seat, theme*games.TroikaThemeQuestions+question, chair)
 				}
 			}
 		}
 	}
+}
+
+func troikaDocument(match store.DBMatchState) (string, error) {
+	var state games.TroikaState
+	if err := json.Unmarshal([]byte(match.RawState), &state); err != nil {
+		return "", err
+	}
+	dealTroikaAnswers(&state, match.ParticipantIDs)
 	// A troika theme is worth the same to both sides, so more correct answers
 	// is a higher score — but two sides can still land on the same total, and a
 	// drawn bout sends nobody on. The side the seed favours takes one more
@@ -450,6 +478,12 @@ func buildOD(ctx context.Context, tx *sql.Tx, festID int64) error {
 	if err != nil {
 		return err
 	}
+	state["entries"], state["completed"] = odAnswers(numbers)
+	return writeFlat(ctx, tx, festID, gameID, state)
+}
+
+// odAnswers deals every OD question: who took it, and that it was played.
+func odAnswers(numbers []int) ([][]int, []bool) {
 	questions := odTours * odQuestions
 	entries := make([][]int, questions)
 	for q := range entries {
@@ -464,9 +498,7 @@ func buildOD(ctx context.Context, tx *sql.Tx, festID int64) error {
 	for i := range completed {
 		completed[i] = true
 	}
-	state["entries"] = entries
-	state["completed"] = completed
-	return writeFlat(ctx, tx, festID, gameID, state)
+	return entries, completed
 }
 
 // odTeamNumbers is the numbers OD's entries key on, in document order.
@@ -566,7 +598,9 @@ func ksiSeats(state map[string]any) ([]games.KSIParticipant, error) {
 // declares: every team spends its two ×2 and its two one-offs on different
 // themes and takes the plain one for the rest.
 func sticker(team, theme int) string {
-	switch (theme - team%5 + 60) % 12 {
+	// stickerPhases is how many different starting themes the teams get.
+	const stickerPhases = 5
+	switch (theme - team%stickerPhases + stickerPhases*stickerThemes) % stickerThemes {
 	case 0, 1:
 		return games.KSIStickerX2
 	case 2:

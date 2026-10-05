@@ -400,48 +400,61 @@ func (s *server) authPassword(w http.ResponseWriter, r *http.Request, sc route.S
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	if len(req.NewPassword) < passwordMinLen {
-		return route.BadRequest(dopestrings.Default.Auth.Password.TooShort(strconv.Itoa(passwordMinLen)))
-	}
-	if len(req.NewPassword) > passwordMaxLen {
-		return route.BadRequest(dopestrings.Default.Auth.Password.TooLong(strconv.Itoa(passwordMaxLen)))
+	if err := checkNewPasswordLen(req.NewPassword); err != nil {
+		return err
 	}
 	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) error {
-		ctx := r.Context()
-		var hash, salt sql.NullString
-		if err := tx.QueryRowContext(ctx, `
-select password_hash, password_salt from users where id = ?`, sc.User.UserID).Scan(&hash, &salt); err != nil {
-			return err
-		}
-		if hash.Valid && hash.String != "" {
-			ok, _, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, req.CurrentPassword)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return route.Unauthorized(dopestrings.Default.Auth.Password.CurrentWrong())
-			}
-		}
-		hashed, err := authcred.HashPassword(req.NewPassword)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
-			hashed, util.UtcNow(), sc.User.UserID); err != nil {
-			return err
-		}
-		if err := core.RevokeAllAPITokensTx(ctx, tx, sc.User.UserID); err != nil {
-			return err
-		}
-		_, err = tx.ExecContext(ctx, `delete from sessions where user_id = ? and id <> ?`, sc.User.UserID, sc.User.SessionID)
-		return err
+		return changePasswordTx(r.Context(), tx, sc.User, req)
 	})
 	if err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
+}
+
+// checkNewPasswordLen refuses a new password outside the allowed length.
+func checkNewPasswordLen(password string) error {
+	if len(password) < passwordMinLen {
+		return route.BadRequest(dopestrings.Default.Auth.Password.TooShort(strconv.Itoa(passwordMinLen)))
+	}
+	if len(password) > passwordMaxLen {
+		return route.BadRequest(dopestrings.Default.Auth.Password.TooLong(strconv.Itoa(passwordMaxLen)))
+	}
+	return nil
+}
+
+// changePasswordTx checks the current password, if the user has one, sets the
+// new one, and signs out every other session and API token of the user.
+func changePasswordTx(ctx context.Context, tx *sql.Tx, user session.User, req passwordRequest) error {
+	var hash, salt sql.NullString
+	if err := tx.QueryRowContext(ctx, `
+select password_hash, password_salt from users where id = ?`, user.UserID).Scan(&hash, &salt); err != nil {
+		return err
+	}
+	if hash.Valid && hash.String != "" {
+		ok, _, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, req.CurrentPassword)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return route.Unauthorized(dopestrings.Default.Auth.Password.CurrentWrong())
+		}
+	}
+	hashed, err := authcred.HashPassword(req.NewPassword)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
+		hashed, util.UtcNow(), user.UserID); err != nil {
+		return err
+	}
+	if err := core.RevokeAllAPITokensTx(ctx, tx, user.UserID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `delete from sessions where user_id = ? and id <> ?`, user.UserID, user.SessionID)
+	return err
 }
 
 func loadUserTx(ctx context.Context, tx *sql.Tx, userID int64) (session.User, error) {
@@ -480,13 +493,14 @@ func meResponseFor(user session.User) meResponse {
 	return resp
 }
 
-const telegramAPIBase = "https://api.telegram.org"
+const (
+	telegramAPIBase     = "https://api.telegram.org"
+	telegramSendTimeout = 10 * time.Second
+)
 
-func sendTelegramMessageFromEnv(ctx context.Context, chatID int64, text string) error {
-	token := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
-	if token == "" {
-		return errors.New("telegram bot token is not configured")
-	}
+// newTelegramSendRequest builds the Bot API sendMessage call for one HTML
+// message.
+func newTelegramSendRequest(ctx context.Context, token string, chatID int64, text string) (*http.Request, error) {
 	values := url.Values{}
 	values.Set("chat_id", fmt.Sprintf("%d", chatID))
 	values.Set("text", text)
@@ -494,10 +508,22 @@ func sendTelegramMessageFromEnv(ctx context.Context, chatID int64, text string) 
 	endpoint := fmt.Sprintf("%s/bot%s/sendMessage", telegramAPIBase, token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := &http.Client{Timeout: 10 * time.Second}
+	return req, nil
+}
+
+func sendTelegramMessageFromEnv(ctx context.Context, chatID int64, text string) error {
+	token := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
+	if token == "" {
+		return errors.New("telegram bot token is not configured")
+	}
+	req, err := newTelegramSendRequest(ctx, token, chatID, text)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: telegramSendTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -519,12 +545,16 @@ func RequireSameOriginUnsafe(w http.ResponseWriter, r *http.Request) bool {
 	return route.SameOriginUnsafe(w, r)
 }
 
+// inviteCodeAttempts is how many random codes createInvite tries before it
+// gives up on finding one that is not taken.
+const inviteCodeAttempts = 3
+
 // createInvite is a small helper used by tests / future admin tooling. Not
 // wired to an HTTP handler yet — invites are seeded out-of-band.
 func createInvite(ctx context.Context, db *sql.DB, createdBy int64) (string, error) {
 	now := time.Now().UTC()
 	expires := now.Add(inviteLifetime).Format(time.RFC3339)
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < inviteCodeAttempts; attempt++ {
 		code, err := authcred.NewInviteCode()
 		if err != nil {
 			return "", err

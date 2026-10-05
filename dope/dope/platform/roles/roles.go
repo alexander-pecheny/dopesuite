@@ -78,33 +78,41 @@ type BulkAccessLine struct {
 // line. "username:remove" marks a deletion. Blank lines are skipped. The error
 // messages are line-numbered and shown to the host verbatim.
 func ParseBulkLines(raw string) ([]BulkAccessLine, error) {
-	s := dopestrings.Default
 	var out []BulkAccessLine
 	for idx, line := range strings.Split(raw, "\n") {
-		lineNo := idx + 1
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		nickname, action, ok := strings.Cut(line, ":")
-		if !ok {
-			return nil, core.User(s.Roles.Bulk.FormatExpected(strconv.Itoa(lineNo)))
-		}
-		nickname = strings.TrimSpace(nickname)
-		action = strings.ToLower(strings.TrimSpace(action))
-		if nickname == "" || action == "" {
-			return nil, core.User(s.Roles.Bulk.FormatExpected(strconv.Itoa(lineNo)))
-		}
-		change := BulkAccessLine{Line: lineNo, Nickname: nickname}
-		switch action {
-		case Admin, Host:
-			change.Role = action
-		case "remove":
-			change.Delete = true
-		default:
-			return nil, core.User(s.Roles.Bulk.ActionUnknown(strconv.Itoa(lineNo)))
+		change, err := parseBulkLine(line, idx+1)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, change)
 	}
 	return out, nil
+}
+
+// parseBulkLine parses one non-blank "username:role" line.
+func parseBulkLine(line string, lineNo int) (BulkAccessLine, error) {
+	s := dopestrings.Default
+	nickname, action, ok := strings.Cut(line, ":")
+	if !ok {
+		return BulkAccessLine{}, core.User(s.Roles.Bulk.FormatExpected(strconv.Itoa(lineNo)))
+	}
+	nickname = strings.TrimSpace(nickname)
+	action = strings.ToLower(strings.TrimSpace(action))
+	if nickname == "" || action == "" {
+		return BulkAccessLine{}, core.User(s.Roles.Bulk.FormatExpected(strconv.Itoa(lineNo)))
+	}
+	change := BulkAccessLine{Line: lineNo, Nickname: nickname}
+	switch action {
+	case Admin, Host:
+		change.Role = action
+	case "remove":
+		change.Delete = true
+	default:
+		return BulkAccessLine{}, core.User(s.Roles.Bulk.ActionUnknown(strconv.Itoa(lineNo)))
+	}
+	return change, nil
 }

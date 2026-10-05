@@ -52,6 +52,13 @@ GOLDENS = DOPE / "scripts" / "matrix-goldens"
 # them. A game is reached by id because the fixture gives none of them a slug.
 FEST = "fixture"
 
+# The port the matrix's own dope-server listens on.
+SERVER_PORT = 9782
+# How a starting server is polled until it answers, and how long it gets to stop.
+STARTUP_POLLS = 100
+STARTUP_POLL_INTERVAL_S = 0.2
+STOP_TIMEOUT_S = 10
+
 # The gallery is every shared table on one page from fixtures; dev servers only.
 GALLERY = "gallery|/gallery"
 
@@ -312,6 +319,17 @@ def bless(shots, goldens):
     return 0
 
 
+def wait_until_up(port):
+    """Poll a starting dope-server until it answers, or give up."""
+    for _ in range(STARTUP_POLLS):
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1)
+            return
+        except Exception:
+            time.sleep(STARTUP_POLL_INTERVAL_S)
+    raise RuntimeError(f"server on {port} did not come up; see {OUT}/server-{port}.log")
+
+
 class Server:
     """A dope-server built from `tree` (a checkout of the module) on `port`,
     serving a database it seeds itself."""
@@ -334,19 +352,12 @@ class Server:
             subprocess.run([str(self.binary), "seed-fixture", "-db", str(self.db)], cwd=self.tree, check=True, capture_output=True)
         env = dict(os.environ, DOPE_DB=str(self.db), PORT=str(port), DOPE_ENV="development")
         self.proc = subprocess.Popen([str(self.binary)], cwd=self.tree, env=env, stdout=(OUT / f"server-{port}.log").open("w"), stderr=subprocess.STDOUT)
-        for _ in range(100):
-            try:
-                urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1)
-                break
-            except Exception:
-                time.sleep(0.2)
-        else:
-            raise RuntimeError(f"server on {port} did not come up; see {OUT}/server-{port}.log")
+        wait_until_up(port)
         self.host = f"http://127.0.0.1:{port}"
 
     def stop(self):
         self.proc.send_signal(signal.SIGTERM)
-        self.proc.wait(timeout=10)
+        self.proc.wait(timeout=STOP_TIMEOUT_S)
 
 
 def run(args):
@@ -356,7 +367,7 @@ def run(args):
     shots = OUT / "shots" / "now"
     server, hub = None, None
     try:
-        server = Server(DOPE, 9782, log, db=args.db)
+        server = Server(DOPE, SERVER_PORT, log, db=args.db)
         hub = Fleet()
         t0 = time.time()
         shoot(hub, server.host, "shot", pages, shots, args.split, log)

@@ -41,6 +41,40 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from http import HTTPStatus
+
+DB_TIMEOUT_S = 15
+SESSION_TOKEN_BYTES = 32
+HTTP_TIMEOUT_S = 30
+SSE_CONNECT_TIMEOUT_S = 15
+MS_PER_S = 1000
+# How long shutdown waits for a viewer, an editor, and the viewer pool.
+VIEWER_JOIN_TIMEOUT_S = 3
+EDITOR_JOIN_TIMEOUT_S = 5
+POOL_JOIN_TIMEOUT_S = 10
+REPORT_RULE_WIDTH = 64
+# The latency percentiles the report shows.
+P50 = 0.5
+P95 = 0.95
+P99 = 0.99
+# The games the simulator edits, one per tick in turn.
+GAME_ROTATION = ("od", "ksi", "ek")
+# How many OD questions are re-rolled per tick, and how many EK themes edits
+# may land in.
+OD_ROUNDS_MAX = 24
+EK_THEMES_MAX = 6
+# simulate defaults.
+DEFAULT_DURATION_S = 120.0
+DEFAULT_EPS = 3.0
+DEFAULT_BURST = 8
+DEFAULT_BURST_TEAMS = 20
+DEFAULT_RAMP_PERIOD_S = 60.0
+DEFAULT_EDITORS = 6
+
+
+def ms_since(t0: float) -> float:
+    """Milliseconds from the monotonic time t0 until now."""
+    return (time.monotonic() - t0) * MS_PER_S
 
 
 def install_dns_cache() -> None:
@@ -90,7 +124,7 @@ def backup_path(db_path: str, stamp: str) -> str:
 # ---------------------------------------------------------------- setup -----
 
 def connect(db_path: str) -> sqlite3.Connection:
-    con = sqlite3.connect(db_path, timeout=15)
+    con = sqlite3.connect(db_path, timeout=DB_TIMEOUT_S)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     con.execute("PRAGMA busy_timeout = 15000")
@@ -162,7 +196,7 @@ def setup(con: sqlite3.Connection, db_path: str, fest_id: int, stamp: str, expir
         (username, now, now),
     )
     uid = cur.lastrowid
-    token = secrets.token_hex(32)
+    token = secrets.token_hex(SESSION_TOKEN_BYTES)
     expires = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=expiry_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     cur.execute(
         "insert into sessions(user_id, token_hash, created_at, expires_at, last_seen_at) values(?, ?, ?, ?, ?)",
@@ -261,7 +295,7 @@ class Client:
         req.add_header("Cookie", f"session={self.token}")
         if body is not None:
             req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_S) as resp:
             return resp.read()
 
     def get_json(self, path: str):
@@ -375,11 +409,11 @@ class Viewer(threading.Thread):
         req = urllib.request.Request(self.url)
         req.add_header("Accept", "text/event-stream")
         try:
-            self._resp = urllib.request.urlopen(req, timeout=15)
+            self._resp = urllib.request.urlopen(req, timeout=SSE_CONNECT_TIMEOUT_S)
         except Exception:  # noqa: BLE001
             self.stats.bump("viewer_fail")
             return
-        if getattr(self._resp, "status", 200) != 200:
+        if getattr(self._resp, "status", HTTPStatus.OK) != HTTPStatus.OK:
             self.stats.bump("viewer_fail")
             return
         buf = []
@@ -419,12 +453,12 @@ class Viewer(threading.Thread):
                 # carry it as a `set _lt_ts` op. Read whichever is present.
                 inner = env.get("data")
                 if isinstance(inner, dict) and "_lt_ts" in inner:
-                    view_ms = (time.monotonic() - float(inner["_lt_ts"])) * 1000
+                    view_ms = ms_since(float(inner["_lt_ts"]))
                 ops = env.get("ops")
                 if view_ms is None and isinstance(ops, list):
                     for op in ops:
                         if isinstance(op, dict) and op.get("path") == ["_lt_ts"]:
-                            view_ms = (time.monotonic() - float(op.get("value"))) * 1000
+                            view_ms = ms_since(float(op.get("value")))
                             break
         except Exception:  # noqa: BLE001 — keepalives / non-JSON frames
             pass
@@ -460,7 +494,12 @@ def run_viewer_pool(base: str, fest: int, stats: Stats, vmin: int, vmax: int,
     for v in viewers:
         v.shutdown()
     for v in viewers:
-        v.join(timeout=3)
+        v.join(timeout=VIEWER_JOIN_TIMEOUT_S)
+
+
+def print_latency_row(label: str, ms: list) -> None:
+    print(f"  {label:<22}{pct(ms, P50):>9.0f}{pct(ms, P95):>9.0f}{pct(ms, P99):>9.0f}"
+          f"{(max(ms) if ms else 0):>9.0f}{len(ms):>8}", flush=True)
 
 
 def print_report(stats: Stats, duration: float, vmin: int, vmax: int):
@@ -474,9 +513,9 @@ def print_report(stats: Stats, duration: float, vmin: int, vmax: int):
     print(f"  edits: {total_edits} total  {stats.edit_ok} ok  {stats.edit_err} err  ({eps:.1f}/s)", flush=True)
     print(f"  SSE events received {stats.events}  (viewer connect fails {stats.viewer_fail}, drops {stats.viewer_drop})", flush=True)
     print(f"\n  {'metric':<22}{'p50':>9}{'p95':>9}{'p99':>9}{'max':>9}{'n':>8}", flush=True)
-    print(f"  {'-' * 64}", flush=True)
-    print(f"  {'edit latency ms':<22}{pct(em,.5):>9.0f}{pct(em,.95):>9.0f}{pct(em,.99):>9.0f}{(max(em) if em else 0):>9.0f}{len(em):>8}", flush=True)
-    print(f"  {'view latency ms':<22}{pct(vm,.5):>9.0f}{pct(vm,.95):>9.0f}{pct(vm,.99):>9.0f}{(max(vm) if vm else 0):>9.0f}{len(vm):>8}", flush=True)
+    print(f"  {'-' * REPORT_RULE_WIDTH}", flush=True)
+    print_latency_row("edit latency ms", em)
+    print_latency_row("view latency ms", vm)
     print("======================================================", flush=True)
     print("  edit = editor PUT/POST round-trip; view = edit->viewer SSE propagation (OD/KSI).", flush=True)
 
@@ -505,7 +544,7 @@ def run_viewers_only(base: str, fest: int, stats: Stats,
               f"peak(srv={stats.server_peak} thr={stats.peak_viewers}) events={stats.events} "
               f"fail={stats.viewer_fail} drop={stats.viewer_drop}   ", end="", flush=True)
     stop_all.set()
-    pool.join(timeout=10)
+    pool.join(timeout=POOL_JOIN_TIMEOUT_S)
     print_report(stats, duration, vmin, vmax)
 
 
@@ -567,14 +606,14 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
         t0 = time.monotonic()
         try:
             fn()
-            stats.add_edit((time.monotonic() - t0) * 1000, ok=True)
+            stats.add_edit(ms_since(t0), ok=True)
             return True
         except urllib.error.HTTPError as e:
-            stats.add_edit((time.monotonic() - t0) * 1000, ok=False)
+            stats.add_edit(ms_since(t0), ok=False)
             print(f"\n  edit error: {e.code} {e.reason}", flush=True)
             return False
         except Exception as e:  # noqa: BLE001 — surface anything else but keep going
-            stats.add_edit((time.monotonic() - t0) * 1000, ok=False)
+            stats.add_edit(ms_since(t0), ok=False)
             print(f"\n  edit error: {e}", flush=True)
             return False
 
@@ -593,12 +632,12 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
     # Concentrate KSI edits on the first handful of participants so changes land
     # where a viewer is looking, in a burst per tick.
     ksi_parts = min(burst_teams, n_participants)
-    rounds = min(24, n_entries)
+    rounds = min(OD_ROUNDS_MAX, n_entries)
     deadline = time.monotonic() + duration
     edits = {"od": 0, "ksi": 0, "ek": 0}
     nxt = 0
     while time.monotonic() < deadline:
-        which = ("od", "ksi", "ek")[nxt % 3]
+        which = GAME_ROTATION[nxt % len(GAME_ROTATION)]
         nxt += 1
         if which == "od" and n_entries and od_numbers:
             # Each tick, re-roll which distinct teams "took" each (completed)
@@ -631,7 +670,7 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
                 ok_any = timed(lambda: c.post_json(
                     f"/api/fest/{fest}/games/{ek}/matches/{ek_match}/update", {
                         "team": rng.randrange(n_ek_teams),
-                        "theme": rng.randrange(min(6, n_themes)),
+                        "theme": rng.randrange(min(EK_THEMES_MAX, n_themes)),
                         "answer": rng.randrange(n_answers),
                         "mark": rng.choice(["right", "wrong"]),
                     })) or ok_any
@@ -643,7 +682,7 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
         time.sleep(interval)
 
     stop_all.set()
-    pool.join(timeout=10)
+    pool.join(timeout=POOL_JOIN_TIMEOUT_S)
     print_report(stats, duration, viewers_min, viewers_max)
 
 
@@ -741,12 +780,12 @@ def simulate_realistic(base: str, fest: int, game_id: int, game_type: str,
             t0 = time.monotonic()
             try:
                 c.patch_json(path, {"ops": ops})
-                stats.add_edit((time.monotonic() - t0) * 1000, ok=True)
+                stats.add_edit(ms_since(t0), ok=True)
             except urllib.error.HTTPError as e:
-                stats.add_edit((time.monotonic() - t0) * 1000, ok=False)
+                stats.add_edit(ms_since(t0), ok=False)
                 print(f"\n  edit error: {e.code} {e.reason}", flush=True)
             except Exception as e:  # noqa: BLE001 — surface but keep going
-                stats.add_edit((time.monotonic() - t0) * 1000, ok=False)
+                stats.add_edit(ms_since(t0), ok=False)
                 print(f"\n  edit error: {e}", flush=True)
             slack = per_editor_interval - (time.monotonic() - ts)
             if slack > 0:
@@ -765,8 +804,8 @@ def simulate_realistic(base: str, fest: int, game_id: int, game_type: str,
 
     stop_all.set()
     for t in threads:
-        t.join(timeout=5)
-    pool.join(timeout=10)
+        t.join(timeout=EDITOR_JOIN_TIMEOUT_S)
+    pool.join(timeout=POOL_JOIN_TIMEOUT_S)
     print_report(stats, duration, viewers_min, viewers_max)
 
 
@@ -794,17 +833,17 @@ def main() -> int:
     sim.add_argument("--ek", type=int, required=True)
     sim.add_argument("--ek-match", required=True)
     sim.add_argument("--token", required=True)
-    sim.add_argument("--duration", type=float, default=120.0)
-    sim.add_argument("--eps", type=float, default=3.0, help="edits per second (one game edit per tick, rotating od/ksi/ek); 0 = no edits, hold viewers only")
-    sim.add_argument("--burst", type=int, default=8, help="cell changes per tick (visible movement)")
-    sim.add_argument("--burst-teams", type=int, default=20, help="restrict edits to the first N teams/participants")
+    sim.add_argument("--duration", type=float, default=DEFAULT_DURATION_S)
+    sim.add_argument("--eps", type=float, default=DEFAULT_EPS, help="edits per second (one game edit per tick, rotating od/ksi/ek); 0 = no edits, hold viewers only")
+    sim.add_argument("--burst", type=int, default=DEFAULT_BURST, help="cell changes per tick (visible movement)")
+    sim.add_argument("--burst-teams", type=int, default=DEFAULT_BURST_TEAMS, help="restrict edits to the first N teams/participants")
     sim.add_argument("--viewers-min", type=int, default=0, help="min concurrent SSE viewers in the ramp")
     sim.add_argument("--viewers-max", type=int, default=0, help="max concurrent SSE viewers in the ramp")
-    sim.add_argument("--ramp-period", type=float, default=60.0, help="seconds for one min->max->min viewer cycle")
+    sim.add_argument("--ramp-period", type=float, default=DEFAULT_RAMP_PERIOD_S, help="seconds for one min->max->min viewer cycle")
     sim.add_argument("--mode", choices=["visual", "patch"], default="visual",
                      help="visual = full-state PUT across od/ksi/ek (watchable demo); "
                           "patch = realistic single-cell PATCH load on one game")
-    sim.add_argument("--editors", type=int, default=6, help="concurrent editors (patch mode)")
+    sim.add_argument("--editors", type=int, default=DEFAULT_EDITORS, help="concurrent editors (patch mode)")
     sim.add_argument("--game", choices=["od", "ksi"], default="od", help="active game to edit (patch mode)")
 
     args = p.parse_args()

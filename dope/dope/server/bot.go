@@ -12,6 +12,9 @@ import (
 	"pecheny.me/dopecore/tgbot"
 )
 
+// botPollTimeout is how long one getUpdates long-poll waits for news.
+const botPollTimeout = 30 * time.Second
+
 // dope's login bot runs here, in the server process. It used to be its own
 // systemd unit calling the server's /api/telegram/* endpoints over loopback
 // behind a shared secret — a hop that existed only because the bot was not
@@ -41,7 +44,7 @@ func (s *server) startBot(ctx context.Context) {
 	}
 	client := tgbot.New(tgbot.Config{
 		Token:          token,
-		PollTimeout:    30 * time.Second,
+		PollTimeout:    botPollTimeout,
 		AllowedUpdates: []string{"message"},
 	})
 	log.Printf("telegram bot %s polling (token %s)", buildinfo.Version(), tgbot.TokenHash(token))

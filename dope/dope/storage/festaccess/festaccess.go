@@ -15,8 +15,10 @@ import (
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
+
 	"pecheny.me/dopecore/adminusers"
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // SiteAdminEnv names the one account that runs /admin (default "pecheny").
@@ -46,13 +48,21 @@ func MigrateFestOrganizerRoles(db *sql.DB) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `
+	for _, stmt := range organizerRoleMigration {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// organizerRoleMigration runs in order: unknown roles become admin, a
+// "creator" who did not create the fest becomes admin, every fest's creator
+// gets the creator row, and the migration records itself.
+var organizerRoleMigration = []string{`
 update fest_organizers
 set role = 'admin'
-where role is null or role not in ('creator', 'admin', 'host')`); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
+where role is null or role not in ('creator', 'admin', 'host')`, `
 update fest_organizers
 set role = 'admin'
 where role = 'creator'
@@ -60,23 +70,14 @@ where role = 'creator'
     select 1 from fests f
     where f.id = fest_organizers.fest_id
       and f.created_by = fest_organizers.user_id
-  )`); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
+  )`, `
 insert into fest_organizers(fest_id, user_id, role, added_at)
 select id, created_by, 'creator', created_at
 from fests
 where created_by is not null
-on conflict(fest_id, user_id) do update set role = 'creator'`); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
+on conflict(fest_id, user_id) do update set role = 'creator'`, `
 insert or ignore into schema_versions(version, applied_at)
-values(11, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
-		return err
-	}
-	return tx.Commit()
+values(11, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
 }
 
 func FestUserRoleFromQuery(ctx context.Context, q store.Queryer, festID, userID int64) (string, error) {
@@ -85,11 +86,7 @@ func FestUserRoleFromQuery(ctx context.Context, q store.Queryer, festID, userID 
 		role      sql.NullString
 		username  sql.NullString
 	)
-	err := q.QueryRowContext(ctx, `
-select f.created_by, o.role, (select u.username from users u where u.id = ?)
-from fests f
-left join fest_organizers o on o.fest_id = f.id and o.user_id = ?
-where f.id = ?`, userID, userID, festID).Scan(&createdBy, &role, &username)
+	err := q.QueryRowContext(ctx, festUserRoleQuery, userID, userID, festID).Scan(&createdBy, &role, &username)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -99,39 +96,35 @@ where f.id = ?`, userID, userID, festID).Scan(&createdBy, &role, &username)
 	if createdBy.Valid && createdBy.Int64 == userID {
 		return roles.Creator, nil
 	}
+	return organizerRole(role, username), nil
+}
+
+const festUserRoleQuery = `
+select f.created_by, o.role, (select u.username from users u where u.id = ?)
+from fests f
+left join fest_organizers o on o.fest_id = f.id and o.user_id = ?
+where f.id = ?`
+
+// organizerRole is the role a user who did not create the fest holds on it:
+// their organizer row's, with a stale "creator" read as admin.
+func organizerRole(role, username sql.NullString) string {
 	if !role.Valid {
 		// The site admin helps on every fest without being added to it, with
 		// the rights of a fest admin: everything except deleting the fest.
 		if username.Valid && IsSiteAdmin(username.String) {
-			return roles.Admin, nil
+			return roles.Admin
 		}
-		return "", nil
+		return ""
 	}
 	normalized := roles.Normalize(role.String)
 	if normalized == roles.Creator {
-		return roles.Admin, nil
+		return roles.Admin
 	}
-	return normalized, nil
+	return normalized
 }
 
 func LoadFestAccessMembers(eng *core.Engine, ctx context.Context, festID int64) ([]HostAccessMember, error) {
-	rows, err := eng.DB.QueryContext(ctx, `
-select member.user_id,
-       coalesce(nullif(u.username, ''), nullif(u.telegram_username, ''), 'user-' || u.id) as nickname,
-       member.role
-from (
-  select f.created_by as user_id, 'creator' as role
-  from fests f
-  where f.id = ? and f.created_by is not null
-  union all
-  select o.user_id, case when o.role = 'creator' then 'admin' else coalesce(o.role, 'admin') end as role
-  from fest_organizers o
-  join fests f on f.id = o.fest_id
-  where o.fest_id = ? and (f.created_by is null or o.user_id <> f.created_by)
-) member
-join users u on u.id = member.user_id
-order by case member.role when 'creator' then 0 when 'admin' then 1 else 2 end,
-         lower(nickname), member.user_id`, festID, festID)
+	rows, err := eng.DB.QueryContext(ctx, festAccessMembersQuery, festID, festID)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +143,26 @@ order by case member.role when 'creator' then 0 when 'admin' then 1 else 2 end,
 	return out, rows.Err()
 }
 
+// festAccessMembersQuery lists a fest's creator and organizers, creator
+// first, then admins, then hosts.
+const festAccessMembersQuery = `
+select member.user_id,
+       coalesce(nullif(u.username, ''), nullif(u.telegram_username, ''), 'user-' || u.id) as nickname,
+       member.role
+from (
+  select f.created_by as user_id, 'creator' as role
+  from fests f
+  where f.id = ? and f.created_by is not null
+  union all
+  select o.user_id, case when o.role = 'creator' then 'admin' else coalesce(o.role, 'admin') end as role
+  from fest_organizers o
+  join fests f on f.id = o.fest_id
+  where o.fest_id = ? and (f.created_by is null or o.user_id <> f.created_by)
+) member
+join users u on u.id = member.user_id
+order by case member.role when 'creator' then 0 when 'admin' then 1 else 2 end,
+         lower(nickname), member.user_id`
+
 func SaveFestAccess(eng *core.Engine, ctx context.Context, festID, actorID int64, form url.Values) error {
 	tx, err := eng.BeginWriteTx(ctx)
 	if err != nil {
@@ -157,20 +170,7 @@ func SaveFestAccess(eng *core.Engine, ctx context.Context, festID, actorID int64
 	}
 	defer tx.Rollback()
 
-	actorRole, err := FestUserRoleFromQuery(ctx, tx, festID, actorID)
-	if err != nil {
-		return err
-	}
-	if !roles.CanManageAccess(actorRole) {
-		return corei18n.User(dopestrings.Default.Festaccess.Manage.Denied())
-	}
-
-	creatorID, err := syncFestCreatorAccessTx(ctx, tx, festID)
-	if err != nil {
-		return err
-	}
-
-	current, err := loadFestAccessRoleMapTx(ctx, tx, festID, creatorID)
+	creatorID, current, err := accessEditTx(ctx, tx, festID, actorID)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func SaveFestAccess(eng *core.Engine, ctx context.Context, festID, actorID int64
 	// A host's Games: the row posts games_present_<uid> with a box per Game,
 	// so ticking none — every Game — is told apart from a form without them.
 	for userID, currentRole := range current {
-		uid := strconv.FormatInt(userID, 10)
+		uid := idstr.Format(userID)
 		if form.Get("games_present_"+uid) != "1" {
 			continue
 		}
@@ -202,7 +202,7 @@ func SaveFestAccess(eng *core.Engine, ctx context.Context, festID, actorID int64
 		}
 		var gameIDs []int64
 		for _, raw := range form["games_"+uid] {
-			if id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && id > 0 {
+			if id, err := idstr.Parse(strings.TrimSpace(raw)); err == nil && id > 0 {
 				gameIDs = append(gameIDs, id)
 			}
 		}
@@ -257,42 +257,13 @@ func SaveFestAccessBulk(eng *core.Engine, ctx context.Context, festID, actorID i
 	}
 	defer tx.Rollback()
 
-	actorRole, err := FestUserRoleFromQuery(ctx, tx, festID, actorID)
+	creatorID, current, err := accessEditTx(ctx, tx, festID, actorID)
 	if err != nil {
 		return 0, err
 	}
-	if !roles.CanManageAccess(actorRole) {
-		return 0, corei18n.User(dopestrings.Default.Festaccess.Manage.Denied())
-	}
-
-	creatorID, err := syncFestCreatorAccessTx(ctx, tx, festID)
-	if err != nil {
+	if err := applyBulkChangesTx(ctx, tx, festID, creatorID, current, changes); err != nil {
 		return 0, err
 	}
-	current, err := loadFestAccessRoleMapTx(ctx, tx, festID, creatorID)
-	if err != nil {
-		return 0, err
-	}
-
-	now := util.UtcNow()
-	for _, change := range changes {
-		userID, err := lookupUserIDByNicknameTx(ctx, tx, change.Nickname)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return 0, corei18n.User(dopestrings.Default.Festaccess.Bulk.UserNotFound(strconv.Itoa(change.Line), change.Nickname))
-			}
-			return 0, err
-		}
-		if err := applyFestAccessMemberTx(ctx, tx, festID, creatorID, userID, current[userID], change.Role, change.Delete, now); err != nil {
-			return 0, corei18n.User(dopestrings.Default.Festaccess.Bulk.LinePrefix(strconv.Itoa(change.Line), err.Error()))
-		}
-		if change.Delete {
-			delete(current, userID)
-		} else {
-			current[userID] = change.Role
-		}
-	}
-
 	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:access", "{}"); err != nil {
 		return 0, err
 	}
@@ -300,6 +271,51 @@ func SaveFestAccessBulk(eng *core.Engine, ctx context.Context, festID, actorID i
 		return 0, err
 	}
 	return len(changes), nil
+}
+
+// accessEditTx checks the actor may manage the fest's access and returns the
+// creator's id and every member's current role (user id → role).
+func accessEditTx(ctx context.Context, tx *sql.Tx, festID, actorID int64) (int64, map[int64]string, error) {
+	actorRole, err := FestUserRoleFromQuery(ctx, tx, festID, actorID)
+	if err != nil {
+		return 0, nil, err
+	}
+	if !roles.CanManageAccess(actorRole) {
+		return 0, nil, corei18n.User(dopestrings.Default.Festaccess.Manage.Denied())
+	}
+	creatorID, err := syncFestCreatorAccessTx(ctx, tx, festID)
+	if err != nil {
+		return 0, nil, err
+	}
+	current, err := loadFestAccessRoleMapTx(ctx, tx, festID, creatorID)
+	if err != nil {
+		return 0, nil, err
+	}
+	return creatorID, current, nil
+}
+
+// applyBulkChangesTx applies the bulk form's lines in order, keeping current
+// (user id → role) up to date as it goes.
+func applyBulkChangesTx(ctx context.Context, tx *sql.Tx, festID, creatorID int64, current map[int64]string, changes []roles.BulkAccessLine) error {
+	now := util.UtcNow()
+	for _, change := range changes {
+		userID, err := lookupUserIDByNicknameTx(ctx, tx, change.Nickname)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return corei18n.User(dopestrings.Default.Festaccess.Bulk.UserNotFound(strconv.Itoa(change.Line), change.Nickname))
+			}
+			return err
+		}
+		if err := applyFestAccessMemberTx(ctx, tx, festID, creatorID, userID, current[userID], change.Role, change.Delete, now); err != nil {
+			return corei18n.User(dopestrings.Default.Festaccess.Bulk.LinePrefix(strconv.Itoa(change.Line), err.Error()))
+		}
+		if change.Delete {
+			delete(current, userID)
+		} else {
+			current[userID] = change.Role
+		}
+	}
+	return nil
 }
 
 func loadFestAccessRoleMapTx(ctx context.Context, tx *sql.Tx, festID, creatorID int64) (map[int64]string, error) {
@@ -342,13 +358,7 @@ update fest_organizers set role = 'creator' where fest_id = ? and user_id = ?`, 
 		return err
 	}
 	if deleteMember {
-		if _, err := tx.ExecContext(ctx, `
-delete from fest_game_hosts where fest_id = ? and user_id = ?`, festID, userID); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, `
-delete from fest_organizers where fest_id = ? and user_id = ?`, festID, userID)
-		return err
+		return deleteFestAccessMemberTx(ctx, tx, festID, userID)
 	}
 	if nextRole == "" {
 		nextRole = currentRole
@@ -361,6 +371,18 @@ insert into fest_organizers(fest_id, user_id, role, added_at)
 values(?, ?, ?, ?)
 on conflict(fest_id, user_id) do update set role = excluded.role`,
 		festID, userID, nextRole, now)
+	return err
+}
+
+// deleteFestAccessMemberTx removes a member from the fest and from every game
+// they host there.
+func deleteFestAccessMemberTx(ctx context.Context, tx *sql.Tx, festID, userID int64) error {
+	if _, err := tx.ExecContext(ctx, `
+delete from fest_game_hosts where fest_id = ? and user_id = ?`, festID, userID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `
+delete from fest_organizers where fest_id = ? and user_id = ?`, festID, userID)
 	return err
 }
 

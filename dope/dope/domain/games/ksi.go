@@ -124,14 +124,7 @@ type KSIStickerConfig struct {
 func KSIStickerMarkValue(stickerID, mark string, value int) int {
 	switch stickerID {
 	case KSIStickerX2:
-		switch mark {
-		case "right":
-			return 2 * value
-		case "wrong":
-			return -2 * value
-		default:
-			return 0
-		}
+		return 2 * KSIStickerMarkValue(KSIStickerNeutral, mark, value)
 	case KSIStickerNoWrong:
 		if mark == "right" {
 			return value
@@ -159,6 +152,22 @@ func KSIStickerMarkValue(stickerID, mark string, value int) int {
 // scheme overrides it — this is only the default.
 const SIThemeCount = 8
 
+// SIThemeQuestions is how many questions an SI theme has.
+const SIThemeQuestions = 5
+
+// siEmptyThemes is an SI state's themes with every answer blank.
+func siEmptyThemes(themesCount, participants int) []map[string]any {
+	themes := make([]map[string]any, themesCount)
+	for i := range themes {
+		answers := make([][]string, participants)
+		for p := range answers {
+			answers[p] = make([]string, SIThemeQuestions)
+		}
+		themes[i] = map[string]any{"answers": answers}
+	}
+	return themes
+}
+
 // SIEmptyGameJSON builds the pristine scheme/state for an individual SI
 // match: the same themes × participants grid as KSI, sized for the players
 // at one table.
@@ -170,14 +179,7 @@ func SIEmptyGameJSON(slug, title string, themesCount, participants int) ([]byte,
 	for i := range seats {
 		seats[i] = map[string]any{"number": i + 1, "name": ""}
 	}
-	themes := make([]map[string]any, themesCount)
-	for i := range themes {
-		answers := make([][]string, participants)
-		for p := range answers {
-			answers[p] = make([]string, 5)
-		}
-		themes[i] = map[string]any{"answers": answers}
-	}
+	themes := siEmptyThemes(themesCount, participants)
 	schemeJSON := []byte(mustJSON(map[string]any{
 		"schemaVersion": 2,
 		"slug":          slug,

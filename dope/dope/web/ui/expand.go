@@ -18,16 +18,7 @@ func expandGameTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 	kids := []base.Node{
 		base.El("nav", []base.Attr{base.ClassAttr("crumbs"), base.At("id", "gameBreadcrumbs"), base.At("aria-label", s.Ui.Crumbs.Label())}),
 	}
-	tabsCls := []string{"match-tabs"}
-	if base.Flag(p, "ektabs") {
-		tabsCls = append(tabsCls, "ek-tabs")
-	}
-	tabsid, _ := base.Get(p, "tabsid")
-	tabsAttrs := []base.Attr{base.ClassAttr(tabsCls...), base.At("id", tabsid), base.At("role", "tablist")}
-	if base.Flag(p, "tabshidden") {
-		tabsAttrs = append(tabsAttrs, base.BareAt("hidden"))
-	}
-	kids = append(kids, base.El("nav", tabsAttrs))
+	kids = append(kids, gameTopbarTabs(p))
 
 	if pid, ok := base.Get(p, "progressid"); ok {
 		kids = append(kids, base.El("span", []base.Attr{base.ClassAttr("od-header-progress"), base.At("id", pid)}))
@@ -48,6 +39,20 @@ func expandGameTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 		base.El("div", []base.Attr{base.ClassAttr("sync-stack")}, dot))
 
 	return one(base.El("header", []base.Attr{base.ClassAttr("host-top", "game-host-top")}, headerMain, actions))
+}
+
+// gameTopbarTabs is the empty tab strip the game script fills.
+func gameTopbarTabs(p *base.Element) base.Node {
+	tabsCls := []string{"match-tabs"}
+	if base.Flag(p, "ektabs") {
+		tabsCls = append(tabsCls, "ek-tabs")
+	}
+	tabsid, _ := base.Get(p, "tabsid")
+	tabsAttrs := []base.Attr{base.ClassAttr(tabsCls...), base.At("id", tabsid), base.At("role", "tablist")}
+	if base.Flag(p, "tabshidden") {
+		tabsAttrs = append(tabsAttrs, base.BareAt("hidden"))
+	}
+	return base.El("nav", tabsAttrs)
 }
 
 // expandPublicTopbar builds the server-rendered pages' header: header.public-top

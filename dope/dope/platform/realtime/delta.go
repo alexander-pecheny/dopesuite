@@ -15,6 +15,13 @@ type setOp struct {
 	Value json.RawMessage `json:"value"`
 }
 
+// A delta is sent only when it is under deltaGateNum/deltaGateDen (75%) of
+// the full state.
+const (
+	deltaGateNum = 3
+	deltaGateDen = 4
+)
+
 // MatchDeltaOps computes the set-ops that turn oldJSON into newJSON, then
 // decides whether broadcasting them as a delta is worthwhile. It returns the
 // marshaled ops and ok=true only when a delta is both valid and meaningfully
@@ -43,7 +50,7 @@ func MatchDeltaOps(oldJSON, newJSON []byte) ([]byte, bool) {
 	// Only worth a delta if it's clearly smaller than the full state. The 75%
 	// gate keeps pathological diffs (e.g. a reordered array touching every
 	// index) from being larger or barely smaller than just resending state.
-	if len(opsJSON)*4 >= len(newJSON)*3 {
+	if len(opsJSON)*deltaGateDen >= len(newJSON)*deltaGateNum {
 		return nil, false
 	}
 	return opsJSON, true

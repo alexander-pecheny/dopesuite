@@ -10,13 +10,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"dope/dope/domain/edit"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // maxShootoutThemes bounds the shootout grid so a bad index can't inflate the
@@ -42,6 +42,16 @@ func Apply(blob *store.MatchBlob, match store.DBMatchState, ops []edit.PatchOp) 
 	return nil
 }
 
+// Positions in a match-state path:
+// participants/<id>/<kind>/<theme>/<field>/<answer>, or participants/<id>/pin.
+const (
+	segParticipant = 1
+	segKind        = 2
+	segTheme       = 3
+	segField       = 4
+	segAnswer      = 5
+)
+
 func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, path []edit.JSONPathSegment) error {
 	remove := op.Op == "remove"
 	if op.Op != "" && op.Op != "set" && !remove {
@@ -49,96 +59,126 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 	}
 	// `teams` is the pre-rename spelling (ADR-0007): a browser holding a cached
 	// bundle mid-tournament keeps working.
-	if len(path) < 3 || path[0].IsIndex || (path[0].Key != "participants" && path[0].Key != "teams") {
+	if len(path) <= segKind || path[0].IsIndex || (path[0].Key != "participants" && path[0].Key != "teams") {
 		return errors.New("patch path is not a match-state path")
 	}
-	participantID, slot, err := resolveParticipant(match, path[1])
+	participantID, slot, err := resolveParticipant(match, path[segParticipant])
 	if err != nil {
 		return err
 	}
-
-	if !path[2].IsIndex && path[2].Key == "pin" {
-		if len(path) != 3 {
-			return errors.New("bad pin path")
-		}
-		if remove {
-			blob.SetPin(participantID, nil)
-			return nil
-		}
-		place, err := decodeNumber(op.Value)
-		if err != nil || place < 0 {
-			return errors.New("bad place")
-		}
-		blob.SetPin(participantID, &place)
-		return nil
+	if !path[segKind].IsIndex && path[segKind].Key == "pin" {
+		return applyPin(blob, participantID, op, path, remove)
 	}
-
-	kind, err := themeKind(path[2])
+	kind, err := themeKind(path[segKind])
 	if err != nil {
 		return err
 	}
-	if len(path) < 4 || !path[3].IsIndex {
+	if len(path) <= segTheme || !path[segTheme].IsIndex {
 		return errors.New("bad theme index")
 	}
-	themeIndex := path[3].Index
+	themeIndex := path[segTheme].Index
 	if err := checkThemeIndex(kind, themeIndex); err != nil {
 		return err
 	}
-
+	at := themeCell{participantID: participantID, slot: slot, kind: kind, theme: themeIndex}
 	// The theme itself: a set adds it (shootout grids grow), a remove drops it.
-	if len(path) == 4 {
-		if kind != "shootout" {
-			return errors.New("regular themes are fixed")
-		}
-		if remove {
-			blob.RemoveTheme(participantID, kind, themeIndex)
-		} else {
-			blob.EnsureTheme(participantID, kind, themeIndex)
-		}
+	if len(path) == segField {
+		return applyTheme(blob, at, remove)
+	}
+	return applyThemeField(blob, match, at, op, path, remove)
+}
+
+// themeCell is the theme a path addresses: whose, which grid, which index.
+type themeCell struct {
+	participantID int64
+	slot          int
+	kind          string
+	theme         int
+}
+
+// applyPin sets or clears a Participant's pinned place.
+func applyPin(blob *store.MatchBlob, participantID int64, op edit.PatchOp, path []edit.JSONPathSegment, remove bool) error {
+	if len(path) != segKind+1 {
+		return errors.New("bad pin path")
+	}
+	if remove {
+		blob.SetPin(participantID, nil)
 		return nil
 	}
+	place, err := decodeNumber(op.Value)
+	if err != nil || place < 0 {
+		return errors.New("bad place")
+	}
+	blob.SetPin(participantID, &place)
+	return nil
+}
 
-	if path[4].IsIndex {
+// applyTheme adds or drops a whole shootout theme; regular themes are fixed.
+func applyTheme(blob *store.MatchBlob, at themeCell, remove bool) error {
+	if at.kind != "shootout" {
+		return errors.New("regular themes are fixed")
+	}
+	if remove {
+		blob.RemoveTheme(at.participantID, at.kind, at.theme)
+	} else {
+		blob.EnsureTheme(at.participantID, at.kind, at.theme)
+	}
+	return nil
+}
+
+// applyThemeField edits one field of a theme: who sat for it, or one answer.
+func applyThemeField(blob *store.MatchBlob, match store.DBMatchState, at themeCell, op edit.PatchOp, path []edit.JSONPathSegment, remove bool) error {
+	if path[segField].IsIndex {
 		return errors.New("bad theme path")
 	}
-	switch path[4].Key {
+	switch path[segField].Key {
 	// `player` is the pre-Sextet spelling, one id where there is now a list
 	// (ADR-0007): a browser holding a cached bundle mid-tournament, and every
 	// journal record written before, keeps working.
 	case "player", "players":
-		if len(path) != 5 {
+		if len(path) != segField+1 {
 			return errors.New("bad player path")
 		}
-		if remove {
-			blob.SetPlayers(participantID, kind, themeIndex, nil)
-			return nil
-		}
-		seated, err := decodeSeating(path[4].Key, op.Value)
-		if err != nil {
-			return err
-		}
-		if err := checkSeating(match, slot, seated); err != nil {
-			return err
-		}
-		blob.SetPlayers(participantID, kind, themeIndex, seated)
-		return nil
+		return applyPlayers(blob, match, at, path[segField].Key, op, remove)
 	case "answers":
-		if len(path) != 6 || !path[5].IsIndex {
+		if len(path) != segAnswer+1 || !path[segAnswer].IsIndex {
 			return errors.New("bad answer index")
 		}
-		if path[5].Index >= len(store.QuestionValues) {
-			return errors.New("bad answer index")
-		}
-		mark := ""
-		if !remove {
-			if err := json.Unmarshal(op.Value, &mark); err != nil {
-				return errors.New("bad mark")
-			}
-		}
-		blob.SetAnswer(participantID, kind, themeIndex, path[5].Index, mark)
-		return nil
+		return applyAnswer(blob, at, path[segAnswer].Index, op, remove)
 	}
 	return errors.New("patch path is not a match-state path")
+}
+
+// applyPlayers seats the players who sat for a theme, or clears them.
+func applyPlayers(blob *store.MatchBlob, match store.DBMatchState, at themeCell, key string, op edit.PatchOp, remove bool) error {
+	if remove {
+		blob.SetPlayers(at.participantID, at.kind, at.theme, nil)
+		return nil
+	}
+	seated, err := decodeSeating(key, op.Value)
+	if err != nil {
+		return err
+	}
+	if err := checkSeating(match, at.slot, seated); err != nil {
+		return err
+	}
+	blob.SetPlayers(at.participantID, at.kind, at.theme, seated)
+	return nil
+}
+
+// applyAnswer marks one answer of a theme, or clears it.
+func applyAnswer(blob *store.MatchBlob, at themeCell, answer int, op edit.PatchOp, remove bool) error {
+	if answer >= len(store.QuestionValues) {
+		return errors.New("bad answer index")
+	}
+	mark := ""
+	if !remove {
+		if err := json.Unmarshal(op.Value, &mark); err != nil {
+			return errors.New("bad mark")
+		}
+	}
+	blob.SetAnswer(at.participantID, at.kind, at.theme, answer, mark)
+	return nil
 }
 
 // resolveParticipant maps the path's id segment to a Participant that actually
@@ -147,7 +187,7 @@ func resolveParticipant(match store.DBMatchState, seg edit.JSONPathSegment) (int
 	if seg.IsIndex {
 		return 0, 0, errors.New("participant must be addressed by id")
 	}
-	participantID, err := strconv.ParseInt(seg.Key, 10, 64)
+	participantID, err := idstr.Parse(seg.Key)
 	if err != nil {
 		return 0, 0, errors.New("bad participant id")
 	}

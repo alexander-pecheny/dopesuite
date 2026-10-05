@@ -316,6 +316,15 @@ let matchTableIndex: NodeIndex | null = null;
 // can tear down a dead connection and re-establish it. null while disconnected.
 const undoStack: UndoEntry[] = [];
 const UNDO_LIMIT = 200;
+// A host edit reloads the match after this pause, so a burst of edits costs
+// one reload.
+const RELOAD_DEBOUNCE_MS = 120;
+// A place op's view path is participants/slot/place.
+const PLACE_OP_PATH_LEN = 3;
+// Space kept between the active tab and the edge of the tab strip.
+const TAB_SCROLL_MARGIN_PX = 8;
+// A theme's question values, in the order the table shows them.
+const QUESTION_VALUES_DESC = [50, 40, 30, 20, 10];
 let undoStackContext: UndoContext | null = null;
 let undoApplying = false;
 // The Участники tab: the list this Game seats (entrants.ts). The grid follows
@@ -756,7 +765,7 @@ function runCurrentRoute(): void {
 
 function scheduleReload(): void {
   window.clearTimeout(reloadTimer ?? undefined);
-  reloadTimer = window.setTimeout(() => void tracked("reload", loadCurrent()), 120);
+  reloadTimer = window.setTimeout(() => void tracked("reload", loadCurrent()), RELOAD_DEBOUNCE_MS);
 }
 
 // tracked shows a load on the status dot the way a write shows: saving while it
@@ -916,7 +925,7 @@ function opToBlobOp(op: PendingOp, view: HostMatchView): BlobOp | null {
   const team = view.participants?.[slot as number];
   if (!team?.id) return null;
   const teamKey = String(team.id);
-  if (op.path.length === 3) {
+  if (op.path.length === PLACE_OP_PATH_LEN) {
     // Emptying the place box clears the pin rather than pinning zero, handing
     // the place back to the scorer at the next recompute.
     const path = ["participants", teamKey, "pin"];
@@ -1082,15 +1091,21 @@ function render(): void {
   seatCursor({focus: false});
   refreshMatchPendingMarkers(state.code || route.matchCode);
   shell.presence.refresh();
+  restoreMatchFocus(focusedPlaceTeam, finishToggleFocused);
+}
+
+// restoreMatchFocus puts the focus back where it was before a redraw: the
+// finish toggle, a place box, or the active answer cell.
+function restoreMatchFocus(focusedPlaceTeam: number | null, finishToggleFocused: boolean): void {
   if (finishToggleFocused) {
     focusFinishToggle({preventScroll: true});
     return;
   }
-  if (!state.finished && focusedPlaceTeam !== null) {
+  if (!state!.finished && focusedPlaceTeam !== null) {
     focusPlaceInput(focusedPlaceTeam, {preventScroll: true});
     return;
   }
-  if (state.finished) return;
+  if (state!.finished) return;
   focusActiveCell({preventScroll: true});
 }
 
@@ -1133,7 +1148,7 @@ function renderEKTabs(): void {
 function scrollActiveTabIntoView(activeLink: HTMLAnchorElement | null): void {
   if (!ekTabsRoot || !activeLink) return;
   requestAnimationFrame(() => {
-    const margin = 8;
+    const margin = TAB_SCROLL_MARGIN_PX;
     const currentLeft = ekTabsRoot.scrollLeft;
     const currentRight = currentLeft + ekTabsRoot.clientWidth;
     // Where the tab sits inside the strip's scrolled content. offsetLeft would
@@ -1958,15 +1973,17 @@ function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
   return table;
 }
 
-function renderedThemeHeaders(): Array<{
+interface RenderedThemeHeader {
   label: string;
   questionLabels: number[];
   questionClassName?: string;
   labelClassName?: string;
   gapHeaderClassName: string;
   gapClassName: string;
-}> {
-  const themes = [];
+}
+
+function renderedThemeHeaders(): RenderedThemeHeader[] {
+  const themes: RenderedThemeHeader[] = [];
   for (let theme = 0; theme < regularThemeCount(); theme++) {
     themes.push({
       label: S.ek.theme.column(String(theme + 1)),
@@ -1992,7 +2009,7 @@ function trailingHeaders(hasShootout: boolean): Array<HTMLElement | {content: st
   const headers: Array<HTMLElement | {content: string | number; className: string}> = viewer ? [] : [shootoutControlsHeader()];
   if (hasShootout) headers.push({content: S.ek.shootout.letter(), className: "number"});
   headers.push({content: "Σ+", className: "number"});
-  for (const value of [50, 40, 30, 20, 10]) {
+  for (const value of QUESTION_VALUES_DESC) {
     headers.push({content: value, className: "number narrow"});
   }
   return headers;
@@ -2122,6 +2139,15 @@ function readonlyPlayerCell(team: HostParticipantView, teamIndex: number, theme:
 // readonlyBattleHeader names the match for a spectator: letter, title and a
 // short venue, with the full title in a popover — and no finish toggle or
 // venue button, which are the host's.
+function readonlyBattleVenue(): HTMLElement | null {
+  const venueText = withStartsAt(state!.venue ? formatBattleVenue(state!.venue) : "", state!.startsAt);
+  if (!venueText) return null;
+  const venue = document.createElement("span");
+  venue.className = "readonly-battle-venue";
+  venue.textContent = venueText;
+  return venue;
+}
+
 function readonlyBattleHeader(): HTMLElement {
   const fullLabel = matchTitle();
   const node = th("", "battle readonly-battle-head readonly-battle-with-popover");
@@ -2139,13 +2165,8 @@ function readonlyBattleHeader(): HTMLElement {
   // The venue's whole title, not only its number, which tells a spectator
   // nothing about which room. A long one fades, and the head's popover holds
   // the rest.
-  const venueText = withStartsAt(state!.venue ? formatBattleVenue(state!.venue) : "", state!.startsAt);
-  if (venueText) {
-    const venue = document.createElement("span");
-    venue.className = "readonly-battle-venue";
-    venue.textContent = venueText;
-    title.appendChild(venue);
-  }
+  const venue = readonlyBattleVenue();
+  if (venue) title.appendChild(venue);
 
   const popover = document.createElement("span");
   popover.className = "popover readonly-battle-popover";
@@ -2197,8 +2218,8 @@ function trailingCells(team: HostParticipantView, teamIndex: number, hasShootout
   const plusCell = td(team.plus, "number plus-cell", {rowSpan: seatRowSpan()});
   plusCell.dataset.team = String(teamIndex);
   cells.push(plusCell);
-  [0, 1, 2, 3, 4].forEach((idx) => {
-    const correctCell = td(team.correctCounts[4 - idx], "number narrow correct-count-cell", {rowSpan: seatRowSpan()});
+  QUESTION_VALUES_DESC.forEach((_, idx) => {
+    const correctCell = td(team.correctCounts[QUESTION_VALUES_DESC.length - 1 - idx], "number narrow correct-count-cell", {rowSpan: seatRowSpan()});
     correctCell.dataset.team = String(teamIndex);
     correctCell.dataset.valueIndex = String(idx);
     cells.push(correctCell);
@@ -2506,6 +2527,11 @@ function currentRoute(): EKRoute {
   // handleFestRouter) but leaves the URL in the bar. Strip it before matching
   // the sub-route, else the injected snapshot is rejected as a "missing" route.
   const rest = path.slice(prefix[0].length).replace(/\/static$/, "").replace(/\/$/, "");
+  return subRoute(rest, host, at);
+}
+
+// subRoute reads the part of a game path after the game itself.
+function subRoute(rest: string, host: boolean, at: Omit<EKRoute, "mode">): EKRoute {
   if (rest === "" || rest === "/") return {mode: "grid", ...at};
   if (rest === "/venues") return {mode: "venues", ...at};
   if (rest === "/roster") return {mode: "roster", ...at};

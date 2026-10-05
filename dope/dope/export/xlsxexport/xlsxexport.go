@@ -23,7 +23,25 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
+
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
+)
+
+// Sheet geometry. Excel caps a sheet name at 31 characters.
+const (
+	maxSheetNameRunes = 31
+	// firstBlockCol is column C: the KSI and multi grids put the team and Σ
+	// in A and B, under two header rows.
+	firstBlockCol = 3
+	firstDataRow  = 3
+	// ekFirstBlockCol is column D: an EK match table has name, Σ and place first.
+	ekFirstBlockCol = 4
+	nameColWidth    = 26
+	playerColWidth  = 24
+	// statDecimals rounds a divided Σ to one decimal.
+	statDecimals = 10
+	percent      = 100
 )
 
 // --- OD: rating.chgk.info "tournament-tours" layout ---------------------------
@@ -201,7 +219,7 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 	}
 	_ = f.MergeCell(sheet, "A1", "A2")
 	_ = f.MergeCell(sheet, "B1", "B2")
-	col := 3 // first theme block starts at column C
+	col := firstBlockCol // first theme block starts at column C
 	for t := 0; t < themesCount; t++ {
 		left, _ := excelize.CoordinatesToCellName(col, 1)
 		right, _ := excelize.CoordinatesToCellName(col+nv, 1)
@@ -218,7 +236,7 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 		col += nv + 1
 	}
 
-	r := 3 // output row; advances only for teams that played (declined teams omitted)
+	r := firstDataRow // output row; advances only for teams that played (declined teams omitted)
 	for p := range state.Participants {
 		if games.KSIParticipantDeclined(state.Declined, state.Participants[p]) {
 			continue
@@ -257,6 +275,15 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 	return nil
 }
 
+// valuesHighToLow is the question value scale, highest first.
+func valuesHighToLow() []int {
+	values := make([]int, len(store.QuestionValues))
+	for i, v := range store.QuestionValues {
+		values[len(store.QuestionValues)-1-i] = v
+	}
+	return values
+}
+
 func buildKSIResultsSheet(f *excelize.File, state *ksiExportState, schemeJSON, stateJSON string) error {
 	s := dopestrings.Default
 	sheet := uniqueSheetName(f, s.Export.Sheet.Results())
@@ -264,10 +291,7 @@ func buildKSIResultsSheet(f *excelize.File, state *ksiExportState, schemeJSON, s
 		return err
 	}
 	// RESULT_VALUES = question values, high to low.
-	resultValues := make([]int, len(store.QuestionValues))
-	for i, v := range store.QuestionValues {
-		resultValues[len(store.QuestionValues)-1-i] = v
-	}
+	resultValues := valuesHighToLow()
 
 	header := []interface{}{s.Export.Col.Place(), s.Export.Col.Team(), "Σ", "Σ+"}
 	for _, v := range resultValues {
@@ -282,9 +306,26 @@ func buildKSIResultsSheet(f *excelize.File, state *ksiExportState, schemeJSON, s
 		return err
 	}
 	// Tie-grouped place labels ("1", "2–4", ...), matching rankedResultRows.
-	for i := 0; i < len(ranked); {
+	places := tiedPlaceLabels(len(ranked), func(i, j int) bool { return ranked[i].Place == ranked[j].Place })
+	for k, row := range ranked {
+		cells := []interface{}{places[k], participantExportName(state.Participants, row.Index), row.Total, row.Plus}
+		for _, v := range resultValues {
+			cells = append(cells, row.Correct[v])
+		}
+		if err := setRow(f, sheet, 2+k, cells); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// tiedPlaceLabels labels each of n ranked rows with its place; a run of rows
+// tied with its first shares one label ("1", "2–4", ...).
+func tiedPlaceLabels(n int, tied func(i, j int) bool) []string {
+	labels := make([]string, n)
+	for i := 0; i < n; {
 		j := i
-		for j+1 < len(ranked) && ranked[j+1].Place == ranked[i].Place {
+		for j+1 < n && tied(i, j+1) {
 			j++
 		}
 		place := strconv.Itoa(i + 1)
@@ -292,17 +333,11 @@ func buildKSIResultsSheet(f *excelize.File, state *ksiExportState, schemeJSON, s
 			place = fmt.Sprintf("%d–%d", i+1, j+1)
 		}
 		for k := i; k <= j; k++ {
-			cells := []interface{}{place, participantExportName(state.Participants, ranked[k].Index), ranked[k].Total, ranked[k].Plus}
-			for _, v := range resultValues {
-				cells = append(cells, ranked[k].Correct[v])
-			}
-			if err := setRow(f, sheet, 2+k, cells); err != nil {
-				return err
-			}
+			labels[k] = place
 		}
 		i = j + 1
 	}
-	return nil
+	return labels
 }
 
 func participantExportName(participants []games.KSIParticipant, i int) string {
@@ -336,7 +371,7 @@ func BuildEKSheets(f *excelize.File, stages []store.StageMatches) error {
 		if _, err := f.NewSheet(sheet); err != nil {
 			return err
 		}
-		_ = f.SetColWidth(sheet, "A", "A", 26) // team / player name column
+		_ = f.SetColWidth(sheet, "A", "A", nameColWidth) // team / player name column
 		row := 1
 		for _, mv := range stage.Matches {
 			n, err := writeEKMatchBlock(f, sheet, row, mv)
@@ -378,7 +413,7 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv store.Ma
 	blockCount := maxThemes + maxShootout
 	hasR := blockCount > 0
 	// Each theme block is nv value columns + 1 score column; blocks start at col 4.
-	blockStart := func(b int) int { return 4 + b*(nv+1) }
+	blockStart := func(b int) int { return ekFirstBlockCol + b*(nv+1) }
 
 	row := startRow
 	// Match title row.
@@ -530,7 +565,7 @@ func seatedNames(players []string) []string {
 // came out whole, one decimal otherwise — the same shape the page's stats tab
 // prints.
 func roundedStat(value float64) interface{} {
-	rounded := math.Round(value*10) / 10
+	rounded := math.Round(value*statDecimals) / statDecimals
 	if rounded == math.Trunc(rounded) {
 		return int(rounded)
 	}
@@ -541,7 +576,7 @@ func roundedStat(value float64) interface{} {
 // keyed by (team, player), mirroring the client-side helper of the same name.
 // Only regular themes count (not shootout), matching the on-screen table.
 func computeEKPlayerStats(stages []store.StageMatches) []ekPlayerStat {
-	values := [5]int{10, 20, 30, 40, 50}
+	values := store.QuestionValues
 	type agg struct {
 		stat    ekPlayerStat
 		battles map[string]bool
@@ -636,33 +671,43 @@ func buildEKStatsSheet(f *excelize.File, stages []store.StageMatches) error {
 	if _, err := f.NewSheet(sheet); err != nil {
 		return err
 	}
-	header := []interface{}{s.Export.Col.Player(), s.Export.Col.Team(), "Σ", "Σ+", s.Export.Col.Battles()}
-	for _, v := range []int{50, 40, 30, 20, 10} {
-		header = append(header, v)
-	}
-	for _, v := range []int{50, 40, 30, 20, 10} {
-		header = append(header, fmt.Sprintf("-%d", v))
-	}
-	header = append(header, s.Export.Col.TeamShare())
-	if err := setRow(f, sheet, 1, header); err != nil {
+	if err := setRow(f, sheet, 1, ekStatsHeader()); err != nil {
 		return err
 	}
 	for i, r := range rows {
-		cells := []interface{}{r.Player, r.Team, roundedStat(r.Sum), roundedStat(r.Plus), r.Battles}
-		for v := 4; v >= 0; v-- {
-			cells = append(cells, r.Right[v])
-		}
-		for v := 4; v >= 0; v-- {
-			cells = append(cells, r.Wrong[v])
-		}
-		cells = append(cells, fmt.Sprintf("%d%%", int(r.Share*100+0.5)))
-		if err := setRow(f, sheet, i+2, cells); err != nil {
+		if err := setRow(f, sheet, i+2, ekStatsCells(r)); err != nil {
 			return err
 		}
 	}
-	_ = f.SetColWidth(sheet, "A", "B", 24) // player + team names
+	_ = f.SetColWidth(sheet, "A", "B", playerColWidth) // player + team names
 	_ = f.SetPanes(sheet, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"})
 	return nil
+}
+
+// ekStatsHeader is the stats sheet's header row: the counts of right answers
+// by value, high to low, then the wrong ones.
+func ekStatsHeader() []interface{} {
+	s := dopestrings.Default
+	header := []interface{}{s.Export.Col.Player(), s.Export.Col.Team(), "Σ", "Σ+", s.Export.Col.Battles()}
+	for _, v := range valuesHighToLow() {
+		header = append(header, v)
+	}
+	for _, v := range valuesHighToLow() {
+		header = append(header, fmt.Sprintf("-%d", v))
+	}
+	return append(header, s.Export.Col.TeamShare())
+}
+
+// ekStatsCells is one player's row of the stats sheet, in ekStatsHeader's order.
+func ekStatsCells(r ekPlayerStat) []interface{} {
+	cells := []interface{}{r.Player, r.Team, roundedStat(r.Sum), roundedStat(r.Plus), r.Battles}
+	for v := len(r.Right) - 1; v >= 0; v-- {
+		cells = append(cells, r.Right[v])
+	}
+	for v := len(r.Wrong) - 1; v >= 0; v-- {
+		cells = append(cells, r.Wrong[v])
+	}
+	return append(cells, fmt.Sprintf("%d%%", int(math.Round(r.Share*percent))))
 }
 
 func formatPlace(p float64) interface{} {
@@ -716,8 +761,8 @@ func sanitizeSheetName(name string) string {
 	if name == "" {
 		name = dopestrings.Default.Export.Sheet.Fallback()
 	}
-	if r := []rune(name); len(r) > 31 {
-		name = string(r[:31])
+	if r := []rune(name); len(r) > maxSheetNameRunes {
+		name = string(r[:maxSheetNameRunes])
 	}
 	return name
 }
@@ -735,8 +780,8 @@ func uniqueSheetName(f *excelize.File, base string) string {
 	for i := 2; ; i++ {
 		suffix := fmt.Sprintf(" (%d)", i)
 		trimmed := base
-		if r := []rune(base); len(r)+len(suffix) > 31 {
-			trimmed = string(r[:31-len(suffix)])
+		if r := []rune(base); len(r)+len(suffix) > maxSheetNameRunes {
+			trimmed = string(r[:maxSheetNameRunes-len(suffix)])
 		}
 		candidate := trimmed + suffix
 		if !existing[candidate] {
@@ -780,7 +825,7 @@ func buildMultiDetailedSheet(f *excelize.File, scheme *games.MultiScheme, state 
 
 	// Two header rows, as KSI's: the minigame merged across its block, and
 	// beneath it each column's maximum — the top of its declared domain.
-	col := 3
+	col := firstBlockCol
 	for _, game := range scheme.Minigames {
 		left, _ := excelize.CoordinatesToCellName(col, 1)
 		right, _ := excelize.CoordinatesToCellName(col+len(game.Columns), 1)
@@ -797,7 +842,7 @@ func buildMultiDetailedSheet(f *excelize.File, scheme *games.MultiScheme, state 
 		col += len(game.Columns) + 1
 	}
 
-	row := 3
+	row := firstDataRow
 	for p := range state.Participants {
 		if games.KSIParticipantDeclined(state.Declined, state.Participants[p]) {
 			continue
@@ -1194,7 +1239,7 @@ func writeHamsaMatch(f *excelize.File, sheet string, row int, match store.MatchV
 	}
 	for index, seat := range match.Participants {
 		cells := []interface{}{hamsaSeatName(match, index)}
-		section := state.Participants[strconv.FormatInt(seat.ID, 10)]
+		section := state.Participants[idstr.Format(seat.ID)]
 		for t := 0; t < themes; t++ {
 			cells = append(cells, hamsaPlayerName(seat, section, t))
 			for q := 0; q < games.HamsaQuestions; q++ {
@@ -1249,7 +1294,7 @@ func hamsaMarkText(section *games.HamsaParticipant, theme, question int) interfa
 }
 
 func hamsaThemeScore(state games.HamsaState, participant int64, theme int) interface{} {
-	section := state.Participants[strconv.FormatInt(participant, 10)]
+	section := state.Participants[idstr.Format(participant)]
 	if section == nil || theme >= len(section.Themes) {
 		return nil
 	}

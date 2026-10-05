@@ -24,7 +24,14 @@ SRC = "sheets/sheet-1M4_-FnE01tIvz9Hd5f2NJm_zE9tHJ7JJ-YHrBPrLxpE.xlsx"
 SHEETS = ["1-й групповой этап (протоколы)", "DE (протоколы)",
           "2-й групповой этап (протоколы)", "3-й групповой этап (протоколы)",
           "Финальный этап (протоколы)"]
-STRIDE, FIRST = 7, 1
+# A block's columns, from its code: the left team (and its players), the score
+# (and the left team's marks), the right team's marks, the right team.
+LEFT_COL = 1
+SCORE_COL = 2
+RIGHT_MARK_COL = 3
+RIGHT_COL = 4
+# How many offenders an error message lists before it says "and N more".
+SHOWN_OFFENDERS = 5
 SCORE = re.compile(r"^\d+\s*:\s*\d+$")
 
 
@@ -48,22 +55,22 @@ def blocks_at(rows, top, group, title):
     header = rows[top]
     out = []
     for column, cell in enumerate(header):
-        if column < 2 or not SCORE.match(text(cell)):
+        if column < SCORE_COL or not SCORE.match(text(cell)):
             continue
-        base = column - 2
-        if base + 5 >= len(header):
+        base = column - SCORE_COL
+        if base + RIGHT_COL + 1 >= len(header):  # the right team and one column past it
             continue
-        left, right = text(header[base + 1]), text(header[base + 4])
-        scored = [int(n) for n in text(header[base + 2]).split(":")]
+        left, right = text(header[base + LEFT_COL]), text(header[base + RIGHT_COL])
+        scored = [int(n) for n in text(header[base + SCORE_COL]).split(":")]
         bout = {"group": group, "title": title, "code": text(header[base]),
                 "teams": [{"name": left, "score": scored[0], "roster": []},
                           {"name": right, "score": scored[1], "roster": []}],
                 "questions": []}
         for row in rows[top + 1:]:
-            if base + 4 >= len(row):
+            if base + RIGHT_COL >= len(row):
                 break
-            label, p1, m1, m2, p2 = (text(row[base]), text(row[base + 1]), row[base + 2],
-                                     row[base + 3], text(row[base + 4]))
+            label, p1, m1, m2, p2 = (text(row[base]), text(row[base + LEFT_COL]), row[base + SCORE_COL],
+                                     row[base + RIGHT_MARK_COL], text(row[base + RIGHT_COL]))
             if label:  # a question row: «1», «2», … or «П»
                 bout["questions"].append({
                     "tiebreak": label == "П",
@@ -167,7 +174,7 @@ def check_stats(stages, stats):
     sheet = {(s["player"], s["team"]): [s["attempts"], s["right"], s["wrong"]] for s in stats}
     bad = [key for key in set(computed) | set(sheet) if computed.get(key) != sheet.get(key)]
     if bad:
-        sys.exit(f"статистика не сходится с протоколами: {sorted(bad)[:5]} и ещё {max(len(bad) - 5, 0)}")
+        sys.exit(f"статистика не сходится с протоколами: {sorted(bad)[:SHOWN_OFFENDERS]} и ещё {max(len(bad) - SHOWN_OFFENDERS, 0)}")
 
 
 if __name__ == "__main__":

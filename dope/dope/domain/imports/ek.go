@@ -207,6 +207,11 @@ order by m.position, m.code, r.place`, gameID)
 	}
 	defer rows.Close()
 	fmt.Println("\n==== EK standings after import ====")
+	printStandingRows(rows)
+}
+
+// printStandingRows prints each match's results under its header.
+func printStandingRows(rows *sql.Rows) {
 	cur := ""
 	for rows.Next() {
 		var mcode, name, status string

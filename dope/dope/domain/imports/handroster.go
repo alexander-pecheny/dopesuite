@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
-	"strconv"
 	"strings"
 
 	"dope/dope/domain/games"
@@ -15,7 +14,9 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
+
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // The host's edits to the fest roster (ADR-0024), and the one write path an
@@ -495,9 +496,9 @@ func planRoster(current, desired []roster.FestRosterImportTeam, merged roster.Me
 	plan := ImportPlan{Kept: merged.Kept, Conflicts: merged.Conflicts}
 	key := func(t roster.FestRosterImportTeam) string {
 		if t.LocalID > 0 {
-			return "id:" + strconv.FormatInt(t.LocalID, 10)
+			return "id:" + idstr.Format(t.LocalID)
 		}
-		return "rating:" + strconv.FormatInt(t.RatingID, 10)
+		return "rating:" + idstr.Format(t.RatingID)
 	}
 	label := func(t roster.FestRosterImportTeam) string {
 		if t.City == "" {

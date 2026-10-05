@@ -511,16 +511,19 @@ type seedEntry struct {
 // that team and no longer for the one the registry lists them under — which
 // is how three people from three teams come to be one Troika team, and how
 // the same three are still found on their own teams in the source Games.
+// scanIDPair reads a row of two ids.
+func scanIDPair(rs *sql.Rows) ([2]int64, error) {
+	var pair [2]int64
+	return pair, rs.Scan(&pair[0], &pair[1])
+}
+
 func gameRoster(ctx context.Context, q store.Queryer, festID, gameID int64) (map[int64]int64, error) {
 	teamOf, err := store.CollectRows(ctx, q, `
 select ftp.player_id, ftp.team_id
 from fest_team_players ftp
 join participants p on `+participantFestTeam+` = ftp.team_id and p.fest_id = ?
 join game_assignments ga on ga.participant_id = p.id and ga.game_id = ?`,
-		[]any{festID, gameID}, func(rs *sql.Rows) ([2]int64, error) {
-			var pair [2]int64
-			return pair, rs.Scan(&pair[0], &pair[1])
-		})
+		[]any{festID, gameID}, scanIDPair)
 	if err != nil {
 		return nil, err
 	}
@@ -532,10 +535,7 @@ join game_assignments ga on ga.participant_id = p.id and ga.game_id = ?`,
 	}
 	overrides, err := store.CollectRows(ctx, q, `
 select player_id, override_team_id from game_player_team_overrides where game_id = ?`,
-		[]any{gameID}, func(rs *sql.Rows) ([2]int64, error) {
-			var pair [2]int64
-			return pair, rs.Scan(&pair[0], &pair[1])
-		})
+		[]any{gameID}, scanIDPair)
 	if err != nil {
 		return nil, err
 	}

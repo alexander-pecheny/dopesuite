@@ -31,6 +31,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 DROPPED_TABLES = ("themes", "answers", "reseed_entries")
+# How long the server gets to run its migrations, and then to stop.
+SERVER_SETTLE_S = 4
+STOP_TIMEOUT_S = 10
 
 
 def norm_mark(mark):
@@ -136,9 +139,9 @@ def main():
                    cwd=REPO, check=True)
     proc = subprocess.Popen([server], env={"DOPE_DB": str(db_path), "PORT": "19699", "PATH": "/usr/bin:/bin"},
                             cwd=work, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(4)
+    time.sleep(SERVER_SETTLE_S)
     proc.terminate()
-    proc.wait(timeout=10)
+    proc.wait(timeout=STOP_TIMEOUT_S)
 
     post = sqlite3.connect(db_path)
     for table in DROPPED_TABLES:

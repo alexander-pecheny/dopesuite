@@ -10,6 +10,10 @@ import S from "./i18nstrings.js";
 export const QUESTION_VALUES = [10, 20, 30, 40, 50];
 export const RESULT_VALUES = QUESTION_VALUES.slice().reverse();
 export const KSI_THEMES = 20;
+// Themes in a plain (individual) SI game.
+export const SI_THEMES = 8;
+// Players a fresh individual game starts with.
+const DEFAULT_PLAYER_COUNT = 4;
 // The sticker whose rules match a regular KSI theme: the implicit sticker of
 // a plain game and the fallback for an unknown id.
 export const STICKER_NEUTRAL = "neutral";
@@ -66,12 +70,12 @@ export function schemeParticipants(scheme: KSIScheme): string[] {
     return scheme.teams.map((team) => team.name || "");
   }
   if (isTeamMode(scheme)) return [];
-  return [1, 2, 3, 4].map((n) => S.si.participant.fallbackPlayer(String(n)));
+  return Array.from({length: DEFAULT_PLAYER_COUNT}, (_, i) => S.si.participant.fallbackPlayer(String(i + 1)));
 }
 
 export function rulesOf(scheme: KSIScheme): KSIRules {
   const teamMode = isTeamMode(scheme);
-  const themesCount = Number(scheme.themes) > 0 ? Number(scheme.themes) : (teamMode ? KSI_THEMES : 8);
+  const themesCount = Number(scheme.themes) > 0 ? Number(scheme.themes) : (teamMode ? KSI_THEMES : SI_THEMES);
   const stickers: StickerType[] = [];
   const types = scheme.stickers && Array.isArray(scheme.stickers.types) ? scheme.stickers.types : [];
   for (const raw of types) {

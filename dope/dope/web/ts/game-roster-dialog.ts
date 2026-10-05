@@ -11,6 +11,9 @@ import {icon} from "./icons_gen.js";
 import type {FestPlayerChoice, RosterPlayer, RosterTeam} from "./fest-roster.js";
 import S from "./i18nstrings.js";
 
+// Most suggestions the player field offers at once.
+const SUGGESTION_LIMIT = 12;
+
 interface DraftPlayer {
   name: string;
   locked: boolean;
@@ -74,7 +77,7 @@ export function openGameRosterDialog(team: RosterTeam, choices: FestPlayerChoice
     return suggestions
       .filter((c) => !taken.has(c.value.toLowerCase()))
       .filter((c) => c.label.toLowerCase().split(/\s+/).some((word) => word.startsWith(needle)) || c.label.toLowerCase().startsWith(needle))
-      .slice(0, 12);
+      .slice(0, SUGGESTION_LIMIT);
   }, (choice) => {
     input.value = choice.value;
     add();
@@ -204,6 +207,16 @@ export function openGameRosterDialog(team: RosterTeam, choices: FestPlayerChoice
 
 // playerRow is one player of the draft: the name, and a cross to take them off
 // — or, for a player with results in this game, a lock that says why not.
+// lockedMark stands in for the remove button on a player who cannot leave.
+function lockedMark(): HTMLElement {
+  const lock = document.createElement("span");
+  lock.className = "hint roster-dialog-mark";
+  lock.title = S.fest.rosterEdit.locked();
+  lock.setAttribute("aria-label", S.fest.rosterEdit.locked());
+  lock.appendChild(icon("lock"));
+  return lock;
+}
+
 function playerRow(player: DraftPlayer, remove: () => void): HTMLElement {
   const row = document.createElement("div");
   row.className = "u-row u-gap-sm u-align-center u-justify-between";
@@ -211,12 +224,7 @@ function playerRow(player: DraftPlayer, remove: () => void): HTMLElement {
   name.textContent = player.name;
   row.appendChild(name);
   if (player.locked) {
-    const lock = document.createElement("span");
-    lock.className = "hint roster-dialog-mark";
-    lock.title = S.fest.rosterEdit.locked();
-    lock.setAttribute("aria-label", S.fest.rosterEdit.locked());
-    lock.appendChild(icon("lock"));
-    row.appendChild(lock);
+    row.appendChild(lockedMark());
     return row;
   }
   const button = document.createElement("button");

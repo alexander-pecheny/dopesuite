@@ -31,6 +31,11 @@ print = functools.partial(print, flush=True)
 CDP_HOST = os.environ.get("CDP_HOST", "localhost:9222")
 TAB_FILE = "/tmp/cdp-tab.txt"
 DEVICE_FILE = "/tmp/cdp-device.json"
+HTTP_TIMEOUT_S = 5
+WS_TIMEOUT_S = 20
+# How long `wait` waits for a selector, and how often it and wait_ready look.
+WAIT_TIMEOUT_S = 10
+POLL_INTERVAL_S = 0.2
 
 DEVICE_PROFILES = {
     "iphone": {
@@ -70,11 +75,11 @@ DEVICE_PROFILES = {
 
 
 def http_get_json(path):
-    return requests.get(f"http://{CDP_HOST}{path}", timeout=5).json()
+    return requests.get(f"http://{CDP_HOST}{path}", timeout=HTTP_TIMEOUT_S).json()
 
 
 def http_put_json(path):
-    return requests.put(f"http://{CDP_HOST}{path}", timeout=5).json()
+    return requests.put(f"http://{CDP_HOST}{path}", timeout=HTTP_TIMEOUT_S).json()
 
 
 def find_tab(tab_id):
@@ -142,7 +147,7 @@ def apply_device(c, profile):
 
 class Client:
     def __init__(self, ws_url):
-        self.ws = websocket.create_connection(ws_url, suppress_origin=True, timeout=20)
+        self.ws = websocket.create_connection(ws_url, suppress_origin=True, timeout=WS_TIMEOUT_S)
         self._id = 0
 
     def call(self, method, params=None):
@@ -161,7 +166,7 @@ class Client:
             r = self.call("Runtime.evaluate", {"expression": "document.readyState", "returnByValue": True})
             if r.get("result", {}).get("value") == "complete":
                 return True
-            time.sleep(0.2)
+            time.sleep(POLL_INTERVAL_S)
         return False
 
     def close(self):
@@ -183,7 +188,7 @@ def main():
             with open(TAB_FILE) as fh:
                 tid = fh.read().strip()
             try:
-                requests.get(f"http://{CDP_HOST}/json/close/{tid}", timeout=5)
+                requests.get(f"http://{CDP_HOST}/json/close/{tid}", timeout=HTTP_TIMEOUT_S)
             except Exception:
                 pass
             os.remove(TAB_FILE)
@@ -223,14 +228,14 @@ def main():
             print(r["result"].get("value"))
         elif cmd == "wait":
             sel = args[1]
-            deadline = time.time() + 10
+            deadline = time.time() + WAIT_TIMEOUT_S
             while time.time() < deadline:
                 js = f"document.querySelector({json.dumps(sel)}) !== null"
                 r = c.call("Runtime.evaluate", {"expression": js, "returnByValue": True})
                 if r["result"].get("value"):
                     print("ok")
                     return
-                time.sleep(0.2)
+                time.sleep(POLL_INTERVAL_S)
             print("timeout", file=sys.stderr)
             sys.exit(2)
         elif cmd == "screenshot":

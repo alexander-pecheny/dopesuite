@@ -3,7 +3,8 @@ package games
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
+
+	"pecheny.me/dopecore/idstr"
 
 	"dope/dope/domain/structure"
 	dopestrings "dope/i18nstrings"
@@ -42,7 +43,8 @@ func (hamsa) SeatsPlayers() bool { return true }
 // The lot among teams that share a place is drawn once the bout is over,
 // so it is the one entry a finished bout takes: ["participants", <id>, "lot"].
 func (hamsa) EditableWhenFinished(path []json.RawMessage) bool {
-	if len(path) != 3 {
+	const lotPathLen = 3 // participants, id, lot
+	if len(path) != lotPathLen {
 		return false
 	}
 	var head, tail string
@@ -62,7 +64,7 @@ func (hamsa) UsedPlayers(stateJSON json.RawMessage, _ []int64) []UsedPlayer {
 		if side == nil {
 			continue
 		}
-		team, _ := strconv.ParseInt(key, 10, 64)
+		team, _ := idstr.Parse(key)
 		for _, theme := range append(append([]HamsaTheme(nil), side.Themes...), side.Shootout...) {
 			out = append(out, UsedPlayer{Team: team, Player: theme.Player})
 		}

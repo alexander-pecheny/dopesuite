@@ -18,7 +18,19 @@ import (
 	"time"
 )
 
-const summaryInterval = 15 * time.Second
+const (
+	summaryInterval = 15 * time.Second
+	// maxWindow caps the samples buffered between two summaries.
+	maxWindow = 100000
+	// The summary reports these percentiles of each duration.
+	p50       = 50
+	p95       = 95
+	pMax      = 100
+	floatBits = 64
+	// msDecimals and rateDecimals are how many digits follow the point.
+	msDecimals   = 2
+	rateDecimals = 3
+)
 
 // Sample is one game-state PATCH's timing breakdown. Durations left zero are
 // omitted from stats. Populated partly under/around the write lock and partly by
@@ -77,7 +89,7 @@ func (r *Recorder) RecordEdit(m Sample) {
 		FmtMs(m.DB), FmtMs(m.Broadcast), FmtMs(m.E2E))
 	r.mu.Lock()
 	// Cap the buffer so a stalled summary goroutine can't grow it without bound.
-	if len(r.window) < 100000 {
+	if len(r.window) < maxWindow {
 		r.window = append(r.window, m)
 	}
 	r.mu.Unlock()
@@ -122,14 +134,11 @@ func (r *Recorder) runSummary() {
 			}
 		}
 		log.Printf("editmetric summary edits=%d max_waiters=%d "+
-			"wait_ms[p50/p95/max]=%s/%s/%s hold_ms[p50/p95/max]=%s/%s/%s "+
-			"db_ms[p50/p95/max]=%s/%s/%s e2e_ms[p50/p95/max]=%s/%s/%s "+
+			"wait_ms[p50/p95/max]=%s hold_ms[p50/p95/max]=%s "+
+			"db_ms[p50/p95/max]=%s e2e_ms[p50/p95/max]=%s "+
 			"festview_hits=%d festview_misses=%d hit_rate=%s",
 			len(window), maxWaiters,
-			PctMs(waits, 50), PctMs(waits, 95), PctMs(waits, 100),
-			PctMs(holds, 50), PctMs(holds, 95), PctMs(holds, 100),
-			PctMs(dbs, 50), PctMs(dbs, 95), PctMs(dbs, 100),
-			PctMs(e2es, 50), PctMs(e2es, 95), PctMs(e2es, 100),
+			pctSummary(waits), pctSummary(holds), pctSummary(dbs), pctSummary(e2es),
 			dHits, dMiss, fmtRate(dHits, dHits+dMiss))
 	}
 }
@@ -145,7 +154,12 @@ func NowIf(cond bool) time.Time {
 
 // FmtMs renders a duration as milliseconds with two decimals.
 func FmtMs(d time.Duration) string {
-	return strconv.FormatFloat(float64(d)/float64(time.Millisecond), 'f', 2, 64)
+	return strconv.FormatFloat(float64(d)/float64(time.Millisecond), 'f', msDecimals, floatBits)
+}
+
+// pctSummary is the p50/p95/max of durs in milliseconds, as "a/b/c".
+func pctSummary(durs []time.Duration) string {
+	return PctMs(durs, p50) + "/" + PctMs(durs, p95) + "/" + PctMs(durs, pMax)
 }
 
 // PctMs returns the p-th percentile (nearest-rank) of durs in milliseconds.
@@ -156,7 +170,7 @@ func PctMs(durs []time.Duration, p int) string {
 	sorted := make([]time.Duration, len(durs))
 	copy(sorted, durs)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
-	idx := (p * len(sorted)) / 100
+	idx := (p * len(sorted)) / pMax
 	if idx >= len(sorted) {
 		idx = len(sorted) - 1
 	}
@@ -167,5 +181,5 @@ func fmtRate(num, den int64) string {
 	if den == 0 {
 		return "n/a"
 	}
-	return strconv.FormatFloat(float64(num)/float64(den), 'f', 3, 64)
+	return strconv.FormatFloat(float64(num)/float64(den), 'f', rateDecimals, floatBits)
 }

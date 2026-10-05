@@ -30,6 +30,9 @@ import {computeHamsaPlayerStats} from "./hamsa-stats.js";
 import type {HamsaBout} from "./hamsa-stats.js";
 import S from "./i18nstrings.js";
 
+// The sheet's leading columns, which the round header row leaves blank.
+const LEADING_COLS = 4;
+
 // A bout sheet pins EK's block, with a total column wide enough for thousands.
 const BOUT_PINS = scoreSheetPins({total: "var(--hamsa-total-col)"});
 
@@ -335,7 +338,7 @@ function roundHeaderRow(bout: BoutEntry, groups: ThemeGroup[]): HTMLTableRowElem
   const state = stateOf(bout.code);
   const row = document.createElement("tr");
   row.className = "hamsa-round-row";
-  row.appendChild(BOUT_PINS.markSpan(th("", "hamsa-round-lead", {colSpan: 4})));
+  row.appendChild(BOUT_PINS.markSpan(th("", "hamsa-round-lead", {colSpan: LEADING_COLS})));
   let index = 0;
   while (index < groups.length) {
     const round = groups[index].round;

@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"errors"
 	"sort"
-	"strconv"
 	"strings"
 
 	"dope/dope/domain/games"
@@ -16,7 +15,9 @@ import (
 	"dope/dope/domain/roster"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
+
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // hasAssignmentsTx reports whether the Game's seats are already claimed.
@@ -49,28 +50,35 @@ on conflict(game_id, basket, number) do update set participant_id = excluded.par
 // was given, so the entrant list can never claim somebody the Structure did not
 // seat. A team knocked out before its first Match is still visibly an entrant,
 // which is the point of keeping the list at all.
-func recordGameEntrantsTx(ctx context.Context, tx *sql.Tx, gameID int64) error {
+// basketEntry is a Participant seated in the first basket, with its number.
+type basketEntry struct {
+	id     int64
+	number int
+}
+
+// firstBasketTx lists the Game's first-basket Participants by number.
+func firstBasketTx(ctx context.Context, tx *sql.Tx, gameID int64) ([]basketEntry, error) {
 	rows, err := tx.QueryContext(ctx, `
 select participant_id, number from game_assignments
 where game_id = ? and basket = 1 and participant_id is not null order by number`, gameID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	type entry struct {
-		id     int64
-		number int
-	}
-	var seated []entry
+	defer rows.Close()
+	var seated []basketEntry
 	for rows.Next() {
-		var e entry
+		var e basketEntry
 		if err := rows.Scan(&e.id, &e.number); err != nil {
-			rows.Close()
-			return err
+			return nil, err
 		}
 		seated = append(seated, e)
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	return seated, rows.Err()
+}
+
+func recordGameEntrantsTx(ctx context.Context, tx *sql.Tx, gameID int64) error {
+	seated, err := firstBasketTx(ctx, tx, gameID)
+	if err != nil {
 		return err
 	}
 	for position, e := range seated {
@@ -124,7 +132,7 @@ func chosenEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType st
 		if err := tx.QueryRowContext(ctx, `
 select name, roster from participants where id = ? and fest_id = ?`, participantID, festID).Scan(&name, &roster); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.UnknownParticipant(strconv.FormatInt(participantID, 10)))
+				return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.UnknownParticipant(idstr.Format(participantID)))
 			}
 			return nil, err
 		}
@@ -379,7 +387,7 @@ const festPlayerRefPrefix = "fp"
 // FestPlayerEntrantRef is the picker value for a rating player who is not a
 // Participant yet.
 func FestPlayerEntrantRef(festPlayerID int64) string {
-	return festPlayerRefPrefix + strconv.FormatInt(festPlayerID, 10)
+	return festPlayerRefPrefix + idstr.Format(festPlayerID)
 }
 
 // ResolveEntrantRefsTx turns the picker's refs into Participant ids, in the
@@ -393,7 +401,7 @@ func ResolveEntrantRefsTx(ctx context.Context, tx *sql.Tx, festID int64, refs []
 	var out []int64
 	for _, ref := range refs {
 		if raw, ok := strings.CutPrefix(ref, festPlayerRefPrefix); ok {
-			festPlayerID, err := strconv.ParseInt(raw, 10, 64)
+			festPlayerID, err := idstr.Parse(raw)
 			if err != nil || festPlayerID <= 0 {
 				continue
 			}
@@ -404,7 +412,7 @@ func ResolveEntrantRefsTx(ctx context.Context, tx *sql.Tx, festID int64, refs []
 			out = append(out, id)
 			continue
 		}
-		if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		if id, err := idstr.Parse(ref); err == nil && id > 0 {
 			out = append(out, id)
 		}
 	}

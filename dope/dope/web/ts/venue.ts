@@ -7,6 +7,9 @@ import type {StandingsColumn} from "./standings.js";
 import {icon, iconed} from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
+// Visible width, in characters, of the new venue's title field.
+const TITLE_FIELD_SIZE = 24;
+
 export type VenueLike = number | string | {number?: unknown; Number?: unknown; title?: unknown; Title?: unknown} | null | undefined;
 
 export interface Venue {
@@ -144,7 +147,7 @@ function venueAddForm(next: number, onAdd: (title: string, number: number) => vo
   const title = document.createElement("input");
   title.type = "text";
   title.className = "input";
-  title.size = 24;
+  title.size = TITLE_FIELD_SIZE;
   title.placeholder = S.widgets.venue.addTitle();
   title.setAttribute("aria-label", S.widgets.venue.addTitle());
   title.dataset.venueAdd = "";

@@ -1,5 +1,8 @@
 import S from "./i18nstrings.js";
 
+// Visible height, in lines, of the import box.
+const IMPORT_TEXTAREA_ROWS = 12;
+
 // Fest team-numbers page: edit-in-place toggle (number replacement) and the two mass
 // number-import <dialog> modals (paste → confirm → apply). Extracted verbatim
 // from the page's former inline <script>; keyed on the #numbers-* ids and
@@ -95,7 +98,7 @@ interface ImportApplyResponse {
     hint.textContent = S.numbers.import.hint();
     const textarea = document.createElement("textarea");
     textarea.className = "numbers-import-textarea";
-    textarea.rows = 12;
+    textarea.rows = IMPORT_TEXTAREA_ROWS;
     textarea.placeholder = S.numbers.import.placeholder();
     const err = document.createElement("p");
     err.className = "empty";

@@ -3,7 +3,8 @@ package pages
 import (
 	"fmt"
 	"net/http"
-	"strconv"
+
+	"pecheny.me/dopecore/idstr"
 
 	ui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
@@ -45,7 +46,7 @@ func festAuditIndexDoc(festID int64, festTitle string, games []auditGameRow) *ui
 	}
 	return &ui.Doc{Nodes: []ui.Node{
 		ui.Page(ui.Title(s.Journal.Index.Title()), ui.PagePublic,
-			ui.Publictopbar(Trail(FestCrumbs(strconv.FormatInt(festID, 10), festTitle), s.Journal.Index.Title())),
+			ui.Publictopbar(Trail(FestCrumbs(idstr.Format(festID), festTitle), s.Journal.Index.Title())),
 			ui.Section(sect...),
 		),
 	}}

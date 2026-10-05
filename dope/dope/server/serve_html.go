@@ -216,6 +216,10 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 	return payload, nil
 }
 
+// ekRouteCodePart is where a match or stage code stands in the EK page's path
+// parts, after the scope and the mode.
+const ekRouteCodePart = 3
+
 func parseEKInitRoute(parts []string, scope festScope) ekInitRoute {
 	route := ekInitRoute{Mode: "grid", FestID: scope.FestID, GameID: scope.GameID}
 	if len(parts) <= 2 {
@@ -227,14 +231,14 @@ func parseEKInitRoute(parts []string, scope festScope) ekInitRoute {
 	case "entrants", "seed-import":
 		route.Mode = "seedImport"
 	case "matches":
-		if len(parts) >= 4 {
+		if len(parts) > ekRouteCodePart {
 			route.Mode = "match"
-			route.MatchCode = parts[3]
+			route.MatchCode = parts[ekRouteCodePart]
 		}
 	case "stage":
-		if len(parts) >= 4 {
+		if len(parts) > ekRouteCodePart {
 			route.Mode = "stage"
-			route.StageCode = parts[3]
+			route.StageCode = parts[ekRouteCodePart]
 		}
 	}
 	return route

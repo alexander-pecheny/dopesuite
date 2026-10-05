@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"slices"
-	"strconv"
 	"strings"
 
 	"dope/dope/domain/core"
@@ -25,6 +24,7 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // What an entrant is in a format: a team, a troika or a player.
@@ -371,7 +371,7 @@ func playersIn(ctx context.Context, q store.Queryer, in map[int64]bool) (map[int
 	return out, nil
 }
 
-func keyOf(kind string, id int64) string { return kind + ":" + strconv.FormatInt(id, 10) }
+func keyOf(kind string, id int64) string { return kind + ":" + idstr.Format(id) }
 
 // ---- the writes ----
 
@@ -604,7 +604,7 @@ insert into participants(fest_id, roster, name, city, game_id) values(?, ?, ?, '
 		return id, name, "", err
 	}
 	want, raw, ok := strings.Cut(req.Key, ":")
-	id, err := strconv.ParseInt(raw, 10, 64)
+	id, err := idstr.Parse(raw)
 	if !ok || err != nil || id <= 0 || want != kind {
 		return 0, "", "", corei18n.User(s.Entrants.Error.PickSomebody())
 	}
@@ -799,7 +799,7 @@ delete from participants where id = ? and game_id = ?
 // its key (entrant:<id>), or anybody an add could bring in.
 func replacementFor(ctx context.Context, tx *sql.Tx, scope core.FestScope, list imports.List, req AddRequest) (int64, string, string, error) {
 	if raw, ok := strings.CutPrefix(req.Key, keyEntrant+":"); ok {
-		id, err := strconv.ParseInt(raw, 10, 64)
+		id, err := idstr.Parse(raw)
 		if err != nil || list.Index(id) < 0 {
 			return 0, "", "", corei18n.User(dopestrings.Default.Entrants.Error.PickSomebody())
 		}

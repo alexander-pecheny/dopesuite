@@ -215,14 +215,19 @@ func LoadListTx(ctx context.Context, q store.Queryer, scope core.FestScope) (Lis
 	if err != nil {
 		return List{}, err
 	}
-	rows := list.State.Rows[:0:0]
-	for _, row := range list.State.Rows {
+	list.State.Rows = knownRows(list.State.Rows, known)
+	return list, nil
+}
+
+// knownRows drops the rows whose Participant the fest no longer has.
+func knownRows(rows []seedImportStateRow, known map[int64]bool) []seedImportStateRow {
+	out := rows[:0:0]
+	for _, row := range rows {
 		if known[row.TeamID] {
-			rows = append(rows, row)
+			out = append(out, row)
 		}
 	}
-	list.State.Rows = rows
-	return list, nil
+	return out
 }
 
 // seatedParticipantsTx is who the Game seats before it keeps a list of its own:

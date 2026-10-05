@@ -255,7 +255,7 @@ func ComputeTroikaResults(stateJSON string) ([]TroikaResultsSide, error) {
 				results[i].Total += count * value
 				results[i].Correct += count
 				switch count {
-				case 3:
+				case TroikaChairs:
 					results[i].Threes++
 				case 2:
 					results[i].Twos++

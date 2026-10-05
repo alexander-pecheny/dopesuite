@@ -3,6 +3,10 @@
 // helpers pages share.
 
 const MINUS_SIGN = "\u2212";
+const DECIMAL_BASE = 10;
+export const PERCENT = 100;
+// From this question number on a header prints the number a step smaller.
+const WIDE_QUESTION_NUMBER = 100;
 
 export type CellContentItem = Node | string | number | boolean | null | undefined;
 export type CellContent = CellContentItem | CellContentItem[];
@@ -129,6 +133,17 @@ export function formatNumber(value: unknown): string {
   return Number.isFinite(Number(value)) ? formatDisplayText(value) : "";
 }
 
+// roundTo rounds value to the given number of decimal places.
+export function roundTo(value: number, decimals: number): number {
+  const scale = DECIMAL_BASE ** decimals;
+  return Math.round(value * scale) / scale;
+}
+
+// percentText prints a share between 0 and 1 as a whole percentage: "42%".
+export function percentText(share: number): string {
+  return `${Math.round(share * PERCENT)}%`;
+}
+
 export function formatPlace(place: number | null | undefined): string {
   return place != null && place > 0 ? String(place) : "";
 }
@@ -141,7 +156,7 @@ export function formatPlace(place: number | null | undefined): string {
 // smaller size win over the font-size the header's own rule sets.
 export function questionNumberNode(displayNumber: number): HTMLElement {
   const node = document.createElement("span");
-  if (displayNumber >= 100) node.className = "q-num-wide";
+  if (displayNumber >= WIDE_QUESTION_NUMBER) node.className = "q-num-wide";
   node.textContent = String(displayNumber);
   return node;
 }

@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/webassets"
 
 	"dope/dope/domain/games"
@@ -59,9 +60,20 @@ type staticConfig struct {
 // snapshot, so a flood of forged `session=...` cookies can't pierce the shield.
 const liveFallthroughCap = 32
 
+// Defaults for the DOPE_STATIC_* knobs; staticConfig says what each one means.
+const (
+	defaultRateHigh      = 400
+	defaultRateLow       = 150
+	defaultSSEMax        = 1200
+	defaultCooldownSecs  = 30
+	defaultRetentionSecs = 60
+	// staticRegenInterval is how often cached snapshots are rebuilt.
+	staticRegenInterval = 5 * time.Second
+)
+
 func envInt64(key string, def int64) int64 {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+		if n, err := idstr.Parse(v); err == nil {
 			return n
 		}
 	}
@@ -73,11 +85,11 @@ func envInt64(key string, def int64) int64 {
 // localhost-only control server. Call once from main() after assets are set.
 func (s *server) initStaticMode() {
 	s.staticCfg = staticConfig{
-		rateHigh:  envInt64("DOPE_STATIC_RATE_HIGH", 400),
-		rateLow:   envInt64("DOPE_STATIC_RATE_LOW", 150),
-		sseMax:    envInt64("DOPE_STATIC_SSE_MAX", 1200),
-		cooldown:  int(envInt64("DOPE_STATIC_COOLDOWN", 30)),
-		retention: time.Duration(envInt64("DOPE_STATIC_RETENTION", 60)) * time.Second,
+		rateHigh:  envInt64("DOPE_STATIC_RATE_HIGH", defaultRateHigh),
+		rateLow:   envInt64("DOPE_STATIC_RATE_LOW", defaultRateLow),
+		sseMax:    envInt64("DOPE_STATIC_SSE_MAX", defaultSSEMax),
+		cooldown:  int(envInt64("DOPE_STATIC_COOLDOWN", defaultCooldownSecs)),
+		retention: time.Duration(envInt64("DOPE_STATIC_RETENTION", defaultRetentionSecs)) * time.Second,
 	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("DOPE_STATIC"))) {
 	case "on":
@@ -114,18 +126,29 @@ func (g *staticGovernor) step(manual int32, on bool, rate, sse int64) bool {
 		return false
 	}
 	if on {
-		g.dwell++
-		if rate < g.cfg.rateLow {
-			g.underTicks++
-		} else {
-			g.underTicks = 0
-		}
-		if g.dwell >= g.cfg.cooldown && g.underTicks >= g.cfg.cooldown {
-			g.overTicks, g.underTicks, g.dwell = 0, 0, 0
-			return false
-		}
-		return true
+		return g.stayOn(rate)
 	}
+	return g.turnOn(rate, sse)
+}
+
+// stayOn is one tick while the shield is up: it reports whether it should
+// stay up.
+func (g *staticGovernor) stayOn(rate int64) bool {
+	g.dwell++
+	if rate < g.cfg.rateLow {
+		g.underTicks++
+	} else {
+		g.underTicks = 0
+	}
+	if g.dwell >= g.cfg.cooldown && g.underTicks >= g.cfg.cooldown {
+		g.overTicks, g.underTicks, g.dwell = 0, 0, 0
+		return false
+	}
+	return true
+}
+
+// turnOn is one tick while the shield is down: it reports whether to raise it.
+func (g *staticGovernor) turnOn(rate, sse int64) bool {
 	if rate > g.cfg.rateHigh || sse > g.cfg.sseMax {
 		g.overTicks++
 	} else {
@@ -186,32 +209,12 @@ func (s *server) setStatic(on bool) {
 // 5s) no matter how hard the cache is hammered.
 func (s *server) runStaticRegen() {
 	cfg := s.staticCfg
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(staticRegenInterval)
 	defer ticker.Stop()
 	for range ticker.C {
-		now := time.Now().UnixNano()
-		var hot, stale []ekInitRoute
-		s.staticMu.RLock()
-		for route, e := range s.staticCache {
-			if now-e.lastAccess.Load() > cfg.retention.Nanoseconds() {
-				stale = append(stale, route)
-			} else {
-				hot = append(hot, route)
-			}
-		}
-		s.staticMu.RUnlock()
-
+		hot, stale := s.partitionStatic(cfg.retention)
 		for _, route := range hot {
-			e, err := s.buildStaticEntry(context.Background(), route)
-			if err != nil || e == nil {
-				continue
-			}
-			s.staticMu.Lock()
-			if old := s.staticCache[route]; old != nil {
-				e.lastAccess.Store(old.lastAccess.Load())
-			}
-			s.staticCache[route] = e
-			s.staticMu.Unlock()
+			s.refreshStatic(route)
 		}
 		if len(stale) > 0 {
 			s.staticMu.Lock()
@@ -223,6 +226,37 @@ func (s *server) runStaticRegen() {
 	}
 }
 
+// partitionStatic splits the cached routes into those read within retention
+// (hot) and the rest (stale).
+func (s *server) partitionStatic(retention time.Duration) (hot, stale []ekInitRoute) {
+	now := time.Now().UnixNano()
+	s.staticMu.RLock()
+	defer s.staticMu.RUnlock()
+	for route, e := range s.staticCache {
+		if now-e.lastAccess.Load() > retention.Nanoseconds() {
+			stale = append(stale, route)
+		} else {
+			hot = append(hot, route)
+		}
+	}
+	return hot, stale
+}
+
+// refreshStatic rebuilds one cached snapshot, keeping its last-access time. A
+// failed build leaves the old snapshot in place.
+func (s *server) refreshStatic(route ekInitRoute) {
+	e, err := s.buildStaticEntry(context.Background(), route)
+	if err != nil || e == nil {
+		return
+	}
+	s.staticMu.Lock()
+	defer s.staticMu.Unlock()
+	if old := s.staticCache[route]; old != nil {
+		e.lastAccess.Store(old.lastAccess.Load())
+	}
+	s.staticCache[route] = e
+}
+
 // buildStaticEntry renders one viewer-page snapshot for a route: it resolves the
 // game type, reuses the existing init builders (with Static=true, CanEdit=false),
 // splices into the shell, and precomputes both raw and gzipped bytes.
@@ -231,36 +265,41 @@ func (s *server) buildStaticEntry(ctx context.Context, route ekInitRoute) (*stat
 	_ = s.eng.DB.QueryRowContext(ctx, `select game_type from games where id = ? and fest_id = ?`, route.GameID, route.FestID).Scan(&gameType)
 
 	def := games.Get(gameType)
-	htmlPath, marker := def.Page, gameInitMarker
-	var payload any
-	if def.Init == games.InitEK {
-		marker = ekInitMarker
-		p, err := s.buildEKInit(ctx, route)
-		if err != nil {
-			return nil, err
-		}
-		p.Static = true
-		p.CanEdit = false
-		payload = p
-	} else {
-		p, err := s.buildGameInit(ctx, festScope{FestID: route.FestID, GameID: route.GameID})
-		if err != nil {
-			return nil, err
-		}
-		p.Static = true
-		p.CanEdit = false
-		payload = p
+	payload, marker, err := s.staticInit(ctx, route, def.Init == games.InitEK)
+	if err != nil {
+		return nil, err
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	html, err := s.renderInjectedBytes(htmlPath, marker, data)
+	html, err := s.renderInjectedBytes(def.Page, marker, data)
 	if err != nil {
 		return nil, err
 	}
 	return &staticEntry{raw: html, gz: webassets.GzipBytes(html)}, nil
+}
+
+// staticInit builds a route's init payload as a read-only viewer sees it, and
+// names the marker it replaces in the page.
+func (s *server) staticInit(ctx context.Context, route ekInitRoute, ek bool) (payload any, marker string, err error) {
+	if ek {
+		p, err := s.buildEKInit(ctx, route)
+		if err != nil {
+			return nil, "", err
+		}
+		p.Static = true
+		p.CanEdit = false
+		return p, ekInitMarker, nil
+	}
+	p, err := s.buildGameInit(ctx, festScope{FestID: route.FestID, GameID: route.GameID})
+	if err != nil {
+		return nil, "", err
+	}
+	p.Static = true
+	p.CanEdit = false
+	return p, gameInitMarker, nil
 }
 
 // spliceInit puts the init JSON where the page's marker stands. The live
@@ -293,10 +332,7 @@ func (s *server) renderInjectedBytes(htmlPath, marker string, payload []byte) ([
 // staticSnapshot returns the cached snapshot for a route, building it once on a
 // miss. Concurrent misses for the same route share a single build (singleflight).
 func (s *server) staticSnapshot(ctx context.Context, route ekInitRoute) *staticEntry {
-	s.staticMu.RLock()
-	e := s.staticCache[route]
-	s.staticMu.RUnlock()
-	if e != nil {
+	if e := s.cachedStatic(route); e != nil {
 		return e
 	}
 
@@ -321,8 +357,21 @@ func (s *server) staticSnapshot(ctx context.Context, route ekInitRoute) *staticE
 	e, err := s.buildStaticEntry(ctx, route)
 	call.e, call.err = e, err
 	call.wg.Done()
+	s.finishStaticBuild(route, e, err)
+	return e
+}
 
+// cachedStatic is the cached snapshot for a route, or nil.
+func (s *server) cachedStatic(route ekInitRoute) *staticEntry {
+	s.staticMu.RLock()
+	defer s.staticMu.RUnlock()
+	return s.staticCache[route]
+}
+
+// finishStaticBuild ends a route's in-flight build and caches what it built.
+func (s *server) finishStaticBuild(route ekInitRoute, e *staticEntry, err error) {
 	s.staticMu.Lock()
+	defer s.staticMu.Unlock()
 	delete(s.staticBuilds, route)
 	if err == nil && e != nil {
 		if s.staticCache == nil {
@@ -330,8 +379,6 @@ func (s *server) staticSnapshot(ctx context.Context, route ekInitRoute) *staticE
 		}
 		s.staticCache[route] = e
 	}
-	s.staticMu.Unlock()
-	return e
 }
 
 // serveStaticSnapshot writes the cached snapshot for a route. It serves the
@@ -371,19 +418,12 @@ func (s *server) serveStaticSnapshot(w http.ResponseWriter, r *http.Request, rou
 // writeStaticStatus emits the current mode + load gauges as JSON for the control
 // endpoint.
 func (s *server) writeStaticStatus(w http.ResponseWriter) {
-	manual := "auto"
-	switch s.eng.StaticManual.Load() {
-	case 1:
-		manual = "on"
-	case 2:
-		manual = "off"
-	}
 	s.staticMu.RLock()
 	cacheEntries := len(s.staticCache)
 	s.staticMu.RUnlock()
 	status := map[string]any{
 		"static":          s.eng.StaticMode.Load(),
-		"manual":          manual,
+		"manual":          manualLabel(s.eng.StaticManual.Load()),
 		"reqRate":         s.eng.LastRate.Load(),
 		"sseConns":        s.eng.SseConns.Load(),
 		"inFlight":        s.eng.InFlight.Load(),
@@ -398,6 +438,17 @@ func (s *server) writeStaticStatus(w http.ResponseWriter) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(status)
+}
+
+// manualLabel names a manual override value for the status endpoint.
+func manualLabel(manual int32) string {
+	switch manual {
+	case 1:
+		return "on"
+	case 2:
+		return "off"
+	}
+	return "auto"
 }
 
 // startStaticControl runs a localhost-only control server (modeled on the pprof
@@ -425,7 +476,7 @@ func (s *server) startStaticControl(addr string) {
 	mux.HandleFunc("/admin/status", func(w http.ResponseWriter, r *http.Request) {
 		s.writeStaticStatus(w)
 	})
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: readHeaderTimeout}
 	go func() {
 		log.Printf("static control listening on http://%s/admin/status", addr)
 		if err := srv.ListenAndServe(); err != nil {

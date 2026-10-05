@@ -48,6 +48,45 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"pecheny.me/dopecore/idstr"
+)
+
+// Flag defaults.
+const (
+	defaultViewers      = 100
+	defaultDuration     = 60 * time.Second
+	defaultEditors      = 3
+	defaultRamp         = 5 * time.Second
+	defaultPayloadBytes = 1200
+	defaultSettle       = 3 * time.Second
+)
+
+const (
+	// runGrace is how long past the last stage the run may take to wind down.
+	runGrace = 5 * time.Second
+	// spareViewerConns and spareEditorConns are headroom in each client's
+	// connection pool beyond one connection per worker.
+	spareViewerConns = 10
+	spareEditorConns = 4
+	editorTimeout    = 30 * time.Second
+	idleConnTimeout  = 90 * time.Second
+	// ekSeedBase keeps the EK editors' random seeds apart from the flat ones'.
+	ekSeedBase    = 1001
+	sseReadBuffer = 64 * 1024
+	// editJitterDivisor sets the jitter on editInterval: ±1/4 of it.
+	editJitterDivisor = 4
+	// The EK cells an editor marks: a theme of the team, an answer of the theme.
+	ekThemes          = 12
+	ekAnswersPerTheme = 5
+	reportFileMode    = 0o644
+)
+
+// The latency percentiles the report shows.
+const (
+	quantileP50 = 0.50
+	quantileP95 = 0.95
+	quantileP99 = 0.99
 )
 
 type stageCfg struct {
@@ -116,17 +155,17 @@ func parseFlags() config {
 	flag.StringVar(&cfg.festRef, "fest", "", "fest slug or id used in /api/fest/{ref} edit paths")
 	flag.StringVar(&cfg.festID, "fest-id", "", "numeric fest id used in /events?fest_id= (defaults to -fest)")
 	flag.StringVar(&cfg.gameID, "game", "", "game id to edit")
-	flag.IntVar(&viewers, "viewers", 100, "viewers for a single-level run (ignored when -stages is set)")
-	flag.DurationVar(&duration, "duration", 60*time.Second, "duration for a single-level run (ignored when -stages is set)")
+	flag.IntVar(&viewers, "viewers", defaultViewers, "viewers for a single-level run (ignored when -stages is set)")
+	flag.DurationVar(&duration, "duration", defaultDuration, "duration for a single-level run (ignored when -stages is set)")
 	flag.StringVar(&stages, "stages", "", "cumulative ramp as count:dur pairs, e.g. 50:24s,100:24s,200:24s")
-	flag.IntVar(&cfg.editors, "editors", 3, "number of concurrent editors (run for the whole test)")
+	flag.IntVar(&cfg.editors, "editors", defaultEditors, "number of concurrent editors (run for the whole test)")
 	flag.DurationVar(&cfg.editInterval, "edit-interval", 2*time.Second, "delay between edits per editor (jittered ±25%)")
-	flag.DurationVar(&cfg.ramp, "ramp", 5*time.Second, "window to spread each stage's new viewer connects over")
+	flag.DurationVar(&cfg.ramp, "ramp", defaultRamp, "window to spread each stage's new viewer connects over")
 	flag.StringVar(&tokens, "tokens", "", "comma-separated editor session tokens (one per editor; reused round-robin)")
-	flag.IntVar(&cfg.payloadBytes, "payload-bytes", 1200, "approximate edit payload size, padded to model a real game-state blob")
+	flag.IntVar(&cfg.payloadBytes, "payload-bytes", defaultPayloadBytes, "approximate edit payload size, padded to model a real game-state blob")
 	flag.StringVar(&cfg.outPath, "out", "", "optional path to write the JSON report")
 	flag.BoolVar(&cfg.insecure, "insecure", false, "skip TLS verification")
-	flag.DurationVar(&cfg.settle, "settle", 3*time.Second, "stop editors this long before the run ends, so in-flight broadcasts can land while viewers still listen")
+	flag.DurationVar(&cfg.settle, "settle", defaultSettle, "stop editors this long before the run ends, so in-flight broadcasts can land while viewers still listen")
 	flag.StringVar(&cfg.editMode, "edit-mode", "patch", "how flat-game editors write: patch (set-ops, the real client path) or put (whole state)")
 	flag.IntVar(&cfg.ekEditors, "ek-editors", 0, "concurrent EK editors PATCHing per-match state ops (spread over -ek-matches)")
 	flag.StringVar(&ekMatches, "ek-matches", "", "comma-separated EK match codes the EK editors mark cells in")
@@ -209,7 +248,7 @@ func run(cfg config) error {
 			maxViewers = st.viewers
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), total+5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), total+runGrace)
 	defer cancel()
 	// Editors stop before the viewers do: an edit made in the last instants of a
 	// run has no chance to be delivered, and counting it would understate
@@ -229,8 +268,8 @@ func run(cfg config) error {
 	stats := newStats(cfg.stages)
 	var wg sync.WaitGroup
 
-	viewerClient := newHTTPClient(cfg, 0, maxViewers+cfg.editors+cfg.ekEditors+10)
-	editorClient := newHTTPClient(cfg, 30*time.Second, cfg.editors+cfg.ekEditors+4)
+	viewerClient := newHTTPClient(cfg, 0, maxViewers+cfg.editors+cfg.ekEditors+spareViewerConns)
+	editorClient := newHTTPClient(cfg, editorTimeout, cfg.editors+cfg.ekEditors+spareEditorConns)
 
 	// Editors run for the whole test, attributing each edit to whatever stage
 	// is current when it completes.
@@ -251,7 +290,7 @@ func run(cfg config) error {
 		wg.Add(1)
 		go func(id int, tok, code string) {
 			defer wg.Done()
-			runEKEditor(editCtx, cfg, editorClient, stats, id, tok, code, rand.New(rand.NewSource(int64(id)+1001)))
+			runEKEditor(editCtx, cfg, editorClient, stats, id, tok, code, rand.New(rand.NewSource(int64(id)+ekSeedBase)))
 		}(i, token, code)
 	}
 
@@ -326,7 +365,7 @@ func newHTTPClient(cfg config, timeout time.Duration, maxConns int) *http.Client
 		MaxIdleConns:        maxConns,
 		MaxIdleConnsPerHost: maxConns,
 		MaxConnsPerHost:     maxConns,
-		IdleConnTimeout:     90 * time.Second,
+		IdleConnTimeout:     idleConnTimeout,
 		ForceAttemptHTTP2:   false, // keep HTTP/1.1 so connection accounting matches nginx
 	}
 	if cfg.insecure {
@@ -365,7 +404,7 @@ func runViewer(ctx context.Context, cfg config, client *http.Client, stats *stat
 	connectedAt := time.Now()
 	defer func() { stats.recordViewerFeed(viewerFeed{connectedAt: connectedAt, arrivals: feed}) }()
 
-	reader := bufio.NewReaderSize(resp.Body, 64*1024)
+	reader := bufio.NewReaderSize(resp.Body, sseReadBuffer)
 	var dataBuf bytes.Buffer
 	for {
 		line, err := reader.ReadString('\n')
@@ -397,9 +436,8 @@ func runEditor(ctx context.Context, cfg config, client *http.Client, stats *stat
 		strings.TrimRight(cfg.base, "/"), cfg.festRef, cfg.gameID)
 	pad := strings.Repeat("x", cfg.payloadBytes)
 	for {
-		jitter := time.Duration(rng.Int63n(int64(cfg.editInterval)/2+1)) - cfg.editInterval/4
 		select {
-		case <-time.After(cfg.editInterval + jitter):
+		case <-time.After(jittered(rng, cfg.editInterval)):
 		case <-ctx.Done():
 			return
 		}
@@ -450,16 +488,15 @@ func runEKEditor(ctx context.Context, cfg config, client *http.Client, stats *st
 	scope := fmt.Sprintf("match:%s:%s", cfg.gameID, code)
 	marks := [2]string{"right", ""}
 	for n := 0; ; n++ {
-		jitter := time.Duration(rng.Int63n(int64(cfg.editInterval)/2+1)) - cfg.editInterval/4
 		select {
-		case <-time.After(cfg.editInterval + jitter):
+		case <-time.After(jittered(rng, cfg.editInterval)):
 		case <-ctx.Done():
 			return
 		}
 
 		team := teamIDs[rng.Intn(len(teamIDs))]
 		body, _ := json.Marshal(map[string]any{"ops": []any{map[string]any{
-			"path":  []any{"teams", strconv.FormatInt(team, 10), "themes", rng.Intn(12), "answers", rng.Intn(5)},
+			"path":  []any{"teams", idstr.Format(team), "themes", rng.Intn(ekThemes), "answers", rng.Intn(ekAnswersPerTheme)},
 			"value": marks[n%2],
 		}}})
 		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, matchURL+"/state", bytes.NewReader(body))
@@ -482,7 +519,7 @@ func runEKEditor(ctx context.Context, cfg config, client *http.Client, stats *st
 		payload, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		stats.recordEdit(elapsed, resp.StatusCode)
-		if resp.StatusCode/100 != 2 {
+		if !isSuccess(resp.StatusCode) {
 			continue
 		}
 		// The response carries the revision this edit committed at; viewers see
@@ -654,15 +691,15 @@ func (s *stats) recordEdit(elapsed time.Duration, status int) {
 	switch {
 	case status == 0:
 		st.editsErr.Add(1)
-	case status >= 200 && status < 300:
+	case isSuccess(status):
 		st.editsOK.Add(1)
-	case status >= 500:
+	case status >= http.StatusInternalServerError:
 		st.editsBusy.Add(1)
 	default:
 		st.editsOther.Add(1)
 	}
 	st.mu.Lock()
-	st.editMS = append(st.editMS, float64(elapsed.Microseconds())/1000)
+	st.editMS = append(st.editMS, millis(elapsed))
 	st.mu.Unlock()
 }
 
@@ -695,7 +732,7 @@ func (s *stats) recordEvent(data []byte, feed *[]scopedEvent, lastSeq map[string
 	st.markersSeen.Add(int64(len(markers)))
 	st.mu.Lock()
 	for _, m := range markers {
-		st.propMS = append(st.propMS, float64(now-m.TSNano)/1e6)
+		st.propMS = append(st.propMS, millis(time.Duration(now-m.TSNano)))
 	}
 	st.mu.Unlock()
 }
@@ -848,7 +885,7 @@ func (s *stats) finalizeEK(cfg config) *ekReport {
 					break // this viewer never saw a broadcast at or past this edit
 				}
 				delivered++
-				if ms := float64(arrivals[next].at.Sub(send.at)) / 1e6; ms >= 0 {
+				if ms := millis(arrivals[next].at.Sub(send.at)); ms >= 0 {
 					latencies = append(latencies, ms)
 				}
 			}
@@ -866,6 +903,23 @@ func (s *stats) finalizeEK(cfg config) *ekReport {
 	}
 }
 
+// millis is d in milliseconds, with the fraction kept.
+func millis(d time.Duration) float64 {
+	return float64(d) / float64(time.Millisecond)
+}
+
+// isSuccess reports a 2xx status.
+func isSuccess(status int) bool {
+	return status >= http.StatusOK && status < http.StatusMultipleChoices
+}
+
+// jittered is interval moved by a random amount within ±1/editJitterDivisor
+// of it.
+func jittered(rng *rand.Rand, interval time.Duration) time.Duration {
+	jitter := time.Duration(rng.Int63n(int64(interval)/2+1)) - interval/editJitterDivisor
+	return interval + jitter
+}
+
 func percentiles(v []float64) (p50, p95, p99, max float64) {
 	if len(v) == 0 {
 		return 0, 0, 0, 0
@@ -876,7 +930,7 @@ func percentiles(v []float64) (p50, p95, p99, max float64) {
 		idx := int(p * float64(len(s)-1))
 		return s[idx]
 	}
-	return pick(0.50), pick(0.95), pick(0.99), s[len(s)-1]
+	return pick(quantileP50), pick(quantileP95), pick(quantileP99), s[len(s)-1]
 }
 
 func (r report) print() {
@@ -910,7 +964,7 @@ func (r report) writeJSON(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(b, '\n'), 0o644)
+	return os.WriteFile(path, append(b, '\n'), reportFileMode)
 }
 
 // progress prints a one-line heartbeat each second so a long run shows life.

@@ -28,6 +28,10 @@ import secrets
 import sqlite3
 import sys
 
+DB_TIMEOUT_S = 10
+SESSION_TOKEN_BYTES = 32
+DEFAULT_EDITORS = 3
+
 
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -44,7 +48,7 @@ def default_stamp() -> str:
 
 
 def connect(db_path: str) -> sqlite3.Connection:
-    con = sqlite3.connect(db_path, timeout=10)
+    con = sqlite3.connect(db_path, timeout=DB_TIMEOUT_S)
     con.execute("PRAGMA foreign_keys = ON")
     con.execute("PRAGMA busy_timeout = 10000")
     return con
@@ -76,7 +80,7 @@ def provision(con: sqlite3.Connection, stamp: str, editors: int, expiry_days: in
         uid = cur.lastrowid
         user_ids.append(uid)
 
-        token = secrets.token_hex(32)
+        token = secrets.token_hex(SESSION_TOKEN_BYTES)
         tokens.append(token)
         cur.execute(
             "insert into sessions(user_id, token_hash, created_at, expires_at, last_seen_at) "
@@ -146,7 +150,7 @@ def grant(con: sqlite3.Connection, stamp: str, fest_id: int, editors: int, expir
         )
         uid = cur.lastrowid
         user_ids.append(uid)
-        token = secrets.token_hex(32)
+        token = secrets.token_hex(SESSION_TOKEN_BYTES)
         tokens.append(token)
         cur.execute(
             "insert into sessions(user_id, token_hash, created_at, expires_at, last_seen_at) "
@@ -203,7 +207,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["provision", "grant", "reopen", "teardown"])
     parser.add_argument("--db", default="/var/lib/dope/fest.db", help="path to the live SQLite file")
-    parser.add_argument("--editors", type=int, default=3, help="number of editor accounts to create")
+    parser.add_argument("--editors", type=int, default=DEFAULT_EDITORS, help="number of editor accounts to create")
     parser.add_argument("--stamp", default=None, help="unique tag; defaults to UTC YYMMDD-HHMM on provision")
     parser.add_argument("--expiry-days", type=int, default=2, help="session lifetime for the test accounts")
     parser.add_argument("--fest", type=int, default=0, help="existing fest id (grant)")

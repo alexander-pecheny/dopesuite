@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 
 	"dope/dope/domain/core"
@@ -26,6 +25,7 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/session"
 )
 
@@ -321,7 +321,7 @@ func ResolveGameID(ctx context.Context, q store.Queryer, festID int64, ref strin
 	if ref == "" {
 		return 0, sql.ErrNoRows
 	}
-	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+	if id, err := idstr.Parse(ref); err == nil && id > 0 {
 		var found int64
 		if err := q.QueryRowContext(ctx, `select id from games where id = ? and fest_id = ?`, id, festID).Scan(&found); err != nil {
 			return 0, err
@@ -335,6 +335,12 @@ func ResolveGameID(ctx context.Context, q store.Queryer, festID int64, ref strin
 	return id, nil
 }
 
+// Lengths of a game page path: game/{id}/{tab} and game/{id}/{tab}/{code}.
+const (
+	gameTabPathLen  = 3
+	gameItemPathLen = 4
+)
+
 // GamePagePath says whether parts (after the fest: "game", the game ref, then
 // the view) name a game page: the game itself; venues, stats, roster, and for
 // hosts seed-import; matches/{code} and stage/{code}.
@@ -347,11 +353,11 @@ func GamePagePath(parts []string, host bool) bool {
 	}
 	switch parts[2] {
 	case "venues", "stats", "roster":
-		return len(parts) == 3
+		return len(parts) == gameTabPathLen
 	case "entrants", "seed-import":
-		return host && len(parts) == 3
+		return host && len(parts) == gameTabPathLen
 	case "matches", "stage":
-		return len(parts) == 4 && parts[3] != ""
+		return len(parts) == gameItemPathLen && parts[3] != ""
 	}
 	return false
 }
@@ -396,14 +402,7 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var js *JSONStatus
 	switch {
 	case errors.As(err, &js):
-		data, merr := json.Marshal(js.Body)
-		if merr != nil {
-			http.Error(w, dopestrings.Default.Server.Error.Internal(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(js.Code)
-		_, _ = w.Write(data)
+		writeJSONStatus(w, js)
 	case errors.As(err, &st):
 		if st.Code == http.StatusNotFound {
 			http.NotFound(w, r)
@@ -420,6 +419,17 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		}
 		http.Error(w, msg, code)
 	}
+}
+
+func writeJSONStatus(w http.ResponseWriter, js *JSONStatus) {
+	data, err := json.Marshal(js.Body)
+	if err != nil {
+		http.Error(w, dopestrings.Default.Server.Error.Internal(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(js.Code)
+	_, _ = w.Write(data)
 }
 
 // BadUser maps a request failure to a 400: a UserError's message verbatim

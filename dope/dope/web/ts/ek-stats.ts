@@ -3,6 +3,7 @@
 
 import type {MatchView} from "./score-table.js";
 import {seatedNames} from "./ek-seating.js";
+import {percentText, roundTo} from "./cells.js";
 import {standingsTable} from "./standings.js";
 import S from "./i18nstrings.js";
 
@@ -128,6 +129,21 @@ export interface IndividualStatsRow {
 // Σ, Σ+ (positive points), matches, and the taken counts per value; regular themes
 // only, finished matches only — a seeded but unplayed match is not a match played —
 // sorted by Σ.
+// addIndividualMarks adds one seat's theme marks to a player's row.
+function addIndividualMarks(row: IndividualStatsRow, themes: Array<{answers?: Array<string | null | undefined>}>, values: readonly number[]): void {
+  for (const theme of themes) {
+    (theme.answers || []).forEach((mark, i) => {
+      if (mark === "right") {
+        row.sum += values[i] || 0;
+        row.plus += values[i] || 0;
+        row.right[i]++;
+      } else if (mark === "wrong") {
+        row.sum -= values[i] || 0;
+      }
+    });
+  }
+}
+
 export function computeIndividualPlayerStats(stages: EKStage[] | null | undefined): IndividualStatsRow[] {
   const values = EK_VALUES;
   const players = new Map<string, IndividualStatsRow>();
@@ -143,17 +159,7 @@ export function computeIndividualPlayerStats(stages: EKStage[] | null | undefine
           players.set(name, row);
         }
         row.battles++;
-        for (const theme of seat.themes || []) {
-          (theme.answers || []).forEach((mark, i) => {
-            if (mark === "right") {
-              row.sum += values[i] || 0;
-              row.plus += values[i] || 0;
-              row.right[i]++;
-            } else if (mark === "wrong") {
-              row.sum -= values[i] || 0;
-            }
-          });
-        }
+        addIndividualMarks(row, seat.themes || [], values);
       }
     }
   }
@@ -166,7 +172,7 @@ export function computeIndividualPlayerStats(stages: EKStage[] | null | undefine
 // whole (every EK row, and a Sextet theme sat by one), one decimal otherwise.
 // Trailing «.0» is noise in a column of integers.
 export function statNumber(value: number): string {
-  const rounded = Math.round(value * 10) / 10;
+  const rounded = roundTo(value, 1);
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
@@ -248,7 +254,7 @@ export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined, v
       row.battles,
       ...byNominal(row.right, values),
       ...byNominal(row.wrong, values),
-      `${Math.round(row.share * 100)}%`,
+      percentText(row.share),
     ]),
   }));
   return wrapper;

@@ -54,17 +54,26 @@ order by id`, gameID, afterID, throughID,
 		if err := rows.Scan(&id, &op, &payload); err != nil {
 			return nil, err
 		}
-		if journal.Op(op) == journal.OpMatchPatch {
-			out = append(out, gameRowOp{id: id, op: journal.Op(op), payload: append([]byte(nil), payload...)})
-			continue
-		}
-		table, row, err := journal.DecodeRowOpJSON(payload)
+		rowOp, err := decodeGameRowOp(id, journal.Op(op), payload)
 		if err != nil {
-			return nil, fmt.Errorf("decode row op %d: %w", id, err)
+			return nil, err
 		}
-		out = append(out, gameRowOp{id: id, op: journal.Op(op), table: table, row: row})
+		out = append(out, rowOp)
 	}
 	return out, rows.Err()
+}
+
+// decodeGameRowOp decodes one journal row: a match patch keeps its raw
+// payload, a row op is decoded into its table and row.
+func decodeGameRowOp(id int64, op journal.Op, payload []byte) (gameRowOp, error) {
+	if op == journal.OpMatchPatch {
+		return gameRowOp{id: id, op: op, payload: append([]byte(nil), payload...)}, nil
+	}
+	table, row, err := journal.DecodeRowOpJSON(payload)
+	if err != nil {
+		return gameRowOp{}, fmt.Errorf("decode row op %d: %w", id, err)
+	}
+	return gameRowOp{id: id, op: op, table: table, row: row}, nil
 }
 
 // nearestCheckpointAtOrBefore returns the newest checkpoint for a game with

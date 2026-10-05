@@ -3,10 +3,11 @@ package dopeserver
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"dope/dope/domain/core"
 	"dope/dope/web/route"
+
+	"pecheny.me/dopecore/idstr"
 )
 
 // The caller's own API tokens (ADR-0021). A token may list and mint its
@@ -36,7 +37,7 @@ func (s *server) apiTokensCreate(w http.ResponseWriter, r *http.Request, sc rout
 }
 
 func (s *server) apiTokensRevoke(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, err := idstr.Parse(r.PathValue("id"))
 	if err != nil || id <= 0 {
 		return route.BadRequest("bad token id")
 	}

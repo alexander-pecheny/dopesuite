@@ -6,7 +6,7 @@
 // cell you click through and a wider one is a cell you type into; either way
 // what may be entered is the scheme's, never the page's.
 
-import {cssEscape, questionNumberNode, td, th} from "./cells.js";
+import {cssEscape, questionNumberNode, roundTo, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {nameCell} from "./name-cell.js";
 import {resultsTeamCell, standingsTable} from "./standings.js";
@@ -28,6 +28,9 @@ import * as multi from "./multi-protocol.js";
 import {CYCLE_LIMIT} from "./multi-protocol.js";
 import S from "./i18nstrings.js";
 import type {MultiRules, MultiScheme, MultiState} from "./multi-protocol.js";
+
+// Visible width, in characters, of the guest name field.
+const GUEST_NAME_FIELD_SIZE = 32;
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -521,7 +524,7 @@ function buildResultsTable(): HTMLElement {
 // formatPlace prints a place or a sum of places, which a shared place makes
 // fractional: 3.5, not 3.50.
 function formatPlace(value: number): string {
-  return String(Math.round(value * 100) / 100);
+  return String(roundTo(value, 2));
 }
 
 // The teams tab is the host's. A team that refused to play keeps its row on
@@ -648,16 +651,21 @@ function guestRenameField(number: number, name: string): HTMLElement {
   return input;
 }
 
-function buildGuestAddForm(): HTMLElement {
-  const form = document.createElement("form");
-  form.className = "u-row u-wrap u-gap-sm u-align-center";
+function guestNameInput(): HTMLInputElement {
   const input = document.createElement("input");
   input.type = "text";
   input.className = "input";
   input.placeholder = S.multi.guests.namePlaceholder();
   input.dataset.guestAdd = "";
-  input.size = 32;
+  input.size = GUEST_NAME_FIELD_SIZE;
   input.setAttribute("aria-label", S.multi.guests.namePlaceholder());
+  return input;
+}
+
+function buildGuestAddForm(): HTMLElement {
+  const form = document.createElement("form");
+  form.className = "u-row u-wrap u-gap-sm u-align-center";
+  const input = guestNameInput();
   const add = document.createElement("button");
   add.type = "submit";
   add.className = "btn";

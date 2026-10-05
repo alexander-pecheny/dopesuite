@@ -25,9 +25,26 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopeuikit/palette"
 
 	"dope/dope/web/route"
+)
+
+// Upper bounds the game creation form accepts.
+const (
+	maxFormTours     = 20
+	maxFormQuestions = 100
+	maxFormThemes    = 100
+	minKDTables      = 2
+	maxKDTables      = 199
+	maxStickerCount  = 100
+)
+
+// Lengths of a "#rgb" and a "#rrggbb" color.
+const (
+	shortHexColorLen = 4
+	longHexColorLen  = 7
 )
 
 type hostGameSettingsData struct {
@@ -73,7 +90,7 @@ func (o gameEntrantOption) value() string {
 	if o.festPlayer > 0 {
 		return gamebuild.FestPlayerEntrantRef(o.festPlayer)
 	}
-	return strconv.FormatInt(o.ID, 10)
+	return idstr.Format(o.ID)
 }
 
 // stickerPaletteColors is the fixed set of colours an organizer may assign to a
@@ -201,10 +218,10 @@ var formatForms = map[string]formatForm{
 		},
 		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
 			s := dopestrings.Default
-			if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", s.Host.Games.OdToursLabel(), 1, 20); err != nil {
+			if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", s.Host.Games.OdToursLabel(), 1, maxFormTours); err != nil {
 				return err
 			}
-			spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", s.Host.Games.OdQuestionsLabel(), 1, 100)
+			spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", s.Host.Games.OdQuestionsLabel(), 1, maxFormQuestions)
 			return err
 		},
 	},
@@ -217,7 +234,7 @@ var formatForms = map[string]formatForm{
 			}
 		},
 		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
-			spec.KSIThemes, err = parsePositiveFormInt(form, "ksi_themes", dopestrings.Default.Host.Games.ThemesLabel(), 1, 100)
+			spec.KSIThemes, err = parsePositiveFormInt(form, "ksi_themes", dopestrings.Default.Host.Games.ThemesLabel(), 1, maxFormThemes)
 			return err
 		},
 		variant: &formVariant{
@@ -236,7 +253,7 @@ var formatForms = map[string]formatForm{
 				}
 			},
 			read: func(spec *gamebuild.Spec, form url.Values) (err error) {
-				if spec.KSIThemes, err = parsePositiveFormInt(form, "ksis_themes", dopestrings.Default.Host.Games.ThemesLabel(), 1, 100); err != nil {
+				if spec.KSIThemes, err = parsePositiveFormInt(form, "ksis_themes", dopestrings.Default.Host.Games.ThemesLabel(), 1, maxFormThemes); err != nil {
 					return err
 				}
 				spec.KSIStickers, err = ksiStickerConfigFromForm(form)
@@ -290,13 +307,13 @@ var formatForms = map[string]formatForm{
 		},
 		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
 			s := dopestrings.Default
-			if spec.ODTours, err = parsePositiveFormInt(form, "kd_tours", s.Host.Games.OdToursLabel(), 1, 20); err != nil {
+			if spec.ODTours, err = parsePositiveFormInt(form, "kd_tours", s.Host.Games.OdToursLabel(), 1, maxFormTours); err != nil {
 				return err
 			}
-			if spec.ODQuestions, err = parsePositiveFormInt(form, "kd_questions", s.Host.Games.OdQuestionsLabel(), 1, 100); err != nil {
+			if spec.ODQuestions, err = parsePositiveFormInt(form, "kd_questions", s.Host.Games.OdQuestionsLabel(), 1, maxFormQuestions); err != nil {
 				return err
 			}
-			spec.KDTables, err = parsePositiveFormInt(form, "kd_tables", s.Host.Games.KdTablesLabel(), 2, 199)
+			spec.KDTables, err = parsePositiveFormInt(form, "kd_tables", s.Host.Games.KdTablesLabel(), minKDTables, maxKDTables)
 			return err
 		},
 	},
@@ -797,24 +814,30 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			return nil, err
 		}
-		dsl := map[string]string{}
-		for _, d := range games.All() {
-			field, ok := dslFieldOf(d.Code)
-			if !ok {
-				continue
-			}
-			fallback := ""
-			if d.DefaultDSL != nil {
-				fallback = d.DefaultDSL(teamCount)
-			}
-			dsl[d.Code] = kept(field, fallback)
-		}
 		return hostGameCreateDoc(hostGameCreateData{
 			Fest: fest, Error: errMsg, SelectedType: selectedType,
-			DSL:      dsl,
+			DSL:      createFormDSLs(teamCount, kept),
 			Entrants: entrants,
 		}), nil
 	})
+}
+
+// createFormDSLs fills each DSL format's box with what the host already typed,
+// or with the format's default for a fest of teamCount teams.
+func createFormDSLs(teamCount int, kept func(field, fallback string) string) map[string]string {
+	dsl := map[string]string{}
+	for _, d := range games.All() {
+		field, ok := dslFieldOf(d.Code)
+		if !ok {
+			continue
+		}
+		fallback := ""
+		if d.DefaultDSL != nil {
+			fallback = d.DefaultDSL(teamCount)
+		}
+		dsl[d.Code] = kept(field, fallback)
+	}
+	return dsl
 }
 
 // festEntrantOptions lists the fest's Participants a Game may seat, teams and
@@ -931,20 +954,8 @@ type GameCreateRequest struct {
 	} `json:"stickers"`
 }
 
-func (req GameCreateRequest) form() url.Values {
-	form := url.Values{}
-	for _, id := range req.Entrants {
-		form.Add("entrant_id", strconv.FormatInt(id, 10))
-	}
-	for _, ref := range req.EntrantRefs {
-		form.Add("entrant_id", ref)
-	}
-	if field, ok := dslFieldOf(req.GameType); ok {
-		form.Set(field, req.DSL)
-	}
-	if field, ok := jsonFieldOf(req.GameType); ok && len(req.Scheme) > 0 {
-		form.Set(field, string(req.Scheme))
-	}
+// setKnobs sets the flat formats' number fields the request gives.
+func (req GameCreateRequest) setKnobs(form url.Values) {
 	setIfGiven := func(key string, v int) {
 		if v != 0 {
 			form.Set(key, strconv.Itoa(v))
@@ -957,6 +968,23 @@ func (req GameCreateRequest) form() url.Values {
 	setIfGiven("kd_tables", req.KDTables)
 	setIfGiven("ksi_themes", req.KSIThemes)
 	setIfGiven("ksis_themes", req.KSIThemes)
+}
+
+func (req GameCreateRequest) form() url.Values {
+	form := url.Values{}
+	for _, id := range req.Entrants {
+		form.Add("entrant_id", idstr.Format(id))
+	}
+	for _, ref := range req.EntrantRefs {
+		form.Add("entrant_id", ref)
+	}
+	if field, ok := dslFieldOf(req.GameType); ok {
+		form.Set(field, req.DSL)
+	}
+	if field, ok := jsonFieldOf(req.GameType); ok && len(req.Scheme) > 0 {
+		form.Set(field, string(req.Scheme))
+	}
+	req.setKnobs(form)
 	form.Set("multi_games", req.MultiGames)
 	form.Set("multi_sorting", req.MultiSorting)
 	for id, sticker := range req.Stickers {
@@ -1015,18 +1043,37 @@ func gameSpecFromForm(ctx context.Context, tx *sql.Tx, festID int64, gameType st
 	// Losses rather than seats, so a DSL wins over the pasted JSON when both
 	// are offered.
 	if field, ok := jsonFieldOf(spec.Type); ok && spec.DSL == "" {
-		s := dopestrings.Default
-		raw := strings.TrimSpace(form.Get(field))
-		if raw == "" {
-			return spec, corei18n.User(s.Host.Games.ErrorEkSchemeMissing())
+		if spec.Pasted, err = pastedScheme(form.Get(field)); err != nil {
+			return spec, err
 		}
-		var scheme store.FestScheme
-		if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
-			return spec, corei18n.User(s.Host.Games.ErrorJsonParse(err.Error()))
-		}
-		spec.Pasted = &scheme
 	}
 	return spec, nil
+}
+
+// pastedScheme parses the JSON scheme pasted into the creation form.
+func pastedScheme(raw string) (*store.FestScheme, error) {
+	s := dopestrings.Default
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, corei18n.User(s.Host.Games.ErrorEkSchemeMissing())
+	}
+	var scheme store.FestScheme
+	if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
+		return nil, corei18n.User(s.Host.Games.ErrorJsonParse(err.Error()))
+	}
+	return &scheme, nil
+}
+
+// festExistsTx returns sql.ErrNoRows when there is no fest festID.
+func festExistsTx(ctx context.Context, tx *sql.Tx, festID int64) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `select count(*) from fests where id = ?`, festID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType string, form url.Values) (int64, error) {
@@ -1040,14 +1087,9 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 
 	var gameID int64
 	err := s.h.Engine().WithWriteTx(reqCtx, festID, "game-create", func(ctx context.Context, tx *sql.Tx) error {
-		var exists int
-		if err := tx.QueryRowContext(ctx, `select count(*) from fests where id = ?`, festID).Scan(&exists); err != nil {
+		if err := festExistsTx(ctx, tx, festID); err != nil {
 			return err
 		}
-		if exists == 0 {
-			return sql.ErrNoRows
-		}
-
 		spec, err := gameSpecFromForm(ctx, tx, festID, gameType, form)
 		if err != nil {
 			return err
@@ -1087,7 +1129,7 @@ func ksiStickerConfigFromForm(form url.Values) (json.RawMessage, error) {
 	}
 	cfg := games.KSIStickerConfig{}
 	for _, s := range all {
-		max, err := parseNonNegativeFormInt(form, s.maxField, dopestrings.Default.Host.Games.StickerMaxField(), 0, 100)
+		max, err := parseNonNegativeFormInt(form, s.maxField, dopestrings.Default.Host.Games.StickerMaxField(), 0, maxStickerCount)
 		if err != nil {
 			return nil, err
 		}
@@ -1114,7 +1156,7 @@ func stickerColorFromForm(form url.Values, field, fallback string) string {
 }
 
 func isHexColor(value string) bool {
-	if len(value) != 4 && len(value) != 7 {
+	if len(value) != shortHexColorLen && len(value) != longHexColorLen {
 		return false
 	}
 	if value[0] != '#' {

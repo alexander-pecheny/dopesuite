@@ -246,7 +246,7 @@ func applyBlobOp(doc any, op store.BlobOp) any {
 		if parts[i-1] != "answers" {
 			continue
 		}
-		if index, err := strconv.Atoi(parts[i]); err != nil || index < 0 || index >= 5 {
+		if index, err := strconv.Atoi(parts[i]); err != nil || index < 0 || index >= store.QuestionCount {
 			return doc
 		}
 	}
@@ -280,6 +280,10 @@ func isIndex(node any, key string, parentKey string) (int, bool) {
 	return index, parentKey != "participants"
 }
 
+// maxPathIndex bounds an array index in a patch, so a bad one cannot pad an
+// array to an absurd length.
+const maxPathIndex = 10_000
+
 // ensurePath pads containers along the way so the addressed theme exists,
 // never overwriting anything that is already there.
 func ensurePath(node any, parts []string, parentKey string) any {
@@ -289,7 +293,7 @@ func ensurePath(node any, parts []string, parentKey string) any {
 		if !ok {
 			arr = []any{}
 		}
-		if index < 0 || index > 10_000 {
+		if index < 0 || index > maxPathIndex {
 			return node
 		}
 		for len(arr) <= index {
@@ -304,22 +308,26 @@ func ensurePath(node any, parts []string, parentKey string) any {
 	if !ok {
 		obj = map[string]any{}
 	}
-	child := obj[key]
 	if len(parts) == 1 {
-		if child == nil {
+		if obj[key] == nil {
 			obj[key] = map[string]any{}
 		}
 		return obj
 	}
-	if child == nil {
-		if _, err := strconv.Atoi(parts[1]); err == nil && key != "participants" {
-			child = []any{}
-		} else {
-			child = map[string]any{}
-		}
-	}
-	obj[key] = ensurePath(child, parts[1:], key)
+	obj[key] = ensurePath(childOrNew(obj[key], parts, key), parts[1:], key)
 	return obj
+}
+
+// childOrNew is child, or when it is missing a new container for the rest of
+// the path: an array when the next segment is an index, an object otherwise.
+func childOrNew(child any, parts []string, key string) any {
+	if child != nil {
+		return child
+	}
+	if _, err := strconv.Atoi(parts[1]); err == nil && key != "participants" {
+		return []any{}
+	}
+	return map[string]any{}
 }
 
 // A numeric segment addresses an array index — except directly under
@@ -327,38 +335,11 @@ func ensurePath(node any, parts []string, parentKey string) any {
 func setPath(node any, parts []string, value any, parentKey string) any {
 	key := parts[0]
 	if index, ok := isIndex(node, key, parentKey); ok {
-		inAnswers := parentKey == "answers"
-		arr, ok := node.([]any)
-		if !ok {
-			arr = []any{}
-		}
-		if index < 0 || index > 10_000 {
+		if index < 0 || index > maxPathIndex {
 			return node
 		}
-		if inAnswers {
-			for len(arr) < 5 {
-				arr = append(arr, "")
-			}
-		}
-		for len(arr) <= index {
-			if len(parts) == 1 {
-				arr = append(arr, map[string]any{})
-			} else {
-				arr = append(arr, map[string]any{"answers": emptyAnswers()})
-			}
-		}
-		if len(parts) == 1 {
-			if inAnswers {
-				if s, ok := value.(string); ok {
-					arr[index] = s
-				}
-			} else {
-				arr[index] = value
-			}
-		} else {
-			arr[index] = setPath(arr[index], parts[1:], value, key)
-		}
-		return arr
+		arr, _ := node.([]any)
+		return setIndex(arr, index, parts, value, parentKey == "answers")
 	}
 	obj, ok := node.(map[string]any)
 	if !ok {
@@ -368,16 +349,39 @@ func setPath(node any, parts []string, value any, parentKey string) any {
 		obj[key] = value
 		return obj
 	}
-	child := obj[key]
-	if child == nil {
-		if _, err := strconv.Atoi(parts[1]); err == nil && key != "participants" {
-			child = []any{}
-		} else {
-			child = map[string]any{}
+	obj[key] = setPath(childOrNew(obj[key], parts, key), parts[1:], value, key)
+	return obj
+}
+
+// setIndex is setPath on an array: it pads the array to reach index, then sets
+// the value there or descends into it. An answers array is a row of
+// QuestionCount marks and only ever holds strings.
+func setIndex(arr []any, index int, parts []string, value any, inAnswers bool) []any {
+	if arr == nil {
+		arr = []any{}
+	}
+	if inAnswers {
+		for len(arr) < store.QuestionCount {
+			arr = append(arr, "")
 		}
 	}
-	obj[key] = setPath(child, parts[1:], value, key)
-	return obj
+	for len(arr) <= index {
+		if len(parts) == 1 {
+			arr = append(arr, map[string]any{})
+		} else {
+			arr = append(arr, map[string]any{"answers": emptyAnswers()})
+		}
+	}
+	if len(parts) > 1 {
+		arr[index] = setPath(arr[index], parts[1:], value, parts[0])
+		return arr
+	}
+	if !inAnswers {
+		arr[index] = value
+	} else if s, ok := value.(string); ok {
+		arr[index] = s
+	}
+	return arr
 }
 
 func emptyAnswers() []any {

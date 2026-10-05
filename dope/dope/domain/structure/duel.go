@@ -29,7 +29,7 @@ func duelStandings(conf Duel, results []MatchOutcome) ([]RankedEntry, error) {
 	if metric == "" {
 		metric = "taken"
 	}
-	win, draw, loss := 2.0, 1.0, 0.0
+	win, draw, loss := defaultWinPoints, defaultDrawPoints, defaultLossPoints
 	if conf.Points != nil {
 		win, draw, loss = conf.Points.Win, conf.Points.Draw, conf.Points.Loss
 	}

@@ -19,6 +19,9 @@ import (
 	"dope/dope/storage/store"
 )
 
+// MaxSquad is the most players a team's roster may hold.
+const MaxSquad = 9
+
 type FestRosterImportTeam struct {
 	// LocalID is the fest_teams row this entry is, when it already has one: a
 	// team made by hand has no rating id, so the writer finds it by this.

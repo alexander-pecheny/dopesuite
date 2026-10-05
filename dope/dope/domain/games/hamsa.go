@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
+
+	"pecheny.me/dopecore/idstr"
 )
 
 // Hamsa pure domain logic.
@@ -37,8 +38,19 @@ const (
 var (
 	HamsaThemes      = []int{5, 5, 5, 1}
 	HamsaMultipliers = []int{1, 2, 3, 4}
-	HamsaValues      = []int{100, 200, 300, 400, 500}
+	HamsaValues      = hamsaBaseValues()
 )
+
+// hamsaValueStep is the gap between neighbouring base values: 100, 200, … 500.
+const hamsaValueStep = 100
+
+func hamsaBaseValues() []int {
+	values := make([]int, HamsaQuestions)
+	for i := range values {
+		values[i] = (i + 1) * hamsaValueStep
+	}
+	return values
+}
 
 // HamsaGameRound is one game round as the document records it: how many themes
 // it played and what each of a theme's five questions was worth.
@@ -289,7 +301,7 @@ func ComputeHamsaResults(stateJSON string, seats []int64) ([]HamsaResult, error)
 			result.Correct[value] = 0
 			result.Wrong[value] = 0
 		}
-		section := state.Participants[strconv.FormatInt(id, 10)]
+		section := state.Participants[idstr.Format(id)]
 		if section != nil {
 			for t, theme := range section.Themes {
 				values := hamsaValues(state.Rounds, t)
@@ -349,7 +361,7 @@ func ComputeHamsaResults(stateJSON string, seats []int64) ([]HamsaResult, error)
 func hamsaDocumentSeats(state HamsaState) []int64 {
 	ids := make([]int64, 0, len(state.Participants))
 	for key := range state.Participants {
-		id, err := strconv.ParseInt(key, 10, 64)
+		id, err := idstr.Parse(key)
 		if err != nil {
 			continue
 		}
@@ -413,6 +425,18 @@ func hamsaPlaces(results []HamsaResult) {
 	}
 }
 
+// lotsDrawn says whether every member of a tie holds its own valid lot.
+func lotsDrawn(results []HamsaResult, members []int) bool {
+	lots := map[int]bool{}
+	for _, i := range members {
+		if !results[i].HasLot || results[i].Lot < 1 || lots[results[i].Lot] {
+			return false
+		}
+		lots[results[i].Lot] = true
+	}
+	return true
+}
+
 // hamsaOrders gives every team the place it goes forward from. A place nobody
 // shares is its own. Teams that share one cover the places around it — two at
 // 2.5 cover 2 and 3 — and the host's Lot deals those out, 1 first; until every
@@ -435,16 +459,7 @@ func hamsaOrders(results []HamsaResult) {
 		if first != float64(int(first)) {
 			continue
 		}
-		lots := map[int]bool{}
-		drawn := true
-		for _, i := range members {
-			if !results[i].HasLot || results[i].Lot < 1 || lots[results[i].Lot] {
-				drawn = false
-				break
-			}
-			lots[results[i].Lot] = true
-		}
-		if !drawn {
+		if !lotsDrawn(results, members) {
 			continue
 		}
 		sort.Slice(members, func(a, b int) bool { return results[members[a]].Lot < results[members[b]].Lot })

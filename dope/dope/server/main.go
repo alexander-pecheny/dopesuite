@@ -2,6 +2,7 @@ package dopeserver
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -51,6 +52,19 @@ const (
 	stateFile                 = "match_state.json"
 	actionAddShootoutTheme    = "addShootoutTheme"
 	actionRemoveShootoutTheme = "removeShootoutTheme"
+
+	readHeaderTimeout = 5 * time.Second
+	idleTimeout       = 120 * time.Second
+	// epochBytes is the random length of the per-process epoch tag.
+	epochBytes    = 8
+	stateFileMode = 0o644
+	// viewerEventBuffer and hostEventBuffer are how many events queue for a
+	// slow SSE client before the oldest one is dropped.
+	viewerEventBuffer    = 8
+	hostEventBuffer      = 16
+	sseKeepaliveInterval = 15 * time.Second
+	// defaultArchiveTimeout caps an offline archive-journal pass.
+	defaultArchiveTimeout = 10 * time.Minute
 )
 
 // dope's deployed environment predates the shared session package, so it keeps
@@ -269,31 +283,41 @@ func Main() {
 
 	httpSrv := &http.Server{
 		Handler:           securityHeaders(auditmw.ContextMiddleware(&srv.eng, webassets.Gzip(slideSessionCookie(mux), "/events", "/host-events"))),
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
 		// No WriteTimeout: SSE responses are intentionally long-lived.
-		IdleTimeout: 120 * time.Second,
+		IdleTimeout: idleTimeout,
 	}
 	log.Fatal(httpSrv.Serve(listener))
 }
 
-func newServer() (*server, error) {
+// openActiveDB opens the database $DOPE_DB names (dbFile by default) and reads
+// which fest, game and match are active.
+func openActiveDB() (db *sql.DB, festID, gameID int64, matchCode string, err error) {
 	dbPath := os.Getenv("DOPE_DB")
 	if dbPath == "" {
 		dbPath = dbFile
 	}
-	db, err := openFestDB(dbPath)
+	db, err = openFestDB(dbPath)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, "", err
 	}
-	festID, gameID, matchCode, err := loadActiveContext(db)
+	festID, gameID, matchCode, err = loadActiveContext(db)
 	if err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, 0, 0, "", err
 	}
 	if matchCode == "" {
 		matchCode = defaultMatchCode
 	}
-	epoch, err := authcred.RandomBase32(8)
+	return db, festID, gameID, matchCode, nil
+}
+
+func newServer() (*server, error) {
+	db, festID, gameID, matchCode, err := openActiveDB()
+	if err != nil {
+		return nil, err
+	}
+	epoch, err := authcred.RandomBase32(epochBytes)
 	if err != nil {
 		_ = db.Close()
 		return nil, err
@@ -326,7 +350,7 @@ func saveState(path string, state store.MatchState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, stateFileMode)
 }
 
 func (s *server) serveStaticPage(source fs.FS, path string) http.HandlerFunc {
@@ -347,13 +371,8 @@ func (s *server) serveStaticPage(source fs.FS, path string) http.HandlerFunc {
 }
 
 func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	festID, err := store.ResolveFestID(r.Context(), s.eng.DB, strings.TrimSpace(r.URL.Query().Get("fest_id")))
-	if err != nil || festID <= 0 {
-		http.Error(w, "missing fest_id", http.StatusBadRequest)
+	festID := s.sseFestID(w, r)
+	if festID == 0 {
 		return
 	}
 	if _, ok := s.api().Admit(w, r, route.Read, festID, 0); !ok {
@@ -378,17 +397,11 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
-	if _, ok := w.(http.Flusher); !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+	if !openSSE(w) {
 		return
 	}
 
-	ch := make(chan realtime.Event, 8)
+	ch := make(chan realtime.Event, viewerEventBuffer)
 	s.eng.RT.AddSubscriber(festID, ch, editor, gameID)
 	s.eng.SseConns.Add(1)
 	s.eng.RT.ScheduleViewerCount(festID)
@@ -401,50 +414,23 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// A write deadline turns a dead or wedged client into a prompt error instead
 	// of a connection that lingers (still counted as a "viewer") until the OS TCP
 	// timeout hours later. Every event and keepalive write is bounded by
-	// sseWriteTimeout; on failure we return, which runs removeSubscriber so the
-	// tally reflects only live connections.
-	rc := http.NewResponseController(w)
-	writeWithDeadline := func(payload string) bool {
-		_ = rc.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
-		if _, err := io.WriteString(w, payload); err != nil {
-			return false
+	// sseWriteTimeout; on failure pumpSSE returns, which runs removeSubscriber so
+	// the tally reflects only live connections.
+	pumpSSE(r.Context(), w, ch, func(ev realtime.Event) (string, bool) {
+		// lockdown is a server-side sentinel telling this viewer to drop the
+		// stream so it reloads into the (now-static) page; without it the
+		// browser's native EventSource would just auto-reconnect. Returning
+		// runs the deferred removeSubscriber, which removes ch from the
+		// subscriber map (it does not close ch — see removeSubscriber).
+		if ev.Name == "lockdown" {
+			return "", false
 		}
-		return rc.Flush() == nil
-	}
-
-	if !writeWithDeadline(": connected\n\n") {
-		return
-	}
-
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case ev := <-ch:
-			// lockdown is a server-side sentinel telling this viewer to drop the
-			// stream so it reloads into the (now-static) page; without it the
-			// browser's native EventSource would just auto-reconnect. Returning
-			// runs the deferred removeSubscriber, which removes ch from the
-			// subscriber map (it does not close ch — see removeSubscriber).
-			if ev.Name == "lockdown" {
-				return
-			}
-			name := ev.Name
-			if name == "" {
-				name = "state"
-			}
-			if !writeWithDeadline(formatSSE(name, ev.Revision, ev.Data)) {
-				return
-			}
-		case <-ticker.C:
-			if !writeWithDeadline(": keepalive\n\n") {
-				return
-			}
-		case <-r.Context().Done():
-			return
+		name := ev.Name
+		if name == "" {
+			name = "state"
 		}
-	}
+		return formatSSE(name, ev.Revision, ev.Data), true
+	})
 }
 
 // sseWriteTimeout bounds a single SSE write/flush. A live client drains the
@@ -452,66 +438,97 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 // to reap rather than keep counted as an active viewer.
 const sseWriteTimeout = 10 * time.Second
 
-func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
+// sseFestID checks that an SSE request is a GET and resolves its fest_id. It
+// returns 0 when it has already answered the request with an error.
+func (s *server) sseFestID(w http.ResponseWriter, r *http.Request) int64 {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return 0
 	}
 	festID, err := store.ResolveFestID(r.Context(), s.eng.DB, strings.TrimSpace(r.URL.Query().Get("fest_id")))
 	if err != nil || festID <= 0 {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
-		return
+		return 0
 	}
-	if _, ok := s.api().Admit(w, r, route.Editor, festID, 0); !ok {
-		return
-	}
+	return festID
+}
 
+// openSSE sets the event-stream headers and checks that w can flush. When it
+// returns false it has already answered the request.
+func openSSE(w http.ResponseWriter) bool {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-
 	if _, ok := w.(http.Flusher); !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-		return
+		return false
 	}
+	return true
+}
 
-	ch := make(chan realtime.HostPresenceEvent, 16)
-	s.eng.RT.AddHostSubscriber(festID, ch)
-	defer s.eng.RT.RemoveHostSubscriber(festID, ch)
-
-	// Bound each write so a dead/stuck host connection is reaped promptly instead
-	// of lingering in the presence set (mirrors handleEvents).
-	rc := http.NewResponseController(w)
-	writeWithDeadline := func(payload string) bool {
-		_ = rc.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
-		if _, err := io.WriteString(w, payload); err != nil {
-			return false
-		}
-		return rc.Flush() == nil
-	}
-
+// pumpSSE streams events from ch to w until a write fails, the client goes
+// away or format says to stop. It opens with a "connected" comment and sends a
+// keepalive comment every sseKeepaliveInterval.
+func pumpSSE[E any](ctx context.Context, w http.ResponseWriter, ch <-chan E, format func(E) (payload string, ok bool)) {
+	writeWithDeadline := sseWriter(w)
 	if !writeWithDeadline(": connected\n\n") {
 		return
 	}
-
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(sseKeepaliveInterval)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case ev := <-ch:
-			if !writeWithDeadline(formatSSE("presence", 0, ev.Data)) {
+			payload, ok := format(ev)
+			if !ok || !writeWithDeadline(payload) {
 				return
 			}
 		case <-ticker.C:
 			if !writeWithDeadline(": keepalive\n\n") {
 				return
 			}
-		case <-r.Context().Done():
+		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+// sseWriter returns a function that writes and flushes one payload, bounded by
+// sseWriteTimeout, and reports whether both worked.
+func sseWriter(w http.ResponseWriter) func(payload string) bool {
+	rc := http.NewResponseController(w)
+	return func(payload string) bool {
+		_ = rc.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
+		if _, err := io.WriteString(w, payload); err != nil {
+			return false
+		}
+		return rc.Flush() == nil
+	}
+}
+
+func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
+	festID := s.sseFestID(w, r)
+	if festID == 0 {
+		return
+	}
+	if _, ok := s.api().Admit(w, r, route.Editor, festID, 0); !ok {
+		return
+	}
+
+	if !openSSE(w) {
+		return
+	}
+
+	ch := make(chan realtime.HostPresenceEvent, hostEventBuffer)
+	s.eng.RT.AddHostSubscriber(festID, ch)
+	defer s.eng.RT.RemoveHostSubscriber(festID, ch)
+
+	// Bound each write so a dead/stuck host connection is reaped promptly instead
+	// of lingering in the presence set (mirrors handleEvents).
+	pumpSSE(r.Context(), w, ch, func(ev realtime.HostPresenceEvent) (string, bool) {
+		return formatSSE("presence", 0, ev.Data), true
+	})
 }
 
 // isFestEditor reports whether the /events request comes from a fest organizer
@@ -816,6 +833,17 @@ func runSeedFixture(args []string) {
 	defer db.Close()
 
 	ctx := context.Background()
+	owner := mustSystemUser(ctx, db)
+	festID, err := fixture.Build(ctx, db, fixture.Options{Slug: *slug, Owner: owner})
+	if err != nil {
+		log.Fatalf("seed-fixture: %v", err)
+	}
+	log.Printf("seed-fixture: fest %d (%s) in %s", festID, *slug, *dbPath)
+}
+
+// mustSystemUser returns the system user's id, creating the user if needed. It
+// exits the process on failure, as the subcommands that call it do.
+func mustSystemUser(ctx context.Context, db *sql.DB) int64 {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Fatalf("begin tx: %v", err)
@@ -828,12 +856,7 @@ func runSeedFixture(args []string) {
 	if err := tx.Commit(); err != nil {
 		log.Fatalf("commit: %v", err)
 	}
-
-	festID, err := fixture.Build(ctx, db, fixture.Options{Slug: *slug, Owner: owner})
-	if err != nil {
-		log.Fatalf("seed-fixture: %v", err)
-	}
-	log.Printf("seed-fixture: fest %d (%s) in %s", festID, *slug, *dbPath)
+	return owner
 }
 
 // runArchiveJournal folds settled hot journal rows into cold segments offline.
@@ -844,7 +867,7 @@ func runSeedFixture(args []string) {
 func runArchiveJournal(args []string) {
 	fs := flag.NewFlagSet("archive-journal", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to the sqlite database")
-	timeout := fs.Duration("timeout", 10*time.Minute, "max wall-clock for the archive pass")
+	timeout := fs.Duration("timeout", defaultArchiveTimeout, "max wall-clock for the archive pass")
 	_ = fs.Parse(args)
 	if *dbPath == "" {
 		log.Fatal("archive-journal: --db is required")

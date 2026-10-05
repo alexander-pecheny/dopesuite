@@ -104,12 +104,13 @@ func groupPublicFests(fests []publicFestSummary, today string) []publicFestGroup
 	sortPublicFests(current)
 	sortPublicFests(future)
 	sortPublicFests(past)
-	groups := make([]publicFestGroup, 0, 3)
-	for _, g := range []publicFestGroup{
+	all := []publicFestGroup{
 		{Title: dopestrings.Default.Server.PublicFests.Current(), Fests: current},
 		{Title: dopestrings.Default.Server.PublicFests.Future(), Fests: future},
 		{Title: dopestrings.Default.Server.PublicFests.Past(), Fests: past},
-	} {
+	}
+	groups := make([]publicFestGroup, 0, len(all))
+	for _, g := range all {
 		if len(g.Fests) > 0 {
 			groups = append(groups, g)
 		}

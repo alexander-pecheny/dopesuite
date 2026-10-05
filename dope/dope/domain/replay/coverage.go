@@ -26,33 +26,40 @@ func (b Bout) Kinds() []string {
 		kinds = append(kinds, "draw")
 	}
 	for _, seat := range b.Seats {
-		if slices.ContainsFunc(seat.Marks, func(theme [5]Mark) bool { return theme != [5]Mark{} }) {
-			kinds = append(kinds, "marks")
-		}
-		if slices.ContainsFunc(seat.Players, func(p string) bool { return p != "" }) {
-			kinds = append(kinds, "players")
-		}
-		if len(seat.Questions) > 0 {
-			kinds = append(kinds, fmt.Sprintf("questions/%d", len(seat.Questions)))
-		}
-		if slices.ContainsFunc(seat.Questions, func(a Answer) bool { return a.Player != "" }) {
-			kinds = append(kinds, "buzzer")
-		}
-		if len(seat.Counts) > 0 {
-			kinds = append(kinds, "counts")
-		}
-		if seat.Shootout != 0 {
-			kinds = append(kinds, "shootout")
-		}
-		if seat.Bet != nil {
-			kinds = append(kinds, "bet")
-		}
-		if seat.Pinned {
-			kinds = append(kinds, "pin")
-		}
+		kinds = append(kinds, seat.kinds()...)
 	}
 	slices.Sort(kinds)
 	return slices.Compact(kinds)
+}
+
+// kinds are the kinds of fact one seat line carries.
+func (seat Seat) kinds() []string {
+	var kinds []string
+	if slices.ContainsFunc(seat.Marks, func(theme [5]Mark) bool { return theme != [5]Mark{} }) {
+		kinds = append(kinds, "marks")
+	}
+	if slices.ContainsFunc(seat.Players, func(p string) bool { return p != "" }) {
+		kinds = append(kinds, "players")
+	}
+	if len(seat.Questions) > 0 {
+		kinds = append(kinds, fmt.Sprintf("questions/%d", len(seat.Questions)))
+	}
+	if slices.ContainsFunc(seat.Questions, func(a Answer) bool { return a.Player != "" }) {
+		kinds = append(kinds, "buzzer")
+	}
+	if len(seat.Counts) > 0 {
+		kinds = append(kinds, "counts")
+	}
+	if seat.Shootout != 0 {
+		kinds = append(kinds, "shootout")
+	}
+	if seat.Bet != nil {
+		kinds = append(kinds, "bet")
+	}
+	if seat.Pinned {
+		kinds = append(kinds, "pin")
+	}
+	return kinds
 }
 
 // Kinds is every kind any of the script's Matches carries, sorted.

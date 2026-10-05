@@ -19,6 +19,7 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // The fest's troikas (CONTEXT.md, Assembled team): Participants assembled out of
@@ -164,7 +165,7 @@ func festFlagChoices(teams []roster.FestTeamChoice) []string {
 	return out
 }
 
-func troikaDialogID(id int64) string { return "troika-" + strconv.FormatInt(id, 10) }
+func troikaDialogID(id int64) string { return "troika-" + idstr.Format(id) }
 
 // hostTroikaDialog edits one troika: its name, up to four people, each a field
 // that suggests the fest's players, the team it counts for and its division.
@@ -174,7 +175,7 @@ func hostTroikaDialog(ref string, t roster.Assembled, teams []roster.FestTeamCho
 	fields := []dopeui.Item{
 		dopeui.Subhead(dopeui.Text(t.Name)),
 		dopeui.Hiddenfield(dopeui.Name("mode"), dopeui.Value("edit")),
-		dopeui.Hiddenfield(dopeui.Name("id"), dopeui.Value(strconv.FormatInt(t.ID, 10))),
+		dopeui.Hiddenfield(dopeui.Name("id"), dopeui.Value(idstr.Format(t.ID))),
 		dopeui.Field(dopeui.Label(s.Host.Troikas.ColName()),
 			dopeui.Textfield(dopeui.Name("name"), dopeui.Value(t.Name), dopeui.Required())),
 	}
@@ -204,7 +205,7 @@ func hostTroikaDialog(ref string, t roster.Assembled, teams []roster.FestTeamCho
 	}
 	teamOptions := []dopeui.Item{dopeui.Name("head_team"), option("0", s.Host.Troikas.TeamNone(), t.HeadTeamID == 0)}
 	for _, team := range teams {
-		teamOptions = append(teamOptions, option(strconv.FormatInt(team.ID, 10), team.Name, team.ID == t.HeadTeamID))
+		teamOptions = append(teamOptions, option(idstr.Format(team.ID), team.Name, team.ID == t.HeadTeamID))
 	}
 	fields = append(fields,
 		dopeui.Field(dopeui.Label(s.Host.Troikas.ColTeam()), dopeui.Selectfield(teamOptions...)),
@@ -248,7 +249,7 @@ func troikaPlacement(form map[string][]string) (*roster.AssembledPlacement, erro
 		}
 		return ""
 	}
-	teamID, err := strconv.ParseInt(strings.TrimSpace(get("head_team")), 10, 64)
+	teamID, err := idstr.Parse(strings.TrimSpace(get("head_team")))
 	if err != nil || teamID < 0 {
 		return nil, route.BadRequest("bad head team")
 	}
@@ -395,7 +396,7 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 		}
 		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Notice: str.Host.Troikas.AddedNotice(added)}, synced...)
 	case "edit":
-		id, err := strconv.ParseInt(r.Form.Get("id"), 10, 64)
+		id, err := idstr.Parse(r.Form.Get("id"))
 		if err != nil || id <= 0 {
 			http.Error(w, "bad id", http.StatusBadRequest)
 			return

@@ -16,6 +16,9 @@ import openpyxl
 
 XLSX = "/tmp/ek_sheet.xlsx"
 QUESTION_VALUES = [10, 20, 30, 40, 50]
+# Columns of a team's row A; sigma is in column 2.
+SIGMA_COL = 2
+PLACE_COL = 3
 
 # tab name -> list of expected match codes (for sanity), and stage code in DB
 TAB_STAGES = [
@@ -48,11 +51,29 @@ def norm_mark(v):
 def find_theme_cols(ws, hrow, maxcol):
     """Theme start columns: a cell ==10 followed by 20,30,40,50."""
     cols = []
-    for c in range(1, maxcol - 3):
-        vals = [ws.cell(row=hrow, column=c + k).value for k in range(5)]
-        if vals == [10.0, 20.0, 30.0, 40.0, 50.0] or vals == [10, 20, 30, 40, 50]:
+    width = len(QUESTION_VALUES)
+    for c in range(1, maxcol - width + 2):
+        vals = [ws.cell(row=hrow, column=c + k).value for k in range(width)]
+        if vals == QUESTION_VALUES:  # 10.0 == 10, so float cells match too
             cols.append(c)
     return cols
+
+
+def parse_team(ws, rr, name, theme_cols):
+    """One team block: row A at rr with names and sums, row B under it with marks."""
+    themes = []
+    for ti, tc in enumerate(theme_cols):
+        player = ws.cell(row=rr, column=tc).value
+        player = str(player).strip() if player not in (None, "") else ""
+        marks = [norm_mark(ws.cell(row=rr + 1, column=tc + k).value)
+                 for k in range(len(QUESTION_VALUES))]
+        themes.append({"theme_index": ti, "player": player, "marks": marks})
+    return {
+        "name": name,
+        "sigma": ws.cell(row=rr, column=SIGMA_COL).value,
+        "place": ws.cell(row=rr, column=PLACE_COL).value,
+        "themes": themes,
+    }
 
 
 def parse_tab(ws):
@@ -73,21 +94,7 @@ def parse_tab(ws):
                     break
                 if str(name).strip().startswith("Бой "):
                     break
-                name = str(name).strip()
-                sigma = ws.cell(row=rr, column=2).value
-                place = ws.cell(row=rr, column=3).value
-                themes = []
-                for ti, tc in enumerate(theme_cols):
-                    player = ws.cell(row=rr, column=tc).value
-                    player = str(player).strip() if player not in (None, "") else ""
-                    marks = [norm_mark(ws.cell(row=rr + 1, column=tc + k).value) for k in range(5)]
-                    themes.append({"theme_index": ti, "player": player, "marks": marks})
-                teams.append({
-                    "name": name,
-                    "sigma": sigma,
-                    "place": place,
-                    "themes": themes,
-                })
+                teams.append(parse_team(ws, rr, str(name).strip(), theme_cols))
                 rr += 2
             matches.append({"code": code, "theme_cols": theme_cols, "teams": teams})
             r = rr
@@ -107,6 +114,21 @@ def compute_total(themes):
     return total
 
 
+def check_totals(tab, matches):
+    """Print each team's sheet sum beside the recomputed one; return the mismatches."""
+    mismatches = []
+    for m in matches:
+        for t in m["teams"]:
+            ct = compute_total(t["themes"])
+            sig = t["sigma"]
+            sig_i = int(sig) if isinstance(sig, (int, float)) else None
+            flag = "" if sig_i == ct else "  <<< MISMATCH"
+            if sig_i != ct:
+                mismatches.append((tab, m["code"], t["name"], sig_i, ct))
+            print(f"{tab:6} Бой {m['code']:2} {t['name'][:28]:28} place={str(t['place']):4} Σsheet={str(sig_i):5} Σcalc={ct:5}{flag}")
+    return mismatches
+
+
 def main():
     wb = openpyxl.load_workbook(XLSX, data_only=True)
     out = {"stages": []}
@@ -115,15 +137,7 @@ def main():
         ws = wb[tab]
         matches = parse_tab(ws)
         out["stages"].append({"tab": tab, "stage": stage, "matches": matches})
-        for m in matches:
-            for t in m["teams"]:
-                ct = compute_total(t["themes"])
-                sig = t["sigma"]
-                sig_i = int(sig) if isinstance(sig, (int, float)) else None
-                flag = "" if sig_i == ct else "  <<< MISMATCH"
-                if sig_i != ct:
-                    mismatches.append((tab, m["code"], t["name"], sig_i, ct))
-                print(f"{tab:6} Бой {m['code']:2} {t['name'][:28]:28} place={str(t['place']):4} Σsheet={str(sig_i):5} Σcalc={ct:5}{flag}")
+        mismatches += check_totals(tab, matches)
     with open("/tmp/ek_parsed.json", "w") as f:
         json.dump(out, f, ensure_ascii=False, indent=1)
     print()

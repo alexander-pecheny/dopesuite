@@ -16,6 +16,7 @@ import (
 	"time"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/session"
 )
 
@@ -302,7 +303,7 @@ func (s *Server) HandleProfileTokens(w http.ResponseWriter, r *http.Request) {
 	}
 	idText, found := strings.CutPrefix(r.URL.Path, "/profile/tokens/")
 	idText, isRevoke := strings.CutSuffix(idText, "/revoke")
-	id, err := strconv.ParseInt(idText, 10, 64)
+	id, err := idstr.Parse(idText)
 	if !found || !isRevoke || err != nil || id <= 0 {
 		http.NotFound(w, r)
 		return

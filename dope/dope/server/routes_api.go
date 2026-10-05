@@ -26,6 +26,17 @@ import (
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
+
+	"pecheny.me/dopecore/idstr"
+	"pecheny.me/dopecore/session"
+)
+
+const (
+	// maxScreenSettingsBody caps the JSON body of a screen-settings save.
+	maxScreenSettingsBody = 1 << 16
+	// maxUploadMemory is how much of a multipart upload is held in memory.
+	maxUploadMemory = 4 << 20
+	decimalBase     = 10
 )
 
 // api is the /api/fest/ table, built once; handleScopedAPI is its entry for
@@ -157,13 +168,9 @@ func (s *server) hostPresence(w http.ResponseWriter, r *http.Request, sc route.S
 	} else {
 		req.Cursor = nil
 	}
-	username := fmt.Sprintf("user-%d", sc.User.UserID)
-	if sc.User.Username.Valid && strings.TrimSpace(sc.User.Username.String) != "" {
-		username = sc.User.Username.String
-	}
 	data, err := json.Marshal(hostPresenceMessage{
 		UserID:    sc.User.UserID,
-		Username:  username,
+		Username:  presenceName(sc.User),
 		Color:     hostPresenceColor(sc.User.UserID),
 		Active:    active,
 		Cursor:    req.Cursor,
@@ -174,6 +181,14 @@ func (s *server) hostPresence(w http.ResponseWriter, r *http.Request, sc route.S
 	}
 	s.eng.RT.BroadcastHostPresence(realtime.HostPresenceEvent{FestID: sc.FestID, Data: data})
 	return route.JSONBytes(w, data)
+}
+
+// presenceName is the name other hosts see beside a user's cursor.
+func presenceName(user session.User) string {
+	if user.Username.Valid && strings.TrimSpace(user.Username.String) != "" {
+		return user.Username.String
+	}
+	return fmt.Sprintf("user-%d", user.UserID)
 }
 
 func (s *server) scopedVenues(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -413,7 +428,7 @@ func (s *server) scopedGameState(w http.ResponseWriter, r *http.Request, sc rout
 	// X-State-Seq lets a resyncing SSE client align its lastSeq with the state
 	// it just fetched; X-State-Epoch says whether the seq space was reset by a
 	// restart, so a low post-restart seq is adopted rather than treated as stale.
-	w.Header().Set("X-State-Seq", strconv.FormatUint(seq, 10))
+	w.Header().Set("X-State-Seq", strconv.FormatUint(seq, decimalBase))
 	w.Header().Set("X-State-Epoch", s.eng.Epoch)
 	return route.JSONBytes(w, []byte(doc.State))
 }
@@ -559,7 +574,7 @@ func (s *server) scopedScreenSettings(w http.ResponseWriter, r *http.Request, sc
 
 func (s *server) scopedScreenSettingsPut(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	defer r.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxScreenSettingsBody))
 	if err != nil {
 		return route.BadUser(err)
 	}
@@ -608,7 +623,7 @@ func (s *server) scopedEntrantsImport(w http.ResponseWriter, r *http.Request, sc
 	var source entrants.Source
 	var file io.Reader
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
-		if err := r.ParseMultipartForm(4 << 20); err != nil {
+		if err := r.ParseMultipartForm(maxUploadMemory); err != nil {
 			return route.BadRequest("bad form")
 		}
 		source = entrants.Source{Kind: entrants.SourceXLSX, Fresh: r.FormValue("fresh") == "1"}
@@ -642,7 +657,7 @@ type entrantEdit struct {
 }
 
 func (s *server) scopedEntrantEdit(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	participantID, err := strconv.ParseInt(r.PathValue("participant"), 10, 64)
+	participantID, err := idstr.Parse(r.PathValue("participant"))
 	if err != nil || participantID <= 0 {
 		return route.BadRequest("bad participant")
 	}
@@ -667,7 +682,7 @@ func (s *server) scopedEntrantEdit(w http.ResponseWriter, r *http.Request, sc ro
 }
 
 func (s *server) scopedEntrantRemove(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	participantID, err := strconv.ParseInt(r.PathValue("participant"), 10, 64)
+	participantID, err := idstr.Parse(r.PathValue("participant"))
 	if err != nil || participantID <= 0 {
 		return route.BadRequest("bad participant")
 	}
@@ -689,7 +704,7 @@ func (s *server) seedImportRoute(source func(*http.Request) (imports.SeedSource,
 }
 
 func seedXLSXSource(r *http.Request) (imports.SeedSource, error) {
-	if err := r.ParseMultipartForm(4 << 20); err != nil {
+	if err := r.ParseMultipartForm(maxUploadMemory); err != nil {
 		return nil, route.BadRequest("bad form")
 	}
 	file, _, err := r.FormFile("file")

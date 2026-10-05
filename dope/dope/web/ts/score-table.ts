@@ -95,6 +95,9 @@ export function scoreSheetPins({rowMarker = false, place = true, total = "var(--
   ], {start: "var(--sheet-corner-col)"});
 }
 
+// Questions in an EK theme; the correct-count columns show them highest first.
+const QUESTIONS_PER_THEME = 5;
+
 // The leading columns every score table has, each with the class that sizes it
 // and the class a cell gets when the page passes no class of its own.
 const LEADING = {
@@ -507,8 +510,8 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
     {name: "correctCount", selector: ".correct-count-cell", keys: teamKeys.concat(["valueIndex"]),
       sync: (node, ms, o) => {
         const t = scoreTeamOf(node, ms);
-        // Columns render reversed: cell valueIndex i shows correctCounts[4 - i].
-        if (t) setNodeText(node, (t.correctCounts || [])[4 - Number(node.dataset.valueIndex)], o.formatNumber);
+        // Columns render reversed: cell valueIndex i shows correctCounts[last - i].
+        if (t) setNodeText(node, (t.correctCounts || [])[QUESTIONS_PER_THEME - 1 - Number(node.dataset.valueIndex)], o.formatNumber);
       }},
     {name: "placeInput", selector: ".place-input", keys: teamKeys,
       sync: (node, ms) => {

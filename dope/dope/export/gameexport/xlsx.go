@@ -3,7 +3,6 @@ package gameexport
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -68,16 +67,11 @@ func boutSheets(build func(*excelize.File, []store.StageMatches) error) sheetBui
 // HandleScopedGameExport serves GET /api/fest/{fid}/games/{gid}/export.xlsx.
 // Gated by read access — anyone who can view the fest can download the archive.
 func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, festID, gameID int64) {
-	doc, err := store.LoadGameDoc(r.Context(), s.DB(), festID, gameID)
+	doc, ok := loadGameDoc(s, w, r, festID, gameID)
+	if !ok {
+		return
+	}
 	gameType, schemeJSON, stateJSON, gameSlug, festSlug := doc.GameType, doc.SchemeJSON, doc.State, doc.Slug, doc.FestSlug
-	if errors.Is(err, sql.ErrNoRows) {
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		route.WriteError(w, r, err)
-		return
-	}
 
 	f := excelize.NewFile()
 	defer f.Close()
@@ -88,8 +82,7 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 		http.Error(w, "export not supported for this game type", http.StatusBadRequest)
 		return
 	}
-	err = build(r.Context(), s, f, festID, gameID, schemeJSON, stateJSON)
-	if err != nil {
+	if err := build(r.Context(), s, f, festID, gameID, schemeJSON, stateJSON); err != nil {
 		route.WriteError(w, r, err)
 		return
 	}
@@ -127,7 +120,7 @@ func ExportFileStem(festSlug string, festID int64, gameSlug string, gameID int64
 // fallback and a UTF-8 (filename*) form, so Cyrillic titles survive the trip.
 func ContentDispositionAttachment(name string) string {
 	ascii := strings.Map(func(r rune) rune {
-		if r < 32 || r > 126 {
+		if r < ' ' || r > '~' { // outside printable ASCII
 			return '_'
 		}
 		return r

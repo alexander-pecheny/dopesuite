@@ -88,7 +88,7 @@ func seBlockRoundTitle(remaining int) string {
 	switch remaining {
 	case 2:
 		return s.Structure.Titles.Final()
-	case 4:
+	case semifinalEntrants:
 		return s.Structure.Se.BlockRoundSemifinals()
 	}
 	return s.Structure.Se.BlockRoundNth(strconv.Itoa(remaining / 2))
@@ -130,7 +130,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 	for i, r := range plan {
 		blockRounds = append(blockRounds, elimBlockRoundNames(r, i, winning)...)
 	}
-	if bronze && (participants >= 4 || hasDirect) {
+	if bronze && (participants >= semifinalEntrants || hasDirect) {
 		blockRounds = append(blockRounds, "bronze")
 	}
 	if err := b.BlockRounds(blockRounds); err != nil {
@@ -177,7 +177,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 				}
 			}
 			if ok {
-				if v < 3 || v%2 == 0 {
+				if v < minBestOf || v%2 == 0 {
 					return Outputs{}, errors.New(s.Structure.Se.BestOfParity())
 				}
 				bestOf = v
@@ -313,7 +313,7 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 			return Outputs{}, err
 		}
 		blockRoundStages = append(blockRoundStages, prevStages...)
-		if remaining == 4 {
+		if remaining == semifinalEntrants {
 			semifinalCodes = codes
 		}
 		prevCodes = codes
@@ -355,7 +355,7 @@ func appendBronze(b Block, pair []store.SchemeSlot, blockRound int) error {
 	}
 	bouts := 1
 	if v, ok := b.Int("best_of.bronze"); ok {
-		if v < 3 || v%2 == 0 {
+		if v < minBestOf || v%2 == 0 {
 			return Keyf("best_of.bronze", "%s", s.Structure.Se.BestOfParity())
 		}
 		bouts = v

@@ -4,6 +4,15 @@
 
 import S from "./i18nstrings.js";
 
+// The keypad's digit keys run from 1 to this.
+const KEYPAD_LAST_DIGIT = 9;
+// Hint popover: distance kept from the viewport edge, and its width bounds.
+const POPOVER_MARGIN_PX = 8;
+const POPOVER_MIN_WIDTH_PX = 80;
+const POPOVER_MAX_WIDTH_PX = 420;
+// Pixels per line when a wheel reports its delta in lines.
+const WHEEL_LINE_PX = 16;
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -117,47 +126,53 @@ export interface VirtualKeypad {
 // the physical keyboard and arrow-key navigation already cover this, so it
 // returns no-ops. Buttons fire on `pointerdown` with the default prevented so
 // the focused input is never blurred and its caret/selection survive editing.
+// keypadKey is one keypad button. It acts on pointerdown and keeps the focus
+// where it is, so the entry cell stays active.
+function keypadKey(label: string, aria: string, className: string, handler?: () => void): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.textContent = label;
+  button.setAttribute("aria-label", aria);
+  button.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    handler?.();
+  });
+  return button;
+}
+
+// keypadRows is the keypad's arrow row and its digit block.
+function keypadRows({onDigit, onBackspace, onNav}: VirtualKeypadOptions): HTMLElement[] {
+  const navRow = document.createElement("div");
+  navRow.className = "entry-keypad-nav";
+  navRow.append(
+    keypadKey("←", S.widgets.keypad.prevColumn(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(-1, 0)),
+    keypadKey("↑", S.widgets.keypad.prevRow(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, -1)),
+    keypadKey("↓", S.widgets.keypad.nextRow(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, 1)),
+    keypadKey("→", S.widgets.keypad.nextColumn(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(1, 0)),
+  );
+
+  const digits = document.createElement("div");
+  digits.className = "entry-keypad-digits";
+  for (let n = 1; n <= KEYPAD_LAST_DIGIT; n++) {
+    digits.appendChild(keypadKey(String(n), String(n), "entry-keypad-key", () => onDigit?.(String(n))));
+  }
+  digits.appendChild(keypadKey("0", "0", "entry-keypad-key entry-keypad-zero", () => onDigit?.("0")));
+  digits.appendChild(keypadKey("⌫", S.widgets.keypad.backspace(), "entry-keypad-key entry-keypad-back", () => onBackspace?.()));
+
+  return [navRow, digits];
+}
+
 export function installVirtualKeypad(options: VirtualKeypadOptions = {}): VirtualKeypad {
   const coarse = typeof window.matchMedia === "function" &&
     window.matchMedia("(pointer: coarse)").matches;
   if (!coarse) return {show: () => {}, hide: () => {}, visible: () => false, height: () => 0};
 
-  const {onDigit, onBackspace, onNav} = options;
   const pad = document.createElement("div");
   pad.className = "entry-keypad";
   pad.hidden = true;
 
-  const key = (label: string, aria: string, className: string, handler?: () => void) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = className;
-    button.textContent = label;
-    button.setAttribute("aria-label", aria);
-    button.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      handler?.();
-    });
-    return button;
-  };
-
-  const navRow = document.createElement("div");
-  navRow.className = "entry-keypad-nav";
-  navRow.append(
-    key("←", S.widgets.keypad.prevColumn(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(-1, 0)),
-    key("↑", S.widgets.keypad.prevRow(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, -1)),
-    key("↓", S.widgets.keypad.nextRow(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, 1)),
-    key("→", S.widgets.keypad.nextColumn(), "entry-keypad-key entry-keypad-arrow", () => onNav?.(1, 0)),
-  );
-
-  const digits = document.createElement("div");
-  digits.className = "entry-keypad-digits";
-  for (let n = 1; n <= 9; n++) {
-    digits.appendChild(key(String(n), String(n), "entry-keypad-key", () => onDigit?.(String(n))));
-  }
-  digits.appendChild(key("0", "0", "entry-keypad-key entry-keypad-zero", () => onDigit?.("0")));
-  digits.appendChild(key("⌫", S.widgets.keypad.backspace(), "entry-keypad-key entry-keypad-back", () => onBackspace?.()));
-
-  pad.append(navRow, digits);
+  pad.append(...keypadRows(options));
   document.body.appendChild(pad);
 
   let isVisible = false;
@@ -308,9 +323,9 @@ function createFloatingPopover(specs: FloatingPopoverSpec[]): FloatingPopover {
       return;
     }
 
-    const margin = 8;
+    const margin = POPOVER_MARGIN_PX;
     const popover = popoverNode;
-    popover.style.maxWidth = `${Math.max(80, Math.min(420, window.innerWidth - margin * 2))}px`;
+    popover.style.maxWidth = `${Math.max(POPOVER_MIN_WIDTH_PX, Math.min(POPOVER_MAX_WIDTH_PX, window.innerWidth - margin * 2))}px`;
     popover.style.visibility = "hidden";
     popover.classList.add("visible");
 
@@ -480,7 +495,7 @@ export interface ScrollEdgeBinding {
 // wheelDeltaPixels turns a wheel step into pixels: a mouse in line mode
 // reports lines, and a page is the scroller's own width.
 function wheelDeltaPixels(delta: number, mode: number, page: number): number {
-  if (mode === 1) return delta * 16;
+  if (mode === 1) return delta * WHEEL_LINE_PX;
   if (mode === 2) return delta * page;
   return delta;
 }

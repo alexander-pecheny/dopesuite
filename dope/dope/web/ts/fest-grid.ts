@@ -5,6 +5,7 @@ import type {Venue} from "./venue.js";
 import {nameCell} from "./name-cell.js";
 import { blockLabel, groupLabel } from "./game-tabs.js";
 import S from "./i18nstrings.js";
+import {PERCENT, roundTo} from "./cells.js";
 
 export interface FestGridVenueObject {
   number?: unknown;
@@ -252,6 +253,10 @@ export interface GridPlan {
 // board of two-seat Matches gets three-row units; every grid with a group table
 // gets five.
 const MAX_UNIT_ROWS = 5;
+// A three-team Match is drawn as tall as a four-team one, with an empty last
+// row, so the boxes beside it line up.
+const THREE_TEAM_MATCH = 3;
+const FOUR_TEAM_MATCH = 4;
 
 export function planGrid(stages: FestGridStage[], liveStages: Map<string | undefined, FestGridStage> = new Map()): GridPlan {
   const liveOf = (stage: FestGridStage) => liveStages.get(stage.code) || stage;
@@ -797,7 +802,7 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
 function gridSlotRowCount(match: FestGridMatch, slots: FestGridSlot[]): number {
   const declared = Number(match.participantCount);
   const rowCount = Math.max(slots.length, Number.isFinite(declared) ? declared : 0);
-  return rowCount === 3 ? 4 : rowCount;
+  return rowCount === THREE_TEAM_MATCH ? FOUR_TEAM_MATCH : rowCount;
 }
 
 function gridHeadCell(className: string, text: string): HTMLElement {
@@ -936,15 +941,19 @@ export function reseedMetricValue(metric: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   const number = Number(value);
   if (!Number.isFinite(number) || String(value).trim() === "") return String(value);
-  if (metric.endsWith("_share")) return `${scoreText(Math.round(number * 1000) / 10)}%`;
+  if (metric.endsWith("_share")) return `${scoreText(roundTo(number * PERCENT, 1))}%`;
   // A rating score is points plus taken over fifty: exact in two places,
   // printed with the binary noise of the sum otherwise.
-  return scoreText(Math.round(number * 100) / 100);
+  return scoreText(roundTo(number, 2));
 }
 
+// Column counts a stage of Matches is laid out in, by how many it holds.
+const WIDE_STAGE_COLUMNS = 6;
+const MEDIUM_STAGE_COLUMNS = 4;
+
 function preferredColumns(count: number): number {
-  if (count >= 6) return 6;
-  if (count >= 4) return 4;
+  if (count >= WIDE_STAGE_COLUMNS) return WIDE_STAGE_COLUMNS;
+  if (count >= MEDIUM_STAGE_COLUMNS) return MEDIUM_STAGE_COLUMNS;
   if (count >= 2) return 2;
   return 1;
 }

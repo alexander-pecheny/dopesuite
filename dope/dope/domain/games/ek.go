@@ -3,7 +3,8 @@ package games
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
+
+	"pecheny.me/dopecore/idstr"
 
 	"dope/dope/domain/structure"
 	"dope/dope/storage/store"
@@ -58,7 +59,7 @@ func (ek) UsedPlayers(stateJSON json.RawMessage, _ []int64) []UsedPlayer {
 	}
 	var out []UsedPlayer
 	for key, section := range blob.Participants {
-		team, _ := strconv.ParseInt(key, 10, 64)
+		team, _ := idstr.Parse(key)
 		for _, theme := range append(append([]store.BlobTheme(nil), section.Themes...), section.ShootoutThemes...) {
 			for _, player := range theme.Players {
 				out = append(out, UsedPlayer{Team: team, Player: player})

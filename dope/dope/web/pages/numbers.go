@@ -21,6 +21,7 @@ import (
 	"dope/dope/web/route"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 type hostFestNumberRow struct {
@@ -83,7 +84,7 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	for _, row := range data.Rows {
 		teamID := ""
 		if row.TeamID != 0 {
-			teamID = strconv.FormatInt(row.TeamID, 10)
+			teamID = idstr.Format(row.TeamID)
 		}
 		rows = append(rows, ui.Numberrow(
 			ui.Index(strconv.Itoa(row.Index)), ui.Num(row.Number),
@@ -207,7 +208,7 @@ func parseNumberRowsFromForm(r *http.Request, rowCount int) []parsedNumberRow {
 		idRaw := strings.TrimSpace(r.Form.Get(fmt.Sprintf("team_id_%d", i)))
 		var teamID int64
 		if idRaw != "" {
-			if v, err := strconv.ParseInt(idRaw, 10, 64); err == nil && v > 0 {
+			if v, err := idstr.Parse(idRaw); err == nil && v > 0 {
 				teamID = v
 			}
 		}

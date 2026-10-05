@@ -15,6 +15,7 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	core "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // assortiFixture is what read-assorti-sheets.py carried out of the workbook.
@@ -63,7 +64,7 @@ func buildAssorti(ctx context.Context, db *sql.DB, festID int64, registry map[st
 	if _, err := db.Exec(`update games set title = ? where id = ?`, "Ассорти", gameID); err != nil {
 		return err
 	}
-	log.Printf("%s", s.Octobearfest.Log.AssortiStart(strconv.FormatInt(gameID, 10), strconv.Itoa(len(minigames)), strconv.Itoa(len(fixture.Participants))))
+	log.Printf("%s", s.Octobearfest.Log.AssortiStart(idstr.Format(gameID), strconv.Itoa(len(minigames)), strconv.Itoa(len(fixture.Participants))))
 
 	// A flat game's team list IS its document — that is what seats its one Match —
 	// so it is written from the workbook's own order, carrying each team's fest

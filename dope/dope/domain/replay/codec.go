@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"math"
 	"sort"
-	"strconv"
 
+	"pecheny.me/dopecore/idstr"
+
+	"dope/dope/domain/games"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 )
@@ -63,7 +65,7 @@ var codecs = map[string]Codec{
 	"brain": {Questions: true, Columns: [3]string{dopestrings.Default.Replay.Codec.StatAttempts(), dopestrings.Default.Replay.Codec.StatRight(), dopestrings.Default.Replay.Codec.StatWrong()}, Aggregate: brainStats},
 	// Troika's sheet keeps no per-player row — it never records which seat
 	// answered — so there is no stats section to hold dope to.
-	"troika": {Counts: true, ThemeSize: 3},
+	"troika": {Counts: true, ThemeSize: games.TroikaThemeQuestions},
 	// Hamsa reads like EK — a grid of themes and the player who sat for each —
 	// with the team round's bet after them. Its shootout is another personal
 	// round, so its questions are worth what that round paid.
@@ -90,7 +92,7 @@ func CodecFor(game string) (Codec, bool) {
 	return codec, ok
 }
 
-var nominals = [5]int{10, 20, 30, 40, 50}
+var nominals = store.QuestionValues
 
 func statRows(acc map[[2]string]*[3]int) []Stat {
 	out := make([]Stat, 0, len(acc))
@@ -120,41 +122,55 @@ func ekStats(bouts []BoutState) ([]Stat, error) {
 	// the end; the themes taken and played are whole for each of them.
 	sums := map[[2]string]float64{}
 	for _, bout := range bouts {
-		var blob struct {
-			Participants map[string]struct {
-				Themes []store.BlobTheme `json:"themes"`
-			} `json:"participants"`
-		}
-		if err := json.Unmarshal([]byte(bout.State), &blob); err != nil {
+		if err := ekBoutStats(bout, acc, sums); err != nil {
 			return nil, err
-		}
-		for pid, section := range blob.Participants {
-			id, err := strconv.ParseInt(pid, 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			for _, theme := range section.Themes {
-				if len(theme.Players) == 0 {
-					continue
-				}
-				sum := themeSum(theme.Answers)
-				share := float64(sum) / float64(len(theme.Players))
-				for _, playerID := range theme.Players {
-					key := [2]string{bout.Players[playerID], bout.Names[id]}
-					entry := entryIn(acc, key[0], key[1])
-					sums[key] += share
-					if sum > 0 {
-						entry[1]++
-					}
-					entry[2]++
-				}
-			}
 		}
 	}
 	for key, sum := range sums {
 		entryIn(acc, key[0], key[1])[0] = int(math.Round(sum))
 	}
 	return statRows(acc), nil
+}
+
+// ekBoutStats adds one bout's themes to acc, and each theme's share of its Σ
+// to sums.
+func ekBoutStats(bout BoutState, acc map[[2]string]*[3]int, sums map[[2]string]float64) error {
+	var blob struct {
+		Participants map[string]struct {
+			Themes []store.BlobTheme `json:"themes"`
+		} `json:"participants"`
+	}
+	if err := json.Unmarshal([]byte(bout.State), &blob); err != nil {
+		return err
+	}
+	for pid, section := range blob.Participants {
+		id, err := idstr.Parse(pid)
+		if err != nil {
+			return err
+		}
+		for _, theme := range section.Themes {
+			addEKTheme(bout, bout.Names[id], theme, acc, sums)
+		}
+	}
+	return nil
+}
+
+// addEKTheme counts one theme for each player who sat it.
+func addEKTheme(bout BoutState, team string, theme store.BlobTheme, acc map[[2]string]*[3]int, sums map[[2]string]float64) {
+	if len(theme.Players) == 0 {
+		return
+	}
+	sum := themeSum(theme.Answers)
+	share := float64(sum) / float64(len(theme.Players))
+	for _, playerID := range theme.Players {
+		key := [2]string{bout.Players[playerID], team}
+		entry := entryIn(acc, key[0], key[1])
+		sums[key] += share
+		if sum > 0 {
+			entry[1]++
+		}
+		entry[2]++
+	}
 }
 
 // individualStats: per player, Σ, Σ+ and the Matches he sat — counted from the
@@ -168,35 +184,43 @@ func individualStats(bouts []BoutState) ([]Stat, error) {
 				entryIn(acc, name, "")[2]++
 			}
 		}
-		var blob struct {
-			Participants map[string]struct {
-				Themes []struct {
-					Answers [5]string `json:"answers"`
-				} `json:"themes"`
-			} `json:"participants"`
-		}
-		if err := json.Unmarshal([]byte(bout.State), &blob); err != nil {
+		if err := individualBoutStats(bout, acc); err != nil {
 			return nil, err
 		}
-		for pid, section := range blob.Participants {
-			id, err := strconv.ParseInt(pid, 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			entry := entryIn(acc, bout.Names[id], "")
-			for _, theme := range section.Themes {
-				for i, mark := range theme.Answers {
-					if mark == "right" {
-						entry[0] += nominals[i]
-						entry[1] += nominals[i]
-					} else if mark == "wrong" {
-						entry[0] -= nominals[i]
-					}
+	}
+	return statRows(acc), nil
+}
+
+// individualBoutStats adds one bout's answers to each player's Σ and Σ+.
+func individualBoutStats(bout BoutState, acc map[[2]string]*[3]int) error {
+	var blob struct {
+		Participants map[string]struct {
+			Themes []struct {
+				Answers [store.QuestionCount]string `json:"answers"`
+			} `json:"themes"`
+		} `json:"participants"`
+	}
+	if err := json.Unmarshal([]byte(bout.State), &blob); err != nil {
+		return err
+	}
+	for pid, section := range blob.Participants {
+		id, err := idstr.Parse(pid)
+		if err != nil {
+			return err
+		}
+		entry := entryIn(acc, bout.Names[id], "")
+		for _, theme := range section.Themes {
+			for i, mark := range theme.Answers {
+				if mark == "right" {
+					entry[0] += nominals[i]
+					entry[1] += nominals[i]
+				} else if mark == "wrong" {
+					entry[0] -= nominals[i]
 				}
 			}
 		}
 	}
-	return statRows(acc), nil
+	return nil
 }
 
 // brainStats: per player and team, the regular questions he buzzed on, and
@@ -204,38 +228,54 @@ func individualStats(bouts []BoutState) ([]Stat, error) {
 func brainStats(bouts []BoutState) ([]Stat, error) {
 	acc := map[[2]string]*[3]int{}
 	for _, bout := range bouts {
-		var blob struct {
-			Teams []struct {
-				Rows []struct {
-					Player string `json:"player"`
-					Mark   string `json:"mark"`
-				} `json:"rows"`
-			} `json:"teams"`
-			Tiebreaks int `json:"tiebreaks"`
-		}
-		if err := json.Unmarshal([]byte(bout.State), &blob); err != nil {
+		if err := brainBoutStats(bout, acc); err != nil {
 			return nil, err
-		}
-		for side, team := range blob.Teams {
-			if side >= len(bout.Seated) {
-				break
-			}
-			regular := len(team.Rows) - blob.Tiebreaks
-			for index, row := range team.Rows {
-				if index >= regular || row.Player == "" || row.Mark == "" {
-					continue
-				}
-				entry := entryIn(acc, row.Player, bout.Seated[side])
-				entry[0]++
-				if row.Mark == "right" {
-					entry[1]++
-				} else {
-					entry[2]++
-				}
-			}
 		}
 	}
 	return statRows(acc), nil
+}
+
+// brainBoutStats adds one bout's regular questions to each player's counts.
+func brainBoutStats(bout BoutState, acc map[[2]string]*[3]int) error {
+	var blob struct {
+		Teams []struct {
+			Rows []brainRow `json:"rows"`
+		} `json:"teams"`
+		Tiebreaks int `json:"tiebreaks"`
+	}
+	if err := json.Unmarshal([]byte(bout.State), &blob); err != nil {
+		return err
+	}
+	for side, team := range blob.Teams {
+		if side >= len(bout.Seated) {
+			break
+		}
+		regular := len(team.Rows) - blob.Tiebreaks
+		addBrainRows(acc, team.Rows[:min(max(regular, 0), len(team.Rows))], bout.Seated[side])
+	}
+	return nil
+}
+
+// brainRow is one question of a Brain side: who buzzed, and how it went.
+type brainRow struct {
+	Player string `json:"player"`
+	Mark   string `json:"mark"`
+}
+
+// addBrainRows counts a side's regular questions for whoever buzzed on them.
+func addBrainRows(acc map[[2]string]*[3]int, rows []brainRow, team string) {
+	for _, row := range rows {
+		if row.Player == "" || row.Mark == "" {
+			continue
+		}
+		entry := entryIn(acc, row.Player, team)
+		entry[0]++
+		if row.Mark == "right" {
+			entry[1]++
+		} else {
+			entry[2]++
+		}
+	}
 }
 
 func themeSum(answers [5]string) int {

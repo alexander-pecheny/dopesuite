@@ -68,31 +68,36 @@ func resizeIntSlice(values []int, size int) []int {
 // number, below zero, matches the same way. New teams get an empty
 // row; teams that dropped out lose their row. Each old row is claimed at most
 // once. With no old participants at all, a plain positional resize is used.
-func RemapAnswerMatrix[T any](values [][]T, oldParts, newParts []KSIParticipant, cols int) [][]T {
-	if len(oldParts) == 0 {
-		return resizeMatrix(values, len(newParts), cols)
-	}
-	consumed := make([]bool, len(oldParts))
+// claimOldRow finds the unclaimed old row that p was: by number first, then by
+// name. It marks the row consumed and returns its index, or -1.
+func claimOldRow(oldParts []KSIParticipant, consumed []bool, p KSIParticipant) int {
 	claim := func(match func(KSIParticipant) bool) int {
-		for i, p := range oldParts {
-			if !consumed[i] && match(p) {
+		for i, o := range oldParts {
+			if !consumed[i] && match(o) {
 				consumed[i] = true
 				return i
 			}
 		}
 		return -1
 	}
+	idx := -1
+	if p.Number != 0 {
+		idx = claim(func(o KSIParticipant) bool { return o.Number == p.Number })
+	}
+	if idx < 0 && p.Name != "" {
+		idx = claim(func(o KSIParticipant) bool { return o.Name == p.Name })
+	}
+	return idx
+}
+
+func RemapAnswerMatrix[T any](values [][]T, oldParts, newParts []KSIParticipant, cols int) [][]T {
+	if len(oldParts) == 0 {
+		return resizeMatrix(values, len(newParts), cols)
+	}
+	consumed := make([]bool, len(oldParts))
 	out := make([][]T, len(newParts))
 	for j, p := range newParts {
-		idx := -1
-		if p.Number != 0 {
-			num := p.Number
-			idx = claim(func(o KSIParticipant) bool { return o.Number == num })
-		}
-		if idx < 0 && p.Name != "" {
-			name := p.Name
-			idx = claim(func(o KSIParticipant) bool { return o.Name == name })
-		}
+		idx := claimOldRow(oldParts, consumed, p)
 		var srcRow []T
 		if idx >= 0 && idx < len(values) {
 			srcRow = values[idx]

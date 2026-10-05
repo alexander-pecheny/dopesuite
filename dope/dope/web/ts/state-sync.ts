@@ -19,6 +19,29 @@ function defaultEventSource(url: string): EventSource {
 // Backoff between wake-recovery attempts, in ms; the last entry repeats.
 const WAKE_RETRY_MS = [3000, 6000, 12000, 30000];
 
+// How long an unacknowledged op stays in local storage by default.
+const PENDING_OP_TTL_MS = 15 * 60 * 1000;
+// Default pause before a scoped writer flushes its batch.
+const WRITE_DEBOUNCE_MS = 150;
+// First HTTP status that counts as a server error worth retrying.
+const SERVER_ERROR_STATUS = 500;
+// A static-mode reload waits this long plus a random spread, so tabs do not
+// all hit the server at the same moment.
+const STATIC_RELOAD_BASE_MS = 4000;
+const STATIC_RELOAD_SPREAD_MS = 3000;
+// djb2 hash: starting value and shift.
+const DJB2_SEED = 5381;
+const DJB2_SHIFT = 5;
+// The recorder session id: random base-36 digits, characters 2 to 10.
+const SESSION_ID_RADIX = 36;
+const SESSION_ID_END = 10;
+// A resync gives up after this long, and first waits a random delay up to
+// RESYNC_JITTER_MS so reconnecting tabs spread out.
+const RESYNC_TIMEOUT_MS = 20000;
+const RESYNC_JITTER_MS = 400;
+// How often presence drops remote cursors that went silent.
+const PRESENCE_PRUNE_MS = 1000;
+
 interface WakeRecoveryOptions {
   // live reports a stream that needs no recovery, so a tab switch on a working
   // page costs nothing.
@@ -225,7 +248,7 @@ export interface PendingOps {
 // long-abandoned session can't resurrect ancient edits.
 export function createPendingOps(opts?: PendingOpsOptions | null): PendingOps {
   opts = opts || {};
-  const ttlMs = typeof opts.ttlMs === "number" && Number.isFinite(opts.ttlMs) ? opts.ttlMs : 15 * 60 * 1000;
+  const ttlMs = typeof opts.ttlMs === "number" && Number.isFinite(opts.ttlMs) ? opts.ttlMs : PENDING_OP_TTL_MS;
   let store: Storage | null = null;
   if (opts.storageKey) {
     try {
@@ -453,7 +476,7 @@ export interface ScopedWriter {
 // mirrored to localStorage so a reload mid-sync recovers it, and flushed when
 // the tab hides (keepalive lets the request finish during unload).
 export function createScopedWriter(options: ScopedWriterOptions): ScopedWriter {
-  const debounceMs = options.debounceMs ?? 150;
+  const debounceMs = options.debounceMs ?? WRITE_DEBOUNCE_MS;
   const indicator = options.indicator || createSyncIndicator();
   const storagePrefix = options.storagePrefix ?? "dope.pending.v2";
   const docPath = options.docPath || [];
@@ -532,7 +555,7 @@ export function createScopedWriter(options: ScopedWriterOptions): ScopedWriter {
         keepalive: true,
       });
       if (!response.ok) {
-        retry = response.status >= 500;
+        retry = response.status >= SERVER_ERROR_STATUS;
         throw new Error(await response.text());
       }
       const updated: unknown = await response.json();
@@ -560,6 +583,18 @@ export function createScopedWriter(options: ScopedWriterOptions): ScopedWriter {
     }
   }
 
+  // postWrite sends one write and returns the server's answer, throwing the
+  // server's message when it refuses.
+  async function postWrite(request: WriteRequest): Promise<unknown> {
+    const response = await fetch(request.url, {
+      method: request.method || "POST",
+      headers: {"Content-Type": "application/json"},
+      body: request.body === undefined ? undefined : JSON.stringify(request.body),
+    });
+    if (!response.ok) throw new Error((await response.text()).trim());
+    return await response.json();
+  }
+
   async function send(scope: string, request: WriteRequest, intent?: WriteIntent): Promise<SendResult> {
     if (options.readonly) return {ok: false, error: "readonly"};
     const own = ++token;
@@ -569,13 +604,7 @@ export function createScopedWriter(options: ScopedWriterOptions): ScopedWriter {
     indicator.busy(key);
     let result: SendResult;
     try {
-      const response = await fetch(request.url, {
-        method: request.method || "POST",
-        headers: {"Content-Type": "application/json"},
-        body: request.body === undefined ? undefined : JSON.stringify(request.body),
-      });
-      if (!response.ok) throw new Error((await response.text()).trim());
-      const body: unknown = await response.json();
+      const body = await postWrite(request);
       options.adopt(scope, body);
       result = {ok: true, response: body};
     } catch (error) {
@@ -679,7 +708,7 @@ export function gameEventsURL(festID: string | number, gameID?: string | number 
 // static viewers spreads its reloads across the window instead of stampeding the
 // server the instant lockdown lifts.
 export function scheduleStaticReload(): void {
-  window.setTimeout(() => window.location.reload(), 4000 + Math.floor(Math.random() * 3000));
+  window.setTimeout(() => window.location.reload(), STATIC_RELOAD_BASE_MS + Math.floor(Math.random() * STATIC_RELOAD_SPREAD_MS));
 }
 
 // applyDeltaOps returns a deep clone of `base` with scoped set-ops applied,
@@ -733,8 +762,8 @@ function recorderNow(): string {
 }
 
 function cheapHash(str: string): number {
-  let h = 5381;
-  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  let h = DJB2_SEED;
+  for (let i = 0; i < str.length; i++) h = ((h << DJB2_SHIFT) + h + str.charCodeAt(i)) | 0;
   return h;
 }
 
@@ -764,7 +793,7 @@ export function createClientRecorder(options?: {scope?: string} | null): ClientR
   const evKey = `dope.rec.ev:${scope}`;
   const snapKey = `dope.rec.snap:${scope}`;
   // Per page-load id so a downloaded log spanning a reload stays separable.
-  const session = Math.random().toString(36).slice(2, 10);
+  const session = Math.random().toString(SESSION_ID_RADIX).slice(2, SESSION_ID_END);
   let store: Storage | null = null;
   try {
     store = window.localStorage;
@@ -901,6 +930,22 @@ export function installClientRecorder(options?: InstallClientRecorderOptions | n
   return recorder;
 }
 
+// The recorder button floats in the bottom-right corner over everything.
+const RECORDER_BUTTON_STYLE = {
+  position: "fixed",
+  bottom: "8px",
+  right: "8px",
+  zIndex: "2147483000",
+  font: "12px/1.2 system-ui, sans-serif",
+  padding: "4px 8px",
+  background: "var(--diag-bg)",
+  color: "var(--diag-fg)",
+  border: "0",
+  borderRadius: "6px",
+  cursor: "pointer",
+  opacity: "0.5",
+};
+
 function mountRecorderButton(recorder: ClientRecorder, label?: string): void {
   if (document.querySelector(".dope-rec-btn")) return; // one per page
   const btn = document.createElement("button");
@@ -908,20 +953,7 @@ function mountRecorderButton(recorder: ClientRecorder, label?: string): void {
   btn.className = "dope-rec-btn";
   btn.textContent = label || S.widgets.recorder.label();
   btn.title = S.widgets.recorder.title();
-  Object.assign(btn.style, {
-    position: "fixed",
-    bottom: "8px",
-    right: "8px",
-    zIndex: "2147483000",
-    font: "12px/1.2 system-ui, sans-serif",
-    padding: "4px 8px",
-    background: "var(--diag-bg)",
-    color: "var(--diag-fg)",
-    border: "0",
-    borderRadius: "6px",
-    cursor: "pointer",
-    opacity: "0.5",
-  });
+  Object.assign(btn.style, RECORDER_BUTTON_STYLE);
   btn.addEventListener("mouseenter", () => (btn.style.opacity = "1"));
   btn.addEventListener("mouseleave", () => (btn.style.opacity = "0.5"));
   btn.addEventListener("click", () => recorder.download());
@@ -1096,9 +1128,9 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
     if (resyncing.has(scope)) return true;
     resyncing.add(scope);
     const abort = new AbortController();
-    const deadline = window.setTimeout(() => abort.abort(), 20000);
+    const deadline = window.setTimeout(() => abort.abort(), RESYNC_TIMEOUT_MS);
     try {
-      await new Promise((r) => window.setTimeout(r, Math.floor(Math.random() * 400)));
+      await new Promise((r) => window.setTimeout(r, Math.floor(Math.random() * RESYNC_JITTER_MS)));
       const response = await fetch(spec.stateURL(scope), {signal: abort.signal});
       if (!response.ok) return false;
       const seq = Number(response.headers.get("X-State-Seq")) || 0;
@@ -1281,7 +1313,7 @@ export function createHostPresence(options: HostPresenceOptions): HostPresence {
     heartbeatTimer = window.setInterval(() => {
       if (lastCursor) void postPresence(true, lastCursor);
     }, heartbeatMs);
-    staleTimer = window.setInterval(pruneStale, 1000);
+    staleTimer = window.setInterval(pruneStale, PRESENCE_PRUNE_MS);
     publishCurrentSoon();
   }
 
@@ -1403,6 +1435,11 @@ export function createHostPresence(options: HostPresenceOptions): HostPresence {
       return;
     }
     node.hidden = false;
+    placeRemoteNode(node, rect, remote);
+  }
+
+  // placeRemoteNode lays a remote cursor over rect in the user's colour and name.
+  function placeRemoteNode(node: HTMLElement, rect: DOMRect, remote: RemotePresence): void {
     node.style.left = `${Math.round(rect.left)}px`;
     node.style.top = `${Math.round(rect.top)}px`;
     node.style.width = `${Math.round(rect.width)}px`;

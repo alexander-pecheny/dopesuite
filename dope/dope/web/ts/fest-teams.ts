@@ -12,6 +12,11 @@ import type {Choice} from "../../../../dopeuikit/assets/ts/suggest.js";
 import {icon} from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
+// The rating search waits for a pause in typing this long.
+const SEARCH_DEBOUNCE_MS = 250;
+// Most people the player picker offers at once.
+const PLAYER_CHOICE_LIMIT = 14;
+
 interface TeamPlayer {
   rating_id: number;
   first_name: string;
@@ -91,7 +96,7 @@ function remoteChoices<T>(url: (q: string) => string, redraw: () => void): (q: s
         answers.set(key, answer.ok ? answer.data as T[] : []);
         redraw();
       });
-    }, 250);
+    }, SEARCH_DEBOUNCE_MS);
     return [];
   };
 }
@@ -250,7 +255,7 @@ function openTeamDialog(api: string, team: TeamDetail): void {
       const games = p.games ? S.fest.teamEdit.games(p.games) : "";
       offer(p, [p.patronymic || "", games, S.fest.teamEdit.ratingId(String(p.rating_id))].filter(Boolean).join(" · "));
     }
-    return out.slice(0, 14);
+    return out.slice(0, PLAYER_CHOICE_LIMIT);
   }, (choice) => {
     picked = byValue.get(choice.value) || null;
     add();

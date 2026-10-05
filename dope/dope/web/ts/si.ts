@@ -19,7 +19,7 @@ import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
 import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
 import * as ksi from "./ksi-protocol.js";
-import {KSI_THEMES, QUESTION_VALUES, RESULT_VALUES, STICKER_NEUTRAL} from "./ksi-protocol.js";
+import {KSI_THEMES, QUESTION_VALUES, RESULT_VALUES, SI_THEMES, STICKER_NEUTRAL} from "./ksi-protocol.js";
 import S from "./i18nstrings.js";
 import type {KSIRules, KSIScheme, KSIState, ParticipantEntry, ResultRow, ScoreSheet, StickerType} from "./ksi-protocol.js";
 
@@ -64,14 +64,20 @@ const STICKER_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4
 // Peel-corner darkness: the curl is the sticker colour multiplied this much
 // darker than the main face.
 const STICKER_PEEL_FACTOR = 0.78;
+const COLOR_CHANNEL_MAX = 255;
+const HEX_RADIX = 16;
+// Where the red, green and blue digits start in "#rrggbb".
+const HEX_CHANNEL_OFFSETS = [1, 3, 5];
+// An answer's state path is themes/theme/answers/player/answer.
+const ANSWER_PATH_LEN = 5;
 
 // Returns the sticker colour a shade darker for the peel corner. The main face
 // keeps the exact picked hex, so what an organizer picks is what renders.
 function darkenHex(hex: string, factor: number): string {
-  const ch = (i: number) => Math.max(0, Math.min(255,
-    Math.round(parseInt(hex.slice(i, i + 2), 16) * factor)));
-  const h = (n: number) => n.toString(16).padStart(2, "0");
-  return "#" + h(ch(1)) + h(ch(3)) + h(ch(5));
+  const ch = (i: number) => Math.max(0, Math.min(COLOR_CHANNEL_MAX,
+    Math.round(parseInt(hex.slice(i, i + 2), HEX_RADIX) * factor)));
+  const h = (n: number) => n.toString(HEX_RADIX).padStart(2, "0");
+  return "#" + HEX_CHANNEL_OFFSETS.map((i) => h(ch(i))).join("");
 }
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 
@@ -100,10 +106,10 @@ let scheme: KSIScheme | null = null;
 let state: KSIState | null = null;
 let fest: FestInfo | null = null;
 let participants: string[] = [];
-let themesCount = 8;
+let themesCount = SI_THEMES;
 // Sticker configuration for the "KSI with stickers" variant, parsed from
 // scheme.stickers. Empty for plain KSI/SI games (stickersEnabled() is false).
-let rules: KSIRules = {teamMode: false, themesCount: 8, stickers: [], stickerById: new Map()};
+let rules: KSIRules = {teamMode: false, themesCount: SI_THEMES, stickers: [], stickerById: new Map()};
 let activeCell: ActiveCell = {player: 0, theme: 0, answer: 0};
 let renderedTable: HTMLElement | null = null;
 let renderedTab: string | null = null;
@@ -1113,7 +1119,7 @@ function saveState(path: Array<string | number>, value: unknown): void {
   // Mark the just-edited answer cell as pending right away; it clears when the
   // server confirms the edit (refreshPendingMarkers, driven from
   // applyRemoteState on the PATCH ack / any remote update).
-  if (path.length === 5 && path[0] === "themes" && path[2] === "answers") {
+  if (path.length === ANSWER_PATH_LEN && path[0] === "themes" && path[2] === "answers") {
     answerCellNode(path[3], path[1], path[4])?.classList.add("pending");
   }
 }

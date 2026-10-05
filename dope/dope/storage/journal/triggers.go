@@ -162,13 +162,34 @@ func opCode2int(op string) int {
 	return 0
 }
 
+// triggerStateTable holds the fingerprint of the installed journal triggers.
+const triggerStateTable = `create table if not exists journal_trigger_state(
+  id integer primary key check(id = 1),
+  fingerprint text not null default ''
+);`
+
+// journalTriggerNames lists the installed journal triggers.
+func journalTriggerNames(db *sql.DB) ([]string, error) {
+	rows, err := db.Query(`select name from sqlite_master where type='trigger' and name like 'journal\_%' escape '\'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		names = append(names, n)
+	}
+	return names, rows.Err()
+}
+
 // EnsureTriggers (re)installs the journal row-op triggers when the schema shape
 // or template version changes (fingerprinted, like the audit triggers).
 func EnsureTriggers(db *sql.DB) error {
-	if _, err := db.Exec(`create table if not exists journal_trigger_state(
-  id integer primary key check(id = 1),
-  fingerprint text not null default ''
-);`); err != nil {
+	if _, err := db.Exec(triggerStateTable); err != nil {
 		return err
 	}
 
@@ -212,27 +233,11 @@ func EnsureTriggers(db *sql.DB) error {
 // fingerprint, so the next EnsureTriggers reinstalls from scratch. Data
 // conversions call this first so their churn is never journaled as edits.
 func DropTriggers(db *sql.DB) error {
-	if _, err := db.Exec(`create table if not exists journal_trigger_state(
-  id integer primary key check(id = 1),
-  fingerprint text not null default ''
-);`); err != nil {
+	if _, err := db.Exec(triggerStateTable); err != nil {
 		return err
 	}
-	rows, err := db.Query(`select name from sqlite_master where type='trigger' and name like 'journal\_%' escape '\'`)
+	drop, err := journalTriggerNames(db)
 	if err != nil {
-		return err
-	}
-	var drop []string
-	for rows.Next() {
-		var n string
-		if err := rows.Scan(&n); err != nil {
-			rows.Close()
-			return err
-		}
-		drop = append(drop, n)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return err
 	}
 	for _, n := range drop {

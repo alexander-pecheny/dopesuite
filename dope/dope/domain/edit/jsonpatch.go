@@ -52,14 +52,14 @@ func ParseJSONPatchPath(parts []json.RawMessage) ([]JSONPathSegment, error) {
 		if err := json.Unmarshal(raw, &number); err != nil {
 			return nil, errors.New("patch path segment must be string or non-negative integer")
 		}
-		index64, err := strconv.ParseInt(number.String(), 10, 0)
-		if err != nil || index64 < 0 {
+		index, err := strconv.Atoi(number.String())
+		if err != nil || index < 0 {
 			return nil, errors.New("patch path index must be a non-negative integer")
 		}
-		if index64 > maxPatchArrayIndex {
+		if index > maxPatchArrayIndex {
 			return nil, fmt.Errorf("patch path index exceeds limit (%d)", maxPatchArrayIndex)
 		}
-		path = append(path, JSONPathSegment{Index: int(index64), IsIndex: true})
+		path = append(path, JSONPathSegment{Index: index, IsIndex: true})
 	}
 	return path, nil
 }
@@ -83,28 +83,39 @@ func ApplyJSONSet(root any, path []JSONPathSegment, value any) (any, error) {
 		return value, nil
 	}
 
-	seg := path[0]
-	if seg.IsIndex {
-		var arr []any
-		switch current := root.(type) {
-		case nil:
-			arr = []any{}
-		case []any:
-			arr = current
-		default:
-			return nil, errors.New("patch path crosses non-array value")
-		}
-		for len(arr) <= seg.Index {
-			arr = append(arr, nil)
-		}
-		next, err := ApplyJSONSet(arr[seg.Index], path[1:], value)
-		if err != nil {
-			return nil, err
-		}
-		arr[seg.Index] = next
-		return arr, nil
+	if path[0].IsIndex {
+		return applyIndexSet(root, path, value)
 	}
+	return applyKeySet(root, path, value)
+}
 
+// applyIndexSet is ApplyJSONSet where the path starts with an array index:
+// the array grows with nulls to reach it.
+func applyIndexSet(root any, path []JSONPathSegment, value any) (any, error) {
+	seg := path[0]
+	var arr []any
+	switch current := root.(type) {
+	case nil:
+		arr = []any{}
+	case []any:
+		arr = current
+	default:
+		return nil, errors.New("patch path crosses non-array value")
+	}
+	for len(arr) <= seg.Index {
+		arr = append(arr, nil)
+	}
+	next, err := ApplyJSONSet(arr[seg.Index], path[1:], value)
+	if err != nil {
+		return nil, err
+	}
+	arr[seg.Index] = next
+	return arr, nil
+}
+
+// applyKeySet is ApplyJSONSet where the path starts with an object key.
+func applyKeySet(root any, path []JSONPathSegment, value any) (any, error) {
+	seg := path[0]
 	var obj map[string]any
 	switch current := root.(type) {
 	case nil:

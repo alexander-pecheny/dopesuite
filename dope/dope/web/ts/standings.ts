@@ -9,6 +9,9 @@ import {nameCell} from "./name-cell.js";
 import {declarePins, sheetHead} from "./sheet-pins.js";
 import type {Pins} from "./sheet-pins.js";
 
+// Decimals a fractional score is printed with, trailing zeros dropped.
+const SCORE_DECIMALS = 3;
+
 export interface StageRef {
   code: string;
   title?: string;
@@ -177,7 +180,7 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[], options: 
   // Up to three decimals, trailing zeros dropped: a rule like Octobearfest's
   // (4 - place) + sum/1000 decides ties in the third place, and toFixed(1)
   // showed 14.96 and 15 alike as «15.0».
-  const score = (value: number) => (Number.isInteger(value) ? String(value) : String(Number(value.toFixed(3))));
+  const score = (value: number) => (Number.isInteger(value) ? String(value) : String(Number(value.toFixed(SCORE_DECIMALS))));
   const blockRounds = (group: GroupStandingsGroup) => Array.from({length: group.blockRoundCount}, (_, blockRound) => blockRound);
   for (const group of groups) {
     const item = document.createElement("section");

@@ -16,6 +16,9 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
+// noCandidateDistance sorts an entry with no candidate teams after every other.
+const noCandidateDistance = 1 << 30
+
 // Mass import of team numbers from an external source (e.g. printed answer
 // blanks). The host pastes lines in the form `<number>\t<team name>`; the
 // server matches each pasted name to a fest team — exact first, otherwise the
@@ -181,7 +184,7 @@ func matchNumberImport(entries []importEntry, teams []numbering.Team) []importMa
 		if len(list) > 0 {
 			bestDist[ei] = list[0].distance
 		} else {
-			bestDist[ei] = 1 << 30
+			bestDist[ei] = noCandidateDistance
 		}
 	}
 

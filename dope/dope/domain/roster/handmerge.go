@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"sort"
-	"strconv"
 	"strings"
+
+	"pecheny.me/dopecore/idstr"
 
 	"dope/dope/storage/store"
 )
@@ -19,7 +20,7 @@ import (
 // a person the rating site does not know.
 func PlayerKey(p FestRosterImportPlayer) string {
 	if p.RatingID > 0 {
-		return "rating:" + strconv.FormatInt(p.RatingID, 10)
+		return "rating:" + idstr.Format(p.RatingID)
 	}
 	return "name:" + strings.ToLower(store.JoinPlayerName(p.FirstName, p.LastName))
 }
@@ -100,7 +101,7 @@ type MergeResult struct {
 // ConflictKey is a conflict's name: the team the site puts the player on and
 // the player.
 func ConflictKey(siteTeamID int64, p FestRosterImportPlayer) string {
-	return strconv.FormatInt(siteTeamID, 10) + "|" + PlayerKey(p)
+	return idstr.Format(siteTeamID) + "|" + PlayerKey(p)
 }
 
 // MergeHand lays the host's edits over an incoming roster. For every rating
@@ -175,7 +176,7 @@ func MergeHand(incoming []FestRosterImportTeam, state HandState, acceptSite map[
 				}
 				conflict.Key = ConflictKey(row.ID, p)
 				if !known {
-					conflict.Key = "rating:" + strconv.FormatInt(team.RatingID, 10) + "|" + key
+					conflict.Key = "rating:" + idstr.Format(team.RatingID) + "|" + key
 				}
 				result.Conflicts = append(result.Conflicts, conflict)
 				if acceptSite[conflict.Key] {

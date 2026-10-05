@@ -158,6 +158,9 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome, in Inputs) 
 	return entries, nil
 }
 
+// maxLot is the largest draw lot.
+const maxLot = 1_000_000
+
 // deterministicLot derives a stable draw lot in [1, 1_000_000] from the
 // game's fixed random seed and the participant, so the lottery order survives
 // every recompute. A collision inside a tie is harmless: participant id breaks
@@ -165,5 +168,5 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome, in Inputs) 
 func deterministicLot(seed string, participant int64) int64 {
 	h := fnv.New64a()
 	fmt.Fprintf(h, "%s:%d", seed, participant)
-	return int64(h.Sum64()%1_000_000) + 1
+	return int64(h.Sum64()%maxLot) + 1
 }

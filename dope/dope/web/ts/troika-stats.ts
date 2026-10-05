@@ -13,6 +13,7 @@
 // where nothing correct had been said yet is not a choice about repeating and
 // is not counted either way.
 
+import {percentText} from "./cells.js";
 import {standingsTable} from "./standings.js";
 import * as troika from "./troika-protocol.js";
 import S from "./i18nstrings.js";
@@ -123,8 +124,6 @@ export function computeTroikaPlayerStats(bouts: ReadonlyArray<TroikaBout>): Troi
   return out;
 }
 
-const percent = (share: number) => `${Math.round(share * 100)}%`;
-
 // buildTroikaStatsTable wears the per-player stats skin EK, Hamsa and solo SI
 // share: flush left, the two name columns as wide as their names up to a cap,
 // and a longer name fading out with its popover.
@@ -160,10 +159,10 @@ export function buildTroikaStatsTable(rows: ReadonlyArray<TroikaPlayerStatsRow>)
       row.chairs.join(" / "),
       String(row.questions),
       String(row.correct),
-      row.questions > 0 ? percent(row.correctRate) : "—",
+      row.questions > 0 ? percentText(row.correctRate) : "—",
       String(row.first),
       String(row.repeat),
-      row.repeatChances > 0 ? percent(row.repeatRate) : "—",
+      row.repeatChances > 0 ? percentText(row.repeatRate) : "—",
       String(row.points),
     ]),
   }));

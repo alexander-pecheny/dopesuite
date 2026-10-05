@@ -20,10 +20,12 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	"sort"
 	"strconv"
 	"strings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 const (
@@ -551,6 +553,16 @@ select coalesce(scheme_json, '{}') from games where fest_id = ? and id = ?`,
 	return *scheme.Seeding, nil
 }
 
+// materializeRosterOverridesTx reapplies the Game's player overrides, if it
+// has any, to the roster the list just seated.
+func materializeRosterOverridesTx(ctx context.Context, tx *sql.Tx, scope core.FestScope) error {
+	hasRosterOverrides, err := overrides.GameHasPlayerOverridesTx(ctx, tx, scope.FestID, scope.GameID)
+	if err != nil || !hasRosterOverrides {
+		return err
+	}
+	return overrides.MaterializeGameRosterOverridesTx(ctx, tx, scope.FestID, scope.GameID)
+}
+
 // SaveListTx writes the Game's Entrant list and seats it (seatListTx), records
 // the event and returns the list as the entrants tab shows it, with the
 // document the game-state scope broadcasts. current is the list as it was
@@ -568,14 +580,8 @@ where fest_id = ? and id = ?`, string(stateJSON), util.UtcNow(), scope.FestID, s
 	if err := seatListTx(ctx, tx, scope, current.GameType, next.State.Rows); err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
-	hasRosterOverrides, err := overrides.GameHasPlayerOverridesTx(ctx, tx, scope.FestID, scope.GameID)
-	if err != nil {
+	if err := materializeRosterOverridesTx(ctx, tx, scope); err != nil {
 		return SeedImportView{}, 0, nil, err
-	}
-	if hasRosterOverrides {
-		if err := overrides.MaterializeGameRosterOverridesTx(ctx, tx, scope.FestID, scope.GameID); err != nil {
-			return SeedImportView{}, 0, nil, err
-		}
 	}
 	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, eventType, util.MustJSON(map[string]any{
 		"gameID":       scope.GameID,
@@ -712,7 +718,7 @@ select participant_id from match_slots where match_id = ? and participant_id is 
 	return festwrite.MutateMatchBlobTx(ctx, tx, matchID, func(blob *store.MatchBlob) error {
 		keep := map[string]bool{}
 		for _, id := range seated {
-			keep[strconv.FormatInt(id, 10)] = true
+			keep[idstr.Format(id)] = true
 		}
 		for key := range blob.Participants {
 			if !keep[key] {

@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strconv"
 	"strings"
+
+	"pecheny.me/dopecore/idstr"
 )
 
 // ResolveFestID accepts either a positive integer (the fest id) or a slug and
@@ -15,7 +16,7 @@ func ResolveFestID(ctx context.Context, q Queryer, ref string) (int64, error) {
 	if ref == "" {
 		return 0, sql.ErrNoRows
 	}
-	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+	if id, err := idstr.Parse(ref); err == nil && id > 0 {
 		var found int64
 		if err := q.QueryRowContext(ctx, `select id from fests where id = ?`, id).Scan(&found); err != nil {
 			return 0, err

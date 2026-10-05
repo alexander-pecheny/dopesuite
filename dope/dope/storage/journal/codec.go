@@ -20,6 +20,7 @@
 package journal
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -85,6 +86,9 @@ const (
 	vBlob byte = 4
 )
 
+// realSize is the bytes of an encoded float64.
+const realSize = 8
+
 // ColVal is one column name (already interned to a dictionary id) and its value.
 // The value is a SQLite scalar: nil, int64, float64, string, or []byte.
 type ColVal struct {
@@ -134,9 +138,7 @@ func (w *byteWriter) value(v any) {
 		w.varint(int64(n))
 	case float64:
 		w.byte(vReal)
-		var tmp [8]byte
-		binary.LittleEndian.PutUint64(tmp[:], math.Float64bits(n))
-		w.buf = append(w.buf, tmp[:]...)
+		w.real(n)
 	case string:
 		w.byte(vText)
 		w.bytes([]byte(n))
@@ -148,6 +150,13 @@ func (w *byteWriter) value(v any) {
 		w.byte(vText)
 		w.bytes([]byte(fmt.Sprint(n)))
 	}
+}
+
+// real appends a float64 as its little-endian bits.
+func (w *byteWriter) real(f float64) {
+	var tmp [realSize]byte
+	binary.LittleEndian.PutUint64(tmp[:], math.Float64bits(f))
+	w.buf = append(w.buf, tmp[:]...)
 }
 
 type byteReader struct {
@@ -208,12 +217,7 @@ func (r *byteReader) value() (any, error) {
 	case vInt:
 		return r.varint()
 	case vReal:
-		if r.pos+8 > len(r.buf) {
-			return nil, errors.New("journal: real overruns buffer")
-		}
-		bits := binary.LittleEndian.Uint64(r.buf[r.pos : r.pos+8])
-		r.pos += 8
-		return math.Float64frombits(bits), nil
+		return r.real()
 	case vText:
 		b, err := r.readBytes()
 		if err != nil {
@@ -225,12 +229,20 @@ func (r *byteReader) value() (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		out := make([]byte, len(b))
-		copy(out, b)
-		return out, nil
+		return bytes.Clone(b), nil
 	default:
 		return nil, fmt.Errorf("journal: unknown value tag %d", tag)
 	}
+}
+
+// real reads a float64 written by byteWriter.real.
+func (r *byteReader) real() (float64, error) {
+	if r.pos+realSize > len(r.buf) {
+		return 0, errors.New("journal: real overruns buffer")
+	}
+	bits := binary.LittleEndian.Uint64(r.buf[r.pos : r.pos+realSize])
+	r.pos += realSize
+	return math.Float64frombits(bits), nil
 }
 
 // --- row-op args codec ------------------------------------------------------
@@ -330,32 +342,41 @@ func DecodeSegment(b []byte) ([]Record, error) {
 	}
 	out := make([]Record, 0, n)
 	for i := uint64(0); i < n; i++ {
-		var rec Record
-		seq, err := r.uvarint()
+		rec, err := r.record()
 		if err != nil {
 			return nil, err
 		}
-		rec.Seq = seq
-		op, err := r.uvarint()
-		if err != nil {
-			return nil, err
-		}
-		rec.Op = Op(op)
-		if rec.TSUnixMilli, err = r.varint(); err != nil {
-			return nil, err
-		}
-		if rec.ActorID, err = r.varint(); err != nil {
-			return nil, err
-		}
-		if rec.RequestID, err = r.uvarint(); err != nil {
-			return nil, err
-		}
-		args, err := r.readBytes()
-		if err != nil {
-			return nil, err
-		}
-		rec.Args = append([]byte(nil), args...)
 		out = append(out, rec)
 	}
 	return out, nil
+}
+
+// record reads one segment record.
+func (r *byteReader) record() (Record, error) {
+	var rec Record
+	seq, err := r.uvarint()
+	if err != nil {
+		return Record{}, err
+	}
+	rec.Seq = seq
+	op, err := r.uvarint()
+	if err != nil {
+		return Record{}, err
+	}
+	rec.Op = Op(op)
+	if rec.TSUnixMilli, err = r.varint(); err != nil {
+		return Record{}, err
+	}
+	if rec.ActorID, err = r.varint(); err != nil {
+		return Record{}, err
+	}
+	if rec.RequestID, err = r.uvarint(); err != nil {
+		return Record{}, err
+	}
+	args, err := r.readBytes()
+	if err != nil {
+		return Record{}, err
+	}
+	rec.Args = append([]byte(nil), args...)
+	return rec, nil
 }

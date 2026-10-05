@@ -26,6 +26,7 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	core "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 func main() {
@@ -78,7 +79,7 @@ func run(dbPath, slug, root string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("%s", s.Octobearfest.Log.Fest(strconv.FormatInt(festID, 10), slug))
+	log.Printf("%s", s.Octobearfest.Log.Fest(idstr.Format(festID), slug))
 
 	// One registry for the fest: everyone who played either game, Troika's
 	// forty-eight first so their numbers are the seed the schema deals by.

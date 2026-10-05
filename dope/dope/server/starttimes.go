@@ -32,6 +32,12 @@ type startsAtRequest struct {
 	Wave bool   `json:"wave,omitempty"`
 }
 
+// The largest hour and minute a start time may name.
+const (
+	maxHour   = 23
+	maxMinute = 59
+)
+
 var startsAtPattern = regexp.MustCompile(`^(\d{1,2})[:.](\d{2})$`)
 
 // normalizeStartsAt reads a time as a host types it, "9:05", "09.05" or
@@ -47,7 +53,7 @@ func normalizeStartsAt(raw string) (string, error) {
 	}
 	hours, _ := strconv.Atoi(m[1])
 	minutes, _ := strconv.Atoi(m[2])
-	if hours > 23 || minutes > 59 {
+	if hours > maxHour || minutes > maxMinute {
 		return "", corei18n.User(dopestrings.Default.Server.StartsAt.Bad(raw))
 	}
 	return fmt.Sprintf("%02d:%02d", hours, minutes), nil

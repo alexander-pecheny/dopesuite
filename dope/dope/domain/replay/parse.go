@@ -34,11 +34,31 @@ import (
 	"strconv"
 	"strings"
 
+	"dope/dope/domain/games"
 	dopestrings "dope/i18nstrings"
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 var s = dopestrings.Default
+
+// Field counts of the transcript's bar-separated lines and slash-separated
+// coordinates.
+const (
+	floatBits = 64
+	// coordParts is `s1/r1/w1/m1`; a grouped coordinate adds `g3`.
+	coordParts        = 4
+	groupedCoordParts = coordParts + 1
+	// statTeamFields is `Игрок | Команда | a | b | c`; an individual stat line
+	// has no team.
+	statTeamFields       = 5
+	statIndividualFields = statTeamFields - 1
+	// entrantCityFields is `number | name | city`; the city may be left off.
+	entrantCityFields = 3
+	// seatFields is `name | marks | Σ | place`; an EK line may add the players.
+	seatFields        = 4
+	seatPlayersFields = seatFields + 1
+	seatPlayersField  = seatFields
+)
 
 // Mark is one answer cell: taken, lost, or never played.
 type Mark byte
@@ -472,29 +492,13 @@ func checkRoster(script Script) error {
 // surface as a defect somewhere downstream; here it is a typo with a line
 // number.
 func checkLineups(script Script, teams map[string]bool) error {
-	players := map[string]map[string]bool{}
-	for _, lineup := range script.Lineups {
-		if !teams[lineup.Team] {
-			return errAt(lineup.Line, s.Replay.Parse.LineupUnknownTeam(lineup.Team))
-		}
-		if players[lineup.Team] != nil {
-			return errAt(lineup.Line, s.Replay.Parse.LineupTwice(lineup.Team))
-		}
-		names := make(map[string]bool, len(lineup.Players))
-		for _, name := range lineup.Players {
-			names[name] = true
-		}
-		players[lineup.Team] = names
+	players, err := lineupPlayers(script.Lineups, teams)
+	if err != nil {
+		return err
 	}
 	if len(script.Lineups) > 0 {
-		for _, bout := range script.Bouts {
-			for _, seat := range bout.Seats {
-				for theme, name := range seat.Players {
-					if name != "" && !players[seat.Name][name] {
-						return errAt(seat.Line, s.Replay.Parse.ThemePlayerUnknown(strconv.Itoa(theme+1), seat.Name, name))
-					}
-				}
-			}
+		if err := checkThemePlayers(script.Bouts, players); err != nil {
+			return err
 		}
 	}
 	for _, stat := range script.Stats {
@@ -509,6 +513,40 @@ func checkLineups(script Script, teams map[string]bool) error {
 		}
 		if len(script.Lineups) > 0 && !players[stat.Team][stat.Player] {
 			return errAt(stat.Line, s.Replay.Parse.StatNotInLineup(stat.Player, stat.Team))
+		}
+	}
+	return nil
+}
+
+// lineupPlayers is each rostered team's set of players, refusing a lineup for
+// a team the script does not know or a team given twice.
+func lineupPlayers(lineups []Lineup, teams map[string]bool) (map[string]map[string]bool, error) {
+	players := map[string]map[string]bool{}
+	for _, lineup := range lineups {
+		if !teams[lineup.Team] {
+			return nil, errAt(lineup.Line, s.Replay.Parse.LineupUnknownTeam(lineup.Team))
+		}
+		if players[lineup.Team] != nil {
+			return nil, errAt(lineup.Line, s.Replay.Parse.LineupTwice(lineup.Team))
+		}
+		names := make(map[string]bool, len(lineup.Players))
+		for _, name := range lineup.Players {
+			names[name] = true
+		}
+		players[lineup.Team] = names
+	}
+	return players, nil
+}
+
+// checkThemePlayers refuses a theme player who is not in his team's lineup.
+func checkThemePlayers(bouts []Bout, players map[string]map[string]bool) error {
+	for _, bout := range bouts {
+		for _, seat := range bout.Seats {
+			for theme, name := range seat.Players {
+				if name != "" && !players[seat.Name][name] {
+					return errAt(seat.Line, s.Replay.Parse.ThemePlayerUnknown(strconv.Itoa(theme+1), seat.Name, name))
+				}
+			}
 		}
 	}
 	return nil
@@ -544,7 +582,7 @@ func parseHead(head string, line int) (Coord, error) {
 func parseTableRow(text string, line int) (TableRow, error) {
 	placeText, name, ok := strings.Cut(text, "|")
 	name = strings.TrimSpace(name)
-	place, err := strconv.ParseFloat(strings.TrimSpace(placeText), 64)
+	place, err := strconv.ParseFloat(strings.TrimSpace(placeText), floatBits)
 	if !ok || name == "" || err != nil || place <= 0 {
 		return TableRow{}, errAt(line, s.Replay.Parse.TableRowExpected(text))
 	}
@@ -557,20 +595,28 @@ func parseTableRow(text string, line int) (TableRow, error) {
 func parseCoord(text string, line int) (Coord, error) {
 	parts := strings.Split(text, "/")
 	coord := Coord{Block: parts[0]}
-	if len(parts) == 5 {
+	if len(parts) == groupedCoordParts {
 		if !strings.HasPrefix(parts[1], "g") || len(parts[1]) < 2 {
 			return Coord{}, errAt(line, s.Replay.Parse.GroupExpected(parts[1]))
 		}
 		coord.Group = parts[1][1:]
 		parts = append(parts[:1], parts[2:]...)
 	}
-	if len(parts) != 4 {
+	if len(parts) != coordParts {
 		return Coord{}, errAt(line,
 			s.Replay.Parse.CoordExpected(text))
 	}
 	if coord.Block == "" {
 		return Coord{}, errAt(line, s.Replay.Parse.CoordNoBlock(text))
 	}
+	if err := parseCoordParts(parts[1:], &coord, line); err != nil {
+		return Coord{}, err
+	}
+	return coord, nil
+}
+
+// parseCoordParts reads the round, wave and match of a coordinate into coord.
+func parseCoordParts(parts []string, coord *Coord, line int) error {
 	for i, part := range []struct {
 		prefix string
 		into   *int
@@ -580,17 +626,17 @@ func parseCoord(text string, line int) (Coord, error) {
 		{"w", &coord.Wave, s.Replay.Parse.PartWave()},
 		{"m", &coord.Match, s.Replay.Parse.PartMatch()},
 	} {
-		field := parts[i+1]
+		field := parts[i]
 		if !strings.HasPrefix(field, part.prefix) {
-			return Coord{}, errAt(line, s.Replay.Parse.PartExpected(part.what, part.prefix, field))
+			return errAt(line, s.Replay.Parse.PartExpected(part.what, part.prefix, field))
 		}
 		n, err := strconv.Atoi(field[len(part.prefix):])
 		if err != nil || n < 1 {
-			return Coord{}, errAt(line, s.Replay.Parse.PartNumberExpected(part.what, field))
+			return errAt(line, s.Replay.Parse.PartNumberExpected(part.what, field))
 		}
 		*part.into = n
 	}
-	return coord, nil
+	return nil
 }
 
 // parseLineup reads `Ктулху | Иван Петров, Анна Ким` — a team and its players,
@@ -624,9 +670,9 @@ func parseLineup(text string, line int) (Lineup, error) {
 // participant already is the player.
 func parseStat(text string, line int, individual bool) (Stat, error) {
 	fields := strings.Split(text, "|")
-	want := 5
+	want := statTeamFields
 	if individual {
-		want = 4
+		want = statIndividualFields
 	}
 	if len(fields) != want {
 		return Stat{}, errAt(line, s.Replay.Parse.StatFields(strconv.Itoa(want), text))
@@ -658,7 +704,7 @@ func parseStat(text string, line int, individual bool) (Stat, error) {
 // «Ушки на макушке Казань» has no unambiguous reading without them.
 func parseEntrant(text string, line int) (Entrant, error) {
 	fields := strings.Split(text, "|")
-	if len(fields) < 2 || len(fields) > 3 {
+	if len(fields) < 2 || len(fields) > entrantCityFields {
 		return Entrant{}, errAt(line, s.Replay.Parse.EntrantExpected(text))
 	}
 	number, err := strconv.Atoi(strings.TrimSpace(fields[0]))
@@ -669,7 +715,7 @@ func parseEntrant(text string, line int) (Entrant, error) {
 	if entrant.Name == "" {
 		return Entrant{}, errAt(line, s.Replay.Parse.EntrantNoName())
 	}
-	if len(fields) == 3 {
+	if len(fields) == entrantCityFields {
 		entrant.City = strings.TrimSpace(fields[2])
 	}
 	return entrant, nil
@@ -681,14 +727,14 @@ func parseEntrant(text string, line int) (Entrant, error) {
 // An EK line may carry a fifth field naming who played each theme.
 func parseSeat(text string, line int, codec Codec) (Seat, error) {
 	fields := strings.Split(text, "|")
-	if len(fields) == 5 {
+	if len(fields) == seatPlayersFields {
 		if codec.Questions {
 			return Seat{}, errAt(line, s.Replay.Parse.SeatBrainPlayerField())
 		}
 		if codec.Individual {
 			return Seat{}, errAt(line, s.Replay.Parse.SeatIndividualPlayer())
 		}
-	} else if len(fields) != 4 {
+	} else if len(fields) != seatFields {
 		return Seat{}, errAt(line, s.Replay.Parse.SeatExpected(text))
 	}
 	seat := Seat{Name: strings.TrimSpace(fields[0]), Line: line}
@@ -742,8 +788,8 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 			}
 			seat.Bet = bet
 		}
-		if len(fields) == 5 {
-			for _, name := range strings.Split(fields[4], ",") {
+		if len(fields) == seatPlayersFields {
+			for _, name := range strings.Split(fields[seatPlayersField], ",") {
 				name = strings.TrimSpace(name)
 				if name == "-" {
 					name = ""
@@ -768,7 +814,7 @@ func parseSeat(text string, line int, codec Codec) (Seat, error) {
 	if seat.Pinned = strings.HasSuffix(placeText, "!"); seat.Pinned {
 		placeText = strings.TrimSpace(strings.TrimSuffix(placeText, "!"))
 	}
-	place, err := strconv.ParseFloat(placeText, 64)
+	place, err := strconv.ParseFloat(placeText, floatBits)
 	if err != nil || place <= 0 {
 		return Seat{}, errAt(line, s.Replay.Parse.SeatPlace(seat.Name, strings.TrimSpace(fields[3])))
 	}
@@ -806,10 +852,10 @@ func parseShootout(text string, line int, bout *Bout) error {
 // parseTheme reads one theme's five cells: R taken, W lost, - never played.
 func parseTheme(text string, line int) ([5]Mark, error) {
 	var marks [5]Mark
-	if len(text) != 5 {
+	if len(text) != len(marks) {
 		return marks, errAt(line, s.Replay.Parse.ThemeFive(text, strconv.Itoa(len(text))))
 	}
-	for i := 0; i < 5; i++ {
+	for i := range marks {
 		switch text[i] {
 		case '-':
 			marks[i] = None
@@ -853,7 +899,7 @@ func parseOverride(text string, line int) (Override, error) {
 // one the third; in the next theme only the third, and one took it.
 func parseCounts(field, who string, line, size int) ([][]int, error) {
 	if size <= 0 {
-		size = 3
+		size = games.TroikaThemeQuestions
 	}
 	var out [][]int
 	for _, theme := range strings.Fields(field) {

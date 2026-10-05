@@ -30,6 +30,7 @@ import sqlite3
 import sys
 
 QUESTION_VALUES = (10, 20, 30, 40, 50)
+DEFAULT_SEED = 42
 
 
 def utc_now() -> str:
@@ -176,7 +177,7 @@ def fill_match(cur, match_id, game_type):
     per_team = {team_id: empty_stats() for team_id in participant_ids}
     for theme_id, team_id in rows:
         stats = per_team.setdefault(team_id, empty_stats())
-        for answer_index in range(5):
+        for answer_index in range(len(QUESTION_VALUES)):
             mark = pick_mark(game_type)
             cur.execute(
                 "insert into answers(theme_id, answer_index, mark) values(?, ?, ?) "
@@ -229,7 +230,7 @@ def main() -> int:
     parser.add_argument("--fest", required=True, help="fest slug")
     parser.add_argument("--game", required=True, choices=("od", "ksi", "ek"), help="game type")
     parser.add_argument("--stage", help="stage code (required when --game ek)")
-    parser.add_argument("--seed", type=int, default=42, help="random seed for reproducibility (default: 42)")
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="random seed for reproducibility (default: 42)")
     args = parser.parse_args()
 
     if args.game == "ek" and not args.stage:

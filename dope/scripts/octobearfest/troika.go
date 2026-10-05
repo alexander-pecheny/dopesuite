@@ -19,6 +19,7 @@ import (
 	dopestrings "dope/i18nstrings"
 
 	corestrings "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // buildTroika plays the transcript through the same writes a host's taps make:
@@ -43,7 +44,7 @@ func buildTroika(ctx context.Context, db *sql.DB, festID int64, registry map[str
 		return err
 	}
 	scope := core.FestScope{FestID: festID, GameID: gameID}
-	log.Printf("%s", s.Octobearfest.Log.TroikaStart(strconv.FormatInt(gameID, 10), strconv.Itoa(len(script.Bouts))))
+	log.Printf("%s", s.Octobearfest.Log.TroikaStart(idstr.Format(gameID), strconv.Itoa(len(script.Bouts))))
 
 	for _, bout := range script.Bouts {
 		matchID, err := matchAt(db, gameID, bout.At)

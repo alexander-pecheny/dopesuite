@@ -5,7 +5,12 @@ that deals them into the sheets' own groups, then every бой's marks.
 a snake, but identity is the join key that cannot drift (session decision)."""
 import json, sqlite3, sys, urllib.request
 
-DB, FEST, BASE = ".tmp/work.db", 14, "http://127.0.0.1:19680"
+DB = ".tmp/work.db"
+FEST = 14
+BASE = "http://127.0.0.1:19680"
+GROUP_LETTERS = "ABCDEF"
+GROUPS = len(GROUP_LETTERS)
+PLAYERS = 54
 data = json.load(open(".tmp/si-data.json"))
 token = open(".tmp/token").read().strip()
 
@@ -13,11 +18,11 @@ token = open(".tmp/token").read().strip()
 def seed_order():
     """The registration order whose snake deal reproduces the sheets' groups:
     row k of group g takes seed rank 6k + (g on even rows, 7−g on odd)."""
-    names = [None] * 54
-    for gi, letter in enumerate("ABCDEF"):
+    names = [None] * PLAYERS
+    for gi, letter in enumerate(GROUP_LETTERS):
         for k, player in enumerate(data["groups"][letter]):
-            column = gi + 1 if k % 2 == 0 else 6 - gi
-            names[6 * k + column - 1] = player
+            column = gi + 1 if k % 2 == 0 else GROUPS - gi
+            names[GROUPS * k + column - 1] = player
     missing = [i for i, n in enumerate(names) if n is None]
     if missing:
         sys.exit(f"seed order has holes at {missing}")
@@ -48,11 +53,9 @@ def api(method, path, payload=None):
         return resp.status, resp.read()
 
 
-def import_bouts():
-    """Seats are matched by who occupies them, so a бой lands on the dope match
-    that already holds exactly its players, whatever either side calls it."""
-    db = sqlite3.connect(DB)
-    gid = db.execute("select id from games where fest_id=? and game_type='si'", (FEST,)).fetchone()[0]
+def match_seats(db, gid):
+    """Each dope match of the game, keyed by the set of player names it seats, and
+    each match's participant ids by name."""
     by_players, seat_index = {}, {}
     for match_id, code in db.execute("select id, code from matches where game_id=?", (gid,)):
         seats = db.execute("""select p.id, p.name from match_slots ms
@@ -62,6 +65,30 @@ def import_bouts():
             continue
         by_players[frozenset(name for _, name in seats)] = code
         seat_index[code] = {name: pid for pid, name in seats}
+    return by_players, seat_index
+
+
+def bout_ops(bout, seats):
+    """The set-ops that write a sheet бой's marks onto its dope match."""
+    ops = []
+    for player in bout["players"]:
+        # Личная СИ is EK-shaped: a mark addresses the participant's own
+        # section of the бой's blob, not a row index in a shared grid.
+        seat = str(seats[player["name"]])
+        for t, answers in enumerate(player["themes"]):
+            for q, value in enumerate(answers):
+                if value:
+                    ops.append({"path": ["participants", seat, "themes", t, "answers", q],
+                                "value": value})
+    return ops
+
+
+def import_bouts():
+    """Seats are matched by who occupies them, so a бой lands on the dope match
+    that already holds exactly its players, whatever either side calls it."""
+    db = sqlite3.connect(DB)
+    gid = db.execute("select id from games where fest_id=? and game_type='si'", (FEST,)).fetchone()[0]
+    by_players, seat_index = match_seats(db, gid)
 
     sheets = [b for round_bouts in data["rounds"].values() for b in round_bouts]
     done = missing = 0
@@ -72,17 +99,7 @@ def import_bouts():
             missing += 1
             print("нет боя для", bout["code"], sorted(names))
             continue
-        seats = seat_index[code]
-        ops = []
-        for player in bout["players"]:
-            # Личная СИ is EK-shaped: a mark addresses the participant's own
-            # section of the бой's blob, not a row index in a shared grid.
-            seat = str(seats[player["name"]])
-            for t, answers in enumerate(player["themes"]):
-                for q, value in enumerate(answers):
-                    if value:
-                        ops.append({"path": ["participants", seat, "themes", t, "answers", q],
-                                    "value": value})
+        ops = bout_ops(bout, seat_index[code])
         if ops:
             status, body = api("PATCH", f"/api/fest/{FEST}/games/{gid}/matches/{code}/state", {"ops": ops})
             if status != 200:

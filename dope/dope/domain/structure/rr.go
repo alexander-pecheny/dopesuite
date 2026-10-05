@@ -139,15 +139,31 @@ func blockOrder(b Block) ([]string, error) {
 	return order, nil
 }
 
+// The points a duel pays when the scheme names none, and the length of the
+// `points` list that overrides them: win, draw, loss.
+const (
+	defaultWinPoints  = 2.0
+	defaultDrawPoints = 1.0
+	defaultLossPoints = 0.0
+	pointsListLen     = 3
+)
+
+// A head-to-head meeting at a table of three counts as a win, a draw or a loss.
+const (
+	h2hWin  = 1.0
+	h2hDraw = 0.5
+	h2hLoss = 0.0
+)
+
 func rrPoints(b Block) ([]float64, error) {
 	points, ok, err := b.NumList("points")
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return []float64{2, 1, 0}, nil
+		return []float64{defaultWinPoints, defaultDrawPoints, defaultLossPoints}, nil
 	}
-	if len(points) != 3 {
+	if len(points) != pointsListLen {
 		return nil, Keyf("points", "%s", dopestrings.Default.Structure.Rr.PointsList())
 	}
 	return points, nil
@@ -405,7 +421,7 @@ func multiSeatStandings(conf RRConfig, results []MatchOutcome, seeds map[int64]f
 		var duels []h2hDuel
 		for _, match := range results {
 			if match.Finished {
-				duels = appendDuels(duels, match, 1, 0.5, 0)
+				duels = appendDuels(duels, match, h2hWin, h2hDraw, h2hLoss)
 			}
 		}
 		return rankWithHeadToHead(ranked, order, duels), nil

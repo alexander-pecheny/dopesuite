@@ -11,15 +11,26 @@ import (
 // by a scheme (Definition.DefaultDSL). Each is the format at its smallest,
 // written in the DSL so the host sees something editable.
 
+// The prefilled schemes' smallest sizes.
+const (
+	// brainDefaultParticipants is the Brain group when the form names none.
+	brainDefaultParticipants = 4
+	// siMinPlayers is one table of three.
+	siMinPlayers = 3
+	// hamsaTable is how many sit at a Hamsa table; the group stage takes a
+	// whole number of tables.
+	hamsaTable = 4
+)
+
 // BrainDSL is a Brain at its plainest: one round-robin of everybody, so many
 // questions a Match. The creation form offers it, and a clear moves a pre-DSL
 // Brain onto it.
 func BrainDSL(participants, questions int) string {
 	if participants < 2 {
-		participants = 4
+		participants = brainDefaultParticipants
 	}
 	if questions <= 0 {
-		questions = 5
+		questions = BrainQuestionCount
 	}
 	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\nkind: roundrobin\ngroup_size: %d\n", questions, participants)
 }
@@ -27,8 +38,8 @@ func BrainDSL(participants, questions int) string {
 // SIDefaultDSL is personal SI's shape at its smallest: one table, everyone at
 // it, eight themes. A real tournament edits it into groups and a play-off.
 func SIDefaultDSL(players int) string {
-	if players < 3 {
-		players = 3
+	if players < siMinPlayers {
+		players = siMinPlayers
 	}
 	return fmt.Sprintf("[scheme]\nkind: roundrobin\ngroup_size: %d\nmatch_size: 3\nthemes: 8\nbout.points: seats + 1 - place\nsorting: [points, total, plus]\n", players)
 }
@@ -51,9 +62,9 @@ func TroikaDefaultDSL(participants int) string {
 // no `[init]` line naming the KSI qualifier, since a fest that has not played
 // one yet would not compile it.
 func HamsaDefaultDSL(participants int) string {
-	if participants < 4 {
-		participants = 4
+	if participants < hamsaTable {
+		participants = hamsaTable
 	}
-	participants -= participants % 4
+	participants -= participants % hamsaTable
 	return dopestrings.Default.Host.Games.HamsaScheme(strconv.Itoa(participants))
 }

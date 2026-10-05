@@ -84,33 +84,64 @@ func ArchiveFest(ctx context.Context, db *sql.DB, festID, throughSeq int64) (int
 			return total, nil
 		}
 
-		blob := Compress(EncodeSegment(records))
-
-		tx, err := db.BeginTx(ctx, nil)
-		if err != nil {
-			return total, err
-		}
-		if err := dict.PersistTx(tx); err != nil {
-			tx.Rollback()
-			return total, err
-		}
-		if _, err := tx.ExecContext(ctx, `
-insert into journal_segment(fest_id, seq_start, seq_end, dsl_version, n_records, blob, created_at)
-values(?, ?, ?, ?, ?, ?, ?)`,
-			festID, seqStart, seqEnd, DSLVersion, len(records), blob, time.Now().UTC().Format(time.RFC3339)); err != nil {
-			tx.Rollback()
-			return total, err
-		}
-		if _, err := tx.ExecContext(ctx,
-			`delete from journal where fest_id = ? and seq > ? and seq <= ?`, festID, afterSeq, seqEnd); err != nil {
-			tx.Rollback()
-			return total, err
-		}
-		if err := tx.Commit(); err != nil {
+		if err := writeArchiveSegment(ctx, db, dict, festID, afterSeq, seqStart, seqEnd, records); err != nil {
 			return total, err
 		}
 		total += len(records)
 		afterSeq = seqEnd
+	}
+}
+
+// writeArchiveSegment stores one chunk as a cold segment and deletes its hot
+// rows (seq in (afterSeq, seqEnd]) in the same transaction.
+func writeArchiveSegment(ctx context.Context, db *sql.DB, dict *Dict, festID, afterSeq, seqStart, seqEnd int64, records []Record) error {
+	blob := Compress(EncodeSegment(records))
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := dict.PersistTx(tx); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+insert into journal_segment(fest_id, seq_start, seq_end, dsl_version, n_records, blob, created_at)
+values(?, ?, ?, ?, ?, ?, ?)`,
+		festID, seqStart, seqEnd, DSLVersion, len(records), blob, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`delete from journal where fest_id = ? and seq > ? and seq <= ?`, festID, afterSeq, seqEnd); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// hotRow is one journal row as the archiver reads it.
+type hotRow struct {
+	seq     int64
+	ts      string
+	actor   int64
+	reqID   string
+	op      int
+	payload []byte
+}
+
+func scanHotRow(rows *sql.Rows) (hotRow, error) {
+	var h hotRow
+	err := rows.Scan(&h.seq, &h.ts, &h.actor, &h.reqID, &h.op, &h.payload)
+	return h, err
+}
+
+// record is the row as a segment record, its request id interned in dict.
+func (h hotRow) record(dict *Dict) Record {
+	return Record{
+		Seq:         uint64(h.seq),
+		Op:          Op(h.op),
+		TSUnixMilli: ParseTSMilli(h.ts),
+		ActorID:     h.actor,
+		RequestID:   dict.Intern(h.reqID),
+		Args:        append([]byte(nil), h.payload...),
 	}
 }
 
@@ -128,38 +159,49 @@ from journal where fest_id = ? and seq > ? and seq <= ? order by seq`, festID, a
 	defer rows.Close()
 	var nbytes int
 	for rows.Next() {
-		var (
-			seq     int64
-			ts      string
-			actor   int64
-			reqID   string
-			op      int
-			payload []byte
-		)
-		if err := rows.Scan(&seq, &ts, &actor, &reqID, &op, &payload); err != nil {
+		h, err := scanHotRow(rows)
+		if err != nil {
 			return nil, 0, 0, err
 		}
-		if len(recs) > 0 && nbytes >= archiveChunkBytes && seq != seqEnd {
+		if len(recs) > 0 && nbytes >= archiveChunkBytes && h.seq != seqEnd {
 			break // over budget and at a seq boundary
 		}
 		if len(recs) == 0 {
-			seqStart = seq
+			seqStart = h.seq
 		}
-		seqEnd = seq
-		nbytes += len(payload)
-		recs = append(recs, Record{
-			Seq:         uint64(seq),
-			Op:          Op(op),
-			TSUnixMilli: ParseTSMilli(ts),
-			ActorID:     actor,
-			RequestID:   dict.Intern(reqID),
-			Args:        append([]byte(nil), payload...),
-		})
+		seqEnd = h.seq
+		nbytes += len(h.payload)
+		recs = append(recs, h.record(dict))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, 0, err
 	}
 	return recs, seqStart, seqEnd, nil
+}
+
+// archiveTarget is a fest with more than ArchiveKeepRecent hot rows.
+type archiveTarget struct{ festID, maxSeq int64 }
+
+// archiveTargets lists the fests with more than ArchiveKeepRecent hot rows,
+// and each one's newest seq.
+func archiveTargets(ctx context.Context, db *sql.DB) ([]archiveTarget, error) {
+	rows, err := db.QueryContext(ctx, `
+select fest_id, max(seq) from journal
+where fest_id is not null
+group by fest_id having count(*) > ?`, ArchiveKeepRecent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var targets []archiveTarget
+	for rows.Next() {
+		var t archiveTarget
+		if err := rows.Scan(&t.festID, &t.maxSeq); err != nil {
+			return nil, err
+		}
+		targets = append(targets, t)
+	}
+	return targets, rows.Err()
 }
 
 // ArchiveStale archives every fest's settled hot rows, leaving the newest
@@ -175,25 +217,8 @@ func ArchiveStale(ctx context.Context, db *sql.DB) (int, error) {
 	// run (so a large fold can't stall a live match) is the caller's job: the
 	// background archiver gates on GloballyQuiet; the archive-journal subcommand is
 	// run by an operator with the service stopped.
-	rows, err := db.QueryContext(ctx, `
-select fest_id, max(seq) from journal
-where fest_id is not null
-group by fest_id having count(*) > ?`, ArchiveKeepRecent)
+	targets, err := archiveTargets(ctx, db)
 	if err != nil {
-		return 0, err
-	}
-	type target struct{ festID, maxSeq int64 }
-	var targets []target
-	for rows.Next() {
-		var t target
-		if err := rows.Scan(&t.festID, &t.maxSeq); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		targets = append(targets, t)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return 0, err
 	}
 

@@ -280,7 +280,7 @@ func mark(entrant, a, b, c int) string {
 	// cannot post the same score; the phase moves too, so the sheets do not
 	// merely nest.
 	skill := markFloor + entrant
-	switch n := (a*31 + b*17 + c*7 + entrant*13) % markSpan; {
+	switch n := (a*markStrideA + b*markStrideB + c*markStrideC + entrant*markStrideEntrant) % markSpan; {
 	case n < skill:
 		return "right"
 	case n < skill+markWrong:
@@ -296,4 +296,9 @@ const (
 	markSpan  = 53
 	markFloor = 14
 	markWrong = 4
+	// Coprime strides, one per coordinate of the cell.
+	markStrideA       = 31
+	markStrideB       = 17
+	markStrideC       = 7
+	markStrideEntrant = 13
 )

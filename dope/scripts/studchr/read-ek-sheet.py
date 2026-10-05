@@ -9,7 +9,18 @@ import json, sys, openpyxl
 SRC = "sheets/sheet-1kwtZUpGtFxkJYMIHeRP40ApKfhpl-75RJI_N0O3eqMo.xlsx"
 ROUNDS = ["116", "18", "14", "12", "Финал"]
 RIGHT, WRONG = {"й", "q", "y", "+"}, {"ц", "w", "-"}
-STRIDE, FIRST, VALUES = 7, 4, 5
+STRIDE = 7
+FIRST = 4
+VALUES = 5
+# Question k of a theme (from 0) is worth NOMINAL_STEP * (k + 1).
+NOMINAL_STEP = 10
+# theme_count stops looking after this many themes.
+MAX_THEMES = 20
+# How many offenders an error message lists before it says "and N more".
+SHOWN_OFFENDERS = 5
+# «Пересев перед 14»: the place and team columns (K and L).
+RESEED_PLACE_COL = 11
+RESEED_TEAM_COL = 12
 
 
 def mark(cell):
@@ -29,7 +40,7 @@ def mark(cell):
 
 def theme_count(header):
     count = 0
-    for t in range(20):
+    for t in range(MAX_THEMES):
         base = FIRST + t * STRIDE
         if base + VALUES >= len(header):
             break
@@ -37,6 +48,31 @@ def theme_count(header):
         if isinstance(label, str) and label.strip().lower().startswith(("т", "t")):
             count += 1
     return count
+
+
+def theme_score(answers):
+    """What a theme's marks add up to: + or - each question's nominal."""
+    return sum(NOMINAL_STEP * (k + 1) * (1 if a == "right" else -1 if a == "wrong" else 0)
+               for k, a in enumerate(answers))
+
+
+def read_team(name, row, marks_row, themes_here):
+    """One team's two rows: players and stated sums above, marks below."""
+    themes, players, mismatch = [], [], 0
+    for t in range(themes_here):
+        base = FIRST + t * STRIDE
+        answers = [mark(marks_row[base + k]) if base + k < len(marks_row) else ""
+                   for k in range(VALUES)]
+        themes.append(answers)
+        player = row[base] if base < len(row) else None
+        players.append(str(player).strip() if player else "")
+        stated = row[base + VALUES] if base + VALUES < len(row) else None
+        if isinstance(stated, (int, float)) and theme_score(answers) != round(stated):
+            mismatch += 1
+    return {"name": name, "themes": themes, "players": players,
+            "total": row[1] if isinstance(row[1], (int, float)) else None,
+            "place": row[2] if isinstance(row[2], (int, float)) else None,
+            "mismatch": mismatch}
 
 
 def read_round(ws):
@@ -56,24 +92,7 @@ def read_round(ws):
             i += 1
             continue
         marks_row = rows[i + 1] if i + 1 < len(rows) else ()
-        themes, players, mismatch = [], [], 0
-        for t in range(themes_here):
-            base = FIRST + t * STRIDE
-            answers = [mark(marks_row[base + k]) if base + k < len(marks_row) else ""
-                       for k in range(VALUES)]
-            themes.append(answers)
-            player = row[base] if base < len(row) else None
-            players.append(str(player).strip() if player else "")
-            stated = row[base + VALUES] if base + VALUES < len(row) else None
-            if isinstance(stated, (int, float)):
-                got = sum(10 * (k + 1) * (1 if a == "right" else -1 if a == "wrong" else 0)
-                          for k, a in enumerate(answers))
-                if got != round(stated):
-                    mismatch += 1
-        current["teams"].append({"name": head, "themes": themes, "players": players,
-                                 "total": row[1] if isinstance(row[1], (int, float)) else None,
-                                 "place": row[2] if isinstance(row[2], (int, float)) else None,
-                                 "mismatch": mismatch})
+        current["teams"].append(read_team(head, row, marks_row, themes_here))
         i += 2
     return [b for b in bouts if b["teams"]]
 
@@ -120,21 +139,20 @@ def check_stats(rounds, stats):
                     if not player:
                         continue
                     entry = computed.setdefault((player, team["name"]), [0, 0, 0])
-                    got = sum(10 * (k + 1) * (1 if a == "right" else -1 if a == "wrong" else 0)
-                              for k, a in enumerate(theme))
+                    got = theme_score(theme)
                     entry[0] += got
                     entry[1] += 1 if got > 0 else 0
                     entry[2] += 1
     sheet = {(s["player"], s["team"]): [s["sum"], s["plus"], s["themes"]] for s in stats}
     bad = [key for key in set(computed) | set(sheet) if computed.get(key) != sheet.get(key)]
     if bad:
-        sys.exit(f"статистика не сходится с протоколами: {sorted(bad)[:5]} и ещё {max(len(bad) - 5, 0)}")
+        sys.exit(f"статистика не сходится с протоколами: {sorted(bad)[:SHOWN_OFFENDERS]} и ещё {max(len(bad) - SHOWN_OFFENDERS, 0)}")
 
 
 def read_reseed(ws):
     """«Пересев перед 14», columns K–L: Место | Команда, the twelve of 1/8 ranked."""
     out = []
-    for row in ws.iter_rows(min_row=2, min_col=11, max_col=12, values_only=True):
+    for row in ws.iter_rows(min_row=2, min_col=RESEED_PLACE_COL, max_col=RESEED_TEAM_COL, values_only=True):
         if row[0] is not None and row[1]:
             out.append([int(row[0]), str(row[1]).strip()])
     return out
@@ -151,7 +169,7 @@ bad = sum(t["mismatch"] for bouts in rounds.values() for b in bouts for t in b["
 loose = sorted({(t["name"], p) for bouts in rounds.values() for b in bouts for t in b["teams"]
                 for p in t["players"] if p and p not in lineups.get(t["name"], [])})
 if loose:
-    sys.exit(f"игроки тем вне составов: {loose[:5]} и ещё {max(len(loose) - 5, 0)}")
+    sys.exit(f"игроки тем вне составов: {loose[:SHOWN_OFFENDERS]} и ещё {max(len(loose) - SHOWN_OFFENDERS, 0)}")
 check_stats(rounds, stats)
 print("боёв по раундам:", {n: len(b) for n, b in rounds.items()}, "| тем, где сумма не сошлась:", bad)
 print("составов:", len(lineups), "| игроков в статистике:", len(stats))

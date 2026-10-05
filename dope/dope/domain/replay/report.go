@@ -24,25 +24,32 @@ func Discrepancies(scripts ...Script) string {
 		if len(script.Overrides) == 0 {
 			continue
 		}
-		title := script.Title
-		if title == "" {
-			title = script.Game
-		}
-		fmt.Fprintf(&out, "\n## %s\n\n", title)
-		out.WriteString("| " + s.Replay.Report.ColBout() + " | " + s.Replay.Report.ColWhat() + " | " + s.Replay.Report.ColWho() + " | " + s.Replay.Report.ColWhy() + " |\n|---|---|---|---|\n")
-		overrides := append([]Override(nil), script.Overrides...)
-		sort.SliceStable(overrides, func(a, b int) bool { return overrides[a].Line < overrides[b].Line })
-		for _, over := range overrides {
-			who := over.Participant
-			if who == "" {
-				who = s.Replay.Report.WhoAll()
-			}
-			fmt.Fprintf(&out, "| `%s` | %s | %s | %s |\n", over.At, over.Field, who, over.Reason)
-			total++
-		}
+		total += writeOverrides(&out, script)
 	}
 	if total == 0 {
 		out.WriteString("\n" + s.Replay.Report.NoneYet() + "\n")
 	}
 	return out.String()
+}
+
+// writeOverrides writes one script's overrides as a table, in transcript
+// order, and returns how many it wrote.
+func writeOverrides(out *strings.Builder, script Script) int {
+	s := dopestrings.Default
+	title := script.Title
+	if title == "" {
+		title = script.Game
+	}
+	fmt.Fprintf(out, "\n## %s\n\n", title)
+	out.WriteString("| " + s.Replay.Report.ColBout() + " | " + s.Replay.Report.ColWhat() + " | " + s.Replay.Report.ColWho() + " | " + s.Replay.Report.ColWhy() + " |\n|---|---|---|---|\n")
+	overrides := append([]Override(nil), script.Overrides...)
+	sort.SliceStable(overrides, func(a, b int) bool { return overrides[a].Line < overrides[b].Line })
+	for _, over := range overrides {
+		who := over.Participant
+		if who == "" {
+			who = s.Replay.Report.WhoAll()
+		}
+		fmt.Fprintf(out, "| `%s` | %s | %s | %s |\n", over.At, over.Field, who, over.Reason)
+	}
+	return len(overrides)
 }

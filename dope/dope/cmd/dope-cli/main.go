@@ -23,6 +23,17 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
+const (
+	stateDirMode  = 0o700
+	stateFileMode = 0o600
+	outFileMode   = 0o644
+	// requestTimeout is generous: an import or an export can take minutes.
+	requestTimeout = 5 * time.Minute
+	// apiArgsWithBody is `api METHOD PATH BODY`, the longest form api takes.
+	apiArgsWithBody = 3
+	exitUsage       = 2
+)
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
@@ -77,14 +88,14 @@ func loadState() (*state, error) {
 
 // save writes the state owner-readable only: the token is the account.
 func (st *state) save() error {
-	if err := os.MkdirAll(filepath.Dir(st.path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(st.path), stateDirMode); err != nil {
 		return err
 	}
 	raw, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(st.path, append(raw, '\n'), 0o600)
+	return os.WriteFile(st.path, append(raw, '\n'), stateFileMode)
 }
 
 type app struct {
@@ -95,19 +106,23 @@ type app struct {
 	http   *http.Client
 }
 
+func printUsage(stdout io.Writer) {
+	for _, line := range []string{
+		dopestrings.Default.Cli.Usage.Title(), "",
+		dopestrings.Default.Cli.Usage.StartHead(), dopestrings.Default.Cli.Usage.StartLogin(), "",
+		dopestrings.Default.Cli.Usage.CommandsHead(),
+		dopestrings.Default.Cli.Usage.Login(), dopestrings.Default.Cli.Usage.Logout(), dopestrings.Default.Cli.Usage.Whoami(),
+		dopestrings.Default.Cli.Usage.Fests(), dopestrings.Default.Cli.Usage.Fest(), dopestrings.Default.Cli.Usage.Api(), "",
+		dopestrings.Default.Cli.Usage.FlagsHead(), dopestrings.Default.Cli.Usage.FlagFile(), dopestrings.Default.Cli.Usage.FlagOut(), "",
+		dopestrings.Default.Cli.Usage.Env(),
+	} {
+		fmt.Fprintln(stdout, line)
+	}
+}
+
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		for _, line := range []string{
-			dopestrings.Default.Cli.Usage.Title(), "",
-			dopestrings.Default.Cli.Usage.StartHead(), dopestrings.Default.Cli.Usage.StartLogin(), "",
-			dopestrings.Default.Cli.Usage.CommandsHead(),
-			dopestrings.Default.Cli.Usage.Login(), dopestrings.Default.Cli.Usage.Logout(), dopestrings.Default.Cli.Usage.Whoami(),
-			dopestrings.Default.Cli.Usage.Fests(), dopestrings.Default.Cli.Usage.Fest(), dopestrings.Default.Cli.Usage.Api(), "",
-			dopestrings.Default.Cli.Usage.FlagsHead(), dopestrings.Default.Cli.Usage.FlagFile(), dopestrings.Default.Cli.Usage.FlagOut(), "",
-			dopestrings.Default.Cli.Usage.Env(),
-		} {
-			fmt.Fprintln(stdout, line)
-		}
+		printUsage(stdout)
 		return 0
 	}
 	st, err := loadState()
@@ -115,19 +130,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, dopestrings.Default.Cli.Run.StateUnreadable(err.Error()))
 		return 1
 	}
-	a := &app{st: st, stdin: stdin, stdout: stdout, stderr: stderr, http: &http.Client{Timeout: 5 * time.Minute}}
-	commands := map[string]func([]string) error{
-		"login":  a.login,
-		"logout": a.logout,
-		"whoami": func([]string) error { return a.call("GET", "/api/auth/me", nil, "", "") },
-		"fests":  func([]string) error { return a.call("GET", "/api/fests", nil, "", "") },
-		"fest":   a.fest,
-		"api":    a.api,
-	}
-	cmd, ok := commands[args[0]]
+	a := &app{st: st, stdin: stdin, stdout: stdout, stderr: stderr, http: &http.Client{Timeout: requestTimeout}}
+	cmd, ok := a.commands()[args[0]]
 	if !ok {
 		fmt.Fprintln(stderr, dopestrings.Default.Cli.Run.UnknownCommand(args[0]))
-		return 2
+		return exitUsage
 	}
 	if err := cmd(args[1:]); err != nil {
 		if !errors.Is(err, flag.ErrHelp) {
@@ -136,6 +143,18 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// commands maps each subcommand name to what runs it.
+func (a *app) commands() map[string]func([]string) error {
+	return map[string]func([]string) error{
+		"login":  a.login,
+		"logout": a.logout,
+		"whoami": func([]string) error { return a.call("GET", "/api/auth/me", nil, "", "") },
+		"fests":  func([]string) error { return a.call("GET", "/api/fests", nil, "", "") },
+		"fest":   a.fest,
+		"api":    a.api,
+	}
 }
 
 // parse reads flags wherever they stand among the positional arguments: an
@@ -168,7 +187,26 @@ func (a *app) login(args []string) error {
 	if a.st.URL == "" {
 		return corei18n.User(dopestrings.Default.Cli.Login.NeedUrl())
 	}
-	raw := *token
+	raw, err := a.readToken(*token)
+	if err != nil {
+		return err
+	}
+	a.st.Token = raw
+	name, err := a.whoami()
+	if err != nil {
+		return corei18n.User(dopestrings.Default.Cli.Login.Rejected(err.Error()))
+	}
+	if err := a.st.save(); err != nil {
+		return err
+	}
+	fmt.Fprintln(a.stdout, dopestrings.Default.Cli.Login.Done(name, a.st.URL, a.st.path))
+	return nil
+}
+
+// readToken takes the token from the flag, else $DOPE_TOKEN, else asks for it
+// on stdin.
+func (a *app) readToken(flagValue string) (string, error) {
+	raw := flagValue
 	if raw == "" {
 		raw = os.Getenv("DOPE_TOKEN")
 	}
@@ -179,9 +217,14 @@ func (a *app) login(args []string) error {
 	}
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return corei18n.User(dopestrings.Default.Cli.Login.EmptyToken())
+		return "", corei18n.User(dopestrings.Default.Cli.Login.EmptyToken())
 	}
-	a.st.Token = raw
+	return raw, nil
+}
+
+// whoami asks the server who the current token belongs to and returns a name
+// to show for that account.
+func (a *app) whoami() (string, error) {
 	var me struct {
 		Username *string `json:"username"`
 		UserID   int64   `json:"user_id"`
@@ -191,17 +234,12 @@ func (a *app) login(args []string) error {
 		err = json.Unmarshal(body, &me)
 	}
 	if err != nil {
-		return corei18n.User(dopestrings.Default.Cli.Login.Rejected(err.Error()))
+		return "", err
 	}
-	if err := a.st.save(); err != nil {
-		return err
-	}
-	name := fmt.Sprintf("user-%d", me.UserID)
 	if me.Username != nil {
-		name = *me.Username
+		return *me.Username, nil
 	}
-	fmt.Fprintln(a.stdout, dopestrings.Default.Cli.Login.Done(name, a.st.URL, a.st.path))
-	return nil
+	return fmt.Sprintf("user-%d", me.UserID), nil
 }
 
 func (a *app) logout([]string) error {
@@ -231,7 +269,7 @@ func (a *app) api(args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(rest) < 2 || len(rest) > 3 {
+	if len(rest) < 2 || len(rest) > apiArgsWithBody {
 		return corei18n.User(dopestrings.Default.Cli.Run.ApiArgs())
 	}
 	method, path := strings.ToUpper(rest[0]), rest[1]
@@ -259,8 +297,8 @@ func (a *app) api(args []string) error {
 			return err
 		}
 		body, contentType = buf.Bytes(), mw.FormDataContentType()
-	case len(rest) == 3:
-		arg := rest[2]
+	case len(rest) == apiArgsWithBody:
+		arg := rest[apiArgsWithBody-1]
 		switch {
 		case arg == "-":
 			body, err = io.ReadAll(a.stdin)
@@ -285,7 +323,7 @@ func (a *app) call(method, path string, body []byte, contentType, out string) er
 		return err
 	}
 	if out != "" {
-		return os.WriteFile(out, data, 0o644)
+		return os.WriteFile(out, data, outFileMode)
 	}
 	var pretty bytes.Buffer
 	if json.Indent(&pretty, data, "", "  ") == nil {
@@ -331,7 +369,7 @@ func (a *app) do(method, path string, body []byte, contentType string) ([]byte, 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, &apiError{resp.StatusCode, dopestrings.Default.Cli.Run.TokenRejected()}
 	}
-	if resp.StatusCode >= 300 {
+	if resp.StatusCode >= http.StatusMultipleChoices {
 		return data, &apiError{resp.StatusCode, strings.TrimSpace(string(data))}
 	}
 	return data, nil

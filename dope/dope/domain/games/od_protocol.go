@@ -137,10 +137,14 @@ func (od) PristineGame(slug, title string, shape Shape) ([]byte, []byte, error) 
 	return scheme, state, nil
 }
 
+// odDefaultTourQuestions is the one tour an OD game has when its scheme
+// records none.
+const odDefaultTourQuestions = 15
+
 func (od) ShapeOf(schemeJSON string) Shape {
 	tours := ParseTourComp(schemeJSON)
 	if len(tours) == 0 {
-		tours = []int{15}
+		tours = []int{odDefaultTourQuestions}
 	}
 	return Shape{Tours: tours}
 }

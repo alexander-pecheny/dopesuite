@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"pecheny.me/dopecore/idstr"
 )
 
 // The per-match Protocol state blob (matches.state_json, ADR-0002). Participant
@@ -117,7 +119,7 @@ func (b *MatchBlob) record(kind, path string, value any) {
 	b.Ops = append(b.Ops, BlobOp{Kind: kind, Path: path, Value: value})
 }
 
-func participantKey(participantID int64) string { return strconv.FormatInt(participantID, 10) }
+func participantKey(participantID int64) string { return idstr.Format(participantID) }
 
 // Participant returns the Participant's section, creating it on first touch.
 // Reading access only — mutations go through the MatchBlob methods below so ops

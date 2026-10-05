@@ -34,6 +34,10 @@ type BrainState struct {
 	Teams     []BrainSide `json:"teams"`
 }
 
+// drawnPlace is the place both sides of a drawn Brain match share: first and
+// second, averaged.
+const drawnPlace = 1.5
+
 // BrainQuestionCount is the default number of base questions in a match.
 const BrainQuestionCount = 5
 
@@ -136,7 +140,7 @@ func ComputeBrainResults(stateJSON string) ([]BrainResultsTeam, error) {
 		case a.Taken < b.Taken:
 			a.Place, b.Place = 2, 1
 		default:
-			a.Place, b.Place = 1.5, 1.5
+			a.Place, b.Place = drawnPlace, drawnPlace
 		}
 	}
 	return results, nil

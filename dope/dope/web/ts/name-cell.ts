@@ -17,6 +17,10 @@
 
 import {nameNode} from "./cells.js";
 
+// shrinkToFit's floor, and the font size it assumes when the style has none.
+const MIN_NAME_FONT_PX = 9;
+const DEFAULT_NAME_FONT_PX = 13;
+
 export const NAME_CELL = "name-cell";
 export const NAME_CELL_TRUNCATED = "name-cell-truncated";
 const NAME_WRAP = "name-cell-wrap";
@@ -323,9 +327,9 @@ export function controlTextOverflows(control: HTMLElement | null, label: string)
 // shrinkToFit steps a wrapping name's font down until its lines fit the cell's
 // height, to 9px at the least, and says whether it still does not fit.
 function shrinkToFit(name: HTMLElement): boolean {
-  const minSize = 9;
+  const minSize = MIN_NAME_FONT_PX;
   name.style.fontSize = "";
-  const baseSize = parseFloat(getComputedStyle(name).fontSize) || 13;
+  const baseSize = parseFloat(getComputedStyle(name).fontSize) || DEFAULT_NAME_FONT_PX;
   const tooTall = (): boolean => name.scrollHeight > name.clientHeight + 1;
   if (tooTall()) {
     let size = Math.floor(baseSize) - 1;

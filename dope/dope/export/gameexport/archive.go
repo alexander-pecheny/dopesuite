@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"pecheny.me/dopecore/idstr"
+
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 )
@@ -185,7 +187,7 @@ func marshalNoHTMLEscape(v any) ([]byte, error) {
 // history. Tables with no rows are omitted from the map.
 func loadGameRelationalRows(ctx context.Context, db *sql.DB, gameID int64) (map[string][]map[string]any, map[string]bool, error) {
 	rows := make(map[string][]map[string]any)
-	anchors := map[string]bool{auditAnchorKey("games", strconv.FormatInt(gameID, 10)): true}
+	anchors := map[string]bool{auditAnchorKey("games", idstr.Format(gameID)): true}
 	for _, spec := range gameRelSpecs {
 		got, err := queryRowMaps(ctx, db, spec.query, gameID)
 		if err != nil {
@@ -253,7 +255,7 @@ func scalarText(v any) string {
 	case nil:
 		return ""
 	case int64:
-		return strconv.FormatInt(t, 10)
+		return idstr.Format(t)
 	case float64:
 		return strconv.FormatFloat(t, 'f', -1, 64)
 	case string:

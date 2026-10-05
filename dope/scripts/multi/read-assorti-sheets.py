@@ -18,6 +18,16 @@ import openpyxl
 # Номиналы темы «Медиа-эрудита»: каждый по два вопроса.
 MEDIA_NOMINALS = [10, 10, 20, 20, 30, 30, 40, 40, 50, 50]
 
+# Where things stand on a mini-game sheet.
+HEADER_ROW = 2
+FIRST_TEAM_ROW = 4
+NAME_COL = 2
+TOTAL_COL = 3
+POINTS_COL = 4
+FIRST_CELL_COL = 5
+# The overall sheet: place, name and total, teams from this row on.
+OVERALL_FIRST_ROW = 3
+
 
 def num(value):
     try:
@@ -30,48 +40,60 @@ def cell(ws, row, col):
     return ws.cell(row=row, column=col).value
 
 
-def read_media(ws):
-    """Темы по десять вопросов: клетка — верно, неверно или пусто."""
-    themes = sum(1 for c in range(5, ws.max_column + 1)
-                 if str(cell(ws, 2, c) or "").strip().startswith("Тема"))
+def team_rows(ws, read_cells):
+    """The team rows of a mini-game sheet; read_cells(r) reads a row's cells."""
     rows = []
-    for r in range(4, ws.max_row + 1):
-        name = cell(ws, r, 2)
+    for r in range(FIRST_TEAM_ROW, ws.max_row + 1):
+        name = cell(ws, r, NAME_COL)
         if not name:
             continue
-        total, points = num(cell(ws, r, 3)), num(cell(ws, r, 4))
-        declined = isinstance(cell(ws, r, 4), str)  # «Вне зачёта»
+        total, points = num(cell(ws, r, TOTAL_COL)), num(cell(ws, r, POINTS_COL))
+        declined = isinstance(cell(ws, r, POINTS_COL), str)  # «Вне зачёта»
         if total is None:
             continue
-        cells, col = [], 5
+        rows.append({"name": str(name).strip(), "cells": read_cells(r),
+                     "total": int(total), "points": points, "declined": declined})
+    return rows
+
+
+def read_media(ws):
+    """Темы по десять вопросов: клетка — верно, неверно или пусто."""
+    themes = sum(1 for c in range(FIRST_CELL_COL, ws.max_column + 1)
+                 if str(cell(ws, HEADER_ROW, c) or "").strip().startswith("Тема"))
+
+    def read_cells(r):
+        cells, col = [], FIRST_CELL_COL
         for _ in range(themes):
             for nominal in MEDIA_NOMINALS:
                 mark = num(cell(ws, r, col))
                 cells.append(int(nominal * mark) if mark else 0)
                 col += 1
             col += 2  # столбцы «Тема» и «Σ» после каждой темы
-        rows.append({"name": str(name).strip(), "cells": cells,
-                     "total": int(total), "points": points, "declined": declined})
-    one = " ".join(f"{{-{n},0,{n}}}x2" for n in (10, 20, 30, 40, 50))
+        return cells
+
+    rows = team_rows(ws, read_cells)
+    one = " ".join(f"{{-{n},0,{n}}}x2" for n in sorted(set(MEDIA_NOMINALS)))
     return rows, " ".join([one] * themes), themes * len(MEDIA_NOMINALS)
 
 
 def read_songs(ws):
     """Столбцы по баллу: клетка — взяли или нет."""
-    width = sum(1 for c in range(5, ws.max_column + 1) if num(cell(ws, 1, c)) == 1)
-    rows = []
-    for r in range(4, ws.max_row + 1):
-        name = cell(ws, r, 2)
-        if not name:
-            continue
-        total, points = num(cell(ws, r, 3)), num(cell(ws, r, 4))
-        declined = isinstance(cell(ws, r, 4), str)
-        if total is None:
-            continue
-        rows.append({"name": str(name).strip(),
-                     "cells": [1 if num(cell(ws, r, 5 + i)) else 0 for i in range(width)],
-                     "total": int(total), "points": points, "declined": declined})
+    width = sum(1 for c in range(FIRST_CELL_COL, ws.max_column + 1) if num(cell(ws, 1, c)) == 1)
+    rows = team_rows(ws, lambda r: [1 if num(cell(ws, r, FIRST_CELL_COL + i)) else 0
+                                    for i in range(width)])
     return rows, f"{{0,1}}x{width}", width
+
+
+def read_overall(ws):
+    """The overall sheet: place, team and total."""
+    overall = []
+    for r in range(OVERALL_FIRST_ROW, ws.max_row + 1):
+        name = cell(ws, r, NAME_COL)
+        total = num(cell(ws, r, TOTAL_COL))
+        if not name or total is None:
+            continue
+        overall.append({"place": num(cell(ws, r, 1)), "name": str(name).strip(), "total": total})
+    return overall
 
 
 def main(path):
@@ -89,14 +111,7 @@ def main(path):
     # команде очков и не даёт ей задавать масштаб остальным.
     declined = sorted({row["name"] for rows in (media, songs) for row in rows if row["declined"]})
 
-    overall = []
-    ws = wb["Общая"]
-    for r in range(3, ws.max_row + 1):
-        name = cell(ws, r, 2)
-        total = num(cell(ws, r, 3))
-        if not name or total is None:
-            continue
-        overall.append({"place": num(cell(ws, r, 1)), "name": str(name).strip(), "total": total})
+    overall = read_overall(wb["Общая"])
 
     def grid(rows, width):
         out = []
