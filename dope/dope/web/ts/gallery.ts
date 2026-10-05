@@ -86,6 +86,9 @@ const groups: GroupStandingsGroup[] = [
     {name: "Ярослав Кудымов", points: 10.5, blockRounds: [2, 2.5, 3]},
     {name: "Алексей Погорелов", points: 10, blockRounds: [3, 3, 2]},
     {name: LONG, points: 8.5, blockRounds: [2, 2.5, 1]},
+  ], groupBouts: [
+    {label: "A", href: "#", blockRound: 1, started: true, sides: [{name: "Ярослав Кудымов", score: 120}, {name: "Алексей Погорелов", score: 90}, {name: LONG, score: -10}]},
+    {label: "B", href: "#", blockRound: 2, started: false, sides: [{name: "Ярослав Кудымов"}, {name: "Алексей Погорелов"}, {name: LONG}]},
   ]},
   {title: "Группа 2", blockRoundCount: 3, rows: [
     {name: "Никита Косенков", points: 9, blockRounds: [3, 3, 3]},

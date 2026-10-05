@@ -1800,6 +1800,12 @@ shootout: true
       player: () => "Игрок",
       points: () => "Очки",
     },
+    groupBouts: {
+      bout: () => "Бой",
+      round: () => "Круг",
+      score: () => "Счёт",
+      sides: () => "Участники",
+    },
     sort: {
       by: (column: string) => `Сортировать по столбцу «${column}»`,
     },

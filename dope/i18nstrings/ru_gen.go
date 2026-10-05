@@ -2531,6 +2531,12 @@ var RU = Strings{
 			Player:     func() string { return "Игрок" },
 			Points:     func() string { return "Очки" },
 		},
+		GroupBouts: StandingsGroupBoutsStrings{
+			Bout:  func() string { return "Бой" },
+			Round: func() string { return "Круг" },
+			Score: func() string { return "Счёт" },
+			Sides: func() string { return "Участники" },
+		},
 		Sort: StandingsSortStrings{
 			By: func(column string) string {
 				return fmt.Sprintf("Сортировать по столбцу «%s»", column)

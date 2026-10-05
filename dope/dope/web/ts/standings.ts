@@ -47,6 +47,18 @@ export interface GroupStandingsGroup {
   anchor?: string;
   blockRoundCount: number;
   rows: Array<{name: string; points: number; blockRounds: number[]; bouts?: string[]}>;
+  // groupBouts is the group's bouts, listed under its table.
+  groupBouts?: GroupBout[];
+}
+
+// GroupBout is one bout in the list under a group's table: its letter, the
+// link to it, its круг and who sits in it, with the score once it began.
+export interface GroupBout {
+  label: string;
+  href?: string;
+  blockRound?: number;
+  sides: Array<{name: string; score?: number | string | null}>;
+  started: boolean;
 }
 
 export interface GroupStandingsOptions {
@@ -295,9 +307,49 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[], options: 
       ]),
     }));
     item.appendChild(wrapper);
+    if (group.groupBouts?.length) item.appendChild(groupBoutsTable(group.groupBouts));
     wrap.appendChild(item);
   }
   return wrap;
+}
+
+// groupBoutsTable lists a group's bouts under its table, the short way the
+// СЧР sheets do: a page's tabs go by круг, and this is the same bouts by
+// group. A bout's letter links to it.
+export function groupBoutsTable(bouts: readonly GroupBout[]): HTMLElement {
+  const wrapper = document.createElement("div");
+  wrapper.className = "results-wrapper";
+  const rounds = bouts.some((bout) => bout.blockRound);
+  wrapper.appendChild(standingsTable({
+    className: "group-bouts-table",
+    columns: [
+      {label: S.standings.groupBouts.bout(), kind: "num"},
+      ...(rounds ? [{label: S.standings.groupBouts.round(), kind: "num" as const}] : []),
+      {label: S.standings.groupBouts.sides(), kind: "name", pin: false},
+      {label: S.standings.groupBouts.score(), kind: "num"},
+    ],
+    rows: bouts.map((bout) => [
+      boutLabelCell(bout),
+      ...(rounds ? [bout.blockRound || ""] : []),
+      bout.sides.map((side) => side.name || "—").join(" — "),
+      bout.started ? bout.sides.map((side) => formatScore(side.score)).join(" : ") : "",
+    ]),
+  }));
+  return wrapper;
+}
+
+function boutLabelCell(bout: GroupBout): CellContentItem {
+  if (!bout.href) return bout.label;
+  const link = document.createElement("a");
+  link.className = "group-round-link";
+  link.href = bout.href;
+  link.textContent = bout.label;
+  return td(link);
+}
+
+function formatScore(score: number | string | null | undefined): string {
+  if (score === null || score === undefined || score === "") return "0";
+  return formatDisplayText(typeof score === "number" ? Number(score.toFixed(SCORE_DECIMALS)) : score);
 }
 
 // roundCell is a player's points in one block round, a link to the bout he

@@ -1778,6 +1778,12 @@ export type Strings = {
       player: () => string;
       points: () => string;
     };
+    groupBouts: {
+      bout: () => string;
+      round: () => string;
+      score: () => string;
+      sides: () => string;
+    };
     sort: {
       by: (column: string) => string;
     };

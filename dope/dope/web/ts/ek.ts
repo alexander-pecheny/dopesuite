@@ -655,7 +655,20 @@ function buildGroupTable(tab: GameTab | undefined): HTMLElement {
         if (entrant.label) rows.push({id: 0, name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0), bouts: []});
       }
     }
-    return {title: stage ? groupLabel(stage as StageRef) : code, anchor: `group-${code}`, blockRoundCount, rows};
+    const groupBouts = planned.map((match) => {
+      const view = page.view(match.code || "");
+      const state = stateOf(match.code || "");
+      const values = valuesOf(view);
+      const sides = !view ? [] : seatsOf(view).map((id, seat) => ({name: seatName(view, seat), score: ek.scoreSection(state.sections.get(id), values).total}));
+      return {
+        label: boutLetters.get(match.code || "") || match.code || "",
+        href: boutHref(match.code || ""),
+        blockRound: Number(match.round) || undefined,
+        sides,
+        started: Boolean(view?.finished) || sides.some((side) => Number(side.score)),
+      };
+    });
+    return {title: stage ? groupLabel(stage as StageRef) : code, anchor: `group-${code}`, blockRoundCount, rows, groupBouts};
   });
   return buildGroupStandingsView(groups, {boutHref: boutHref});
 }

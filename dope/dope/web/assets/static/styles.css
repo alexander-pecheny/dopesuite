@@ -77,6 +77,7 @@
   --od-detailed-name-extra-col: 3em;
   --results-place-col-mobile: 48px;
   --results-team-col-mobile: 101px;
+  --group-bouts-pairing-col-mobile: 210px;
   --results-team-pad-mobile: var(--space-1-5);
   --results-total-col-mobile: 42px;
   --results-num-col-mobile: 40px;
@@ -1368,6 +1369,12 @@ button.seat-picker-control {
 .group-standings-table {
   --results-place-col: 48px;
   --results-team-col: 260px;
+}
+
+/* The list of a group's bouts: the pairing is as wide as two names, and a
+   longer one fades. */
+.results-table.group-bouts-table {
+  --results-team-col: 420px;
 }
 
 /* The folded «Пересев» tab: every этап's table stacked, each under the name
@@ -2786,6 +2793,8 @@ html:has(.game-host-top) {
 .stage-standings-table .results-team,
 .group-standings-table thead th.results-team-head,
 .group-standings-table .results-team,
+.group-bouts-table thead th.results-team-head,
+.group-bouts-table .results-team,
 .troika-swiss-table thead th.results-team-head,
 .troika-swiss-table .results-team {
   width: var(--results-team-col);
@@ -3346,6 +3355,11 @@ html:has(.game-host-top) {
     --results-total-col: var(--results-total-col-mobile);
   }
 
+  /* A bout's pairing is two names; it takes the row a phone has left. */
+  .results-table.group-bouts-table {
+    --results-team-col: var(--group-bouts-pairing-col-mobile);
+  }
+
   .match-table.od-detailed {
     --od-detailed-name-col: calc(var(--od-detailed-name-base-col-compact) + var(--od-detailed-name-extra-col));
   }
@@ -3878,15 +3892,19 @@ html:has(.game-host-top) {
   color: var(--blue);
 }
 
-/* A player's round in the groups tab leads to the bout he played it in. */
-.group-standings-table .group-round-link {
+/* A player's round in the groups tab leads to the bout he played it in, and
+   so does a bout's letter in the list under a group's table. */
+.group-standings-table .group-round-link,
+.group-bouts-table .group-round-link {
   display: block;
   color: inherit;
   text-decoration: none;
 }
 
 .group-standings-table .group-round-link:hover,
-.group-standings-table .group-round-link:focus {
+.group-standings-table .group-round-link:focus,
+.group-bouts-table .group-round-link:hover,
+.group-bouts-table .group-round-link:focus {
   color: var(--blue);
 }
 
@@ -4668,6 +4686,11 @@ body.is-fullscreen.od-page .match-main {
 .troika-groups .crosstable {
   --results-place-col: 28px;
   --results-team-col: 140px;
+  font-size: var(--text-xs);
+}
+
+/* The list of a группа's bouts under its table reads at the table's size. */
+.troika-groups .group-bouts-table {
   font-size: var(--text-xs);
 }
 

@@ -63,6 +63,7 @@ interface FestInfo {
 interface SchemeMatch {
   code?: string;
   title?: string;
+  round?: number;
   slots?: SchemeSlotRef[];
 }
 
@@ -879,6 +880,8 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
           finished: Boolean(view.finished),
           started: troika.started(state),
           href: boutHref(planned.code || ""),
+          label: boutLetters.get(planned.code || "") || planned.code || "",
+          blockRound: Number(planned.round) || undefined,
         }];
       }),
       standings: standingsByParticipant(page.festStage(stage.code || "")),
