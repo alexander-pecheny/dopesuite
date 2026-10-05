@@ -2531,6 +2531,11 @@ var RU = Strings{
 			Player:     func() string { return "Игрок" },
 			Points:     func() string { return "Очки" },
 		},
+		Sort: StandingsSortStrings{
+			By: func(column string) string {
+				return fmt.Sprintf("Сортировать по столбцу «%s»", column)
+			},
+		},
 	},
 	Storage: StorageStrings{
 		Match: StorageMatchStrings{

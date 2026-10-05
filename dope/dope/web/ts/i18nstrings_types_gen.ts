@@ -1778,6 +1778,9 @@ export type Strings = {
       player: () => string;
       points: () => string;
     };
+    sort: {
+      by: (column: string) => string;
+    };
   };
   storage: {
     match: {

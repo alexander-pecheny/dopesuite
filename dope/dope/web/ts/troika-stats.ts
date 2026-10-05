@@ -139,6 +139,7 @@ export function buildTroikaStatsTable(rows: ReadonlyArray<TroikaPlayerStatsRow>)
   }
   wrapper.appendChild(standingsTable({
     className: "ek-stats-table",
+    sortKey: "troika-stats",
     columns: [
       {label: S.troika.stats.player(), kind: "name", className: "ek-stats-name ek-stats-player"},
       {label: S.troika.stats.team(), kind: "name", className: "ek-stats-name"},

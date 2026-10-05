@@ -5018,3 +5018,18 @@ body.is-fullscreen.od-page .match-main {
 .anchor-tail {
   pointer-events: none;
 }
+
+/* A statistics table sorts by a click on a column's head (standings.ts
+   makeSortable); the column it is sorted by carries an arrow. */
+.results-table .sortable-head {
+  cursor: pointer;
+  user-select: none;
+}
+
+.results-table .sortable-head[aria-sort="descending"]::after {
+  content: " ↓";
+}
+
+.results-table .sortable-head[aria-sort="ascending"]::after {
+  content: " ↑";
+}

@@ -1800,6 +1800,9 @@ shootout: true
       player: () => "Игрок",
       points: () => "Очки",
     },
+    sort: {
+      by: (column: string) => `Сортировать по столбцу «${column}»`,
+    },
   },
   storage: {
     match: {

@@ -111,6 +111,92 @@ export interface StandingsSpec {
   columns: StandingsColumn[];
   // A cell is text, or a cell the caller built when it needs more than text.
   rows: CellContentItem[][];
+  // sortKey makes the columns sortable by a click on their head, and names
+  // the table so a redraw keeps the reader's sort (a statistics tab redraws
+  // on every live event).
+  sortKey?: string;
+}
+
+// SortChoice is the column a reader sorted a table by, and whether they
+// turned it round from its natural order.
+interface SortChoice {
+  column: number;
+  turned: boolean;
+}
+
+// chosenSorts is each sortable table's sort, by its sortKey, for the page's
+// lifetime.
+const chosenSorts = new Map<string, SortChoice>();
+
+// sortedOrder is the order a column's values sort in, as row indexes, and
+// whether the column is numbers. Numbers run from the biggest down and text
+// from A, unless the reader turned the column round; a tie keeps the order
+// the table came in.
+export function sortedOrder(values: ReadonlyArray<number | string>, turned: boolean): {order: number[]; numeric: boolean} {
+  const numeric = values.every((value) => typeof value === "number" || value === "");
+  const order = values.map((_, index) => index).sort((a, b) => {
+    let by = numeric
+      ? (Number(values[b]) || 0) - (Number(values[a]) || 0)
+      : String(values[a]).localeCompare(String(values[b]), "ru");
+    if (turned) by = -by;
+    return by || a - b;
+  });
+  return {order, numeric};
+}
+
+// sortRows orders the body's rows by a column (sortedOrder).
+function sortRows(table: HTMLTableElement, choice: SortChoice): void {
+  const body = table.tBodies[0];
+  if (!body) return;
+  const rows = [...body.rows];
+  const {order, numeric} = sortedOrder(rows.map((row) => sortValue(row.cells[choice.column])), choice.turned);
+  order.forEach((index, at) => {
+    const row = rows[index];
+    row.classList.toggle("results-group-first", at === 0);
+    row.classList.toggle("results-group-last", at === rows.length - 1);
+    body.appendChild(row);
+  });
+  const heads = table.tHead?.rows[0]?.cells || [];
+  [...heads].forEach((head, index) => {
+    if (head.classList.contains("sortable-head")) head.setAttribute("aria-sort", index !== choice.column ? "none" : numeric !== choice.turned ? "descending" : "ascending");
+  });
+}
+
+// sortValue reads a cell as the sort compares it: a number where the cell is
+// one (the typographic minus and a decimal comma included), else its text.
+export function sortValue(cell: Pick<Element, "textContent"> | undefined): number | string {
+  const text = (cell?.textContent || "").trim();
+  const number = Number(text.replace("\u2212", "-").replace(",", "."));
+  return text !== "" && Number.isFinite(number) ? number : text.toLocaleLowerCase("ru");
+}
+
+// makeSortable lets a reader sort the table by any column with a head, and
+// restores the sort they chose last.
+function makeSortable(table: HTMLTableElement, key: string): void {
+  const heads = [...(table.tHead?.rows[0]?.cells || [])];
+  heads.forEach((head, column) => {
+    const label = (head.textContent || "").trim();
+    if (!label) return;
+    head.classList.add("sortable-head");
+    head.tabIndex = 0;
+    head.title = S.standings.sort.by(label);
+    head.setAttribute("aria-label", head.title);
+    head.setAttribute("aria-sort", "none");
+    const pick = () => {
+      const was = chosenSorts.get(key);
+      const choice = {column, turned: was?.column === column ? !was.turned : false};
+      chosenSorts.set(key, choice);
+      sortRows(table, choice);
+    };
+    head.addEventListener("click", pick);
+    head.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      pick();
+    });
+  });
+  const chosen = chosenSorts.get(key);
+  if (chosen) sortRows(table, chosen);
 }
 
 const STANDINGS_KIND_CLASSES: Record<NonNullable<StandingsColumn["kind"]>, {head: string; cell: string}> = {
@@ -121,7 +207,7 @@ const STANDINGS_KIND_CLASSES: Record<NonNullable<StandingsColumn["kind"]>, {head
 
 // standingsTable is the one builder for every standings-shaped table — a
 // place, a name, numbers — so no table restates the results-table skin.
-export function standingsTable({className, columns, rows}: StandingsSpec): HTMLTableElement {
+export function standingsTable({className, columns, rows, sortKey}: StandingsSpec): HTMLTableElement {
   const table = document.createElement("table");
   table.className = classNames("results-table", className);
   const pinKeys = columns.map(pinKeyOf);
@@ -145,6 +231,7 @@ export function standingsTable({className, columns, rows}: StandingsSpec): HTMLT
     });
     body.appendChild(tr);
   });
+  if (sortKey) makeSortable(table, sortKey);
   return table;
 
   // pinKeyOf is the pinned column a column is, or "" when it scrolls: the

@@ -8,3 +8,8 @@ place = "М"
 player = "Игрок"
 points = "Очки"
 block_round = 'Круг {{.n}}'
+
+[sort]
+# A sortable column's head: its tooltip and aria-label. A click sorts the
+# table by the column, a second click the other way round.
+by = 'Сортировать по столбцу «{{.column}}»'
