@@ -194,6 +194,7 @@ var IconHouse = base.IconHouse
 var IconLink = base.IconLink
 var IconList = base.IconList
 var IconListChecks = base.IconListChecks
+var IconListPlus = base.IconListPlus
 var IconLock = base.IconLock
 var IconLogIn = base.IconLogIn
 var IconMaximize2 = base.IconMaximize2

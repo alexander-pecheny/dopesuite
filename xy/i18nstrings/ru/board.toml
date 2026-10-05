@@ -808,6 +808,14 @@ type_change = "Тип списка…"
 # changing it does and does not do.
 type_title = "Тип списка"
 type_hint = "Тип решает, какую карточку создаёт кнопка «Добавить карточку». На уже созданные карточки не влияет."
+# ⋯ entry and the modal it opens: a new list placed next to this one, so a
+# board with many lists needs no scrolling to the add-list column and back.
+add_label = "Добавить список"
+add_name = "Название списка"
+add_where = "Где"
+add_after = "После этого списка"
+add_before = "Перед этим списком"
+add_failed = 'Не удалось создать список: {{.error}}'
 
 [count]
 # Question count under a list head ("5 вопросов").

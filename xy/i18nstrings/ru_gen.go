@@ -478,8 +478,16 @@ var RU = Strings{
 			},
 		},
 		List: BoardListStrings{
-			AddCard:        func() string { return "Добавить карточку" },
+			AddAfter:  func() string { return "После этого списка" },
+			AddBefore: func() string { return "Перед этим списком" },
+			AddCard:   func() string { return "Добавить карточку" },
+			AddFailed: func(error string) string {
+				return fmt.Sprintf("Не удалось создать список: %s", error)
+			},
+			AddLabel:       func() string { return "Добавить список" },
+			AddName:        func() string { return "Название списка" },
 			AddPlaceholder: func() string { return "+ Новый список" },
+			AddWhere:       func() string { return "Где" },
 			Create:         func() string { return "Создать список" },
 			GroupFallback:  func() string { return "связанные списки" },
 			GroupTitle: func() string {

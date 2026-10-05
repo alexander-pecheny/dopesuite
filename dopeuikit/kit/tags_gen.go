@@ -540,6 +540,7 @@ var IconHouse = Attr{Name: "icon", Value: "house"}
 var IconLink = Attr{Name: "icon", Value: "link"}
 var IconList = Attr{Name: "icon", Value: "list"}
 var IconListChecks = Attr{Name: "icon", Value: "list-checks"}
+var IconListPlus = Attr{Name: "icon", Value: "list-plus"}
 var IconLock = Attr{Name: "icon", Value: "lock"}
 var IconLogIn = Attr{Name: "icon", Value: "log-in"}
 var IconMaximize2 = Attr{Name: "icon", Value: "maximize-2"}

@@ -389,8 +389,14 @@ export type Strings = {
       title: () => string;
     };
     list: {
+      addAfter: () => string;
+      addBefore: () => string;
       addCard: () => string;
+      addFailed: (error: string) => string;
+      addLabel: () => string;
+      addName: () => string;
       addPlaceholder: () => string;
+      addWhere: () => string;
       create: () => string;
       groupFallback: () => string;
       groupTitle: () => string;

@@ -385,6 +385,23 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         button submit @board.actions.save
         button kind="ghost" id="listTypeCancel" @board.actions.cancel
 
+  -- the ⋯ add-list entry: a new list right after or before this one
+  modal id="addListOverlay" label=@board.list.add_label title=@board.list.add_label
+    form id="addListForm" dir="col"
+      field label=@board.list.add_name
+        textfield id="addListName" required autocomplete="off"
+      field label=@board.list.type_label
+        selectfield id="addListType"
+          option value="normal" @board.list.type_chgk
+          option value="si" @board.list.type_si
+      field label=@board.list.add_where
+        radio id="addListAfter" name="addListWhere" value="after" checked @board.list.add_after
+        radio id="addListBefore" name="addListWhere" value="before" @board.list.add_before
+      message id="addListMessage"
+      row gap="sm" wrap
+        button submit @board.list.create
+        button kind="ghost" id="addListCancel" @board.actions.cancel
+
   -- move / copy list overlay (within board → re-rank; other board →
   -- client-side re-encryption of the list + its cards)
   modal id="moveListOverlay" label=@board.movelist.title title=@board.movelist.title done=@board.actions.close doneid="moveListClose"
