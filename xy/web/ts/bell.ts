@@ -10,6 +10,9 @@ import type { BoardCard } from "./unlock.js";
 import type { DataKey } from "./crypto.js";
 import S from "./i18nstrings.js";
 
+// Characters of the comment shown under each notification.
+const PREVIEW_CHARS = 120;
+
 const { fetchJSON, jpost, el, deriveTitle } = xyApp;
 
 export interface BellUI {
@@ -118,7 +121,7 @@ export function createBell(board: Board, ui: BellUI, deps: BellDeps): Bell {
         let preview = "";
         try { preview = await xyCrypto.decField(deps.mustDK(), ev.payload_enc || ""); } catch (_) {}
         if (ev.type === "comment") preview = decodeCommentPayload(preview).text;
-        bodyWrap.append(el("div", { class: "notif-row-preview u-clip-fade", text: deriveTitle(preview, 120) }));
+        bodyWrap.append(el("div", { class: "notif-row-preview u-clip-fade", text: deriveTitle(preview, PREVIEW_CHARS) }));
       }
       row.append(bodyWrap);
       row.addEventListener("click", () => {

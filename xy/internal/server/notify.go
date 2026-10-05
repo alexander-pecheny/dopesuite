@@ -4,10 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"log"
-	"strconv"
 	"time"
 
 	xystrings "xy/i18nstrings"
+
+	"pecheny.me/dopecore/idstr"
+)
+
+const (
+	// notifyLookupTimeout bounds the database reads that build a notification.
+	notifyLookupTimeout = 3 * time.Second
+	// notifySendTimeout bounds one message to telegram.
+	notifySendTimeout = 10 * time.Second
 )
 
 // The telegram nudge for a Mention: who + board + card link, nothing from
@@ -26,7 +34,7 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 	// All the lookups run inline (they are point reads on the same SQLite);
 	// only the network call is fire-and-forget, so nothing here outlives the
 	// request's owner of s.db.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), notifyLookupTimeout)
 	defer cancel()
 	targets := map[int64]bool{}
 	mentioned := map[int64]bool{}
@@ -64,9 +72,9 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 	if boardName.String != "" {
 		where = str.Notify.Mention.BoardNamed(boardName.String)
 	}
-	link := publicURL() + "/board/" + strconv.FormatInt(bid, 10)
+	link := publicURL() + "/board/" + idstr.Format(bid)
 	if cardID != 0 {
-		link += "?card=" + strconv.FormatInt(cardID, 10)
+		link += "?card=" + idstr.Format(cardID)
 	}
 	for id := range targets {
 		var tgID sql.NullInt64
@@ -80,7 +88,7 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 		}
 		text := author.String + " " + verb + " " + where + ": " + link
 		go func(tg int64) {
-			sctx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
+			sctx, scancel := context.WithTimeout(context.Background(), notifySendTimeout)
 			defer scancel()
 			s.notifyDM(sctx, tg, text)
 		}(tgID.Int64)
@@ -95,7 +103,7 @@ func (s *server) notifyJoinRequest(bid, requesterID int64) {
 	if s.bot == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), notifyLookupTimeout)
 	defer cancel()
 	var requester sql.NullString
 	var ownerTg sql.NullInt64
@@ -126,9 +134,9 @@ select u.telegram_user_id from boards b join users u on u.id = b.owner_user_id w
 		where = str.Notify.Join.BoardNamed(boardName)
 	}
 	text := str.Notify.Join.Text(requester.String, where,
-		publicURL()+"/board/"+strconv.FormatInt(bid, 10))
+		publicURL()+"/board/"+idstr.Format(bid))
 	go func(tg int64) {
-		sctx, scancel := context.WithTimeout(context.Background(), 10*time.Second)
+		sctx, scancel := context.WithTimeout(context.Background(), notifySendTimeout)
 		defer scancel()
 		s.notifyDM(sctx, tg, text)
 	}(ownerTg.Int64)

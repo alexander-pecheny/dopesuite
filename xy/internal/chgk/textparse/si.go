@@ -249,6 +249,13 @@ func (p *siParser) isFieldLabel(text string) bool {
 	return false
 }
 
+// The heading levels an SI document's outline uses.
+const (
+	battleHeading = 1
+	metaHeading   = 2
+	themeHeading  = 3
+)
+
 // heading reads a line the document itself marked as a heading: a battle at the
 // top level, a theme at the third, and whatever the text says regardless.
 func (p *siParser) heading(level int, text string) {
@@ -263,14 +270,14 @@ func (p *siParser) heading(level int, text string) {
 		return
 	}
 	switch level {
-	case 1:
+	case battleHeading:
 		p.push("battle", p.apply(text))
-	case 2:
+	case metaHeading:
 		if reThemesHeader.MatchString(text) {
 			p.inThemeList = true
 		}
 		p.push("meta", p.apply(text))
-	case 3:
+	case themeHeading:
 		p.push("theme", p.apply(reLeadingNum.ReplaceAllString(text, "")))
 		p.lastThemeHeading, p.hasLastTheme = text, true
 		p.afterTheme = true

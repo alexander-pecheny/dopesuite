@@ -14,7 +14,7 @@
 // imports straight away. A .docx has been through a lossy heuristic parse, so it
 // goes to the verification screen first.
 
-import { xyApp } from "./app.js";
+import { xyApp, ISO_DATE_LEN } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
@@ -26,6 +26,9 @@ import { sniffBundle } from "./bundleimport.js";
 import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board, BoardPanel } from "./panels.js";
 import S from "./i18nstrings.js";
+
+// Quiet time after the last option change before the preview is redrawn.
+const PREVIEW_DEBOUNCE_MS = 200;
 
 const { jpost, byId, errMsg } = xyApp;
 const { keyBetween } = xyRank;
@@ -71,7 +74,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     void sniffBundle(file).then((b) => {
       sniffed = b;
       showKind(b
-        ? S.import.pack.sniffedArchive(b.bundle.board.name, b.bundle.exported_at.slice(0, 10))
+        ? S.import.pack.sniffedArchive(b.bundle.board.name, b.bundle.exported_at.slice(0, ISO_DATE_LEN))
         : S.import.pack.sniffedPackage());
     });
   });
@@ -213,7 +216,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     let t: ReturnType<typeof setTimeout> | null = null;
     return () => {
       if (t) clearTimeout(t);
-      t = setTimeout(() => { if (importCtx) renderImportPreview(); }, 200);
+      t = setTimeout(() => { if (importCtx) renderImportPreview(); }, PREVIEW_DEBOUNCE_MS);
     };
   }
 

@@ -11,6 +11,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"math"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -39,6 +40,9 @@ const ExportDPI = 200.0
 // second generation of loss at worst, and an invisible one.
 const jpegQuality = 85
 
+// opaqueAlpha is the alpha RGBA() reports for a fully opaque pixel.
+const opaqueAlpha = 0xffff
+
 // ForExport encodes an image for embedding at the size it will be drawn
 // (widthIn × heightIn, in inches): downscaled to ExportDPI and, if it has no
 // transparency, encoded as JPEG rather than PNG.
@@ -61,7 +65,7 @@ func ForExport(raw []byte, widthIn, heightIn float64) (data []byte, ext string, 
 	if err != nil {
 		return nil, "", err
 	}
-	img = downscale(img, int(widthIn*ExportDPI+0.5), int(heightIn*ExportDPI+0.5))
+	img = downscale(img, int(math.Round(widthIn*ExportDPI)), int(math.Round(heightIn*ExportDPI)))
 
 	var buf bytes.Buffer
 	if hasAlpha(img) {
@@ -85,8 +89,8 @@ func downscale(img image.Image, maxW, maxH int) image.Image {
 		return img
 	}
 	scale := min(float64(maxW)/float64(b.Dx()), float64(maxH)/float64(b.Dy()))
-	w := max(int(float64(b.Dx())*scale+0.5), 1)
-	h := max(int(float64(b.Dy())*scale+0.5), 1)
+	w := max(int(math.Round(float64(b.Dx())*scale)), 1)
+	h := max(int(math.Round(float64(b.Dy())*scale)), 1)
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
 	return dst
@@ -105,7 +109,7 @@ func hasAlpha(img image.Image) bool {
 	b := img.Bounds()
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
-			if _, _, _, a := img.At(x, y).RGBA(); a != 0xffff {
+			if _, _, _, a := img.At(x, y).RGBA(); a != opaqueAlpha {
 				return true
 			}
 		}
@@ -128,27 +132,8 @@ func Optimize(data []byte, ext string, quality int) ([]byte, string, bool) {
 	if err != nil {
 		return nil, "", false
 	}
-	type candidate struct {
-		ext  string
-		data []byte
-	}
-	var candidates []candidate
-	if HasAlpha(img) {
-		if out, err := EncodePNG(img); err == nil {
-			candidates = append(candidates, candidate{"png", out})
-		}
-	} else {
-		if out, err := EncodeJPEG(img, quality); err == nil {
-			candidates = append(candidates, candidate{"jpg", out})
-		}
-		if ext == "png" {
-			if out, err := EncodePNG(img); err == nil {
-				candidates = append(candidates, candidate{"png", out})
-			}
-		}
-	}
 	best := candidate{}
-	for _, c := range candidates {
+	for _, c := range reencodings(img, ext, quality) {
 		if len(c.data) >= len(data) {
 			continue
 		}
@@ -160,6 +145,31 @@ func Optimize(data []byte, ext string, quality int) ([]byte, string, bool) {
 		return nil, "", false
 	}
 	return best.data, best.ext, true
+}
+
+type candidate struct {
+	ext  string
+	data []byte
+}
+
+// reencodings is every encoding Optimize weighs against the original bytes.
+func reencodings(img image.Image, ext string, quality int) []candidate {
+	var candidates []candidate
+	if HasAlpha(img) {
+		if out, err := EncodePNG(img); err == nil {
+			candidates = append(candidates, candidate{"png", out})
+		}
+		return candidates
+	}
+	if out, err := EncodeJPEG(img, quality); err == nil {
+		candidates = append(candidates, candidate{"jpg", out})
+	}
+	if ext == "png" {
+		if out, err := EncodePNG(img); err == nil {
+			candidates = append(candidates, candidate{"png", out})
+		}
+	}
+	return candidates
 }
 
 // EncodeJPEG is Pillow's `save(quality=…, optimize=True)`: Go's encoder writes

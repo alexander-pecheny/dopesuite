@@ -59,10 +59,7 @@ func composeDocx(args []string) error {
 	// no-break pass through its standalone wrapper, which ignores the switches.
 	noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	lang, labelsFile, err := language()
@@ -132,7 +129,7 @@ func composeDocxFile(s source, opts docx.Options, randomize, addTS bool) (string
 		return "", err
 	}
 	out := outputName(s.path, "docx", docxSuffix(opts), addTS)
-	return out, os.WriteFile(out, data, 0o644)
+	return out, os.WriteFile(out, data, outputFileMode)
 }
 
 // docxSuffix is chgksuite's addsuffix: the export's switches, in its filename.
@@ -153,7 +150,7 @@ func docxSuffix(o docx.Options) string {
 // outputName ports make_filename: the input's basename, the switches' suffix,
 // an optional timestamp, and the new extension, beside the input.
 func outputName(in, ext, suffix string, addTS bool) string {
-	base := strings.TrimSuffix(filepath.Base(in), filepath.Ext(in)) + suffix
+	base := stem(in) + suffix
 	if addTS {
 		base += time.Now().Format("_20060102T1504")
 	}
@@ -237,6 +234,11 @@ func loadSources(files []string, merge bool) ([]source, error) {
 	return []source{merged}, nil
 }
 
+// stem is a file's name without its directory and extension.
+func stem(path string) string {
+	return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+}
+
 func parseSource(in string) (fsource.Doc, error) {
 	src, err := os.ReadFile(in)
 	if err != nil {
@@ -250,7 +252,7 @@ func parseSource(in string) (fsource.Doc, error) {
 func mergedName(files []string) string {
 	stems := make([][]rune, len(files))
 	for i, f := range files {
-		stems[i] = []rune(strings.TrimSuffix(filepath.Base(f), filepath.Ext(f)))
+		stems[i] = []rune(stem(f))
 	}
 	n := len(stems[0])
 	for _, s := range stems[1:] {

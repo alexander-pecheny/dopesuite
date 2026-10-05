@@ -20,6 +20,44 @@ import (
 	"xy/internal/chgk/typo"
 )
 
+// FIB layout ([MS-DOC] 2.5.1).
+const (
+	fibRgW        = 0x22 // where the variable part starts, after FibBase and csw
+	identWord6    = 0xA5DC
+	identWord95   = 0xA59B
+	identWord97   = 0xA5EC
+	minNFib       = 0x6A // the oldest nFib with the Word 97 layout
+	flagEncrypted = 0x0100
+	flagWhichTbl  = 0x0200 // the piece table is in 1Table, not 0Table
+	longSize      = 4
+	ccpTextLong   = 3 // ccpText is the fourth entry of FibRgLw97
+	fcLcbPairSize = 8
+	clxPair       = 33 // fcClx/lcbClx is the 34th pair of FibRgFcLcb97
+)
+
+// Clx and piece table layout ([MS-DOC] 2.9.38).
+const (
+	clxtPrc      = 0x01
+	clxtPcdt     = 0x02
+	prcHeaderLen = 3 // clxt plus cbGrpprl
+	pcdtHeadLen  = 5 // clxt plus lcb
+	cpSize       = 4
+	pcdSize      = 8
+	fcCompressed = 1 << 30 // the piece is cp1252 at fc/2
+)
+
+// Control characters in the text stream.
+const (
+	fieldBegin     = 0x13
+	fieldSeparator = 0x14
+	fieldEnd       = 0x15
+	cellMark       = 0x07 // table cell or row end
+	pageBreak      = 0x0C // page or section break
+	lineBreak      = 0x0B
+	nbHyphen       = 0x1E
+	softHyphen     = 0x1F
+)
+
 var (
 	// ErrEncrypted is a password-protected document.
 	ErrEncrypted = errors.New("the .doc is password-protected")
@@ -41,38 +79,38 @@ func ToText(data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(wd) < 0x22 {
+	if len(wd) < fibRgW {
 		return "", fmt.Errorf("doc: no WordDocument stream")
 	}
 	le := binary.LittleEndian
 	switch ident := le.Uint16(wd); {
-	case ident == 0xA5DC || ident == 0xA59B:
+	case ident == identWord6 || ident == identWord95:
 		return "", ErrOldWord
-	case ident != 0xA5EC:
+	case ident != identWord97:
 		return "", fmt.Errorf("doc: unknown FIB identifier %#x", ident)
 	}
-	if nFib := le.Uint16(wd[2:]); nFib < 0x6A {
+	if nFib := le.Uint16(wd[2:]); nFib < minNFib {
 		return "", ErrOldWord
 	}
 	flags := le.Uint16(wd[0x0A:])
-	if flags&0x0100 != 0 {
+	if flags&flagEncrypted != 0 {
 		return "", ErrEncrypted
 	}
 
 	// The FIB's variable part: csw shorts, cslw longs (ccpText is the fourth),
 	// then cbRgFcLcb pairs of fc/lcb, of which fcClx/lcbClx is the 34th.
 	csw := int(le.Uint16(wd[0x20:]))
-	p := 0x22 + 2*csw
+	p := fibRgW + 2*csw
 	if p+2 > len(wd) {
 		return "", fmt.Errorf("doc: truncated FIB")
 	}
 	cslw := int(le.Uint16(wd[p:]))
 	rglw := p + 2
-	p = rglw + 4*cslw
-	if cslw < 4 || p+2 > len(wd) {
+	p = rglw + longSize*cslw
+	if cslw <= ccpTextLong || p+2 > len(wd) {
 		return "", fmt.Errorf("doc: truncated FIB")
 	}
-	ccpText := le.Uint32(wd[rglw+12:])
+	ccpText := le.Uint32(wd[rglw+ccpTextLong*longSize:])
 	if ccpText > uint32(len(wd)) {
 		// Every character takes at least a byte of the stream; pieces may
 		// overlap, so without this cap a crafted file could ask for gigabytes.
@@ -80,14 +118,14 @@ func ToText(data []byte) (string, error) {
 	}
 	cbRgFcLcb := int(le.Uint16(wd[p:]))
 	fcLcb := p + 2
-	if cbRgFcLcb < 34 || fcLcb+34*8 > len(wd) {
+	if cbRgFcLcb <= clxPair || fcLcb+(clxPair+1)*fcLcbPairSize > len(wd) {
 		return "", fmt.Errorf("doc: truncated FIB")
 	}
-	fcClx := le.Uint32(wd[fcLcb+33*8:])
-	lcbClx := le.Uint32(wd[fcLcb+33*8+4:])
+	fcClx := le.Uint32(wd[fcLcb+clxPair*fcLcbPairSize:])
+	lcbClx := le.Uint32(wd[fcLcb+clxPair*fcLcbPairSize+longSize:])
 
 	tableName := "0Table"
-	if flags&0x0200 != 0 {
+	if flags&flagWhichTbl != 0 {
 		tableName = "1Table"
 	}
 	table, ok, err := c.stream(tableName)
@@ -113,27 +151,27 @@ func ToText(data []byte) (string, error) {
 // cp1252 at fc/2.
 func readPieces(wd, clx []byte, ccpText uint32) ([]rune, error) {
 	le := binary.LittleEndian
-	for len(clx) > 0 && clx[0] == 0x01 {
-		if len(clx) < 3 {
+	for len(clx) > 0 && clx[0] == clxtPrc {
+		if len(clx) < prcHeaderLen {
 			return nil, fmt.Errorf("doc: truncated Clx")
 		}
-		n := 3 + int(le.Uint16(clx[1:]))
+		n := prcHeaderLen + int(le.Uint16(clx[1:]))
 		if n > len(clx) {
 			return nil, fmt.Errorf("doc: truncated Clx")
 		}
 		clx = clx[n:]
 	}
-	if len(clx) < 5 || clx[0] != 0x02 {
+	if len(clx) < pcdtHeadLen || clx[0] != clxtPcdt {
 		return nil, fmt.Errorf("doc: no piece table")
 	}
 	lcb := int(le.Uint32(clx[1:]))
-	plc := clx[5:]
-	if lcb > len(plc) || (lcb-4)%12 != 0 {
+	plc := clx[pcdtHeadLen:]
+	if lcb > len(plc) || (lcb-cpSize)%(cpSize+pcdSize) != 0 {
 		return nil, fmt.Errorf("doc: bad piece table size")
 	}
-	n := (lcb - 4) / 12
-	cp := func(i int) uint32 { return le.Uint32(plc[4*i:]) }
-	pcd := plc[4*(n+1):]
+	n := (lcb - cpSize) / (cpSize + pcdSize)
+	cp := func(i int) uint32 { return le.Uint32(plc[cpSize*i:]) }
+	pcd := plc[cpSize*(n+1):]
 	dec := charmap.Windows1252.NewDecoder()
 
 	var out []rune
@@ -146,9 +184,9 @@ func readPieces(wd, clx []byte, ccpText uint32) ([]rune, error) {
 		if left := ccpText - uint32(len(out)); count > left {
 			count = left
 		}
-		fc := le.Uint32(pcd[8*i+2:])
-		if fc&0x40000000 != 0 {
-			off := uint64(fc&^0x40000000) / 2
+		fc := le.Uint32(pcd[pcdSize*i+2:])
+		if fc&fcCompressed != 0 {
+			off := uint64(fc&^fcCompressed) / 2
 			if off+uint64(count) > uint64(len(wd)) {
 				return nil, fmt.Errorf("doc: piece past the end of the text")
 			}
@@ -196,15 +234,15 @@ func render(raw []rune) string {
 	}
 	for _, r := range raw {
 		switch r {
-		case 0x13:
+		case fieldBegin:
 			inCode = append(inCode, true)
 			continue
-		case 0x14:
+		case fieldSeparator:
 			if len(inCode) > 0 {
 				inCode[len(inCode)-1] = false
 			}
 			continue
-		case 0x15:
+		case fieldEnd:
 			if len(inCode) > 0 {
 				inCode = inCode[:len(inCode)-1]
 			}
@@ -214,19 +252,19 @@ func render(raw []rune) string {
 			continue
 		}
 		switch r {
-		case '\r', 0x07, 0x0C: // paragraph, table cell or row end, page or section break
+		case '\r', cellMark, pageBreak:
 			flush()
-		case 0x0B: // manual line break
+		case lineBreak:
 			cur.WriteByte('\n')
-		case 0x1E: // non-breaking hyphen
+		case nbHyphen:
 			cur.WriteByte('-')
-		case 0x1F: // optional hyphen
-		case 0x09:
+		case softHyphen:
+		case '\t':
 			cur.WriteByte('\t')
 		default:
 			// Below 0x20 are anchors with nothing to read: a picture (0x01),
 			// a footnote or comment mark (0x02, 0x05), a drawn object (0x08).
-			if r >= 0x20 {
+			if r >= ' ' {
 				cur.WriteRune(r)
 			}
 		}

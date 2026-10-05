@@ -16,6 +16,9 @@ import S from "./i18nstrings.js";
 import { type Tester, testerNames, testersFromList } from "./sessions.js";
 import { nameOf, parseCardSeen, serializeCardSeen, withoutSeen, withSeen } from "./seen.js";
 
+// How long a clean run's summary stays up before the modal closes itself.
+const CLOSE_AFTER_SUCCESS_MS = 900;
+
 const { jput, el, byId } = xyApp;
 
 export interface MassPanelDeps {
@@ -278,7 +281,7 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     board.render();
     msg.textContent = xyMass.runSummary(ok, failed.size);
     run.disabled = false;
-    if (!failed.size) setTimeout(massModal.close, 900);
+    if (!failed.size) setTimeout(massModal.close, CLOSE_AFTER_SUCCESS_MS);
   }
 
   async function applyMass(action: MassAction, card: BoardCard): Promise<void> {

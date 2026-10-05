@@ -49,7 +49,7 @@ func PackPages(hndt string, teams int) (pages int, colour bool, err error) {
 	if only == nil {
 		return 0, false, corei18n.User(xystrings.Default.Docs.Handout.PackNone())
 	}
-	perTeam := 3
+	perTeam := defaultHandoutsPerTeam
 	if v, ok := only.intVal("handouts_per_team"); ok && v != 0 {
 		perTeam = v
 	}

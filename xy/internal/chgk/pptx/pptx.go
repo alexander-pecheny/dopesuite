@@ -20,6 +20,18 @@ import (
 	"xy/internal/chgk/typo"
 )
 
+// optimizeQuality is the JPEG quality --optimize_size re-encodes at.
+const optimizeQuality = 80
+
+// The template's slide layouts, by index, unless the config names others.
+const (
+	defaultTitleLayout    = 0
+	defaultQuestionLayout = 1
+	defaultAnswerLayout   = 2
+	defaultPlugLayout     = 3
+	defaultBlankLayout    = 6
+)
+
 // Options are the switches `compose pptx` takes that are not in the config file.
 type Options struct {
 	// Config is pptx_config.toml; nil is the one chgksuite ships.
@@ -82,7 +94,7 @@ func Export(doc fsource.Doc, images map[string][]byte, o Options) ([]byte, error
 		return nil, err
 	}
 	if o.OptimizeSize {
-		p.optimizeImages(80)
+		p.optimizeImages(optimizeQuality)
 	}
 	return p.save()
 }
@@ -118,21 +130,21 @@ func (e *exporter) resolveLayouts() error {
 		return e.pkg.layoutTarget(e.cfg.layoutIndex(key, fallback))
 	}
 	var err error
-	if e.titleLayout, err = pick("title_slide_index", 0); err != nil {
+	if e.titleLayout, err = pick("title_slide_index", defaultTitleLayout); err != nil {
 		return err
 	}
-	if e.blankLayout, err = pick("blank_slide_index", 6); err != nil {
+	if e.blankLayout, err = pick("blank_slide_index", defaultBlankLayout); err != nil {
 		return err
 	}
 	e.questionLayout, e.answerLayout, e.plugLayout = e.blankLayout, e.blankLayout, e.blankLayout
 	if e.cfg.templateVersion() >= 2 {
-		if e.questionLayout, err = pick("question_slide_index", 1); err != nil {
+		if e.questionLayout, err = pick("question_slide_index", defaultQuestionLayout); err != nil {
 			return err
 		}
-		if e.answerLayout, err = pick("answer_slide_index", 2); err != nil {
+		if e.answerLayout, err = pick("answer_slide_index", defaultAnswerLayout); err != nil {
 			return err
 		}
-		if e.plugLayout, err = pick("plug_slide_index", 3); err != nil {
+		if e.plugLayout, err = pick("plug_slide_index", defaultPlugLayout); err != nil {
 			return err
 		}
 	}
@@ -248,7 +260,7 @@ func (e *exporter) text(v any) any { return e.processText(v, false, true, true, 
 func (e *exporter) configureParagraph(p *paragraph, size float64, align, lineSpacingKey string) *paragraph {
 	p.fontName = e.cfg.fontName()
 	if size == 0 {
-		size = e.cfg.fontSize("default_size", 32)
+		size = e.cfg.fontSize("default_size", defaultFontPt)
 	}
 	p.size = size
 	e.setLineSpacing(p, size, lineSpacingKey)

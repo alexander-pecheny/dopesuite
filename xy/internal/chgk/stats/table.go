@@ -9,6 +9,10 @@ import (
 	xystrings "xy/i18nstrings"
 )
 
+// tourCol is the column that holds the tour in the "tour" layout; in the
+// "full" layout the answers start there instead.
+const tourCol = 3
+
 // ReadTable ports _results_table_to_masks: the two layouts rating.chgk.info
 // exports a question table in — one row per team, or one row per team per
 // tour — under a header row whose second column is the team-name column.
@@ -36,7 +40,7 @@ func ReadTable(rows [][]string) ([]Result, []string) {
 		if layout == "" {
 			if len(row) > 1 && strings.TrimSpace(row[1]) == "Название" {
 				layout = "full"
-				if len(row) > 3 && row[3] == "Тур" {
+				if len(row) > tourCol && row[tourCol] == "Тур" {
 					layout = "tour"
 				}
 			}
@@ -46,11 +50,11 @@ func ReadTable(rows [][]string) ([]Result, []string) {
 		if err != nil || len(row) < 2 {
 			continue
 		}
-		tour, from := 1, 3
+		tour, from := 1, tourCol
 		if layout == "tour" {
-			tour, from = 0, 4
-			if len(row) > 3 {
-				tour, _ = strconv.Atoi(strings.TrimSpace(row[3]))
+			tour, from = 0, tourCol+1
+			if len(row) > tourCol {
+				tour, _ = strconv.Atoi(strings.TrimSpace(row[tourCol]))
 			}
 		}
 		var mask []byte

@@ -19,6 +19,9 @@ import { applyBundle } from "./bundleapply.js";
 import type { Board, ListPanel } from "./panels.js";
 import type { BoardList } from "./unlock.js";
 
+// How long the "moved"/"copied" note stays up before the modal closes itself.
+const CLOSE_AFTER_SUCCESS_MS = 700;
+
 const { fetchJSON, jdelete, el, byId, errMsg } = xyApp;
 
 interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; schema_version?: number }
@@ -151,7 +154,7 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
       if (sameBoard || remove) await board.reload();
       board.render();
       msg.textContent = remove ? S.board.movelist.moved() : S.board.movelist.copied();
-      setTimeout(moveListModal.close, 700);
+      setTimeout(moveListModal.close, CLOSE_AFTER_SUCCESS_MS);
     } catch (err) { msg.textContent = errMsg(err); }
   }
 

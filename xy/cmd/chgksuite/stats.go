@@ -24,10 +24,7 @@ func composeAddStats(args []string) error {
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "read the input files as one packet")
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if (*ratingIDs == "") == (*customCSV == "") {
@@ -68,7 +65,7 @@ func composeAddStats(args []string) error {
 			return err
 		}
 		out := outputName(s.path, "4s", "_with_stats", *addTS == "on")
-		if err := os.WriteFile(out, []byte(fsource.Compose(s.doc, fsource.NumbersDefault)), 0o644); err != nil {
+		if err := os.WriteFile(out, []byte(fsource.Compose(s.doc, fsource.NumbersDefault)), outputFileMode); err != nil {
 			return err
 		}
 		reportOutput(out)

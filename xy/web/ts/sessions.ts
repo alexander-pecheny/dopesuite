@@ -282,6 +282,10 @@ export function humanDate(date: string): string {
 }
 
 const pad = (n: number): string => String(n).padStart(2, "0");
+const MONTHS_PER_YEAR = 12;
+const MAX_DAY_OF_MONTH = 31;
+const HOURS_PER_DAY = 24;
+const MINUTES_PER_HOUR = 60;
 
 // ---- date and time as the UI writes them ----
 //
@@ -303,7 +307,7 @@ export function parseDate(human: string): string {
   const m = /^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/.exec((human || "").trim());
   if (!m) return "";
   const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
-  if (mo < 1 || mo > 12 || d < 1 || d > 31) return "";
+  if (mo < 1 || mo > MONTHS_PER_YEAR || d < 1 || d > MAX_DAY_OF_MONTH) return "";
   const probe = new Date(Date.UTC(y, mo - 1, d));
   if (probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) return ""; // 31.02
   return `${y}-${pad(mo)}-${pad(d)}`;
@@ -315,7 +319,7 @@ export function parseTime(human: string): string {
   const m = /^(\d{1,2})[:.](\d{2})$/.exec((human || "").trim());
   if (!m) return "";
   const h = Number(m[1]), min = Number(m[2]);
-  if (h > 23 || min > 59) return "";
+  if (h >= HOURS_PER_DAY || min >= MINUTES_PER_HOUR) return "";
   return `${pad(h)}:${pad(min)}`;
 }
 
@@ -386,7 +390,7 @@ function zonedParts(at: Date, zone: string): Parts {
     mo: Number(got.month),
     d: Number(got.day),
     // Some engines render midnight as hour 24 under hour12:false.
-    hh: Number(got.hour) % 24,
+    hh: Number(got.hour) % HOURS_PER_DAY,
     mm: Number(got.minute),
   };
 }
@@ -412,11 +416,20 @@ export function inviteLine(m: SessionMeta): string {
     ? m.cities
     : [{ zone: m.tz || "UTC", name: m.tz || "" }];
   const anchorDay = m.date;
-  // Grouped by the clock they actually show, not by the zone: Europe/Minsk and
-  // Europe/Moscow are two zones and one time, which is exactly the pair a reader
-  // does not want to see written out twice. The group takes the place of its
-  // first city, so the order the editor put the cities in still shows through,
-  // and the names inside it are alphabetical.
+  // The names inside a group are alphabetical.
+  const parts = clockGroups(at, cities).map(({ clock, day, names }) => {
+    const where = names.length ? ` (${[...names].sort((a, b) => a.localeCompare(b, "ru")).join(", ")})` : "";
+    return day === anchorDay ? `${clock}${where}` : `${clock}${where} — ${humanDate(day)}`;
+  });
+  return head ? `${head}, ${parts.join(" / ")}` : parts.join(" / ");
+}
+
+// clockGroups groups cities by the clock they actually show, not by the zone:
+// Europe/Minsk and Europe/Moscow are two zones and one time, which is exactly
+// the pair a reader does not want to see written out twice. The group takes the
+// place of its first city, so the order the editor put the cities in still
+// shows through.
+function clockGroups(at: Date, cities: AnnounceCity[]): { clock: string; day: string; names: string[] }[] {
   const order: string[] = [];
   const groups = new Map<string, { clock: string; day: string; names: string[] }>();
   for (const c of cities) {
@@ -432,12 +445,7 @@ export function inviteLine(m: SessionMeta): string {
     }
     if (c.name && !g.names.includes(c.name)) g.names.push(c.name);
   }
-  const parts = order.map((key) => {
-    const { clock, day, names } = groups.get(key)!;
-    const where = names.length ? ` (${[...names].sort((a, b) => a.localeCompare(b, "ru")).join(", ")})` : "";
-    return day === anchorDay ? `${clock}${where}` : `${clock}${where} — ${humanDate(day)}`;
-  });
-  return head ? `${head}, ${parts.join(" / ")}` : parts.join(" / ");
+  return order.map((key) => groups.get(key)!);
 }
 
 // whoSaw is every tester from every session a card is tagged with, deduped.

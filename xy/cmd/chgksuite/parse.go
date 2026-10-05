@@ -41,10 +41,7 @@ func parseCmd(args []string) error {
 	whitespace := fs.String("typography_whitespace", override("typography_whitespace", "on"), "trim and collapse whitespace: on|off")
 	percent := fs.String("typography_percent", override("typography_percent", "on"), "decode %-escapes; chgksuite reads this switch and decodes either way")
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if fs.NArg() == 0 {
@@ -137,12 +134,12 @@ func parseFile(in string, a parseArgs) (string, error) {
 		return "", err
 	}
 	for _, img := range images {
-		if err := os.WriteFile(filepath.Join(filepath.Dir(in), img.Name), img.Data, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(filepath.Dir(in), img.Name), img.Data, outputFileMode); err != nil {
 			return "", err
 		}
 	}
 	out := outputName(in, gameExt(game), "", a.addTS)
-	return out, os.WriteFile(out, []byte(fsource.Compose(doc, numbers)), 0o644)
+	return out, os.WriteFile(out, []byte(fsource.Compose(doc, numbers)), outputFileMode)
 }
 
 // readSource turns the input file into the plain text a parser reads, plus the
@@ -154,7 +151,7 @@ func readSource(in, game string, a parseArgs) (string, []docxread.Image, error) 
 	}
 	switch strings.ToLower(filepath.Ext(in)) {
 	case ".docx":
-		base := strings.TrimSuffix(filepath.Base(in), filepath.Ext(in))
+		base := stem(in)
 		prefix := strings.ReplaceAll(base, " ", "_") + "_"
 		if a.noImagePrefix {
 			prefix = ""
@@ -205,12 +202,15 @@ func parseText(text, game, in string, a parseArgs) (fsource.Doc, error) {
 	}
 }
 
+// dbFetchTimeout bounds one download from db.chgk.info.
+const dbFetchTimeout = 30 * time.Second
+
 // dbFetcher downloads a picture or sound a db.chgk.info export names, skipping
 // what is already on disk. chgksuite fetches into the working directory; this
 // puts the file beside the one being parsed, where the .4s coming out of it
 // looks for its pictures.
 func dbFetcher(dir string) textparse.Fetcher {
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: dbFetchTimeout}
 	return func(url, name string) error {
 		path := filepath.Join(dir, name)
 		if _, err := os.Stat(path); err == nil {
@@ -228,7 +228,7 @@ func dbFetcher(dir string) textparse.Fetcher {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(path, data, 0o644)
+		return os.WriteFile(path, data, outputFileMode)
 	}
 }
 
@@ -239,7 +239,7 @@ func defaultAuthorFor(setting, in string) string {
 	case "", "off":
 		return ""
 	case "file":
-		return strings.TrimSuffix(filepath.Base(in), filepath.Ext(in))
+		return stem(in)
 	default:
 		return setting
 	}

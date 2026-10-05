@@ -13,6 +13,15 @@ import (
 	"golang.org/x/image/font/sfnt"
 )
 
+const (
+	// minHeadLen and minHheaLen cover the fields verticalMetrics reads: head
+	// through unitsPerEm, hhea through lineGap.
+	minHeadLen = 20
+	minHheaLen = 12
+	// fixedPointOne is 1.0 in the 26.6 fixed point font.MeasureString returns.
+	fixedPointOne = 64
+)
+
 // Measurement is how the shrink-to-fit pass decides whether text fits, and it is
 // the one part of the pptx export that cannot be byte-identical to chgksuite's.
 //
@@ -61,7 +70,7 @@ func newMeasuredFace(path string) (*measuredFace, error) {
 func verticalMetrics(data []byte) (unitsPerEm, height int) {
 	tables := fontfile.Tables(data)
 	head, hhea := tables["head"], tables["hhea"]
-	if len(head) < 20 || len(hhea) < 12 {
+	if len(head) < minHeadLen || len(hhea) < minHheaLen {
 		return 0, 0
 	}
 	unitsPerEm = int(fontfile.Be16(head[18:]))
@@ -78,7 +87,7 @@ func (m *measuredFace) face(pixels int) (font.Face, error) {
 	// Size in points at 72 dpi is size in pixels, and unhinted is what matches
 	// Pillow: hinting rounds every advance to a whole pixel.
 	f, err := opentype.NewFace(m.font, &opentype.FaceOptions{
-		Size: float64(pixels), DPI: 72, Hinting: font.HintingNone,
+		Size: float64(pixels), DPI: ptPerInch, Hinting: font.HintingNone,
 	})
 	if err != nil {
 		return nil, err
@@ -101,7 +110,7 @@ func (m *measuredFace) width(text string, size float64) float64 {
 	if err != nil {
 		return 0
 	}
-	return float64(font.MeasureString(f, text)) / 64
+	return float64(font.MeasureString(f, text)) / fixedPointOne
 }
 
 // lineHeight is _measure_line_height_px, which reads Pillow's font.height —

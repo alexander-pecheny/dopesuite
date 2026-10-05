@@ -27,6 +27,10 @@ type mediaItem struct {
 
 const emuPerInch = 914400
 
+// optimizeQuality is the JPEG quality --optimize_size re-encodes at, as in
+// chgksuite.
+const optimizeQuality = 80
+
 // embedImage parses an (img …) directive's argument (the last whitespace token is
 // the filename; the rest are big/inline/w=/h= options — chgksuite parseimg),
 // re-encodes the referenced image to PNG, registers it, and returns the inline
@@ -124,7 +128,7 @@ func drawingXML(relID string, docID int, cx, cy int64, name string) string {
 // been written yet.
 func (e *exporter) optimizeMedia() {
 	for i, m := range e.media {
-		smaller, ext, ok := imgconv.Optimize(m.data, m.ext, 80)
+		smaller, ext, ok := imgconv.Optimize(m.data, m.ext, optimizeQuality)
 		if !ok {
 			continue
 		}

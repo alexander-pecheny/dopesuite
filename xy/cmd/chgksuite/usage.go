@@ -25,24 +25,30 @@ func usage() {
 		"usage: chgksuite <command> [<args>]"))
 	b.WriteString("\n\n")
 	for _, c := range commands {
-		if c.verb == "" {
-			b.WriteString("\n")
-			continue
-		}
-		// Pad outside the style, so the escapes wrap the word and not the gap.
-		verb, args := c.verb, c.args
-		if tty {
-			verb, args = styleVerb.Render(verb), styleArgs.Render(args)
-		}
-		fmt.Fprintf(&b, "  %s%s  %s%s  %s\n",
-			verb, spaces(verbWidth-len(c.verb)),
-			args, spaces(argsWidth-len([]rune(c.args))),
-			c.what)
+		writeCommand(&b, c, tty, verbWidth, argsWidth)
 	}
 	b.WriteString("\n")
 	b.WriteString(pick(tty, styleNote.Render(usageTail), usageTail))
 	b.WriteString("\n")
 	fmt.Fprint(out, b.String())
+}
+
+// writeCommand writes one line of the usage, its verb and args padded to the
+// widths of the columns; an empty command is a blank line between groups.
+func writeCommand(b *strings.Builder, c command, tty bool, verbWidth, argsWidth int) {
+	if c.verb == "" {
+		b.WriteString("\n")
+		return
+	}
+	// Pad outside the style, so the escapes wrap the word and not the gap.
+	verb, args := c.verb, c.args
+	if tty {
+		verb, args = styleVerb.Render(verb), styleArgs.Render(args)
+	}
+	fmt.Fprintf(b, "  %s%s  %s%s  %s\n",
+		verb, spaces(verbWidth-len(c.verb)),
+		args, spaces(argsWidth-len([]rune(c.args))),
+		c.what)
 }
 
 const usageTail = `run a command with -h for its flags

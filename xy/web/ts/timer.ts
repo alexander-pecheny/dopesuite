@@ -24,14 +24,22 @@ declare global {
 // of any preset gets the 10-second warning beep and the answer countdown; the
 // earlier ones simply end on a long beep.
 export interface TimerPreset { label: string; segments: number[] }
+const QUESTION_SEC = 60;
+const DUPLET_SEGMENT_SEC = 30;
+const BLITZ_SEGMENT_SEC = 20;
 const PRESETS: Record<string, TimerPreset> = {
-  regular: { label: S.board.timer.presetRegular(), segments: [60] },
-  duplet: { label: S.board.timer.presetDuplet(), segments: [30, 30] },
-  blitz: { label: S.board.timer.presetBlitz(), segments: [20, 20, 20] },
-  custom: { label: S.board.timer.presetCustom(), segments: [60] },
+  regular: { label: S.board.timer.presetRegular(), segments: [QUESTION_SEC] },
+  duplet: { label: S.board.timer.presetDuplet(), segments: [DUPLET_SEGMENT_SEC, DUPLET_SEGMENT_SEC] },
+  blitz: { label: S.board.timer.presetBlitz(), segments: [BLITZ_SEGMENT_SEC, BLITZ_SEGMENT_SEC, BLITZ_SEGMENT_SEC] },
+  custom: { label: S.board.timer.presetCustom(), segments: [QUESTION_SEC] },
 };
 const ANSWER_SEC = 10; // post-question window to write the answer down
 const WARN_AT = 10; // seconds-left at which the single warning beep fires
+// Slack for float error when comparing seconds, so 9.9999 still counts as 10.
+const EPS_SEC = 1e-3;
+const MS_PER_SEC = 1000;
+const LOOP_MS = 100; // how often the display loop repaints
+const DECIMAL = 10;
 
 export type CueKind = "warn" | "tick" | "long";
 
@@ -41,12 +49,12 @@ export type CueKind = "warn" | "tick" | "long";
 function cueTimes(phase: "running" | "answer", last: boolean, rem: number): Array<[CueKind, number]> {
   const out: Array<[CueKind, number]> = [];
   if (phase === "answer") {
-    for (let d = 1; d < rem - 1e-3; d++) out.push(["tick", rem - d]);
+    for (let d = 1; d < rem - EPS_SEC; d++) out.push(["tick", rem - d]);
     out.push(["long", rem]);
     return out;
   }
   if (!last) return [["long", rem]];
-  if (rem - WARN_AT > 1e-3) out.push(["warn", rem - WARN_AT]);
+  if (rem - WARN_AT > EPS_SEC) out.push(["warn", rem - WARN_AT]);
   for (let j = 0; j < ANSWER_SEC; j++) out.push(["tick", rem + j]);
   out.push(["long", rem + ANSWER_SEC]);
   return out;
@@ -57,9 +65,9 @@ function cueTimes(phase: "running" | "answer", last: boolean, rem: number): Arra
 function parseCustom(raw: string | null | undefined): number[] {
   const parts = String(raw || "")
     .split("+")
-    .map((s) => parseInt(s.trim(), 10))
+    .map((s) => parseInt(s.trim(), DECIMAL))
     .filter((n) => Number.isFinite(n) && n > 0);
-  return parts.length ? parts : [60];
+  return parts.length ? parts : [QUESTION_SEC];
 }
 
 // ---- the kernel -------------------------------------------------------------
@@ -118,9 +126,9 @@ export function createTimer(deps: TimerDeps): Timer {
     segIdx: 0,
     phase: "ready" as Phase,
     resumePhase: "running" as "running" | "answer",
-    remaining: 60, // frozen seconds for the current/paused countdown
+    remaining: QUESTION_SEC, // frozen seconds for the current/paused countdown
     deadline: 0, // clock.now() target while running/answer
-    shown: 60, // last integer shown
+    shown: QUESTION_SEC, // last integer shown
     timer: 0, // interval handle while running/answer
   };
   const isLast = (): boolean => m.segIdx === m.segments.length - 1;
@@ -151,11 +159,11 @@ export function createTimer(deps: TimerDeps): Timer {
   }
   function startLoop(): void {
     stopLoop();
-    m.timer = clock.setInterval(loop, 100);
+    m.timer = clock.setInterval(loop, LOOP_MS);
   }
   function loop(): void {
-    const rem = (m.deadline - clock.now()) / 1000;
-    const disp = Math.max(0, Math.ceil(rem - 1e-3));
+    const rem = (m.deadline - clock.now()) / MS_PER_SEC;
+    const disp = Math.max(0, Math.ceil(rem - EPS_SEC));
     if (disp !== m.shown) {
       m.shown = disp;
       render();
@@ -170,7 +178,7 @@ export function createTimer(deps: TimerDeps): Timer {
         // Question's up → roll straight into the answer-writing window, measured
         // from the question's deadline so a late frame does not stretch it.
         m.phase = "answer";
-        m.deadline += ANSWER_SEC * 1000;
+        m.deadline += ANSWER_SEC * MS_PER_SEC;
         m.shown = ANSWER_SEC;
         render();
         return;
@@ -193,8 +201,8 @@ export function createTimer(deps: TimerDeps): Timer {
 
   function beginRun(kind: "running" | "answer"): void {
     m.phase = kind;
-    m.deadline = clock.now() + m.remaining * 1000;
-    m.shown = Math.max(0, Math.ceil(m.remaining - 1e-3));
+    m.deadline = clock.now() + m.remaining * MS_PER_SEC;
+    m.shown = Math.max(0, Math.ceil(m.remaining - EPS_SEC));
     bell.cancel();
     for (const [cue, at] of cueTimes(kind, isLast(), m.remaining)) bell.play(cue, at);
     render();
@@ -210,7 +218,7 @@ export function createTimer(deps: TimerDeps): Timer {
     if (m.phase !== "running" && m.phase !== "answer") return;
     stopLoop();
     bell.cancel();
-    m.remaining = Math.max(0, (m.deadline - clock.now()) / 1000);
+    m.remaining = Math.max(0, (m.deadline - clock.now()) / MS_PER_SEC);
     m.resumePhase = m.phase;
     m.phase = "paused";
     render();
@@ -281,7 +289,30 @@ const CUES: Record<CueKind, Cue> = {
 // Every cue of a countdown is scheduled up front on the audio clock, which
 // keeps time while the tab is hidden — rAF stops there and timers crawl, so a
 // loop that beeps when it notices the second change skips and bunches dings.
+// The stand-in tone's envelope, in seconds: a short attack, a hold, a release.
+const TONE_ATTACK_SEC = 0.012;
+const TONE_RELEASE_SEC = 0.04;
+const TONE_MIN_HOLD_SEC = 0.02;
+const TONE_TAIL_SEC = 0.02; // the oscillator outlives the ramp by this much
+
 let scheduled: AudioScheduledSourceNode[] = [];
+function bellSource(ac: AudioContext, buf: AudioBuffer, cue: Cue, g: GainNode): AudioScheduledSourceNode {
+  const s = ac.createBufferSource();
+  s.buffer = buf;
+  s.playbackRate.value = cue.rate;
+  g.gain.value = cue.gain;
+  return s;
+}
+function toneSource(ac: AudioContext, cue: Cue, g: GainNode, t: number): AudioScheduledSourceNode {
+  const osc = ac.createOscillator();
+  osc.type = cue.wave;
+  osc.frequency.value = cue.freq;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(cue.toneGain, t + TONE_ATTACK_SEC);
+  g.gain.setValueAtTime(cue.toneGain, t + Math.max(TONE_MIN_HOLD_SEC, cue.dur - TONE_RELEASE_SEC));
+  g.gain.linearRampToValueAtTime(0, t + cue.dur);
+  return osc;
+}
 function playAt(kind: CueKind, inSec: number): void {
   const ac = ensureAudio();
   if (!ac) return;
@@ -289,28 +320,10 @@ function playAt(kind: CueKind, inSec: number): void {
   const t = ac.currentTime + inSec;
   const g = ac.createGain();
   g.connect(ac.destination);
-  let src: AudioScheduledSourceNode;
-  if (dingBuf) {
-    const s = ac.createBufferSource();
-    s.buffer = dingBuf;
-    s.playbackRate.value = cue.rate;
-    g.gain.value = cue.gain;
-    src = s;
-    src.connect(g);
-    src.start(t);
-  } else {
-    const osc = ac.createOscillator();
-    osc.type = cue.wave;
-    osc.frequency.value = cue.freq;
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(cue.toneGain, t + 0.012);
-    g.gain.setValueAtTime(cue.toneGain, t + Math.max(0.02, cue.dur - 0.04));
-    g.gain.linearRampToValueAtTime(0, t + cue.dur);
-    src = osc;
-    src.connect(g);
-    src.start(t);
-    src.stop(t + cue.dur + 0.02);
-  }
+  const src = dingBuf ? bellSource(ac, dingBuf, cue, g) : toneSource(ac, cue, g, t);
+  src.connect(g);
+  src.start(t);
+  if (!dingBuf) src.stop(t + cue.dur + TONE_TAIL_SEC);
   scheduled.push(src);
   src.onended = () => { scheduled = scheduled.filter((s) => s !== src); };
 }
@@ -369,7 +382,7 @@ function paint(vm: TimerVM): void {
   startBtn.setAttribute("aria-label", vm.startWord);
 }
 
-function build(): void {
+function buildPresetControls(): void {
   presetSel = el("select", { class: "input timer-preset", "aria-label": S.board.timer.modeLabel() }) as HTMLSelectElement;
   for (const [key, p] of Object.entries(PRESETS)) presetSel.append(el("option", { value: key, text: p.label }));
   presetSel.addEventListener("change", () => {
@@ -388,23 +401,28 @@ function build(): void {
   customInput.addEventListener("change", applyCustom);
   customInput.addEventListener("input", applyCustom);
   customWrap = el("div", { class: "timer-custom", hidden: true }, customInput);
+}
 
-  timeNode = el("div", { class: "timer-time", text: "60" });
-  labelNode = el("div", { class: "timer-label", text: "" });
-
-  // Icons, not captions — three worded buttons overflowed the 240px box
-  // ("Continue" alone nearly filled it). The word lives in title/aria-label.
+// Icons, not captions — three worded buttons overflowed the 240px box
+// ("Continue" alone nearly filled it). The word lives in title/aria-label.
+function buildButtons(): HTMLElement {
   startBtn = el("button", { class: "btn btn-small", type: "button", title: S.board.timer.start(), "aria-label": S.board.timer.start(), onclick: () => timer!.start() }, playIcon()) as HTMLButtonElement;
   pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: S.board.timer.pause(), "aria-label": S.board.timer.pause(), onclick: () => timer!.pause() }, pauseIcon()) as HTMLButtonElement;
   const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: S.board.timer.reset(), "aria-label": S.board.timer.reset(), onclick: () => timer!.reset() }, resetIcon());
+  return el("div", { class: "timer-actions" }, startBtn, pauseBtn, resetBtn);
+}
 
+function build(): void {
+  buildPresetControls();
+  timeNode = el("div", { class: "timer-time", text: String(QUESTION_SEC) });
+  labelNode = el("div", { class: "timer-label", text: "" });
   overlay = el(
     "div",
     { class: "timer-overlay", role: "dialog", "aria-label": S.board.timer.title(), hidden: true },
     el("div", { class: "timer-row" }, presetSel),
     customWrap,
     el("div", { class: "timer-display" }, timeNode, labelNode),
-    el("div", { class: "timer-actions" }, startBtn, pauseBtn, resetBtn),
+    buildButtons(),
   );
   document.body.append(overlay);
   wireDrag();

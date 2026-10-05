@@ -4,12 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"xy/internal/rank"
+
+	"pecheny.me/dopecore/idstr"
 )
+
+// trelloPosStep is the gap between the positions given to consecutive lists,
+// the spacing Trello itself uses.
+const trelloPosStep = 1024
 
 // Trello-compatible API surface for chgksuite (https://github.com/lemonsqueeze
 // /chgksuite trello.py). chgksuite talks to a Trello board with exactly three
@@ -70,7 +75,7 @@ type trelloBoard struct {
 	Keymeta keymetaResponse `json:"keymeta"`
 }
 
-func idStr(id int64) string { return strconv.FormatInt(id, 10) }
+func idStr(id int64) string { return idstr.Format(id) }
 
 // ---- token authentication ----
 
@@ -185,13 +190,13 @@ func (s *server) handleTrelloGetBoard(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, l := range lists {
 		board.Lists = append(board.Lists, trelloList{
-			ID: idStr(l.ID), Name: l.TitleEnc, IDBoard: bidStr, Pos: (i + 1) * 1024,
+			ID: idStr(l.ID), Name: l.TitleEnc, IDBoard: bidStr, Pos: (i + 1) * trelloPosStep,
 		})
 	}
 	for i, c := range cards {
 		tc := trelloCard{
 			ID: idStr(c.ID), IDList: idStr(c.ListID), IDBoard: bidStr,
-			Desc: c.DescEnc, Pos: (i + 1) * 1024, Labels: []trelloLabel{},
+			Desc: c.DescEnc, Pos: (i + 1) * trelloPosStep, Labels: []trelloLabel{},
 		}
 		for _, lid := range cardLabels[c.ID] {
 			if tl, ok := labelByID[lid]; ok {
@@ -242,7 +247,7 @@ func (s *server) handleTrelloGetLists(w http.ResponseWriter, r *http.Request) {
 	bidStr := idStr(bid)
 	out := make([]trelloList, 0, len(lists))
 	for i, l := range lists {
-		out = append(out, trelloList{ID: idStr(l.ID), Name: l.TitleEnc, IDBoard: bidStr, Pos: (i + 1) * 1024})
+		out = append(out, trelloList{ID: idStr(l.ID), Name: l.TitleEnc, IDBoard: bidStr, Pos: (i + 1) * trelloPosStep})
 	}
 	writeJSON(w, out)
 }

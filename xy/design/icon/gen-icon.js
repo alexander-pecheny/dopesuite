@@ -14,6 +14,15 @@ import { buildSVG, COLORS, DEFAULTS, RANGES, SIZE } from "./icon.js";
 const HERE = new URL(".", import.meta.url).pathname;
 const STATIC = `${HERE}../../web/assets/static/`;
 
+const LAB_PORT = 8000;
+const HTTP_NOT_FOUND = 404;
+const ANDROID_ICON_PX = 192;
+const LARGE_ICON_PX = 512;
+const APPLE_TOUCH_PX = 180;
+// Android crops a maskable icon to a circle 80% wide; this keeps the art inside.
+const MASKABLE_ART_SCALE = 0.78;
+const FAVICON_SOURCE_PX = 128;
+
 function parseArgs(argv) {
   const numeric = new Set(RANGES.map(([k]) => k));
   const known = new Set([...numeric, ...COLORS.map(([k]) => k), "transparent", "install"]);
@@ -53,7 +62,7 @@ async function png(params, px, out, { opaque = false } = {}) {
 }
 
 async function serveLab() {
-  const port = 8000;
+  const port = LAB_PORT;
   const types = { ".html": "text/html", ".js": "text/javascript", ".svg": "image/svg+xml" };
   Deno.serve({ port }, async (req) => {
     let path = new URL(req.url).pathname;
@@ -63,7 +72,7 @@ async function serveLab() {
       const ext = path.slice(path.lastIndexOf("."));
       return new Response(body, { headers: { "content-type": types[ext] ?? "application/octet-stream" } });
     } catch {
-      return new Response("not found", { status: 404 });
+      return new Response("not found", { status: HTTP_NOT_FOUND });
     }
   });
   console.log(`icon lab: http://localhost:${port}/lab.html`);
@@ -83,16 +92,16 @@ if (Deno.args[0] === "--lab") {
     // A square tile for the launcher surfaces that round it themselves, and a
     // maskable one whose art sits inside the 80% safe zone Android crops to.
     const square = { ...p, bgRadius: 0 };
-    await png(p, 192, `${STATIC}icon-192.png`);
-    await png(p, 512, `${STATIC}icon-512.png`);
-    await png(square, 180, `${STATIC}apple-touch-icon.png`, { opaque: true });
-    await png({ ...square, artScale: p.artScale * 0.78 }, 512, `${STATIC}icon-maskable.png`, { opaque: true });
+    await png(p, ANDROID_ICON_PX, `${STATIC}icon-${ANDROID_ICON_PX}.png`);
+    await png(p, LARGE_ICON_PX, `${STATIC}icon-${LARGE_ICON_PX}.png`);
+    await png(square, APPLE_TOUCH_PX, `${STATIC}apple-touch-icon.png`, { opaque: true });
+    await png({ ...square, artScale: p.artScale * MASKABLE_ART_SCALE }, LARGE_ICON_PX, `${STATIC}icon-maskable.png`, { opaque: true });
 
     // Favicon: the SVG is what modern browsers use; the .ico (16/32/48) is the
     // fallback every browser asks for at /favicon.ico whether it's linked or not.
     await Deno.writeTextFile(`${STATIC}favicon.svg`, buildSVG(p));
     const tmp = `${STATIC}favicon.tmp.png`;
-    await png(p, 128, tmp);
+    await png(p, FAVICON_SOURCE_PX, tmp);
     await run("magick", [tmp, "-define", "icon:auto-resize=48,32,16", `${STATIC}favicon.ico`]);
     await Deno.remove(tmp);
     console.log("installed icon-192, icon-512, apple-touch-icon, icon-maskable, favicon.svg, favicon.ico into web/assets/static/");

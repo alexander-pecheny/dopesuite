@@ -6,7 +6,7 @@
 // one block, keeping its members consecutive (the invariant the board relies on).
 
 import S from "./i18nstrings.js";
-import { xyApp } from "./app.js";
+import { xyApp, DECIMAL_RADIX } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyRank } from "./rank.js";
@@ -91,7 +91,7 @@ export function createListsManage(board: Board): ListsManage {
   function manageMoveControl(unit: Unit): HTMLElement {
     const inp = el("input", { class: "input lm-move-pos", type: "number", min: "1", placeholder: S.board.listsmanage.posPlaceholder() }) as HTMLInputElement;
     const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", title: S.board.listsmanage.posTitle() }, icon("arrow-up-down"));
-    const go = (): void => { const n = parseInt(inp.value, 10); if (n >= 1) void moveUnitsTo(new Set([unit.key]), n); };
+    const go = (): void => { const n = parseInt(inp.value, DECIMAL_RADIX); if (n >= 1) void moveUnitsTo(new Set([unit.key]), n); };
     btn.addEventListener("click", go);
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
     return el("div", { class: "lm-move" }, inp, btn);
@@ -305,7 +305,7 @@ export function createListsManage(board: Board): ListsManage {
 
   byId("listsLinkBtn").addEventListener("click", () => { void linkSelected(); });
   byId("listsMoveBtn").addEventListener("click", () => {
-    const n = parseInt(byId<HTMLInputElement>("listsMovePos").value, 10);
+    const n = parseInt(byId<HTMLInputElement>("listsMovePos").value, DECIMAL_RADIX);
     if (!(n >= 1)) { listsManageModal.message(S.board.listsmanage.posMissing()); return; }
     void moveUnitsTo(new Set(manageSelected), n);
   });

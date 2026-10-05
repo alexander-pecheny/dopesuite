@@ -28,6 +28,9 @@ const historyLimit = 200
 // somebody else's conversation.
 const historyWindow = 5 * time.Minute
 
+// longPollTimeout is how long one getUpdates call waits for something to arrive.
+const longPollTimeout = 30 * time.Second
+
 // Bot is the export's poller and the waiters over it.
 type Bot struct {
 	client *tgbot.Client
@@ -57,7 +60,7 @@ func NewBotAt(token, apiBase string) *Bot {
 	return &Bot{client: tgbot.New(tgbot.Config{
 		Token:          token,
 		APIBase:        apiBase,
-		PollTimeout:    30 * time.Second,
+		PollTimeout:    longPollTimeout,
 		AllowedUpdates: []string{"message", "channel_post"},
 	})}
 }

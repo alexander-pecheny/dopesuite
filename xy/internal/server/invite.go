@@ -11,6 +11,12 @@ import (
 	"pecheny.me/dopecore/authcred"
 )
 
+const (
+	// defaultInviteDays is how long a minted invite lives unless told otherwise.
+	defaultInviteDays = 7
+	day               = 24 * time.Hour
+)
+
 // mintInvite creates a one-shot invite valid for the given duration and returns
 // the code.
 func (s *server) mintInvite(ctx context.Context, ttl time.Duration) (string, error) {
@@ -30,7 +36,7 @@ insert into invites(code, created_at, expires_at) values(?, ?, ?)`,
 
 // runMintInvite is the `xy-server invite [days]` subcommand.
 func runMintInvite(args []string) {
-	days := 7
+	days := defaultInviteDays
 	if len(args) > 0 {
 		if d, err := strconv.Atoi(args[0]); err == nil && d > 0 {
 			days = d
@@ -40,7 +46,7 @@ func runMintInvite(args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	code, err := srv.mintInvite(context.Background(), time.Duration(days)*24*time.Hour)
+	code, err := srv.mintInvite(context.Background(), time.Duration(days)*day)
 	if err != nil {
 		log.Fatal(err)
 	}

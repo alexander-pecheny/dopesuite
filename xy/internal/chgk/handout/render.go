@@ -16,6 +16,9 @@ var fontNames = []string{
 	"NotoSans-Regular.ttf", "NotoSans-Bold.ttf", "NotoSans-Italic.ttf", "NotoSans-BoldItalic.ttf",
 }
 
+// fontFileMode is for the bundled fonts, which are not secret.
+const fontFileMode = 0o644
+
 var (
 	fontOnce sync.Once
 	fontDir  string
@@ -37,7 +40,7 @@ func bundledFontDir() (string, error) {
 				fontErr = err
 				return
 			}
-			if err := os.WriteFile(filepath.Join(d, n), b, 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(d, n), b, fontFileMode); err != nil {
 				fontErr = err
 				return
 			}

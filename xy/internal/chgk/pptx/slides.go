@@ -10,6 +10,14 @@ import (
 	"xy/internal/chgk/inline"
 )
 
+// The title slide's text box, in inches, when the config does not place it.
+const (
+	titleBoxLeftIn   = 1.67
+	titleBoxTopIn    = 0.8
+	titleBoxWidthIn  = 8.86
+	titleBoxHeightIn = 6.1
+)
+
 // The slide builders, in the order export() reaches them: the title, the block
 // between tours, the question and its handout or picture, the plug, the answer.
 
@@ -127,7 +135,7 @@ func firstOfType(d fsource.Doc, typ string) *fsource.Pair {
 func (e *exporter) titleSlide(title string, date *fsource.Pair) {
 	titleFrame := newTextFrame()
 	titleP := titleFrame.first()
-	titleP.size = e.cfg.fontSize("title_size", 60)
+	titleP.size = e.cfg.fontSize("title_size", titleFontPt)
 	e.setLineSpacing(titleP, titleP.size, "title")
 	r := &run{text: title, size: titleP.size, sizeSet: true, fontName: e.cfg.headingFontName()}
 	titleP.runs = append(titleP.runs, r)
@@ -136,7 +144,7 @@ func (e *exporter) titleSlide(title string, date *fsource.Pair) {
 	if date != nil {
 		subtitleFrame = newTextFrame()
 		p := subtitleFrame.first()
-		p.size = e.cfg.fontSize("default_size", 32)
+		p.size = e.cfg.fontSize("default_size", defaultFontPt)
 		e.setLineSpacing(p, p.size, "default")
 		p.runs = append(p.runs, &run{
 			text: textForGrid(date.Content), size: p.size, sizeSet: true,
@@ -180,7 +188,7 @@ func (e *exporter) spreadTitleOverSlide(s *slidePart) {
 		}
 		return inches(fallback)
 	}
-	box := [4]int64{dim("left", 1.67), dim("top", 0.8), dim("width", 8.86), dim("height", 6.1)}
+	box := [4]int64{dim("left", titleBoxLeftIn), dim("top", titleBoxTopIn), dim("width", titleBoxWidthIn), dim("height", titleBoxHeightIn)}
 	s.edits[0].xfrm = &box
 	s.edits[0].tf.marginTop, s.edits[0].tf.marginBottom = 0, 0
 	s.edits[0].tf.verticalAnchor = "ctr"
@@ -218,7 +226,7 @@ func (e *exporter) processBlock(block fsource.Doc) {
 			if f := e.cfg.headingFontName(); f != "" {
 				r.fontName = f
 			}
-			r.size, r.sizeSet = e.cfg.fontSize("tour_size", 32), true
+			r.size, r.sizeSet = e.cfg.fontSize("tour_size", defaultFontPt), true
 			addBreak = true
 		}
 	}
@@ -250,6 +258,18 @@ func nonNil(p *fsource.Pair) fsource.Doc {
 // processQuestion is process_question: the question, the plug, the answer. A
 // blitz gets one slide per sub-question, each showing one more than the last.
 func (e *exporter) processQuestion(q *fsource.Question) error {
+	e.advanceNumber(q)
+	e.processQuestionSlides(q)
+	if e.cfg.addPlug() {
+		s := e.pkg.addSlide(e.plugLayout)
+		e.setQuestionNumber(s, e.number)
+	}
+	e.addAnswerSlide(q)
+	return nil
+}
+
+// advanceNumber counts the question and sets the number its slides show.
+func (e *exporter) advanceNumber(q *fsource.Question) {
 	if !q.Has("number") {
 		e.qcount++
 	}
@@ -262,27 +282,26 @@ func (e *exporter) processQuestion(q *fsource.Question) error {
 	if n := q.Get("number"); n != nil {
 		e.number = textForGrid(n)
 	}
+}
 
-	if list, ok := q.Get("question").([]any); ok && len(list) > 1 {
-		if inner, nested := list[1].([]any); nested {
-			for i := range inner {
-				partial := cloneQuestion(q)
-				partial.Set("question", []any{list[0], append([]any{}, inner[:i+1]...)})
-				e.processQuestionText(partial)
-			}
-		} else {
-			e.processQuestionText(q)
-		}
-	} else {
+// processQuestionSlides puts up the question text: once, or for a blitz once
+// per sub-question, each slide showing one more than the last.
+func (e *exporter) processQuestionSlides(q *fsource.Question) {
+	list, ok := q.Get("question").([]any)
+	if !ok || len(list) <= 1 {
 		e.processQuestionText(q)
+		return
 	}
-
-	if e.cfg.addPlug() {
-		s := e.pkg.addSlide(e.plugLayout)
-		e.setQuestionNumber(s, e.number)
+	inner, nested := list[1].([]any)
+	if !nested {
+		e.processQuestionText(q)
+		return
 	}
-	e.addAnswerSlide(q)
-	return nil
+	for i := range inner {
+		partial := cloneQuestion(q)
+		partial.Set("question", []any{list[0], append([]any{}, inner[:i+1]...)})
+		e.processQuestionText(partial)
+	}
 }
 
 func cloneQuestion(q *fsource.Question) *fsource.Question {
@@ -325,18 +344,11 @@ func (e *exporter) putQuestionOnSlide(image *slideImage, s *slidePart, q *fsourc
 		handout, question = e.splitHandoutFromText(question)
 	}
 	questionText := e.processText(question, image != nil, true, true, false)
-	questionSize := e.cfg.fontSizeForText("question", textForGrid(questionText), "question_size", 32)
+	questionSize := e.cfg.fontSizeForText("question", textForGrid(questionText), "question_size", defaultFontPt)
 
 	var p *paragraph
 	if handout != "" {
-		handoutText := e.processText(handout, false, true, true, true)
-		handoutP := e.configureParagraph(box.tf.first(),
-			e.handoutFontSizeForText(textForGrid(handoutText), box, questionSize), "", "handout")
-		if a := tableStr(e.cfg.handout(), "align", ""); a != "" {
-			handoutP.align = pptxAlign(a)
-		}
-		e.format(handoutText, handoutP, box, s, true, false)
-		handoutP.spaceAfter = e.cfg.handoutTextSpaceAfter()
+		e.putHandoutText(handout, box, s, questionSize)
 		p = e.configureParagraph(box.tf.addParagraph(), questionSize, "", "question")
 	} else {
 		p = e.configureParagraph(box.tf.first(), questionSize, "", "question")
@@ -344,6 +356,19 @@ func (e *exporter) putQuestionOnSlide(image *slideImage, s *slidePart, q *fsourc
 	e.format(questionText, p, box, s, true, true)
 	e.shrink(box, 0)
 	e.placeInlineImages(box, s)
+}
+
+// putHandoutText sets a text handout in the box's first paragraph, above the
+// question, as large as fits but no smaller than the question.
+func (e *exporter) putHandoutText(handout string, box *textbox, s *slidePart, questionSize float64) {
+	handoutText := e.processText(handout, false, true, true, true)
+	handoutP := e.configureParagraph(box.tf.first(),
+		e.handoutFontSizeForText(textForGrid(handoutText), box, questionSize), "", "handout")
+	if a := tableStr(e.cfg.handout(), "align", ""); a != "" {
+		handoutP.align = pptxAlign(a)
+	}
+	e.format(handoutText, handoutP, box, s, true, false)
+	handoutP.spaceAfter = e.cfg.handoutTextSpaceAfter()
 }
 
 // addSlideWithHandout is add_slide_with_handout.
@@ -391,7 +416,7 @@ func (e *exporter) addAnswerSlide(q *fsource.Question) {
 	if e.cfg.addAuthor() && q.Has("author") {
 		fields = append(fields, "author")
 	}
-	answerSize := e.cfg.fontSizeForText("answer", e.answerGridText(q, fields), "answer_size", 32)
+	answerSize := e.cfg.fontSizeForText("answer", e.answerGridText(q, fields), "answer_size", defaultFontPt)
 
 	var box *textbox
 	for _, field := range fields {

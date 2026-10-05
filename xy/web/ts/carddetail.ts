@@ -34,6 +34,12 @@ import S from "./i18nstrings.js";
 const { fetchJSON, jpost, jput, jdelete, el, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
 
+const MAX_SUGGESTIONS = 8; // rows in an autocomplete dropdown
+const ZACHET_ROWS = 3; // a zachet field's starting height, in lines
+const HIGHLIGHT_MS = 2500; // a linked comment's highlight, and a copy note
+const CONTENT_DWELL_MS = 10000; // on the card body before its edits count as read
+const TIMELINE_DWELL_MS = 2000; // the timeline on screen before it counts as read
+
 // ---- pure helpers (exported for tests and for the board) ----
 
 // nowStamp is the local stand-in for cards.created_at on a card this session
@@ -459,7 +465,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     };
     const open = (): void => {
       const q2 = input.value.trim().toLowerCase();
-      items = values.filter((v) => v.toLowerCase().includes(q2) && v !== input.value.trim()).slice(0, 8);
+      items = values.filter((v) => v.toLowerCase().includes(q2) && v !== input.value.trim()).slice(0, MAX_SUGGESTIONS);
       if (!items.length) { close(); return; }
       menu.replaceChildren(...items.map((v) => {
         const b = el("button", { class: "suggest-item u-clip-fade", type: "button", text: v });
@@ -793,8 +799,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       answer: buildField(S.card.field.answer(), "area", f.answer, { open: opts.open }),
       // Three lines, and growing: a zachet is a list of accepted wordings, and
       // one line of it was a slot you wrote a paragraph through.
-      zachet: buildField(S.card.field.zachet(), "area", f.zachet, { rows: 3 }),
-      nezachet: buildField(S.card.field.nezachet(), "area", f.nezachet, { rows: 3 }),
+      zachet: buildField(S.card.field.zachet(), "area", f.zachet, { rows: ZACHET_ROWS }),
+      nezachet: buildField(S.card.field.nezachet(), "area", f.nezachet, { rows: ZACHET_ROWS }),
       comment: buildField(S.card.field.comment(), "area", f.comment),
       sources: buildSourcesField(f.sources, boardSources()),
       authors: buildAuthorsField(f.authors, boardAuthors(), f.authorLabel),
@@ -1158,7 +1164,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (!node) return;
     node.scrollIntoView({ block: "center" });
     node.classList.add("tl-highlight");
-    setTimeout(() => node.classList.remove("tl-highlight"), 2500);
+    setTimeout(() => node.classList.remove("tl-highlight"), HIGHLIGHT_MS);
   }
 
   async function copyCardLink(): Promise<void> {
@@ -1173,15 +1179,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     catch (err) { showCopyMsg(S.card.copy.failed(errMsg(err)), true); }
   }
 
-  async function openCard(card: BoardCard, opts: { returnTo?: CardReturn | null; fresh?: boolean } = {}): Promise<void> {
-    stopReadTracking(); // tear down any timer/observer left over from a previous card
-    freshCard = !!opts.fresh;
-    versionIdx = 0;
-    cardReturn = opts.returnTo || null;
-    openCardId = card.id;
-    deps.onOpenCard?.(card.id);
-    cardView = "";
-    cardFieldReaders = null;
+  // fillCardEditor loads the card into the draft and the editor's own fields.
+  function fillCardEditor(card: BoardCard): void {
     const openMeta = card.handoutMeta != null ? card.handoutMeta : null;
     const openAlias = card.alias != null ? card.alias : null;
     draft.open(card.desc, openMeta, openAlias);
@@ -1197,6 +1196,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // the numbered, screen-mode question text); hide it otherwise.
     ui.copy.hidden = card.kind !== "question" && card.kind !== "theme";
     ui.copyMsg.hidden = true;
+  }
+
+  // showCardOverlay puts the card on screen and on the overlay stack.
+  function showCardOverlay(card: BoardCard): void {
     // The exit says what it does: opened from a list preview, closing lands back
     // in that preview, so it is ← (back); opened from the board, it is × (close).
     const back = !!cardReturn;
@@ -1210,6 +1213,19 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (cardReturn) overlayStack.replace(previewOverlay, entry, cardUrl(card.id));
     else if (!overlayStack.isTop(cardOverlay)) overlayStack.open(entry, cardUrl(card.id));
     else overlayStack.replace(cardOverlay, entry, cardUrl(card.id));
+  }
+
+  async function openCard(card: BoardCard, opts: { returnTo?: CardReturn | null; fresh?: boolean } = {}): Promise<void> {
+    stopReadTracking(); // tear down any timer/observer left over from a previous card
+    freshCard = !!opts.fresh;
+    versionIdx = 0;
+    cardReturn = opts.returnTo || null;
+    openCardId = card.id;
+    deps.onOpenCard?.(card.id);
+    cardView = "";
+    cardFieldReaders = null;
+    fillCardEditor(card);
+    showCardOverlay(card);
     deps.renderLabelPicker(card);
     deps.paintLabels();
     lastEditView = fieldsAvailable() ? "fields" : "text";
@@ -1252,29 +1268,30 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       contentReadTimer = setTimeout(() => {
         contentReadTimer = null;
         if (openCardId === card.id) void markCardRead(card.id, { content: true });
-      }, 10000);
+      }, CONTENT_DWELL_MS);
     }
+    if (u.content || u.comments) watchTimelineDwell(card, u);
+  }
 
-    if (u.content || u.comments) {
-      const timeline = ui.timeline;
-      let dwellTimer: ReturnType<typeof setTimeout> | null = null;
-      commentsObserver = new IntersectionObserver((entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio > 0) {
-            if (!dwellTimer) {
-              dwellTimer = setTimeout(() => {
-                const seen = deps.timeline.readBuckets();
-                if (openCardId === card.id) void markCardRead(card.id, { content: !!u.content && seen.content, comments: !!u.comments && seen.comments });
-              }, 2000);
-            }
-          } else if (dwellTimer) {
-            clearTimeout(dwellTimer);
-            dwellTimer = null;
-          }
+  // watchTimelineDwell marks the card read once its timeline has been on screen
+  // for a while, clearing only the buckets the timeline's filter showed.
+  function watchTimelineDwell(card: BoardCard, u: UnreadFlags): void {
+    let dwellTimer: ReturnType<typeof setTimeout> | null = null;
+    const markSeen = (): void => {
+      const seen = deps.timeline.readBuckets();
+      if (openCardId === card.id) void markCardRead(card.id, { content: !!u.content && seen.content, comments: !!u.comments && seen.comments });
+    };
+    commentsObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && entry.intersectionRatio > 0) {
+          if (!dwellTimer) dwellTimer = setTimeout(markSeen, TIMELINE_DWELL_MS);
+        } else if (dwellTimer) {
+          clearTimeout(dwellTimer);
+          dwellTimer = null;
         }
-      });
-      commentsObserver.observe(timeline);
-    }
+      }
+    });
+    commentsObserver.observe(ui.timeline);
   }
 
   // markCardRead advances the caller's read watermark(s) for a card to the
@@ -1440,7 +1457,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (isErr) node.setAttribute("data-err", ""); else node.removeAttribute("data-err");
     node.hidden = false;
     if (copyMsgTimer) clearTimeout(copyMsgTimer);
-    copyMsgTimer = setTimeout(() => { node.hidden = true; }, 2500);
+    copyMsgTimer = setTimeout(() => { node.hidden = true; }, HIGHLIGHT_MS);
   }
 
   // imagePng decrypts a handout picture and re-encodes it as PNG — the one image
@@ -1682,16 +1699,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // The alias is deliberately absent here — it autosaves (saveAlias).
     msg.textContent = "";
     try {
-      const dk = mustDK();
-      const body: OpBody = { description_enc: await xyCrypto.encField(dk, newDesc) };
-      if (newDesc !== card.desc) {
-        body.desc_event_enc = await xyCrypto.encField(dk, JSON.stringify({ before: card.desc, after: newDesc }));
-      }
-      // Persist handout-gen settings (field #10) when they changed: "" clears them.
-      if (newMeta !== (card.handoutMeta || null)) {
-        body.handout_meta_enc = newMeta ? await xyCrypto.encField(dk, newMeta) : "";
-      }
-      await verbs.patch("patchCard", `/api/cards/${card.id}`, body);
+      await verbs.patch("patchCard", `/api/cards/${card.id}`, await saveBody(card, newDesc, newMeta));
       card.desc = newDesc;
       card.handoutMeta = newMeta;
       draft.commitContent(newDesc, newMeta);
@@ -1703,6 +1711,21 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       msg.textContent = S.card.save.saved();
     } catch (err) { msg.textContent = errMsg(err); return false; }
     return true;
+  }
+
+  // saveBody is the card PATCH: the description, a desc_edit entry when the text
+  // changed, and the handout settings when they changed.
+  async function saveBody(card: BoardCard, newDesc: string, newMeta: string | null): Promise<OpBody> {
+    const dk = mustDK();
+    const body: OpBody = { description_enc: await xyCrypto.encField(dk, newDesc) };
+    if (newDesc !== card.desc) {
+      body.desc_event_enc = await xyCrypto.encField(dk, JSON.stringify({ before: card.desc, after: newDesc }));
+    }
+    // Persist handout-gen settings (field #10) when they changed: "" clears them.
+    if (newMeta !== (card.handoutMeta || null)) {
+      body.handout_meta_enc = newMeta ? await xyCrypto.encField(dk, newMeta) : "";
+    }
+    return body;
   }
 
   // Cmd/Ctrl-Enter saves from either edit view (textarea or structured fields).

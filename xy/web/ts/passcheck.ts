@@ -11,7 +11,9 @@
 import S from "./i18nstrings.js";
 
 export const PASSCHECK_PREFIX = "xy-passcheck:";
-export const PASSCHECK_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+const PASSCHECK_INTERVAL_DAYS = 30;
+const HOURS_PER_DAY = 24;
+export const PASSCHECK_INTERVAL_MS = PASSCHECK_INTERVAL_DAYS * HOURS_PER_DAY * 60 * 60 * 1000;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 

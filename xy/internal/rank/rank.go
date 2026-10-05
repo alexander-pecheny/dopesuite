@@ -15,6 +15,14 @@ import (
 const digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 const zero = '0'
 
+// smallestInteger is the lowest integer part a key can have: head "A" takes
+// the most digits, all zero. Nothing sorts below it, so it is not a valid key.
+var smallestInteger = "A" + strings.Repeat(string(zero), maxIntegerDigits)
+
+// maxIntegerDigits is how many digits the longest integer part, head "A" or
+// "z", carries.
+const maxIntegerDigits = 26
+
 func indexOf(c byte) int { return strings.IndexByte(digits, c) }
 
 // midpoint is the shortest string strictly between the fractional parts a and b
@@ -100,7 +108,7 @@ func integerPart(key string) (string, error) {
 }
 
 func validate(key string) error {
-	if key == "A"+strings.Repeat(string(zero), 26) {
+	if key == smallestInteger {
 		return errors.New("rank: invalid order key: " + key)
 	}
 	i, err := integerPart(key)
@@ -220,7 +228,7 @@ func Between(a, b string) (string, error) {
 			return "", err
 		}
 		fb := b[len(ib):]
-		if ib == "A"+strings.Repeat(string(zero), 26) {
+		if ib == smallestInteger {
 			mid, err := midpoint("", fb)
 			if err != nil {
 				return "", err

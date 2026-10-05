@@ -29,6 +29,14 @@ import (
 	xystrings "xy/i18nstrings"
 )
 
+const (
+	cssPxPerInch = 96
+	mmPerInch    = 25.4
+	floatBits    = 64
+	// scratchFileMode keeps the user's page readable by the server alone.
+	scratchFileMode = 0o600
+)
+
 // Options are the switches `handouts html2img` takes.
 type Options struct {
 	// Browser is the Chromium to drive; empty looks for one.
@@ -61,7 +69,7 @@ func WidthMM(html string) (float64, error) {
 	if m == nil {
 		return 0, corei18n.User(xystrings.Default.Docs.Print.WidthMissing())
 	}
-	return strconv.ParseFloat(m[1], 64)
+	return strconv.ParseFloat(m[1], floatBits)
 }
 
 // Render writes <name>.pdf and <name>.png beside the HTML.
@@ -112,7 +120,7 @@ func Render(ctx context.Context, path string, o Options) (Result, error) {
 	// document's @page rule, which is where Playwright's width/height end up
 	// too, so the injected copy is rendered rather than the original.
 	paged := filepath.Join(scratch, "paged.html")
-	if err := os.WriteFile(paged, []byte(withPageRule(string(raw), res.WidthMM, res.HeightMM)), 0o600); err != nil {
+	if err := os.WriteFile(paged, []byte(withPageRule(string(raw), res.WidthMM, res.HeightMM)), scratchFileMode); err != nil {
 		return Result{}, err
 	}
 	if err := run(ctx, browser, &o, []string{
@@ -138,7 +146,7 @@ func Render(ctx context.Context, path string, o Options) (Result, error) {
 // write it into an element and the DOM is dumped.
 func measure(ctx context.Context, browser, html string, widthPx int, scratch string, o *Options) (height, width int, err error) {
 	probe := filepath.Join(scratch, "measure.html")
-	if err := os.WriteFile(probe, []byte(html+measureScript), 0o600); err != nil {
+	if err := os.WriteFile(probe, []byte(html+measureScript), scratchFileMode); err != nil {
 		return 0, 0, err
 	}
 	out, err := output(ctx, browser, o, []string{
@@ -396,10 +404,10 @@ func firstLine(s string) string {
 	return ""
 }
 
-func mmToPx(mm float64) int { return int(math.Round(mm * 96 / 25.4)) }
-func pxToMM(px int) float64 { return float64(px) * 25.4 / 96 }
+func mmToPx(mm float64) int { return int(math.Round(mm * cssPxPerInch / mmPerInch)) }
+func pxToMM(px int) float64 { return float64(px) * mmPerInch / cssPxPerInch }
 func fileURL(path string) string {
 	return "file://" + filepath.ToSlash(path)
 }
 
-func trimFloat(f float64) string { return strconv.FormatFloat(f, 'g', -1, 64) }
+func trimFloat(f float64) string { return strconv.FormatFloat(f, 'g', -1, floatBits) }

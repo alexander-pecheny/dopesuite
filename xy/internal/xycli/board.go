@@ -5,8 +5,9 @@ import (
 	"sort"
 	"strings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Board is a snapshot decrypted under a held key — the plaintext model every

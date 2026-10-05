@@ -4,8 +4,9 @@ import (
 	"regexp"
 	"strings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Search reads what the browser's Search Index reads — each Card's 4s, its Alias

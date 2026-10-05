@@ -53,6 +53,18 @@ const (
 	// answer paragraph, not one small line — the 2pt shrink × Arial's 1.15em line
 	// box, in twips.
 	srcGapTw = 46
+
+	// firstFreeRel is the first relationship id after the template's rId1–6;
+	// firstDocPrID is where python-docx starts numbering drawing objects.
+	firstFreeRel = 7
+	firstDocPrID = 1000
+
+	// Paragraph spacing before, in twips (chgksuite's Pt values × 20).
+	metaAfterQuestionTw = 360 // 18pt
+	themeGapTw          = 480 // 24pt
+	siQuestionGapTw     = 240 // 12pt
+	questionGapTw       = 360 // 18pt
+	answerGapTw         = 120 // 6pt
 )
 
 // relItem is a relationship appended to word/_rels/document.xml.rels in document
@@ -91,7 +103,7 @@ func Export(doc fsource.Doc, images map[string][]byte, opts Options) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	e := &exporter{images: images, nextRel: 7, nextDoc: 1000, opts: opts, labels: labels}
+	e := &exporter{images: images, nextRel: firstFreeRel, nextDoc: firstDocPrID, opts: opts, labels: labels}
 	body := e.renderBody(doc)
 	if opts.OptimizeSize {
 		e.optimizeMedia()
@@ -122,6 +134,24 @@ type para struct {
 // pPr child order follows the OOXML CT_PPr schema (pStyle, keepNext, keepLines,
 // pageBreakBefore, spacing, …, rPr last).
 func (p *para) xml() string {
+	ppr := p.pPr()
+	if ppr == "" && len(p.runs) == 0 {
+		return "<w:p/>"
+	}
+	var b strings.Builder
+	b.WriteString("<w:p>")
+	if ppr != "" {
+		b.WriteString("<w:pPr>" + ppr + "</w:pPr>")
+	}
+	for _, r := range p.runs {
+		b.WriteString(r)
+	}
+	b.WriteString("</w:p>")
+	return b.String()
+}
+
+// pPr is the paragraph properties' children, empty when there are none.
+func (p *para) pPr() string {
 	var ppr strings.Builder
 	if p.style != "" {
 		ppr.WriteString(`<w:pStyle w:val="` + p.style + `"/>`)
@@ -141,19 +171,7 @@ func (p *para) xml() string {
 	if p.lang {
 		ppr.WriteString(`<w:rPr><w:lang w:val="en-US"/></w:rPr>`)
 	}
-	if ppr.Len() == 0 && len(p.runs) == 0 {
-		return "<w:p/>"
-	}
-	var b strings.Builder
-	b.WriteString("<w:p>")
-	if ppr.Len() > 0 {
-		b.WriteString("<w:pPr>" + ppr.String() + "</w:pPr>")
-	}
-	for _, r := range p.runs {
-		b.WriteString(r)
-	}
-	b.WriteString("</w:p>")
-	return b.String()
+	return ppr.String()
 }
 
 // addRaw appends a run for verbatim text (mirrors python-docx paragraph.add_run
@@ -229,7 +247,7 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 			flushLead()
 			p := e.addPara()
 			if prevType == "Question" {
-				p.spacingBefore = 360
+				p.spacingBefore = metaAfterQuestionTw
 			}
 			e.addValue(p, el.Content, textOpts{nbsp: true})
 			e.addPara() // trailing empty paragraph
@@ -304,7 +322,7 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 			p := e.addPara()
 			p.style, p.keepNext = "Heading3", true
 			if !firstTheme {
-				p.spacingBefore = 480
+				p.spacingBefore = themeGapTw
 			}
 			firstTheme = false
 			e.addValue(p, themeLabel(el.Content), textOpts{nbsp: true})
@@ -386,9 +404,9 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 	// A SI question sits under its theme's heading and is spaced tighter than a
 	// ChGK one, which headlines its own paragraph.
 	if e.opts.siMode() {
-		p.spacingBefore = 240
+		p.spacingBefore = siQuestionGapTw
 	} else {
-		p.spacingBefore = 360
+		p.spacingBefore = questionGapTw
 	}
 
 	p.addRaw(e.questionLabel(q, e.opts.OnlyQuestionNumber || e.opts.siMode())+". ", "bold")
@@ -424,15 +442,15 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 		// table cell; so does this.
 		p = e.addPara()
 		p.runs = append(p.runs, pageBreakRun)
-		p.keepLines, p.spacingBefore = true, 120
+		p.keepLines, p.spacingBefore = true, answerGapTw
 	case into != nil:
 		into.addRaw("\n", "")
 		// chgksuite sets the spacing on whatever paragraph it holds, so in a cell
 		// the answer's 6pt overwrites the question's 18pt.
-		into.spacingBefore = 120
+		into.spacingBefore = answerGapTw
 	default:
 		p = e.addPara()
-		p.keepLines, p.spacingBefore = true, 120
+		p.keepLines, p.spacingBefore = true, answerGapTw
 	}
 
 	whiten := e.opts.Spoilers == SpoilersWhiten

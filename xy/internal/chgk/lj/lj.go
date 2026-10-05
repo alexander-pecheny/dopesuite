@@ -24,6 +24,13 @@ import (
 	_ "image/png"
 )
 
+const (
+	floatBits = 64
+	// pyReprDigits is the precision that always round-trips a float64, which
+	// Python's repr falls back to when the shortest form does not.
+	pyReprDigits = 17
+)
+
 // Options are the switches `compose lj` takes that shape the HTML.
 type Options struct {
 	// NoSpoilers prints the answers openly instead of inside <lj-spoiler>.
@@ -481,8 +488,8 @@ func pyNum(f float64, native bool) string {
 	if native {
 		return strconv.Itoa(int(f))
 	}
-	s := strconv.FormatFloat(f, 'g', 17, 64)
-	if short := strconv.FormatFloat(f, 'g', -1, 64); mustParse(short) == f {
+	s := strconv.FormatFloat(f, 'g', pyReprDigits, floatBits)
+	if short := strconv.FormatFloat(f, 'g', -1, floatBits); mustParse(short) == f {
 		s = short
 	}
 	if !strings.ContainsAny(s, ".eE") {
@@ -492,6 +499,6 @@ func pyNum(f float64, native bool) string {
 }
 
 func mustParse(s string) float64 {
-	f, _ := strconv.ParseFloat(s, 64)
+	f, _ := strconv.ParseFloat(s, floatBits)
 	return f
 }

@@ -36,6 +36,27 @@ const (
 	labelAbove      = 2.0 // LABEL_ABOVE
 	labelBelow      = 0.9 // LABEL_BELOW
 	strutEM         = 1.2 // STRUT_EM
+
+	// chgksuite's defaults: A4 paper with 5 mm margins.
+	a4WidthMM       = 210
+	a4HeightMM      = 297
+	defaultMarginMM = 5
+
+	defaultBottomSpaceRowRatio = 0.6
+	defaultShrinkPercent       = 2
+	defaultMinResizeImage      = 0.6
+	defaultRefineIterations    = 8
+
+	// defaultHandoutsPerTeam is handouts_per_team when a block does not set it.
+	defaultHandoutsPerTeam = 3
+
+	mmPerInch = 25.4
+	ptPerInch = 72
+	percent   = 100
+
+	// round3Scale is 10^3, for rounding to three decimals.
+	round3Scale = 1000
+	floatBits   = 64
 )
 
 // Args mirrors the chgksuite handout CLI flags xy relies on (ru defaults).
@@ -74,11 +95,14 @@ type ResizeConfig struct {
 // DefaultArgs returns the chgksuite handout defaults.
 func DefaultArgs() Args {
 	return Args{
-		PaperWidth: 210, PaperHeight: 297,
-		MarginTop: 5, MarginBottom: 5, MarginLeft: 5, MarginRight: 5,
+		PaperWidth: a4WidthMM, PaperHeight: a4HeightMM,
+		MarginTop: defaultMarginMM, MarginBottom: defaultMarginMM,
+		MarginLeft: defaultMarginMM, MarginRight: defaultMarginMM,
 		Resize: ResizeConfig{
-			BottomSpaceRowRatio: 0.6, ShrinkPercent: 2, MinResizeImage: 0.6,
-			RefineIterations: 8,
+			BottomSpaceRowRatio: defaultBottomSpaceRowRatio,
+			ShrinkPercent:       defaultShrinkPercent,
+			MinResizeImage:      defaultMinResizeImage,
+			RefineIterations:    defaultRefineIterations,
 		},
 	}
 }
@@ -98,7 +122,7 @@ func (n pynum) String() string {
 }
 
 func pyFloat(f float64) string {
-	s := strconv.FormatFloat(f, 'f', -1, 64)
+	s := strconv.FormatFloat(f, 'f', -1, floatBits)
 	if !strings.Contains(s, ".") {
 		s += ".0"
 	}
@@ -106,7 +130,7 @@ func pyFloat(f float64) string {
 }
 
 // round3 mirrors Python round(x, 3) (round half to even).
-func round3(x float64) float64 { return math.RoundToEven(x*1000) / 1000 }
+func round3(x float64) float64 { return math.RoundToEven(x*round3Scale) / round3Scale }
 
 // ── .hndt parsing (utils.parse_handouts) ──
 
@@ -179,7 +203,7 @@ func wrapVal(key, val string) any {
 		return n
 	}
 	if floatKeys[key] {
-		f, _ := strconv.ParseFloat(strings.TrimSpace(val), 64)
+		f, _ := strconv.ParseFloat(strings.TrimSpace(val), floatBits)
 		return f
 	}
 	return strings.TrimSpace(val)
@@ -357,7 +381,7 @@ func (a Args) buildCellBody(b block) string {
 		if r, ok := b.floatVal("resize_image"); ok && r != 0 {
 			qw = r
 		}
-		imgWidth := pyFloat(qw*100) + "%"
+		imgWidth := pyFloat(qw*percent) + "%"
 		path := strings.ReplaceAll(img, "\\", "/")
 		imgExpr = strings.ReplaceAll(strings.ReplaceAll(imgTmpl, "<IMGPATH>", path), "<IMGWIDTH>", imgWidth)
 	}
@@ -405,7 +429,7 @@ func (a Args) generateRegularBlock(b block) string {
 	if r, ok := b.intVal("rows"); ok && r != 0 {
 		numRows = r
 	}
-	handoutsPerTeam := 3
+	handoutsPerTeam := defaultHandoutsPerTeam
 	if h, ok := b.intVal("handouts_per_team"); ok && h != 0 {
 		handoutsPerTeam = h
 	}
@@ -436,7 +460,7 @@ func (a Args) generateRegularBlock(b block) string {
 	if f, ok := b.floatVal("font_size"); ok {
 		fsf = f
 	}
-	strut := pynum{round3(fsf * strutEM * 25.4 / 72), false}
+	strut := pynum{round3(fsf * strutEM * mmPerInch / ptPerInch), false}
 	cellbody := a.buildCellBody(b)
 	centered := "true"
 	if nc, ok := b.intVal("no_center"); ok && nc != 0 {

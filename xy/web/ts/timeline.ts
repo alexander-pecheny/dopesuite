@@ -22,6 +22,14 @@ import type { OpBody, TimelineEvent } from "./store.js";
 import { icon, iconed } from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
+// Placeholder rows shown while a card's comments load.
+const SKELETON_ROWS = 3;
+// Characters of the parent comment quoted above a reply.
+const QUOTE_CHARS = 110;
+// Lets a click on a mention suggestion land before blur closes the list.
+const BLUR_CLOSE_DELAY_MS = 150;
+const MAX_MENTION_SUGGESTIONS = 8;
+
 const { fetchJSON, jpost, jpatch, jdelete, el, onCmdEnter, deriveTitle } = xyApp;
 
 // requestSubmit, not submit(): the form's own submit listener is what posts the
@@ -515,7 +523,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // container tall while saying "not yet".
   function skeleton(): DocumentFragment {
     const frag = document.createDocumentFragment();
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < SKELETON_ROWS; i++) {
       frag.append(el("div", { class: "tl-event tl-skeleton" },
         el("div", { class: "tl-skeleton-bar tl-skeleton-meta" }),
         el("div", { class: "tl-skeleton-bar" }),
@@ -704,7 +712,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         if (parent && !parent.deleted && parentText) {
           quoteNode = el("button", {
             class: "tl-quote", type: "button", title: S.timeline.thread.openTitle(),
-            text: deriveTitle(parentText, 110), onclick: () => { void openThread(rootId); },
+            text: deriveTitle(parentText, QUOTE_CHARS), onclick: () => { void openThread(rootId); },
           });
         }
       }
@@ -1138,7 +1146,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   function attachMentionPicker(input: HTMLTextAreaElement | HTMLInputElement): void {
     let popup: { close(): void } | null = null;
     const closePopup = (): void => { popup?.close(); popup = null; };
-    input.addEventListener("blur", () => setTimeout(closePopup, 150));
+    input.addEventListener("blur", () => setTimeout(closePopup, BLUR_CLOSE_DELAY_MS));
     input.addEventListener("keydown", (e: Event) => {
       if ((e as KeyboardEvent).key === "Escape" && popup) { e.stopPropagation(); closePopup(); }
     });
@@ -1152,21 +1160,24 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       const names = rosterNames().filter((n) => n.toLowerCase().startsWith(token.toLowerCase()) && n !== token);
       if (!names.length) return;
       const list = el("div", { class: "menu-dropdown menu-fixed mention-menu" });
-      for (const name of names.slice(0, 8)) {
-        const btn = el("button", { class: "menu-item", type: "button", text: "@" + name });
-        // pointerdown + preventDefault, so the textarea never blurs (the
-        // suggestWrap trick) and the insert lands in one undo step.
-        btn.addEventListener("pointerdown", (e) => {
-          e.preventDefault();
-          input.setSelectionRange(caret - token.length - 1, caret);
-          input.focus();
-          document.execCommand("insertText", false, "@" + name + " ");
-          closePopup();
-        });
-        list.append(btn);
-      }
+      for (const name of names.slice(0, MAX_MENTION_SUGGESTIONS)) list.append(mentionItem(name, caret, token));
       popup = anchorPopup(list, input, { align: "start", onClose: () => { popup = null; } });
     });
+
+    // mentionItem replaces the "@token" before the caret with "@name ".
+    function mentionItem(name: string, caret: number, token: string): HTMLElement {
+      const btn = el("button", { class: "menu-item", type: "button", text: "@" + name });
+      // pointerdown + preventDefault, so the textarea never blurs (the
+      // suggestWrap trick) and the insert lands in one undo step.
+      btn.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        input.setSelectionRange(caret - token.length - 1, caret);
+        input.focus();
+        document.execCommand("insertText", false, "@" + name + " ");
+        closePopup();
+      });
+      return btn;
+    }
   }
   attachMentionPicker(ui.commentInput);
   attachMentionPicker(ui.threadInput);

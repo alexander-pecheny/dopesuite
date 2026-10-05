@@ -6,6 +6,17 @@ import (
 	"strings"
 )
 
+// Sizes as chgksuite's parseimg and python-docx's add_picture compute them.
+const (
+	pxPerInch    = 120 // python-docx lays pixels out at 120 dpi
+	pxPerEm      = 25
+	linesPerInch = 6 // an inline picture is one line tall
+	maxSidePx    = 600
+	minSidePx    = 200
+	floatBits    = 64
+	hundredths   = 100 // Round2 keeps two decimals
+)
+
 // Img is a parsed (img …) directive: the last whitespace token is the file name,
 // the rest are options (chgksuite parseimg).
 type Img struct {
@@ -54,20 +65,20 @@ func (im Img) SizeInches(nativeW, nativeH int) (w, h float64) {
 		nativeW, nativeH = 1, 1
 	}
 	if im.Inline {
-		h = 1.0 / 6 // one line tall
+		h = 1.0 / linesPerInch
 		return h * float64(nativeW) / float64(nativeH), h
 	}
 	rw, rh := proportionalResize(nativeW, nativeH)
 	width, height := im.Width, im.Height
 	if width == -1 && height == -1 {
-		return float64(rw) / 120, float64(rh) / 120
+		return float64(rw) / pxPerInch, float64(rh) / pxPerInch
 	}
 	if width != -1 && height == -1 {
 		height = float64(rh) * (width / float64(rw))
 	} else if width == -1 && height != -1 {
 		width = float64(rw) * (height / float64(rh))
 	}
-	return width / 120, height / 120
+	return width / pxPerInch, height / pxPerInch
 }
 
 // SizePixels is parseimg(dimensions="pixels"), which is what the HTML exports
@@ -92,11 +103,11 @@ func (im Img) SizePixels(nativeW, nativeH int) (w, h float64, native bool) {
 // proportionalResize mirrors chgksuite: clamp the longest side into [200, 600] px.
 func proportionalResize(w, h int) (int, int) {
 	mx := max(w, h)
-	if mx > 600 {
-		return w * 600 / mx, h * 600 / mx
+	if mx > maxSidePx {
+		return w * maxSidePx / mx, h * maxSidePx / mx
 	}
-	if mx < 200 {
-		return w * 200 / mx, h * 200 / mx
+	if mx < minSidePx {
+		return w * minSidePx / mx, h * minSidePx / mx
 	}
 	return w, h
 }
@@ -105,17 +116,17 @@ func proportionalResize(w, h int) (int, int) {
 func parseSingleSize(s string) float64 {
 	switch {
 	case strings.HasSuffix(s, "in"):
-		v, _ := strconv.ParseFloat(s[:len(s)-2], 64)
-		return v * 120
+		v, _ := strconv.ParseFloat(s[:len(s)-2], floatBits)
+		return v * pxPerInch
 	case strings.HasSuffix(s, "em"):
-		v, _ := strconv.ParseFloat(s[:len(s)-2], 64)
-		return v * 25
+		v, _ := strconv.ParseFloat(s[:len(s)-2], floatBits)
+		return v * pxPerEm
 	case strings.HasSuffix(s, "px"):
 		s = s[:len(s)-2]
 	}
-	v, _ := strconv.ParseFloat(s, 64)
+	v, _ := strconv.ParseFloat(s, floatBits)
 	return v
 }
 
 // Round2 rounds to two decimals (used when emitting lengths).
-func Round2(f float64) float64 { return math.Round(f*100) / 100 }
+func Round2(f float64) float64 { return math.Round(f*hundredths) / hundredths }

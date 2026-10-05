@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 //go:embed assets/poll_config.toml
@@ -174,11 +176,12 @@ func asciiEscape(s string) string {
 	var b strings.Builder
 	for _, r := range s {
 		switch {
-		case r < 0x80:
+		case r < utf8.RuneSelf:
 			b.WriteRune(r)
-		case r > 0xFFFF:
-			r -= 0x10000
-			fmt.Fprintf(&b, "\\u%04x\\u%04x", 0xD800+(r>>10), 0xDC00+(r&0x3FF))
+		case utf16.RuneLen(r) == 2:
+			hi, lo := utf16.EncodeRune(r)
+			fmt.Fprintf(&b, "\\u%04x\\u%04x", hi, lo)
+
 		default:
 			fmt.Fprintf(&b, "\\u%04x", r)
 		}

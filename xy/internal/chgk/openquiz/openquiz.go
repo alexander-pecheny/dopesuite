@@ -205,6 +205,26 @@ func (e *exporter) format(s string, removeBrackets bool) (string, []string, erro
 	if removeBrackets {
 		s = inline.RemoveSquareBrackets(s)
 	}
+	res, images, err := e.flatten(s)
+	if err != nil {
+		return "", nil, err
+	}
+	res = strings.TrimRight(res, "\n")
+	switch {
+	case len(images) > 0:
+		// The handout was a picture, so its brackets go with the text.
+		res = strings.TrimSpace(reHandoutBlock.ReplaceAllString(s, ""))
+	case reHandoutShort.MatchString(res):
+		if m := reHandoutInline.FindStringSubmatch(res); m != nil {
+			res = strings.Replace(res, m[0], m[1], 1)
+		}
+	}
+	res = inline.ReplaceNoBreak(res, e.opts.NoBreak)
+	return strings.ReplaceAll(res, "́", ""), images, nil
+}
+
+// flatten is the text of every run, and the links of the pictures among them.
+func (e *exporter) flatten(s string) (string, []string, error) {
 	var b strings.Builder
 	var images []string
 	for _, r := range inline.Parse4sElem(s) {
@@ -221,18 +241,7 @@ func (e *exporter) format(s string, removeBrackets bool) (string, []string, erro
 			images = append(images, link)
 		}
 	}
-	res := strings.TrimRight(b.String(), "\n")
-	switch {
-	case len(images) > 0:
-		// The handout was a picture, so its brackets go with the text.
-		res = strings.TrimSpace(reHandoutBlock.ReplaceAllString(s, ""))
-	case reHandoutShort.MatchString(res):
-		if m := reHandoutInline.FindStringSubmatch(res); m != nil {
-			res = strings.Replace(res, m[0], m[1], 1)
-		}
-	}
-	res = inline.ReplaceNoBreak(res, e.opts.NoBreak)
-	return strings.ReplaceAll(res, "́", ""), images, nil
+	return b.String(), images, nil
 }
 
 func (e *exporter) link(arg string) (string, error) {

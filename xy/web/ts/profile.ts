@@ -137,21 +137,26 @@ const PREVIEW_CARDS = [3, 6, 1, 9, 2, 4, 7, 2];
 // boardGrow on takes the whole screen and the width no longer decides anything
 // (.kanban in styles.css).
 const PREVIEW_LISTS = 4;
+const PREVIEW_CARDS_PER_LIST = 3;
+// The preview's width before it has been laid out.
+const PREVIEW_FALLBACK_W = 360;
+const LINE_HEIGHT_RATIO = 1.4; // a text line is ~1.4× the font size
+const MIN_LINE_PX = 1.5; // a wireframe bar never gets thinner than this
 
 function renderPreview(): void {
-  const k = (preview.clientWidth || 360) / PREVIEW_SCREEN_W;
+  const k = (preview.clientWidth || PREVIEW_FALLBACK_W) / PREVIEW_SCREEN_W;
   preview.style.setProperty("--pv-board-w", sizes.boardW == null ? "none" : Math.round(sizes.boardW * k) + "px");
   preview.style.setProperty("--pv-list-w", Math.round(sizes.listW * k) + "px");
   preview.style.setProperty("--pv-list-count", String(PREVIEW_LISTS));
   preview.style.setProperty("--kanban-grow", sizes.boardGrow ? "1" : "0");
-  // A text line is ~1.4× the font size; scale it like everything else so the
-  // font knob visibly re-packs the wireframe cards.
-  preview.style.setProperty("--pvb-line-h", Math.max(1.5, sizes.cardFont * 1.4 * k).toFixed(1) + "px");
+  // Scale the line height like everything else so the font knob visibly
+  // re-packs the wireframe cards.
+  preview.style.setProperty("--pvb-line-h", Math.max(MIN_LINE_PX, sizes.cardFont * LINE_HEIGHT_RATIO * k).toFixed(1) + "px");
   const lists = [];
   for (let i = 0; i < PREVIEW_LISTS; i++) {
     const cards = [];
-    for (let j = 0; j < 3; j++) {
-      const total = PREVIEW_CARDS[(i + j * 3) % PREVIEW_CARDS.length];
+    for (let j = 0; j < PREVIEW_CARDS_PER_LIST; j++) {
+      const total = PREVIEW_CARDS[(i + j * PREVIEW_CARDS_PER_LIST) % PREVIEW_CARDS.length];
       const shown = sizes.cardLines == null ? total : Math.min(total, sizes.cardLines);
       const bars = [];
       for (let n = 0; n < shown; n++) {
@@ -180,6 +185,7 @@ function syncSizesUI(): void {
 }
 
 // Debounce the save so dragging a slider fires one request, not one per pixel.
+const SIZES_SAVE_DELAY_MS = 400;
 let sizesSaveTimer: number | null = null;
 function scheduleSizesSave(): void {
   if (sizesSaveTimer) clearTimeout(sizesSaveTimer);
@@ -187,7 +193,7 @@ function scheduleSizesSave(): void {
     sizesSaveTimer = null;
     // Best-effort — the sliders already show the value, a failed save is not fatal.
     try { await jpost("/api/auth/sizes", sizes); } catch (_) {}
-  }, 400);
+  }, SIZES_SAVE_DELAY_MS);
 }
 
 function commitSizes(): void {
@@ -224,11 +230,15 @@ wireModal("sizes", "sizesBtn", async () => {
 // Its message line says it saved, or why the save failed; a text field also
 // saves while you pause typing, since a suggestion picked from its list fires
 // no change event.
+const FLASH_MS = 2000; // how long "saved" stays up
+// A typed field saves after this long without a keystroke.
+const TYPING_SAVE_DELAY_MS = 800;
+
 function flash(node: HTMLElement, text: string): void {
   setText(node, text);
   if (!text) return;
   const shown = text;
-  setTimeout(() => { if (node.textContent === shown) setText(node, ""); }, 2000);
+  setTimeout(() => { if (node.textContent === shown) setText(node, ""); }, FLASH_MS);
 }
 
 // saveOn wires one control: `save` posts it and throws on failure, `revert`
@@ -250,7 +260,7 @@ function saveOn(controls: HTMLElement[], message: HTMLElement, save: () => Promi
     c.addEventListener("change", () => { void run(); });
     if (typing) c.addEventListener("input", () => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => { void run(); }, 800);
+      timer = setTimeout(() => { void run(); }, TYPING_SAVE_DELAY_MS);
     });
   }
 }

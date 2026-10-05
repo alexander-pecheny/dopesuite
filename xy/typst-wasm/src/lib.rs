@@ -57,6 +57,9 @@ struct MemWorld<'a> {
     main: Source,
 }
 
+/// FIXED_YEAR is the year every render believes it is: there is no clock.
+const FIXED_YEAR: i32 = 1970;
+
 impl World for MemWorld<'_> {
     fn library(&self) -> &LazyHash<Library> {
         &self.state.library
@@ -96,11 +99,17 @@ impl World for MemWorld<'_> {
     fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
         // No clock: WASI would need a host call, and a deterministic render is
         // worth more to us than a real date (nothing in a handout prints one).
-        Datetime::from_ymd(1970, 1, 1)
+        Datetime::from_ymd(FIXED_YEAR, 1, 1)
     }
 }
 
 // ---- memory helpers ----
+
+/// PTR_SHIFT puts a packed buffer's pointer in the high half of the u64.
+const PTR_SHIFT: u64 = 32;
+
+/// RESULT_HEADER_LEN is the ok byte plus the u32 page count before a payload.
+const RESULT_HEADER_LEN: usize = 5;
 
 #[no_mangle]
 pub extern "C" fn alloc(len: u32) -> u32 {
@@ -128,11 +137,11 @@ fn pack(mut buf: Vec<u8>) -> u64 {
     let ptr = buf.as_mut_ptr() as u64;
     let len = buf.len() as u64;
     std::mem::forget(buf);
-    (ptr << 32) | len
+    (ptr << PTR_SHIFT) | len
 }
 
 fn result_buf(ok: bool, pages: u32, payload: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(5 + payload.len());
+    let mut out = Vec::with_capacity(RESULT_HEADER_LEN + payload.len());
     out.push(ok as u8);
     out.extend_from_slice(&pages.to_le_bytes());
     out.extend_from_slice(payload);

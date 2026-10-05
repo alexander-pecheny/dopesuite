@@ -119,7 +119,7 @@ func configValue(v any) string {
 		case bool:
 			return strconv.FormatBool(t)
 		case float64:
-			return strconv.FormatFloat(t, 'f', -1, 64)
+			return strconv.FormatFloat(t, 'f', -1, floatBits)
 		default:
 			b, _ := json.Marshal(v)
 			return string(b)
@@ -135,6 +135,14 @@ func configValue(v any) string {
 
 // configFlag declares --config on a command's own flag set, since this CLI has
 // no flags of its own before the command name.
+// parseConfigured parses args into fs, then applies the --config file over them.
+func parseConfigured(fs *flagSet, args []string, config string) error {
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	return applyConfig(fs, config)
+}
+
 func configFlag(fs *flagSet) *string {
 	return fs.String("config", "", "a JSON file of flag values, applied over the command line")
 }

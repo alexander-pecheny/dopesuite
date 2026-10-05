@@ -12,11 +12,19 @@ import (
 	xystrings "xy/i18nstrings"
 )
 
+const (
+	bytesPerMiB = 1 << 20
+	// mbRounding keeps two decimals of a MiB figure.
+	mbRounding = 100
+	// floatBits is the precision strconv formats floats at.
+	floatBits = 64
+)
+
 // mbNum renders a byte count as a bare MiB number, rounded to two decimals with
 // trailing zeros dropped: a few hundred bytes reads "0", not "0.00004863".
 func mbNum(b int64) string {
-	mb := math.Round(float64(b)/(1<<20)*100) / 100
-	return strconv.FormatFloat(mb, 'f', -1, 64)
+	mb := math.Round(float64(b)/bytesPerMiB*mbRounding) / mbRounding
+	return strconv.FormatFloat(mb, 'f', -1, floatBits)
 }
 
 // humanMB is mbNum with the unit, for a standalone user-facing string.

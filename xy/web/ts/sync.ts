@@ -17,6 +17,8 @@
 import { xyStore } from "./store.js";
 import type { BoardSnapshot, OpBody, OutboxOp, SnapshotCardLabel, SnapshotPlaying, TimelineEvent } from "./store.js";
 
+const HTTP_NO_CONTENT = 204;
+
 // The server's JSON reply to a mutation, as far as the engine reads it.
 interface MutationResult {
   id?: number | null;
@@ -280,7 +282,7 @@ async function rawSend(method: string, path: string, body: unknown): Promise<unk
     err.httpStatus = res.status;
     throw err;
   }
-  if (res.status === 204) return null;
+  if (res.status === HTTP_NO_CONTENT) return null;
   const ct = res.headers.get("Content-Type") || "";
   return ct.includes("json") ? res.json() : null;
 }

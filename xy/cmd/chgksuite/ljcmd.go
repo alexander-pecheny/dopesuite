@@ -31,10 +31,7 @@ func composeLJ(args []string) error {
 	language := languageFlag(fs)
 	noBreak := noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	lang, labelsFile, err := language()
@@ -102,7 +99,7 @@ func writeLJ(groups [][]lj.Post, path string, addTS bool) error {
 			b.WriteString(p.Content + "\n\n")
 		}
 		out := outputName(path, "html", suffix, addTS)
-		if err := os.WriteFile(out, []byte(b.String()), 0o644); err != nil {
+		if err := os.WriteFile(out, []byte(b.String()), outputFileMode); err != nil {
 			return err
 		}
 		reportOutput(out)

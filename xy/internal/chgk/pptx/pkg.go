@@ -199,9 +199,12 @@ func (p *pkg) nextImageName(ext string) string {
 	}
 }
 
+// minSldID is the lowest slide id the schema allows.
+const minSldID = 256
+
 // nextSldID is CT_SlideIdList's: one past the highest, and never below 256.
 func (p *pkg) nextSldID() int {
-	next := 256
+	next := minSldID
 	for _, s := range p.slides {
 		if s.sldID >= next {
 			next = s.sldID + 1

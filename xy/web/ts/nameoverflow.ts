@@ -9,6 +9,9 @@
 // has laid the page out: measure() re-reads on the next frame, coalesced, and
 // every caller that rebuilds its DOM calls it.
 
+// Keep the tooltip this far from the viewport edges.
+const VIEWPORT_MARGIN = 8;
+
 export interface NameOverflowOptions {
   // The container the items live in; its rebuilds are what measure() re-reads.
   root: HTMLElement;
@@ -47,9 +50,9 @@ export function createNameOverflow({ root, item, name, truncatedClass }: NameOve
     tip.textContent = text;
     tip.classList.add("visible");
     const r = anchor.getBoundingClientRect();
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - tip.offsetWidth - 8));
+    const left = Math.max(VIEWPORT_MARGIN, Math.min(r.left, window.innerWidth - tip.offsetWidth - VIEWPORT_MARGIN));
     let top = r.bottom + 2;
-    if (top + tip.offsetHeight > window.innerHeight - 8) top = r.top - tip.offsetHeight - 2;
+    if (top + tip.offsetHeight > window.innerHeight - VIEWPORT_MARGIN) top = r.top - tip.offsetHeight - 2;
     tip.style.left = `${left}px`;
     tip.style.top = `${top}px`;
   }

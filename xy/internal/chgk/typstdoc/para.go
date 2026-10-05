@@ -33,6 +33,13 @@ type para struct {
 // It can't collide with a real expression: those are all function calls.
 const pbMarker = "\x00pagebreak\x00"
 
+// The ASCII control characters, which a typst string must escape, are
+// everything below the space plus DEL.
+const (
+	asciiSpace = 0x20
+	asciiDEL   = 0x7f
+)
+
 func (p *para) add(expr string) {
 	if expr != "" {
 		p.exprs = append(p.exprs, expr)
@@ -213,7 +220,6 @@ func wrapText(s, params string) string {
 // it has to be done by hand here because Noto Sans carries no `smcp` feature — so
 // typst's smallcaps() would leave the text exactly as it was.
 func scExpr(s, params string) string {
-	const scale = 0.8 // of the surrounding size, as Word renders small caps
 	var parts []string
 	var cur []rune
 	curLower := false
@@ -221,16 +227,7 @@ func scExpr(s, params string) string {
 		if len(cur) == 0 {
 			return
 		}
-		if curLower {
-			p := params
-			if p != "" {
-				p += ", "
-			}
-			p += "size: " + strconv.FormatFloat(scale, 'g', -1, 64) + "em"
-			parts = append(parts, wrapText(strings.ToUpper(string(cur)), p))
-		} else {
-			parts = append(parts, wrapText(string(cur), params))
-		}
+		parts = append(parts, scPart(string(cur), curLower, params))
 		cur = cur[:0]
 	}
 	for _, r := range s {
@@ -243,6 +240,20 @@ func scExpr(s, params string) string {
 	}
 	flush()
 	return strings.Join(parts, " + ")
+}
+
+// scPart sets one stretch of scExpr's text: a lowercase one uppercased and
+// shrunk, anything else as it is.
+func scPart(text string, lower bool, params string) string {
+	const scale = 0.8 // of the surrounding size, as Word renders small caps
+	if !lower {
+		return wrapText(text, params)
+	}
+	if params != "" {
+		params += ", "
+	}
+	params += "size: " + strconv.FormatFloat(scale, 'g', -1, floatBits) + "em"
+	return wrapText(strings.ToUpper(text), params)
 }
 
 // ── literals ──
@@ -266,7 +277,7 @@ func typstString(s string) string {
 		case '\t':
 			b.WriteString(`\t`)
 		default:
-			if r < 0x20 || r == 0x7f {
+			if r < asciiSpace || r == asciiDEL {
 				fmt.Fprintf(&b, `\u{%x}`, r)
 				continue
 			}
@@ -279,13 +290,13 @@ func typstString(s string) string {
 
 // pt formats a length in points, the way typst wants it.
 func pt(v float64) string {
-	return strconv.FormatFloat(inline.Round2(v), 'f', -1, 64) + "pt"
+	return strconv.FormatFloat(inline.Round2(v), 'f', -1, floatBits) + "pt"
 }
 
 // num writes the line-box edges as Python writes a float, decimal point and all:
 // they go into the source unrounded, so "1.0em" is what the other tool emits.
 func num(v float64) string {
-	s := strconv.FormatFloat(v, 'g', -1, 64)
+	s := strconv.FormatFloat(v, 'g', -1, floatBits)
 	if !strings.ContainsAny(s, ".eE") {
 		s += ".0"
 	}
@@ -294,5 +305,5 @@ func num(v float64) string {
 
 // mm formats a length in millimetres.
 func mm(v float64) string {
-	return strconv.FormatFloat(inline.Round2(v), 'f', -1, 64) + "mm"
+	return strconv.FormatFloat(inline.Round2(v), 'f', -1, floatBits) + "mm"
 }

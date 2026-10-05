@@ -8,12 +8,16 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
+
+// outputFileMode is the permission every file xy-cli writes out gets.
+const outputFileMode = 0o644
 
 // The command layer. xy-cli is meant to be driven by an agent, so: human text by
 // default and --json where a machine wants exactness, a board named on every
@@ -214,14 +218,14 @@ func (a *app) boardRef(ref string) (int64, DataKey, error) {
 	}
 	held := make([]HeldKey, 0, len(a.st.Boards))
 	for idStr, board := range a.st.Boards {
-		board.id, _ = strconv.ParseInt(idStr, 10, 64)
+		board.id, _ = idstr.Parse(idStr)
 		held = append(held, board)
 	}
 	sort.Slice(held, func(i, j int) bool { return held[i].id < held[j].id })
 	board, err := pickOne(held, ref, xystrings.Default.Cli.Shared.WhatUnlockedBoard(),
 		func(h HeldKey) int64 { return h.id }, func(h HeldKey) string { return h.Name })
 	if err != nil {
-		if id, convErr := strconv.ParseInt(ref, 10, 64); convErr == nil {
+		if id, convErr := idstr.Parse(ref); convErr == nil {
 			return 0, nil, corei18n.User(xystrings.Default.Cli.Shared.NoKey(itoa(id)))
 		}
 		return 0, nil, corei18n.User(xystrings.Default.Cli.Shared.SeeBoards(err.Error()))
@@ -268,10 +272,10 @@ func (a *app) note(format string, args ...any) {
 	fmt.Fprintf(a.stderr, format, args...)
 }
 
-func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+func itoa(n int64) string { return idstr.Format(n) }
 
 func parseID(s, what string) (int64, error) {
-	id, err := strconv.ParseInt(s, 10, 64)
+	id, err := idstr.Parse(s)
 	if err != nil {
 		return 0, corei18n.User(xystrings.Default.Cli.Shared.NumericId(what, s))
 	}

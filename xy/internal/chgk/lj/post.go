@@ -28,6 +28,9 @@ import (
 // Endpoint is the interface lj.py talks to.
 const Endpoint = "http://www.livejournal.com/interface/xmlrpc"
 
+// defaultPause is lj.py's sleep between calls.
+const defaultPause = 5 * time.Second
+
 // Account is who to post as, and where.
 type Account struct {
 	Login    string
@@ -50,7 +53,7 @@ type Client struct {
 }
 
 func NewClient(a Account) *Client {
-	return &Client{account: a, endpoint: Endpoint, http: &http.Client{Timeout: time.Minute}, Pause: 5 * time.Second}
+	return &Client{account: a, endpoint: Endpoint, http: &http.Client{Timeout: time.Minute}, Pause: defaultPause}
 }
 
 // Result is what a post came back as.

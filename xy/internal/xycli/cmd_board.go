@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 
 	"xy/internal/rank"
 )
@@ -75,10 +76,13 @@ func cmdBoard(a *app, args []string) error {
 	})
 }
 
+// maxLineRunes is the longest a title gets in a listing before it is cut.
+const maxLineRunes = 90
+
 func oneLine(s string) string {
 	s = strings.ReplaceAll(strings.TrimSpace(s), "\n", " ")
-	if len([]rune(s)) > 90 {
-		return string([]rune(s)[:89]) + "…"
+	if len([]rune(s)) > maxLineRunes {
+		return string([]rune(s)[:maxLineRunes-1]) + "…"
 	}
 	return s
 }

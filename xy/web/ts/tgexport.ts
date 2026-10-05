@@ -68,18 +68,7 @@ export function createTelegramExport(deps: TelegramExportDeps) {
     const chat = field("tgExportChat").value.trim();
     if (!token || !channel || !chat || !body) return;
     const boardId = deps.boardId();
-
-    // The ids Telegram resolved last time stand in for the same names typed
-    // again — that, and not the names, is what spares the reader the dialogue.
-    const saved = await xyStore.getTgTarget(boardId);
-    const same = saved?.channel === channel && saved?.chat === chat;
-    body.append("token", token);
-    body.append("channel", (same && saved?.channelId) || channel);
-    body.append("chat", (same && saved?.chatId) || chat);
-    await xyStore.putTgBot(token);
-    // A renamed target keeps no ids: those belonged to the old one. They come
-    // back on the last line of the stream, once Telegram has said what they are.
-    await xyStore.putTgTarget(boardId, same ? { channel, chat, channelId: saved?.channelId, chatId: saved?.chatId } : { channel, chat });
+    await addTarget(body, boardId, token, channel, chat);
 
     const btn = byId<HTMLButtonElement>("tgExportRun");
     btn.disabled = true;
@@ -94,6 +83,22 @@ export function createTelegramExport(deps: TelegramExportDeps) {
     } finally {
       btn.disabled = false;
     }
+  }
+
+  // addTarget puts the bot and its destination into the request and remembers
+  // them for the next export from this board.
+  async function addTarget(form: FormData, boardId: number, token: string, channel: string, chat: string): Promise<void> {
+    // The ids Telegram resolved last time stand in for the same names typed
+    // again — that, and not the names, is what spares the reader the dialogue.
+    const saved = await xyStore.getTgTarget(boardId);
+    const same = saved?.channel === channel && saved?.chat === chat;
+    form.append("token", token);
+    form.append("channel", (same && saved?.channelId) || channel);
+    form.append("chat", (same && saved?.chatId) || chat);
+    await xyStore.putTgBot(token);
+    // A renamed target keeps no ids: those belonged to the old one. They come
+    // back on the last line of the stream, once Telegram has said what they are.
+    await xyStore.putTgTarget(boardId, same ? { channel, chat, channelId: saved?.channelId, chatId: saved?.chatId } : { channel, chat });
   }
 
   // read walks the stream. A dropped connection ends it without a last line,

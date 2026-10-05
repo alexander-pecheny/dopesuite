@@ -160,19 +160,29 @@ func (c *Client) Lists(ctx context.Context, b Board) ([]List, error) {
 // PostCard creates one card in a list. On xy the text is encrypted first — the
 // server never sees it.
 func (c *Client) PostCard(ctx context.Context, b Board, listID, name, desc string) error {
-	form := url.Values{"name": {name}, "desc": {desc}}
-	target := c.trelloAPI + "/lists/" + listID + "/cards"
+	target, form, err := c.cardForm(b, listID, name, desc)
+	if err != nil {
+		return err
+	}
+	return c.postForm(ctx, target, form)
+}
+
+// cardForm is where a new card goes and the form that creates it.
+func (c *Client) cardForm(b Board, listID, name, desc string) (string, url.Values, error) {
 	if b.Service == XY {
 		enc, err := c.dk.EncField(desc)
 		if err != nil {
-			return err
+			return "", nil, err
 		}
-		form = url.Values{"token": {b.Token}, "name": {name}, "desc": {enc}}
-		target = b.BaseURL + "/1/lists/" + listID + "/cards"
-	} else {
-		form.Set("key", b.Key)
-		form.Set("token", b.Token)
+		return b.BaseURL + "/1/lists/" + listID + "/cards",
+			url.Values{"token": {b.Token}, "name": {name}, "desc": {enc}}, nil
 	}
+	form := url.Values{"name": {name}, "desc": {desc}, "key": {b.Key}, "token": {b.Token}}
+	return c.trelloAPI + "/lists/" + listID + "/cards", form, nil
+}
+
+// postForm POSTs a urlencoded form and fails on anything but 200.
+func (c *Client) postForm(ctx context.Context, target string, form url.Values) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(form.Encode()))
 	if err != nil {
 		return err

@@ -6,8 +6,9 @@ import (
 	"os"
 	"strings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 
 	"golang.org/x/term"
 )

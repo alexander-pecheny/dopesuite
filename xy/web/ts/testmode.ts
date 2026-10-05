@@ -23,6 +23,8 @@ export interface TestModeState {
 export const TESTMODE_KEY = "xy-testmode";
 export const IDLE_LIMIT_MS = 60 * 60 * 1000;
 export const DWELL_MS = 60 * 1000;
+// The dwell timer fires this long after DWELL_MS, so check() sees it elapsed.
+const DWELL_TIMER_SLACK_MS = 1000;
 // Against an hour-long idle limit, stamping activity to the second buys nothing.
 export const TOUCH_EVERY_MS = 30 * 1000;
 
@@ -156,7 +158,7 @@ export function createDwell(deps: DwellDeps): Dwell {
     opened(cardId) {
       drop();
       open = { cardId, at: deps.now(), fired: false };
-      timer = deps.setTimer(check, DWELL_MS + 1000);
+      timer = deps.setTimer(check, DWELL_MS + DWELL_TIMER_SLACK_MS);
     },
     closed: drop,
   };

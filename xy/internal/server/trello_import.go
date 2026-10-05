@@ -35,7 +35,10 @@ const trelloAPIBase = "https://api.trello.com/1"
 // bytes fetched here become that ciphertext.
 const maxTrelloProxyBytes = 55 << 20
 
-var trelloProxyClient = &http.Client{Timeout: 90 * time.Second}
+// trelloProxyTimeout bounds one call to the Trello API.
+const trelloProxyTimeout = 90 * time.Second
+
+var trelloProxyClient = &http.Client{Timeout: trelloProxyTimeout}
 
 type trelloProxyRequest struct {
 	Token  string            `json:"token"`
@@ -71,7 +74,7 @@ func (s *server) handleTrelloProxy(w http.ResponseWriter, r *http.Request) {
 	q.Set("token", req.Token)
 	target := trelloAPIBase + req.Path + "?" + q.Encode()
 
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), trelloProxyTimeout)
 	defer cancel()
 	outReq, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {

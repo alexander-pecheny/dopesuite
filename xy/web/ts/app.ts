@@ -2,6 +2,17 @@
 // DOM builder, derived card titles.
 import S from "./i18nstrings.js";
 
+export const HTTP_NO_CONTENT = 204;
+export const HTTP_UNAUTHORIZED = 401;
+// Radix for parseInt on numbers a person typed or a DOM attribute holds.
+export const DECIMAL_RADIX = 10;
+// Length of "YYYY-MM-DD", the date part of an ISO timestamp.
+export const ISO_DATE_LEN = 10;
+// How long a blob URL handed to a download stays alive.
+const BLOB_URL_TTL_MS = 10000;
+// deriveTitle cuts at the last space only if it keeps at least this share of `max`.
+const TITLE_MIN_KEEP = 0.5;
+
 export interface AuthMe {
   user_id: number;
   username?: string | null;
@@ -27,7 +38,7 @@ async function fetchJSON(url: string, init?: RequestInit): Promise<unknown> {
     const text = (await res.text()).trim();
     throw new Error(text || `HTTP ${res.status}`);
   }
-  if (res.status === 204) return null;
+  if (res.status === HTTP_NO_CONTENT) return null;
   return res.json();
 }
 
@@ -77,7 +88,7 @@ function downloadBlob(blob: Blob, filename: string): void {
   document.body.append(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_TTL_MS);
 }
 
 // The header's sync badge combines a transient per-write state (saving/error)
@@ -146,7 +157,7 @@ function deriveTitle(desc: string | null | undefined, max = 80): string {
   if (t.length <= max) return t;
   const cut = t.slice(0, max);
   const sp = cut.lastIndexOf(" ");
-  return (sp > max * 0.5 ? cut.slice(0, sp) : cut) + "…";
+  return (sp > max * TITLE_MIN_KEEP ? cut.slice(0, sp) : cut) + "…";
 }
 
 async function requireLogin(): Promise<AuthMe | { offline: true } | null> {

@@ -121,45 +121,58 @@ func loadNumbering(p *pkg) *numbering {
 			continue
 		}
 		for _, level := range abstract.findAll("lvl") {
-			ilvl, ok := level.wattr("ilvl")
-			if !ok {
-				ilvl = "0"
-			}
-			lv := numLevel{fmt: "decimal", text: "%1.", start: 1}
-			if f := level.find("numFmt"); f != nil {
-				if v, ok := f.wattr("val"); ok {
-					lv.fmt = v
-				}
-			}
-			if t := level.find("lvlText"); t != nil {
-				if v, ok := t.wattr("val"); ok {
-					lv.text = v
-				}
-			}
-			if s := level.find("start"); s != nil {
-				lv.start = attrInt(s, "val", 1)
-			}
+			ilvl, lv := parseLevel(level)
 			n.levels[[2]string{abstractID, ilvl}] = lv
 		}
 	}
 	for _, num := range root.findAll("num") {
-		numID, hasNum := num.wattr("numId")
-		if abstract := num.find("abstractNumId"); abstract != nil {
-			if abstractID, ok := abstract.wattr("val"); ok && hasNum {
-				n.numToAbstract[numID] = abstractID
-			}
-		}
-		for _, override := range num.findAll("lvlOverride") {
-			ilvl, ok := override.wattr("ilvl")
-			if !ok {
-				ilvl = "0"
-			}
-			if s := override.find("startOverride"); s != nil {
-				n.overrides[[2]string{numID, ilvl}] = attrInt(s, "val", 1)
-			}
-		}
+		n.addNum(num)
 	}
 	return n
+}
+
+// addNum records one w:num: the abstract numbering it uses and the levels
+// whose start it overrides.
+func (n *numbering) addNum(num *node) {
+	numID, hasNum := num.wattr("numId")
+	if abstract := num.find("abstractNumId"); abstract != nil {
+		if abstractID, ok := abstract.wattr("val"); ok && hasNum {
+			n.numToAbstract[numID] = abstractID
+		}
+	}
+	for _, override := range num.findAll("lvlOverride") {
+		ilvl, ok := override.wattr("ilvl")
+		if !ok {
+			ilvl = "0"
+		}
+		if s := override.find("startOverride"); s != nil {
+			n.overrides[[2]string{numID, ilvl}] = attrInt(s, "val", 1)
+		}
+	}
+}
+
+// parseLevel reads one w:lvl of an abstract numbering: its index and how it
+// numbers, with Word's defaults for what it leaves out.
+func parseLevel(level *node) (string, numLevel) {
+	ilvl, ok := level.wattr("ilvl")
+	if !ok {
+		ilvl = "0"
+	}
+	lv := numLevel{fmt: "decimal", text: "%1.", start: 1}
+	if f := level.find("numFmt"); f != nil {
+		if v, ok := f.wattr("val"); ok {
+			lv.fmt = v
+		}
+	}
+	if t := level.find("lvlText"); t != nil {
+		if v, ok := t.wattr("val"); ok {
+			lv.text = v
+		}
+	}
+	if s := level.find("start"); s != nil {
+		lv.start = attrInt(s, "val", 1)
+	}
+	return ilvl, lv
 }
 
 func attrInt(n *node, local string, deflt int) int {
@@ -240,12 +253,15 @@ func formatListNumber(value int, format string) string {
 	return strconv.Itoa(value)
 }
 
+// alphabetLen is how many letters upperLetter numbering counts through.
+const alphabetLen = 26
+
 func alphaNumber(value int) string {
 	result := ""
 	for value > 0 {
 		value--
-		result = string(rune('A'+value%26)) + result
-		value /= 26
+		result = string(rune('A'+value%alphabetLen)) + result
+		value /= alphabetLen
 	}
 	if result == "" {
 		return "A"

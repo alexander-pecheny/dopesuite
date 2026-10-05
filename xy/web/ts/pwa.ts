@@ -4,6 +4,9 @@
 // honest. A side-effect module: no exports, all work happens at load.
 import { liveTestMode } from "./testmode.js";
 
+// Two taps closer together than this are a double-tap zoom, which we block.
+const DOUBLE_TAP_MS = 300;
+
 // ---- test-mode activity (ADR-0012, runs on every page) ----
 // The mode expires after an idle hour ANYWHERE in xy, so every page counts as
 // activity — reading the board list mid-test must not switch the test off.
@@ -81,7 +84,7 @@ try {
   let lastTouchEnd = 0;
   document.addEventListener("touchend", (e) => {
     const now = e.timeStamp || 0;
-    if (now - lastTouchEnd <= 300) e.preventDefault(); // double-tap zoom
+    if (now - lastTouchEnd <= DOUBLE_TAP_MS) e.preventDefault(); // double-tap zoom
     lastTouchEnd = now;
   }, { passive: false });
 } catch (_) {}

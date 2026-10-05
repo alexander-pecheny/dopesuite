@@ -12,6 +12,15 @@ const (
 	emuPerPt   = 12700
 	pxPerInch  = 96
 	ptPerInch  = 72
+
+	// python-pptx's default text insets, which it leaves unwritten.
+	defaultInsetXIn = 0.1
+	defaultInsetYIn = 0.05
+
+	// DrawingML writes point sizes in hundredths and percentages in
+	// thousandths of a percent.
+	hundredthsPerPt = 100
+	pctUnits        = 100000
 )
 
 func inches(v float64) int64 { return int64(v * emuPerInch) }
@@ -47,8 +56,8 @@ type textFrame struct {
 
 func newTextFrame() *textFrame {
 	return &textFrame{
-		marginLeft: inches(0.1), marginRight: inches(0.1),
-		marginTop: inches(0.05), marginBottom: inches(0.05),
+		marginLeft: inches(defaultInsetXIn), marginRight: inches(defaultInsetXIn),
+		marginTop: inches(defaultInsetYIn), marginBottom: inches(defaultInsetYIn),
 	}
 }
 
@@ -116,16 +125,16 @@ func (f *textFrame) render(s *slidePart) string {
 	var b strings.Builder
 	b.WriteString(`<p:txBody><a:bodyPr wrap="square"`)
 	var attrs []string
-	if f.marginLeft != inches(0.1) {
+	if f.marginLeft != inches(defaultInsetXIn) {
 		attrs = append(attrs, fmt.Sprintf(`lIns="%d"`, f.marginLeft))
 	}
-	if f.marginTop != inches(0.05) {
+	if f.marginTop != inches(defaultInsetYIn) {
 		attrs = append(attrs, fmt.Sprintf(`tIns="%d"`, f.marginTop))
 	}
-	if f.marginRight != inches(0.1) {
+	if f.marginRight != inches(defaultInsetXIn) {
 		attrs = append(attrs, fmt.Sprintf(`rIns="%d"`, f.marginRight))
 	}
-	if f.marginBottom != inches(0.05) {
+	if f.marginBottom != inches(defaultInsetYIn) {
 		attrs = append(attrs, fmt.Sprintf(`bIns="%d"`, f.marginBottom))
 	}
 	if f.verticalAnchor != "" {
@@ -168,15 +177,15 @@ func (p *paragraph) propsXML() string {
 	}
 	switch {
 	case p.lineSpacePt > 0:
-		fmt.Fprintf(&children, `<a:lnSpc><a:spcPts val="%d"/></a:lnSpc>`, int(p.lineSpacePt*100))
+		fmt.Fprintf(&children, `<a:lnSpc><a:spcPts val="%d"/></a:lnSpc>`, int(p.lineSpacePt*hundredthsPerPt))
 	case p.lineSpacing > 0:
-		fmt.Fprintf(&children, `<a:lnSpc><a:spcPct val="%d"/></a:lnSpc>`, int(p.lineSpacing*100000))
+		fmt.Fprintf(&children, `<a:lnSpc><a:spcPct val="%d"/></a:lnSpc>`, int(p.lineSpacing*pctUnits))
 	}
 	if p.spaceBefore > 0 {
-		fmt.Fprintf(&children, `<a:spcBef><a:spcPts val="%d"/></a:spcBef>`, int(p.spaceBefore*100))
+		fmt.Fprintf(&children, `<a:spcBef><a:spcPts val="%d"/></a:spcBef>`, int(p.spaceBefore*hundredthsPerPt))
 	}
 	if p.spaceAfter > 0 {
-		fmt.Fprintf(&children, `<a:spcAft><a:spcPts val="%d"/></a:spcAft>`, int(p.spaceAfter*100))
+		fmt.Fprintf(&children, `<a:spcAft><a:spcPts val="%d"/></a:spcAft>`, int(p.spaceAfter*hundredthsPerPt))
 	}
 	if def := defRPrXML(p.size, p.fontName); def != "" {
 		children.WriteString(def)
@@ -196,7 +205,7 @@ func defRPrXML(size float64, fontName string) string {
 	}
 	var attrs, children strings.Builder
 	if size > 0 {
-		fmt.Fprintf(&attrs, ` sz="%d"`, int(size*100))
+		fmt.Fprintf(&attrs, ` sz="%d"`, int(size*hundredthsPerPt))
 	}
 	if fontName != "" {
 		fmt.Fprintf(&children, `<a:latin typeface="%s"/>`, escapeAttr(fontName))
@@ -212,7 +221,7 @@ func defRPrXML(size float64, fontName string) string {
 func (r *run) render(*slidePart) string {
 	var attrs, children strings.Builder
 	if r.sizeSet && r.size > 0 {
-		fmt.Fprintf(&attrs, ` sz="%d"`, int(r.size*100))
+		fmt.Fprintf(&attrs, ` sz="%d"`, int(r.size*hundredthsPerPt))
 	}
 	if r.langSet && r.language != "" {
 		fmt.Fprintf(&attrs, ` lang="%s"`, r.language)

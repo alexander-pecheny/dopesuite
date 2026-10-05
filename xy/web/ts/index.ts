@@ -11,6 +11,9 @@ import { iconed } from "./icons_gen.js";
 import { createNameOverflow } from "./nameoverflow.js";
 import S from "./i18nstrings.js";
 
+// Quiet time after the last keystroke before the search runs.
+const SEARCH_DEBOUNCE_MS = 120;
+
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
 
 interface BoardListItem {
@@ -135,6 +138,18 @@ function setNote(node: HTMLElement, text: string): void {
   node.hidden = !text;
 }
 
+// clearSearch drops every hit and shows the whole board list again.
+async function clearSearch(): Promise<void> {
+  hitNode.replaceChildren();
+  commentNode.replaceChildren();
+  setNote(cardNote, "");
+  setNote(commentNote, "");
+  moreQuestions.hidden = true;
+  moreComments.hidden = true;
+  listNode.hidden = false;
+  await renderBoards(allBoards);
+}
+
 async function runSearch(query: string, keepShown = false): Promise<void> {
   const q = query.trim();
   // A new query starts from the first page again; Show more does not.
@@ -143,14 +158,7 @@ async function runSearch(query: string, keepShown = false): Promise<void> {
   hitNode.hidden = !q;
   commentNode.hidden = !q;
   if (!q) {
-    hitNode.replaceChildren();
-    commentNode.replaceChildren();
-    setNote(cardNote, "");
-    setNote(commentNote, "");
-    moreQuestions.hidden = true;
-    moreComments.hidden = true;
-    listNode.hidden = false;
-    await renderBoards(allBoards);
+    await clearSearch();
     return;
   }
   // A board matches by name without any key — names are plaintext (v2). A legacy
@@ -215,7 +223,7 @@ moreComments.addEventListener("click", () => {
 let searchTimer = 0;
 searchBox.addEventListener("input", () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { void runSearch(searchBox.value); }, 120);
+  searchTimer = setTimeout(() => { void runSearch(searchBox.value); }, SEARCH_DEBOUNCE_MS);
 });
 
 // Prewarm: fill the Mirror and the Search Index for every board this device can
@@ -249,35 +257,38 @@ async function renderBoards(boards: BoardListItem[]): Promise<void> {
     return;
   }
   // Boards arrive already ordered by the caller's last visit (server-side).
-  boards.forEach((b, i) => {
-    // Migrated (v2) boards carry a plaintext name — shown with no key needed; the
-    // lock marks a board that will still ask for the passphrase. Legacy (v1)
-    // boards need the cached DK for the name itself, so start with a placeholder.
-    const migrated = b.schema_version >= 2;
-    const name = migrated ? b.name : S.chrome.home.boardLockedName(String(b.id));
-    const card = el("a", { class: "board-card", href: `/board/${b.id}` },
-      el("span", { class: "board-card-name-wrap" },
-        el("span", { class: "board-card-name" }, ...(locked[i] ? iconed("lock", name) : [name]))),
-    );
-    // Only a board somebody else created says whose it is; your own says nothing.
-    if (b.creator) card.append(el("span", { class: "board-card-creator", text: S.chrome.home.creator(b.creator) }));
-    if (b.unread) {
-      const mention = b.unread_mentions ? " unread-dot-mention" : "";
-      const title = b.unread_mentions ? S.chrome.home.unreadMentionTitle() : S.chrome.home.unreadTitle();
-      card.append(el("span", { class: "unread-dot unread-dot-corner board-card-unread" + mention, title }));
-    }
-    if (!migrated) {
-      // Decrypt the name lazily if we have the cached key, and — since we now hold
-      // the plaintext — opportunistically migrate the board off name_enc.
-      decryptName(b).then((name) => {
-        if (!name) return;
-        setCardName(card, name);
-        migrateName(b.id, name);
-      });
-    }
-    listNode.append(card);
-  });
+  boards.forEach((b, i) => listNode.append(boardCard(b, locked[i])));
   boardNames.measure();
+}
+
+// boardCard is one tile of the board list.
+function boardCard(b: BoardListItem, locked: boolean): HTMLElement {
+  // Migrated (v2) boards carry a plaintext name — shown with no key needed; the
+  // lock marks a board that will still ask for the passphrase. Legacy (v1)
+  // boards need the cached DK for the name itself, so start with a placeholder.
+  const migrated = b.schema_version >= 2;
+  const name = migrated ? b.name : S.chrome.home.boardLockedName(String(b.id));
+  const card = el("a", { class: "board-card", href: `/board/${b.id}` },
+    el("span", { class: "board-card-name-wrap" },
+      el("span", { class: "board-card-name" }, ...(locked ? iconed("lock", name) : [name]))),
+  );
+  // Only a board somebody else created says whose it is; your own says nothing.
+  if (b.creator) card.append(el("span", { class: "board-card-creator", text: S.chrome.home.creator(b.creator) }));
+  if (b.unread) {
+    const mention = b.unread_mentions ? " unread-dot-mention" : "";
+    const title = b.unread_mentions ? S.chrome.home.unreadMentionTitle() : S.chrome.home.unreadTitle();
+    card.append(el("span", { class: "unread-dot unread-dot-corner board-card-unread" + mention, title }));
+  }
+  if (!migrated) {
+    // Decrypt the name lazily if we have the cached key, and — since we now hold
+    // the plaintext — opportunistically migrate the board off name_enc.
+    decryptName(b).then((name) => {
+      if (!name) return;
+      setCardName(card, name);
+      migrateName(b.id, name);
+    });
+  }
+  return card;
 }
 
 // A board tile's name is one line: the ones that overflow fade at the right edge

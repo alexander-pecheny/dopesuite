@@ -20,7 +20,7 @@ import (
 // invite/telegram registration flow. Used to bootstrap the first account on a
 // fresh deploy. Returns an error if the username is taken.
 func (s *server) addUser(ctx context.Context, username, password string) error {
-	if len(username) < 3 {
+	if len(username) < usernameMinLen {
 		return errors.New("username too short")
 	}
 	if len(password) < authcred.PasswordMinLen || len(password) > authcred.PasswordMaxLen {

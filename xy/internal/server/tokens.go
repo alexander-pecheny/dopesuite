@@ -19,7 +19,9 @@ import (
 // The raw token is shown once on creation; only its sha256 hash is stored.
 
 const (
-	apiTokenBytes    = 32 // 64 hex chars — Trello-token shaped
+	apiTokenBytes = 32 // 64 hex chars — Trello-token shaped
+	// maxTokenLabelLen is where a token's label is cut off.
+	maxTokenLabelLen = 100
 	apiTokenLifetime = 30 * 24 * time.Hour
 )
 
@@ -43,6 +45,28 @@ type apiTokenDTO struct {
 	Active     bool    `json:"active"`
 }
 
+// scanAPIToken reads one row of the token list; a token is active when it is
+// neither revoked nor expired at now.
+func scanAPIToken(rows *sql.Rows, now time.Time) (apiTokenDTO, error) {
+	var t apiTokenDTO
+	var label, revoked, lastUsed sql.NullString
+	if err := rows.Scan(&t.ID, &label, &t.CreatedAt, &t.ExpiresAt, &revoked, &lastUsed); err != nil {
+		return t, err
+	}
+	if label.Valid {
+		t.Label = &label.String
+	}
+	if revoked.Valid {
+		t.RevokedAt = &revoked.String
+	}
+	if lastUsed.Valid {
+		t.LastUsedAt = &lastUsed.String
+	}
+	expires, _ := time.Parse(time.RFC3339, t.ExpiresAt)
+	t.Active = !revoked.Valid && now.Before(expires)
+	return t, nil
+}
+
 func (s *server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
@@ -58,22 +82,10 @@ from api_tokens where user_id = ? order by id desc`, u.UserID)
 	now := time.Now()
 	out := []apiTokenDTO{}
 	for rows.Next() {
-		var t apiTokenDTO
-		var label, revoked, lastUsed sql.NullString
-		if err := rows.Scan(&t.ID, &label, &t.CreatedAt, &t.ExpiresAt, &revoked, &lastUsed); handleErr(w, err) {
+		t, err := scanAPIToken(rows, now)
+		if handleErr(w, err) {
 			return
 		}
-		if label.Valid {
-			t.Label = &label.String
-		}
-		if revoked.Valid {
-			t.RevokedAt = &revoked.String
-		}
-		if lastUsed.Valid {
-			t.LastUsedAt = &lastUsed.String
-		}
-		expires, _ := time.Parse(time.RFC3339, t.ExpiresAt)
-		t.Active = !revoked.Valid && now.Before(expires)
 		out = append(out, t)
 	}
 	writeJSON(w, out)
@@ -99,8 +111,8 @@ func (s *server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	label := strings.TrimSpace(req.Label)
-	if len(label) > 100 {
-		label = label[:100]
+	if len(label) > maxTokenLabelLen {
+		label = label[:maxTokenLabelLen]
 	}
 	raw, err := newAPIToken()
 	if err != nil {

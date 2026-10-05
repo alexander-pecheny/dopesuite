@@ -9,8 +9,9 @@ import (
 	"strings"
 
 	"fmt"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Attachments are ciphertext on the server like everything else: the CLI seals
@@ -103,7 +104,7 @@ func attachmentGet(a *app, args []string) error {
 		}
 		path = safeName(name)
 	}
-	if err := os.WriteFile(path, plain, 0o644); err != nil {
+	if err := os.WriteFile(path, plain, outputFileMode); err != nil {
 		return err
 	}
 	return a.emit(map[string]any{"path": path, "bytes": len(plain)}, func() {

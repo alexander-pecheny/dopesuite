@@ -22,13 +22,18 @@ import zipfile
 
 RATING = "https://api.rating.chgk.net/towns?itemsPerPage=100&page={}"
 GEONAMES = "https://download.geonames.org/export/dump/cities500.zip"
+# The rating API pages through its towns; this many pages is far past the end.
+MAX_RATING_PAGES = 60
+RATING_TIMEOUT = 60
+# cities500.zip is tens of megabytes.
+GEONAMES_TIMEOUT = 300
 OUT = pathlib.Path(__file__).resolve().parent.parent / "web" / "ts" / "towns.ts"
 
 
 def rating_towns() -> list[str]:
     names, page = [], 1
-    while page <= 60:
-        with urllib.request.urlopen(RATING.format(page), timeout=60) as r:
+    while page <= MAX_RATING_PAGES:
+        with urllib.request.urlopen(RATING.format(page), timeout=RATING_TIMEOUT) as r:
             batch = json.load(r)
         if not batch:
             break
@@ -39,7 +44,7 @@ def rating_towns() -> list[str]:
 
 def geonames_zones() -> dict[str, str]:
     """name → timezone, keeping the most populous claimant of a shared name."""
-    with urllib.request.urlopen(GEONAMES, timeout=300) as r:
+    with urllib.request.urlopen(GEONAMES, timeout=GEONAMES_TIMEOUT) as r:
         blob = r.read()
     zones: dict[str, tuple[str, int]] = {}
     with zipfile.ZipFile(io.BytesIO(blob)) as z:

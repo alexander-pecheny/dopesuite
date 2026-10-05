@@ -65,6 +65,14 @@ const (
 )
 
 const (
+	mmPerInch = 25.4
+	// maxImgWIn and maxImgHIn are the board preview's box for a picture: 5in
+	// wide, 2in (12em at the 12pt body) tall.
+	maxImgWIn = 5.0
+	maxImgHIn = 2.0
+)
+
+const (
 	linkColor  = "#0000ff" // Hyperlink character style
 	tabWidth   = "36pt"    // Word's default tab stop (0.5in)
 	fontFamily = "Noto Sans"

@@ -53,9 +53,9 @@ func (e *exporter) addImage(p *para, arg string) {
 	// or an explicit h= still ate half a page of the PDF. Scale down (never up)
 	// into the preview's box: 2in tall (12em at the 12pt body), 5in wide.
 	// The mobile page's text column is narrower than 5in, so cap to it there.
-	maxImgW, maxImgH := 5.0, 2.0
+	maxImgW, maxImgH := maxImgWIn, maxImgHIn
 	if e.device == Mobile {
-		maxImgW = (mobileWMM - 2*mobileMarginMM) / 25.4
+		maxImgW = (mobileWMM - 2*mobileMarginMM) / mmPerInch
 	}
 	if s := min(maxImgW/widthIn, maxImgH/heightIn); s < 1 {
 		widthIn, heightIn = widthIn*s, heightIn*s
@@ -70,7 +70,7 @@ func (e *exporter) addImage(p *para, arg string) {
 	e.used[name] = data
 
 	expr := fmt.Sprintf("box(image(%s, width: %s, height: %s))",
-		typstString(name), mm(widthIn*25.4), mm(heightIn*25.4))
+		typstString(name), mm(widthIn*mmPerInch), mm(heightIn*mmPerInch))
 	if im.Inline {
 		p.add(expr)
 		return

@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 )
 
 // querier is satisfied by *sql.DB, *sql.Conn, and *sql.Tx.
@@ -28,7 +29,7 @@ func unb64(s string) ([]byte, error) { return base64.StdEncoding.DecodeString(s)
 
 // pathInt reads an int64 path value, writing 400 on failure.
 func pathInt(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
-	v, err := strconv.ParseInt(r.PathValue(name), 10, 64)
+	v, err := idstr.Parse(r.PathValue(name))
 	if err != nil {
 		httpError(w, http.StatusBadRequest, "bad "+name)
 		return 0, false
@@ -442,7 +443,7 @@ group by e.card_id`, uid, uid, uid, uid, bid)
 			return
 		}
 		if commentsUnread == 1 || contentUnread == 1 {
-			snap.Unread[strconv.FormatInt(cardID, 10)] = unreadDTO{
+			snap.Unread[idstr.Format(cardID)] = unreadDTO{
 				Content:  contentUnread == 1,
 				Comments: commentsUnread == 1,
 				Mentions: mentionsUnread == 1,

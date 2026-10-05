@@ -17,6 +17,12 @@ import (
 	xystrings "xy/i18nstrings"
 )
 
+// The bounds of the ASCII control characters a header value must not carry.
+const (
+	asciiSpace = 0x20
+	asciiDEL   = 0x7f
+)
+
 // Export turns the client-supplied chgksuite "4s" source (the list's decrypted
 // card descriptions concatenated in board order) plus its referenced images into a
 // .docx (chgk/docx) or a .pdf (chgk/typstdoc — the same document, laid out by typst
@@ -57,7 +63,7 @@ func safeImageName(name string) string {
 // value of a Content-Disposition header (quotes, backslashes, control bytes).
 func headerSafeName(name string) string {
 	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || r == '"' || r == '\\' {
+		if r < asciiSpace || r == asciiDEL || r == '"' || r == '\\' {
 			return -1
 		}
 		return r

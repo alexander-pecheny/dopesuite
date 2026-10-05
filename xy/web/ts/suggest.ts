@@ -8,6 +8,11 @@ import { allZones, zoneOffset } from "./sessions.js";
 import { TOWNS } from "./towns.js";
 import type { Choice } from "./kit/suggest.js";
 
+// Zones offered at most, and how many of them may come from town names.
+const MAX_ZONE_CHOICES = 12;
+const MAX_TOWN_ZONE_CHOICES = 8;
+const MAX_TOWN_CHOICES = 10;
+
 // Nobody should have to know that Almaty is Asia/Almaty, so the zone picker
 // searches Russian city names as well as IANA ids.
 let townsByZone: Map<string, string[]> | null = null;
@@ -26,7 +31,7 @@ function zoneTowns(): Map<string, string[]> {
 export function zoneChoices(q: string): Choice[] {
   const needle = q.trim().toLowerCase();
   const zones = allZones();
-  if (!needle) return zones.slice(0, 12).map((z) => ({ value: z, label: z, hint: zoneOffset(z) }));
+  if (!needle) return zones.slice(0, MAX_ZONE_CHOICES).map((z) => ({ value: z, label: z, hint: zoneOffset(z) }));
 
   const out: Choice[] = [];
   const seen = new Set<string>();
@@ -36,10 +41,10 @@ export function zoneChoices(q: string): Choice[] {
     if (!c.name.toLowerCase().startsWith(needle)) continue;
     seen.add(c.zone);
     out.push({ value: c.zone, label: c.name, hint: `${c.zone} · ${zoneOffset(c.zone)}` });
-    if (out.length >= 8) break;
+    if (out.length >= MAX_TOWN_ZONE_CHOICES) break;
   }
   for (const z of zones) {
-    if (out.length >= 12 || seen.has(z)) continue;
+    if (out.length >= MAX_ZONE_CHOICES || seen.has(z)) continue;
     if (!z.toLowerCase().includes(needle) && !zoneOffset(z).toLowerCase().includes(needle)) continue;
     seen.add(z);
     const towns = (zoneTowns().get(z) || []).slice(0, 2).join(", ");
@@ -52,7 +57,7 @@ export function zoneChoices(q: string): Choice[] {
 export function townChoices(q: string): Choice[] {
   const needle = q.trim().toLowerCase();
   const pool = needle ? TOWNS.filter((c) => c.name.toLowerCase().startsWith(needle)) : TOWNS;
-  return pool.slice(0, 10).map((c) => ({
+  return pool.slice(0, MAX_TOWN_CHOICES).map((c) => ({
     value: c.name,
     label: c.name,
     hint: c.zone ? zoneOffset(c.zone) : "",

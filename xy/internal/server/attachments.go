@@ -7,10 +7,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"time"
 
 	xystrings "xy/i18nstrings"
+
+	"pecheny.me/dopecore/idstr"
 )
 
 // Attachments carry ciphertext bytes (already an xy envelope) plus encrypted
@@ -22,6 +23,10 @@ const maxAttachmentBytes = 50 << 20 // 50 MiB ciphertext cap
 // boundary overhead) so a single request can't exhaust memory/temp disk. It
 // sits comfortably above maxAttachmentBytes; over-cap requests fail the parse.
 const maxAttachmentRequest = maxAttachmentBytes + 8<<20
+
+// multipartMemory is how much of an upload form is held in memory before
+// the rest spills to a temporary file.
+const multipartMemory = 8 << 20
 
 type attachmentDTO struct {
 	ID          int64  `json:"id"`
@@ -81,7 +86,7 @@ type attachmentUpload struct {
 // it if the transaction referencing it fails.
 func (s *server) readUpload(w http.ResponseWriter, r *http.Request) (meta attachmentUpload, filenameEnc []byte, ref string, size int64, ok bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentRequest)
-	if err := r.ParseMultipartForm(8 << 20); err != nil {
+	if err := r.ParseMultipartForm(multipartMemory); err != nil {
 		httpError(w, http.StatusBadRequest, "bad multipart form")
 		return
 	}
@@ -113,6 +118,46 @@ func (s *server) readUpload(w http.ResponseWriter, r *http.Request) (meta attach
 		meta.Mime = "application/octet-stream"
 	}
 	return meta, filenameEnc, ref, size, true
+}
+
+// attachmentRow is the plaintext side of a live attachment.
+type attachmentRow struct {
+	id, boardID, cardID, size int64
+	ref                       string
+}
+
+// lookupAttachment reads the attachment named by the {id} path value and checks
+// that the user is a member of its board. When there is no such attachment it
+// calls onMissing to answer. ok=false means the response is already written.
+func (s *server) lookupAttachment(w http.ResponseWriter, r *http.Request, onMissing func()) (uid int64, att attachmentRow, ok bool) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return 0, att, false
+	}
+	if att.id, ok = pathInt(w, r, "id"); !ok {
+		return 0, att, false
+	}
+	err := s.db.QueryRowContext(r.Context(), `
+select board_id, card_id, blob_ref, size from attachments where id = ? and deleted_at is null`, att.id).
+		Scan(&att.boardID, &att.cardID, &att.ref, &att.size)
+	if errors.Is(err, sql.ErrNoRows) {
+		onMissing()
+		return 0, att, false
+	}
+	if handleErr(w, err) {
+		return 0, att, false
+	}
+	if _, err := boardRole(r.Context(), s.db, att.boardID, u.UserID); handleErr(w, err) {
+		return 0, att, false
+	}
+	return u.UserID, att, true
+}
+
+// requireAttachment is lookupAttachment answering 404 for a missing attachment.
+func (s *server) requireAttachment(w http.ResponseWriter, r *http.Request) (uid int64, att attachmentRow, ok bool) {
+	return s.lookupAttachment(w, r, func() {
+		httpError(w, http.StatusNotFound, xystrings.Default.Server.Attachment.NotFound())
+	})
 }
 
 func boolInt(b bool) int {
@@ -167,43 +212,25 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, bid, cardID, filenameEnc, meta.Mime, size, b
 // rather than delete+upload is what lets a screenshot be re-shot without the
 // card's other references to it going stale.
 func (s *server) handleReplaceAttachment(w http.ResponseWriter, r *http.Request) {
-	u, ok := s.requireUser(w, r)
+	uid, old, ok := s.requireAttachment(w, r)
 	if !ok {
-		return
-	}
-	attID, okp := pathInt(w, r, "id")
-	if !okp {
-		return
-	}
-	var bid, cardID, oldSize int64
-	var oldRef string
-	err := s.db.QueryRowContext(r.Context(), `
-select board_id, card_id, blob_ref, size from attachments where id = ? and deleted_at is null`, attID).Scan(&bid, &cardID, &oldRef, &oldSize)
-	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, xystrings.Default.Server.Attachment.NotFound())
-		return
-	}
-	if handleErr(w, err) {
-		return
-	}
-	if _, err := boardRole(r.Context(), s.db, bid, u.UserID); handleErr(w, err) {
 		return
 	}
 	meta, filenameEnc, ref, size, ok := s.readUpload(w, r)
 	if !ok {
 		return
 	}
-	err = s.withWriteTx(r.Context(), "replace-attachment", func(ctx context.Context, tx *sql.Tx) error {
-		if err := enforceQuota(ctx, tx, bid, size-oldSize); err != nil {
+	err := s.withWriteTx(r.Context(), "replace-attachment", func(ctx context.Context, tx *sql.Tx) error {
+		if err := enforceQuota(ctx, tx, old.boardID, size-old.size); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
 update attachments set filename_enc = ?, mime = ?, size = ?, lossless = ?, blob_ref = ?, rev = rev + 1
-where id = ?`, filenameEnc, meta.Mime, size, boolInt(meta.Lossless), ref, attID); err != nil {
+where id = ?`, filenameEnc, meta.Mime, size, boolInt(meta.Lossless), ref, old.id); err != nil {
 			return err
 		}
 		if meta.EventPayloadEnc != "" {
-			return appendEvent(ctx, tx, bid, cardID, "attach_replace", u.UserID, meta.EventPayloadEnc)
+			return appendEvent(ctx, tx, old.boardID, old.cardID, "attach_replace", uid, meta.EventPayloadEnc)
 		}
 		return nil
 	})
@@ -212,8 +239,8 @@ where id = ?`, filenameEnc, meta.Mime, size, boolInt(meta.Lossless), ref, attID)
 		handleErr(w, err)
 		return
 	}
-	_ = s.blobs.Remove(oldRef)
-	writeJSON(w, map[string]any{"id": attID, "size": size})
+	_ = s.blobs.Remove(old.ref)
+	writeJSON(w, map[string]any{"id": old.id, "size": size})
 }
 
 type patchAttachmentRequest struct {
@@ -222,24 +249,8 @@ type patchAttachmentRequest struct {
 
 // handlePatchAttachment flips an attachment's excerpt flag.
 func (s *server) handlePatchAttachment(w http.ResponseWriter, r *http.Request) {
-	u, ok := s.requireUser(w, r)
+	_, att, ok := s.requireAttachment(w, r)
 	if !ok {
-		return
-	}
-	attID, okp := pathInt(w, r, "id")
-	if !okp {
-		return
-	}
-	var bid int64
-	err := s.db.QueryRowContext(r.Context(), `select board_id from attachments where id = ? and deleted_at is null`, attID).Scan(&bid)
-	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, xystrings.Default.Server.Attachment.NotFound())
-		return
-	}
-	if handleErr(w, err) {
-		return
-	}
-	if _, err := boardRole(r.Context(), s.db, bid, u.UserID); handleErr(w, err) {
 		return
 	}
 	var req patchAttachmentRequest
@@ -250,8 +261,8 @@ func (s *server) handlePatchAttachment(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	err = s.withWriteTx(r.Context(), "patch-attachment", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update attachments set is_excerpt = ? where id = ?`, boolInt(*req.IsExcerpt), attID)
+	err := s.withWriteTx(r.Context(), "patch-attachment", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update attachments set is_excerpt = ? where id = ?`, boolInt(*req.IsExcerpt), att.id)
 		return err
 	})
 	if handleErr(w, err) {
@@ -261,29 +272,11 @@ func (s *server) handlePatchAttachment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleGetAttachment(w http.ResponseWriter, r *http.Request) {
-	u, ok := s.requireUser(w, r)
+	_, att, ok := s.requireAttachment(w, r)
 	if !ok {
 		return
 	}
-	attID, ok := pathInt(w, r, "id")
-	if !ok {
-		return
-	}
-	var bid int64
-	var ref, mime string
-	err := s.db.QueryRowContext(r.Context(), `select board_id, blob_ref, mime from attachments where id = ? and deleted_at is null`, attID).
-		Scan(&bid, &ref, &mime)
-	if errors.Is(err, sql.ErrNoRows) {
-		httpError(w, http.StatusNotFound, xystrings.Default.Server.Attachment.NotFound())
-		return
-	}
-	if handleErr(w, err) {
-		return
-	}
-	if _, err := boardRole(r.Context(), s.db, bid, u.UserID); handleErr(w, err) {
-		return
-	}
-	f, err := s.blobs.Open(ref)
+	f, err := s.blobs.Open(att.ref)
 	if err != nil {
 		httpError(w, http.StatusNotFound, "blob missing")
 		return
@@ -294,40 +287,24 @@ func (s *server) handleGetAttachment(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, no-store")
 	if st, err := f.Stat(); err == nil {
-		w.Header().Set("Content-Length", strconv.FormatInt(st.Size(), 10))
+		w.Header().Set("Content-Length", idstr.Format(st.Size()))
 	}
 	_, _ = io.Copy(w, f)
 }
 
 func (s *server) handleDeleteAttachment(w http.ResponseWriter, r *http.Request) {
-	uid, ok := s.requireUser(w, r)
+	// Deleting what is already gone is a success.
+	uid, att, ok := s.lookupAttachment(w, r, func() { w.WriteHeader(http.StatusNoContent) })
 	if !ok {
 		return
 	}
-	attID, okp := pathInt(w, r, "id")
-	if !okp {
-		return
-	}
-	var bid, cardID int64
-	err := s.db.QueryRowContext(r.Context(), `select board_id, card_id from attachments where id = ? and deleted_at is null`, attID).
-		Scan(&bid, &cardID)
-	if errors.Is(err, sql.ErrNoRows) {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if handleErr(w, err) {
-		return
-	}
-	if _, err := boardRole(r.Context(), s.db, bid, uid.UserID); handleErr(w, err) {
-		return
-	}
 	eventEnc := r.URL.Query().Get("event_payload_enc")
-	err = s.withWriteTx(r.Context(), "delete-attachment", func(ctx context.Context, tx *sql.Tx) error {
-		if err := tombstone(ctx, tx, "attachments", "id = ?", attID); err != nil {
+	err := s.withWriteTx(r.Context(), "delete-attachment", func(ctx context.Context, tx *sql.Tx) error {
+		if err := tombstone(ctx, tx, "attachments", "id = ?", att.id); err != nil {
 			return err
 		}
 		if eventEnc != "" {
-			return appendEvent(ctx, tx, bid, cardID, "attach_remove", uid.UserID, eventEnc)
+			return appendEvent(ctx, tx, att.boardID, att.cardID, "attach_remove", uid, eventEnc)
 		}
 		return nil
 	})

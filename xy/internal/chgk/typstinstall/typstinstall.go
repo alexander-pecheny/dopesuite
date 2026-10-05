@@ -27,18 +27,30 @@ import (
 // ReleasesURL is where typst publishes its builds.
 const ReleasesURL = "https://api.github.com/repos/typst/typst/releases/latest"
 
+const (
+	dirMode  = 0o755
+	execMode = 0o755 // the installed binary
+	// fileMode is for an archive entry that carries no permissions.
+	fileMode = 0o644
+	// versionTimeout bounds `typst --version`, which is how a binary is checked.
+	versionTimeout  = 20 * time.Second
+	downloadTimeout = 15 * time.Minute
+	// maxEntrySize is well above any typst build, against an archive that lies.
+	maxEntrySize = 1 << 30
+)
+
 // UtilsDir is ~/.pecheny_utils, which is chgksuite's own get_utils_dir. Sharing
 // it means a machine that has run either tool has a typst for both.
 func UtilsDir() (string, error) {
 	if dir := os.Getenv("CHGKSUITE_UTILS_DIR"); dir != "" {
-		return dir, os.MkdirAll(dir, 0o755)
+		return dir, os.MkdirAll(dir, dirMode)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 	dir := filepath.Join(home, ".pecheny_utils")
-	return dir, os.MkdirAll(dir, 0o755)
+	return dir, os.MkdirAll(dir, dirMode)
 }
 
 func binaryName() string {
@@ -65,7 +77,7 @@ func Find() string {
 }
 
 func works(path string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), versionTimeout)
 	defer cancel()
 	return exec.CommandContext(ctx, path, "--version").Run() == nil
 }
@@ -94,6 +106,17 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	}
 	defer os.Remove(archive)
 
+	target, err := installFrom(archive, dir)
+	if err != nil {
+		return "", err
+	}
+	say("%s", s.Install.Installed(target))
+	return target, nil
+}
+
+// installFrom unpacks a downloaded release beside dir and moves its binary
+// into dir.
+func installFrom(archive, dir string) (string, error) {
 	staging, err := os.MkdirTemp(dir, "typst-unpack-*")
 	if err != nil {
 		return "", err
@@ -105,16 +128,15 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	// The binary sits inside a per-target directory in the archive.
 	found := findBinary(staging)
 	if found == "" {
-		return "", corei18n.User(s.Install.Typst.ArchiveNoBinary(binaryName()))
+		return "", corei18n.User(xystrings.Default.Install.Typst.ArchiveNoBinary(binaryName()))
 	}
 	target := filepath.Join(dir, binaryName())
 	if err := move(found, target); err != nil {
 		return "", err
 	}
-	if err := os.Chmod(target, 0o755); err != nil {
+	if err := os.Chmod(target, execMode); err != nil {
 		return "", err
 	}
-	say("%s", s.Install.Installed(target))
 	return target, nil
 }
 
@@ -133,26 +155,8 @@ func FindOrInstall(ctx context.Context, progress func(string)) (string, error) {
 // the same triple chgksuite matches on: musl on Linux, msvc on Windows, and
 // whatever Apple calls the architecture on a Mac.
 func latestAsset(ctx context.Context) (version, url string, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ReleasesURL, nil)
+	body, err := fetchLatestRelease(ctx)
 	if err != nil {
-		return "", "", err
-	}
-	resp, err := (&http.Client{Timeout: time.Minute}).Do(req)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", "", corei18n.User(xystrings.Default.Install.Typst.ReleasesFailed(resp.Status))
-	}
-	var body struct {
-		Tag    string `json:"tag_name"`
-		Assets []struct {
-			Name string `json:"name"`
-			URL  string `json:"browser_download_url"`
-		} `json:"assets"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return "", "", err
 	}
 	want, err := assetPrefix()
@@ -167,20 +171,53 @@ func latestAsset(ctx context.Context) (version, url string, err error) {
 	return "", "", corei18n.User(xystrings.Default.Install.Typst.ReleaseNoBuild(want))
 }
 
-// assetPrefix is the "typst-<arch>-<target>" a release asset is named by.
-func assetPrefix() (string, error) {
-	arch := ""
+type releaseInfo struct {
+	Tag    string `json:"tag_name"`
+	Assets []struct {
+		Name string `json:"name"`
+		URL  string `json:"browser_download_url"`
+	} `json:"assets"`
+}
+
+// fetchLatestRelease asks GitHub for typst's latest release.
+func fetchLatestRelease(ctx context.Context) (releaseInfo, error) {
+	var body releaseInfo
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ReleasesURL, nil)
+	if err != nil {
+		return body, err
+	}
+	resp, err := (&http.Client{Timeout: time.Minute}).Do(req)
+	if err != nil {
+		return body, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return body, corei18n.User(xystrings.Default.Install.Typst.ReleasesFailed(resp.Status))
+	}
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	return body, err
+}
+
+// typstArch is what typst's release names call this machine's architecture.
+func typstArch() (string, error) {
 	switch runtime.GOARCH {
 	case "amd64":
-		arch = "x86_64"
+		return "x86_64", nil
 	case "arm64":
-		arch = "aarch64"
+		return "aarch64", nil
 	case "arm":
-		arch = "armv7"
+		return "armv7", nil
 	case "riscv64":
-		arch = "riscv64gc"
-	default:
-		return "", corei18n.User(xystrings.Default.Install.Typst.PlatformMissing(runtime.GOARCH))
+		return "riscv64gc", nil
+	}
+	return "", corei18n.User(xystrings.Default.Install.Typst.PlatformMissing(runtime.GOARCH))
+}
+
+// assetPrefix is the "typst-<arch>-<target>" a release asset is named by.
+func assetPrefix() (string, error) {
+	arch, err := typstArch()
+	if err != nil {
+		return "", err
 	}
 	switch runtime.GOOS {
 	case "darwin":
@@ -209,7 +246,7 @@ func download(ctx context.Context, url, dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resp, err := (&http.Client{Timeout: 15 * time.Minute}).Do(req)
+	resp, err := (&http.Client{Timeout: downloadTimeout}).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -271,24 +308,29 @@ func extractTar(archive, dir string) error {
 		if err != nil {
 			return err
 		}
-		target, err := safeJoin(dir, hdr.Name)
-		if err != nil {
+		if err := writeTarEntry(tr, hdr, dir); err != nil {
 			return err
 		}
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := writeFile(tr, target, os.FileMode(hdr.Mode).Perm()); err != nil {
-				return err
-			}
-		}
 	}
+}
+
+// writeTarEntry creates one directory or regular file of a tar under dir;
+// other kinds of entry are skipped.
+func writeTarEntry(tr *tar.Reader, hdr *tar.Header, dir string) error {
+	target, err := safeJoin(dir, hdr.Name)
+	if err != nil {
+		return err
+	}
+	switch hdr.Typeflag {
+	case tar.TypeDir:
+		return os.MkdirAll(target, dirMode)
+	case tar.TypeReg:
+		if err := os.MkdirAll(filepath.Dir(target), dirMode); err != nil {
+			return err
+		}
+		return writeFile(tr, target, os.FileMode(hdr.Mode).Perm())
+	}
+	return nil
 }
 
 func extractZip(archive, dir string) error {
@@ -303,12 +345,12 @@ func extractZip(archive, dir string) error {
 			return err
 		}
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0o755); err != nil {
+			if err := os.MkdirAll(target, dirMode); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(target), dirMode); err != nil {
 			return err
 		}
 		rc, err := f.Open()
@@ -335,15 +377,14 @@ func safeJoin(dir, name string) (string, error) {
 
 func writeFile(r io.Reader, target string, mode os.FileMode) error {
 	if mode == 0 {
-		mode = 0o644
+		mode = fileMode
 	}
 	out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-	// Bounded well above any typst build, against an archive that lies.
-	_, err = io.Copy(out, io.LimitReader(r, 1<<30))
+	_, err = io.Copy(out, io.LimitReader(r, maxEntrySize))
 	return err
 }
 
@@ -373,5 +414,6 @@ func move(from, to string) error {
 		return err
 	}
 	defer src.Close()
-	return writeFile(src, to, 0o755)
+	return writeFile(src, to, execMode)
+
 }

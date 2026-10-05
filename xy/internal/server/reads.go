@@ -76,6 +76,12 @@ type activityEventDTO struct {
 	ReplyToID    *int64 `json:"reply_to_id"`
 }
 
+// How many events the bell panel gets when it does not ask, and at most.
+const (
+	defaultActivityLimit = 50
+	maxActivityLimit     = 200
+)
+
 // handleBoardActivity returns the board's other-authored events, newest first,
 // for the 🔔 bell panel. `?limit=` defaults to 50, capped at 200.
 func (s *server) handleBoardActivity(w http.ResponseWriter, r *http.Request) {
@@ -83,14 +89,14 @@ func (s *server) handleBoardActivity(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit := 50
+	limit := defaultActivityLimit
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			limit = n
 		}
 	}
-	if limit > 200 {
-		limit = 200
+	if limit > maxActivityLimit {
+		limit = maxActivityLimit
 	}
 	rows, err := s.db.QueryContext(r.Context(), `
 select e.id, e.card_id, e.type, e.author_user_id,

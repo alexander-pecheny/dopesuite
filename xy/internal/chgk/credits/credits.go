@@ -93,6 +93,22 @@ type Options struct {
 // that inflates far past it (a zip bomb) is refused as soon as it crosses.
 const maxInflated = 150 << 20
 
+// A Своя игра theme is five questions worth siStep to siTopPoints.
+const (
+	siStep      = 10
+	siTopPoints = 50
+)
+
+const (
+	// languageSample is how much of the text lingua reads.
+	languageSample = 20000
+	// minLanguageRunes is the least text lingua is trusted to tell apart.
+	minLanguageRunes = 200
+	pdftotextTimeout = 30 * time.Second
+	// wrappedLineRunes is how long a PDF line is when it ran to the margin.
+	wrappedLineRunes = 40
+)
+
 // Read extracts the credits of one uploaded file. The name's extension picks the
 // format: .docx, .doc, .4s, .pdf, or a .zip holding any number of those (images and
 // everything else in an archive are ignored). A zip member that can't be
@@ -187,7 +203,7 @@ var reNumberedLine = regexp.MustCompile(`^\s*(\d{1,3})\s*[.)]`)
 // themes — numbered lines 10, 20, 30, 40, 50 in a row with no other number
 // between them — are enough; a ЧГК packet's 10 is followed by 11.
 func isSI(text string) bool {
-	themes, want := 0, 10
+	themes, want := 0, siStep
 	for _, line := range strings.Split(text, "\n") {
 		m := reNumberedLine.FindStringSubmatch(line)
 		if m == nil {
@@ -195,14 +211,14 @@ func isSI(text string) bool {
 		}
 		n, _ := strconv.Atoi(m[1])
 		switch {
-		case n == want && n == 50:
-			themes, want = themes+1, 10
+		case n == want && n == siTopPoints:
+			themes, want = themes+1, siStep
 		case n == want:
-			want += 10
-		case n == 10:
-			want = 20
+			want += siStep
+		case n == siStep:
+			want = n + siStep
 		default:
-			want = 10
+			want = siStep
 		}
 	}
 	return themes >= 2
@@ -218,10 +234,10 @@ var detector = lingua.NewLanguageDetectorBuilder().
 // little text to tell (an image-only file) reads as Russian, as does Uzbek,
 // which lingua does not know.
 func language(text string) string {
-	if len(text) > 20000 {
-		text = text[:20000]
+	if len(text) > languageSample {
+		text = text[:languageSample]
 	}
-	if utf8.RuneCountInString(strings.TrimSpace(text)) < 200 {
+	if utf8.RuneCountInString(strings.TrimSpace(text)) < minLanguageRunes {
 		return ""
 	}
 	l, ok := detector.DetectLanguageOf(text)
@@ -253,10 +269,7 @@ func readZip(data []byte, opt Options) (*Credits, error) {
 	budget := int64(maxInflated)
 	var files []file
 	for _, zf := range zr.File {
-		base := path.Base(zf.Name)
-		ext := strings.ToLower(path.Ext(base))
-		if zf.FileInfo().IsDir() || strings.HasPrefix(base, ".") || strings.HasPrefix(base, "~$") ||
-			strings.HasPrefix(zf.Name, "__MACOSX/") || (ext != ".docx" && ext != ".doc" && ext != ".4s" && ext != ".pdf") {
+		if !mayBePacket(zf) {
 			continue
 		}
 		body, err := readEntry(zf, &budget)
@@ -269,7 +282,7 @@ func readZip(data []byte, opt Options) (*Credits, error) {
 			// packet is often another file beside it.
 			continue
 		}
-		f, err := readOne(base, body, opt)
+		f, err := readOne(path.Base(zf.Name), body, opt)
 		if err != nil || f.questions == 0 {
 			// Handouts, an answer sheet, a scan: nothing that is a packet.
 			continue
@@ -281,6 +294,18 @@ func readZip(data []byte, opt Options) (*Credits, error) {
 		return nil, fmt.Errorf("no packet in the archive: no .docx, .doc, .4s or .pdf with questions")
 	}
 	return merge(pick(files, opt.Questions)), nil
+}
+
+// mayBePacket skips the members of an archive that cannot be a packet:
+// directories, hidden and lock files, macOS metadata and other formats.
+func mayBePacket(zf *zip.File) bool {
+	base := path.Base(zf.Name)
+	ext := strings.ToLower(path.Ext(base))
+	if zf.FileInfo().IsDir() || strings.HasPrefix(base, ".") || strings.HasPrefix(base, "~$") ||
+		strings.HasPrefix(zf.Name, "__MACOSX/") {
+		return false
+	}
+	return ext == ".docx" || ext == ".doc" || ext == ".4s" || ext == ".pdf"
 }
 
 // formats is the order formats are trusted in: a docx is the organizer's own
@@ -297,40 +322,10 @@ var formats = []string{"docx", "doc", "4s", "pdf"}
 // the first group: its biggest file alone when it has at least twice the
 // questions of the next (the packet beside spare questions), else all of them.
 func pick(files []file, questions int) []file {
-	type key struct{ format, language string }
-	groups := map[key][]file{}
-	for _, f := range dedupe(files) {
-		k := key{f.format, f.language}
-		groups[k] = append(groups[k], f)
-	}
-	var order []key
-	for _, format := range formats {
-		var langs []string
-		for k := range groups {
-			if k.format == format {
-				langs = append(langs, k.language)
-			}
-		}
-		sort.Strings(langs) // "" (Russian) sorts first
-		for _, l := range langs {
-			order = append(order, key{format, l})
-		}
-	}
-	for _, g := range groups {
-		sort.SliceStable(g, func(i, j int) bool { return naturalLess(g[i].name, g[j].name) })
-	}
+	groups, order := groupFiles(files)
 	if questions > 0 {
-		for _, k := range order {
-			sum := 0
-			for _, f := range groups[k] {
-				if f.questions == questions {
-					return []file{f}
-				}
-				sum += f.questions
-			}
-			if sum == questions {
-				return groups[k]
-			}
+		if g := matchCount(groups, order, questions); g != nil {
+			return g
 		}
 	}
 	for _, k := range order {
@@ -346,6 +341,53 @@ func pick(files []file, questions int) []file {
 		return g
 	}
 	return files
+}
+
+type groupKey struct{ format, language string }
+
+// groupFiles groups the files by format and language, each group in natural
+// order of its names, and lists the groups most trusted first.
+func groupFiles(files []file) (map[groupKey][]file, []groupKey) {
+	groups := map[groupKey][]file{}
+	for _, f := range dedupe(files) {
+		k := groupKey{f.format, f.language}
+		groups[k] = append(groups[k], f)
+	}
+	var order []groupKey
+	for _, format := range formats {
+		var langs []string
+		for k := range groups {
+			if k.format == format {
+				langs = append(langs, k.language)
+			}
+		}
+		sort.Strings(langs) // "" (Russian) sorts first
+		for _, l := range langs {
+			order = append(order, groupKey{format, l})
+		}
+	}
+	for _, g := range groups {
+		sort.SliceStable(g, func(i, j int) bool { return naturalLess(g[i].name, g[j].name) })
+	}
+	return groups, order
+}
+
+// matchCount finds, group by group, one file holding exactly questions, or a
+// group holding them together; nil when there is none.
+func matchCount(groups map[groupKey][]file, order []groupKey, questions int) []file {
+	for _, k := range order {
+		sum := 0
+		for _, f := range groups[k] {
+			if f.questions == questions {
+				return []file{f}
+			}
+			sum += f.questions
+		}
+		if sum == questions {
+			return groups[k]
+		}
+	}
+	return nil
 }
 
 // dedupe drops a file that repeats another of its format — the same packet
@@ -396,7 +438,7 @@ func pdfText(data []byte, bin string) (string, error) {
 		return "", err
 	}
 	tmp.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), pdftotextTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, bin, "-enc", "UTF-8", "-nopgbrk", tmp.Name(), "-").Output()
 	if err != nil {
@@ -421,7 +463,7 @@ func unwrap(text string) string {
 		if n := len(out); n > 0 && line != "" && out[n-1] != "" {
 			prev := out[n-1]
 			last, _ := utf8.DecodeLastRuneInString(prev)
-			if utf8.RuneCountInString(prev) >= 40 && !strings.ContainsRune(".!?:;»)\"…", last) &&
+			if utf8.RuneCountInString(prev) >= wrappedLineRunes && !strings.ContainsRune(".!?:;»)\"…", last) &&
 				!reLabelStart.MatchString(strings.TrimSpace(line)) {
 				out[n-1] = prev + " " + strings.TrimSpace(line)
 				continue
@@ -467,21 +509,9 @@ func fromDoc(doc fsource.Doc) file {
 		switch p.Type {
 		case "section":
 			label := text(p.Content)
-			// A heading with no question under it before any real tour (a
-			// contents line in the narrator's instructions) is not a tour: its
-			// paragraphs belong to the preamble.
-			if tour >= 0 && f.tours[tour].First == 0 && !f.tours[tour].Warmup && f.questions == 0 {
-				for _, i := range pending {
-					f.paragraphs[i].Tour = -1
-				}
-				f.tours = f.tours[:tour]
-			}
-			warmup = reWarmup.MatchString(label)
-			f.tours = append(f.tours, Tour{Label: label, Warmup: warmup})
+			pending = f.openTour(label, tour, pending)
+			warmup = f.tours[len(f.tours)-1].Warmup
 			tour = len(f.tours) - 1
-			// A paragraph left at the end of a tour has no question after it;
-			// the preamble's wait for the packet's first question.
-			pending = slices.DeleteFunc(pending, func(i int) bool { return f.paragraphs[i].Tour >= 0 })
 		case "meta", "editor":
 			if s := text(p.Content); s != "" {
 				f.paragraphs = append(f.paragraphs, Paragraph{Text: s, Tour: tour, Editor: p.Type == "editor"})
@@ -491,26 +521,50 @@ func fromDoc(doc fsource.Doc) file {
 			if warmup {
 				continue
 			}
-			f.questions++
-			n := f.questions
-			for _, i := range pending {
-				f.paragraphs[i].Next = n
-			}
+			f.addQuestion(p, tour, pending)
 			pending = nil
-			if tour >= 0 {
-				if f.tours[tour].First == 0 {
-					f.tours[tour].First = n
-				}
-				f.tours[tour].Last = n
-			}
-			if q, ok := p.Content.(*fsource.Question); ok {
-				if s := text(q.Get("author")); s != "" {
-					f.authors = append(f.authors, Author{Question: n, Text: s})
-				}
-			}
 		}
 	}
 	return f
+}
+
+// openTour starts a tour under the heading label; tour is the one open so
+// far. It returns the paragraphs still waiting for a question.
+func (f *file) openTour(label string, tour int, pending []int) []int {
+	// A heading with no question under it before any real tour (a
+	// contents line in the narrator's instructions) is not a tour: its
+	// paragraphs belong to the preamble.
+	if tour >= 0 && f.tours[tour].First == 0 && !f.tours[tour].Warmup && f.questions == 0 {
+		for _, i := range pending {
+			f.paragraphs[i].Tour = -1
+		}
+		f.tours = f.tours[:tour]
+	}
+	f.tours = append(f.tours, Tour{Label: label, Warmup: reWarmup.MatchString(label)})
+	// A paragraph left at the end of a tour has no question after it;
+	// the preamble's wait for the packet's first question.
+	return slices.DeleteFunc(pending, func(i int) bool { return f.paragraphs[i].Tour >= 0 })
+}
+
+// addQuestion numbers the next question: the paragraphs waiting for it, the
+// open tour's range and its author.
+func (f *file) addQuestion(p fsource.Pair, tour int, pending []int) {
+	f.questions++
+	n := f.questions
+	for _, i := range pending {
+		f.paragraphs[i].Next = n
+	}
+	if tour >= 0 {
+		if f.tours[tour].First == 0 {
+			f.tours[tour].First = n
+		}
+		f.tours[tour].Last = n
+	}
+	if q, ok := p.Content.(*fsource.Question); ok {
+		if s := text(q.Get("author")); s != "" {
+			f.authors = append(f.authors, Author{Question: n, Text: s})
+		}
+	}
 }
 
 // dropLeadingWarmup un-numbers the questions that stand before the first tour
@@ -521,13 +575,7 @@ func fromDoc(doc fsource.Doc) file {
 // questions stay numbered — the packet simply has no heading for its first
 // tour.
 func dropLeadingWarmup(f file, want int) file {
-	pre := 0
-	for _, t := range f.tours {
-		if t.First > 0 {
-			pre = t.First - 1
-			break
-		}
-	}
+	pre := questionsBeforeTours(f)
 	if pre == 0 || len(f.tours) == 0 || (want > 0 && f.questions == want) {
 		return f
 	}
@@ -543,16 +591,32 @@ func dropLeadingWarmup(f file, want int) file {
 	for i := range f.paragraphs {
 		f.paragraphs[i].Next = shift(f.paragraphs[i].Next)
 	}
-	authors := f.authors[:0]
-	for _, a := range f.authors {
-		if a.Question > pre {
-			a.Question -= pre
-			authors = append(authors, a)
-		}
-	}
-	f.authors = authors
+	f.authors = dropAuthors(f.authors, pre)
 	f.questions -= pre
 	return f
+}
+
+// questionsBeforeTours counts the questions before the first tour that has any.
+func questionsBeforeTours(f file) int {
+	for _, t := range f.tours {
+		if t.First > 0 {
+			return t.First - 1
+		}
+	}
+	return 0
+}
+
+// dropAuthors forgets the authors of the first pre questions and renumbers
+// the rest.
+func dropAuthors(authors []Author, pre int) []Author {
+	kept := authors[:0]
+	for _, a := range authors {
+		if a.Question > pre {
+			a.Question -= pre
+			kept = append(kept, a)
+		}
+	}
+	return kept
 }
 
 // merge puts the files of a packet in order and joins them, renumbering the

@@ -81,22 +81,13 @@ func (p *pkg) clonePlaceholders(s *slidePart, layout string) []*clonedPlaceholde
 		if m == nil {
 			continue
 		}
-		phType := ""
-		if t := rePhType.FindStringSubmatch(m[1]); t != nil {
-			phType = t[1]
-		}
+		phType := submatch(rePhType, m[1])
 		if !cloneablePlaceholder(phType) {
 			continue
 		}
-		attr := func(re *regexp.Regexp) string {
-			if v := re.FindStringSubmatch(m[1]); v != nil {
-				return v[1]
-			}
-			return ""
-		}
 		ph := &clonedPlaceholder{
-			id: s.nextShapeID, phType: phType, phIdx: attr(rePhIdx),
-			phOrient: attr(rePhOrient), phSz: attr(rePhSz), tf: newTextFrame(),
+			id: s.nextShapeID, phType: phType, phIdx: submatch(rePhIdx, m[1]),
+			phOrient: submatch(rePhOrient, m[1]), phSz: submatch(rePhSz, m[1]), tf: newTextFrame(),
 		}
 		ph.name = nextPlaceholderName(s, phType, ph.phOrient, ph.id)
 		s.nextShapeID++
@@ -104,6 +95,14 @@ func (p *pkg) clonePlaceholders(s *slidePart, layout string) []*clonedPlaceholde
 		out = append(out, ph)
 	}
 	return out
+}
+
+// submatch is re's first group in s, or "" when re does not match.
+func submatch(re *regexp.Regexp, s string) string {
+	if v := re.FindStringSubmatch(s); v != nil {
+		return v[1]
+	}
+	return ""
 }
 
 // nextPlaceholderName is _next_ph_name: the kind of placeholder, then a number

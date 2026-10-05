@@ -24,6 +24,17 @@ import (
 // ErrUnknown is a file whose encoding nothing here recognises.
 var ErrUnknown = errors.New("encoding cannot be determined; pass it with --encoding")
 
+const (
+	// minConfidence is the lowest score Decode accepts as a guess. The right
+	// encoding scores 0.87 and up, the wrong ones 0.62 and down (measured
+	// across all four, and on the KOI8-R package in chgksuite's corpus).
+	minConfidence = 0.7
+	// percent turns a share into the scale russianFrequencies is written in.
+	percent = 100
+	bomLE   = "\xFF\xFE"
+	bomBE   = "\xFE\xFF"
+)
+
 // candidates are the single-byte encodings Russian question packages come in.
 var candidates = []struct {
 	name string
@@ -59,11 +70,9 @@ func Decode(raw []byte, name string) (string, error) {
 			best, bestScore = s, score
 		}
 	}
-	// The right encoding scores 0.87 and up, the wrong ones 0.62 and down
-	// (measured across all four, and on the KOI8-R package in chgksuite's
-	// corpus). Below 0.7 this is not a guess worth making: a wrong encoding
+	// Below minConfidence this is not a guess worth making: a wrong encoding
 	// silently turns a package into mojibake.
-	if bestScore < 0.7 {
+	if bestScore < minConfidence {
 		return "", ErrUnknown
 	}
 	return normalize(best), nil
@@ -109,11 +118,11 @@ func decodeWith(raw []byte, e encoding.Encoding) (string, error) {
 }
 
 func decodeUTF16(raw []byte) (string, bool) {
-	if len(raw) < 2 {
+	if len(raw) < len(bomLE) {
 		return "", false
 	}
 	bom := xunicode.UTF16(xunicode.LittleEndian, xunicode.UseBOM)
-	if (raw[0] == 0xFF && raw[1] == 0xFE) || (raw[0] == 0xFE && raw[1] == 0xFF) {
+	if head := string(raw[:len(bomLE)]); head == bomLE || head == bomBE {
 		out, _, err := transform.Bytes(bom.NewDecoder(), raw)
 		return string(out), err == nil
 	}
@@ -159,7 +168,7 @@ func russianScore(s string) float64 {
 func cosine(counts map[rune]float64, total float64) float64 {
 	var dot, normObserved, normExpected float64
 	for r, expected := range russianFrequencies {
-		observed := counts[r] / total * 100
+		observed := counts[r] / total * percent
 		dot += observed * expected
 		normObserved += observed * observed
 		normExpected += expected * expected
@@ -169,7 +178,8 @@ func cosine(counts map[rune]float64, total float64) float64 {
 	// count against the observed norm.
 	for r, n := range counts {
 		if _, known := russianFrequencies[r]; !known {
-			observed := n / total * 100
+			observed := n / total * percent
+
 			normObserved += observed * observed
 		}
 	}

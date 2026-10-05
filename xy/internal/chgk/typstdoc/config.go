@@ -10,6 +10,34 @@ import (
 	"xy/internal/chgk/inline"
 )
 
+// The defaults below are template.docx's, in mm and pt.
+const (
+	// Noto Sans's ascender and descender, in em.
+	notoTopEdgeEm    = 1.07
+	notoBottomEdgeEm = -0.29
+
+	docxMarginVMM = 25.4  // 1in
+	docxMarginHMM = 19.05 // 0.75in
+
+	docxBodyPt     = 12
+	docxHeading1Pt = 16
+	docxHeading2Pt = 14
+	docxHeading3Pt = 13
+	docxSourcePt   = 10
+
+	docxHeadingAbovePt    = 12
+	docxHeadingBelowPt    = 3
+	docxQuestionAbovePt   = 18
+	docxAnswerAbovePt     = 6
+	docxThemeAbovePt      = 24
+	docxSIQuestionAbovePt = 12
+	// The shrunk source block starts one body line below: 2pt × Noto Sans's
+	// 1.362em line box (ascender 1.069 + descender 0.293).
+	docxSourceGapPt = 2.72
+
+	floatBits = 64
+)
+
 // Config is pdf_config.toml: the typography and page setup a project can
 // override with --pdf_config. The defaults are template.docx's, transcribed
 // (twips → mm/pt), so the PDF and the .docx lay out the same.
@@ -34,15 +62,13 @@ type Config struct {
 // DefaultConfig is the pdf_config.toml chgksuite ships.
 func DefaultConfig() Config {
 	return Config{
-		TopEdge: 1.07, BottomEdge: -0.29, LeadingPt: 0,
-		MarginVMM: 25.4, MarginHMM: 19.05,
-		BodyPt: 12, Heading1Pt: 16, Heading2Pt: 14, SourcePt: 10,
-		HeadingAbove: 12, HeadingBelow: 3,
-		QuestionAbove: 18, AnswerAbove: 6,
-		Heading3Pt: 13, ThemeAbove: 24, SIQuestionAbove: 12,
-		// The shrunk source block starts one body line below: 2pt × Noto Sans's
-		// 1.362em line box (ascender 1.069 + descender 0.293).
-		SourceGap: 2.72,
+		TopEdge: notoTopEdgeEm, BottomEdge: notoBottomEdgeEm, LeadingPt: 0,
+		MarginVMM: docxMarginVMM, MarginHMM: docxMarginHMM,
+		BodyPt: docxBodyPt, Heading1Pt: docxHeading1Pt, Heading2Pt: docxHeading2Pt, SourcePt: docxSourcePt,
+		HeadingAbove: docxHeadingAbovePt, HeadingBelow: docxHeadingBelowPt,
+		QuestionAbove: docxQuestionAbovePt, AnswerAbove: docxAnswerAbovePt,
+		Heading3Pt: docxHeading3Pt, ThemeAbove: docxThemeAbovePt, SIQuestionAbove: docxSIQuestionAbovePt,
+		SourceGap: docxSourceGapPt,
 	}
 }
 
@@ -132,7 +158,7 @@ func ParseConfig(text string) (Config, error) {
 		if !known {
 			continue
 		}
-		v, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		v, err := strconv.ParseFloat(strings.TrimSpace(value), floatBits)
 		if err != nil {
 			return c, corei18n.User(xystrings.Default.Docs.Typst.LineError(strconv.Itoa(n+1), err.Error()))
 		}

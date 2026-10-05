@@ -11,8 +11,9 @@ import (
 	"errors"
 	"fmt"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 
 	"golang.org/x/crypto/scrypt"
 	"golang.org/x/text/unicode/norm"
@@ -29,6 +30,10 @@ const (
 	headerLen = len(magic) + 1 + nonceLen
 
 	verifyPlaintext = "xy-verify-v1"
+
+	// defaultDKLen is the data key length, in bytes, when a board's KDF
+	// parameters leave it out.
+	defaultDKLen = 32
 )
 
 // KDFParams are the scrypt parameters a board stores with its wrapped key.
@@ -104,7 +109,7 @@ func gcmFor(key []byte) (cipher.AEAD, error) {
 func deriveKEK(passphrase string, salt []byte, p KDFParams) ([]byte, error) {
 	dkLen := p.DKLen
 	if dkLen == 0 {
-		dkLen = 32
+		dkLen = defaultDKLen
 	}
 	return scrypt.Key([]byte(norm.NFKC.String(passphrase)), salt, p.N, p.R, p.P, dkLen)
 }

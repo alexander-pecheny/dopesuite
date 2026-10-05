@@ -6,8 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // `source` prints the 4s a List (or its whole List Group) exports as — a whole
@@ -77,7 +78,7 @@ func cmdExport(a *app, args []string) error {
 		filename = safeName(title) + ".bin"
 	}
 	path := filepath.Join(*out, filename)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, outputFileMode); err != nil {
 		return err
 	}
 	return a.emit(map[string]any{"path": path, "bytes": len(data)}, func() {

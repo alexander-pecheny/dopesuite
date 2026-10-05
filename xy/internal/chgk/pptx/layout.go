@@ -26,6 +26,9 @@ var (
 	reSpaceRun  = regexp.MustCompile(`( +)`)
 )
 
+// fitSlack is chgksuite's margin of error: text must fit in 99% of the box.
+const fitSlack = 0.99
+
 // urlBreakAfterChars are the characters a long URL may wrap after, which is what
 // keeps one from forcing the whole box to shrink.
 const urlBreakAfterChars = "/&?=-_.,;:+~#%"
@@ -162,7 +165,7 @@ func (e *exporter) effectiveParagraphSize(p *paragraph) float64 {
 	if p.size > 0 {
 		return p.size
 	}
-	return e.cfg.fontSize("default_size", 32)
+	return e.cfg.fontSize("default_size", defaultFontPt)
 }
 
 func (e *exporter) effectiveRunSize(r *run, p *paragraph) float64 {
@@ -186,29 +189,9 @@ func (e *exporter) runTextWidth(r *run, p *paragraph, text string) (float64, boo
 // lineHeight is _paragraph_line_height_px: the tallest run on the line, then
 // whatever line spacing the paragraph asks for.
 func (e *exporter) lineHeight(p *paragraph, line []token) float64 {
-	var height, size float64
-	withText := line[:0:0]
-	for _, t := range line {
-		if t.text != "" {
-			withText = append(withText, t)
-		}
-	}
-	if len(withText) > 0 {
-		for _, t := range withText {
-			face := e.faces.pick(t.run.bold, t.run.italic)
-			if face == nil {
-				continue
-			}
-			height = math.Max(height, face.lineHeight(e.effectiveRunSize(t.run, p)))
-			size = math.Max(size, e.effectiveRunSize(t.run, p))
-		}
-	} else {
-		size = e.effectiveParagraphSize(p)
-		if face := e.faces.pick(false, false); face != nil {
-			height = face.lineHeight(size)
-		} else {
-			height = ptToPx(size)
-		}
+	height, hasText := e.textLineHeight(p, line)
+	if !hasText {
+		height = e.emptyLineHeight(p)
 	}
 	switch {
 	case p.lineSpacePt > 0:
@@ -217,6 +200,30 @@ func (e *exporter) lineHeight(p *paragraph, line []token) float64 {
 		return height * p.lineSpacing
 	}
 	return height
+}
+
+// textLineHeight is the tallest line box among the line's runs that carry text;
+// hasText is false when none does.
+func (e *exporter) textLineHeight(p *paragraph, line []token) (height float64, hasText bool) {
+	for _, t := range line {
+		if t.text == "" {
+			continue
+		}
+		hasText = true
+		if face := e.faces.pick(t.run.bold, t.run.italic); face != nil {
+			height = math.Max(height, face.lineHeight(e.effectiveRunSize(t.run, p)))
+		}
+	}
+	return height, hasText
+}
+
+// emptyLineHeight is the height of a line with no text, at the paragraph's size.
+func (e *exporter) emptyLineHeight(p *paragraph) float64 {
+	size := e.effectiveParagraphSize(p)
+	if face := e.faces.pick(false, false); face != nil {
+		return face.lineHeight(size)
+	}
+	return ptToPx(size)
 }
 
 func ptToPx(v float64) float64 { return v * pxPerInch / ptPerInch }
@@ -239,8 +246,8 @@ func max64(a, b int64) int64 {
 // fits is _text_frame_fits: every paragraph laid out, and the total no taller
 // than the box. The 0.99 is chgksuite's own margin of error.
 func (e *exporter) fits(t *textbox) bool {
-	maxWidth := innerWidth(t) * 0.99
-	maxHeight := innerHeight(t) * 0.99
+	maxWidth := innerWidth(t) * fitSlack
+	maxHeight := innerHeight(t) * fitSlack
 	total := 0.0
 	for _, p := range t.tf.paragraphs {
 		lines, widest, ok := e.layoutLines(p, maxWidth)
@@ -267,7 +274,7 @@ type sizedItem struct {
 
 func (e *exporter) collectSizes(t *textbox) []sizedItem {
 	var items []sizedItem
-	fallback := e.cfg.fontSize("default_size", 32)
+	fallback := e.cfg.fontSize("default_size", defaultFontPt)
 	for _, p := range t.tf.paragraphs {
 		size := p.size
 		if size == 0 {
@@ -327,7 +334,7 @@ func (e *exporter) shrink(t *textbox, minSize float64) {
 func (e *exporter) handoutFontSizeForText(text string, t *textbox, minSize float64) float64 {
 	maxSize := e.cfg.handoutFontSize()
 	if minSize == 0 {
-		minSize = e.cfg.fontSize("question_size", 32)
+		minSize = e.cfg.fontSize("question_size", defaultFontPt)
 	}
 	if maxSize <= minSize {
 		return maxSize
@@ -340,7 +347,7 @@ func (e *exporter) handoutFontSizeForText(text string, t *textbox, minSize float
 	if len(lines) == 0 {
 		return maxSize
 	}
-	maxWidth := innerWidth(t) * 0.99
+	maxWidth := innerWidth(t) * fitSlack
 	for size := maxSize; size > minSize; size-- {
 		fitsAll := true
 		for _, line := range lines {

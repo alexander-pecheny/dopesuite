@@ -11,6 +11,9 @@ import (
 	xystrings "xy/i18nstrings"
 )
 
+// columnLetters is the base of a spreadsheet column name (A…Z, AA…).
+const columnLetters = 26
+
 // The xlsx side of the question table. openpyxl reads these for chgksuite;
 // a results table is a grid of numbers and team names on one sheet, so this
 // reads that much of SpreadsheetML directly rather than adding a spreadsheet
@@ -164,7 +167,7 @@ func columnIndex(ref string) int {
 		if c < 'A' || c > 'Z' {
 			break
 		}
-		n = n*26 + int(c-'A') + 1
+		n = n*columnLetters + int(c-'A') + 1
 	}
 	return n - 1
 }

@@ -40,6 +40,14 @@ const { keyBetween } = xyRank;
 // needs no OAuth secret.
 const TRELLO_KEY = "1d4fe71dd193855686196e7768aa4b05";
 
+const HTTP_TOO_MANY_REQUESTS = 429;
+const MAX_RATE_LIMIT_RETRIES = 6;
+const MS_PER_SEC = 1000;
+const TRELLO_ACTIONS_PAGE = 1000; // Trello's cap on actions per response
+// The server refuses an attachment above this, so the import skips it.
+const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+const REDIRECT_DELAY_MS = 1500; // time to read the log before the board opens
+
 interface TrelloLabel { id: string; name?: string; color?: string | null }
 interface TrelloAttachment { id: string; name?: string; fileName?: string; isUpload?: boolean; bytes?: number; mimeType?: string }
 interface TrelloCard {
@@ -138,8 +146,8 @@ async function proxyFetch(token: string, path: string, params?: Record<string, s
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, path, params: params || {} }),
     });
-    if (res.status === 429 && attempt < 6) {
-      const wait = (Number(res.headers.get("Retry-After")) || 1) * 1000;
+    if (res.status === HTTP_TOO_MANY_REQUESTS && attempt < MAX_RATE_LIMIT_RETRIES) {
+      const wait = (Number(res.headers.get("Retry-After")) || 1) * MS_PER_SEC;
       await sleep(wait);
       continue;
     }
@@ -190,7 +198,7 @@ async function fetchHistory(token: string, boardId: string): Promise<History> {
   let seen = 0;
   for (;;) {
     const params: Record<string, string> = {
-      filter: "commentCard,updateCard", limit: "1000",
+      filter: "commentCard,updateCard", limit: String(TRELLO_ACTIONS_PAGE),
       memberCreator: "true", memberCreator_fields: "fullName,username",
     };
     if (before) params.before = before;
@@ -199,7 +207,7 @@ async function fetchHistory(token: string, boardId: string): Promise<History> {
     collectActions(page, history);
     seen += page.length;
     log(S.import.run.history(String(seen)));
-    if (page.length < 1000) break;
+    if (page.length < TRELLO_ACTIONS_PAGE) break;
     before = page[page.length - 1].id;
   }
   for (const arr of history.comments.values()) arr.reverse();
@@ -335,7 +343,7 @@ function trelloBundle(source: ImportSource, name: string): { bundle: Bundle; byt
       for (const att of (c.attachments || [])) {
         if (!att.isUpload) continue;
         const nm = att.name || att.fileName || S.import.trello.attachmentFallback();
-        if (att.bytes && att.bytes > 50 * 1024 * 1024) continue; // the server would refuse it anyway
+        if (att.bytes && att.bytes > MAX_ATTACHMENT_BYTES) continue;
         const aid = id();
         attachments.push({
           id: aid, card_id: cardId, filename: nm, mime: att.mimeType || "application/octet-stream",
@@ -494,7 +502,7 @@ form.addEventListener("submit", async (e) => {
     try {
       const { id } = await importBundle(bundleFile, name, pass, log);
       setStatus("saved");
-      setTimeout(() => { window.location.href = `/board/${id}`; }, 1500);
+      setTimeout(() => { window.location.href = `/board/${id}`; }, REDIRECT_DELAY_MS);
     } catch (err) {
       setStatus("error");
       log(S.import.run.aborted(errMsg(err)));
@@ -542,7 +550,7 @@ form.addEventListener("submit", async (e) => {
   importBtn.disabled = true;
   try {
     const { id } = await runImport(source, name, pass);
-    setTimeout(() => { window.location.href = `/board/${id}`; }, 1500);
+    setTimeout(() => { window.location.href = `/board/${id}`; }, REDIRECT_DELAY_MS);
   } catch (err) {
     setStatus("error");
     log(S.import.run.aborted(errMsg(err)));

@@ -6,6 +6,46 @@ import (
 	"sort"
 )
 
+// JPEG markers: every segment starts with markerPrefix and one of these.
+const (
+	markerPrefix = 0xFF
+	markerSOI    = 0xD8 // start of image
+	markerEOI    = 0xD9 // end of image
+	markerSOF0   = 0xC0 // baseline frame
+	markerSOF2   = 0xC2 // progressive frame
+	markerDHT    = 0xC4 // Huffman table
+	markerDQT    = 0xDB // quantisation table
+	markerDRI    = 0xDD // restart interval
+	markerSOS    = 0xDA // start of scan
+)
+
+// Segment layout and the limits of a baseline JPEG.
+const (
+	byteBits        = 8
+	nibbleBits      = 4
+	lowNibble       = 0x0F
+	lengthFieldLen  = 2 // the big-endian length after a marker
+	segmentHeadLen  = 4 // marker plus length
+	samplePrecision = 8 // bits per sample in a baseline frame
+	sofHeight       = 1 // offset of the height in an SOF payload
+	sofWidth        = 3 // offset of the width
+	sofComponents   = 5 // offset of the component count
+	sofHeaderLen    = 6
+	sofComponentLen = 3
+	maxSampling     = 4
+	blockSide       = 8 // pixels along one side of a block
+	blockCoeffs     = 64
+	maxCodeLen      = 16
+	dhtHeaderLen    = 1 + maxCodeLen // class/id byte plus the code-length counts
+	tablesPerClass  = 4              // DC tables come first, then AC
+	tableCount      = 2 * tablesPerClass
+	sosTailLen      = 3 // Ss, Se, Ah/Al
+	zeroRun         = 15
+	maxMergedLen    = 32 // longest code the merge in build can produce
+	reservedSymbol  = 256
+	scanRecordsHint = 4096
+)
+
 // OptimizeJPEG rewrites a baseline JPEG with Huffman tables built for the image
 // it actually holds, instead of the fixed ones Go's encoder always writes. It is
 // lossless — the coefficients are untouched, only the codes that spell them —
@@ -24,7 +64,7 @@ func OptimizeJPEG(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	tables := make([]*huffSpec, 8)
+	tables := make([]*huffSpec, tableCount)
 	for _, r := range records {
 		if tables[r.table] == nil {
 			tables[r.table] = &huffSpec{}
@@ -66,45 +106,45 @@ type jpegFile struct {
 var errUnsupportedJPEG = errors.New("not a baseline JPEG this can rewrite")
 
 func readJPEG(data []byte) (*jpegFile, error) {
-	if len(data) < 4 || data[0] != 0xFF || data[1] != 0xD8 {
+	if len(data) < segmentHeadLen || data[0] != markerPrefix || data[1] != markerSOI {
 		return nil, errUnsupportedJPEG
 	}
 	j := &jpegFile{}
 	i := 2
-	for i+3 < len(data) {
-		if data[i] != 0xFF {
+	for i+segmentHeadLen <= len(data) {
+		if data[i] != markerPrefix {
 			return nil, errUnsupportedJPEG
 		}
 		marker := data[i+1]
-		if marker == 0xD9 { // EOI
+		if marker == markerEOI {
 			break
 		}
-		size := int(data[i+2])<<8 | int(data[i+3])
-		if size < 2 || i+2+size > len(data) {
+		size := bigEndian16(data[i+lengthFieldLen:])
+		if size < lengthFieldLen || i+2+size > len(data) {
 			return nil, errUnsupportedJPEG
 		}
 		segment := data[i : i+2+size]
-		payload := data[i+4 : i+2+size]
+		payload := data[i+segmentHeadLen : i+2+size]
 
 		switch {
-		case marker == 0xC0: // SOF0, baseline
+		case marker == markerSOF0:
 			if err := j.readSOF(payload); err != nil {
 				return nil, err
 			}
 			j.sof = segment
-		case marker == 0xC2: // SOF2, progressive
+		case marker == markerSOF2:
 			return nil, errUnsupportedJPEG
-		case marker == 0xC4: // DHT
+		case marker == markerDHT:
 			if err := j.readDHT(payload); err != nil {
 				return nil, err
 			}
-		case marker == 0xDB: // DQT
+		case marker == markerDQT:
 			j.quant = append(j.quant, segment...)
-		case marker == 0xDD: // DRI
-			if len(payload) >= 2 && (int(payload[0])<<8|int(payload[1])) != 0 {
+		case marker == markerDRI:
+			if len(payload) >= lengthFieldLen && bigEndian16(payload) != 0 {
 				return nil, errUnsupportedJPEG
 			}
-		case marker == 0xDA: // SOS
+		case marker == markerSOS:
 			if err := j.readSOS(payload); err != nil {
 				return nil, err
 			}
@@ -120,20 +160,26 @@ func readJPEG(data []byte) (*jpegFile, error) {
 	return nil, errUnsupportedJPEG
 }
 
+// bigEndian16 reads the two-byte big-endian number at the start of b.
+func bigEndian16(b []byte) int {
+	return int(b[0])<<byteBits | int(b[1])
+}
+
 func (j *jpegFile) readSOF(p []byte) error {
-	if len(p) < 6 || p[0] != 8 {
+	if len(p) < sofHeaderLen || p[0] != samplePrecision {
 		return errUnsupportedJPEG
 	}
-	height := int(p[1])<<8 | int(p[2])
-	width := int(p[3])<<8 | int(p[4])
-	n := int(p[5])
-	if n == 0 || len(p) < 6+3*n {
+	height := bigEndian16(p[sofHeight:])
+	width := bigEndian16(p[sofWidth:])
+	n := int(p[sofComponents])
+	if n == 0 || len(p) < sofHeaderLen+sofComponentLen*n {
 		return errUnsupportedJPEG
 	}
 	hMax, vMax := 1, 1
 	for k := range n {
-		c := jpegComponent{id: p[6+3*k], h: int(p[7+3*k] >> 4), v: int(p[7+3*k] & 15)}
-		if c.h < 1 || c.v < 1 || c.h > 4 || c.v > 4 {
+		spec := p[sofHeaderLen+sofComponentLen*k:]
+		c := jpegComponent{id: spec[0], h: int(spec[1] >> nibbleBits), v: int(spec[1] & lowNibble)}
+		if c.h < 1 || c.v < 1 || c.h > maxSampling || c.v > maxSampling {
 			return errUnsupportedJPEG
 		}
 		hMax, vMax = max(hMax, c.h), max(vMax, c.v)
@@ -142,27 +188,28 @@ func (j *jpegFile) readSOF(p []byte) error {
 	for k := range j.comps {
 		j.comps[k].blocks = j.comps[k].h * j.comps[k].v
 	}
-	j.mcusX = (width + 8*hMax - 1) / (8 * hMax)
-	j.mcusY = (height + 8*vMax - 1) / (8 * vMax)
+	mcuW, mcuH := blockSide*hMax, blockSide*vMax
+	j.mcusX = (width + mcuW - 1) / mcuW
+	j.mcusY = (height + mcuH - 1) / mcuH
 	return nil
 }
 
 func (j *jpegFile) readDHT(p []byte) error {
-	for len(p) > 17 {
-		class, id := int(p[0]>>4), int(p[0]&15)
-		if class > 1 || id > 3 {
+	for len(p) > dhtHeaderLen {
+		class, id := int(p[0]>>nibbleBits), int(p[0]&lowNibble)
+		if class > 1 || id >= tablesPerClass {
 			return errUnsupportedJPEG
 		}
-		counts := p[1:17]
+		counts := p[1:dhtHeaderLen]
 		total := 0
 		for _, c := range counts {
 			total += int(c)
 		}
-		if len(p) < 17+total {
+		if len(p) < dhtHeaderLen+total {
 			return errUnsupportedJPEG
 		}
-		j.dec[class*4+id] = newHuffDecoder(counts, p[17:17+total])
-		p = p[17+total:]
+		j.dec[class*tablesPerClass+id] = newHuffDecoder(counts, p[dhtHeaderLen:dhtHeaderLen+total])
+		p = p[dhtHeaderLen+total:]
 	}
 	return nil
 }
@@ -172,7 +219,7 @@ func (j *jpegFile) readSOS(p []byte) error {
 		return errUnsupportedJPEG
 	}
 	n := int(p[0])
-	if n != len(j.comps) || len(p) < 1+2*n+3 {
+	if n != len(j.comps) || len(p) < 1+2*n+sosTailLen {
 		return errUnsupportedJPEG
 	}
 	for k := range n {
@@ -186,12 +233,12 @@ func (j *jpegFile) readSOS(p []byte) error {
 		if idx < 0 {
 			return errUnsupportedJPEG
 		}
-		j.comps[idx].dcTbl = int(tables >> 4)
-		j.comps[idx].acTbl = int(tables & 15)
+		j.comps[idx].dcTbl = int(tables >> nibbleBits)
+		j.comps[idx].acTbl = int(tables & lowNibble)
 	}
 	// Ss, Se, Ah/Al: a baseline scan is the whole spectrum, unshifted.
 	tail := p[1+2*n:]
-	if tail[0] != 0 || tail[1] != 63 || tail[2] != 0 {
+	if tail[0] != 0 || tail[1] != blockCoeffs-1 || tail[2] != 0 {
 		return errUnsupportedJPEG
 	}
 	return nil
@@ -223,17 +270,17 @@ func (b *bitReader) readBit() (uint32, error) {
 		}
 		c := b.data[b.i]
 		b.i++
-		if c == 0xFF {
+		if c == markerPrefix {
 			if b.i >= len(b.data) {
 				return 0, errUnsupportedJPEG
 			}
 			// A stuffed zero is not data; any other marker ends the scan.
-			if b.data[b.i] != 0x00 {
+			if b.data[b.i] != 0 {
 				return 0, errUnsupportedJPEG
 			}
 			b.i++
 		}
-		b.bits, b.n = uint32(c), 8
+		b.bits, b.n = uint32(c), byteBits
 	}
 	b.n--
 	return (b.bits >> b.n) & 1, nil
@@ -297,7 +344,7 @@ func (d *huffDecoder) decode(b *bitReader) (byte, error) {
 // decodeScan walks the whole scan, MCU by MCU, recording every symbol it reads.
 func (j *jpegFile) decodeScan() ([]record, error) {
 	br := &bitReader{data: j.scan}
-	records := make([]record, 0, 4096)
+	records := make([]record, 0, scanRecordsHint)
 	for range j.mcusY * j.mcusX {
 		for ci := range j.comps {
 			c := j.comps[ci]
@@ -314,7 +361,7 @@ func (j *jpegFile) decodeScan() ([]record, error) {
 }
 
 func (j *jpegFile) decodeBlock(br *bitReader, c jpegComponent, out []record) ([]record, error) {
-	dc, ac := j.dec[c.dcTbl], j.dec[4+c.acTbl]
+	dc, ac := j.dec[c.dcTbl], j.dec[tablesPerClass+c.acTbl]
 	if dc == nil || ac == nil {
 		return nil, errUnsupportedJPEG
 	}
@@ -323,7 +370,7 @@ func (j *jpegFile) decodeBlock(br *bitReader, c jpegComponent, out []record) ([]
 		return nil, err
 	}
 	n := int(symbol)
-	if n > 16 {
+	if n > maxCodeLen {
 		return nil, errUnsupportedJPEG
 	}
 	extra, err := br.readBits(n)
@@ -331,21 +378,25 @@ func (j *jpegFile) decodeBlock(br *bitReader, c jpegComponent, out []record) ([]
 		return nil, err
 	}
 	out = append(out, record{table: c.dcTbl, symbol: symbol, extra: extra, nExtra: n})
+	return decodeAC(br, ac, tablesPerClass+c.acTbl, out)
+}
 
-	for k := 1; k < 64; {
+// decodeAC records the 63 AC coefficients of one block, up to its end-of-block.
+func decodeAC(br *bitReader, ac *huffDecoder, table int, out []record) ([]record, error) {
+	for k := 1; k < blockCoeffs; {
 		symbol, err := ac.decode(br)
 		if err != nil {
 			return nil, err
 		}
-		run, size := int(symbol>>4), int(symbol&15)
+		run, size := int(symbol>>nibbleBits), int(symbol&lowNibble)
 		extra, err := br.readBits(size)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, record{table: 4 + c.acTbl, symbol: symbol, extra: extra, nExtra: size})
+		out = append(out, record{table: table, symbol: symbol, extra: extra, nExtra: size})
 		switch {
-		case size == 0 && run != 15: // end of block
-			k = 64
+		case size == 0 && run != zeroRun: // end of block
+			k = blockCoeffs
 		default:
 			k += run + 1
 		}
@@ -369,7 +420,7 @@ type huffSpec struct {
 // 256 is the spec's own reservation, which keeps the all-ones code free.
 func (h *huffSpec) build() {
 	freq := h.freq
-	freq[256] = 1
+	freq[reservedSymbol] = 1
 	others := [257]int{}
 	for i := range others {
 		others[i] = -1
@@ -409,7 +460,7 @@ func (h *huffSpec) build() {
 	limitTo16(&bits)
 
 	// The reserved symbol takes the last code of the longest length.
-	for i := 32; i > 0; i-- {
+	for i := maxMergedLen; i > 0; i-- {
 		if bits[i] > 0 {
 			bits[i]--
 			break
@@ -435,7 +486,7 @@ func (h *huffSpec) build() {
 	}
 
 	code, k := uint32(0), 0
-	for length := 1; length <= 16; length++ {
+	for length := 1; length <= maxCodeLen; length++ {
 		for range h.counts[length] {
 			if k >= len(syms) {
 				break
@@ -467,7 +518,7 @@ func leastFrequent(freq *[257]int32, exclude int) int {
 // limitTo16 is the spec's own procedure for pulling codes longer than 16 bits
 // back under the limit, which the merge above can produce for a skewed image.
 func limitTo16(bits *[33]int) {
-	for i := 32; i > 16; i-- {
+	for i := maxMergedLen; i > maxCodeLen; i-- {
 		for bits[i] > 0 {
 			j := i - 2
 			for j > 0 && bits[j] == 0 {
@@ -482,12 +533,12 @@ func limitTo16(bits *[33]int) {
 			bits[j]--
 		}
 	}
-	for i := 32; i > 16; i-- {
-		bits[16] += bits[i]
+	for i := maxMergedLen; i > maxCodeLen; i-- {
+		bits[maxCodeLen] += bits[i]
 		bits[i] = 0
 	}
-	for bits[16] > 0 && bits[16] > (1<<16)-1 {
-		bits[16]--
+	for bits[maxCodeLen] > 0 && bits[maxCodeLen] > (1<<maxCodeLen)-1 {
+		bits[maxCodeLen]--
 	}
 }
 
@@ -503,11 +554,11 @@ func (w *bitWriter) write(code uint32, size int) {
 	for i := size - 1; i >= 0; i-- {
 		w.bits = w.bits<<1 | (code>>i)&1
 		w.n++
-		if w.n == 8 {
+		if w.n == byteBits {
 			b := byte(w.bits)
 			w.out = append(w.out, b)
-			if b == 0xFF {
-				w.out = append(w.out, 0x00)
+			if b == markerPrefix {
+				w.out = append(w.out, 0) // stuffed zero
 			}
 			w.bits, w.n = 0, 0
 		}
@@ -534,7 +585,7 @@ func (j *jpegFile) reassemble(tables []*huffSpec, records []record) ([]byte, err
 	}
 	w.flush()
 
-	out := []byte{0xFF, 0xD8}
+	out := []byte{markerPrefix, markerSOI}
 	out = append(out, j.prologue...)
 	out = append(out, j.quant...)
 	out = append(out, j.sof...)
@@ -546,14 +597,14 @@ func (j *jpegFile) reassemble(tables []*huffSpec, records []record) ([]byte, err
 	}
 	out = append(out, j.sos...)
 	out = append(out, w.out...)
-	return append(out, 0xFF, 0xD9), nil
+	return append(out, markerPrefix, markerEOI), nil
 }
 
 func dhtSegment(index int, t *huffSpec) []byte {
-	length := 2 + 1 + 16 + len(t.symbols)
-	seg := []byte{0xFF, 0xC4, byte(length >> 8), byte(length)}
-	seg = append(seg, byte(index/4<<4|index%4))
-	for i := 1; i <= 16; i++ {
+	length := lengthFieldLen + dhtHeaderLen + len(t.symbols)
+	seg := []byte{markerPrefix, markerDHT, byte(length >> byteBits), byte(length)}
+	seg = append(seg, byte(index/tablesPerClass<<nibbleBits|index%tablesPerClass))
+	for i := 1; i <= maxCodeLen; i++ {
 		seg = append(seg, byte(t.counts[i]))
 	}
 	return append(seg, t.symbols...)

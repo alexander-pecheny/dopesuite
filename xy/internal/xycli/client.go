@@ -15,6 +15,14 @@ import (
 	xystrings "xy/i18nstrings"
 )
 
+const (
+	// httpTimeout is generous: an export renders typst server-side, and
+	// split-fit is slow.
+	httpTimeout = 5 * time.Minute
+	// maxErrorBody is how much of an error response is read for its message.
+	maxErrorBody = 4 << 10
+)
+
 // Client is an ordinary xy client that authenticates with an API token
 // (ADR-0015) instead of a session cookie.
 type Client struct {
@@ -28,7 +36,7 @@ func NewClient(base, token string) *Client {
 		Base:  strings.TrimRight(base, "/"),
 		Token: token,
 		// Generous: an export renders typst server-side, and split-fit is slow.
-		HTTP: &http.Client{Timeout: 5 * time.Minute},
+		HTTP: &http.Client{Timeout: httpTimeout},
 	}
 }
 
@@ -59,9 +67,9 @@ func (c *Client) request(method, path string, body io.Reader, contentType string
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode >= 300 {
+	if resp.StatusCode >= http.StatusMultipleChoices {
 		defer resp.Body.Close()
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 		text := serverMessage(msg)
 		if resp.StatusCode == http.StatusUnauthorized {
 			text = xystrings.Default.Cli.Client.TokenRejected()

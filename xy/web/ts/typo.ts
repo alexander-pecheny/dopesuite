@@ -128,6 +128,9 @@ function getDashesRight(s: string): string {
 // ── percent decoding ────────────────────────────────────────────────────────
 
 const RE_PERCENT = /(?:%[0-9a-fA-F]{2})+/g;
+// One escape is "%" and two hex digits.
+const PCT_ESCAPE_LEN = 3;
+const HEX_RADIX = 16;
 // ignoreBOM keeps a decoded U+FEFF as a character instead of eating it, which is
 // what Go's utf8.Valid + string() does: %EF%BB%BF decodes to the BOM, not to "".
 const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
@@ -138,8 +141,11 @@ const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 function percentDecode(s: string): string {
   const groups = (s.match(RE_PERCENT) || []).slice().sort((a, b) => b.length - a.length);
   for (const g of groups) {
-    const bytes = new Uint8Array(g.length / 3);
-    for (let i = 0; i * 3 < g.length; i++) bytes[i] = parseInt(g.slice(i * 3 + 1, i * 3 + 3), 16);
+    const bytes = new Uint8Array(g.length / PCT_ESCAPE_LEN);
+    for (let i = 0; i * PCT_ESCAPE_LEN < g.length; i++) {
+      const at = i * PCT_ESCAPE_LEN;
+      bytes[i] = parseInt(g.slice(at + 1, at + PCT_ESCAPE_LEN), HEX_RADIX);
+    }
     let text: string;
     try {
       text = utf8.decode(bytes);

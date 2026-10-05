@@ -71,19 +71,23 @@ func (s *slidePart) renderEdited() ([]byte, error) {
 			xml = xml[:start] + xml[end:]
 			continue
 		}
-		sp := xml[start:end]
-		if e.tf != nil {
-			body := e.tf.render(s)
-			if loc := reTxBody.FindStringIndex(sp); loc != nil {
-				sp = sp[:loc[0]] + body + sp[loc[1]:]
-			}
-		}
-		if e.xfrm != nil {
-			sp = setShapeXfrm(sp, *e.xfrm)
-		}
-		xml = xml[:start] + sp + xml[end:]
+		xml = xml[:start] + e.apply(s, xml[start:end]) + xml[end:]
 	}
 	return []byte(xml), nil
+}
+
+// apply rewrites one placeholder's <p:sp>: its text body, then its position.
+func (e *editedShape) apply(s *slidePart, sp string) string {
+	if e.tf != nil {
+		body := e.tf.render(s)
+		if loc := reTxBody.FindStringIndex(sp); loc != nil {
+			sp = sp[:loc[0]] + body + sp[loc[1]:]
+		}
+	}
+	if e.xfrm != nil {
+		sp = setShapeXfrm(sp, *e.xfrm)
+	}
+	return sp
 }
 
 // spTreeShapes lifts a slide's own shapes out of its XML: everything in the

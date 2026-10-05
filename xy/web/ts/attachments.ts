@@ -50,10 +50,16 @@ export function gatherTargets(lists: ReadonlyArray<ReadonlyArray<NamedAttachment
   return targets;
 }
 
+const KIB = 1024;
+const MIB = KIB * KIB;
+const WEBP_QUALITY = 0.7; // the opt-in re-encode's quality
+// How long a download's object URL lives; the click has started the save by then.
+const DOWNLOAD_URL_TTL_MS = 10000;
+
 export function humanSize(n: number): string {
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-  return (n / 1024 / 1024).toFixed(1) + " MB";
+  if (n < KIB) return n + " B";
+  if (n < MIB) return (n / KIB).toFixed(1) + " KB";
+  return (n / MIB).toFixed(1) + " MB";
 }
 
 export function extFromMime(m: string): string {
@@ -303,7 +309,7 @@ async function recompressToWebp(file: File): Promise<{ bytes: Uint8Array<ArrayBu
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;
   canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
-  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", 0.7));
+  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", WEBP_QUALITY));
   if (!blob) return { bytes: new Uint8Array(await file.arrayBuffer()), mime: file.type };
   return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: "image/webp" };
 }
@@ -417,6 +423,9 @@ async function viewAttachment(att: NamedAttachment, name: string): Promise<void>
 interface LightboxEls { overlay: HTMLElement; img: HTMLImageElement; closeBtn: HTMLElement }
 let lbEls: LightboxEls | null = null, lbScale = 1, lbTx = 0, lbTy = 0, lbBaseW = 0, lbBaseH = 0, lbDragged = false;
 const LB_MIN = 1, LB_MAX = 8;
+const LB_CLICK_ZOOM = 2.5; // a click on a fitted image zooms to this
+const LB_WHEEL_STEP = 1.2; // one wheel notch scales by this
+const LB_DRAG_SLOP_PX = 3; // movement below this is still a click, not a pan
 
 function lbApply(): void {
   if (!lbEls) return;
@@ -441,26 +450,20 @@ function lbZoomTo(next: number, cx: number, cy: number): void {
   lbApply();
 }
 
-function ensureLightbox(): LightboxEls {
-  if (lbEls) return lbEls;
-  const img = el("img", { class: "img-lb-img", alt: "" }) as HTMLImageElement;
-  const closeBtn = el("button", { class: "img-lb-close", type: "button", title: S.attachments.lightbox.close(), "aria-label": S.attachments.lightbox.close() }, icon("x"));
-  const overlay = el("div", { class: "img-lb", role: "dialog", "aria-label": S.attachments.lightbox.dialogLabel(), hidden: true }, img, closeBtn);
-  document.body.append(overlay);
-  lbEls = { overlay, img, closeBtn };
-
-  closeBtn.addEventListener("click", closeLightbox);
-  // Backdrop click closes; a click on the image toggles fit ↔ 2× toward the point.
+// Backdrop click closes; a click on the image toggles fit ↔ 2.5× toward the point.
+function wireLightboxZoom(overlay: HTMLElement, img: HTMLImageElement): void {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeLightbox(); });
   img.addEventListener("click", (e) => {
     e.stopPropagation();
     if (lbDragged) { lbDragged = false; return; } // a pan gesture isn't a zoom toggle
-    lbZoomTo(lbScale > 1 ? 1 : 2.5, e.clientX, e.clientY);
+    lbZoomTo(lbScale > 1 ? 1 : LB_CLICK_ZOOM, e.clientX, e.clientY);
   });
-  img.addEventListener("wheel", (e) => { e.preventDefault(); lbZoomTo(lbScale * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY); }, { passive: false });
+  img.addEventListener("wheel", (e) => { e.preventDefault(); lbZoomTo(lbScale * (e.deltaY < 0 ? LB_WHEEL_STEP : 1 / LB_WHEEL_STEP), e.clientX, e.clientY); }, { passive: false });
   img.addEventListener("dblclick", (e) => { e.preventDefault(); lbZoomTo(1, e.clientX, e.clientY); });
+}
 
-  // Drag to pan while zoomed.
+// Drag to pan while zoomed.
+function wireLightboxPan(img: HTMLImageElement): void {
   let drag: { x: number; y: number; tx: number; ty: number } | null = null;
   img.addEventListener("pointerdown", (e) => {
     if (lbScale <= 1) return;
@@ -470,12 +473,24 @@ function ensureLightbox(): LightboxEls {
   });
   img.addEventListener("pointermove", (e) => {
     if (!drag) return;
-    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) lbDragged = true;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > LB_DRAG_SLOP_PX) lbDragged = true;
     lbTx = drag.tx + (e.clientX - drag.x); lbTy = drag.ty + (e.clientY - drag.y); lbApply();
   });
   const endDrag = (): void => { drag = null; };
   img.addEventListener("pointerup", endDrag);
   img.addEventListener("pointercancel", endDrag);
+}
+
+function ensureLightbox(): LightboxEls {
+  if (lbEls) return lbEls;
+  const img = el("img", { class: "img-lb-img", alt: "" }) as HTMLImageElement;
+  const closeBtn = el("button", { class: "img-lb-close", type: "button", title: S.attachments.lightbox.close(), "aria-label": S.attachments.lightbox.close() }, icon("x"));
+  const overlay = el("div", { class: "img-lb", role: "dialog", "aria-label": S.attachments.lightbox.dialogLabel(), hidden: true }, img, closeBtn);
+  document.body.append(overlay);
+  lbEls = { overlay, img, closeBtn };
+  closeBtn.addEventListener("click", closeLightbox);
+  wireLightboxZoom(overlay, img);
+  wireLightboxPan(img);
   return lbEls;
 }
 
@@ -524,7 +539,7 @@ async function download(att: NamedAttachment, name: string): Promise<void> {
     document.body.append(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_TTL_MS);
   } catch (err) { ui.message.textContent = errMsg(err); }
 }
 

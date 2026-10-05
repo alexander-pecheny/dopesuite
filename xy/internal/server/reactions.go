@@ -21,6 +21,27 @@ type addReactionRequest struct {
 	TargetID   *int64 `json:"target_id"` // a comment on the same card; nil = the card
 }
 
+// checkReactionTarget checks that the comment a reaction answers is live and on
+// the same card. ok=false means the response is already written.
+func (s *server) checkReactionTarget(w http.ResponseWriter, r *http.Request, targetID, cardID int64) bool {
+	var owner sql.NullInt64
+	err := s.db.QueryRowContext(r.Context(), `
+select card_id from timeline_events
+where id = ? and type = 'comment' and deleted_at is null`, targetID).Scan(&owner)
+	if errors.Is(err, sql.ErrNoRows) {
+		httpError(w, http.StatusNotFound, xystrings.Default.Server.Comment.NotFound())
+		return false
+	}
+	if handleErr(w, err) {
+		return false
+	}
+	if !owner.Valid || owner.Int64 != cardID {
+		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Comment.Foreign())
+		return false
+	}
+	return true
+}
+
 func (s *server) handleAddReaction(w http.ResponseWriter, r *http.Request) {
 	uid, cardID, bid, ok := s.requireChildAccess(w, r, childCard)
 	if !ok {
@@ -34,22 +55,8 @@ func (s *server) handleAddReaction(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "payload_enc required")
 		return
 	}
-	if req.TargetID != nil {
-		var owner sql.NullInt64
-		err := s.db.QueryRowContext(r.Context(), `
-select card_id from timeline_events
-where id = ? and type = 'comment' and deleted_at is null`, *req.TargetID).Scan(&owner)
-		if errors.Is(err, sql.ErrNoRows) {
-			httpError(w, http.StatusNotFound, xystrings.Default.Server.Comment.NotFound())
-			return
-		}
-		if handleErr(w, err) {
-			return
-		}
-		if !owner.Valid || owner.Int64 != cardID {
-			httpError(w, http.StatusBadRequest, xystrings.Default.Server.Comment.Foreign())
-			return
-		}
+	if req.TargetID != nil && !s.checkReactionTarget(w, r, *req.TargetID, cardID) {
+		return
 	}
 	var evID int64
 	err := s.withWriteTx(r.Context(), "add-reaction", func(ctx context.Context, tx *sql.Tx) error {

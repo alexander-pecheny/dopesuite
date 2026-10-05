@@ -3,6 +3,9 @@
 import { xyApp } from "./app.js";
 import S from "./i18nstrings.js";
 
+// How long the copy button says "copied" before it reverts.
+const COPIED_FLASH_MS = 1500;
+
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 
 interface ApiToken {
@@ -86,7 +89,7 @@ copyTokenBtn.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(newTokenValue.textContent ?? "");
     copyTokenBtn.textContent = S.chrome.tokens.copied();
-    setTimeout(() => { copyTokenBtn.textContent = S.chrome.tokens.copy(); }, 1500);
+    setTimeout(() => { copyTokenBtn.textContent = S.chrome.tokens.copy(); }, COPIED_FLASH_MS);
   } catch (_) {
     // Clipboard API unavailable (e.g. non-secure context) — select for manual copy.
     const range = document.createRange();

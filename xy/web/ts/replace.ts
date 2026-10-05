@@ -16,6 +16,13 @@ import type { Rewrites, DescChange } from "./rewrites.js";
 import type { BoardCard } from "./unlock.js";
 import type { Span as FindSpan } from "./find.js";
 
+const LIST_SCOPE_PREFIX = "list:";
+const GROUP_SCOPE_PREFIX = "group:";
+// Characters of context around a match in the preview.
+const SNIPPET_CHARS = 60;
+// Quiet time after the last keystroke before the replacement is re-planned.
+const PLAN_DEBOUNCE_MS = 200;
+
 const { el, byId, errMsg } = xyApp;
 
 export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply">): BoardPanel {
@@ -46,12 +53,12 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
 
   function scopeCards(): BoardCard[] {
     const v = replaceScope.value;
-    if (v.startsWith("list:")) {
-      const id = Number(v.slice(5));
+    if (v.startsWith(LIST_SCOPE_PREFIX)) {
+      const id = Number(v.slice(LIST_SCOPE_PREFIX.length));
       return cardsInBoardOrder(board.state.cards.filter((c) => c.listId === id));
     }
-    if (v.startsWith("group:")) {
-      const id = Number(v.slice(6));
+    if (v.startsWith(GROUP_SCOPE_PREFIX)) {
+      const id = Number(v.slice(GROUP_SCOPE_PREFIX.length));
       const ids = new Set(board.state.lists.filter((l) => l.groupId === id).map((l) => l.id));
       return cardsInBoardOrder(board.state.cards.filter((c) => ids.has(c.listId)));
     }
@@ -107,7 +114,7 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
           el("span", { class: "replace-card-name u-clip-fade", text: xySearchIndex.cardTitle(o.card, board.state.cardTitle, S.board.replace.cardUntitled()) }),
           el("span", { class: "replace-card-count", text: `${ids.length}` })));
       }
-      const snip = xyFind.snippet(o.card.desc, [o.span], 60);
+      const snip = xyFind.snippet(o.card.desc, [o.span], SNIPPET_CHARS);
       const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
       cb.checked = replacePicked.has(o.i);
       cb.addEventListener("change", () => {
@@ -138,8 +145,8 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
     replaceModal.message(replaceFrom.value && !occurrences.length ? S.board.replace.notFound() : "");
   }
 
-  async function runReplace(): Promise<void> {
-    const to = replaceTo.value;
+  // pickedByCard groups the ticked occurrences by the card they are in.
+  function pickedByCard(): Map<number, { card: BoardCard; spans: FindSpan[] }> {
     const byCard = new Map<number, { card: BoardCard; spans: FindSpan[] }>();
     for (const o of occurrences) {
       if (!replacePicked.has(o.i)) continue;
@@ -147,6 +154,12 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
       entry.spans.push(o.span);
       byCard.set(o.card.id, entry);
     }
+    return byCard;
+  }
+
+  async function runReplace(): Promise<void> {
+    const to = replaceTo.value;
+    const byCard = pickedByCard();
     // Spans are offsets into the text as it was when the preview was drawn. If that
     // text has moved since — a co-author's edit arriving with a snapshot reload, or
     // this editor's own save — applying them would corrupt the card and record a
@@ -199,7 +212,7 @@ export function createReplacePanel(board: Board, rewrites: Pick<Rewrites, "apply
   let planTimer = 0;
   replaceFrom.addEventListener("input", () => {
     clearTimeout(planTimer);
-    planTimer = setTimeout(planReplace, 200);
+    planTimer = setTimeout(planReplace, PLAN_DEBOUNCE_MS);
   });
   for (const node of [replaceCase, replaceScope]) node.addEventListener("input", () => planReplace());
   // What is replaced has not changed — only what the preview shows it becoming.

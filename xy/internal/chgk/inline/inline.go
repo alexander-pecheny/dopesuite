@@ -71,6 +71,22 @@ func isSpace(r rune) bool {
 
 const hiddenComment = "(hidden-comment"
 
+// Directive openings that wrap their argument in parentheses.
+const (
+	imgOpen    = "(img"
+	screenOpen = "(screen"
+	scOpen     = "(sc"
+)
+
+// How many underscores on each side spell each emphasis.
+const (
+	italicMarks        = 1
+	boldMarks          = 2
+	underlineMarks     = 3
+	italicBoldMarks    = 4
+	boldUnderlineMarks = 5
+)
+
 // startsHiddenComment: the keyword must end the bracket or be followed by space,
 // so a question about a "(hidden-commentary)" is not swallowed as a directive.
 func startsHiddenComment(r []rune, i int) bool {
@@ -310,15 +326,15 @@ func tokenize(s string) []Run {
 			}
 			p.Text = string(pr[j : len(pr)-j])
 			switch {
-			case j == 1:
+			case j == italicMarks:
 				p.Kind = "italic"
-			case j == 2:
+			case j == boldMarks:
 				p.Kind = "bold"
-			case j == 3:
+			case j == underlineMarks:
 				p.Kind = "underline"
-			case j == 4:
+			case j == italicBoldMarks:
 				p.Kind = "italicbold"
-			case j == 5:
+			case j == boldUnderlineMarks:
 				p.Kind = "boldunderline"
 			default:
 				p.Kind = "italicboldunderline"
@@ -336,20 +352,20 @@ func tokenize(s string) []Run {
 			p.Kind = "linebreak"
 			p.Text = ""
 		}
-		if len([]rune(p.Text)) > 4 && strings.HasPrefix(p.Text, "(img") {
+		if len([]rune(p.Text)) > len(imgOpen) && strings.HasPrefix(p.Text, imgOpen) {
 			if !strings.HasSuffix(p.Text, ")") {
 				p.Text += ")"
 			}
 			pr := []rune(p.Text)
-			p.Text = string(pr[4 : len(pr)-1])
+			p.Text = string(pr[len(imgOpen) : len(pr)-1])
 			p.Kind = "img"
 		}
-		if len([]rune(p.Text)) > 7 && strings.HasPrefix(p.Text, "(screen") {
+		if len([]rune(p.Text)) > len(screenOpen) && strings.HasPrefix(p.Text, screenOpen) {
 			if !strings.HasSuffix(p.Text, ")") {
 				p.Text += ")"
 			}
 			pr := []rune(p.Text)
-			inner := string(pr[8 : len(pr)-1])
+			inner := string(pr[len(screenOpen)+1 : len(pr)-1]) // past the space
 			fp, fs, _ := strings.Cut(inner, "|")
 			p.ForPrint = ProcessEsc(fp)
 			p.ForScreen = ProcessEsc(fs)
@@ -360,12 +376,13 @@ func tokenize(s string) []Run {
 		if strings.HasPrefix(p.Text, "http://") || strings.HasPrefix(p.Text, "https://") {
 			p.Kind = "hyperlink"
 		}
-		if len([]rune(p.Text)) > 3 && strings.HasPrefix(p.Text, "(sc") {
+		if len([]rune(p.Text)) > len(scOpen) && strings.HasPrefix(p.Text, scOpen) {
 			if !strings.HasSuffix(p.Text, ")") {
 				p.Text += ")"
 			}
 			pr := []rune(p.Text)
-			p.Text = string(pr[3 : len(pr)-1])
+			p.Text = string(pr[len(scOpen) : len(pr)-1])
+
 			p.Kind = "sc"
 		}
 		p.Text = ProcessEsc(p.Text)

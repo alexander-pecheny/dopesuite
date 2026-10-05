@@ -28,6 +28,9 @@ FIXTURES = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "internal", "chgk", "tg", "testdata"
 )
 
+# FIRST_MESSAGE_ID is where the fake telegram starts numbering the posts.
+FIRST_MESSAGE_ID = 1000
+
 
 def make_args(**over):
     args = DefaultArgs()
@@ -64,7 +67,7 @@ def run(source, args, targetdir):
     exporter.chat_id = None
 
     calls = []
-    msg_id = [1000]
+    msg_id = [FIRST_MESSAGE_ID]
 
     def fake_post(chat_id, text, photo, reply_to_message_id=None):
         msg_id[0] += 1

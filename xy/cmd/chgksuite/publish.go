@@ -21,10 +21,7 @@ func composePublished(filetype string, args []string) error {
 	merge := fs.Bool("merge", false, "export the input files as one packet")
 	noBreak := noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	sources, err := loadSources(fs.Args(), *merge)
@@ -61,7 +58,7 @@ func composePublished(filetype string, args []string) error {
 			ext = "json"
 		}
 		out := outputName(s.path, ext, "", *addTS == "on")
-		if err := os.WriteFile(out, data, 0o644); err != nil {
+		if err := os.WriteFile(out, data, outputFileMode); err != nil {
 			return err
 		}
 		reportOutput(out)

@@ -10,12 +10,12 @@
 // rolls itself back and the ones before it stay.
 
 import S from "./i18nstrings.js";
-import { xyApp } from "./app.js";
+import { xyApp, ISO_DATE_LEN } from "./app.js";
 import { xySync } from "./sync.js";
 import { unitsOf } from "./bundle.js";
 import type { Bundle, BundleUnit } from "./bundle.js";
 import { applyBundle } from "./bundleapply.js";
-import type { AppendState, AttachmentBytes } from "./bundleapply.js";
+import type { AppendState, ApplyResult, AttachmentBytes } from "./bundleapply.js";
 import { checkQuota, summarize } from "./bundleimport.js";
 import { sliceBundle } from "./bundle.js";
 import { tickList } from "./bundleexport.js";
@@ -43,7 +43,7 @@ export function createBundleImport(board: Board, shell: PanelShell): BundleImpor
       const all = el("button", { class: "btn btn-ghost btn-sm", type: "button" }, S.import.append.all()) as HTMLButtonElement;
       const body = el("div", { class: "u-col u-gap-sm" },
         el("p", { class: "hint" },
-          S.import.append.lead(bundle.board.name, bundle.exported_at.slice(0, 10)),
+          S.import.append.lead(bundle.board.name, bundle.exported_at.slice(0, ISO_DATE_LEN)),
           S.import.append.leadTail()),
         ticks.node,
         el("div", { class: "u-row u-gap-sm u-wrap" }, all, run),
@@ -70,26 +70,32 @@ export function createBundleImport(board: Board, shell: PanelShell): BundleImpor
     board.setStatus("saving");
     try {
       await checkQuota(slice);
-      const append: AppendState = {
-        labels: board.state.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
-        sessions: board.state.sessions.map((s) => ({ id: s.id, meta: s.meta })),
-        lastRank: [...board.state.lists].map((l) => l.rank).sort().pop() ?? null,
-        sourceName: bundle.board.name,
-      };
+      const append = appendState(bundle);
       const result = await applyBundle(slice, { boardId: board.id, dk: board.dk(), append }, bytesOf, log);
       await board.reload();
       board.setStatus(result.failed ? "error" : "saved");
-      if (!result.failed) {
-        log(summarize(slice, result));
-        return;
-      }
-      const failed = result.units.find((u) => u.error)!;
-      const done = result.units.filter((u) => !u.error).map((u) => u.title);
-      log(S.import.append.failedUnit(failed.title, String(failed.error))
-        + (done.length ? S.import.append.failedDone(done.join(", ")) : S.import.append.failedNone()));
+      log(result.failed ? failureLine(result) : summarize(slice, result));
     } catch (e) {
       board.setStatus("error");
       log(S.import.append.failed(errMsg(e)));
     }
+  }
+
+  // appendState is what applyBundle needs to know about the open board.
+  function appendState(bundle: Bundle): AppendState {
+    return {
+      labels: board.state.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+      sessions: board.state.sessions.map((s) => ({ id: s.id, meta: s.meta })),
+      lastRank: [...board.state.lists].map((l) => l.rank).sort().pop() ?? null,
+      sourceName: bundle.board.name,
+    };
+  }
+
+  // failureLine names the unit that failed and the ones that made it in.
+  function failureLine(result: ApplyResult): string {
+    const failed = result.units.find((u) => u.error)!;
+    const done = result.units.filter((u) => !u.error).map((u) => u.title);
+    return S.import.append.failedUnit(failed.title, String(failed.error))
+      + (done.length ? S.import.append.failedDone(done.join(", ")) : S.import.append.failedNone());
   }
 }

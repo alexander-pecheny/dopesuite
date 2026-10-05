@@ -80,10 +80,7 @@ func boardDownload(args []string) error {
 	font := fs.String("font", override("font", ""), "font family for the .docx outputs")
 	docxTemplate := fs.String("docx_template", "", "a .docx to build the .docx outputs on")
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
@@ -125,7 +122,7 @@ func boardDownload(args []string) error {
 	}
 	for _, f := range files {
 		out := filepath.Join(folder, f.Name)
-		if err := os.WriteFile(out, f.Data, 0o644); err != nil {
+		if err := os.WriteFile(out, f.Data, outputFileMode); err != nil {
 			return err
 		}
 		reportOutput(out)
@@ -138,10 +135,7 @@ func boardUpload(args []string) error {
 	author := fs.Bool("author", false, "put the author in the card's caption too")
 	listName := fs.String("list_name", "", "the list to upload into; empty is the board's first")
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {

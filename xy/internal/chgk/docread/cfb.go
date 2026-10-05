@@ -1,7 +1,6 @@
 package docread
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -13,15 +12,24 @@ import (
 // "0Table" or "1Table". This reads the top-level streams by name and nothing
 // else (no writing, no storages below the root, no property sets).
 
-var cfbSignature = []byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}
+const cfbSignature = "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
 
 const (
-	endOfChain  = 0xFFFFFFFE
-	noStream    = 0xFFFFFFFF
-	typeStream  = 2
-	typeRoot    = 5
-	dirEntrySz  = 128
-	maxDirCount = 1 << 20
+	headerSize      = 512
+	shift512        = 9  // sector size of a version 3 file
+	shift4096       = 12 // sector size of a version 4 file
+	miniShift64     = 6  // the only mini sector size there is
+	headerDIFATLen  = 109
+	headerDIFAT     = 0x4C // offset of the DIFAT array in the header
+	sectorIDSize    = 4
+	maxRegSect      = 0xFFFFFFFA // the highest real sector number
+	maxEntryNameLen = 64         // bytes, UTF-16 with the terminator
+	endOfChain      = 0xFFFFFFFE
+	noStream        = 0xFFFFFFFF
+	typeStream      = 2
+	typeRoot        = 5
+	dirEntrySz      = 128
+	maxDirCount     = 1 << 20
 )
 
 // ErrNotCFB is a file that is not an OLE compound file, so not a Word 97+ .doc.
@@ -48,13 +56,13 @@ type streamRef struct {
 // read from the file is bounded by the sectors the file actually has, since a
 // crafted header must not exhaust the memory of whoever reads it.
 func openCFB(data []byte) (*cfb, error) {
-	if len(data) < 512 || !bytes.Equal(data[:8], cfbSignature) {
+	if len(data) < headerSize || string(data[:len(cfbSignature)]) != cfbSignature {
 		return nil, ErrNotCFB
 	}
 	le := binary.LittleEndian
 	shift := le.Uint16(data[0x1E:])
 	miniShift := le.Uint16(data[0x20:])
-	if shift != 9 && shift != 12 || miniShift != 6 {
+	if shift != shift512 && shift != shift4096 || miniShift != miniShift64 {
 		return nil, fmt.Errorf("cfb: unsupported sector size 2^%d", shift)
 	}
 	c := &cfb{
@@ -72,27 +80,27 @@ func openCFB(data []byte) (*cfb, error) {
 		return nil, fmt.Errorf("cfb: more FAT sectors than the file has")
 	}
 	var fatSectors []uint32
-	for i := 0; i < 109 && len(fatSectors) < numFAT; i++ {
-		fatSectors = append(fatSectors, le.Uint32(data[0x4C+4*i:]))
+	for i := 0; i < headerDIFATLen && len(fatSectors) < numFAT; i++ {
+		fatSectors = append(fatSectors, le.Uint32(data[headerDIFAT+sectorIDSize*i:]))
 	}
-	per := c.sectorSize/4 - 1
+	per := c.sectorSize/sectorIDSize - 1
 	next := le.Uint32(data[0x44:])
-	for seen := 0; len(fatSectors) < numFAT && next < endOfChain-3; seen++ {
+	for seen := 0; len(fatSectors) < numFAT && next <= maxRegSect; seen++ {
 		sec, err := c.sector(next)
 		if err != nil || seen > numFAT {
 			return nil, fmt.Errorf("cfb: broken DIFAT chain")
 		}
 		for i := 0; i < per && len(fatSectors) < numFAT; i++ {
-			fatSectors = append(fatSectors, le.Uint32(sec[4*i:]))
+			fatSectors = append(fatSectors, le.Uint32(sec[sectorIDSize*i:]))
 		}
-		next = le.Uint32(sec[4*per:])
+		next = le.Uint32(sec[sectorIDSize*per:])
 	}
 	for _, s := range fatSectors {
 		sec, err := c.sector(s)
 		if err != nil {
 			return nil, fmt.Errorf("cfb: FAT sector: %w", err)
 		}
-		for i := 0; i < c.sectorSize; i += 4 {
+		for i := 0; i < c.sectorSize; i += sectorIDSize {
 			c.fat = append(c.fat, le.Uint32(sec[i:]))
 		}
 	}
@@ -111,12 +119,12 @@ func openCFB(data []byte) (*cfb, error) {
 		return nil, fmt.Errorf("cfb: no root entry")
 	}
 
-	if mf := le.Uint32(data[0x3C:]); mf < endOfChain-3 {
+	if mf := le.Uint32(data[0x3C:]); mf <= maxRegSect {
 		raw, err := c.chain(mf, -1)
 		if err != nil {
 			return nil, fmt.Errorf("cfb: mini FAT: %w", err)
 		}
-		for i := 0; i+4 <= len(raw); i += 4 {
+		for i := 0; i+sectorIDSize <= len(raw); i += sectorIDSize {
 			c.miniFAT = append(c.miniFAT, le.Uint32(raw[i:]))
 		}
 		c.ministream, err = c.chain(le.Uint32(root[0x74:]), int64(le.Uint32(root[0x78:])))
@@ -145,7 +153,7 @@ func openCFB(data []byte) (*cfb, error) {
 			continue
 		}
 		nameLen := int(le.Uint16(e[0x40:]))
-		if nameLen < 2 || nameLen > 64 {
+		if nameLen < 2 || nameLen > maxEntryNameLen {
 			return nil, fmt.Errorf("cfb: bad entry name")
 		}
 		u := make([]uint16, nameLen/2-1)

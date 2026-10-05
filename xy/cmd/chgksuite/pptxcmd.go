@@ -23,10 +23,7 @@ func composePptx(args []string) error {
 	merge := fs.Bool("merge", false, "export the input files as one packet")
 	noBreak := noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 
@@ -77,7 +74,7 @@ func composePptx(args []string) error {
 			return err
 		}
 		out := outputName(s.path, "pptx", "", *addTS == "on")
-		if err := os.WriteFile(out, data, 0o644); err != nil {
+		if err := os.WriteFile(out, data, outputFileMode); err != nil {
 			return err
 		}
 		reportOutput(out)

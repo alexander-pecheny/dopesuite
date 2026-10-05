@@ -26,6 +26,16 @@ type Host interface {
 // overrides.
 const ImgurClientID = "e86275b3316c6d6"
 
+const (
+	// chgksuite's upload policy: ten tries, five seconds apart.
+	imgurTimeout = 2 * time.Minute
+	imgurRetries = 10
+	imgurWait    = 5 * time.Second
+
+	cacheDirMode  = 0o755
+	cacheFileMode = 0o600
+)
+
 // Imgur is composer_common.Imgur: an upload with a local cache, so a package
 // exported twice does not upload its pictures twice. The cache is keyed by the
 // bytes, not the name.
@@ -48,9 +58,9 @@ func NewImgur(clientID string) *Imgur {
 	}
 	return &Imgur{
 		ClientID: clientID,
-		HTTP:     &http.Client{Timeout: 2 * time.Minute},
-		Retries:  10,
-		Wait:     5 * time.Second,
+		HTTP:     &http.Client{Timeout: imgurTimeout},
+		Retries:  imgurRetries,
+		Wait:     imgurWait,
 	}
 }
 
@@ -151,6 +161,6 @@ func (im *Imgur) save(cache map[string]string) {
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
-	_ = os.WriteFile(path, data, 0o600)
+	_ = os.MkdirAll(filepath.Dir(path), cacheDirMode)
+	_ = os.WriteFile(path, data, cacheFileMode)
 }

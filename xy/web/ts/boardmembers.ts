@@ -16,6 +16,9 @@ import { autocomplete } from "./kit/suggest.js";
 import { createBoardInvites } from "./boardinvites.js";
 import S from "./i18nstrings.js";
 
+// Collaborators suggested at once while typing a member's name.
+const MAX_MEMBER_SUGGESTIONS = 8;
+
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 
 export interface BoardMember {
@@ -87,14 +90,15 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     void render();
     fetchJSON(`/api/collaborators`).then((names) => { collaborators = names as string[]; }).catch(() => {});
   }
-  autocomplete(document.getElementById("addMemberName") as HTMLInputElement, (q) => {
+  function suggestCollaborators(q: string): { value: string; label: string }[] {
     const needle = q.trim().toLowerCase();
     const onBoard = new Set((state.members || []).map(memberName));
     return collaborators
       .filter((n) => !onBoard.has(n) && n.toLowerCase().includes(needle))
-      .slice(0, 8)
+      .slice(0, MAX_MEMBER_SUGGESTIONS)
       .map((n) => ({ value: n, label: n }));
-  });
+  }
+  autocomplete(document.getElementById("addMemberName") as HTMLInputElement, suggestCollaborators);
 
   async function render(): Promise<void> {
     const listNode = document.getElementById("membersList")!;
@@ -113,19 +117,23 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     addForm.hidden = !isOwner;
     await invites.load();
     invites.render();
-    for (const m of members) {
-      const row = el("div", { class: "member-row" },
-        el("span", { class: "member-name u-clip-fade", text: memberName(m) }),
-        el("span", { class: "member-role", text: roleLabel(m.role) }),
-      );
-      if (isOwner && m.role !== "owner") {
-        row.append(el("button", {
-          class: "attach-del member-del", type: "button", title: S.board.members.removeTitle(), text: "×",
-          onclick: () => removeMember(m),
-        }));
-      }
-      listNode.append(row);
+    for (const m of members) listNode.append(memberRow(m, isOwner));
+  }
+
+  // memberRow is one line of the roster; the owner gets a remove button on
+  // everyone but themselves.
+  function memberRow(m: BoardMember, isOwner: boolean): HTMLElement {
+    const row = el("div", { class: "member-row" },
+      el("span", { class: "member-name u-clip-fade", text: memberName(m) }),
+      el("span", { class: "member-role", text: roleLabel(m.role) }),
+    );
+    if (isOwner && m.role !== "owner") {
+      row.append(el("button", {
+        class: "attach-del member-del", type: "button", title: S.board.members.removeTitle(), text: "×",
+        onclick: () => removeMember(m),
+      }));
     }
+    return row;
   }
 
   async function removeMember(m: BoardMember): Promise<void> {
@@ -138,7 +146,7 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     }
   }
 
-  document.getElementById("addMemberForm")!.addEventListener("submit", async (e) => {
+  async function addMember(e: Event): Promise<void> {
     e.preventDefault();
     const input = document.getElementById("addMemberName") as HTMLInputElement;
     const msg = document.getElementById("membersMessage")!;
@@ -152,7 +160,8 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     } catch (err) {
       msg.textContent = err instanceof Error ? err.message : String(err);
     }
-  });
+  }
+  document.getElementById("addMemberForm")!.addEventListener("submit", addMember);
 
   return { load, open, pendingCount: invites.pendingCount };
 }

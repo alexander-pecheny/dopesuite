@@ -31,6 +31,7 @@ function matchMarker(line: string): { type: MarkerType; rest: string } | null {
 }
 
 const MARKER_SET = new Set<string>(MARKERS.map(([m]) => m));
+const DECIMAL = 10;
 
 // startsBlock reports whether a line opens a new 4s element rather than
 // continuing the one before it.
@@ -205,6 +206,27 @@ function isZeroNumber(value: string | number): boolean {
 // carry no number of their own, but a standalone "№№ N" on them resets the base
 // for the questions that follow (chgksuite's setcounter). "Other" and test cards
 // are ignored entirely. Returns an array aligned with `cards`.
+// questionNumber is a question card's display number, and the auto-counter
+// value the card leaves behind for the next one.
+function questionNumber(desc: string, next: number): { num: string; next: number } {
+  const dir = numberDirective(parseBlocks(desc));
+  if (!dir || dir.value === "") return { num: String(next), next: next + 1 };
+  const n = parseInt(dir.value, DECIMAL);
+  if (dir.base) {
+    return Number.isNaN(n) ? { num: dir.value, next } : { num: String(n), next: n + 1 };
+  }
+  return { num: dir.value, next: isZeroNumber(dir.value) ? next : n + 1 };
+}
+
+// baseReset is the counter a heading or meta card's standalone "№№ N" sets, or
+// `next` unchanged when it has none.
+function baseReset(desc: string, next: number): number {
+  const dir = numberDirective(parseBlocks(desc));
+  if (!dir || !dir.base || dir.value === "") return next;
+  const n = parseInt(dir.value, DECIMAL);
+  return Number.isNaN(n) ? next : n;
+}
+
 export function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<string | null> {
   let next = 1;
   // Темы СИ run a sequence of their own — «Тема 3» is the third theme, whatever
@@ -220,31 +242,12 @@ export function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<strin
     }
     if (c.kind === "heading") nextTheme = 1;
     if (c.kind === "question") {
-      const dir = numberDirective(parseBlocks(c.desc));
-      let num: string;
-      if (dir && dir.value !== "") {
-        const n = parseInt(dir.value, 10);
-        if (dir.base) {
-          if (!Number.isNaN(n)) { num = String(n); next = n + 1; }
-          else num = dir.value;
-        } else {
-          num = dir.value;
-          if (!isZeroNumber(dir.value)) next = n + 1;
-        }
-      } else {
-        num = String(next);
-        next++;
-      }
-      out.push(num);
+      const r = questionNumber(c.desc, next);
+      next = r.next;
+      out.push(r.num);
       continue;
     }
-    if (c.kind === "heading" || c.kind === "meta") {
-      const dir = numberDirective(parseBlocks(c.desc));
-      if (dir && dir.base && dir.value !== "") {
-        const n = parseInt(dir.value, 10);
-        if (!Number.isNaN(n)) next = n;
-      }
-    }
+    if (c.kind === "heading" || c.kind === "meta") next = baseReset(c.desc, next);
     out.push(null);
   }
   return out;
@@ -543,6 +546,12 @@ function parse4sElem(s: string): Run[] {
   return dropHiddenComments(parse4sElemKeep(s));
 }
 
+// The run style a word wrapped in N underscores takes; six or more is the last.
+const UNDERSCORE_STYLES = ["italic", "bold", "underline", "italicbold", "boldunderline", "italicboldunderline"];
+const IMG_OPEN = "(img";
+const SCREEN_OPEN = "(screen";
+const SC_OPEN = "(sc";
+
 function parse4sElemKeep(s: string): Run[] {
   s = s.replace(/\\_/g, UNDERSCORE_PLACEHOLDER).replace(/\\~/g, TILDE_PLACEHOLDER);
 
@@ -593,12 +602,7 @@ function parse4sElemKeep(s: string): Run[] {
         let j = 1;
         while (j < part[1].length && part[1][j] === "_" && part[1][part[1].length - j - 1] === "_") j++;
         part[1] = part[1].slice(j, part[1].length - j);
-        if (j === 1) part[0] = "italic";
-        else if (j === 2) part[0] = "bold";
-        else if (j === 3) part[0] = "underline";
-        else if (j === 4) part[0] = "italicbold";
-        else if (j === 5) part[0] = "boldunderline";
-        else if (j >= 6) part[0] = "italicboldunderline";
+        part[0] = UNDERSCORE_STYLES[Math.min(j, UNDERSCORE_STYLES.length) - 1];
       }
       if (part[1].startsWith("~") && part[1].endsWith("~")) {
         part[0] = "strike";
@@ -606,22 +610,25 @@ function parse4sElemKeep(s: string): Run[] {
       }
       if (part[1] === "(PAGEBREAK)") { part[0] = "pagebreak"; part[1] = ""; }
       if (part[1] === "(LINEBREAK)") { part[0] = "linebreak"; part[1] = ""; }
-      if (part[1].length > 4 && part[1].slice(0, 4) === "(img") {
+      if (part[1].length > IMG_OPEN.length && part[1].slice(0, IMG_OPEN.length) === IMG_OPEN) {
         if (part[1][part[1].length - 1] !== ")") part[1] += ")";
-        part[1] = part[1].slice(4, -1);
+        part[1] = part[1].slice(IMG_OPEN.length, -1);
         part[0] = "img";
       }
-      if (part[1].length > 7 && part[1].slice(0, 7) === "(screen") {
+      if (part[1].length > SCREEN_OPEN.length && part[1].slice(0, SCREEN_OPEN.length) === SCREEN_OPEN) {
         if (part[1][part[1].length - 1] !== ")") part[1] += ")";
-        const [forPrint, forScreen] = part[1].slice(8, -1).split("|");
+        // Past the opener and the space after it.
+        const [forPrint, forScreen] = part[1].slice(SCREEN_OPEN.length + 1, -1).split("|");
         part[1] = { for_print: process(forPrint), for_screen: process(forScreen) };
         part[0] = "screen";
         continue;
       }
       if (part[1].startsWith("http://") || part[1].startsWith("https://")) part[0] = "hyperlink";
-      if (part[1].length > 3 && part[1].slice(0, 4) === "(sc") {
+      // chgksuite compares four characters with this three-character opener,
+      // so the branch never fires; kept as it is for parity.
+      if (part[1].length > SC_OPEN.length && part[1].slice(0, SC_OPEN.length + 1) === SC_OPEN) {
         if (part[1][part[1].length - 1] !== ")") part[1] += ")";
-        part[1] = part[1].slice(3, -1);
+        part[1] = part[1].slice(SC_OPEN.length, -1);
         part[0] = "sc";
       }
       part[1] = process(part[1]);
@@ -799,6 +806,8 @@ function fixTrelloFormatting(s: string | null | undefined): string {
   return fixTrelloLinks(s);
 }
 
+const URL_SCHEME = "http";
+
 // parseTrelloLink locates the `[text](target)` span whose `](` is at index i,
 // walking out to the matching `[` and `)` (bracket-aware, like chgksuite's
 // find_and_parse_link). Returns the span bounds + the bare URL when both the
@@ -821,7 +830,8 @@ function parseTrelloLink(s: string, i: number): { start: number; end: number; li
   }
   if (!found || s[j] !== ")") return null;
   const secondPart = s.slice(i + 1, j + 1); // "( … )"
-  const link = (firstPart.slice(1, 5) === "http" && secondPart.slice(1, 5) === "http")
+  const scheme = (part: string): string => part.slice(1, 1 + URL_SCHEME.length);
+  const link = (scheme(firstPart) === URL_SCHEME && scheme(secondPart) === URL_SCHEME)
     ? firstPart.slice(1, -1) : null;
   return { start, end: j, link };
 }
@@ -941,13 +951,27 @@ function answerBlock(f: CardFields): string[] {
 // legs are pasted into one conversation in order. A card with more than one piece
 // also offers all of them as a single paste, for a chat where the question is one
 // message rather than three.
+function handoutCopyTarget(h: Handout | null): CopyTarget | null {
+  if (!h) return null;
+  return h.kind === "image" ? { label: S.chgk.copy.handout(), image: h.name }
+    : { label: S.chgk.copy.handout(), text: `${S.chgk.label.handout()}:\n${screenText(h.text)}` };
+}
+
+// questionPieces is the question as one paste, or as one per leg of a blitz.
+function questionPieces(q: string, head: string): CopyTarget[] {
+  const lst = splitList(q);
+  if (!lst.items) return [{ label: S.chgk.copy.question(), text: head + q }];
+  const lead = lst.preamble.trim();
+  return lst.items.map((item, i) => {
+    const line = `${i + 1}. ${item.trim()}`;
+    return { label: S.chgk.copy.questionPiece(String(i + 1)), text: i === 0 ? head + (lead ? lead + "\n" : "") + line : line };
+  });
+}
+
 function copyTargets(desc: string | null | undefined, number: string | number | null | undefined): CopyTarget[] {
   const f = splitFields(desc);
   const out: CopyTarget[] = [];
-  const h = f.handout;
-  const handoutTarget: CopyTarget | null = !h ? null
-    : h.kind === "image" ? { label: S.chgk.copy.handout(), image: h.name }
-    : { label: S.chgk.copy.handout(), text: `${S.chgk.label.handout()}:\n${screenText(h.text)}` };
+  const handoutTarget = handoutCopyTarget(f.handout);
   // A picture is not pastable text, so the aggregates carry the note instead.
   const handout = !handoutTarget ? "" : handoutTarget.text || S.chgk.copy.imageHandoutNote(S.chgk.label.handout());
   if (handoutTarget) out.push(handoutTarget);
@@ -955,17 +979,7 @@ function copyTargets(desc: string | null | undefined, number: string | number | 
   // anchor where it stood; that marks a position, and has no business in a paste.
   const q = screenText(f.question ?? "").split(HANDOUT_ANCHOR).join("").trim();
   const head = number ? S.chgk.copy.questionNumbered(String(number)) : "";
-  const lst = splitList(q);
-  const pieces: CopyTarget[] = [];
-  if (lst.items) {
-    const lead = lst.preamble.trim();
-    lst.items.forEach((item, i) => {
-      const line = `${i + 1}. ${item.trim()}`;
-      pieces.push({ label: S.chgk.copy.questionPiece(String(i + 1)), text: i === 0 ? head + (lead ? lead + "\n" : "") + line : line });
-    });
-  } else {
-    pieces.push({ label: S.chgk.copy.question(), text: head + q });
-  }
+  const pieces = questionPieces(q, head);
   const body = pieces.map((p) => p.text).join("\n");
   const whole = handout ? handout + "\n\n" + body : body;
   out.push(...pieces);
@@ -1193,40 +1207,58 @@ function composeAuthors(names: ReadonlyArray<string>, label: string | null): str
   return body ? `@ ${body}` : "@";
 }
 
+interface FieldScan {
+  res: CardFields;
+  preLines: string[];
+  extraLines: string[];
+  authorList: string[];
+  seenQuestion: boolean;
+  sawAuthor: boolean;
+}
+
+// takeQuestion files the first question block, lifting an inline handout out
+// of it when the card has no handout block of its own.
+function takeQuestion(st: FieldScan, text: string): void {
+  let q = text;
+  const ih = st.res.handout === null ? extractInlineHandout(q) : null;
+  if (ih) { st.res.handout = ih.handout; q = ih.rest; }
+  st.res.question = q;
+  st.seenQuestion = true;
+}
+
+function takeAuthor(st: FieldScan, text: string): void {
+  st.sawAuthor = true;
+  const ab = authorBlock(text);
+  if (ab.label && st.res.authorLabel === null) st.res.authorLabel = ab.label;
+  st.authorList.push(...ab.names);
+}
+
+function scanFieldBlock(st: FieldScan, b: Block): void {
+  const t = b.type, res = st.res;
+  // "> " blocks are legacy (they never reached the exporters — see
+  // composeFields); still read so old cards surface their handout.
+  if (t === "handout" && res.handout === null) res.handout = parseHandoutBlock(b.text);
+  else if ((t === "question" || t === "pre") && !st.seenQuestion) takeQuestion(st, b.text);
+  else if ((t === "answer" || t === "zachet" || t === "nezachet" || t === "comment") && res[t] === null) res[t] = b.text;
+  else if (t === "source" && res.sources === null) res.sources = sourcesFromBlock(b.text);
+  else if (t === "author") takeAuthor(st, b.text);
+  else if (!st.seenQuestion && PRE_TYPES.has(t)) st.preLines.push(rawLine(b));
+  else st.extraLines.push(rawLine(b));
+}
+
 export function splitFields(desc: string | null | undefined): CardFields {
-  const blocks = parseBlocks(desc);
-  const res: CardFields = {
-    preMarkup: null, handout: null, question: null, answer: null, zachet: null,
-    nezachet: null, comment: null, sources: null, authors: null, authorLabel: null, extra: null,
+  const st: FieldScan = {
+    res: {
+      preMarkup: null, handout: null, question: null, answer: null, zachet: null,
+      nezachet: null, comment: null, sources: null, authors: null, authorLabel: null, extra: null,
+    },
+    preLines: [], extraLines: [], authorList: [], seenQuestion: false, sawAuthor: false,
   };
-  const preLines: string[] = [], extraLines: string[] = [], authorList: string[] = [];
-  let seenQuestion = false, sawAuthor = false;
-  for (const b of blocks) {
-    const t = b.type;
-    // "> " blocks are legacy (they never reached the exporters — see
-    // composeFields); still read so old cards surface their handout.
-    if (t === "handout" && res.handout === null) { res.handout = parseHandoutBlock(b.text); continue; }
-    if ((t === "question" || t === "pre") && !seenQuestion) {
-      let q = b.text;
-      const ih = res.handout === null ? extractInlineHandout(q) : null;
-      if (ih) { res.handout = ih.handout; q = ih.rest; }
-      res.question = q; seenQuestion = true; continue;
-    }
-    if ((t === "answer" || t === "zachet" || t === "nezachet" || t === "comment") && res[t] === null) { res[t] = b.text; continue; }
-    if (t === "source" && res.sources === null) { res.sources = sourcesFromBlock(b.text); continue; }
-    if (t === "author") {
-      sawAuthor = true;
-      const ab = authorBlock(b.text);
-      if (ab.label && res.authorLabel === null) res.authorLabel = ab.label;
-      authorList.push(...ab.names);
-      continue;
-    }
-    if (!seenQuestion && PRE_TYPES.has(t)) { preLines.push(rawLine(b)); continue; }
-    extraLines.push(rawLine(b));
-  }
-  if (sawAuthor) res.authors = authorList;
-  if (preLines.length) res.preMarkup = preLines.join("\n");
-  if (extraLines.length) res.extra = extraLines.join("\n");
+  for (const b of parseBlocks(desc)) scanFieldBlock(st, b);
+  const res = st.res;
+  if (st.sawAuthor) res.authors = st.authorList;
+  if (st.preLines.length) res.preMarkup = st.preLines.join("\n");
+  if (st.extraLines.length) res.extra = st.extraLines.join("\n");
   return res;
 }
 

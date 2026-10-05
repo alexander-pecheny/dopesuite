@@ -5,6 +5,9 @@ import (
 	"net/http"
 )
 
+// maxJSONBody caps a JSON request body.
+const maxJSONBody = 1 << 20
+
 // writeJSON marshals v and writes it as application/json.
 func writeJSON(w http.ResponseWriter, v any) {
 	data, err := json.Marshal(v)
@@ -24,7 +27,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 // readJSON decodes the request body into v, rejecting unknown fields. Returns
 // false (after writing a 400) on failure.
 func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBody))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)

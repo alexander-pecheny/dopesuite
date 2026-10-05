@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Labels. An assignment may be scoped to a Playing (what the testers thought at
@@ -16,6 +17,33 @@ func cmdLabel(a *app, args []string) error {
 	return dispatch("label", map[string]func(*app, []string) error{
 		"ls": labelList, "add": labelAdd, "assign": labelAssign,
 	}, a, args)
+}
+
+// labelRow is one line of `label ls`.
+type labelRow struct {
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+	On    bool   `json:"on_card,omitempty"`
+}
+
+// labelRows lists the board's labels, or, when card is not 0, only the ones
+// on that card.
+func labelRows(b *Board, card int64) []labelRow {
+	assigned := map[int64]bool{}
+	for _, assignment := range b.CardLabels {
+		if card != 0 && assignment.CardID == card {
+			assigned[assignment.LabelID] = true
+		}
+	}
+	rows := []labelRow{}
+	for _, l := range b.Labels {
+		if card != 0 && !assigned[l.ID] {
+			continue
+		}
+		rows = append(rows, labelRow{ID: l.ID, Name: l.Name, Color: l.Color, On: assigned[l.ID]})
+	}
+	return rows
 }
 
 func labelList(a *app, args []string) error {
@@ -31,25 +59,7 @@ func labelList(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	type row struct {
-		ID    int64  `json:"id"`
-		Name  string `json:"name"`
-		Color string `json:"color"`
-		On    bool   `json:"on_card,omitempty"`
-	}
-	assigned := map[int64]bool{}
-	for _, assignment := range b.CardLabels {
-		if *card != 0 && assignment.CardID == *card {
-			assigned[assignment.LabelID] = true
-		}
-	}
-	rows := []row{}
-	for _, l := range b.Labels {
-		if *card != 0 && !assigned[l.ID] {
-			continue
-		}
-		rows = append(rows, row{ID: l.ID, Name: l.Name, Color: l.Color, On: assigned[l.ID]})
-	}
+	rows := labelRows(b, *card)
 	return a.emit(rows, func() {
 		for _, r := range rows {
 			a.printf("%6d  %-24s %s\n", r.ID, r.Name, r.Color)

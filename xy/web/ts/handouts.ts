@@ -8,7 +8,7 @@
 // the fields view, a form over the same text (hndt.ts parseHndtForm/composeHndtForm).
 
 import S from "./i18nstrings.js";
-import { xyApp } from "./app.js";
+import { xyApp, DECIMAL_RADIX } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
@@ -24,6 +24,11 @@ import type { HndtFormBlock } from "./hndt.js";
 import type { Board, ListPanel, ListScope } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 import type { OpBody } from "./store.js";
+
+// Quiet time after the last keystroke before the preview is rebuilt.
+const PREVIEW_DEBOUNCE_MS = 300;
+// A PDF that takes longer than this to build shows the busy state.
+const BUSY_DELAY_MS = 200;
 
 const { el, byId, errMsg, downloadBlob, onCmdEnter } = xyApp;
 
@@ -76,26 +81,31 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
       fieldsEl.replaceChildren(el("p", { class: "hint", text: S.board.handouts.fieldsEmpty() }));
       return;
     }
+    const head = preambleHead(blocks, write);
+    fieldsEl.replaceChildren(el("div", { class: "u-col u-gap-md" }, head, ...shown.map((b) => handoutBox(b, write))));
+  }
+
+  // preambleHead is the top of the fields view: the preamble's own rows with a
+  // remove button, or a button that adds one.
+  function preambleHead(blocks: HndtFormBlock[], write: () => void): HTMLElement {
     const preamble = blocks.find((b) => b.preamble);
-    let head: HTMLElement;
     if (preamble) {
       const rm = el("button", { class: "fld-rm", type: "button", text: "×", title: S.board.handouts.preambleRemove() });
       rm.addEventListener("click", () => { blocks.splice(blocks.indexOf(preamble), 1); write(); renderFields(); });
       const extras = extrasOf(preamble, write);
-      head = el("div", { class: "hndt-block u-col u-gap-sm" },
+      return el("div", { class: "hndt-block u-col u-gap-sm" },
         el("div", { class: "u-row u-gap-sm u-align-center u-justify-between" },
           el("span", { class: "section-label", text: S.board.handouts.preambleTitle() }),
           el("div", { class: "u-row u-gap-sm u-align-center" }, extras.more, rm)),
         extras.rows);
-    } else {
-      head = el("button", { class: "btn btn-ghost btn-small", type: "button", title: S.board.handouts.preambleAddTitle(), text: S.board.handouts.preambleAdd() });
-      head.addEventListener("click", () => {
-        blocks.unshift({ head: [], preamble: true, kind: "text", text: "", image: "", blank: false });
-        write();
-        renderFields();
-      });
     }
-    fieldsEl.replaceChildren(el("div", { class: "u-col u-gap-md" }, head, ...shown.map((b) => handoutBox(b, write))));
+    const add = el("button", { class: "btn btn-ghost btn-small", type: "button", title: S.board.handouts.preambleAddTitle(), text: S.board.handouts.preambleAdd() });
+    add.addEventListener("click", () => {
+      blocks.unshift({ head: [], preamble: true, kind: "text", text: "", image: "", blank: false });
+      write();
+      renderFields();
+    });
+    return add;
   }
 
   // number builds one labelled number field over a setting; empty removes it.
@@ -106,7 +116,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     input.value = xyHndt.hndtGet(b, key) ?? "";
     input.addEventListener("input", () => { xyHndt.hndtSet(b, key, input.value.trim() || null); write(); });
     const step = (by: number): void => {
-      input.value = String(Math.max(1, (parseInt(input.value, 10) || 0) + by));
+      input.value = String(Math.max(1, (parseInt(input.value, DECIMAL_RADIX) || 0) + by));
       input.dispatchEvent(new Event("input"));
     };
     const btn = (glyph: "chevron-up" | "chevron-down", aria: string, by: number): HTMLElement => {
@@ -366,7 +376,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
 
   function schedulePreview(): void {
     if (previewTimer) clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => { void refreshPreview(); }, 300);
+    previewTimer = setTimeout(() => { void refreshPreview(); }, PREVIEW_DEBOUNCE_MS);
   }
 
   async function refreshPreview(): Promise<void> {
@@ -375,7 +385,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     rendering = true;
     // A render that is quick shows no spinner. One that waits on big images or
     // a long typeset marks the pane busy, so the old preview does not look final.
-    const busy = setTimeout(() => byId("handoutsPdf").setAttribute("aria-busy", "true"), 200);
+    const busy = setTimeout(() => byId("handoutsPdf").setAttribute("aria-busy", "true"), BUSY_DELAY_MS);
     try { await generateHandoutsPdf(); } finally { rendering = false; }
     if (renderAgain) { renderAgain = false; clearTimeout(busy); void refreshPreview(); return; }
     clearTimeout(busy);
@@ -398,20 +408,26 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
       const name = handoutFileBase() + ".pdf";
       const blob = await res.blob();
       if (!handoutsCtx) return; // closed while it rendered
-      clearHandoutsPdf();
-      handoutsPdfUrl = await namedUrl(blob, name);
-      byId("handoutsPdf").replaceChildren(pagesNode || el("iframe", { class: "handouts-pdf-frame", src: handoutsPdfUrl, title: "PDF" }));
-      // Only the preview needs /dl/ (the viewer's Save name); Chromium re-issues a
-      // download outside the worker, where that path 404s — so the button gets a blob.
-      handoutsDlUrl = URL.createObjectURL(blob);
-      const dl = byId<HTMLAnchorElement>("handoutsDownload");
-      dl.href = handoutsDlUrl;
-      dl.setAttribute("download", name);
-      dl.hidden = false;
+      await showHandoutsPdf(blob, name, pagesNode);
       msg.textContent = "";
     } catch (err) {
       msg.textContent = S.board.handouts.generateFailed(errMsg(err));
     }
+  }
+
+  // showHandoutsPdf puts a fresh PDF in the preview pane and behind the
+  // download button. pagesNode, when set, replaces the inline viewer.
+  async function showHandoutsPdf(blob: Blob, name: string, pagesNode: HTMLElement | null): Promise<void> {
+    clearHandoutsPdf();
+    handoutsPdfUrl = await namedUrl(blob, name);
+    byId("handoutsPdf").replaceChildren(pagesNode || el("iframe", { class: "handouts-pdf-frame", src: handoutsPdfUrl, title: "PDF" }));
+    // Only the preview needs /dl/ (the viewer's Save name); Chromium re-issues a
+    // download outside the worker, where that path 404s — so the button gets a blob.
+    handoutsDlUrl = URL.createObjectURL(blob);
+    const dl = byId<HTMLAnchorElement>("handoutsDownload");
+    dl.href = handoutsDlUrl;
+    dl.setAttribute("download", name);
+    dl.hidden = false;
   }
 
   // ---- handout image staging (server-side cache) ----

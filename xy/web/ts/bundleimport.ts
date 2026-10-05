@@ -16,6 +16,12 @@ import type { Bundle } from "./bundle.js";
 import { zipRead } from "./zip.js";
 import S from "./i18nstrings.js";
 
+// Headroom over the plaintext size for envelope overhead (10%).
+const QUOTA_HEADROOM = 1.1;
+const MIB_SHIFT = 20;
+// Skipped names listed in the summary before it stops.
+const MAX_SKIPPED_SHOWN = 20;
+
 const { fetchJSON, jpost, errMsg } = xyApp;
 
 interface StorageInfo {
@@ -29,10 +35,10 @@ export async function checkQuota(bundle: Bundle): Promise<void> {
   if (s.unlimited) return;
   // Ciphertext sizes match the plaintext's within an envelope's few dozen
   // bytes per field; 10% headroom covers that.
-  const need = Math.ceil(contentBytes(bundle) * 1.1);
+  const need = Math.ceil(contentBytes(bundle) * QUOTA_HEADROOM);
   const left = s.quota_bytes - s.used_bytes;
   if (need > left) {
-    const mb = (n: number): string => (n / (1 << 20)).toFixed(1);
+    const mb = (n: number): string => (n / (1 << MIB_SHIFT)).toFixed(1);
     throw new Error(S.import.bundle.quota(mb(need), mb(Math.max(left, 0))));
   }
 }
@@ -68,7 +74,7 @@ export async function sniffBundle(file: File): Promise<{ bundle: Bundle; bytesOf
 
 export function summarize(bundle: Bundle, r: ApplyResult): string {
   let out = S.import.bundle.summary(String(r.cards), String(r.units.filter((u) => !u.error).length), String(bundle.sessions.length), String(r.events), String(r.attachments));
-  if (r.skipped.length) out += S.import.bundle.summarySkipped(String(r.skipped.length)) + r.skipped.slice(0, 20).join(", ");
+  if (r.skipped.length) out += S.import.bundle.summarySkipped(String(r.skipped.length)) + r.skipped.slice(0, MAX_SKIPPED_SHOWN).join(", ");
   return out;
 }
 

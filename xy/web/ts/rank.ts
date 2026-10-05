@@ -6,6 +6,9 @@
 
 const DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const ZERO = DIGITS[0];
+// The longest integer part has this many digits after its "A" head.
+const MAX_INTEGER_DIGITS = 26;
+const SMALLEST_INTEGER = "A" + ZERO.repeat(MAX_INTEGER_DIGITS);
 
 function midpoint(a: string, b: string | null): string {
   if (b !== null && a >= b) throw new Error(`${a} >= ${b}`);
@@ -18,7 +21,7 @@ function midpoint(a: string, b: string | null): string {
   const digitA = a ? DIGITS.indexOf(a[0]) : 0;
   const digitB = b !== null ? DIGITS.indexOf(b[0]) : DIGITS.length;
   if (digitB - digitA > 1) {
-    const midDigit = Math.round(0.5 * (digitA + digitB));
+    const midDigit = Math.round((digitA + digitB) / 2);
     return DIGITS[midDigit];
   }
   if (b && b.length > 1) return b.slice(0, 1);
@@ -39,7 +42,7 @@ function getIntegerPart(key: string): string {
   return key.slice(0, integerPartLength);
 }
 function validateOrderKey(key: string): void {
-  if (key === "A" + ZERO.repeat(26)) throw new Error("invalid order key: " + key);
+  if (key === SMALLEST_INTEGER) throw new Error("invalid order key: " + key);
   const i = getIntegerPart(key);
   const f = key.slice(i.length);
   if (f.slice(-1) === ZERO) throw new Error("invalid order key: " + key);
@@ -84,27 +87,32 @@ function decrementInteger(x: string): string | null {
   return head + digs.join("");
 }
 
+// keyBefore returns a key that sorts before b.
+function keyBefore(b: string): string {
+  const ib = getIntegerPart(b);
+  const fb = b.slice(ib.length);
+  if (ib === SMALLEST_INTEGER) return ib + midpoint("", fb);
+  if (ib < b) return ib;
+  const res = decrementInteger(ib);
+  if (res === null) throw new Error("cannot decrement any more");
+  return res;
+}
+
+// keyAfter returns a key that sorts after a.
+function keyAfter(a: string): string {
+  const ia = getIntegerPart(a);
+  const fa = a.slice(ia.length);
+  const i = incrementInteger(ia);
+  return i === null ? ia + midpoint(fa, null) : i;
+}
+
 // keyBetween returns a key strictly between a and b (null open ends).
 function keyBetween(a: string | null, b: string | null): string {
   if (a !== null) validateOrderKey(a);
   if (b !== null) validateOrderKey(b);
   if (a !== null && b !== null && a >= b) throw new Error(`${a} >= ${b}`);
-  if (a === null) {
-    if (b === null) return "a" + ZERO;
-    const ib = getIntegerPart(b);
-    const fb = b.slice(ib.length);
-    if (ib === "A" + ZERO.repeat(26)) return ib + midpoint("", fb);
-    if (ib < b) return ib;
-    const res = decrementInteger(ib);
-    if (res === null) throw new Error("cannot decrement any more");
-    return res;
-  }
-  if (b === null) {
-    const ia = getIntegerPart(a);
-    const fa = a.slice(ia.length);
-    const i = incrementInteger(ia);
-    return i === null ? ia + midpoint(fa, null) : i;
-  }
+  if (a === null) return b === null ? "a" + ZERO : keyBefore(b);
+  if (b === null) return keyAfter(a);
   const ia = getIntegerPart(a);
   const fa = a.slice(ia.length);
   const ib = getIntegerPart(b);

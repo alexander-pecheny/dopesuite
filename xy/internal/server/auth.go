@@ -285,6 +285,13 @@ func (s *server) telegramConfigured() bool {
 	return s.bot != nil && botUsername() != ""
 }
 
+// The length limits on the profile's free-text fields, in bytes.
+const (
+	profileNameMaxLen    = 200
+	timezoneMaxLen       = 64
+	announceCitiesMaxLen = 4096
+)
+
 // The three answers the login page can get about telegram. Being configured and
 // being usable are different things, and a visitor deserves to know which one
 // failed rather than watching a code that no bot will ever collect.
@@ -374,18 +381,24 @@ func (s *server) handleTgClaim(w http.ResponseWriter, r *http.Request) {
 	var out tglogin.Outcome
 	err := s.withWriteTx(r.Context(), "tg-claim", func(ctx context.Context, tx *sql.Tx) (err error) {
 		out, err = s.handshake().Claim(ctx, tx, req.Code, uname, req.Password, time.Now())
-		str := xystrings.Default
-		switch {
-		case errors.Is(err, tglogin.ErrCodeNotFound):
-			return corei18n.User(str.Auth.Tg.CodeMissing())
-		case errors.Is(err, tglogin.ErrWrongPassword):
-			return corei18n.User(str.Auth.Tg.PasswordWrong())
-		case errors.Is(err, tglogin.ErrTelegramLinked):
-			return corei18n.User(str.Auth.Tg.TelegramTaken())
-		}
-		return err
+		return claimError(err)
 	})
 	writeOutcome(w, out, err)
+}
+
+// claimError turns the handshake's refusals of a claim into errors the user
+// can read; any other error passes through.
+func claimError(err error) error {
+	str := xystrings.Default
+	switch {
+	case errors.Is(err, tglogin.ErrCodeNotFound):
+		return corei18n.User(str.Auth.Tg.CodeMissing())
+	case errors.Is(err, tglogin.ErrWrongPassword):
+		return corei18n.User(str.Auth.Tg.PasswordWrong())
+	case errors.Is(err, tglogin.ErrTelegramLinked):
+		return corei18n.User(str.Auth.Tg.TelegramTaken())
+	}
+	return err
 }
 
 func writeOutcome(w http.ResponseWriter, out tglogin.Outcome, err error) {
@@ -447,6 +460,25 @@ type loginPasswordRequest struct {
 	Password string `json:"password"`
 }
 
+// checkPassword finds the user with this username and checks the password. An
+// unknown user and a wrong password get the same answer.
+func checkPassword(ctx context.Context, tx *sql.Tx, uname, password string) (session.User, error) {
+	invalid := corei18n.User(xystrings.Default.Auth.Login.Invalid())
+	u := session.User{}
+	var pwHash sql.NullString
+	row := tx.QueryRowContext(ctx, `select id, password_hash, username, telegram_username from users where username = ?`, uname)
+	if err := row.Scan(&u.UserID, &pwHash, &u.Username, &u.Telegram); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return u, invalid
+		}
+		return u, err
+	}
+	if ok, _, _ := authcred.VerifyPasswordUpgrading(pwHash.String, "", password); !ok {
+		return u, invalid
+	}
+	return u, nil
+}
+
 func (s *server) handleLoginPassword(w http.ResponseWriter, r *http.Request) {
 	str := xystrings.Default
 	var req loginPasswordRequest
@@ -458,37 +490,20 @@ func (s *server) handleLoginPassword(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, str.Auth.Login.FieldsRequired())
 		return
 	}
-	now := time.Now()
-	var (
-		token string
-		me    meResponse
-	)
-	err := s.withWriteTx(r.Context(), "login-password", func(ctx context.Context, tx *sql.Tx) error {
-		var uid int64
-		var pwHash, uname2, tg sql.NullString
-		row := tx.QueryRowContext(ctx, `select id, password_hash, username, telegram_username from users where username = ?`, uname)
-		if err := row.Scan(&uid, &pwHash, &uname2, &tg); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return corei18n.User(str.Auth.Login.Invalid())
-			}
+	var token string
+	var u session.User
+	err := s.withWriteTx(r.Context(), "login-password", func(ctx context.Context, tx *sql.Tx) (err error) {
+		if u, err = checkPassword(ctx, tx, uname, req.Password); err != nil {
 			return err
 		}
-		if ok, _, _ := authcred.VerifyPasswordUpgrading(pwHash.String, "", req.Password); !ok {
-			return corei18n.User(str.Auth.Login.Invalid())
-		}
-		var err error
-		token, err = s.createSessionTx(ctx, tx, uid, now)
-		if err != nil {
-			return err
-		}
-		me = meOf(session.User{UserID: uid, Username: uname2, Telegram: tg})
-		return nil
+		token, err = s.createSessionTx(ctx, tx, u.UserID, time.Now())
+		return err
 	})
 	if handleErr(w, err) {
 		return
 	}
 	session.SetCookie(w, token)
-	writeJSON(w, me)
+	writeJSON(w, meOf(u))
 }
 
 // ---- username / password management ----
@@ -508,33 +523,39 @@ func (s *server) handleSetUsername(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uname := strings.TrimSpace(req.Username)
-	if len(uname) < 3 {
+	if len(uname) < usernameMinLen {
 		httpError(w, http.StatusBadRequest, str.Auth.Username.TooShort())
 		return
 	}
-	if len(uname) > 64 {
+	if len(uname) > usernameMaxLen {
 		httpError(w, http.StatusBadRequest, str.Auth.Username.TooLong())
 		return
 	}
 	err := s.withWriteTx(r.Context(), "set-username", func(ctx context.Context, tx *sql.Tx) error {
-		var existing sql.NullString
-		if err := tx.QueryRowContext(ctx, `select username from users where id = ?`, u.UserID).Scan(&existing); err != nil {
-			return err
-		}
-		if existing.Valid && existing.String != "" {
-			return corei18n.User(str.Auth.Username.AlreadySet())
-		}
-		_, err := tx.ExecContext(ctx, `update users set username = ?, updated_at = ? where id = ?`,
-			uname, rfc3339(time.Now()), u.UserID)
-		if sqlitex.IsUniqueViolation(err) {
-			return corei18n.User(str.Auth.Username.Taken())
-		}
-		return err
+		return setUsername(ctx, tx, u.UserID, uname)
 	})
 	if handleErr(w, err) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// setUsername gives a user without a username this one, if nobody has it.
+func setUsername(ctx context.Context, tx *sql.Tx, userID int64, uname string) error {
+	str := xystrings.Default
+	var existing sql.NullString
+	if err := tx.QueryRowContext(ctx, `select username from users where id = ?`, userID).Scan(&existing); err != nil {
+		return err
+	}
+	if existing.Valid && existing.String != "" {
+		return corei18n.User(str.Auth.Username.AlreadySet())
+	}
+	_, err := tx.ExecContext(ctx, `update users set username = ?, updated_at = ? where id = ?`,
+		uname, rfc3339(time.Now()), userID)
+	if sqlitex.IsUniqueViolation(err) {
+		return corei18n.User(str.Auth.Username.Taken())
+	}
+	return err
 }
 
 type passwordRequest struct {
@@ -566,32 +587,38 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = s.withWriteTx(r.Context(), "set-password", func(ctx context.Context, tx *sql.Tx) error {
-		var cur sql.NullString
-		if err := tx.QueryRowContext(ctx, `select password_hash from users where id = ?`, u.UserID).Scan(&cur); err != nil {
-			return err
-		}
-		if cur.Valid && cur.String != "" {
-			if ok, _, _ := authcred.VerifyPasswordUpgrading(cur.String, "", req.CurrentPassword); !ok {
-				return corei18n.User(str.Auth.Password.CurrentWrong())
-			}
-		}
-		now := rfc3339(time.Now())
-		if _, err := tx.ExecContext(ctx, `update users set password_hash = ?, updated_at = ? where id = ?`,
-			newHash, now, u.UserID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx,
-			`update api_tokens set revoked_at = ? where user_id = ? and revoked_at is null`,
-			now, u.UserID); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, `delete from sessions where user_id = ? and id <> ?`, u.UserID, u.SessionID)
-		return err
+		return setPassword(ctx, tx, u, req.CurrentPassword, newHash)
 	})
 	if handleErr(w, err) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// setPassword checks the current password, when the account has one, stores
+// newHash, and revokes every API token and every session but this one.
+func setPassword(ctx context.Context, tx *sql.Tx, u session.User, current, newHash string) error {
+	var cur sql.NullString
+	if err := tx.QueryRowContext(ctx, `select password_hash from users where id = ?`, u.UserID).Scan(&cur); err != nil {
+		return err
+	}
+	if cur.Valid && cur.String != "" {
+		if ok, _, _ := authcred.VerifyPasswordUpgrading(cur.String, "", current); !ok {
+			return corei18n.User(xystrings.Default.Auth.Password.CurrentWrong())
+		}
+	}
+	now := rfc3339(time.Now())
+	if _, err := tx.ExecContext(ctx, `update users set password_hash = ?, updated_at = ? where id = ?`,
+		newHash, now, u.UserID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`update api_tokens set revoked_at = ? where user_id = ? and revoked_at is null`,
+		now, u.UserID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `delete from sessions where user_id = ? and id <> ?`, u.UserID, u.SessionID)
+	return err
 }
 
 // ---- display prefs ----
@@ -650,7 +677,7 @@ func (s *server) handleSetDefaultAuthor(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	author := strings.TrimSpace(req.DefaultAuthor)
-	if len(author) > 200 {
+	if len(author) > profileNameMaxLen {
 		httpError(w, http.StatusBadRequest, xystrings.Default.Auth.Profile.NameTooLong())
 		return
 	}
@@ -686,11 +713,11 @@ func (s *server) handleSetProfileDefaults(w http.ResponseWriter, r *http.Request
 	// Not validated against the tz database: Intl on the client is the source of
 	// these, and a zone the server rejects would be a zone the user's browser
 	// believes in. Length-capped only.
-	if req.Timezone != nil && len(*req.Timezone) > 64 {
+	if req.Timezone != nil && len(*req.Timezone) > timezoneMaxLen {
 		httpError(w, http.StatusBadRequest, xystrings.Default.Auth.Profile.TimezoneTooLong())
 		return
 	}
-	if req.DefaultAuthor != nil && len(strings.TrimSpace(*req.DefaultAuthor)) > 200 {
+	if req.DefaultAuthor != nil && len(strings.TrimSpace(*req.DefaultAuthor)) > profileNameMaxLen {
 		httpError(w, http.StatusBadRequest, xystrings.Default.Auth.Profile.NameTooLong())
 		return
 	}
@@ -739,7 +766,7 @@ func (s *server) handleSetAnnounceCities(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if len(req.AnnounceCities) > 4096 {
+	if len(req.AnnounceCities) > announceCitiesMaxLen {
 		httpError(w, http.StatusBadRequest, xystrings.Default.Auth.Profile.CitiesTooLong())
 		return
 	}

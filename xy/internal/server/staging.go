@@ -27,6 +27,8 @@ const (
 	handoutSessionTTL   = 60 * time.Second
 	handoutReapInterval = 20 * time.Second
 	maxHandoutSessions  = 200
+	// handoutTokenBytes is the length of a staging session's random id.
+	handoutTokenBytes = 16
 	// maxStagedBytes caps one session's images. Staging is in memory, so without
 	// this a handful of sessions could pin an unbounded amount of it.
 	maxStagedBytes = 128 << 20
@@ -56,7 +58,7 @@ func newHandoutStaging() *handoutStaging {
 }
 
 func randToken() (string, error) {
-	b := make([]byte, 16)
+	b := make([]byte, handoutTokenBytes)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}

@@ -6,7 +6,7 @@
 // "Move list…" all transfer through here, so a bulk move behaves like
 // the card's own move done once per card.
 import S from "./i18nstrings.js";
-import { xyApp } from "./app.js";
+import { xyApp, ISO_DATE_LEN } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyRank } from "./rank.js";
@@ -104,15 +104,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
   // given board — from in-memory state for the current board, otherwise by
   // fetching + decrypting its snapshot.
   async function loadMoveBoard(bid: number): Promise<MoveCtx> {
-    if (bid === boardId) {
-      const lists = [...st().lists].sort(byRank).map((l) => ({ id: l.id, title: l.title, rank: l.rank }));
-      const cardsByList = new Map<number, Array<{ id: number; rank: string }>>();
-      for (const l of lists) cardsByList.set(l.id, cardsOf(l.id).map((c) => ({ id: c.id, rank: c.rank })));
-      return {
-        boardId: bid, dk: mustDK(), lists, cardsByList, labels: st().labels,
-        sessions: st().sessions.map((s) => ({ id: s.id, meta: s.meta })), name: st().name,
-      };
-    }
+    if (bid === boardId) return currentMoveBoard();
     const tdk = await ensureDK(bid);
     const snap = (await fetchJSON(`/api/boards/${bid}`)) as Snapshot;
     const lists = await Promise.all((snap.lists || []).map(async (l) => ({
@@ -134,6 +126,17 @@ export function createTransfer(deps: TransferDeps): Transfer {
     return {
       boardId: bid, dk: tdk, lists, cardsByList, labels, sessions,
       name: snap.name || "",
+    };
+  }
+
+  // currentMoveBoard is loadMoveBoard's ctx for the open board, read from state.
+  function currentMoveBoard(): MoveCtx {
+    const lists = [...st().lists].sort(byRank).map((l) => ({ id: l.id, title: l.title, rank: l.rank }));
+    const cardsByList = new Map<number, Array<{ id: number; rank: string }>>();
+    for (const l of lists) cardsByList.set(l.id, cardsOf(l.id).map((c) => ({ id: c.id, rank: c.rank })));
+    return {
+      boardId, dk: mustDK(), lists, cardsByList, labels: st().labels,
+      sessions: st().sessions.map((s) => ({ id: s.id, meta: s.meta })), name: st().name,
     };
   }
 
@@ -269,7 +272,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
 
     const copy = serializeSession({
       ...meta,
-      origin: meta.origin || { board: st().name, at: new Date().toISOString().slice(0, 10) },
+      origin: meta.origin || { board: st().name, at: new Date().toISOString().slice(0, ISO_DATE_LEN) },
     });
     const sr = (await jpost(`/api/boards/${targetBid}/sessions`, {
       meta_enc: await xyCrypto.encField(targetDk, copy),

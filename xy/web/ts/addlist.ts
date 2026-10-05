@@ -56,13 +56,7 @@ export function createAddListPanel(board: Board): ListPanel {
     nameInput.focus();
   }
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const list = anchor;
-    const title = nameInput.value.trim();
-    if (!list || !title || form.inert) return;
-    const rank = rankNextTo(board.state.lists, list, byId<HTMLInputElement>("addListBefore").checked);
-    if (rank == null) { addListModal.close(); return; }
+  async function save(title: string, rank: string): Promise<void> {
     form.inert = true; // a second Enter would make a second list
     board.setStatus("saving");
     try {
@@ -74,6 +68,16 @@ export function createAddListPanel(board: Board): ListPanel {
       board.setStatus("error");
       addListModal.message(S.board.list.addFailed(errMsg(err)));
     } finally { form.inert = false; }
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const list = anchor;
+    const title = nameInput.value.trim();
+    if (!list || !title || form.inert) return;
+    const rank = rankNextTo(board.state.lists, list, byId<HTMLInputElement>("addListBefore").checked);
+    if (rank == null) { addListModal.close(); return; }
+    await save(title, rank);
   });
 
   return { id: "add-list", menu: "list", icon: "list-plus", label: S.board.list.addLabel(), open: (s) => open(s.list) };

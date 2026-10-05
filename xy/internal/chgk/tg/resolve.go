@@ -12,6 +12,7 @@ import (
 	"time"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
+	"pecheny.me/dopecore/idstr"
 	xystrings "xy/i18nstrings"
 )
 
@@ -20,6 +21,19 @@ import (
 // the person driving the export has to show the bot the channel and the group
 // from the inside. That conversation is what this file holds, plus the cache
 // that means it only happens once per target.
+
+const (
+	// promptTimeout is how long the bot waits for the person to do what it asked.
+	promptTimeout = 5 * time.Minute
+	// shortCodeRange bounds a short code to seven hex digits.
+	shortCodeRange = 0xFFFFFFF
+	hexBase        = 16
+	cacheDirMode   = 0o755
+	cacheFileMode  = 0o600
+	// Stand-in ids a dry run posts to when it was given names.
+	dryRunChannelID = 1111111111
+	dryRunChatID    = 2222222222
+)
 
 var (
 	reChannelLink = regexp.MustCompile(`^https?://t\.me/c/(\d+)`)
@@ -33,9 +47,9 @@ func parseTargetRef(ref string) (id int64, username string, err error) {
 	if ref == "" {
 		return 0, "", fmt.Errorf("no channel or chat given")
 	}
-	if n, convErr := strconv.ParseInt(ref, 10, 64); convErr == nil {
+	if n, convErr := idstr.Parse(ref); convErr == nil {
 		if s := strings.TrimPrefix(ref, "-100"); s != ref {
-			n, _ = strconv.ParseInt(s, 10, 64)
+			n, _ = idstr.Parse(s)
 		}
 		return n, "", nil
 	}
@@ -43,7 +57,7 @@ func parseTargetRef(ref string) (id int64, username string, err error) {
 		return 0, name, nil
 	}
 	if m := reChannelLink.FindStringSubmatch(ref); m != nil {
-		n, _ := strconv.ParseInt(m[1], 10, 64)
+		n, _ := idstr.Parse(m[1])
 		return n, "", nil
 	}
 	if m := rePublicLink.FindStringSubmatch(ref); m != nil {
@@ -54,7 +68,7 @@ func parseTargetRef(ref string) (id int64, username string, err error) {
 
 // prefixed is the "-100…" form the Bot API wants for a channel or supergroup.
 func prefixed(id int64) string {
-	s := strconv.FormatInt(id, 10)
+	s := idstr.Format(id)
 	if strings.HasPrefix(s, "-100") {
 		return s
 	}
@@ -68,7 +82,6 @@ type Prompter func(format string, args ...any)
 // ResolveTarget turns the two references into the ids the export posts to,
 // asking for help only for a username it has not seen before.
 func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, say Prompter) (Target, error) {
-	s := xystrings.Default
 	var t Target
 	channelID, channelName, err := parseTargetRef(channelRef)
 	if err != nil {
@@ -92,22 +105,13 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, sa
 		}
 	}
 	if channelID == 0 {
-		say("%s", s.Tg.Resolve.Forward(channelName))
-		if channelID, err = bot.WaitForForwardedChannel(ctx, 5*time.Minute); err != nil {
-			return t, fmt.Errorf("channel %s: %w", channelName, err)
+		if channelID, err = askForChannel(ctx, bot, channelName, say); err != nil {
+			return t, err
 		}
 		cache[channelName] = channelID
 	}
-	for chatID == 0 || chatID == channelID {
-		if chatID == channelID {
-			say("%s", s.Tg.Resolve.SameChannel())
-		}
-		code := shortCode()
-		say("%s", s.Tg.Resolve.GroupCode(chatName, code))
-		say("%s", s.Tg.Resolve.GroupCodeHint())
-		if chatID, err = bot.WaitForChatMessage(ctx, code, 5*time.Minute); err != nil {
-			return t, fmt.Errorf("chat %s: %w", chatName, err)
-		}
+	if chatID, err = askForChat(ctx, bot, chatID, channelID, chatName, say); err != nil {
+		return t, err
 	}
 	if chatName != "" {
 		cache[chatName] = chatID
@@ -115,10 +119,46 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, sa
 	saveResolveCache(cache)
 
 	t = Target{ChannelID: prefixed(channelID), ChatID: prefixed(chatID)}
-	if err := verifyAccess(ctx, bot, t.ChannelID, s.Tg.Verify.WhatChannel(), s.Tg.Verify.OfChannel()); err != nil {
-		return t, err
+	return t, verifyTarget(ctx, bot, t)
+}
+
+// askForChannel has the person forward a post from the channel to the bot.
+func askForChannel(ctx context.Context, bot *Bot, name string, say Prompter) (int64, error) {
+	say("%s", xystrings.Default.Tg.Resolve.Forward(name))
+	id, err := bot.WaitForForwardedChannel(ctx, promptTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("channel %s: %w", name, err)
 	}
-	return t, verifyAccess(ctx, bot, t.ChatID, s.Tg.Verify.WhatChat(), s.Tg.Verify.OfChat())
+	return id, nil
+}
+
+// askForChat has the person post a code in the group until the bot sees it
+// there and the group is not the channel itself. A chatID already known and
+// distinct from the channel is returned as it is.
+func askForChat(ctx context.Context, bot *Bot, chatID, channelID int64, name string, say Prompter) (int64, error) {
+	s := xystrings.Default
+	for chatID == 0 || chatID == channelID {
+		if chatID == channelID {
+			say("%s", s.Tg.Resolve.SameChannel())
+		}
+		code := shortCode()
+		say("%s", s.Tg.Resolve.GroupCode(name, code))
+		say("%s", s.Tg.Resolve.GroupCodeHint())
+		var err error
+		if chatID, err = bot.WaitForChatMessage(ctx, code, promptTimeout); err != nil {
+			return 0, fmt.Errorf("chat %s: %w", name, err)
+		}
+	}
+	return chatID, nil
+}
+
+// verifyTarget checks the bot may post to both the channel and the chat.
+func verifyTarget(ctx context.Context, bot *Bot, t Target) error {
+	s := xystrings.Default
+	if err := verifyAccess(ctx, bot, t.ChannelID, s.Tg.Verify.WhatChannel(), s.Tg.Verify.OfChannel()); err != nil {
+		return err
+	}
+	return verifyAccess(ctx, bot, t.ChatID, s.Tg.Verify.WhatChat(), s.Tg.Verify.OfChat())
 }
 
 // introduce is chgksuite's authenticate_user: before asking the person to do
@@ -127,7 +167,7 @@ func introduce(ctx context.Context, bot *Bot, say Prompter) error {
 	s := xystrings.Default
 	code := shortCode()
 	say("%s", s.Tg.Resolve.PrivateCode(code))
-	chatID, err := bot.WaitForCode(ctx, code, 5*time.Minute)
+	chatID, err := bot.WaitForCode(ctx, code, promptTimeout)
 	if err != nil {
 		return fmt.Errorf("authentication: %w", err)
 	}
@@ -172,7 +212,7 @@ func verifyAccess(ctx context.Context, bot *Bot, chatID, dative, genitive string
 // shortCode is a one-off word the person types back, so the bot knows which
 // message is theirs.
 func shortCode() string {
-	return strconv.FormatInt(time.Now().UnixNano()%0xFFFFFFF, 16)
+	return strconv.FormatInt(time.Now().UnixNano()%shortCodeRange, hexBase)
 }
 
 // resolveCachePath is where the ids of named channels are kept, beside
@@ -204,8 +244,8 @@ func saveResolveCache(cache map[string]int64) {
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
-	_ = os.WriteFile(path, data, 0o600)
+	_ = os.MkdirAll(filepath.Dir(path), cacheDirMode)
+	_ = os.WriteFile(path, data, cacheFileMode)
 }
 
 // DryRunTarget is where a dry run pretends to post: the ids it was given, or
@@ -217,5 +257,6 @@ func DryRunTarget(channelRef, chatRef string) Target {
 		}
 		return prefixed(fallback)
 	}
-	return Target{ChannelID: id(channelRef, 1111111111), ChatID: id(chatRef, 2222222222)}
+	return Target{ChannelID: id(channelRef, dryRunChannelID), ChatID: id(chatRef, dryRunChatID)}
+
 }

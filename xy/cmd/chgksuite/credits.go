@@ -32,13 +32,7 @@ func creditsCmd(args []string) error {
 		return fmt.Errorf("credits takes one file, or - for stdin")
 	}
 	in := fs.Arg(0)
-	var data []byte
-	var err error
-	if in == "-" {
-		data, err = io.ReadAll(os.Stdin)
-	} else {
-		data, err = os.ReadFile(in)
-	}
+	data, err := readInput(in)
 	if err != nil {
 		return err
 	}
@@ -52,4 +46,12 @@ func creditsCmd(args []string) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetEscapeHTML(false)
 	return enc.Encode(c)
+}
+
+// readInput reads the file at in, or stdin when in is "-".
+func readInput(in string) ([]byte, error) {
+	if in == "-" {
+		return io.ReadAll(os.Stdin)
+	}
+	return os.ReadFile(in)
 }

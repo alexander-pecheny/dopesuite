@@ -19,13 +19,16 @@ import (
 //
 // The pool is built once and reused: compiling the module is the expensive part.
 
+// maxTypstPool is the most typst instances the pool holds.
+const maxTypstPool = 4
+
 // typstPoolSize bounds concurrent renders. split_fit fits its blocks in parallel,
 // so a single instance would serialise the slowest path we have; each instance
 // costs its own linear memory, so this is capped rather than unbounded.
 func typstPoolSize() int {
 	n := runtime.NumCPU()
-	if n > 4 {
-		n = 4
+	if n > maxTypstPool {
+		n = maxTypstPool
 	}
 	if n < 1 {
 		n = 1

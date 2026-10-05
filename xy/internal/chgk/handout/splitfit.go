@@ -35,6 +35,15 @@ func pdfConf() *model.Configuration {
 // also measure; with one that cannot, image blocks simply keep their given size.
 const splitFitMaxRows = 256
 
+const (
+	// truncEpsilon keeps a float that should be whole from flooring one below.
+	truncEpsilon = 1e-9
+	// resizeTolerance is how close two resize factors must be to count as equal.
+	resizeTolerance = 1e-4
+	// hundredths scales a value to two decimals.
+	hundredths = 100
+)
+
 // newSFRun loads the run's images into the typesetter.
 func newSFRun(ctx context.Context, images map[string][]byte, a Args, ts Typesetter) (*sfRun, error) {
 	if err := ts.SetImages(ctx, images); err != nil {
@@ -222,18 +231,18 @@ func (b sfBlock) handoutsPerTeam() int {
 			return n
 		}
 	}
-	return 3
+	return defaultHandoutsPerTeam
 }
 
 func (b sfBlock) maxWidth() float64 {
-	if f, err := strconv.ParseFloat(b.meta["max_width"], 64); err == nil && f > 0 {
+	if f, err := strconv.ParseFloat(b.meta["max_width"], floatBits); err == nil && f > 0 {
 		return f
 	}
 	return 1
 }
 
 func (b sfBlock) maxWidthMultiplier() int {
-	m := int(1.0/b.maxWidth() + 1e-9)
+	m := int(1.0/b.maxWidth() + truncEpsilon)
 	if m < 1 {
 		m = 1
 	}
@@ -449,7 +458,7 @@ func (r *sfRun) fitBlock(ctx context.Context, b sfBlock) (int, map[string]*strin
 		return rows, b.resizeUpdate(resize), nil
 	}
 
-	shrink := 1 - cfg.ShrinkPercent/100
+	shrink := 1 - cfg.ShrinkPercent/percent
 	for {
 		bottom, onePage, err := r.bottomSpace(ctx, ms, b, rows, resize)
 		if err != nil {
@@ -474,7 +483,7 @@ func (r *sfRun) fitBlock(ctx context.Context, b sfBlock) (int, map[string]*strin
 				improvedRows = n
 				break
 			}
-			if math.Abs(trial-cfg.MinResizeImage) < 1e-4 {
+			if math.Abs(trial-cfg.MinResizeImage) < resizeTolerance {
 				break
 			}
 		}
@@ -532,7 +541,7 @@ func (r *sfRun) maxResizeForRows(ctx context.Context, b sfBlock, rows int, low, 
 
 // resizeImage is the block's own resize_image, 1.0 by default.
 func (b sfBlock) resizeImage() float64 {
-	if f, err := strconv.ParseFloat(b.meta["resize_image"], 64); err == nil && f > 0 {
+	if f, err := strconv.ParseFloat(b.meta["resize_image"], floatBits); err == nil && f > 0 {
 		return f
 	}
 	return 1
@@ -546,7 +555,7 @@ func (b sfBlock) resizeUpdate(resize float64) map[string]*string {
 		return nil
 	}
 	_, explicit := b.meta["resize_image"]
-	if !explicit && math.Abs(resize-1) < 1e-4 {
+	if !explicit && math.Abs(resize-1) < resizeTolerance {
 		return nil
 	}
 	return map[string]*string{"resize_image": ptr(formatFloat(resize))}
@@ -554,7 +563,7 @@ func (b sfBlock) resizeUpdate(resize float64) map[string]*string {
 
 // formatFloat ports format_float: two decimals, floored, trailing zeros dropped.
 func formatFloat(v float64) string {
-	s := strconv.FormatFloat(math.Floor(v*100+1e-9)/100, 'f', 2, 64)
+	s := strconv.FormatFloat(math.Floor(v*hundredths+truncEpsilon)/hundredths, 'f', 2, floatBits)
 	s = strings.TrimRight(s, "0")
 	return strings.TrimRight(s, ".")
 }

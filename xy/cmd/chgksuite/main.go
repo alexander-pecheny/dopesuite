@@ -7,6 +7,12 @@ import (
 	"os"
 )
 
+// outputFileMode is the permission every file the command writes gets.
+const outputFileMode = 0o644
+
+// floatBits is the precision strconv formats and parses floats at.
+const floatBits = 64
+
 // command is one line of the usage: what to type, what it takes, what it does.
 type command struct {
 	verb, args, what string

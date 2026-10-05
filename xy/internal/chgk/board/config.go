@@ -25,6 +25,13 @@ const (
 
 const trelloHost = "trello.com"
 
+const (
+	// configDirMode is the config folder; privateFileMode keeps tokens and
+	// board metadata readable by the owner only.
+	configDirMode   = 0o755
+	privateFileMode = 0o600
+)
+
 // Board is a board to talk to.
 type Board struct {
 	Service    Service
@@ -101,7 +108,7 @@ func suiteDir() (string, error) {
 		return "", err
 	}
 	dir := filepath.Join(home, ".chgksuite")
-	return dir, os.MkdirAll(dir, 0o755)
+	return dir, os.MkdirAll(dir, configDirMode)
 }
 
 func tokensPath() (string, error) {
@@ -137,7 +144,7 @@ func SetTokenFor(host, token string) error {
 	for _, h := range sortedKeys(tokens) {
 		b.WriteString("[[tokens]]\nhost = " + tomlString(h) + "\ntoken = " + tomlString(tokens[h]) + "\n\n")
 	}
-	return os.WriteFile(path, []byte(b.String()), 0o600)
+	return os.WriteFile(path, []byte(b.String()), privateFileMode)
 }
 
 func loadTokens() (map[string]string, error) {
@@ -188,7 +195,7 @@ func migrateLegacyTrelloToken() error {
 	path, _ := tokensPath()
 	if _, err := os.Stat(path); err != nil && token != "" {
 		if err := os.WriteFile(path,
-			[]byte("[[tokens]]\nhost = "+tomlString(trelloHost)+"\ntoken = "+tomlString(token)+"\n\n"), 0o600); err != nil {
+			[]byte("[[tokens]]\nhost = "+tomlString(trelloHost)+"\ntoken = "+tomlString(token)+"\n\n"), privateFileMode); err != nil {
 			return err
 		}
 	}
@@ -238,7 +245,7 @@ func WriteMetadata(folder string, m Metadata) error {
 	if m.Passphrase != "" {
 		b += "passphrase = " + tomlString(m.Passphrase) + "\n"
 	}
-	return os.WriteFile(metadataPath(folder), []byte(b), 0o600)
+	return os.WriteFile(metadataPath(folder), []byte(b), privateFileMode)
 }
 
 func migrateLegacyBoardID(folder string) error {

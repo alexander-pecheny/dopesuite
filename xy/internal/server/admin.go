@@ -45,12 +45,18 @@ func sameOrigin(r *http.Request) bool {
 	return u.Host == r.Host
 }
 
+// The length limits on a username, in bytes.
+const (
+	usernameMinLen = 3
+	usernameMaxLen = 64
+)
+
 // adminUsernameRe allows the same shape the rest of the app uses for logins:
 // letters, digits, and ._- (length is checked separately).
 var adminUsernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 func validNewUsername(name string) bool {
-	return len(name) >= 3 && len(name) <= 64 && adminUsernameRe.MatchString(name)
+	return len(name) >= usernameMinLen && len(name) <= usernameMaxLen && adminUsernameRe.MatchString(name)
 }
 
 // adminIndexDoc builds the /admin landing page: a link list of admin tools.

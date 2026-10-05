@@ -6,8 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // The Timeline: a Card's comments, the word-level record of its description

@@ -7,6 +7,7 @@
 package typo
 
 import (
+	"encoding/hex"
 	"regexp"
 	"strings"
 	"unicode"
@@ -51,20 +52,7 @@ func httpURLSpans(s string) []span {
 			i += sz
 			continue
 		}
-		j := i + 1
-		bracket := 0
-		for j < len(s) {
-			r, sz := utf8.DecodeRuneInString(s[j:])
-			if unicode.IsSpace(r) || (r == ')' && bracket == 0) {
-				break
-			}
-			if r == '(' {
-				bracket++
-			} else if r == ')' && bracket > 0 {
-				bracket--
-			}
-			j += sz
-		}
+		j := httpURLEnd(s, i)
 		end := j
 		if j > i {
 			if last := s[j-1]; last == ',' || last == '.' || last == ';' {
@@ -75,6 +63,26 @@ func httpURLSpans(s string) []span {
 		i = j
 	}
 	return out
+}
+
+// httpURLEnd is where the URL starting at i stops: at a space, or at a closing
+// parenthesis it did not open.
+func httpURLEnd(s string, i int) int {
+	j := i + 1
+	bracket := 0
+	for j < len(s) {
+		r, sz := utf8.DecodeRuneInString(s[j:])
+		if unicode.IsSpace(r) || (r == ')' && bracket == 0) {
+			break
+		}
+		if r == '(' {
+			bracket++
+		} else if r == ')' && bracket > 0 {
+			bracket--
+		}
+		j += sz
+	}
+	return j
 }
 
 // HasURL reports whether a string carries anything iter_url_spans calls a URL,
@@ -444,17 +452,6 @@ func fixAccents(s string, on bool) string {
 
 var rePercent = regexp.MustCompile(`(%[0-9a-fA-F]{2})+`)
 
-func unhex(b byte) byte {
-	switch {
-	case b >= '0' && b <= '9':
-		return b - '0'
-	case b >= 'a' && b <= 'f':
-		return b - 'a' + 10
-	default:
-		return b - 'A' + 10
-	}
-}
-
 // PercentDecode ports typotools.percent_decode: percent-escapes that decode to
 // valid UTF-8 are turned back into text (chgk sources are full of pasted
 // Wikipedia URLs). Longest runs first, so a shorter run can't clobber a longer.
@@ -467,10 +464,8 @@ func PercentDecode(s string) string {
 		}
 	}
 	for _, g := range groups {
-		buf := make([]byte, 0, len(g)/3)
-		for i := 0; i+2 < len(g); i += 3 {
-			buf = append(buf, unhex(g[i+1])<<4|unhex(g[i+2]))
-		}
+		// rePercent guarantees two hex digits after every %.
+		buf, _ := hex.DecodeString(strings.ReplaceAll(g, "%", ""))
 		if !utf8.Valid(buf) {
 			continue // Python raises and leaves the escape in place
 		}

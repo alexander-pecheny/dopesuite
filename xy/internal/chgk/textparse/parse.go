@@ -24,6 +24,25 @@ import (
 
 const sep = "\n"
 
+// What "smart" mode takes for a package whose question numbers stand on lines
+// of their own: between these many elements per numbered line, and numbers
+// that follow each other at most numberLineGap apart.
+const (
+	minElemsPerNumber = 4.0
+	maxElemsPerNumber = 13.0
+	numberLineGap     = 3
+)
+
+// What searchForDate accepts as a package's date.
+const (
+	day         = 24 * time.Hour
+	minDateYear = 1980
+	// dateHorizon is how far ahead a date may lie, for a package announced early.
+	dateHorizon = 365 * day
+	// dateShare is the fraction of a header line the date must fill: 1/dateShare.
+	dateShare = 10
+)
+
 // elem is one [type, content] pair of the working structure. content is a string
 // for all but a handful of elements (a source can become a list of references).
 type elem struct {
@@ -426,24 +445,7 @@ func (p *parser) processSingleNumberLines(mode string) {
 	if mode == "off" {
 		return
 	}
-	type numLine struct {
-		idx, num int
-	}
-	var lines []numLine
-	for i, e := range p.structure {
-		if e.Type != "" {
-			continue
-		}
-		m := reNumOnly.FindStringSubmatch(strings.TrimSpace(e.str()))
-		if m == nil {
-			continue
-		}
-		n, err := strconv.Atoi(m[1])
-		if err != nil {
-			continue
-		}
-		lines = append(lines, numLine{i, n})
-	}
+	lines := p.numberLines()
 	patch := func(l numLine) {
 		p.structure[l.idx].Type = "question"
 		// question_stub for ru: "Question {}."
@@ -465,17 +467,42 @@ func (p *parser) processSingleNumberLines(mode string) {
 		return
 	}
 	frac := float64(len(p.structure)) / float64(len(lines))
-	if frac < 4.0 || frac > 13.0 {
+	if frac < minElemsPerNumber || frac > maxElemsPerNumber {
 		return
 	}
 	var prev *numLine
 	for i := range lines {
 		l := lines[i]
-		if prev == nil || (l.num-prev.num <= 3 && l.idx-prev.idx > 1) {
+		if prev == nil || (l.num-prev.num <= numberLineGap && l.idx-prev.idx > 1) {
 			patch(l)
 			prev = &lines[i]
 		}
 	}
+}
+
+// numLine is an untyped element that holds nothing but a number.
+type numLine struct {
+	idx, num int
+}
+
+// numberLines finds the elements that are only a number.
+func (p *parser) numberLines() []numLine {
+	var lines []numLine
+	for i, e := range p.structure {
+		if e.Type != "" {
+			continue
+		}
+		m := reNumOnly.FindStringSubmatch(strings.TrimSpace(e.str()))
+		if m == nil {
+			continue
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		lines = append(lines, numLine{i, n})
+	}
+	return lines
 }
 
 // dupletBlitzHack ports the "duplet"/"blitz" special case (chgksuite issue #23).
@@ -744,7 +771,7 @@ func (p *parser) detectInnerList(e *elem) {
 // isPySpace matches Python's \s (Unicode-aware, so NBSP counts).
 func isPySpace(r rune) bool {
 	switch r {
-	case ' ', '\t', '\n', '\r', '\v', '\f', 0x00a0:
+	case ' ', '\t', '\n', '\r', '\v', '\f', ' ':
 		return true
 	}
 	return false
@@ -848,8 +875,8 @@ func (p *parser) searchForDate(s string) string {
 			if err != nil {
 				continue
 			}
-			today := p.now.Truncate(24 * time.Hour)
-			if d.Year() >= 1980 && (d.Before(today) || d.Sub(today) <= 365*24*time.Hour) {
+			today := p.now.Truncate(day)
+			if d.Year() >= minDateYear && (d.Before(today) || d.Sub(today) <= dateHorizon) {
 				return m
 			}
 		}
@@ -901,7 +928,8 @@ func (p *parser) headerPass(final fsource.Doc) fsource.Doc {
 		if !ok {
 			continue
 		}
-		n := float64(utf8.RuneCountInString(content)) / 10
+		n := float64(utf8.RuneCountInString(content)) / dateShare
+
 		if m := p.rx.field("date2").FindString(content); m != "" && float64(utf8.RuneCountInString(m)) >= n {
 			makeDate(i)
 			dateDefined = true

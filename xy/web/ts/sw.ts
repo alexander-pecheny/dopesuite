@@ -31,6 +31,9 @@ declare const __PRECACHE__: string[];
 declare const __SHELL_VERSION__: string;
 const CACHE = __SHELL_VERSION__;
 const PRECACHE: string[] = __PRECACHE__;
+const HTTP_NOT_FOUND = 404;
+const HTTP_UNAVAILABLE = 503;
+const HTTP_GATEWAY_TIMEOUT = 504;
 
 sw.addEventListener("install", (event) => {
   event.waitUntil(
@@ -76,7 +79,7 @@ async function networkFirstNavigation(request: Request): Promise<Response> {
     }
     const home = await cache.match("/");
     if (home) return home;
-    return new Response("Офлайн", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    return new Response("Офлайн", { status: HTTP_UNAVAILABLE, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 }
 
@@ -112,7 +115,7 @@ async function networkFirstStatic(request: Request): Promise<Response> {
     return resp;
   } catch (_) {
     const cached = await cache.match(request, { ignoreSearch: true });
-    return cached || new Response("", { status: 504 });
+    return cached || new Response("", { status: HTTP_GATEWAY_TIMEOUT });
   }
 }
 
@@ -146,7 +149,7 @@ function rfc6266(disposition: string, filename: string): string {
 
 function serveDownload(path: string): Response {
   const hit = downloads.get(path);
-  if (!hit) return new Response("", { status: 404 });
+  if (!hit) return new Response("", { status: HTTP_NOT_FOUND });
   return new Response(hit.blob, {
     headers: {
       "Content-Type": hit.blob.type || "application/octet-stream",

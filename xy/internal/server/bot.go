@@ -16,6 +16,13 @@ import (
 	xystrings "xy/i18nstrings"
 )
 
+// botPollTimeout is how long one long poll waits for an update; the HTTP
+// timeout leaves room on top of it for the round trip.
+const (
+	botPollTimeout = 60 * time.Second
+	botHTTPTimeout = 70 * time.Second
+)
+
 // xy's login bot runs here, in the server process. It used to be its own
 // systemd unit that reached these same code paths over loopback HTTP behind a
 // shared secret, and answered a second loopback endpoint about its own health —
@@ -45,8 +52,8 @@ func (s *server) startBot(ctx context.Context) {
 	}
 	s.bot = tgbot.New(tgbot.Config{
 		Token:          token,
-		PollTimeout:    60 * time.Second,
-		HTTPTimeout:    70 * time.Second,
+		PollTimeout:    botPollTimeout,
+		HTTPTimeout:    botHTTPTimeout,
 		AllowedUpdates: []string{"message"},
 	})
 	log.Printf("telegram bot %s polling (token %s)", buildinfo.Version(), tgbot.TokenHash(token))

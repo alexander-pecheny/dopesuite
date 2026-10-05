@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	xystrings "xy/i18nstrings"
-	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/handout"
 	"xy/internal/chgk/htmlshot"
 	"xy/internal/chgk/i18n"
@@ -43,6 +43,16 @@ func handouts(args []string) error {
 	}
 }
 
+const (
+	// a4WidthMM is the width of an A4 page.
+	a4WidthMM = 210.0
+	// handoutMarginMM is the margin the handout renderer leaves on each side.
+	handoutMarginMM = 5
+)
+
+// handoutFractions are the shares of the page create_html lays a handout out for.
+var handoutFractions = []string{"1/6", "1/3", "1/2", "1"}
+
 // handoutsGenerate is 4s2hndt: a packet's handout brackets
 // into the .hndt the renderer reads.
 func handoutsGenerate(args []string) error {
@@ -52,33 +62,35 @@ func handoutsGenerate(args []string) error {
 	separate := fs.Bool("separate", false, "a file per question instead of one for the packet")
 	listHandouts := fs.Bool("list_handouts", false, "also write which questions have a handout")
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
 		return fmt.Errorf("handouts generate takes exactly one .4s file")
 	}
 	in := fs.Arg(0)
-	src, err := os.ReadFile(in)
+	doc, err := parseSource(in)
 	if err != nil {
 		return err
 	}
 	dir := filepath.Dir(in)
-	base := strings.TrimSuffix(filepath.Base(in), filepath.Ext(in))
-	files, warnings, err := handout.Generate(fsource.Parse(string(src), gameOf(in)), base, dir,
+	files, warnings, err := handout.Generate(doc, stem(in), dir,
 		handout.GenerateOptions{Language: *language, Separate: *separate, ListHandouts: *listHandouts})
 	if err != nil {
 		return err
 	}
+	return writeGenerated(dir, files, warnings)
+}
+
+// writeGenerated reports what handout.Generate warned about and writes the
+// .hndt files it made into dir.
+func writeGenerated(dir string, files []handout.File, warnings []handout.Warning) error {
 	for _, w := range warnings {
 		warn("%s", xystrings.Default.Chgkcli.Handouts.WarnQuestion(w.Number, w.Text))
 	}
 	for _, f := range files {
 		out := filepath.Join(dir, f.Name)
-		if err := os.WriteFile(out, []byte(f.Content), 0o644); err != nil {
+		if err := os.WriteFile(out, []byte(f.Content), outputFileMode); err != nil {
 			return err
 		}
 		reportOutput(out)
@@ -123,10 +135,7 @@ func handoutsRun(args []string) error {
 	read := handoutArgs(fs)
 	watch := fs.Bool("watch", false, "re-render whenever the file changes; Ctrl-C to stop")
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
@@ -153,7 +162,7 @@ func handoutsRun(args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(out, pdf, 0o644); err != nil {
+		if err := os.WriteFile(out, pdf, outputFileMode); err != nil {
 			return err
 		}
 		reportOutput(out)
@@ -214,6 +223,23 @@ func handoutsInstall(args []string) error {
 	return nil
 }
 
+// handoutWidthMM is how wide a handout taking fraction of the page is: an A4
+// page less the margins the renderer uses, times that fraction.
+func handoutWidthMM(fraction string) (float64, error) {
+	if !slices.Contains(handoutFractions, fraction) {
+		return 0, fmt.Errorf("%q is not one of 1/6, 1/3, 1/2, 1", fraction)
+	}
+	share := 1.0
+	if _, den, ok := strings.Cut(fraction, "/"); ok {
+		n, err := strconv.Atoi(den)
+		if err != nil {
+			return 0, err
+		}
+		share /= float64(n)
+	}
+	return (a4WidthMM - 2*handoutMarginMM) * share, nil
+}
+
 // handoutsCreateHTML is create_html: the scaffold for a handout laid out by
 // hand in a browser rather than by the .hndt format.
 func handoutsCreateHTML(args []string) error {
@@ -226,13 +252,10 @@ func handoutsCreateHTML(args []string) error {
 	if fs.NArg() != 1 {
 		return fmt.Errorf("handouts create_html takes a fraction of the page: 1/6, 1/3, 1/2 or 1")
 	}
-	widths := map[string]float64{"1/6": 1.0 / 6, "1/3": 1.0 / 3, "1/2": 0.5, "1": 1}
-	share, ok := widths[fs.Arg(0)]
-	if !ok {
-		return fmt.Errorf("%q is not one of 1/6, 1/3, 1/2, 1", fs.Arg(0))
+	widthMM, err := handoutWidthMM(fs.Arg(0))
+	if err != nil {
+		return err
 	}
-	// A4 less the 5 mm margins the renderer uses.
-	widthMM := (210.0 - 2*5) * share
 	name := *output
 	if name == "" {
 		name = "handout_" + strings.ReplaceAll(fs.Arg(0), "/", "_") + ".html"
@@ -240,16 +263,22 @@ func handoutsCreateHTML(args []string) error {
 	if _, err := os.Stat(name); err == nil {
 		return fmt.Errorf("%s", xystrings.Default.Chgkcli.Handouts.AlreadyExists(name))
 	}
-	family := *font
+	return writeHandoutHTML(name, *font, widthMM, fs.Arg(0))
+}
+
+// writeHandoutHTML writes the create_html scaffold for a handout widthMM wide
+// in font family (empty is the browser's sans-serif), and says what it made.
+func writeHandoutHTML(name, family string, widthMM float64, fraction string) error {
 	if family == "" {
 		family = "sans-serif"
 	}
-	html := fmt.Sprintf(htmlHandoutTemplate, strconv.FormatFloat(widthMM, 'f', 1, 64), family)
-	if err := os.WriteFile(name, []byte(html), 0o644); err != nil {
+	width := strconv.FormatFloat(widthMM, 'f', 1, floatBits)
+	html := fmt.Sprintf(htmlHandoutTemplate, width, family)
+	if err := os.WriteFile(name, []byte(html), outputFileMode); err != nil {
 		return err
 	}
 	reportOutput(name)
-	reportNote("%s", xystrings.Default.Chgkcli.Handouts.HtmlGeometryNote(strconv.FormatFloat(widthMM, 'f', 1, 64), fs.Arg(0)))
+	reportNote("%s", xystrings.Default.Chgkcli.Handouts.HtmlGeometryNote(width, fraction))
 	return nil
 }
 
@@ -261,10 +290,7 @@ func handoutsHTML2Img(args []string) error {
 	browser := fs.String("browser", override("browser", ""),
 		"the chromium to render with; empty looks for one (also $CHGKSUITE_BROWSER)")
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
@@ -278,9 +304,9 @@ func handoutsHTML2Img(args []string) error {
 		return err
 	}
 	reportOutput(res.PDF)
-	reportNote("%s", xystrings.Default.Chgkcli.Handouts.DimensionsNote(strconv.FormatFloat(res.WidthMM, 'f', 1, 64), strconv.FormatFloat(res.HeightMM, 'f', 1, 64)))
+	reportNote("%s", xystrings.Default.Chgkcli.Handouts.DimensionsNote(strconv.FormatFloat(res.WidthMM, 'f', 1, floatBits), strconv.FormatFloat(res.HeightMM, 'f', 1, floatBits)))
 	reportOutput(res.PNG)
-	reportNote("%s", xystrings.Default.Chgkcli.Handouts.ScaleNote(strconv.FormatFloat(*scale, 'g', -1, 64)))
+	reportNote("%s", xystrings.Default.Chgkcli.Handouts.ScaleNote(strconv.FormatFloat(*scale, 'g', -1, floatBits)))
 	return nil
 }
 
@@ -312,15 +338,36 @@ const htmlHandoutTemplate = `<!DOCTYPE html>
 </html>
 `
 
+// splitFitZip reads the .hndt at in and its pictures, and fits its blocks
+// into the zip split_fit writes.
+func splitFitZip(in string, a handout.Args, typstBin string) ([]byte, error) {
+	hndt, images, err := readHandoutSource(in)
+	if err != nil {
+		return nil, err
+	}
+	ts, closeTS, err := typesetter(typstBin)
+	if err != nil {
+		return nil, err
+	}
+	defer closeTS()
+	return handout.SplitFit(context.Background(), hndt, images, a, ts)
+}
+
+// splitFitOutput is where split_fit writes the zip for in: into dir, or
+// beside in when dir is empty.
+func splitFitOutput(in, dir string) string {
+	if dir == "" {
+		dir = filepath.Dir(in)
+	}
+	return filepath.Join(dir, stem(in)+"_split_fit.zip")
+}
+
 func handoutsSplitFit(args []string) error {
 	fs := newFlagSet("handouts split_fit")
 	read := handoutArgs(fs)
 	outputDir := fs.String("output_dir", "", "where to write the zip; empty is beside the input")
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
@@ -331,25 +378,12 @@ func handoutsSplitFit(args []string) error {
 		return err
 	}
 	in := fs.Arg(0)
-	hndt, images, err := readHandoutSource(in)
+	zipped, err := splitFitZip(in, a, typstBin)
 	if err != nil {
 		return err
 	}
-	ts, closeTS, err := typesetter(typstBin)
-	if err != nil {
-		return err
-	}
-	defer closeTS()
-	zipped, err := handout.SplitFit(context.Background(), hndt, images, a, ts)
-	if err != nil {
-		return err
-	}
-	dir := *outputDir
-	if dir == "" {
-		dir = filepath.Dir(in)
-	}
-	out := filepath.Join(dir, strings.TrimSuffix(filepath.Base(in), filepath.Ext(in))+"_split_fit.zip")
-	if err := os.WriteFile(out, zipped, 0o644); err != nil {
+	out := splitFitOutput(in, *outputDir)
+	if err := os.WriteFile(out, zipped, outputFileMode); err != nil {
 		return err
 	}
 	reportOutput(out)
@@ -392,10 +426,7 @@ func handoutsPack(args []string) error {
 	read := handoutArgs(fs)
 	compress := fs.String("compress_pdf", "on", "compress the merged PDF: on|off")
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if *nTeams <= 0 {
@@ -465,7 +496,7 @@ func handoutsPack(args []string) error {
 			return err
 		}
 		path := filepath.Join(folder, *prefix+out.suffix)
-		if err := os.WriteFile(path, merged, 0o644); err != nil {
+		if err := os.WriteFile(path, merged, outputFileMode); err != nil {
 			return err
 		}
 		reportOutput(path)

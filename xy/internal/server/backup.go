@@ -11,11 +11,17 @@ import (
 	"path/filepath"
 )
 
+// A backup holds every board's data, so only its owner may read it.
+const (
+	backupDirMode  = 0o700
+	backupFileMode = 0o600
+)
+
 // backup writes a restorable pair into dest: a checkpointed copy of the database
 // and the blob tree it references. Both halves or nothing — restoring xy.db alone
 // leaves every attachment a dangling ref.
 func (s *server) backup(ctx context.Context, dest string) error {
-	if err := os.MkdirAll(dest, 0o700); err != nil {
+	if err := os.MkdirAll(dest, backupDirMode); err != nil {
 		return err
 	}
 	dbPath := filepath.Join(dest, "xy.db")
@@ -46,7 +52,7 @@ func copyTree(src, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {
-			return os.MkdirAll(target, 0o700)
+			return os.MkdirAll(target, backupDirMode)
 		}
 		if err := os.Link(path, target); err == nil {
 			return nil
@@ -61,7 +67,7 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, backupFileMode)
 	if err != nil {
 		return err
 	}

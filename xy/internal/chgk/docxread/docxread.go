@@ -24,6 +24,37 @@ import (
 	"xy/internal/chgk/typo"
 )
 
+// maxMarkedHeading is the deepest heading that gets a $$H$$ marker.
+const maxMarkedHeading = 3
+
+// How many underscores spell each combined emphasis in 4s markup.
+const (
+	underlineMarks          = 3
+	boldItalicMarks         = 4
+	boldUnderlineMarks      = 5
+	boldItalicUnderlineMark = 6
+)
+
+// minCellWidth is the narrowest column a Markdown table is drawn with.
+const minCellWidth = 3
+
+// The line boundaries Python's str.splitlines breaks at besides \r, \n, \v, \f.
+const (
+	fileSeparator   = 0x1c
+	groupSeparator  = 0x1d
+	recordSeparator = 0x1e
+	nextLine        = 0x85
+	lineSeparator   = 0x2028
+	paraSeparator   = 0x2029
+)
+
+// A percent escape is "%" and two hex digits.
+const (
+	percentEscapeLen = 3
+	hexDigitBits     = 4
+	hexLetterBase    = 10 // the value of 'a'
+)
+
 // Image is one image extracted from the document. Unlike chgksuite (which writes
 // them next to the source file), we hand them back in memory.
 type Image struct {
@@ -162,7 +193,7 @@ func (c *converter) paragraphText(p *node) string {
 	// A heading marker replaces the list prefix: the SI and troika parsers read
 	// the document's own outline, and a heading that is also a list item is a
 	// heading first.
-	if level := c.headingLevel(p); c.opts.HeadingMarkers && level >= 1 && level <= 3 {
+	if level := c.headingLevel(p); c.opts.HeadingMarkers && level >= 1 && level <= maxMarkedHeading {
 		c.breakListIfNeeded()
 		return fmt.Sprintf("$$H%d$$ %s", level, text)
 	}
@@ -249,8 +280,12 @@ func (c *converter) hyperlinkText(hyperlink *node) string {
 		}
 		return href
 	}
-	// links="unwrap": keep the anchor text, and append the href only when the
-	// text does not already show the URL.
+	return unwrapLink(out, plain, href)
+}
+
+// unwrapLink is links="unwrap": keep the anchor text, and append the href only
+// when the text does not already show the URL.
+func unwrapLink(out, plain, href string) string {
 	if strings.HasPrefix(plain, "http") {
 		return out
 	}
@@ -354,13 +389,13 @@ func runFormatting(run *node) (bold, italic, underline bool) {
 func formatMarker(bold, italic, underline bool) string {
 	switch {
 	case italic && bold && underline:
-		return strings.Repeat("_", 6)
+		return strings.Repeat("_", boldItalicUnderlineMark)
 	case bold && underline:
-		return strings.Repeat("_", 5)
+		return strings.Repeat("_", boldUnderlineMarks)
 	case bold && italic:
-		return strings.Repeat("_", 4)
+		return strings.Repeat("_", boldItalicMarks)
 	case underline:
-		return strings.Repeat("_", 3)
+		return strings.Repeat("_", underlineMarks)
 	case bold:
 		return "__"
 	case italic:
@@ -632,28 +667,7 @@ func markdownTable(rows [][]string) string {
 	if len(rows) == 0 {
 		return ""
 	}
-	maxCols := 0
-	for _, row := range rows {
-		if len(row) > maxCols {
-			maxCols = len(row)
-		}
-	}
-	for i, row := range rows {
-		for len(row) < maxCols {
-			row = append(row, "")
-		}
-		rows[i] = row
-	}
-	widths := make([]int, maxCols)
-	for col := 0; col < maxCols; col++ {
-		w := 0
-		for _, row := range rows {
-			if n := utf8.RuneCountInString(row[col]); n > w {
-				w = n
-			}
-		}
-		widths[col] = max(w+2, 3)
-	}
+	widths := columnWidths(padRows(rows))
 	line := func(row []string) string {
 		var b strings.Builder
 		b.WriteString("|")
@@ -666,21 +680,49 @@ func markdownTable(rows [][]string) string {
 		b.WriteString("|")
 		return b.String()
 	}
-	lines := []string{line(rows[0])}
-	var sep strings.Builder
-	sep.WriteString("|")
+	// The rule under the header is a row of dashes as wide as each column.
+	dashes := make([]string, len(widths))
 	for i, w := range widths {
-		if i > 0 {
-			sep.WriteString("|")
-		}
-		sep.WriteString(strings.Repeat("-", w))
+		dashes[i] = strings.Repeat("-", w)
 	}
-	sep.WriteString("|")
-	lines = append(lines, sep.String())
+	lines := []string{line(rows[0]), line(dashes)}
 	for _, row := range rows[1:] {
+
 		lines = append(lines, line(row))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// padRows gives every row as many cells as the widest one.
+func padRows(rows [][]string) [][]string {
+	maxCols := 0
+	for _, row := range rows {
+		if len(row) > maxCols {
+			maxCols = len(row)
+		}
+	}
+	for i, row := range rows {
+		for len(row) < maxCols {
+			row = append(row, "")
+		}
+		rows[i] = row
+	}
+	return rows
+}
+
+// columnWidths is each column's widest cell plus a space either side.
+func columnWidths(rows [][]string) []int {
+	widths := make([]int, len(rows[0]))
+	for col := range widths {
+		w := 0
+		for _, row := range rows {
+			if n := utf8.RuneCountInString(row[col]); n > w {
+				w = n
+			}
+		}
+		widths[col] = max(w+2, minCellWidth)
+	}
+	return widths
 }
 
 // centerCell pads by code points, not bytes — the cells are mostly Cyrillic.
@@ -761,7 +803,7 @@ func splitLines(s string) []string {
 			if i+sz < len(s) && s[i+sz] == '\n' {
 				brk = sz + 1
 			}
-		case '\n', '\v', '\f', 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029:
+		case '\n', '\v', '\f', fileSeparator, groupSeparator, recordSeparator, nextLine, lineSeparator, paraSeparator:
 			brk = sz
 		}
 		if brk > 0 {
@@ -793,8 +835,8 @@ func unquote(s string) string {
 		}
 		var raw []byte
 		for i+2 < len(s) && s[i] == '%' && isHex(s[i+1]) && isHex(s[i+2]) {
-			raw = append(raw, unhex(s[i+1])<<4|unhex(s[i+2]))
-			i += 3
+			raw = append(raw, unhex(s[i+1])<<hexDigitBits|unhex(s[i+2]))
+			i += percentEscapeLen
 		}
 		for len(raw) > 0 {
 			r, sz := utf8.DecodeRune(raw)
@@ -814,8 +856,8 @@ func unhex(c byte) byte {
 	case c >= '0' && c <= '9':
 		return c - '0'
 	case c >= 'a' && c <= 'f':
-		return c - 'a' + 10
+		return c - 'a' + hexLetterBase
 	default:
-		return c - 'A' + 10
+		return c - 'A' + hexLetterBase
 	}
 }

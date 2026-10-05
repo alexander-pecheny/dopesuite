@@ -23,10 +23,7 @@ func composePDF(args []string) error {
 	merge := fs.Bool("merge", false, "export the input files as one packet")
 	noBreak := noBreakFlags(fs)
 	config := configFlag(fs)
-	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-	if err := applyConfig(fs, *config); err != nil {
+	if err := parseConfigured(fs, args, *config); err != nil {
 		return err
 	}
 	if *device != "desktop" && *device != "mobile" {
@@ -75,7 +72,7 @@ func composePDF(args []string) error {
 		}
 		if *rawTypst {
 			typ := outputName(s.path, "typ", suffix, *addTS == "on")
-			if err := os.WriteFile(typ, []byte(typstdoc.GenerateTyp(s.doc, images, opts)), 0o644); err != nil {
+			if err := os.WriteFile(typ, []byte(typstdoc.GenerateTyp(s.doc, images, opts)), outputFileMode); err != nil {
 				return err
 			}
 			reportOutput(typ)
@@ -85,7 +82,7 @@ func composePDF(args []string) error {
 			return err
 		}
 		out := outputName(s.path, "pdf", suffix, *addTS == "on")
-		if err := os.WriteFile(out, data, 0o644); err != nil {
+		if err := os.WriteFile(out, data, outputFileMode); err != nil {
 			return err
 		}
 		reportOutput(out)

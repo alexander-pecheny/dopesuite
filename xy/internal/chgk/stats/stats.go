@@ -19,6 +19,12 @@ import (
 	"xy/internal/chgk/fsource"
 )
 
+const (
+	percent = 100
+	// allQuestions is the upper bound of an empty question range.
+	allQuestions = 9999
+)
+
 // Result is one team's row of a results table: the mask is one character per
 // question, "1" for taken.
 type Result struct {
@@ -88,7 +94,7 @@ func Add(doc fsource.Doc, results []Result, o Options) error {
 		scored := taken[qnumber]
 		// Python's round() is half-to-even, and a package where exactly an
 		// eighth of the field took a question would round the other way here.
-		percent := int(math.RoundToEven(float64(scored) / float64(total) * 100))
+		percent := int(math.RoundToEven(float64(scored) / float64(total) * percent))
 		message := s.Stats.Question.Line(o.Label, strconv.Itoa(scored), strconv.Itoa(total),
 			strconv.Itoa(percent))
 		if scored > 0 && scored <= o.TeamNamingThreshold {
@@ -142,7 +148,7 @@ func patchQuestion(q *fsource.Question, message string) {
 
 func parseRange(s string) (int, int, error) {
 	if s == "" {
-		return 1, 9999, nil
+		return 1, allQuestions, nil
 	}
 	from, to, ok := strings.Cut(s, "-")
 	if !ok {

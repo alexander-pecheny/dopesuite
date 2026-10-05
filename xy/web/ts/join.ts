@@ -2,7 +2,7 @@
 // is and what the link can still do for you, and joining is one button. A link
 // carries membership only: what you get here is the right to fetch the board's
 // ciphertext, and the passphrase still has to reach you from a person.
-import { xyApp } from "./app.js";
+import { xyApp, HTTP_UNAUTHORIZED } from "./app.js";
 import S from "./i18nstrings.js";
 
 const { jpost, el, byId, errMsg } = xyApp;
@@ -73,7 +73,7 @@ async function main(): Promise<void> {
   const res = await fetch(`/api/board-invites/code/${encodeURIComponent(code)}`, { credentials: "same-origin" });
   // Logged out is the common case for a link pasted into a messenger: go and log
   // in, and come back HERE rather than to the board list.
-  if (res.status === 401) {
+  if (res.status === HTTP_UNAUTHORIZED) {
     location.replace(`/login?next=${encodeURIComponent(`/join/${code}`)}`);
     return;
   }

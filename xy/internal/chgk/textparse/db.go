@@ -29,8 +29,8 @@ type Fetcher func(url, name string) error
 // IsDBExport reports whether a .txt is db.chgk.info's export rather than a
 // package written by hand; chgksuite decides on the first ten characters.
 func IsDBExport(text string) bool {
-	r := []rune(text)
-	return len(r) >= 10 && string(r[:10]) == "Чемпионат:"
+	return strings.HasPrefix(text, "Чемпионат:")
+
 }
 
 // dbPicBaseURL and dbAudBaseURL are where db.chgk.info keeps what its exports

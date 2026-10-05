@@ -210,16 +210,7 @@ func ForRE2(pattern string) string {
 		c := pattern[i]
 		switch {
 		case c == '\\' && i+1 < len(pattern):
-			if pattern[i+1] == 's' {
-				if inClass {
-					out.WriteString(`\s\x{00a0}`)
-				} else {
-					out.WriteString(`[\s\x{00a0}]`)
-				}
-			} else {
-				out.WriteByte(c)
-				out.WriteByte(pattern[i+1])
-			}
+			out.WriteString(re2Escape(pattern[i+1], inClass))
 			i++
 		case c == '[' && !inClass:
 			inClass = true
@@ -232,6 +223,19 @@ func ForRE2(pattern string) string {
 		}
 	}
 	return out.String()
+}
+
+// re2Escape is the RE2 for the escape \<next>: \s gains U+00A0, anything else
+// stays as it is.
+func re2Escape(next byte, inClass bool) string {
+	switch {
+	case next != 's':
+		return string([]byte{'\\', next})
+	case inClass:
+		return `\s\x{00a0}`
+	default:
+		return `[\s\x{00a0}]`
+	}
 }
 
 func orDefault(language string) string {

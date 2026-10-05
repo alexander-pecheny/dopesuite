@@ -5,7 +5,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
+
+	"pecheny.me/dopecore/idstr"
+)
+
+// The state holds data keys, so only its owner may read it.
+const (
+	stateDirMode  = 0o700
+	stateFileMode = 0o600
 )
 
 // State is what xy-cli remembers between commands: one instance, its API token,
@@ -77,19 +84,19 @@ func LoadState() (*State, error) {
 
 // Save writes the state back, owner-readable only.
 func (s *State) Save() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), stateDirMode); err != nil {
 		return err
 	}
 	raw, err := json.MarshalIndent(s, "", " ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, append(raw, '\n'), 0o600)
+	return os.WriteFile(s.path, append(raw, '\n'), stateFileMode)
 }
 
 // Key returns the held data key of a board.
 func (s *State) Key(boardID int64) (DataKey, bool) {
-	held, ok := s.Boards[strconv.FormatInt(boardID, 10)]
+	held, ok := s.Boards[idstr.Format(boardID)]
 	if !ok {
 		return nil, false
 	}
@@ -102,9 +109,9 @@ func (s *State) Key(boardID int64) (DataKey, bool) {
 
 // Hold remembers a board's key; Forget drops it.
 func (s *State) Hold(boardID int64, name string, dk DataKey) {
-	s.Boards[strconv.FormatInt(boardID, 10)] = HeldKey{Name: name, DK: b64enc(dk)}
+	s.Boards[idstr.Format(boardID)] = HeldKey{Name: name, DK: b64enc(dk)}
 }
 
 func (s *State) Forget(boardID int64) {
-	delete(s.Boards, strconv.FormatInt(boardID, 10))
+	delete(s.Boards, idstr.Format(boardID))
 }

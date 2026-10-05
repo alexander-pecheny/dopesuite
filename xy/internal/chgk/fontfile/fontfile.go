@@ -3,28 +3,55 @@
 package fontfile
 
 import (
+	"encoding/binary"
 	"os"
 	"unicode/utf16"
+)
+
+// The sfnt table directory.
+const (
+	offsetTableLen = 12 // sfnt version, numTables and the search hints
+	numTablesAt    = 4
+	tableRecordLen = 16
+	tagLen         = 4
+	tableOffsetAt  = 8
+	tableLengthAt  = 12
+)
+
+// The "name" table.
+const (
+	nameHeaderLen   = 6 // format, count, stringOffset
+	nameStorageAt   = 4
+	nameRecordLen   = 12
+	nameEncodingAt  = 2
+	nameIDAt        = 6
+	nameLengthAt    = 8
+	nameOffsetAt    = 10
+	nameIDFamily    = 1
+	nameIDTypoFam   = 16
+	platformUnicode = 0
+	platformMac     = 1
+	platformWindows = 3
 )
 
 // Tables indexes a font file's table directory. A collection is not handled:
 // the faces this looks for are single fonts.
 func Tables(data []byte) map[string][]byte {
 	out := map[string][]byte{}
-	if len(data) < 12 {
+	if len(data) < offsetTableLen {
 		return out
 	}
-	count := int(Be16(data[4:]))
+	count := int(Be16(data[numTablesAt:]))
 	for i := range count {
-		rec := 12 + i*16
-		if rec+16 > len(data) {
+		rec := offsetTableLen + i*tableRecordLen
+		if rec+tableRecordLen > len(data) {
 			break
 		}
-		offset, length := int(be32(data[rec+8:])), int(be32(data[rec+12:]))
+		offset, length := int(be32(data[rec+tableOffsetAt:])), int(be32(data[rec+tableLengthAt:]))
 		if offset < 0 || length < 0 || offset+length > len(data) {
 			continue
 		}
-		out[string(data[rec:rec+4])] = data[offset : offset+length]
+		out[string(data[rec:rec+tagLen])] = data[offset : offset+length]
 	}
 	return out
 }
@@ -45,45 +72,47 @@ func Family(path string) (string, error) {
 // FamilyOf is Family for bytes already in hand.
 func FamilyOf(data []byte) string {
 	name := Tables(data)["name"]
-	if len(name) < 6 {
+	if len(name) < nameHeaderLen {
 		return ""
 	}
-	count, storage := int(Be16(name[2:])), int(Be16(name[4:]))
+	count, storage := int(Be16(name[2:])), int(Be16(name[nameStorageAt:]))
 	byID := map[int]string{}
 	for i := range count {
-		rec := 6 + i*12
-		if rec+12 > len(name) {
+		rec := nameHeaderLen + i*nameRecordLen
+		if rec+nameRecordLen > len(name) {
 			break
 		}
-		platform, encoding, nameID := int(Be16(name[rec:])), int(Be16(name[rec+2:])), int(Be16(name[rec+6:]))
-		if nameID != 1 && nameID != 16 {
+		platform, nameID, s := readNameRecord(name, rec, storage)
+		if nameID != nameIDFamily && nameID != nameIDTypoFam || s == "" {
 			continue
 		}
-		length, offset := int(Be16(name[rec+8:])), int(Be16(name[rec+10:]))
-		from := storage + offset
-		if from < 0 || from+length > len(name) {
-			continue
-		}
-		raw := name[from : from+length]
-		// Windows and the modern Mac tables are UTF-16BE; the old Mac Roman one
-		// is bytes.
-		var s string
-		if platform == 3 || platform == 0 || (platform == 1 && encoding != 0) {
-			s = decodeUTF16BE(raw)
-		} else {
-			s = string(raw)
-		}
-		if s == "" {
-			continue
-		}
-		if _, seen := byID[nameID]; !seen || platform == 3 {
+		if _, seen := byID[nameID]; !seen || platform == platformWindows {
 			byID[nameID] = s
 		}
 	}
-	if s := byID[16]; s != "" {
+	if s := byID[nameIDTypoFam]; s != "" {
 		return s
 	}
-	return byID[1]
+	return byID[nameIDFamily]
+}
+
+// readNameRecord decodes the name record at rec; s is empty when the string
+// lies outside the table.
+func readNameRecord(name []byte, rec, storage int) (platform, nameID int, s string) {
+	platform, encoding := int(Be16(name[rec:])), int(Be16(name[rec+nameEncodingAt:]))
+	nameID = int(Be16(name[rec+nameIDAt:]))
+	length, offset := int(Be16(name[rec+nameLengthAt:])), int(Be16(name[rec+nameOffsetAt:]))
+	from := storage + offset
+	if from < 0 || from+length > len(name) {
+		return platform, nameID, ""
+	}
+	raw := name[from : from+length]
+	// Windows and the modern Mac tables are UTF-16BE; the old Mac Roman one
+	// is bytes.
+	if platform == platformWindows || platform == platformUnicode || (platform == platformMac && encoding != 0) {
+		return platform, nameID, decodeUTF16BE(raw)
+	}
+	return platform, nameID, string(raw)
 }
 
 func decodeUTF16BE(b []byte) string {
@@ -95,7 +124,5 @@ func decodeUTF16BE(b []byte) string {
 }
 
 // Be16 reads a big-endian uint16, which is how every field of a font is stored.
-func Be16(b []byte) uint16 { return uint16(b[0])<<8 | uint16(b[1]) }
-func be32(b []byte) uint32 {
-	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
-}
+func Be16(b []byte) uint16 { return binary.BigEndian.Uint16(b) }
+func be32(b []byte) uint32 { return binary.BigEndian.Uint32(b) }

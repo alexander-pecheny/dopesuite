@@ -13,7 +13,7 @@
 // The List is the unit of atomicity: a unit that fails takes its own lists down
 // with it and the ones before it stay. The caller reports which is which.
 
-import { xyApp } from "./app.js";
+import { xyApp, ISO_DATE_LEN } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { parseSession, serializeSession } from "./sessions.js";
@@ -22,6 +22,9 @@ import { bundleUnits } from "./bundle.js";
 import type { Bundle, BundleAttachment, BundleEvent, BundleUnit } from "./bundle.js";
 import type { DataKey } from "./crypto.js";
 import S from "./i18nstrings.js";
+
+// Log a progress line every this many cards.
+const PROGRESS_EVERY_CARDS = 20;
 
 const { jpost, jput, jdelete, errMsg } = xyApp;
 const { keyBetween } = xyRank;
@@ -179,7 +182,7 @@ export async function applyBundle(
       }
       meta = serializeSession({
         ...parsed,
-        origin: parsed.origin || { board: append.sourceName, at: bundle.exported_at.slice(0, 10) },
+        origin: parsed.origin || { board: append.sourceName, at: bundle.exported_at.slice(0, ISO_DATE_LEN) },
       });
     }
     const res = (await jpost(`/api/boards/${boardId}/sessions`, { meta_enc: await enc(meta) })) as { id: number };
@@ -264,7 +267,7 @@ export async function applyBundle(
         if (c.seen) body.seen_enc = await enc(c.seen);
         const res = (await jpost(`/api/lists/${listMap.get(c.list_id)}/cards`, body)) as { id: number };
         cardMap.set(c.id, res.id);
-        if (++done % 20 === 0) log(S.import.apply.cards(unit.title, String(done), String(cards.length)));
+        if (++done % PROGRESS_EVERY_CARDS === 0) log(S.import.apply.cards(unit.title, String(done), String(cards.length)));
       });
       const ours = new Set(cards.map((c) => c.id));
 

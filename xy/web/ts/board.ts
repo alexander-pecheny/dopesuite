@@ -59,6 +59,11 @@ import type { PreviewCardLike } from "./carddetail.js";
 import { icon, iconed } from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
+// How often an open board re-checks the test-mode dwell and its badge.
+const TEST_DWELL_POLL_MS = 60_000;
+// Quiet time after the last change before the search index is rebuilt.
+const REINDEX_DEBOUNCE_MS = 800;
+
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, byId, errMsg, deriveTitle, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
 
@@ -484,7 +489,7 @@ window.addEventListener("pagehide", () => testDwell.check());
 window.setInterval(() => {
   testDwell.check();
   updateTestBadge();
-}, 60_000);
+}, TEST_DWELL_POLL_MS);
 
 // ---- 🔔 bell: the badge and the panel of recent other-authored activity ----
 const bell = createBell(board, { toggle: byId("notifToggle"), badge: byId("notifBadge") }, {
@@ -531,7 +536,7 @@ function scheduleReindex(): void {
       lists.map((l) => ({ id: l.id, title: l.title })),
       cards.map((c) => ({ id: c.id, list: c.listId, kind: c.kind, desc: c.desc, alias: c.alias || "" })),
     );
-  }, 800);
+  }, REINDEX_DEBOUNCE_MS);
 }
 
 function render(): void {

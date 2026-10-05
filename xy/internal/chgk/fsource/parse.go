@@ -153,6 +153,10 @@ var requiredLabels = []string{"question", "answer"}
 
 const overridePrefix = "!!"
 
+// themeFirstNumber is where chgksuite restarts question numbering at each
+// theme outside troika.
+const themeFirstNumber = 10
+
 // ── whitespace normalisation (typotools.remove_excessive_whitespace) ──
 // WHITESPACE = {space, newline, nbsp(U+00A0)}.
 var (
@@ -222,35 +226,32 @@ var reSetCounter = regexp.MustCompile(`set 4SCOUNTER([0-9a-zA-Z_]*) = ([0-9+]+)`
 
 func replaceCounters(s string) string {
 	dd := map[string]int{}
-	get := func(id string) int {
-		if _, ok := dd[id]; !ok {
-			dd[id] = 1
-		}
-		return dd[id]
-	}
 	for {
 		loc := reCounterUnify.FindStringSubmatchIndex(s)
 		if loc == nil {
-			break
+			return s
 		}
-		matched := s[loc[0]:loc[1]]
-		if reSetCounter.MatchString(matched) {
-			m := reSetCounter.FindStringSubmatch(matched)
-			id := m[1]
-			// counter_value is [0-9+]+; Python int() of e.g. "3" → 3 (it never
-			// actually contains '+', the regex just tolerates it).
-			val, _ := strconv.Atoi(strings.TrimRight(m[2], "+"))
-			dd[id] = val
-			s = s[:loc[0]] + s[loc[1]:]
-		} else {
-			m := reCounterUnify.FindStringSubmatch(matched)
-			id := m[2]
-			v := get(id)
-			s = s[:loc[0]] + strconv.Itoa(v) + s[loc[1]:]
-			dd[id] = v + 1
-		}
+		s = s[:loc[0]] + expandCounter(s[loc[0]:loc[1]], dd) + s[loc[1]:]
 	}
-	return s
+}
+
+// expandCounter is what one counter macro is replaced with: nothing for a
+// "set", which only moves the counter, and the next value for a use.
+func expandCounter(matched string, dd map[string]int) string {
+	if m := reSetCounter.FindStringSubmatch(matched); m != nil {
+		// counter_value is [0-9+]+; Python int() of e.g. "3" → 3 (it never
+		// actually contains '+', the regex just tolerates it).
+		val, _ := strconv.Atoi(strings.TrimRight(m[2], "+"))
+		dd[m[1]] = val
+		return ""
+	}
+	id := reCounterUnify.FindStringSubmatch(matched)[2]
+	v, ok := dd[id]
+	if !ok {
+		v = 1
+	}
+	dd[id] = v + 1
+	return strconv.Itoa(v)
 }
 
 // ── process_list: detect "- " list markers and reshape content ──
@@ -381,7 +382,7 @@ func Parse(s string, game string) Doc {
 				if game == "troika" {
 					counter = 1
 				} else {
-					counter = 10
+					counter = themeFirstNumber
 				}
 			case (game == "brain" || game == "troika") && (e.Type == "battle" || e.Type == "section"):
 				counter = 1
@@ -419,17 +420,24 @@ func mergeField(cur, elem any) any {
 		}
 		return elem
 	case curIsList && elemIsList:
-		if len(curList) >= 2 && len(elemList) >= 2 {
-			curList[0] = toStr(curList[0]) + "\n" + toStr(elemList[0])
-			if a, ok := curList[1].([]any); ok {
-				if b, ok := elemList[1].([]any); ok {
-					curList[1] = append(a, b...)
-				}
-			}
-		}
-		return curList
+		return mergeLists(curList, elemList)
 	}
 	return cur
+}
+
+// mergeLists joins two [intro, items] fields: the intros by a line break, the
+// items one after the other.
+func mergeLists(curList, elemList []any) []any {
+	if len(curList) < 2 || len(elemList) < 2 {
+		return curList
+	}
+	curList[0] = toStr(curList[0]) + "\n" + toStr(elemList[0])
+	if a, ok := curList[1].([]any); ok {
+		if b, ok := elemList[1].([]any); ok {
+			curList[1] = append(a, b...)
+		}
+	}
+	return curList
 }
 
 func toStr(v any) string {

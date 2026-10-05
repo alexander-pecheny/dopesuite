@@ -25,7 +25,7 @@ func Paragraph(text string) Block { return Block{Text: text} }
 // Simple renders the blocks into the template, as Export renders a package.
 // opts is read for --font and --docx_template only.
 func Simple(blocks []Block, opts Options) ([]byte, error) {
-	e := &exporter{nextRel: 7, nextDoc: 1000, opts: opts}
+	e := &exporter{nextRel: firstFreeRel, nextDoc: firstDocPrID, opts: opts}
 	var body strings.Builder
 	for _, b := range blocks {
 		p := &para{style: b.Style}

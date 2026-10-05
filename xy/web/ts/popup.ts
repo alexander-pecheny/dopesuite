@@ -5,6 +5,11 @@
 // floats on <body> at a fixed spot. These stay OFF the overlay stack: they claim
 // Escape in the CAPTURE phase, closing before whatever they were opened from.
 
+// Keep the popup this far from the viewport edges.
+const VIEWPORT_MARGIN = 8;
+// Space between the anchor and the popup.
+const ANCHOR_GAP = 4;
+
 export interface AnchoredPopup {
   close(): void;
 }
@@ -20,11 +25,11 @@ interface PopupDeps {
 
 export function place(node: HTMLElement, anchor: HTMLElement, align: "start" | "end" = "end"): void {
   const r = anchor.getBoundingClientRect();
-  const pad = 8;
+  const pad = VIEWPORT_MARGIN;
   const want = align === "start" ? r.left : r.right - node.offsetWidth;
   const left = Math.max(pad, Math.min(want, window.innerWidth - node.offsetWidth - pad));
-  let top = r.bottom + 4;
-  if (top + node.offsetHeight > window.innerHeight - pad) top = Math.max(pad, r.top - node.offsetHeight - 4);
+  let top = r.bottom + ANCHOR_GAP;
+  if (top + node.offsetHeight > window.innerHeight - pad) top = Math.max(pad, r.top - node.offsetHeight - ANCHOR_GAP);
   node.style.left = left + "px";
   node.style.top = top + "px";
 }

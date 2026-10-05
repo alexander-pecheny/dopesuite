@@ -9,13 +9,29 @@ import (
 	"image/jpeg"
 	"log"
 	"math"
-	"strconv"
 	"time"
 
 	"golang.org/x/image/draw"
 
+	"pecheny.me/dopecore/idstr"
 	"pecheny.me/dopecore/tgbot"
 	"xy/internal/chgk/imgconv"
+)
+
+const (
+	// discussionSettle is how long a channel post is given to reach the group.
+	discussionSettle = 90 * time.Second
+	// postPace is the pause between posts, chgksuite's cadence.
+	postPace = 5 * time.Second
+)
+
+// What prepareImage holds a picture to, after prepare_image_for_telegram.
+const (
+	maxSidesSum   = 10000 // width plus height Telegram accepts for a photo
+	shrunkMaxSide = 1000  // the longest side once a picture had to be shrunk
+	photoQuality  = 95
+	maxSideRatio  = 20 // Telegram refuses a photo this lopsided
+	paddedRatio   = 19 // the ratio padExtremeRatio pads a sliver out to
 )
 
 // client posts through the Bot API, with the bot above watching for the copies
@@ -38,7 +54,7 @@ func NewPoster(bot *Bot, t Target) (Poster, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &client{bot: bot, settle: 90 * time.Second, pace: 5 * time.Second,
+	return &client{bot: bot, settle: discussionSettle, pace: postPace,
 		channel: channel, chat: chat}, nil
 }
 
@@ -71,50 +87,31 @@ func (d *dryRun) Call(_ context.Context, method string, data map[string]any) err
 func (d *dryRun) id() int64 { d.nextID++; return d.nextID }
 
 func numericID(s string) (int64, error) {
-	n, err := strconv.ParseInt(s, 10, 64)
+	n, err := idstr.Parse(s)
 	if err != nil {
 		return 0, fmt.Errorf("not a telegram id: %q", s)
 	}
 	return n, nil
 }
 
+type richMedia struct {
+	ID    string            `json:"id"`
+	Media map[string]string `json:"media"`
+}
+
 func (c *client) PostRich(ctx context.Context, chatID, html string, media []Media, replyTo int64) (int64, error) {
-	type richMedia struct {
-		ID    string            `json:"id"`
-		Media map[string]string `json:"media"`
-	}
 	rich := map[string]any{"html": html}
-	var files []tgbot.FilePart
-	var items []richMedia
-	for _, m := range media {
-		data, err := prepareImage(m.Data, richImgAspect)
-		if err != nil {
-			return 0, fmt.Errorf("picture %s: %w", m.Name, err)
-		}
-		field := "f" + m.ID
-		files = append(files, tgbot.FilePart{Field: field, Filename: m.ID + ".jpg", Data: data})
-		items = append(items, richMedia{ID: m.ID, Media: map[string]string{
-			"type": "photo", "media": "attach://" + field,
-		}})
+	files, items, err := richAttachments(media)
+	if err != nil {
+		return 0, err
 	}
 	if len(items) > 0 {
 		rich["media"] = items
 	}
 
 	var res json.RawMessage
-	var err error
 	if len(files) > 0 {
-		blob, jsonErr := json.Marshal(rich)
-		if jsonErr != nil {
-			return 0, jsonErr
-		}
-		fields := map[string]string{
-			"chat_id": chatID, "rich_message": string(blob), "disable_notification": "true",
-		}
-		if replyTo != 0 {
-			fields["reply_parameters"] = fmt.Sprintf(`{"message_id":%d}`, replyTo)
-		}
-		res, err = c.bot.Client().CallMultipart(ctx, "sendRichMessage", fields, files)
+		res, err = c.sendRichMultipart(ctx, chatID, rich, files, replyTo)
 	} else {
 		payload := map[string]any{
 			"chat_id": chatID, "rich_message": rich, "disable_notification": true,
@@ -129,6 +126,41 @@ func (c *client) PostRich(ctx context.Context, chatID, html string, media []Medi
 	}
 	c.wait(ctx)
 	return messageID(res)
+}
+
+// richAttachments prepares the pictures of a rich message as uploads, with
+// the media entries that point the message at them.
+func richAttachments(media []Media) ([]tgbot.FilePart, []richMedia, error) {
+	var files []tgbot.FilePart
+	var items []richMedia
+	for _, m := range media {
+		data, err := prepareImage(m.Data, richImgAspect)
+		if err != nil {
+			return nil, nil, fmt.Errorf("picture %s: %w", m.Name, err)
+		}
+		field := "f" + m.ID
+		files = append(files, tgbot.FilePart{Field: field, Filename: m.ID + ".jpg", Data: data})
+		items = append(items, richMedia{ID: m.ID, Media: map[string]string{
+			"type": "photo", "media": "attach://" + field,
+		}})
+	}
+	return files, items, nil
+}
+
+// sendRichMultipart sends a rich message together with its pictures, which
+// makes every field a string.
+func (c *client) sendRichMultipart(ctx context.Context, chatID string, rich map[string]any, files []tgbot.FilePart, replyTo int64) (json.RawMessage, error) {
+	blob, err := json.Marshal(rich)
+	if err != nil {
+		return nil, err
+	}
+	fields := map[string]string{
+		"chat_id": chatID, "rich_message": string(blob), "disable_notification": "true",
+	}
+	if replyTo != 0 {
+		fields["reply_parameters"] = fmt.Sprintf(`{"message_id":%d}`, replyTo)
+	}
+	return c.bot.Client().CallMultipart(ctx, "sendRichMessage", fields, files)
 }
 
 func (c *client) PostText(ctx context.Context, chatID, text string, replyTo int64) (int64, error) {
@@ -193,16 +225,16 @@ func prepareImage(raw []byte, padAspect float64) ([]byte, error) {
 	}
 	img = padToAspect(img, padAspect)
 	img = padExtremeRatio(img)
-	if b := img.Bounds(); b.Dx()+b.Dy() >= 10000 {
-		f := 10000.0 / float64(b.Dx()+b.Dy())
+	if b := img.Bounds(); b.Dx()+b.Dy() >= maxSidesSum {
+		f := maxSidesSum / float64(b.Dx()+b.Dy())
 		w, h := int(float64(b.Dx())*f), int(float64(b.Dy())*f)
-		if m := max(w, h); m > 1000 {
-			w, h = w*1000/m, h*1000/m
+		if m := max(w, h); m > shrunkMaxSide {
+			w, h = w*shrunkMaxSide/m, h*shrunkMaxSide/m
 		}
 		img = scale(img, max(w, 1), max(h, 1))
 	}
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95}); err != nil {
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: photoQuality}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -238,14 +270,14 @@ func padToAspect(img image.Image, aspect float64) image.Image {
 func padExtremeRatio(img image.Image) image.Image {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
-	if w == 0 || h == 0 || float64(max(w, h))/float64(min(w, h)) < 20 {
+	if w == 0 || h == 0 || float64(max(w, h))/float64(min(w, h)) < maxSideRatio {
 		return img
 	}
 	nw, nh := w, h
 	if w > h {
-		nh = w / 19
+		nh = w / paddedRatio
 	} else {
-		nw = h / 19
+		nw = h / paddedRatio
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, nw, nh))
 	draw.Draw(dst, dst.Bounds(), image.White, image.Point{}, draw.Src)

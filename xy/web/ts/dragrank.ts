@@ -4,6 +4,7 @@
 // lists; dragAfterIn/dragAfterInX are the only DOM-aware adapters.
 
 import { xyRank } from "./rank.js";
+import { DECIMAL_RADIX } from "./app.js";
 
 const { keyBetween } = xyRank;
 
@@ -81,7 +82,7 @@ export function slotBounds(cards: readonly RankedCard[], posValue: string, exclu
   if (posValue === "end" || posValue === "") {
     prev = arr.length ? arr[arr.length - 1] : undefined;
   } else {
-    const k = parseInt(posValue, 10);
+    const k = parseInt(posValue, DECIMAL_RADIX);
     prev = k >= 2 ? arr[k - 2] : undefined;
     next = k - 1 < arr.length ? arr[k - 1] : undefined;
   }

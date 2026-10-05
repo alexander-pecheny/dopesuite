@@ -278,11 +278,11 @@ func (in *instance) measureOn(ctx context.Context, typ string) (int, float64, er
 	if err != nil {
 		return 0, 0, err
 	}
-	pages := int(binary.LittleEndian.Uint32(buf[1:5]))
+	pages := int(binary.LittleEndian.Uint32(buf[1:resultHeaderLen]))
 	if buf[0] != 1 {
-		return pages, 0, fmt.Errorf("typst: %s", buf[5:])
+		return pages, 0, fmt.Errorf("typst: %s", buf[resultHeaderLen:])
 	}
-	y, err := strconv.ParseFloat(strings.TrimSpace(string(buf[5:])), 64)
+	y, err := strconv.ParseFloat(strings.TrimSpace(string(buf[resultHeaderLen:])), floatBits)
 	if err != nil {
 		return pages, 0, fmt.Errorf("measure: %w", err)
 	}
@@ -291,7 +291,7 @@ func (in *instance) measureOn(ctx context.Context, typ string) (int, float64, er
 
 // readResult copies the guest's (ptr << 32) | len result buffer out and frees it.
 func (in *instance) readResult(ctx context.Context, packed uint64) ([]byte, error) {
-	ptr, size := uint32(packed>>32), uint32(packed)
+	ptr, size := uint32(packed>>resultLenBits), uint32(packed)
 	out, ok := in.mod.Memory().Read(ptr, size)
 	if !ok {
 		return nil, errors.New("result outside guest memory")
@@ -299,11 +299,20 @@ func (in *instance) readResult(ctx context.Context, packed uint64) ([]byte, erro
 	buf := make([]byte, len(out))
 	copy(buf, out) // the guest frees the original next
 	in.free(ctx, ptr, size)
-	if len(buf) < 5 {
+	if len(buf) < resultHeaderLen {
 		return nil, errors.New("short result")
 	}
 	return buf, nil
 }
+
+// A guest result starts with a status byte (1 = ok) and the page count as a
+// little-endian uint32; the payload follows. The call itself returns the
+// buffer as (ptr << resultLenBits) | len.
+const (
+	resultHeaderLen = 5
+	resultLenBits   = 32
+	floatBits       = 64
+)
 
 // What the guest's compile returns besides the page count.
 const (
@@ -327,9 +336,9 @@ func (in *instance) compileOn(ctx context.Context, typ string, want uint64) ([]b
 	if err != nil {
 		return nil, 0, err
 	}
-	pages := int(binary.LittleEndian.Uint32(buf[1:5]))
+	pages := int(binary.LittleEndian.Uint32(buf[1:resultHeaderLen]))
 	if buf[0] != 1 {
-		return nil, pages, fmt.Errorf("typst: %s", buf[5:])
+		return nil, pages, fmt.Errorf("typst: %s", buf[resultHeaderLen:])
 	}
-	return buf[5:], pages, nil
+	return buf[resultHeaderLen:], pages, nil
 }

@@ -8,6 +8,20 @@ import (
 	"xy/internal/chgk/inline"
 )
 
+const (
+	// imageShareOfBox: a picture beside or above the text gets a third of
+	// the box (two thirds in big mode).
+	imageShareOfBox = 3
+	// estCharWidthEm is chgksuite's guess at a character's width, in ems,
+	// when there is no font to measure with.
+	estCharWidthEm = 0.35
+)
+
+// centerOffset is how far in from the outer edge an inner length is centred.
+func centerOffset(outer, inner int64) int64 {
+	return int64(float64(outer-inner) / 2)
+}
+
 // A picture on a slide is either the question's own — laid beside or above the
 // text, taking a third of the box unless it is marked big — or an inline one,
 // which is drawn where its placeholder of non-breaking spaces ended up.
@@ -181,7 +195,7 @@ func (e *exporter) makeSlideLayout(image *slideImage, s *slidePart, allowBigImag
 	bigMode := image.big && !e.cfg.textIsDuplicated() && allowBigImage
 	var left, top, width, high, imgLeft, imgTop int64
 	if image.width/image.height < 1 { // a tall picture stands beside the text
-		maxWidth := baseWidth / 3
+		maxWidth := baseWidth / imageShareOfBox
 		if bigMode {
 			maxWidth *= 2
 		}
@@ -196,9 +210,9 @@ func (e *exporter) makeSlideLayout(image *slideImage, s *slidePart, allowBigImag
 		left, top = baseLeft+imgWidth+spaceAfter, baseTop
 		width, high = max64(baseWidth-imgWidth-spaceAfter, 0), baseHigh
 		imgLeft = baseLeft
-		imgTop = baseTop + int64(0.5*float64(baseHigh-imgHigh))
+		imgTop = baseTop + centerOffset(baseHigh, imgHigh)
 	} else { // a wide one sits above it
-		maxHigh := baseHigh / 3
+		maxHigh := baseHigh / imageShareOfBox
 		if bigMode {
 			maxHigh *= 2
 		}
@@ -213,7 +227,7 @@ func (e *exporter) makeSlideLayout(image *slideImage, s *slidePart, allowBigImag
 		left, top = baseLeft, baseTop+imgHigh+spaceAfter
 		width, high = baseWidth, max64(baseHigh-imgHigh-spaceAfter, 0)
 		imgTop = baseTop
-		imgLeft = baseLeft + int64(0.5*float64(baseWidth-imgWidth))
+		imgLeft = baseLeft + centerOffset(baseWidth, imgWidth)
 	}
 	s.addPicture(e.pkg, image.name, image.data, imgLeft, imgTop, imgWidth, imgHigh)
 	return s.addTextbox(left, top, width, high)
@@ -239,8 +253,8 @@ func (e *exporter) addSlideWithImage(image *slideImage, number string) {
 		imgHigh = baseHigh
 	}
 	s.addPicture(e.pkg, image.name, image.data,
-		baseLeft+int64(0.5*float64(baseWidth-imgWidth)),
-		baseTop+int64(0.5*float64(baseHigh-imgHigh)),
+		baseLeft+centerOffset(baseWidth, imgWidth),
+		baseTop+centerOffset(baseHigh, imgHigh),
 		imgWidth, imgHigh)
 }
 
@@ -288,7 +302,7 @@ func (e *exporter) inlinePlaceholder(p *paragraph, width float64) string {
 		spaceWidth = face.width(" ", size)
 	}
 	if spaceWidth == 0 {
-		spaceWidth = ptToPx(size) * 0.35
+		spaceWidth = ptToPx(size) * estCharWidthEm
 	}
 	return strings.Repeat(" ", max(1, roundHalf(width*pxPerInch/math.Max(spaceWidth, 1))))
 }
@@ -312,7 +326,7 @@ func (e *exporter) placeInlineImages(t *textbox, s *slidePart) {
 
 	originX := emuToPx(t.tf.marginLeft)
 	y := emuToPx(t.tf.marginTop)
-	maxWidth := innerWidth(t) * 0.99
+	maxWidth := innerWidth(t) * fitSlack
 
 	for _, p := range t.tf.paragraphs {
 		y += ptToPx(p.spaceBefore)
@@ -353,7 +367,7 @@ func (e *exporter) tokenWidthOrEstimate(p *paragraph, t token) float64 {
 	if w, ok := e.runTextWidth(t.run, p, t.text); ok {
 		return w
 	}
-	return float64(len([]rune(t.text))) * ptToPx(e.effectiveRunSize(t.run, p)) * 0.35
+	return float64(len([]rune(t.text))) * ptToPx(e.effectiveRunSize(t.run, p)) * estCharWidthEm
 }
 
 func min64(a, b int64) int64 {

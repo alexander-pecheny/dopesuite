@@ -6,6 +6,18 @@ import (
 	"strings"
 )
 
+// chgksuite's fallbacks, in points, for the keys a config may leave out.
+const (
+	defaultFontPt       = 32
+	titleFontPt         = 60
+	handoutFontPt       = 42
+	smallestFontPt      = 14
+	handoutSpaceAfterPt = 18
+)
+
+// latinLetters is the base of the a, b, …, z, aa, ab list markers.
+const latinLetters = 26
+
 // The getters below are chgksuite's, one for one: each falls back the way the
 // Python does, which is why they read the config rather than a struct of
 // defaults — an absent key and a zero are different things here.
@@ -106,7 +118,7 @@ func (c *Config) fontSizeForText(role, text, key string, fallback float64) float
 }
 
 func (c *Config) smallestSize() float64 {
-	return tableNumOr(c.table("text_size_grid"), "smallest", 14)
+	return tableNumOr(c.table("text_size_grid"), "smallest", smallestFontPt)
 }
 
 func (c *Config) textbox() map[string]any       { return c.table("textbox") }
@@ -116,7 +128,9 @@ func (c *Config) list() map[string]any          { return c.table("list") }
 
 func (c *Config) includeHandoutLabel() bool  { return tableBool(c.handout(), "include_label", false) }
 func (c *Config) handoutImageScale() float64 { return tableNumOr(c.handout(), "image_scale", 1) }
-func (c *Config) handoutSpaceAfter() float64 { return tableNumOr(c.handout(), "space_after", 18) }
+func (c *Config) handoutSpaceAfter() float64 {
+	return tableNumOr(c.handout(), "space_after", handoutSpaceAfterPt)
+}
 
 // handoutTextSpaceAfter is _get_pptx_handout_text_space_after: the newer key
 // wins, the older stands in for it.
@@ -124,14 +138,14 @@ func (c *Config) handoutTextSpaceAfter() float64 {
 	if f, ok := tableNum(c.handout(), "text_space_after"); ok {
 		return f
 	}
-	return tableNumOr(c.handout(), "space_after", 18)
+	return tableNumOr(c.handout(), "space_after", handoutSpaceAfterPt)
 }
 
 func (c *Config) handoutFontSize() float64 {
 	if f, ok := tableNum(c.handout(), "font_size"); ok {
 		return f
 	}
-	return c.fontSize("tour_size", 42)
+	return c.fontSize("tour_size", handoutFontPt)
 }
 
 func (c *Config) disableShrinkFit() bool    { return c.boolean("disable_shrink_fit", false) }
@@ -213,8 +227,8 @@ func alphaMarker(n int, upper bool) string {
 	out := ""
 	for n > 0 {
 		n--
-		out = string(rune('a'+n%26)) + out
-		n /= 26
+		out = string(rune('a'+n%latinLetters)) + out
+		n /= latinLetters
 	}
 	if upper {
 		return strings.ToUpper(out)

@@ -60,7 +60,9 @@ const HEADER_LEN = MAGIC.length + 1 + NONCE_LEN;
 // boards and passphrase re-wraps pick up a bumped N). N=2^16 needs 128*N*r =
 // 64 MiB and ~0.2s desktop / ~1s low-end-mobile per derive — paid once per
 // unlock (the DK is then cached), so a cheap Android tab stays within budget.
-const DEFAULT_KDF: KdfParams = { kdf: "scrypt", N: 65536, r: 8, p: 1, dkLen: 32 };
+const KEY_LEN = 32; // AES-256: the data key and the KEK
+const SALT_LEN = 16;
+const DEFAULT_KDF: KdfParams = { kdf: "scrypt", N: 65536, r: 8, p: 1, dkLen: KEY_LEN };
 const VERIFY_PLAINTEXT = "xy-verify-v1";
 
 // Minimum board-passphrase strength. The passphrase is the ONLY secret guarding
@@ -94,10 +96,13 @@ function randomBytes(n: number): Uint8Array<ArrayBuffer> {
 
 // randomInt returns a uniform integer in [0, n) using rejection sampling over a
 // 16-bit draw — no modulo bias (unlike `rand % n`). n must be ≤ 65536.
+const U16_RANGE = 0x10000;
+const BITS_PER_BYTE = 8;
+
 function randomInt(n: number): number {
-  const limit = 65536 - (65536 % n);
+  const limit = U16_RANGE - (U16_RANGE % n);
   let x: number;
-  do { const b = randomBytes(2); x = (b[0] << 8) | b[1]; } while (x >= limit);
+  do { const b = randomBytes(2); x = (b[0] << BITS_PER_BYTE) | b[1]; } while (x >= limit);
   return x % n;
 }
 
@@ -164,7 +169,7 @@ function warm(): void { void init(); }
 async function deriveKEK(passphrase: string, salt: Uint8Array<ArrayBuffer>, params: KdfParams): Promise<CryptoKey> {
   await init();
   const pass = te.encode(passphrase.normalize("NFKC"));
-  const p = { N: params.N, r: params.r, p: params.p, dkLen: params.dkLen || 32 };
+  const p = { N: params.N, r: params.r, p: params.p, dkLen: params.dkLen || KEY_LEN };
   let raw: Uint8Array<ArrayBuffer>;
   if (worker) {
     // A worker that dies mid-derive is a reason to be slower, never to fail:
@@ -209,8 +214,8 @@ async function importDK(raw: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
 // KEK. Returns the keymeta to persist plus the live DK (CryptoKey + raw).
 async function createBoardKeys(passphrase: string): Promise<{ keymeta: BoardKeymeta; dk: DataKey }> {
   const params = { ...DEFAULT_KDF };
-  const salt = randomBytes(16);
-  const dkRaw = randomBytes(32);
+  const salt = randomBytes(SALT_LEN);
+  const dkRaw = randomBytes(KEY_LEN);
   const kek = await deriveKEK(passphrase, salt, params);
   const dk = await importDK(dkRaw);
   const wrapped = await seal(kek, dkRaw);
@@ -252,7 +257,7 @@ async function unlockBoard(passphrase: string, keymeta: BoardKeymeta): Promise<D
 // change, re-wrapping the SAME dk. Board data is never re-encrypted.
 async function rewrapKey(newPassphrase: string, dk: DataKey): Promise<Omit<BoardKeymeta, "verify_token">> {
   const params = { ...DEFAULT_KDF };
-  const salt = randomBytes(16);
+  const salt = randomBytes(SALT_LEN);
   const kek = await deriveKEK(newPassphrase, salt, params);
   const wrapped = await seal(kek, dk.raw);
   return { kdf_salt: toB64(salt), kdf_params: JSON.stringify(params), wrapped_key: toB64(wrapped) };

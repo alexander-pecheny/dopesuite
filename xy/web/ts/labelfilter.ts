@@ -10,6 +10,7 @@ import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { modal } from "./modal.js";
 import type { Board, BoardPanel } from "./panels.js";
+import type { BoardLabel } from "./unlock.js";
 
 const { el, byId } = xyApp;
 
@@ -124,22 +125,8 @@ export function createLabelFilter(deps: FilterDeps) {
       body.replaceChildren(el("p", { class: "label-empty", text: S.board.filter.noLabels() }));
       return;
     }
-    const seg = el("div", { class: "seg" });
-    for (const c of MODES) {
-      const btn = el("button", { class: "seg-btn" + (c.mode === mode ? " active" : ""), type: "button", text: c.word, title: c.title });
-      btn.addEventListener("click", () => { mode = c.mode; renderBody(); apply(); });
-      seg.append(btn);
-    }
-    const row = el("div", { class: "label-picker" });
-    for (const l of labels) {
-      const chip = el("button", { class: "label-pick" + (picked.has(l.id) ? " active" : ""), type: "button", dataset: { c: l.color }, text: l.name });
-      chip.addEventListener("click", () => {
-        if (!picked.delete(l.id)) picked.add(l.id);
-        renderBody();
-        apply();
-      });
-      row.append(chip);
-    }
+    const seg = modeSwitch();
+    const row = labelPicker(labels);
     const reset = el("button", { class: "btn btn-ghost btn-small", type: "button", text: S.board.filter.reset() });
     reset.addEventListener("click", clear);
     body.replaceChildren(
@@ -151,6 +138,32 @@ export function createLabelFilter(deps: FilterDeps) {
       reset,
     );
     deps.paintLabels();
+  }
+
+  // modeSwitch is the segmented any/all/none control.
+  function modeSwitch(): HTMLElement {
+    const seg = el("div", { class: "seg" });
+    for (const c of MODES) {
+      const btn = el("button", { class: "seg-btn" + (c.mode === mode ? " active" : ""), type: "button", text: c.word, title: c.title });
+      btn.addEventListener("click", () => { mode = c.mode; renderBody(); apply(); });
+      seg.append(btn);
+    }
+    return seg;
+  }
+
+  // labelPicker is one toggle chip per label.
+  function labelPicker(labels: BoardLabel[]): HTMLElement {
+    const row = el("div", { class: "label-picker" });
+    for (const l of labels) {
+      const chip = el("button", { class: "label-pick" + (picked.has(l.id) ? " active" : ""), type: "button", dataset: { c: l.color }, text: l.name });
+      chip.addEventListener("click", () => {
+        if (!picked.delete(l.id)) picked.add(l.id);
+        renderBody();
+        apply();
+      });
+      row.append(chip);
+    }
+    return row;
   }
 
   function renderBar(): void {

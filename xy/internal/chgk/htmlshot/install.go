@@ -29,6 +29,17 @@ import (
 // VersionsURL publishes the current build of each channel and where to get it.
 const VersionsURL = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
 
+const (
+	cacheDirMode = 0o755
+	// defaultEntryMode is for an archive entry that carries no permissions.
+	defaultEntryMode = 0o644
+	downloadTimeout  = 15 * time.Minute
+	// maxEntryBytes bounds one unpacked file (2 GiB), against a zip bomb.
+	maxEntryBytes = 2 << 30
+	// maxSymlinkBytes bounds a symlink entry, whose body is just its target path.
+	maxSymlinkBytes = 4096
+)
+
 // CacheDir is where a downloaded browser lives, and the first place FindBrowser
 // looks after the ones the user already has.
 func CacheDir() string {
@@ -152,14 +163,14 @@ func chromePlatform() (string, error) {
 }
 
 func download(ctx context.Context, url string) (string, error) {
-	if err := os.MkdirAll(CacheDir(), 0o755); err != nil {
+	if err := os.MkdirAll(CacheDir(), cacheDirMode); err != nil {
 		return "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
-	resp, err := (&http.Client{Timeout: 15 * time.Minute}).Do(req)
+	resp, err := (&http.Client{Timeout: downloadTimeout}).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -192,12 +203,12 @@ func unzip(archive, dir string) error {
 			return corei18n.User(xystrings.Default.Install.ArchiveEscape(f.Name))
 		}
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0o755); err != nil {
+			if err := os.MkdirAll(target, cacheDirMode); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(target), cacheDirMode); err != nil {
 			return err
 		}
 		// A macOS archive can carry symlinks (a framework's Versions/Current).
@@ -224,7 +235,7 @@ func writeEntry(f *zip.File, target string) error {
 	defer rc.Close()
 	mode := f.Mode().Perm()
 	if mode == 0 {
-		mode = 0o644
+		mode = defaultEntryMode
 	}
 	out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 	if err != nil {
@@ -233,7 +244,7 @@ func writeEntry(f *zip.File, target string) error {
 	defer out.Close()
 	// The archive is Google's own and its entries are bounded; the limit is
 	// belt and braces against a zip bomb, at a size no browser exceeds.
-	_, err = io.Copy(out, io.LimitReader(rc, 2<<30))
+	_, err = io.Copy(out, io.LimitReader(rc, maxEntryBytes))
 	return err
 }
 
@@ -243,7 +254,7 @@ func writeSymlink(f *zip.File, dir, target string) error {
 		return err
 	}
 	defer rc.Close()
-	raw, err := io.ReadAll(io.LimitReader(rc, 4096))
+	raw, err := io.ReadAll(io.LimitReader(rc, maxSymlinkBytes))
 	if err != nil {
 		return err
 	}

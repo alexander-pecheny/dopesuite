@@ -12,6 +12,10 @@ import { xyApp } from "./app.js";
 import { iconed } from "./icons_gen.js";
 import type { ListPanel, PanelShell } from "./panels.js";
 
+const PERCENT = 100;
+// Shares are shown to one decimal place.
+const SHARE_TENTHS = 10;
+
 const { el } = xyApp;
 
 export interface AuthorRow { name: string; count: number; share: number; numbers: string[] }
@@ -88,7 +92,7 @@ export function countAuthors(cards: ReadonlyArray<ChgkCard>, upTo: string, inclu
 }
 
 export function formatShare(share: number, questions: number): string {
-  return questions ? `${Math.round((share / questions) * 1000) / 10}%` : "";
+  return questions ? `${Math.round((share / questions) * PERCENT * SHARE_TENTHS) / SHARE_TENTHS}%` : "";
 }
 
 export const xyAuthorCount = { countAuthors, formatShare };

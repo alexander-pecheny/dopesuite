@@ -15,6 +15,11 @@ import (
 	"pecheny.me/dopecore/webassets"
 )
 
+const (
+	readHeaderTimeout = 5 * time.Second
+	idleTimeout       = 120 * time.Second
+)
+
 // xy's deployed environment predates the shared session package, so it keeps
 // its own env-var name for the production switch.
 func init() { session.ProdEnvVar = "XY_ENV" }
@@ -79,8 +84,8 @@ func Main() {
 
 	httpSrv := &http.Server{
 		Handler:           webassets.Gzip(mux),
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 	log.Fatal(httpSrv.Serve(listener))
 }

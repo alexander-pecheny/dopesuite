@@ -6,6 +6,13 @@ import { xyApp } from "./app.js";
 import { xySync } from "./sync.js";
 import S from "./i18nstrings.js";
 
+const MS_PER_HOUR = 3600000;
+const HOURS_PER_DAY = 24;
+const HOURS_PER_WEEK = 168;
+// The maximum-uses presets offered next to "1" and "unlimited".
+const USES_FEW = 10;
+const USES_MANY = 100;
+
 const { fetchJSON, jpost, jdelete, el, errMsg } = xyApp;
 
 // One person's passage through a link: who, and when they joined or asked.
@@ -61,8 +68,8 @@ export function inviteTimeLeft(expiresAt: string | undefined, now: number): stri
   const ms = new Date(expiresAt).getTime() - now;
   if (isNaN(ms)) return "";
   if (ms <= 0) return S.invite.time.expired();
-  const hours = Math.floor(ms / 3600000);
-  if (hours >= 24) return S.invite.time.days(String(Math.floor(hours / 24)));
+  const hours = Math.floor(ms / MS_PER_HOUR);
+  if (hours >= HOURS_PER_DAY) return S.invite.time.days(String(Math.floor(hours / HOURS_PER_DAY)));
   if (hours >= 1) return S.invite.time.hours(String(hours));
   return S.invite.time.underHour();
 }
@@ -214,9 +221,9 @@ export function createBoardInvites(deps: InvitesDeps) {
     box.replaceChildren(
       label,
       el("div", { class: "invite-field" }, el("span", { class: "invite-field-label", text: S.invite.form.ttlLabel() }),
-        chips([[S.invite.form.ttlHour(), 1], [S.invite.form.ttlDay(), 24], [S.invite.form.ttlWeek(), 168], [S.invite.form.ttlNever(), 0]], () => ttlHours, (v) => { ttlHours = v; })),
+        chips([[S.invite.form.ttlHour(), 1], [S.invite.form.ttlDay(), HOURS_PER_DAY], [S.invite.form.ttlWeek(), HOURS_PER_WEEK], [S.invite.form.ttlNever(), 0]], () => ttlHours, (v) => { ttlHours = v; })),
       el("div", { class: "invite-field" }, el("span", { class: "invite-field-label", text: S.invite.form.usesLabel() }),
-        chips([["1", 1], ["10", 10], ["100", 100], [S.invite.form.usesUnlimited(), 0]], () => maxUses, (v) => { maxUses = v; })),
+        chips([["1", 1], [String(USES_FEW), USES_FEW], [String(USES_MANY), USES_MANY], [S.invite.form.usesUnlimited(), 0]], () => maxUses, (v) => { maxUses = v; })),
       el("label", { class: "invite-field" }, approval, el("span", { text: S.invite.form.approval() })),
       create,
     );

@@ -285,7 +285,7 @@ func safeImageName(name string) string {
 		case '(', ')', '/', '\\':
 			return '_'
 		}
-		if rn == ' ' || rn == '\t' || rn == '\n' || rn == '\r' || rn == 0x00a0 {
+		if rn == ' ' || rn == '\t' || rn == '\n' || rn == '\r' || rn == '\u00a0' {
 			return '_'
 		}
 		return rn

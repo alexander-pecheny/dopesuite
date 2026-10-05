@@ -4,6 +4,13 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"pecheny.me/dopecore/idstr"
+)
+
+const (
+	floatBits   = 64
+	rgbChannels = 3
 )
 
 // Config is pptx_config.toml. Every knob chgksuite reads is here, and reading
@@ -110,10 +117,10 @@ func parseTOMLValue(s string) (any, error) {
 	case strings.HasPrefix(s, "{"):
 		return parseInlineTable(s)
 	}
-	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+	if n, err := idstr.Parse(s); err == nil {
 		return float64(n), nil
 	}
-	f, err := strconv.ParseFloat(s, 64)
+	f, err := strconv.ParseFloat(s, floatBits)
 	if err != nil {
 		return nil, fmt.Errorf("%q is not a value this reader knows", s)
 	}
@@ -244,10 +251,10 @@ func tableNumOr(t map[string]any, key string, fallback float64) float64 {
 // colorOf reads a [r, g, b] array as the "RRGGBB" a run wants.
 func colorOf(t map[string]any, key string) string {
 	list, ok := t[key].([]any)
-	if !ok || len(list) != 3 {
+	if !ok || len(list) != rgbChannels {
 		return ""
 	}
-	var rgb [3]int
+	var rgb [rgbChannels]int
 	for i, v := range list {
 		f, ok := v.(float64)
 		if !ok {

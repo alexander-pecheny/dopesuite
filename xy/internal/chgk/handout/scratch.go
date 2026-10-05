@@ -6,6 +6,12 @@ import (
 	"sync"
 )
 
+// Scratch dirs and files are owner-only: they hold decrypted questions.
+const (
+	scratchDirMode  = 0o700
+	scratchFileMode = 0o600
+)
+
 // typst is a separate process that reads its source and images from a real
 // filesystem — it has no virtual-FS mode — so, unlike every other part of xy,
 // handout rendering must materialise the user's plaintext somewhere. The scratch
@@ -36,7 +42,7 @@ func scratchTemp(pattern string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, scratchDirMode); err != nil {
 		os.RemoveAll(dir)
 		return "", err
 	}
@@ -45,5 +51,5 @@ func scratchTemp(pattern string) (string, error) {
 
 // writeScratch writes one plaintext file into a scratch dir, owner-only.
 func writeScratch(dir, name string, data []byte) error {
-	return os.WriteFile(filepath.Join(dir, name), data, 0o600)
+	return os.WriteFile(filepath.Join(dir, name), data, scratchFileMode)
 }

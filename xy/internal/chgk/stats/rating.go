@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -47,16 +48,23 @@ func fetchTournament(ctx context.Context, id string) ([]Result, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, corei18n.User(xystrings.Default.Stats.Rating.Status(id, resp.Status))
 	}
-	var body []struct {
-		Mask    string `json:"mask"`
-		Current struct {
-			Name string `json:"name"`
-		} `json:"current"`
-		Team struct {
-			ID int `json:"id"`
-		} `json:"team"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	return decodeResults(resp.Body, id)
+}
+
+// ratingResult is one team's row in a tournament's results.json.
+type ratingResult struct {
+	Mask    string `json:"mask"`
+	Current struct {
+		Name string `json:"name"`
+	} `json:"current"`
+	Team struct {
+		ID int `json:"id"`
+	} `json:"team"`
+}
+
+func decodeResults(r io.Reader, id string) ([]Result, error) {
+	var body []ratingResult
+	if err := json.NewDecoder(r).Decode(&body); err != nil {
 		return nil, corei18n.User(xystrings.Default.Stats.Rating.Decode(id, err.Error()))
 	}
 	out := make([]Result, 0, len(body))
