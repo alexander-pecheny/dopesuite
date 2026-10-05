@@ -1613,6 +1613,7 @@ ${usage}
       tokenSubmit: () => "Подтвердить токен",
     },
     versions: {
+      head: (n: string) => `Версия ${n}:`,
       label: (n: string) => `версия ${n}: `,
       question: (n: string, question: string) => `Версия ${n}: ${question}`,
     },

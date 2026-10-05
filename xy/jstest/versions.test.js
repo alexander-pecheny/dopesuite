@@ -172,6 +172,16 @@ test("a version's name reaches no export — the label is always the number", ()
   assert.ok(!out.includes("xy-version"));
 });
 
+test("a version that opens with a handout has its head on a line of its own", () => {
+  const desc = [
+    "(hidden-comment xy-version:)", "? [Раздаточный материал: жорроменж]\nНапишите это слово.", "! Ответ",
+    "(hidden-comment xy-version: полегче)", "? Напишите слово.", "! Ответ",
+  ].join("\n");
+  const out = composeVersions(desc);
+  assert.ok(out.includes("? Версия 1:\n[Раздаточный материал: жорроменж]\nНапишите это слово."), out);
+  assert.ok(out.includes("Версия 2: Напишите слово."), out);
+});
+
 // ---- the cards written under the old (PAGEBREAK) scheme ----
 
 test("a page-broken question converts to whole bodies that clone the shared fields", () => {

@@ -1573,6 +1573,7 @@ export type Strings = {
       tokenSubmit: () => string;
     };
     versions: {
+      head: (n: string) => string;
       label: (n: string) => string;
       question: (n: string, question: string) => string;
     };

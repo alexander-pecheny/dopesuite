@@ -267,3 +267,6 @@ attach_failed = 'вложение «{{.name}}»: {{.status}}'
 label = 'версия {{.n}}: '
 # Head of each version's question block in the composed multi-version export.
 question = 'Версия {{.n}}: {{.question}}'
+# The same head on a line of its own, for a version that opens with a handout:
+# the exports set a handout apart only when it has its lines to itself.
+head = 'Версия {{.n}}:'

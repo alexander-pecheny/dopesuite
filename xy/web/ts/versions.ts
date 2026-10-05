@@ -14,7 +14,7 @@
 // between editors, and "easier" above a question tells a tester how hard it is
 // meant to be before they have tried it).
 
-import { composeFields, extractInlineHandout, parseBlocks, scanDirectives, splitFields, versionLineName } from "./chgk.js";
+import { composeFields, extractInlineHandout, parseBlocks, scanDirectives, splitFields, splitHandouts, versionLineName } from "./chgk.js";
 import type { HiddenSpan } from "./chgk.js";
 import S from "./i18nstrings.js";
 
@@ -181,6 +181,15 @@ function mergeAuthors(values: Array<string[] | null>): string[] | null {
   return out.length ? [out.join("\n")] : null;
 }
 
+// versionQuestion is one version's question under its head. A version that
+// opens with a handout gets the head on a line of its own: on the handout's
+// line it would make the handout part of a sentence, and the exports would
+// print the bracket instead of the captioned box.
+function versionQuestion(i: number, q: string): string {
+  if (splitHandouts(q)[0]?.kind === "handout") return S.import.versions.head(String(i + 1)) + "\n" + q;
+  return S.import.versions.question(String(i + 1), q);
+}
+
 // composeVersions is what every export renders: the versions folded back into a
 // single question block. Structural leftovers (a "№" directive, anything the
 // field editor does not model) come from version 1 — they belong to the question,
@@ -196,9 +205,7 @@ function composeVersions(desc: string | null | undefined): string {
   return composeFields({
     preMarkup: f0.preMarkup,
     handout: null, // each version's own bracket rides inside its question text
-    question: bodies
-      .map((b, i) => S.import.versions.question(String(i + 1), rawQuestion(b).trim()))
-      .join("\n" + PAGEBREAK + "\n"),
+    question: bodies.map((b, i) => versionQuestion(i, rawQuestion(b).trim())).join("\n" + PAGEBREAK + "\n"),
     answer: mergeField(fs.map((f) => f.answer)),
     zachet: mergeField(fs.map((f) => f.zachet)),
     nezachet: mergeField(fs.map((f) => f.nezachet)),

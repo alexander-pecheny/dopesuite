@@ -2100,6 +2100,7 @@ var RU = Strings{
 			TokenSubmit:      func() string { return "Подтвердить токен" },
 		},
 		Versions: ImportVersionsStrings{
+			Head:     func(n string) string { return fmt.Sprintf("Версия %s:", n) },
 			Label:    func(n string) string { return fmt.Sprintf("версия %s: ", n) },
 			Question: func(n string, question string) string { return fmt.Sprintf("Версия %s: %s", n, question) },
 		},
