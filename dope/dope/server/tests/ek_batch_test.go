@@ -3,6 +3,7 @@ package tests
 import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/imports"
 	"dope/dope/platform/realtime"
 	dopeserver "dope/dope/server"
@@ -28,7 +29,7 @@ func newBatchTestServer(t *testing.T) (*dopeserver.Server, dopeserver.MatchScope
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
+	if _, err := entrants.ImportLegacy(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 	scope, err := srv.VerifyMatchInScope(t.Context(), scopeBase, "A")

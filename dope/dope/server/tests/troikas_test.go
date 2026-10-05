@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"dope/dope/domain/gamebuild"
+	"dope/dope/domain/entrants"
+	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
@@ -210,7 +211,7 @@ func TestTroikaGameFollowsItsDivision(t *testing.T) {
 			if id, err = roster.SaveAssembledTx(ctx, tx, festID, 0, roster.AssembledInput{Name: name, Players: players}); err != nil {
 				return err
 			}
-			_, err = gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0)
+			_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
 			return err
 		})
 		return id
@@ -247,7 +248,7 @@ func TestTroikaGameFollowsItsDivision(t *testing.T) {
 			Placement: &roster.AssembledPlacement{HeadTeamID: alpha, Division: &none}}); err != nil {
 			return err
 		}
-		_, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0)
+		_, err := entrants.FollowDivisionsTx(ctx, tx, festID, 0)
 		return err
 	})
 	expectEntrants(students, s1, s2)
@@ -255,7 +256,7 @@ func TestTroikaGameFollowsItsDivision(t *testing.T) {
 
 	// A troika only a following game seats can still be deleted.
 	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, s3); err != nil {
+		if _, err := entrants.FollowDivisionsTx(ctx, tx, festID, s3); err != nil {
 			return err
 		}
 		return roster.DeleteAssembledTx(ctx, tx, festID, s3)
@@ -282,16 +283,15 @@ update matches set status = 'finished', state_json = json_set(state_json, '$.sid
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := gamebuild.DropTroikaFromListsTx(t.Context(), tx, festID, s4); err != nil {
-		t.Fatal(err)
-	}
-	if _, user := corei18n.AsUser(roster.DeleteAssembledTx(t.Context(), tx, festID, s4)); !user {
+	if _, err := entrants.DeleteTroikaTx(t.Context(), tx, festID, s4); err == nil {
 		t.Fatal("a troika with a row in a started отбор was deleted")
+	} else if _, user := corei18n.AsUser(err); !user {
+		t.Fatalf("the delete failed with %v, want a message for the host", err)
 	}
 	tx.Rollback()
 
 	expectEntrants(students, s1, s2, s4)
-	divisionGames, err := gamebuild.LoadDivisionGames(t.Context(), db, festID)
+	divisionGames, err := entrants.LoadDivisionGames(t.Context(), db, festID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,4 +335,50 @@ func assembledByID(t *testing.T, db *sql.DB, festID, id int64) roster.Assembled 
 	}
 	t.Fatalf("no troika %d", id)
 	return roster.Assembled{}
+}
+
+// A rating import that changes a team's Flags moves its troikas between the
+// Тройка Games that take a зачёт, in the import's own transaction: nobody has
+// to re-seat them afterwards.
+func TestRatingImportMovesTroikasBetweenDivisions(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	site := func(flags ...roster.FestRosterFlag) []roster.FestRosterImportTeam {
+		return []roster.FestRosterImportTeam{{RatingID: 1, Number: 1, Name: "Альфа", Flags: flags, Players: []roster.FestRosterImportPlayer{
+			{RatingID: 11, FirstName: "А", LastName: "Один"}, {RatingID: 12, FirstName: "А", LastName: "Два"},
+		}}}
+	}
+	student := roster.FestRosterFlag{RatingID: 2, Short: "Студ", Full: "Студенческая команда"}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, site(student), imports.RosterChoice{}); err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	var troika int64
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) (err error) {
+		troika, err = roster.SaveAssembledTx(ctx, tx, festID, 0, roster.AssembledInput{Name: "С1", Players: []string{"А Один", "А Два"}})
+		return err
+	})
+	const scheme = "\n[scheme]\nkind: flat\nwritten: true\nthemes: 1\nletters: false\n"
+	students := createSchemeGameFor(t, db, festID, "troika", "Тройка — студенты", "[init]\ndivision: Студ\n"+scheme, nil)
+	adults := createSchemeGameFor(t, db, festID, "troika", "Тройка — взрослые", "[init]\ndivision: -Студ\n"+scheme, nil)
+	if got := gameEntrants(t, db, students); !slices.Equal(got, []int64{troika}) {
+		t.Fatalf("students before the import = %v", got)
+	}
+
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, site(), imports.RosterChoice{}); err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+	if got := gameEntrants(t, db, adults); !slices.Equal(got, []int64{troika}) {
+		t.Fatalf("adults after the import = %v, want the troika", got)
+	}
+	// The student game is left with no troika, which it does not take: a
+	// Game without entrants would seat the whole fest roster.
+	followed, err := entrants.LoadDivisionGames(t.Context(), db, festID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(followed) != 2 || followed[0].GameID != students || followed[0].Current || len(followed[0].Troikas) != 0 {
+		t.Fatalf("division games after the import = %+v", followed)
+	}
 }

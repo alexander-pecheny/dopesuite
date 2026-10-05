@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/schemedsl"
 	"dope/dope/platform/util"
@@ -235,10 +236,10 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 	// A Тройка that takes a зачёт seats that зачёт's troikas, whatever was
 	// ticked on the form. A зачёт with none yet still gets its game: the
 	// Structure is built for as many empty seats as its first stage sends on,
-	// and the troikas fill it as they are entered (SyncDivisionEntrantsTx).
+	// and the troikas fill it as they are entered (entrants.FollowDivisionsTx).
 	var placeholders int
 	troikas := games.SeatsTroikas(gameType)
-	if division, ok := entrantDivision(dsl); ok && troikas {
+	if division, ok := imports.EntrantDivision(dsl); ok && troikas {
 		if entrants, err = divisionEntrantsTx(ctx, tx, festID, division, 0); err != nil {
 			return 0, err
 		}
@@ -250,7 +251,7 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 	// it takes every troika of the fest in the order of applications — not
 	// the fest's teams, which is what «none ticked» means for a team game and
 	// which a Тройка never seats.
-	if troikas && len(entrants) == 0 && placeholders == 0 && !declaresSeed(dsl) {
+	if troikas && len(entrants) == 0 && placeholders == 0 && !imports.DeclaresSeed(dsl) {
 		if entrants, err = festTroikasTx(ctx, tx, festID); err != nil {
 			return 0, err
 		}

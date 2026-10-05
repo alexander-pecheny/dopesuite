@@ -9,7 +9,7 @@ import (
 	"sort"
 
 	"dope/dope/domain/core"
-	"dope/dope/domain/gamebuild"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
@@ -38,7 +38,7 @@ func (s *Server) editFestRoster(reqCtx context.Context, festID int64, label stri
 		if written, err = edit(ctx, tx); err != nil {
 			return err
 		}
-		if _, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0); err != nil {
+		if _, err := entrants.FollowDivisionsTx(ctx, tx, festID, 0); err != nil {
 			return err
 		}
 		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, label, "{}")

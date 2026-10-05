@@ -150,9 +150,13 @@ here when it needs type metadata.
   a seed source is `FromGame|FromFest|FromTroikas|FromRandom|FromXLSX|…`, and
   `entrants.go` holds a Game's entrant list and how it fills the Structure's
   seed numbers (ADR-0023).
-- `entrants` — the Участники tab of a buzzer Game: its view, its sources and
-  the host's hand edits, with their refusals. It calls `gamebuild.ApplyListTx`,
-  which rebuilds a Game sized by its entrants before `imports` seats the list.
+- `entrants` — who a buzzer Game seats. It holds the Участники tab (its view,
+  its sources and the host's hand edits, with their refusals) and every other
+  write that moves an Entrant list: the Тройка Games that follow a зачёт
+  (`FollowDivisionsTx`), a troika's delete (`DeleteTroikaTx`) and a rating
+  import (`ImportFestRoster`, which follows in the import's own transaction).
+  All of them save the list through one `applyListTx`: `gamebuild.FollowListTx`
+  rebuilds a Game sized by its entrants, then `imports` seats the list.
 - `numbering` — team-number assignment. `edit` — match-edit value types.
 - `towns` — which country a town is in, as the ISO code the screen draws a flag
   from: buff answers for every town it has mirrored, and one it has not is asked

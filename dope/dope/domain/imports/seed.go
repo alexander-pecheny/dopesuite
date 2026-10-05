@@ -263,33 +263,6 @@ func (f fromXLSX) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 	return seeding{source: "xlsx", label: "xlsx", candidates: candidates}, err
 }
 
-// ImportSeeds seeds the Game from the source: the source's current order is
-// snapshotted into the Entrant list (partial results mid-fest are a normal
-// source), previous declines survive, and every seed slot nobody has started
-// is reseated. A Game whose Structure is sized by its entrants is reshaped by
-// the entrants package, which calls ResolveListTx and SaveListTx itself.
-func ImportSeeds(eng *core.Engine, ctx context.Context, scope core.FestScope, src SeedSource) (SeedImportView, int64, []byte, error) {
-	var view SeedImportView
-	var revision int64
-	var stateJSON []byte
-	err := eng.WithWriteTx(ctx, scope.FestID, "seed-import", func(ctx context.Context, tx *sql.Tx) error {
-		list, err := LoadListTx(ctx, tx, scope)
-		if err != nil {
-			return err
-		}
-		next, event, err := ResolveListTx(ctx, tx, scope, list, src)
-		if err != nil {
-			return err
-		}
-		view, revision, stateJSON, err = SaveListTx(ctx, tx, scope, list, next, event)
-		return err
-	})
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	return view, revision, stateJSON, nil
-}
-
 // ResolveListTx runs a source and returns the Entrant list it makes, merged
 // with the list there is (its declines survive), and the event to record it
 // under.
@@ -493,34 +466,6 @@ func listFromSeedingTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, pr
 		Division:     resolved.division,
 		Rows:         rows,
 	}, nil
-}
-
-// SetSeedImportDeclined marks an entrant as having refused to play, or takes
-// the mark back. The next entrant moves up into the seat, in every bout nobody
-// has started.
-func SetSeedImportDeclined(eng *core.Engine, ctx context.Context, scope core.FestScope, req SeedDeclineRequest) (SeedImportView, int64, []byte, error) {
-	if req.TeamID <= 0 {
-		return SeedImportView{}, 0, nil, errors.New("bad team id")
-	}
-	var view SeedImportView
-	var revision int64
-	var stateJSON []byte
-	err := eng.WithWriteTx(ctx, scope.FestID, "seed-import-decline", func(ctx context.Context, tx *sql.Tx) error {
-		list, err := LoadListTx(ctx, tx, scope)
-		if err != nil {
-			return err
-		}
-		next, err := list.Decline(req.TeamID, req.Declined)
-		if err != nil {
-			return err
-		}
-		view, revision, stateJSON, err = SaveListTx(ctx, tx, scope, list, next, "seed-import:decline")
-		return err
-	})
-	if err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	return view, revision, stateJSON, nil
 }
 
 // loadSeedImportGame reads any game's type and state blob — the seed ladder

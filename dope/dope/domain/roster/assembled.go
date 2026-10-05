@@ -639,7 +639,7 @@ order by coalesce(applied, 1000000000), id`, []any{festID, id}, func(rows *sql.R
 
 // DeleteAssembledTx removes an assembled team no bout seats. A seed number it
 // still holds past a Game's seats (the waiting list) goes with it; the Games'
-// lists let go of it first (gamebuild.DropTroikaFromListsTx).
+// lists let go of it first (entrants.DeleteTroikaTx).
 func DeleteAssembledTx(ctx context.Context, tx *sql.Tx, festID, id int64) error {
 	var seated bool
 	if err := tx.QueryRowContext(ctx, `

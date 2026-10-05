@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/imports"
 	"dope/dope/platform/realtime"
 	dopeserver "dope/dope/server"
@@ -30,7 +31,7 @@ func TestMatchEditJournalsAsMatchPatch(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
+	if _, err := entrants.ImportLegacy(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 

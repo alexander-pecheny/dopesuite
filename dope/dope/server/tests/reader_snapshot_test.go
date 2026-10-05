@@ -2,6 +2,7 @@ package tests
 
 import (
 	"dope/dope/domain/core"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/imports"
 	"dope/dope/platform/realtime"
 	dopeserver "dope/dope/server"
@@ -29,7 +30,7 @@ func TestSnapshotReadsDecoupledFromWriteLock(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scope := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scope, imports.FromKSI()); err != nil {
+	if _, err := entrants.ImportLegacy(srv.Eng(), t.Context(), scope, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 

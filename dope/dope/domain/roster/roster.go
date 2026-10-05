@@ -293,6 +293,16 @@ order by f.team_id, f.position, f.id`, festID)
 	return out, rows.Err()
 }
 
+// SetHandFlagsTx writes the Flags a host typed for a team and marks them as
+// the host's, so a rating import leaves them alone (ADR-0024).
+func SetHandFlagsTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, flags []FestRosterFlag) error {
+	if err := ReplaceTeamFlagsTx(ctx, tx, teamID, flags); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `update fest_teams set hand_flags = 1 where id = ? and fest_id = ?`, teamID, festID)
+	return err
+}
+
 // ReplaceTeamFlagsTx rewrites one team's Flags. An import replaces a team's
 // Flags wholesale, and so does a hand edit, so this is the only writer: the old
 // rows go, the new ones are inserted in the order given.

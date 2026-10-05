@@ -56,7 +56,7 @@ func OpenFestDB(path string) (*sql.DB, error) { return sqlitextest.Open(path, pr
 // ----- field accessors -----
 
 // Eng returns a pointer to the embedded engine (tests both read it and pass its
-// address into leaf packages, e.g. imports.ImportSeeds(srv.Eng(), ..., imports.FromKSI())).
+// address into leaf packages, e.g. entrants.ImportLegacy(srv.Eng(), ..., imports.FromKSI())).
 func (s *Server) Eng() *core.Engine { return &s.eng }
 
 // Metrics returns a pointer to the edit-metrics recorder.

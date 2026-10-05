@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/imports"
 	"dope/dope/platform/realtime"
@@ -31,7 +32,8 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	})
 	scope := dopeserver.FestScope{FestID: festID, GameID: ekGameID}
 
-	view, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scope, imports.FromKSI())
+	result, err := entrants.ImportLegacy(srv.Eng(), t.Context(), scope, imports.FromKSI())
+	view := result.View.SeedImportView
 	if err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
@@ -51,10 +53,8 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 		t.Fatalf("regular themes = %d, want %d", got, 4*store.ThemeCount)
 	}
 
-	view, _, _, err = imports.SetSeedImportDeclined(srv.Eng(), t.Context(), scope, imports.SeedDeclineRequest{
-		TeamID:   view.Rows[0].TeamID,
-		Declined: true,
-	})
+	result, err = entrants.Decline(srv.Eng(), t.Context(), scope, view.Rows[0].TeamID, true)
+	view = result.View.SeedImportView
 	if err != nil {
 		t.Fatalf("decline seed: %v", err)
 	}
@@ -93,7 +93,8 @@ func TestSeedImportFromKSIPropagatesDeclines(t *testing.T) {
 	})
 	scope := dopeserver.FestScope{FestID: festID, GameID: ekGameID}
 
-	view, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scope, imports.FromKSI())
+	result, err := entrants.ImportLegacy(srv.Eng(), t.Context(), scope, imports.FromKSI())
+	view := result.View.SeedImportView
 	if err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
@@ -180,7 +181,7 @@ func TestFinishAssignsPlaces(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: ekGameID}
-	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
+	if _, err := entrants.ImportLegacy(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 	scope, err := srv.VerifyMatchInScope(t.Context(), scopeBase, "A")

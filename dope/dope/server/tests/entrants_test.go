@@ -13,7 +13,6 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/entrants"
-	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 	"dope/dope/storage/store"
@@ -348,7 +347,7 @@ func TestTroikaListFollowsTheDivisionUntilEdited(t *testing.T) {
 			if id, err = roster.SaveAssembledTx(ctx, tx, festID, 0, roster.AssembledInput{Name: name, Players: players}); err != nil {
 				return err
 			}
-			_, err = gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0)
+			_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
 			return err
 		})
 		return id
@@ -381,7 +380,7 @@ func TestTroikaListFollowsTheDivisionUntilEdited(t *testing.T) {
 		t.Fatalf("entrants after the move = %v", got)
 	}
 	s4 := add("С4", "А Семь", "А Восемь")
-	games, err := gamebuild.LoadDivisionGames(ctx, db, festID)
+	games, err := entrants.LoadDivisionGames(ctx, db, festID)
 	if err != nil {
 		t.Fatal(err)
 	}

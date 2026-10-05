@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"dope/dope/domain/gamebuild"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
@@ -35,7 +35,7 @@ type hostTroikasData struct {
 	Players []roster.FestPlayerChoice
 	Teams   []roster.FestTeamChoice
 	// Games are the Troika Games that take their troikas from a division.
-	Games  []gamebuild.DivisionGame
+	Games  []entrants.DivisionGame
 	Lines  string
 	Error  string
 	Notice string
@@ -271,7 +271,7 @@ func (s *Server) renderHostFestTroikas(w http.ResponseWriter, r *http.Request, f
 
 // renderHostFestTroikasWith draws the page; problems are what the save that
 // led here reported per Game, which a plain view cannot know.
-func (s *Server) renderHostFestTroikasWith(w http.ResponseWriter, r *http.Request, festID int64, data hostTroikasData, problems ...gamebuild.DivisionGame) {
+func (s *Server) renderHostFestTroikasWith(w http.ResponseWriter, r *http.Request, festID int64, data hostTroikasData, problems ...entrants.DivisionGame) {
 	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
 		db := s.h.Engine().DB
 		troikas, err := roster.LoadAssembled(r.Context(), db, festID)
@@ -286,7 +286,7 @@ func (s *Server) renderHostFestTroikasWith(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			return nil, err
 		}
-		divisionGames, err := gamebuild.LoadDivisionGames(r.Context(), db, festID)
+		divisionGames, err := entrants.LoadDivisionGames(r.Context(), db, festID)
 		if err != nil {
 			return nil, err
 		}
@@ -306,7 +306,7 @@ func (s *Server) renderHostFestTroikasWith(w http.ResponseWriter, r *http.Reques
 // says how many it added. Like every troika write it re-seats the Troika Games
 // that take a division and tells the open Troika pages; it returns those Games
 // so the page can say which of them could not follow.
-func (s *Server) AddTroikas(ctx context.Context, festID int64, lines string) (int, []gamebuild.DivisionGame, error) {
+func (s *Server) AddTroikas(ctx context.Context, festID int64, lines string) (int, []entrants.DivisionGame, error) {
 	inputs, err := roster.ParseAssembledLines(lines)
 	if err != nil {
 		return 0, nil, err
@@ -324,7 +324,7 @@ func (s *Server) AddTroikas(ctx context.Context, festID int64, lines string) (in
 
 // SaveTroika renames one troika and sets its players, and its head team and
 // division when in.Placement says so.
-func (s *Server) SaveTroika(ctx context.Context, festID, id int64, in roster.AssembledInput) ([]gamebuild.DivisionGame, error) {
+func (s *Server) SaveTroika(ctx context.Context, festID, id int64, in roster.AssembledInput) ([]entrants.DivisionGame, error) {
 	return s.troikaWrite(ctx, festID, "edit", 0, func(ctx context.Context, tx *sql.Tx) error {
 		_, err := roster.SaveAssembledTx(ctx, tx, festID, id, in)
 		return err
@@ -333,30 +333,25 @@ func (s *Server) SaveTroika(ctx context.Context, festID, id int64, in roster.Ass
 
 // DeleteTroika deletes a troika no game seats. The Games that take a division
 // let go of it first, so a troika only they seat can be deleted.
-func (s *Server) DeleteTroika(ctx context.Context, festID, id int64) ([]gamebuild.DivisionGame, error) {
+func (s *Server) DeleteTroika(ctx context.Context, festID, id int64) ([]entrants.DivisionGame, error) {
 	return s.troikaWrite(ctx, festID, "delete", id, func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, id); err != nil {
-			return err
-		}
-		if err := gamebuild.DropTroikaFromListsTx(ctx, tx, festID, id); err != nil {
-			return err
-		}
-		return roster.DeleteAssembledTx(ctx, tx, festID, id)
+		_, err := entrants.DeleteTroikaTx(ctx, tx, festID, id)
+		return err
 	})
 }
 
 // troikaWrite runs one troika write, then re-seats the Troika Games that take
 // a division (exclude leaves out a troika being deleted) and tells the open
 // Troika pages, whose seat rosters it may have changed.
-func (s *Server) troikaWrite(ctx context.Context, festID int64, label string, exclude int64, fn func(ctx context.Context, tx *sql.Tx) error) ([]gamebuild.DivisionGame, error) {
-	var synced []gamebuild.DivisionGame
+func (s *Server) troikaWrite(ctx context.Context, festID int64, label string, exclude int64, fn func(ctx context.Context, tx *sql.Tx) error) ([]entrants.DivisionGame, error) {
+	var synced []entrants.DivisionGame
 	var revision int64
 	err := s.h.Engine().WithWriteTx(ctx, festID, "troikas-"+label, func(ctx context.Context, tx *sql.Tx) error {
 		if err := fn(ctx, tx); err != nil {
 			return err
 		}
 		var err error
-		if synced, err = gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, exclude); err != nil {
+		if synced, err = entrants.FollowDivisionsTx(ctx, tx, festID, exclude); err != nil {
 			return err
 		}
 		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "troikas:"+label, util.MustJSON(map[string]any{"label": label}))
@@ -438,7 +433,7 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 // broadcastTroikaGames tells every open Troika page of the fest to fetch its
 // bouts again: a troika's people, or a Game's entrants, may have changed.
 func (s *Server) broadcastTroikaGames(ctx context.Context, festID, revision int64) {
-	ids, err := gamebuild.TroikaGameIDs(ctx, s.h.Engine().DB, festID)
+	ids, err := entrants.TroikaGameIDs(ctx, s.h.Engine().DB, festID)
 	if err != nil {
 		return
 	}

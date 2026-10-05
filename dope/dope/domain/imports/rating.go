@@ -43,6 +43,9 @@ type RatingRosterImportResult struct {
 	// Plan is what the import did, or with RosterChoice.Preview what it would
 	// do: set on every import that reached the merge (ADR-0024).
 	Plan *ImportPlan
+	// Revision is the fest revision the import recorded; zero when it wrote
+	// nothing.
+	Revision int64
 }
 
 type ratingFestResult struct {
@@ -82,13 +85,15 @@ type ratingPlayer struct {
 	Surname string `json:"surname"`
 }
 
-func FetchAndImportRatingRoster(eng *core.Engine, ctx context.Context, festID, ratingID int64, choice RosterChoice) (RatingRosterImportResult, error) {
+// FetchRatingRoster reads a tournament's roster from rating.chgk.info, with
+// each team's country, ready for ImportFestRoster.
+func FetchRatingRoster(eng *core.Engine, ctx context.Context, ratingID int64) ([]roster.FestRosterImportTeam, error) {
 	teams, err := fetchRatingFestRoster(ctx, ratingID)
 	if err != nil {
-		return RatingRosterImportResult{}, err
+		return nil, err
 	}
 	resolveTeamCountries(ctx, eng, teams)
-	return ImportFestRoster(eng, ctx, festID, ratingID, teams, choice)
+	return teams, nil
 }
 
 // DroppedTeam is a team the fest has, that the incoming roster no longer
@@ -136,6 +141,11 @@ type RosterChoice struct {
 	AcceptSite map[string]bool
 	// Preview computes the plan and writes nothing.
 	Preview bool
+	// Within runs in the import's transaction once the roster is written,
+	// before the revision is recorded: what else a roster change moves, which
+	// this package cannot reach (entrants.ImportRatingRoster re-seats the
+	// Troika Games that follow a division).
+	Within func(ctx context.Context, tx *sql.Tx) error
 }
 
 // resolveTeamCountries fills in the country each team's town is in, before the
@@ -373,6 +383,11 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		if _, err := tx.ExecContext(ctx, `update fests set rating_id = ?, updated_at = ? where id = ?`, ratingID, util.UtcNow(), festID); err != nil {
 			return RatingRosterImportResult{}, err
 		}
+		if choice.Within != nil {
+			if err := choice.Within(ctx, tx); err != nil {
+				return RatingRosterImportResult{}, err
+			}
+		}
 		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "rating:roster-import", util.MustJSON(map[string]any{
 			"ratingID": ratingID,
 			"teams":    result.TeamCount,
@@ -387,6 +402,7 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 			return RatingRosterImportResult{}, err
 		}
 		result.ODGameCount, result.KSIGameCount = written.odGames, written.ksiGames
+		result.Revision = revision
 		return result, nil
 	}()
 	if err != nil {

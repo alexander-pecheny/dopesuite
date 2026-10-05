@@ -384,6 +384,45 @@ func EntrantSized(dsl string) bool {
 	return !seeded
 }
 
+// EntrantDivision is the division a scheme DSL takes its troikas from:
+// division in [init] with no seed. A Troika Game that takes one follows that
+// division's troikas (entrants.FollowDivisionsTx).
+func EntrantDivision(dsl string) (string, bool) {
+	doc, err := schemedsl.Parse(dsl)
+	if err != nil {
+		return "", false
+	}
+	if _, seeded := doc.Init.Str("seed"); seeded {
+		return "", false
+	}
+	division, ok := doc.Init.Str("division")
+	division = strings.TrimSpace(division)
+	return division, ok && division != ""
+}
+
+// DeclaresSeed reports whether a scheme's [init] names a seed source, which
+// then decides the entrants instead of the form.
+func DeclaresSeed(dsl string) bool {
+	doc, err := schemedsl.Parse(dsl)
+	if err != nil {
+		return false
+	}
+	_, seeded := doc.Init.Str("seed")
+	return seeded
+}
+
+// InBoutTx reports whether a Participant sits in any bout of the Game, begun
+// or not. A bout's seat points at it, so it cannot be deleted. This is a
+// weaker test than PlayedParticipants, which asks whether it has results and
+// so whether the list may still move it.
+func InBoutTx(ctx context.Context, q store.Queryer, gameID, participantID int64) (bool, error) {
+	var seated bool
+	err := q.QueryRowContext(ctx, `
+select exists(select 1 from match_slots ms join matches m on m.id = ms.match_id where m.game_id = ? and ms.participant_id = ?)`,
+		gameID, participantID).Scan(&seated)
+	return seated, err
+}
+
 // seatListTx gives the list's entrants their seed numbers and reseats every
 // seed slot nobody has started. An entrant seated in a bout that has begun
 // keeps its number, unless it has declined; the other active entrants take

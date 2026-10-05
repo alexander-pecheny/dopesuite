@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/view"
@@ -578,7 +579,7 @@ select coalesce(scheme_dsl, '') from games where id = ?`, gameID).Scan(&stored);
 			return err
 		}
 		// A Troika that now takes a division, or another one, seats its troikas.
-		_, err := gamebuild.SyncDivisionEntrantsTx(ctx, tx, festID, 0)
+		_, err := entrants.FollowDivisionsTx(ctx, tx, festID, 0)
 		return err
 	})
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
@@ -36,7 +37,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
+	if _, err := entrants.ImportLegacy(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 	assertReseedState(t, loadReseedStageView(t, srv, festID, gameID, "rs"), false, []string{"A", "B"}, "Бои A, B не закончены")
@@ -175,7 +176,7 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
+	if _, err := entrants.ImportLegacy(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 
@@ -376,7 +377,7 @@ func TestUntickEditRetickPreservesDownstream(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 	scopeBase := dopeserver.FestScope{FestID: festID, GameID: gameID}
-	if _, _, _, err := imports.ImportSeeds(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
+	if _, err := entrants.ImportLegacy(srv.Eng(), t.Context(), scopeBase, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 

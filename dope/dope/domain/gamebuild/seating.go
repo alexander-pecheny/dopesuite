@@ -431,3 +431,31 @@ func festPlayerParticipantTx(ctx context.Context, tx *sql.Tx, festID, festPlayer
 	// own if they have one, else under their rank, never another person's.
 	return imports.EnsurePlayerParticipantTx(ctx, tx, festID, festPlayerID)
 }
+
+// festTroikasTx is every troika of the fest, in the order of applications.
+func festTroikasTx(ctx context.Context, q store.Queryer, festID int64) ([]int64, error) {
+	troikas, err := roster.LoadAssembled(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, len(troikas))
+	for i, t := range troikas {
+		ids[i] = t.ID
+	}
+	return ids, nil
+}
+
+// divisionEntrantsTx is who a Game of that division seats, by name; empty is a
+// message for the host, since a Game without entrants would seat the whole
+// fest roster instead.
+func divisionEntrantsTx(ctx context.Context, q store.Queryer, festID int64, division string, exclude int64) ([]int64, error) {
+	troikas, err := roster.AssembledInDivision(ctx, q, festID, division, exclude)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, len(troikas))
+	for i, t := range troikas {
+		ids[i] = t.ID
+	}
+	return ids, nil
+}

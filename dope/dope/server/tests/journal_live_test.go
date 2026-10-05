@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/entrants"
 	"dope/dope/domain/imports"
 	"dope/dope/platform/realtime"
 	dopeserver "dope/dope/server"
@@ -13,10 +14,13 @@ import (
 	"testing"
 )
 
+// importEvent is what an import into the entrants tab records.
+const importEvent = "entrants:import"
+
 // TestJournalRecordsLiveEdits proves the unified journal is written on the live
-// edit path (replacing the old events table): a seed-import edit lands a journal
-// row with the right opcode, payload and fest-scoped seq, and no `events` table
-// exists anymore.
+// edit path (replacing the old events table): an entrants import lands a
+// journal row with its event type, payload and fest-scoped seq, and no `events`
+// table exists anymore.
 func TestJournalRecordsLiveEdits(t *testing.T) {
 	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
@@ -43,11 +47,12 @@ func TestJournalRecordsLiveEdits(t *testing.T) {
 	// Attribute the edit to a user via the audit context, as the middleware does.
 	ctx := festwrite.WithAuditRequestID(festwrite.WithAuditActor(context.Background(), 42), "req-test")
 	scope := dopeserver.FestScope{FestID: festID, GameID: ekGameID}
-	if _, _, _, err := imports.ImportSeeds(srv.Eng(), ctx, scope, imports.FromKSI()); err != nil {
+	if _, err := entrants.ImportLegacy(srv.Eng(), ctx, scope, imports.FromKSI()); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 
-	// The seed-import edit must have produced a journal row with the KSI opcode.
+	// The import must have produced a journal row. Its event has no opcode of
+	// its own, so the row carries the type in its payload.
 	var (
 		op      int
 		seq     int64
@@ -58,12 +63,12 @@ func TestJournalRecordsLiveEdits(t *testing.T) {
 	err = db.QueryRow(`
 select op, seq, actor_user_id, request_id, payload
 from journal where fest_id = ? and op = ? order by seq desc limit 1`,
-		festID, int(journal.OpEvSeedImportKSI)).Scan(&op, &seq, &actor, &req, &payload)
+		festID, int(journal.OpEvGeneric)).Scan(&op, &seq, &actor, &req, &payload)
 	if err != nil {
-		t.Fatalf("expected seed-import journal row: %v", err)
+		t.Fatalf("expected the import's journal row: %v", err)
 	}
-	if journal.Op(op) != journal.OpEvSeedImportKSI {
-		t.Fatalf("op = %d, want %d", op, journal.OpEvSeedImportKSI)
+	if eventType, _, err := journal.DecodeGenericPayload(payload); err != nil || eventType != importEvent {
+		t.Fatalf("event type = %q (%v), want %s", eventType, err, importEvent)
 	}
 	if seq <= 0 {
 		t.Fatalf("seq = %d, want > 0 (per-fest revision)", seq)
@@ -95,8 +100,8 @@ from journal where fest_id = ? and op = ? order by seq desc limit 1`,
 			t.Fatalf("events not ordered by seq: %d then %d", evs[i-1].Seq, evs[i].Seq)
 		}
 	}
-	if evs[len(evs)-1].EventType != "seed-import:ksi" {
-		t.Fatalf("last event type = %q, want seed-import:ksi", evs[len(evs)-1].EventType)
+	if evs[len(evs)-1].EventType != importEvent {
+		t.Fatalf("last event type = %q, want %s", evs[len(evs)-1].EventType, importEvent)
 	}
 
 	// After archiving the hot rows into a cold segment, events-since must still
@@ -118,7 +123,7 @@ from journal where fest_id = ? and op = ? order by seq desc limit 1`,
 	if len(evs2) != len(evs) {
 		t.Fatalf("events after archive = %d, want %d", len(evs2), len(evs))
 	}
-	if evs2[len(evs2)-1].EventType != "seed-import:ksi" {
+	if evs2[len(evs2)-1].EventType != importEvent {
 		t.Fatalf("post-archive last event type = %q", evs2[len(evs2)-1].EventType)
 	}
 }

@@ -1,9 +1,12 @@
-// Package entrants is a buzzer Game's entrants tab (CONTEXT.md, Entrant
-// list): who the Game seats, where that list comes from, and the host's hand
-// edits to it. EK, ES, Brain, Troika, Hamsa and individual SI share it. The list
-// itself — how it is stored and how it fills the Structure's seats — is
-// imports'; a Game whose Structure is built for its entrants is recompiled by
-// gamebuild. This package decides what the host may do and says why not.
+// Package entrants decides who a buzzer Game seats (CONTEXT.md, Entrant
+// list): where its list comes from, the host's hand edits to it on the
+// entrants tab, and the writes elsewhere that move it — a troika added,
+// deleted or moved to another division, a team's Flags (follow.go). EK, ES,
+// Brain, Troika, Hamsa and individual SI share it. Every one of those saves
+// the list through applyListTx: how the list is stored and fills the
+// Structure's seats is imports', and an entrant-sized Structure follows it
+// through gamebuild. This package decides what the host may do and says why
+// not.
 package entrants
 
 import (
@@ -15,7 +18,6 @@ import (
 	"strings"
 
 	"dope/dope/domain/core"
-	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
@@ -44,10 +46,6 @@ func kindOf(gameType string) string {
 	}
 	return KindTeam
 }
-
-// Formats reports whether a Game type keeps an Entrant list: the buzzer
-// formats, where a few entrants meet in each bout (games.KeepsEntrantList).
-func Formats(gameType string) bool { return games.KeepsEntrantList(gameType) }
 
 // Source is where a list comes from: a Game's table (Game is its code), the
 // fest's own roster, the fest's troikas, a lot, an uploaded sheet or the
@@ -199,7 +197,7 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 		}
 	}
 	if view.Preselect.Kind == "" {
-		if division, ok := gamebuild.EntrantDivision(dsl); ok && view.Kind == KindTroika {
+		if division, ok := imports.EntrantDivision(dsl); ok && view.Kind == KindTroika {
 			view.Preselect = Source{Kind: SourceTroikas, Division: division}
 		} else {
 			view.Preselect = view.Sources[0].Source
@@ -396,11 +394,11 @@ func edit(h Host, reqCtx context.Context, scope core.FestScope, event string,
 		if err != nil {
 			return err
 		}
-		applied, err := gamebuild.ApplyListTx(ctx, tx, scope, list, next, "entrants:"+event)
+		saved, err := applyListTx(ctx, tx, scope, list, next, "entrants:"+event)
 		if err != nil {
 			return err
 		}
-		base := applied.View
+		base := saved.view
 		if after != nil {
 			if err := after(ctx, tx); err != nil {
 				return err
@@ -413,8 +411,8 @@ func edit(h Host, reqCtx context.Context, scope core.FestScope, event string,
 		if err != nil {
 			return err
 		}
-		view.Kept = applied.Kept
-		result = Result{View: view, Revision: applied.Revision, StateJSON: applied.StateJSON, Rebuilt: applied.Rebuilt}
+		view.Kept = saved.kept
+		result = Result{View: view, Revision: saved.revision, StateJSON: saved.stateJSON, Rebuilt: saved.rebuilt}
 		return nil
 	})
 	return result, err
@@ -788,9 +786,11 @@ select game_id is not null from participants where id = ?`, participantID).Scan(
 		if !oneOff {
 			return nil
 		}
-		_, err := tx.ExecContext(ctx, `
-delete from participants where id = ? and game_id = ?
-  and not exists (select 1 from match_slots where participant_id = ?)`, participantID, scope.GameID, participantID)
+		seated, err := imports.InBoutTx(ctx, tx, scope.GameID, participantID)
+		if err != nil || seated {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `delete from participants where id = ? and game_id = ?`, participantID, scope.GameID)
 		return err
 	})
 }
