@@ -965,11 +965,12 @@ func (p *parser) postprocessQuestion(q *fsource.Question) {
 		}
 	}
 	qs = joinStrings(q.Get("question"))
-	// "Handout:\n[…" → "[Handout:\n…" so the handout
-	// ends up inside the bracketed block the composer looks for.
-	if m := p.rx.handoutBefore.FindString(qs); m != "" {
-		gap := p.rx.handoutBefore.FindStringSubmatch(qs)[1]
-		q.Set("question", replaceDeep(q.Get("question"), m, "["+p.rx.handoutLabel+":"+gap))
+	// "Handout:\n[…" → "[Handout:\n…" so the handout ends up inside the
+	// bracketed block the composer looks for. A label that is already in a
+	// bracket is a handout whose text happens to open with one ("[СЛОВО
+	// ПРОПУЩЕНО] …"), and is left alone.
+	if m := p.rx.handoutBefore.FindStringSubmatch(qs); m != nil {
+		q.Set("question", replaceDeep(q.Get("question"), m[0], m[1]+"["+p.rx.handoutLabel+":"+m[2]))
 	}
 	liftLeadingImages(q)
 }

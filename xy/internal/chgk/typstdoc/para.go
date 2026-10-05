@@ -108,6 +108,43 @@ func (p *para) typ() string {
 	return out.String()
 }
 
+// The handout frame, as the docx export sets it: a caption close above a 1pt
+// frame around the handout, and the question text resuming a little below it.
+const (
+	handoutCaptionPt      = 10.0
+	handoutCaptionAbovePt = 4.0
+	handoutCaptionGapPt   = 1.0
+	handoutStrokePt       = 1.0
+	handoutInsetPt        = 5.0
+	handoutGapPt          = 6.0 // the question text after the frame
+)
+
+// handoutBox is a handout set apart from its question (chgksuite's
+// HandoutBox): filled like a para, it renders to the caption, lined up with
+// the text inside the frame and kept with it, then the framed handout. A page
+// break inside a handout is dropped: typst refuses one inside a block.
+type handoutBox struct {
+	para
+	caption string
+}
+
+func (h *handoutBox) typ() string {
+	var body []string
+	for _, e := range h.exprs {
+		if e != pbMarker {
+			body = append(body, e)
+		}
+	}
+	content := strings.Join(body, " + ")
+	if content == "" {
+		content = "[]"
+	}
+	return fmt.Sprintf("#block(above: %s, below: 0pt, inset: (left: %s), breakable: false, sticky: true, %s)\n",
+		pt(handoutCaptionAbovePt), pt(handoutInsetPt+handoutStrokePt), wrapText(h.caption, "size: "+pt(handoutCaptionPt))) +
+		fmt.Sprintf("#block(above: %s, below: 0pt, width: 100%%, stroke: %s, inset: %s, %s)\n",
+			pt(handoutCaptionGapPt), pt(handoutStrokePt), pt(handoutInsetPt), content)
+}
+
 // chunks splits the paragraph's expressions at the page breaks.
 func (p *para) chunks() [][]string {
 	chunks := [][]string{{}}

@@ -259,3 +259,24 @@ func TestGenerateTypSI(t *testing.T) {
 		t.Errorf("СИ questions must not carry the ЧГК question label\n---\n%s", typ)
 	}
 }
+
+// A handout on lines of its own is set apart: the caption, then the handout in
+// a frame, and the question text in a block of its own below. One in the
+// middle of a sentence stays a part of the text.
+func TestGenerateTypHandoutFrame(t *testing.T) {
+	src := "? [Раздаточный материал:\nстрока один\nстрока два\n]\nЧто это?\n! Ответ\n\n" +
+		"? Взгляните на [Раздаточный материал: АБВ] и ответьте.\n! Ответ\n"
+	typ := typstdoc.GenerateTyp(parse(t, src), nil, typstdoc.Options{})
+	caption := strings.Index(typ, `text(size: 10pt, "Раздаточный материал")`)
+	frame := strings.Index(typ, "stroke: 1pt")
+	text := strings.Index(typ, `это?")`)
+	if caption < 0 || frame < caption || text < frame {
+		t.Fatalf("want caption, frame, text in that order\n---\n%s", typ)
+	}
+	if strings.Count(typ, "stroke:") != 1 {
+		t.Errorf("a handout inside a sentence should not be framed\n---\n%s", typ)
+	}
+	if !strings.Contains(typ, "[Раздаточный материал: АБВ]") {
+		t.Errorf("the mid-sentence handout lost its bracket\n---\n%s", typ)
+	}
+}

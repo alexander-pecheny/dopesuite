@@ -66,6 +66,8 @@ const (
 
 const (
 	mmPerInch = 25.4
+	ptPerInch = 72.0
+	a4WMM     = 210.0
 	// maxImgWIn and maxImgHIn are the board preview's box for a picture: 5in
 	// wide, 2in (12em at the 12pt body) tall.
 	maxImgWIn = 5.0
@@ -107,6 +109,9 @@ type exporter struct {
 	cfg    Config
 	device Device
 	labels i18n.Labels
+	// insetIn is what a handout's frame takes off the text width while it is
+	// being filled, so a picture in it still fits.
+	insetIn float64
 }
 
 func newExporter(images map[string][]byte, o Options) *exporter {
@@ -248,17 +253,7 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 	}
 	p1 := &para{above: above, keepLines: true}
 	p1.addStyled(e.questionLabel(q)+". ", "bold")
-	if h := q.Get("handout"); h != nil {
-		p1.addStyled("\n["+e.labelFor(q, "handout")+": ", "")
-		e.addValue(p1, h, false)
-		p1.addStyled("\n]", "")
-	}
-	// SI runs the question on from its point value; ChGK breaks the line after it.
-	if !e.opts.siMode() {
-		p1.addBreak()
-	}
-	e.addValue(p1, q.Get("question"), true)
-	out.WriteString(p1.typ())
+	out.WriteString(e.renderQuestionText(q, p1))
 
 	p2 := &para{above: e.cfg.AnswerAbove, keepLines: true}
 	p2.addStyled(e.labelFor(q, "answer")+": ", "bold")
@@ -288,6 +283,51 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 	out.WriteString(p2.typ())
 	if src != nil {
 		out.WriteString(src.typ())
+	}
+	return out.String()
+}
+
+// textWidthIn is the page's text column, in inches.
+func (e *exporter) textWidthIn() float64 {
+	if e.device == Mobile {
+		return (mobileWMM - 2*mobileMarginMM) / mmPerInch
+	}
+	return (a4WMM - 2*e.cfg.MarginHMM) / mmPerInch
+}
+
+// renderQuestionText writes the question's text after its label paragraph p,
+// each handout set apart as a captioned frame (handoutBox): the one of a field
+// of its own, and the ones the text holds on lines of their own.
+func (e *exporter) renderQuestionText(q *fsource.Question, p *para) string {
+	pieces := inline.QuestionPieces(q.Get("handout"), q.Get("question"), e.labelFor(q, "handout"))
+	// SI runs the question on from its point value; ChGK breaks the line after it.
+	if !e.opts.siMode() && (pieces == nil || !pieces[0].Handout) {
+		p.addBreak()
+	}
+	if pieces == nil {
+		e.addValue(p, q.Get("question"), true)
+		return p.typ()
+	}
+	var out strings.Builder
+	for _, pc := range pieces {
+		if pc.Handout {
+			p.sticky = true
+			out.WriteString(p.typ())
+			box := &handoutBox{caption: pc.Label}
+			e.insetIn = 2 * (handoutInsetPt + handoutStrokePt) / ptPerInch
+			e.addValue(&box.para, pc.Value, false)
+			e.insetIn = 0
+			out.WriteString(box.typ())
+			p = nil
+			continue
+		}
+		if p == nil {
+			p = &para{above: handoutGapPt, keepLines: true}
+		}
+		e.addValue(p, pc.Value, true)
+	}
+	if p != nil {
+		out.WriteString(p.typ())
 	}
 	return out.String()
 }

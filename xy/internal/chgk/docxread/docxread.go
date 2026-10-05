@@ -21,6 +21,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"xy/internal/chgk/inline"
 	"xy/internal/chgk/typo"
 )
 
@@ -557,6 +558,9 @@ func or(a, b string) string {
 // ── tables ──────────────────────────────────────────────────────────────────
 
 func (c *converter) tableText(tbl *node) string {
+	if handout, ok := c.handoutTableText(tbl); ok {
+		return handout
+	}
 	var rows [][]string
 	for _, tr := range tbl.findAll("tr") {
 		var rowData []string
@@ -568,6 +572,32 @@ func (c *converter) tableText(tbl *node) string {
 		}
 	}
 	return markdownTable(rows)
+}
+
+// handoutTableText reads a table the exporters set a handout in back as the
+// handout bracket, in the block form (parsing_engine's _handout_table_text):
+// two rows of one cell each, the first holding nothing but the handout
+// caption, the second something. ok is false for any other table.
+func (c *converter) handoutTableText(tbl *node) (string, bool) {
+	trs := tbl.findAll("tr")
+	if len(trs) != 2 {
+		return "", false
+	}
+	var cells [2]*node
+	for i, tr := range trs {
+		rc := rowCells(tbl, tr)
+		if len(rc) != 1 {
+			return "", false
+		}
+		cells[i] = rc[0]
+	}
+	caption := strings.Join(strings.FieldsFunc(c.cellText(cells[0]), unicode.IsSpace), " ")
+	caption = strings.TrimRightFunc(strings.TrimSuffix(strings.TrimSpace(caption), ":"), unicode.IsSpace)
+	content := strings.TrimSpace(c.cellText(cells[1]))
+	if content == "" || !inline.IsHandoutBody(caption) || strings.Contains(caption, "[") {
+		return "", false
+	}
+	return "[" + caption + ":\n" + content + "\n]", true
 }
 
 func (c *converter) cellText(tc *node) string {

@@ -65,6 +65,7 @@ const (
 	siQuestionGapTw     = 240 // 12pt
 	questionGapTw       = 360 // 18pt
 	answerGapTw         = 120 // 6pt
+	handoutGapTw        = 120 // 6pt: the question text resuming under a handout box
 )
 
 // relItem is a relationship appended to word/_rels/document.xml.rels in document
@@ -410,16 +411,22 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 	}
 
 	p.addRaw(e.questionLabel(q, e.opts.OnlyQuestionNumber || e.opts.siMode())+". ", "bold")
-	if h := q.Get("handout"); h != nil {
-		p.addRaw("\n["+e.labelFor(q, "handout")+": ", "")
-		e.addValue(p, h, textOpts{removeAccents: screen, removeBrackets: screen})
-		p.addRaw("\n]", "")
+	if into != nil {
+		// Inside a table cell (the screen-version columns) a handout stays a
+		// bracket in the text: a cell holds the whole question as one paragraph.
+		if h := q.Get("handout"); h != nil {
+			p.addRaw("\n["+e.labelFor(q, "handout")+": ", "")
+			e.addValue(p, h, textOpts{removeAccents: screen, removeBrackets: screen})
+			p.addRaw("\n]", "")
+		}
+		// SI runs the question on from its point value; ChGK breaks the line after the label.
+		if !e.opts.NoParagraph && !e.opts.siMode() {
+			p.addRaw("\n", "")
+		}
+		e.addValue(p, q.Get("question"), textOpts{nbsp: true, removeAccents: screen, removeBrackets: screen})
+	} else {
+		e.renderQuestionText(q, p, screen)
 	}
-	// SI runs the question on from its point value; ChGK breaks the line after the label.
-	if !e.opts.NoParagraph && !e.opts.siMode() {
-		p.addRaw("\n", "")
-	}
-	e.addValue(p, q.Get("question"), textOpts{nbsp: true, removeAccents: screen, removeBrackets: screen})
 
 	if e.opts.NoAnswers {
 		return
@@ -508,6 +515,41 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 		p.addRaw("\n", "")
 		p.addRaw(e.labelFor(q, field)+": ", "bold")
 		e.addValue(p, v, o)
+	}
+}
+
+// renderQuestionText writes the question's text after its label paragraph p,
+// setting each handout apart as a captioned box (handoutTable) — the ones of a
+// field of their own and the ones the text holds on lines of their own.
+func (e *exporter) renderQuestionText(q *fsource.Question, p *para, screen bool) {
+	text := textOpts{nbsp: true, removeAccents: screen, removeBrackets: screen}
+	pieces := inline.QuestionPieces(q.Get("handout"), q.Get("question"), e.labelFor(q, "handout"))
+	if pieces == nil {
+		// SI runs the question on from its point value; ChGK breaks the line after the label.
+		if !e.opts.NoParagraph && !e.opts.siMode() {
+			p.addRaw("\n", "")
+		}
+		e.addValue(p, q.Get("question"), text)
+		return
+	}
+	if !pieces[0].Handout && !e.opts.NoParagraph && !e.opts.siMode() {
+		p.addRaw("\n", "")
+	}
+	for _, pc := range pieces {
+		if pc.Handout {
+			p.keepNext = true
+			t := &handoutTable{caption: &para{keepNext: true, sz: handoutCaptionSz}, box: &para{}}
+			t.caption.addRaw(pc.Label, "")
+			e.addValue(t.box, pc.Value, textOpts{removeAccents: screen, removeBrackets: screen})
+			e.body = append(e.body, t)
+			p = nil
+			continue
+		}
+		if p == nil {
+			p = e.addPara()
+			p.keepLines, p.spacingBefore = true, handoutGapTw
+		}
+		e.addValue(p, pc.Value, text)
 	}
 }
 
@@ -837,6 +879,36 @@ const cellWidth = 4873
 
 // table is the one-row, two-column table the add_versions_columns screen mode
 // puts a question in, one copy per cell, one paragraph per copy.
+// The handout box (add_handout_table in chgksuite's docx.py): a two-row table,
+// the caption borderless and close above the bordered handout.
+const (
+	handoutCaptionSz       = 20  // 10pt, in half-points
+	handoutBorderEighths   = 8   // 1pt, in eighths of a point
+	handoutBoxMarginTw     = 100 // above and below the handout, inside the frame
+	handoutCaptionMarginTw = 20  // between the caption and the frame
+)
+
+type handoutTable struct{ caption, box *para }
+
+func (t *handoutTable) xml() string {
+	var b strings.Builder
+	b.WriteString(`<w:tbl><w:tblPr><w:tblW w:type="pct" w:w="5000"/>` +
+		`<w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/></w:tblPr>`)
+	fmt.Fprintf(&b, `<w:tblGrid><w:gridCol w:w="%d"/></w:tblGrid>`, 2*cellWidth)
+	fmt.Fprintf(&b, `<w:tr><w:tc><w:tcPr><w:tcW w:type="dxa" w:w="%d"/>`, 2*cellWidth)
+	b.WriteString(cellMargins(0, handoutCaptionMarginTw) + "</w:tcPr>" + t.caption.xml() + "</w:tc></w:tr>")
+	fmt.Fprintf(&b, `<w:tr><w:tc><w:tcPr><w:tcW w:type="dxa" w:w="%d"/><w:tcBorders>`, 2*cellWidth)
+	for _, edge := range []string{"top", "left", "bottom", "right"} {
+		fmt.Fprintf(&b, `<w:%s w:val="single" w:sz="%d" w:space="0" w:color="000000"/>`, edge, handoutBorderEighths)
+	}
+	b.WriteString("</w:tcBorders>" + cellMargins(handoutBoxMarginTw, handoutBoxMarginTw) + "</w:tcPr>" + t.box.xml() + "</w:tc></w:tr></w:tbl>")
+	return b.String()
+}
+
+func cellMargins(top, bottom int) string {
+	return fmt.Sprintf(`<w:tcMar><w:top w:w="%d" w:type="dxa"/><w:bottom w:w="%d" w:type="dxa"/></w:tcMar>`, top, bottom)
+}
+
 type table struct{ cells [2]*para }
 
 func (t *table) xml() string {

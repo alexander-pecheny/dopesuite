@@ -3,6 +3,7 @@ package docx
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/xml"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,32 +14,40 @@ import (
 	"xy/internal/chgk/fsource"
 )
 
-var reWT = regexp.MustCompile(`(?s)<w:t[^>]*>(.*?)</w:t>`)
-
-// docText extracts and concatenates all <w:t> run text from a .docx's
-// word/document.xml — the visible text content, ignoring formatting/breaks.
+// docText concatenates the text of every <w:t> in a .docx's word/document.xml
+// — the visible text content, ignoring formatting and breaks. Both spellings
+// of the non-breaking hyphen read as U+2011 (see plainNoBreakHyphen).
 func docText(t *testing.T, docx []byte) string {
 	t.Helper()
-	zr, err := zip.NewReader(bytes.NewReader(docx), int64(len(docx)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range zr.File {
-		if f.Name != "word/document.xml" {
-			continue
+	dec := xml.NewDecoder(strings.NewReader(documentXML(t, docx)))
+	var b strings.Builder
+	inText := false
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
 		}
-		rc, _ := f.Open()
-		data, _ := io.ReadAll(rc)
-		rc.Close()
-		var b strings.Builder
-		for _, m := range reWT.FindAllStringSubmatch(plainNoBreakHyphen(string(data)), -1) {
-			b.WriteString(unescapeXML(m[1]))
+		if err != nil {
+			t.Fatal(err)
 		}
-		return b.String()
+		switch el := tok.(type) {
+		case xml.StartElement:
+			inText = el.Name.Space == wordNS && el.Name.Local == "t"
+			if el.Name.Space == wordNS && el.Name.Local == "noBreakHyphen" {
+				b.WriteRune('\u2011')
+			}
+		case xml.EndElement:
+			inText = false
+		case xml.CharData:
+			if inText {
+				b.Write(el)
+			}
+		}
 	}
-	t.Fatal("no document.xml")
-	return ""
+	return strings.ReplaceAll(b.String(), "\u2060-\u2060", "\u2011")
 }
+
+const wordNS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 // reNBHyphenEl is the element xy writes for a non-breaking hyphen, with the
 // <w:t> it interrupts.
@@ -54,13 +63,6 @@ func plainNoBreakHyphen(s string) string {
 	// A hyphen at either end of a run has no <w:t> on that side to merge into.
 	s = strings.ReplaceAll(s, "<w:noBreakHyphen/>", "<w:t>\u2011</w:t>")
 	return strings.ReplaceAll(s, "\u2060-\u2060", "\u2011")
-}
-
-func unescapeXML(s string) string {
-	s = strings.ReplaceAll(s, "&lt;", "<")
-	s = strings.ReplaceAll(s, "&gt;", ">")
-	s = strings.ReplaceAll(s, "&amp;", "&")
-	return s
 }
 
 // documentXML returns the word/document.xml part of a .docx.

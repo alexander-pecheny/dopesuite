@@ -62,7 +62,7 @@ func newRegexSet(language, labelsFile string) (*regexSet, error) {
 	if re := rx.Get("author"); re != nil {
 		s.authorOnly = regexp.MustCompile(`^(?:` + re.String() + `)$`)
 	}
-	s.handoutBefore = regexp.MustCompile(`(?s)` + regexp.QuoteMeta(s.handoutLabel) + `:([ \n]+)\[`)
+	s.handoutBefore = regexp.MustCompile(`(?s)(^|[^\[])` + regexp.QuoteMeta(s.handoutLabel) + `:([ \n]+)\[`)
 	return s, nil
 }
 

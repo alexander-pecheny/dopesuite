@@ -52,11 +52,9 @@ func (e *exporter) addImage(p *para, arg string) {
 	// SizeInches only clamps the AUTO size (longest side ≤ 5in) — a portrait photo
 	// or an explicit h= still ate half a page of the PDF. Scale down (never up)
 	// into the preview's box: 2in tall (12em at the 12pt body), 5in wide.
-	// The mobile page's text column is narrower than 5in, so cap to it there.
-	maxImgW, maxImgH := maxImgWIn, maxImgHIn
-	if e.device == Mobile {
-		maxImgW = (mobileWMM - 2*mobileMarginMM) / mmPerInch
-	}
+	// The mobile page's text column is narrower than 5in, so cap to the column
+	// too — less a handout frame's insets, inside one.
+	maxImgW, maxImgH := min(maxImgWIn, e.textWidthIn()-e.insetIn), maxImgHIn
 	if s := min(maxImgW/widthIn, maxImgH/heightIn); s < 1 {
 		widthIn, heightIn = widthIn*s, heightIn*s
 	}
