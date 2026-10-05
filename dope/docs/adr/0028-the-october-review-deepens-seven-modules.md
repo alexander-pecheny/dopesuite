@@ -40,3 +40,23 @@ path production never takes.
   `gamebuild.EntrantDivision` are gone. The tests import through
   `entrants.ImportLegacy` and decline through `entrants.Decline`, which is
   what the routes call.
+
+## 2. A recompile writes through the one Structure writer
+
+ADR-0014 gave a Game's stages, matches and slots one writer,
+`writeStructureTx`. `Recompile` had since grown a second writer of its own,
+with the same inserts plus its rules for the bouts it keeps. The two had
+already drifted apart: a bout that a recompile added was given no venue.
+`createSchemeGame` had also become where Тройка seating was decided. Six of
+the last 19 commits to `build.go` were seating rules.
+
+- `writeStructureTx` takes the Game's live Structure (`liveStructure`, nil on
+  creation). A stage or bout the scheme still names is rewritten in place.
+  A bout that has begun keeps its seats, one that grows takes its new seats
+  after its old ones, and any other is reseated. What the scheme no longer
+  names is deleted.
+- `Recompile` only plans: it loads the live Structure, decides which started
+  bouts may grow and refuses the rest (`planGrowthTx`), resolves the venues
+  as a clear does, and hands everything to the writer.
+- Who a Game created from a DSL seats (a зачёт's troikas, every troika of
+  the fest, or empty seats) is `createEntrantsTx` in `seating.go`.

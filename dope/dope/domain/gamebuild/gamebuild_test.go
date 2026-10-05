@@ -349,3 +349,53 @@ select count(*) from matches m join venues v on v.id = m.venue_id where m.game_i
 		t.Fatalf("no bout of the cleared game on the renamed room 1 (%v)", err)
 	}
 }
+
+// A recompile writes through the same writer as a create: a bout the new
+// scheme adds sits at its venue, and a bout both schemes name keeps its row.
+// The recompile used to write its own inserts, which left the new bouts
+// without a venue.
+func TestRecompileSeatsNewBoutsAtTheirVenue(t *testing.T) {
+	db, festID := newFest(t, 4)
+	const before = "[defaults]\nvenues: [А, Б]\n\n[scheme]\nkind: single_elimination\nparticipants: 4\n"
+	const after = before + "bronze: true\n"
+	var gameID int64
+	inTx(t, db, func(tx *sql.Tx) (err error) {
+		gameID, err = gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "brain", Label: "Брейн", DSL: before})
+		return err
+	})
+	ids := func() map[string]int64 {
+		t.Helper()
+		out := map[string]int64{}
+		rows, err := db.Query(`select code, id from matches where game_id = ?`, gameID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var code string
+			var id int64
+			if err := rows.Scan(&code, &id); err != nil {
+				t.Fatal(err)
+			}
+			out[code] = id
+		}
+		return out
+	}
+	was := ids()
+	inTx(t, db, func(tx *sql.Tx) error {
+		return gamebuild.Recompile(context.Background(), tx, festID, gameID, after)
+	})
+	now := ids()
+	if len(now) <= len(was) {
+		t.Fatalf("бои after the recompile = %d, before %d", len(now), len(was))
+	}
+	for code, id := range was {
+		if now[code] != id {
+			t.Fatalf("бой %s was %d, now %d: a bout both schemes name keeps its row", code, id, now[code])
+		}
+	}
+	var unseated int
+	if err := db.QueryRow(`select count(*) from matches where game_id = ? and venue_id is null`, gameID).Scan(&unseated); err != nil || unseated != 0 {
+		t.Fatalf("%d бои without a venue after the recompile (%v)", unseated, err)
+	}
+}

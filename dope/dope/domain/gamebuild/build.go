@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
-	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/schemedsl"
 	"dope/dope/platform/util"
@@ -192,7 +191,7 @@ func writePastedStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int6
 	if err != nil {
 		return err
 	}
-	return writeStructureTx(ctx, tx, festID, gameID, scheme.GameType, scheme, venues, unseated)
+	return writeStructureTx(ctx, tx, festID, gameID, scheme.GameType, scheme, venues, unseated, nil)
 }
 
 func unseated(store.SchemeSlot) any { return nil }
@@ -233,31 +232,9 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 	if err != nil {
 		return 0, err
 	}
-	// A Тройка that takes a зачёт seats that зачёт's troikas, whatever was
-	// ticked on the form. A зачёт with none yet still gets its game: the
-	// Structure is built for as many empty seats as its first stage sends on,
-	// and the troikas fill it as they are entered (entrants.FollowDivisionsTx).
-	var placeholders int
-	troikas := games.SeatsTroikas(gameType)
-	if division, ok := imports.EntrantDivision(dsl); ok && troikas {
-		if entrants, err = divisionEntrantsTx(ctx, tx, festID, division, 0); err != nil {
-			return 0, err
-		}
-		if len(entrants) == 0 {
-			placeholders = placeholderSeats(dsl)
-		}
-	}
-	// A Тройка seats troikas. Created with none ticked and no seed declared,
-	// it takes every troika of the fest in the order of applications — not
-	// the fest's teams, which is what «none ticked» means for a team game and
-	// which a Тройка never seats.
-	if troikas && len(entrants) == 0 && placeholders == 0 && !imports.DeclaresSeed(dsl) {
-		if entrants, err = festTroikasTx(ctx, tx, festID); err != nil {
-			return 0, err
-		}
-		if len(entrants) < 2 {
-			return 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedTroikas())
-		}
+	entrants, placeholders, err := createEntrantsTx(ctx, tx, festID, gameType, dsl, entrants)
+	if err != nil {
+		return 0, err
 	}
 	var scheme store.FestScheme
 	if placeholders > 0 {
@@ -298,7 +275,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 		if err != nil {
 			return 0, err
 		}
-		if err := writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, unseated); err != nil {
+		if err := writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, unseated, nil); err != nil {
 			return 0, err
 		}
 		return gameID, nil
@@ -451,7 +428,7 @@ func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID in
 	if err != nil {
 		return err
 	}
-	return writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, seat)
+	return writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, seat, nil)
 }
 
 // schemeVenuesTx gives the fest the venues a compiled scheme titles — Hamsa's
@@ -552,53 +529,206 @@ func venueKey(title string) string {
 }
 
 // writeStructureTx is the one writer of a Game's stages, matches and slots —
-// compiled or pasted, created, rebuilt or imported. A stage carries its Kind
-// (its stage_type when the scheme names none), a match its letter, its venue
-// when the caller resolved the scheme's venues to rows, and the pristine
-// Protocol document its Protocol asks for; seat says who sits in a seed slot.
-func writeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme, venues map[int]int64, seat func(store.SchemeSlot) any) error {
+// compiled or pasted, created, rebuilt, recompiled or imported. A stage
+// carries its Kind (its stage_type when the scheme names none), a match its
+// letter, its venue when the caller resolved the scheme's venues to rows, and
+// the pristine Protocol document its Protocol asks for; seat says who sits in
+// a seed slot.
+//
+// live is the Structure the Game has now, nil for a Game that has none. A
+// stage or bout the scheme still names is then rewritten in place rather
+// than inserted, and what the scheme no longer names is deleted: see
+// liveStructure for what each bout keeps.
+func writeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme, venues map[int]int64, seat func(store.SchemeSlot) any, live *liveStructure) error {
+	if live == nil {
+		live = &liveStructure{}
+	}
 	for stageIndex, stage := range scheme.Stages {
-		position := stage.Position
-		if position == 0 {
-			position = stageIndex + 1
-		}
-		stageType := stage.StageType
-		if stageType == "" {
-			stageType = "matches"
-		}
-		kind := stage.Kind
-		if kind == "" {
-			kind = stageType
-		}
-		grain := stage.Grain.Normalized()
-		stageID, err := store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
-values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
-			festID, gameID, stage.Code, stage.Title, stageType, kind, position, store.StageConfigOf(stage).JSON(),
-			grain.Block, grain.Wave, grain.Group)
+		stageID, err := live.writeStageTx(ctx, tx, festID, gameID, stageIndex, stage)
 		if err != nil {
 			return err
 		}
 		for matchIndex, match := range stage.Matches {
-			seats := match.ParticipantCount
-			if seats == 0 {
-				seats = len(match.Slots)
-			}
-			var venueID any
+			row := matchRow{stageID: stageID, position: matchIndex + 1, match: match,
+				emptyState: stageEmptyState(gameType, stage, len(match.Slots), scheme.Questions)}
 			if id, ok := venues[match.Venue]; ok {
-				venueID = id
+				row.venueID = id
 			}
-			emptyState := stageEmptyState(gameType, stage, len(match.Slots), scheme.Questions)
-			matchID, err := store.InsertReturningID(ctx, tx, `
+			if err := live.writeMatchTx(ctx, tx, festID, gameID, gameType, row, seat); err != nil {
+				return err
+			}
+		}
+	}
+	return live.dropLeftTx(ctx, tx)
+}
+
+// liveStructure is a Game's stages and bouts as they stand, by code, for
+// writeStructureTx to write the new scheme over. A bout that has begun keeps
+// its seats and its document and only moves (title, letter, position); one in
+// grown keeps them too and takes the extra seats after them; any other is
+// reseated from scratch.
+type liveStructure struct {
+	stages  map[string]int64
+	matches map[string]liveMatch
+	// grown is the bouts that grow, with the document their Protocol grew.
+	grown map[string]json.RawMessage
+}
+
+type liveMatch struct {
+	id     int64
+	status string
+	state  string
+}
+
+func (m liveMatch) begun(gameType string) bool {
+	return m.status == "finished" || games.Started(gameType, m.state)
+}
+
+// matchRow is one bout of the scheme as writeStructureTx writes it.
+type matchRow struct {
+	stageID    int64
+	position   int
+	match      store.SchemeMatch
+	emptyState string
+	venueID    any
+}
+
+func loadLiveStructureTx(ctx context.Context, tx *sql.Tx, gameID int64) (*liveStructure, error) {
+	live := &liveStructure{stages: map[string]int64{}, matches: map[string]liveMatch{}, grown: map[string]json.RawMessage{}}
+	type stageRow struct {
+		id   int64
+		code string
+	}
+	stages, err := store.CollectRows(ctx, tx, `select id, code from stages where game_id = ?`, []any{gameID},
+		func(rows *sql.Rows) (stageRow, error) {
+			var r stageRow
+			return r, rows.Scan(&r.id, &r.code)
+		})
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range stages {
+		live.stages[r.code] = r.id
+	}
+	type liveRow struct {
+		code string
+		m    liveMatch
+	}
+	matches, err := store.CollectRows(ctx, tx, `
+select id, code, status, coalesce(state_json, '{}') from matches where game_id = ?`, []any{gameID},
+		func(rows *sql.Rows) (liveRow, error) {
+			var r liveRow
+			return r, rows.Scan(&r.m.id, &r.code, &r.m.status, &r.m.state)
+		})
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range matches {
+		live.matches[r.code] = r.m
+	}
+	return live, nil
+}
+
+func (live *liveStructure) writeStageTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, stageIndex int, stage store.SchemeStage) (int64, error) {
+	position := stage.Position
+	if position == 0 {
+		position = stageIndex + 1
+	}
+	stageType := stage.StageType
+	if stageType == "" {
+		stageType = "matches"
+	}
+	kind := stage.Kind
+	if kind == "" {
+		kind = stageType
+	}
+	grain := stage.Grain.Normalized()
+	if stageID, ok := live.stages[stage.Code]; ok {
+		delete(live.stages, stage.Code)
+		// The grain is refreshed here too: a recompile is how a game whose
+		// stages predate the coordinates acquires them, and a block that
+		// moved needs its new ones.
+		_, err := tx.ExecContext(ctx, `
+update stages set title = ?, stage_type = ?, kind = ?, position = ?, config_json = ?,
+  block_code = ?, wave_index = ?, group_code = ? where id = ?`,
+			stage.Title, stageType, kind, position, store.StageConfigOf(stage).JSON(),
+			grain.Block, grain.Wave, grain.Group, stageID)
+		return stageID, err
+	}
+	return store.InsertReturningID(ctx, tx, `
+insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
+values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+		festID, gameID, stage.Code, stage.Title, stageType, kind, position, store.StageConfigOf(stage).JSON(),
+		grain.Block, grain.Wave, grain.Group)
+}
+
+func (live *liveStructure) writeMatchTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, row matchRow, seat func(store.SchemeSlot) any) error {
+	match := row.match
+	seats := match.ParticipantCount
+	if seats == 0 {
+		seats = len(match.Slots)
+	}
+	existing, ok := live.matches[match.Code]
+	if !ok {
+		matchID, err := store.InsertReturningID(ctx, tx, `
 insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, venue_id, status, revision, state_json)
 values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, seats, venueID, emptyState)
-			if err != nil {
-				return err
-			}
-			if err := insertMatchSlots(ctx, tx, matchID, match.Slots, seat); err != nil {
-				return err
-			}
+			festID, gameID, row.stageID, match.Code, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, seats, row.venueID, row.emptyState)
+		if err != nil {
+			return err
+		}
+		return insertMatchSlots(ctx, tx, matchID, match.Slots, seat)
+	}
+	delete(live.matches, match.Code)
+	if state, grows := live.grown[match.Code]; grows {
+		// The seats it had stay where they are, results and all; the new ones
+		// are added after them.
+		if _, err := tx.ExecContext(ctx, `
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, state_json = ? where id = ?`,
+			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, seats, string(state), existing.id); err != nil {
+			return err
+		}
+		var have int
+		if err := tx.QueryRowContext(ctx, `select count(*) from match_slots where match_id = ?`, existing.id).Scan(&have); err != nil {
+			return err
+		}
+		return insertMatchSlotsFrom(ctx, tx, existing.id, match.Slots, have, seat)
+	}
+	if existing.begun(gameType) {
+		_, err := tx.ExecContext(ctx, `
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ? where id = ?`,
+			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, existing.id)
+		return err
+	}
+	// A team-blob бой keys its marks by Participant, and its Protocol calls it
+	// unstarted until it is finished. Its marks stay through the reseat: those
+	// of an entrant still seated show again, the others wait unseen. A late
+	// entrant added to a written qualifier mid-entry used to wipe it.
+	state := row.emptyState
+	if store.TeamBlobShaped(gameType) {
+		state = existing.state
+	}
+	if _, err := tx.ExecContext(ctx, `
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
+		row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, seats, state, existing.id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `delete from match_slots where match_id = ?`, existing.id); err != nil {
+		return err
+	}
+	return insertMatchSlots(ctx, tx, existing.id, match.Slots, seat)
+}
+
+// dropLeftTx deletes the stages and bouts the new scheme no longer names.
+func (live *liveStructure) dropLeftTx(ctx context.Context, tx *sql.Tx) error {
+	for _, m := range live.matches {
+		if _, err := tx.ExecContext(ctx, `delete from matches where id = ?`, m.id); err != nil {
+			return err
+		}
+	}
+	for _, stageID := range live.stages {
+		if _, err := tx.ExecContext(ctx, `delete from stages where id = ?`, stageID); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -607,7 +737,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
 // Recompile re-expands an edited DSL onto a live game: stages and unstarted
 // matches follow the new scheme (questions changes included), started matches
 // survive with identical slot sources — else the whole edit is refused,
-// naming them.
+// naming them. A bout the new scheme adds sits at its venue, as on creation.
 func Recompile(ctx context.Context, tx *sql.Tx, festID, gameID int64, dsl string) error {
 	var oldSchemeJSON, gameType string
 	if err := tx.QueryRowContext(ctx, `
@@ -631,208 +761,27 @@ select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_i
 	if err != nil {
 		return err
 	}
-
-	type dbMatch struct {
-		ID      int64
-		StageID int64
-		Status  string
-		State   string
-	}
-	existingMatches := map[string]dbMatch{}
-	rows, err := tx.QueryContext(ctx, `
-select id, stage_id, code, status, coalesce(state_json, '{}') from matches where game_id = ?`, gameID)
+	live, err := loadLiveStructureTx(ctx, tx, gameID)
 	if err != nil {
 		return err
 	}
-	for rows.Next() {
-		var m dbMatch
-		var code string
-		if err := rows.Scan(&m.ID, &m.StageID, &code, &m.Status, &m.State); err != nil {
-			rows.Close()
-			return err
-		}
-		existingMatches[code] = m
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
+	if err := planGrowthTx(ctx, tx, gameType, scheme, live); err != nil {
 		return err
 	}
-	rows.Close()
-
-	existingStages := map[string]int64{}
-	stageRows, err := tx.QueryContext(ctx, `select id, code from stages where game_id = ?`, gameID)
-	if err != nil {
-		return err
-	}
-	for stageRows.Next() {
-		var id int64
-		var code string
-		if err := stageRows.Scan(&id, &code); err != nil {
-			stageRows.Close()
-			return err
-		}
-		existingStages[code] = id
-	}
-	if err := stageRows.Err(); err != nil {
-		stageRows.Close()
-		return err
-	}
-	stageRows.Close()
-
-	planned := map[string]store.SchemeMatch{}
-	for _, stage := range scheme.Stages {
-		for _, match := range stage.Matches {
-			planned[match.Code] = match
-		}
-	}
-	// A started bout keeps its seats. The one exception is a bout that only
-	// grows: the same seats first, more after them, a document that can take
-	// them (a troika game's written qualifier), and nothing else in the Game
-	// started — a late troika then gets a row, and no result that decides a
-	// later seat has been played yet.
-	var blocked []string
-	grown := map[string]json.RawMessage{}
-	othersStarted := false
-	for code, m := range existingMatches {
-		if m.Status != "finished" && !games.Started(gameType, m.State) {
-			continue
-		}
-		match, survives := planned[code]
-		if survives && sameSlotIdentities(ctx, tx, m.ID, match.Slots) {
-			othersStarted = true
-			continue
-		}
-		if survives && slotIdentitiesExtend(ctx, tx, m.ID, match.Slots) {
-			if grower, ok := games.As[games.Grower](gameType); ok {
-				state, grew, err := grower.GrowSeats(json.RawMessage(m.State), len(match.Slots))
-				if err != nil {
-					return err
-				}
-				if grew {
-					grown[code] = state
-					continue
-				}
-			}
-		}
-		blocked = append(blocked, code)
-	}
-	if othersStarted {
-		for code := range grown {
-			blocked = append(blocked, code)
-		}
-	}
-	if len(blocked) > 0 {
-		sort.Strings(blocked)
-		return corei18n.User(dopestrings.Default.Gamebuild.Recompile.StartedBouts(strings.Join(blocked, ", ")))
-	}
-
 	seat, err := seedSeaterTx(ctx, tx, festID, gameID, gameType)
 	if err != nil {
 		return err
 	}
-	for stageIndex, stage := range scheme.Stages {
-		position := stage.Position
-		if position == 0 {
-			position = stageIndex + 1
-		}
-		grain := stage.Grain.Normalized()
-		stageID, exists := existingStages[stage.Code]
-		if exists {
-			// The grain is refreshed here, not only on insert: a recompile is how
-			// a game whose stages predate the coordinates acquires them, and a
-			// block that moved needs its new ones.
-			if _, err := tx.ExecContext(ctx, `
-update stages set title = ?, stage_type = ?, kind = ?, position = ?, config_json = ?,
-  block_code = ?, wave_index = ?, group_code = ? where id = ?`,
-				stage.Title, stage.StageType, stage.Kind, position, store.StageConfigOf(stage).JSON(),
-				grain.Block, grain.Wave, grain.Group, stageID); err != nil {
-				return err
-			}
-			delete(existingStages, stage.Code)
-		} else {
-			if stageID, err = store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
-values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
-				festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, store.StageConfigOf(stage).JSON(),
-				grain.Block, grain.Wave, grain.Group); err != nil {
-				return err
-			}
-		}
-		for matchIndex, match := range stage.Matches {
-			// The Protocol owns a pristine бой's shape, as it does when the
-			// Structure is first written: a Тройка or a Хамса бой is not a
-			// брейн's row of questions.
-			emptyState := stageEmptyState(gameType, stage, len(match.Slots), scheme.Questions)
-			existing, ok := existingMatches[match.Code]
-			if ok {
-				delete(existingMatches, match.Code)
-				if state, grows := grown[match.Code]; grows {
-					// The seats it had stay where they are, results and all; the new
-					// ones are added after them.
-					if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, state_json = ? where id = ?`,
-						stageID, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, len(match.Slots), string(state), existing.ID); err != nil {
-						return err
-					}
-					var have int
-					if err := tx.QueryRowContext(ctx, `select count(*) from match_slots where match_id = ?`, existing.ID).Scan(&have); err != nil {
-						return err
-					}
-					if err := insertMatchSlotsFrom(ctx, tx, existing.ID, match.Slots, have, seat); err != nil {
-						return err
-					}
-					continue
-				}
-				if existing.Status == "finished" || games.Started(gameType, existing.State) {
-					if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ? where id = ?`,
-						stageID, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, existing.ID); err != nil {
-						return err
-					}
-					continue
-				}
-				// A team-blob бой keys its marks by Participant, and its Protocol calls
-				// it unstarted until it is finished. Its marks stay through the reseat:
-				// those of an entrant still seated show again, the others wait unseen.
-				// A late entrant added to a written qualifier mid-entry used to wipe it.
-				state := emptyState
-				if store.TeamBlobShaped(gameType) {
-					state = existing.State
-				}
-				if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
-					stageID, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, len(match.Slots), state, existing.ID); err != nil {
-					return err
-				}
-				if _, err := tx.ExecContext(ctx, `delete from match_slots where match_id = ?`, existing.ID); err != nil {
-					return err
-				}
-				if err := insertMatchSlots(ctx, tx, existing.ID, match.Slots, seat); err != nil {
-					return err
-				}
-				continue
-			}
-			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, status, revision, state_json)
-values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.BlockRound, match.Wave, len(match.Slots), emptyState)
-			if err != nil {
-				return err
-			}
-			if err := insertMatchSlots(ctx, tx, matchID, match.Slots, seat); err != nil {
-				return err
-			}
-		}
+	own, err := gameVenueIDsTx(ctx, tx, gameID)
+	if err != nil {
+		return err
 	}
-	for _, m := range existingMatches {
-		if _, err := tx.ExecContext(ctx, `delete from matches where id = ?`, m.ID); err != nil {
-			return err
-		}
+	venues, err := schemeVenuesTx(ctx, tx, festID, gameID, scheme.Venues, own)
+	if err != nil {
+		return err
 	}
-	for _, stageID := range existingStages {
-		if _, err := tx.ExecContext(ctx, `delete from stages where id = ?`, stageID); err != nil {
-			return err
-		}
+	if err := writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, seat, live); err != nil {
+		return err
 	}
 
 	schemeJSON, err := json.Marshal(scheme)
@@ -852,6 +801,56 @@ update games set scheme_json = ?, scheme_dsl = ?, revision = revision + 1, updat
 		"stages": len(scheme.Stages),
 	}))
 	return err
+}
+
+// planGrowthTx says which of the Game's started bouts the new scheme may
+// keep, and refuses it, naming the others. A started bout keeps its seats.
+// The one exception is a bout that only grows: the same seats first, more
+// after them, a document that can take them (a troika game's written
+// qualifier), and nothing else in the Game started — a late troika then gets a
+// row, and no result that decides a later seat has been played yet.
+func planGrowthTx(ctx context.Context, tx *sql.Tx, gameType string, scheme store.FestScheme, live *liveStructure) error {
+	planned := map[string]store.SchemeMatch{}
+	for _, stage := range scheme.Stages {
+		for _, match := range stage.Matches {
+			planned[match.Code] = match
+		}
+	}
+	var blocked []string
+	othersStarted := false
+	for code, m := range live.matches {
+		if !m.begun(gameType) {
+			continue
+		}
+		match, survives := planned[code]
+		if survives && sameSlotIdentities(ctx, tx, m.id, match.Slots) {
+			othersStarted = true
+			continue
+		}
+		if survives && slotIdentitiesExtend(ctx, tx, m.id, match.Slots) {
+			if grower, ok := games.As[games.Grower](gameType); ok {
+				state, grew, err := grower.GrowSeats(json.RawMessage(m.state), len(match.Slots))
+				if err != nil {
+					return err
+				}
+				if grew {
+					live.grown[code] = state
+					continue
+				}
+			}
+		}
+		blocked = append(blocked, code)
+	}
+	if othersStarted {
+		for code := range live.grown {
+			blocked = append(blocked, code)
+		}
+	}
+	if len(blocked) > 0 {
+		sort.Strings(blocked)
+		return corei18n.User(dopestrings.Default.Gamebuild.Recompile.StartedBouts(strings.Join(blocked, ", ")))
+	}
+	return nil
 }
 
 // sameSlotIdentities compares a live match's slot sources with the planned

@@ -459,3 +459,38 @@ func divisionEntrantsTx(ctx context.Context, q store.Queryer, festID int64, divi
 	}
 	return ids, nil
 }
+
+// createEntrantsTx is who a Game created from a DSL seats, given the
+// entrants ticked on the form, and how many empty seats it is built with
+// instead when there is nobody to seat yet.
+func createEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, dsl string, entrants []int64) ([]int64, int, error) {
+	var placeholders int
+	var err error
+	// A Troika game that takes a division seats that division's troikas,
+	// whatever was ticked on the form. A division with none yet still gets
+	// its game: the Structure is built for as many empty seats as its first
+	// stage sends on, and the troikas fill it as they are entered
+	// (entrants.FollowDivisionsTx).
+	troikas := games.SeatsTroikas(gameType)
+	if division, ok := imports.EntrantDivision(dsl); ok && troikas {
+		if entrants, err = divisionEntrantsTx(ctx, tx, festID, division, 0); err != nil {
+			return nil, 0, err
+		}
+		if len(entrants) == 0 {
+			placeholders = placeholderSeats(dsl)
+		}
+	}
+	// A Troika game seats troikas. Created with none ticked and no seed
+	// declared, it takes every troika of the fest in the order of
+	// applications, not the fest's teams: that is what "none ticked" means
+	// for a team game, and a Troika game never seats teams.
+	if troikas && len(entrants) == 0 && placeholders == 0 && !imports.DeclaresSeed(dsl) {
+		if entrants, err = festTroikasTx(ctx, tx, festID); err != nil {
+			return nil, 0, err
+		}
+		if len(entrants) < 2 {
+			return nil, 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedTroikas())
+		}
+	}
+	return entrants, placeholders, nil
+}
