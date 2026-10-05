@@ -32,7 +32,7 @@ import { xyHndt } from "./hndt.js";
 import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
-import { createUnlock } from "./unlock.js";
+import { createUnlock, listType } from "./unlock.js";
 import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from "./dragrank.js";
 import { createTimeline, decodeCommentPayload, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
@@ -741,7 +741,7 @@ const listTypeModal = modal("listType");
 
 function retypeList(list: BoardList): void {
   retyping = list;
-  byId<HTMLSelectElement>("listTypeSelect").value = list.type === "si" ? "si" : "normal";
+  byId<HTMLSelectElement>("listTypeSelect").value = listType(list);
   listTypeModal.open({ onClose: () => { retyping = null; } });
 }
 
@@ -750,7 +750,7 @@ byId("listTypeForm").addEventListener("submit", async (e) => {
   const list = retyping;
   if (!list) return;
   const next = byId<HTMLSelectElement>("listTypeSelect").value;
-  if (next === (list.type === "si" ? "si" : "normal")) { listTypeModal.close(); return; }
+  if (next === listType(list)) { listTypeModal.close(); return; }
   setStatus("saving");
   try {
     await patch("patchList", `/api/lists/${list.id}`, { type: next });

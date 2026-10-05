@@ -11,7 +11,7 @@ import { byRank } from "./dragrank.js";
 import { unitsOf } from "./listsmanage.js";
 import { modal } from "./modal.js";
 import type { Board, ListPanel } from "./panels.js";
-import type { BoardList } from "./unlock.js";
+import { type BoardList, listType } from "./unlock.js";
 
 const { byId, errMsg } = xyApp;
 const { keyBetween } = xyRank;
@@ -50,7 +50,7 @@ export function createAddListPanel(board: Board): ListPanel {
   function open(list: BoardList): void {
     anchor = list;
     nameInput.value = "";
-    typeSelect.value = list.type === "si" ? "si" : "normal";
+    typeSelect.value = listType(list);
     byId<HTMLInputElement>("addListAfter").checked = true;
     addListModal.open({ onClose: () => { anchor = null; } });
     nameInput.focus();

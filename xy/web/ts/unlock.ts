@@ -44,6 +44,11 @@ export interface BoardList {
   groupId: number | null;
   title: string;
 }
+// listType is what a list holds as the type pickers spell it: "si" for SI
+// themes, "normal" for anything else (an older or unknown type included).
+export function listType(list: BoardList): "si" | "normal" {
+  return list.type === "si" ? "si" : "normal";
+}
 export interface BoardGroup {
   id: number;
   name: string;
