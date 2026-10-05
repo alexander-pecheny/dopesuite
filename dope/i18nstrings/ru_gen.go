@@ -2830,6 +2830,9 @@ var RU = Strings{
 			Saved:        func() string { return "Синхронизировано" },
 			Saving:       func() string { return "Синхронизация" },
 		},
+		TabPicker: WidgetsTabPickerStrings{
+			Label: func() string { return "Все вкладки" },
+		},
 		Venue: WidgetsVenueStrings{
 			Add:         func() string { return "Добавить" },
 			AddNumber:   func() string { return "Номер площадки" },

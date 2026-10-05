@@ -77,3 +77,8 @@ no_token = 'нет {{.token}}'
 [roster]
 # Validation error when a datalist input was not picked from suggestions (roster.ts).
 pick_suggestion = "Выберите значение из подсказки"
+
+[tab_picker]
+# The button beside a long tab strip that lists every tab to jump to one:
+# its tooltip and aria-label.
+label = "Все вкладки"

@@ -5033,3 +5033,37 @@ body.is-fullscreen.od-page .match-main {
 .results-table .sortable-head[aria-sort="ascending"]::after {
   content: " ↑";
 }
+
+/* The list of every tab at the head of a long tab strip (widgets.ts
+   tabPicker): an icon with a native select laid invisibly over it, so a click
+   opens the browser's own list. It stays at the strip's left edge while the
+   tabs scroll under it. */
+.tab-picker {
+  position: sticky;
+  left: var(--space-0);
+  /* Above the active tab, which stands one level up over its neighbours. */
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  align-self: stretch;
+  min-width: var(--control-h-sm);
+  border-radius: var(--radius-sm);
+  background: var(--page);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab-picker:hover,
+.tab-picker:focus-within {
+  color: var(--text-strong);
+  background: var(--wash-emphasis);
+}
+
+.tab-picker select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}

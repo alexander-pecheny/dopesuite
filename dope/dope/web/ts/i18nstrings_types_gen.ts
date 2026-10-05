@@ -1997,6 +1997,9 @@ export type Strings = {
       saved: () => string;
       saving: () => string;
     };
+    tabPicker: {
+      label: () => string;
+    };
     venue: {
       add: () => string;
       addNumber: () => string;
