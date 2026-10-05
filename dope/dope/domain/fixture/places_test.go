@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -37,10 +38,20 @@ type placesCase struct {
 	State  json.RawMessage `json:"state"`
 	Seats  []int64         `json:"seats"`
 	Places []float64       `json:"places"`
+	// Themes, Totals and Plus are an EK-family bout's: how many themes it
+	// plays, and each seat's Σ and Σ+ as store.ScoreParticipant reckons them.
+	// The page scores the document itself while a write is in flight.
+	Themes int   `json:"themes,omitempty"`
+	Totals []int `json:"totals,omitempty"`
+	Plus   []int `json:"plus,omitempty"`
 }
 
 // mirrored is the formats whose page ranks a document itself.
 var mirrored = map[string]bool{"od": true, "ksi": true, "multi": true, "hamsa": true}
+
+// scored is the EK family: its page draws the server's places but reckons the
+// sheet's totals itself.
+var scored = map[string]bool{"ek": true, "es": true, "si": true}
 
 func TestThePagesRankAsTheServerDoes(t *testing.T) {
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "fixture.db"))
@@ -77,6 +88,14 @@ where g.fest_id = ? order by g.position, m.position, m.id`, []any{festID}, func(
 	}
 	var cases []placesCase
 	for _, b := range bouts {
+		if scored[b.format] {
+			c, err := scoredCase(ctx, db, b.format, b.matchID)
+			if err != nil {
+				t.Fatalf("%s %s: %v", b.format, b.code, err)
+			}
+			cases = append(cases, c)
+			continue
+		}
 		if !mirrored[b.format] {
 			continue
 		}
@@ -125,9 +144,31 @@ select coalesce(participant_id, 0) from match_slots where match_id = ? order by 
 		t.Fatalf("places.json has %d documents, the fixture %d: run go test ./domain/fixture -update-places", len(stored), len(cases))
 	}
 	for i := range cases {
-		if !reflect.DeepEqual(stored[i].Places, cases[i].Places) || stored[i].Bout != cases[i].Bout {
+		if !reflect.DeepEqual(stored[i].Places, cases[i].Places) || stored[i].Bout != cases[i].Bout ||
+			!reflect.DeepEqual(stored[i].Totals, cases[i].Totals) || !reflect.DeepEqual(stored[i].Plus, cases[i].Plus) {
 			t.Fatalf("%s %s: places.json says %v, the server deals %v: run go test ./domain/fixture -update-places and check the pages agree",
 				cases[i].Format, cases[i].Bout, stored[i].Places, cases[i].Places)
 		}
 	}
+}
+
+// scoredCase is an EK-family bout with the totals the server reckons for it.
+func scoredCase(ctx context.Context, db *sql.DB, format string, matchID int64) (placesCase, error) {
+	matches, err := store.LoadMatchStates(ctx, db, store.MatchSelector{MatchID: matchID})
+	if err != nil || len(matches) != 1 {
+		return placesCase{}, fmt.Errorf("load bout %d: %v", matchID, err)
+	}
+	m := matches[0]
+	c := placesCase{Format: format, Bout: m.Code, Scheme: json.RawMessage("{}"), State: json.RawMessage(store.NonEmptyJSON(m.RawState)),
+		Seats: m.ParticipantIDs, Themes: m.Themes}
+	if c.Themes == 0 {
+		c.Themes = store.ThemeCount
+	}
+	for _, team := range m.State.Participants {
+		view := store.ScoreParticipant(team)
+		c.Places = append(c.Places, team.Place)
+		c.Totals = append(c.Totals, view.Total)
+		c.Plus = append(c.Plus, view.Plus)
+	}
+	return c, nil
 }
