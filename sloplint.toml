@@ -1,0 +1,8 @@
+# sloplint (code.pecheny.me/pecheny/sloplint) settings. `just slop-check`, part
+# of `just pre-commit`, reads max-slop-score from here.
+
+[project]
+# The whole tree's slop score may not go above this. It was 0.81 before the
+# sloplint branch and 0.523 after it. When a change lowers the score, lower this
+# line to match, so the gain is kept.
+max-slop-score = 0.53

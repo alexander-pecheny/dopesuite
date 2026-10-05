@@ -25,7 +25,7 @@ vet: vet-core vet-uikit
 # kit's own gate are things no single module can run for itself.
 #
 # The gate, wherever you are. A module's own faster one is `just check`.
-pre-commit: pre-commit-core pre-commit-uikit class-check cyrillic-check strings-check
+pre-commit: pre-commit-core pre-commit-uikit class-check cyrillic-check strings-check slop-check
     cd xy && just check
     cd dope && just check
     cd spliff && just check
@@ -96,6 +96,27 @@ cyrillic-check: fmt-scripts
     go -C scripts/cyrillic vet ./...
     go -C scripts/cyrillic test ./...
     go -C scripts/cyrillic run .
+
+# Two checks with sloplint (code.pecheny.me/pecheny/sloplint). The first fails
+# on an error-level finding in a line changed since HEAD, so old findings only
+# block you when you touch them. The second fails when the whole tree's slop
+# score goes above max-slop-score in sloplint.toml. When the score drops, lower
+# that ceiling to the new value so it cannot creep back up.
+slop-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v sloplint >/dev/null || { echo "sloplint not found: cargo install --git https://code.pecheny.me/pecheny/sloplint" >&2; exit 1; }
+    sloplint --diff HEAD
+    limit=$(sed -n 's/^max-slop-score *= *//p' sloplint.toml)
+    # The summary run exits 1 on any old error finding, so only its output counts.
+    score=$(sloplint --format summary | jq .slop_score || true)
+    [ -n "$score" ] || { echo "sloplint printed no summary" >&2; exit 1; }
+    if awk -v s="$score" -v l="$limit" 'BEGIN { exit !(s > l) }'; then
+      echo "slop score $(printf %.4f "$score") is above the ceiling $limit in sloplint.toml" >&2
+      echo "see the worst offenders with: sloplint --warnings" >&2
+      exit 1
+    fi
+    echo "slop score $(printf %.4f "$score") (ceiling $limit)"
 
 # scripts/ holds Go modules (webbuild, classcheck, i18nstringsgen, cyrillic)
 # that no module recipe reaches, so they had no fmt or vet until this.

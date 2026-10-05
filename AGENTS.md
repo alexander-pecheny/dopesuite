@@ -161,6 +161,11 @@ messages, code comments and test names, in Russian and in English.
   build-wasm`). That file is 30 MB, it is embedded with `//go:embed`, and it is
   not in git, so every Go recipe in xy fails with an instruction until you have
   built it once.
+- **sloplint** (`cargo install --git https://code.pecheny.me/pecheny/sloplint`)
+  and **jq**, for `just slop-check`. It fails on a new error-level finding in a
+  changed line, and when the whole tree's slop score goes above `max-slop-score`
+  in `sloplint.toml`. Name numbers as constants and keep functions short rather
+  than raising the ceiling. When a change lowers the score, lower the ceiling.
 - **Python with uv**, for `deploy.py` and the dope scripts. Only ever run
   Python through `uv` (`uv run python`).
 
