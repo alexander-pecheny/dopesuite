@@ -168,6 +168,10 @@ test("each Block wears its own accent; a Game of one Block, or a reseed, wears n
   assert.equal(accents.get("s3-r1"), 1);
   assert.equal(accents.has("s2"), false);
   assert.equal(blockAccents([group(1), group(2)]).size, 0);
+  // One bracket that reseeds between its rounds is one grid (ЧР's ЭК).
+  const r8 = {code: "r8", title: "1/8", stage_type: "matches", kind: "playoff", matches: []};
+  const r4 = {code: "r4", title: "1/4", stage_type: "matches", kind: "playoff", matches: []};
+  assert.equal(blockAccents([r8, reseed, r4]).size, 0);
   assert.equal(tabAccent({key: "x", label: "", kind: "stage", stages: ["s1-g1", "s1-g2"]}, accents), 0);
   assert.equal(tabAccent({key: "x", label: "", kind: "stage", stages: ["s1-g1", "s3-r1"]}, accents), undefined);
 });

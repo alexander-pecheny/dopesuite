@@ -250,17 +250,21 @@ function shortStageTitle(stage: StageRef): string {
 export const BLOCK_ACCENTS = 6;
 
 // blockAccents is the accent colour each stage wears, by its code, so a bout
-// shows which Block it belongs to: the Сетка's boxes and the tabs carry it. A
-// Game of one Block has nothing to tell apart and gets none, and neither
-// does a reseed, which belongs to no Block.
+// shows which Block it belongs to: the Сетка's boxes and the tabs carry it.
+// A Block here is the scheme's own (grain.block), not a run between reseeds:
+// a single bracket that reseeds between its rounds is still one grid. A Game
+// of one Block has nothing to tell apart and gets none, and neither does a
+// reseed, which belongs to no Block.
 export function blockAccents(stages: readonly StageRef[]): Map<string, number> {
   const out = new Map<string, number>();
-  const all = blocks([...stages]);
-  if (all.length < 2) return out;
-  all.forEach((block, index) => {
-    for (const stage of block.stages) out.set(stage.code, index % BLOCK_ACCENTS);
-  });
-  return out;
+  const codes: string[] = [];
+  for (const stage of stages) {
+    if (isPool(stage) || isReseed(stage)) continue;
+    const code = stage.grain?.block || "";
+    if (!codes.includes(code)) codes.push(code);
+    out.set(stage.code, codes.indexOf(code) % BLOCK_ACCENTS);
+  }
+  return codes.length < 2 ? new Map() : out;
 }
 
 // tabAccent is the accent a tab wears: its stages' one Block's, if they share one.

@@ -5102,7 +5102,7 @@ body.is-fullscreen.od-page .match-main {
   --block-accent-3: var(--uchu-green-5);
   --block-accent-4: var(--uchu-pink-5);
   --block-accent-5: var(--uchu-yellow-5);
-  --block-accent-w: 3px;
+  --block-accent-w: 2px;
 }
 
 [data-block="0"] { --block-accent: var(--block-accent-0); }
@@ -5112,11 +5112,20 @@ body.is-fullscreen.od-page .match-main {
 [data-block="4"] { --block-accent: var(--block-accent-4); }
 [data-block="5"] { --block-accent: var(--block-accent-5); }
 
-/* In the Сетка a box's head carries it along its top edge, drawn inside the
-   cell so no box moves off the shared rows; on the tab strip a tab's bottom
-   edge does. */
-[data-block] .grid-box .grid-slot-head {
-  box-shadow: inset 0 var(--block-accent-w) 0 var(--block-accent);
+/* In the Сетка the accent rings a box's rows, below its head: an overlay laid
+   over the rows, so no box moves off the shared row grid. On the tab strip a
+   tab's bottom edge carries it. */
+[data-block] .grid-box .grid-slot-grid {
+  position: relative;
+}
+
+[data-block] .grid-box .grid-slot-grid::after {
+  content: "";
+  position: absolute;
+  inset: var(--grid-row) 0 0;
+  border: var(--block-accent-w) solid var(--block-accent);
+  border-radius: var(--radius-md);
+  pointer-events: none;
 }
 
 .match-tab[data-block] {
