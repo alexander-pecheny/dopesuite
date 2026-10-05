@@ -409,7 +409,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        (panels.ts): one
                        registerPanel(...) call lists every ☰ and ⋯ entry in menu order,
                        and both menus render from it. Board-level actions that are not
-                       panels (rename/delete/leave board, forget password, add/rename/delete
+                       panels (rename/delete/leave board, forget password, rename/delete
                        list, preview) are registered inline. Display sizes
                        (users.sizes, edited on /profile) arrive in the snapshot and become
                        CSS vars on <html>: --kanban-max-w, --klist-w, --kcard-lines (a
@@ -489,6 +489,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        loadMoveBoard / moveBoardOptions / transferCard(card, list, ctx,
                        remove, rank?); the card editor, «Массовое действие» and
                        «Переместить список…» all go through it (transfer.test.js, real keys)
+    addlist.ts         «Добавить список» in a list's ⋯: a new list right after or before
+                       this one (past its whole group, if it has one); createList is the
+                       one create step, the board's add-list column calls it too
     movelist.ts        «Переместить список…»: within the board a move is a plain re-rank;
                        everything else goes out as a Bundle and back through applyBundle,
                        so a travelling list carries what an exported one does

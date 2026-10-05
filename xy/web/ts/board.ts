@@ -7,6 +7,7 @@ import { createRewrites } from "./rewrites.js";
 import { createReplacePanel } from "./replace.js";
 import { createMoveListPanel } from "./movelist.js";
 import { createListsManage, unitsOf } from "./listsmanage.js";
+import { createAddListPanel, createList } from "./addlist.js";
 import { progress } from "./themes.js";
 import { createImportPanel } from "./importpack.js";
 import { createExportPanel } from "./export.js";
@@ -760,47 +761,6 @@ byId("listTypeForm").addEventListener("submit", async (e) => {
   } catch (err) { setStatus("error"); listTypeModal.message(S.board.rename.failed(errMsg(err))); }
 });
 
-// addListNext opens the add-list modal for a list's ⋯ entry: the new list
-// lands right after (or before) it, so a board with many lists needs no trip to
-// the add-list column at the far end and a drag back. A list inside a group is
-// placed past the whole group, since a group's members stay consecutive.
-let addingNext: BoardList | null = null;
-const addListModal = modal("addList");
-
-function addListNext(list: BoardList): void {
-  addingNext = list;
-  byId<HTMLInputElement>("addListName").value = "";
-  byId<HTMLSelectElement>("addListType").value = list.type === "si" ? "si" : "normal";
-  byId<HTMLInputElement>("addListAfter").checked = true;
-  addListModal.open({ onClose: () => { addingNext = null; } });
-  byId<HTMLInputElement>("addListName").focus();
-}
-
-byId("addListForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const anchor = addingNext;
-  if (!anchor) return;
-  const title = byId<HTMLInputElement>("addListName").value.trim();
-  if (!title) return;
-  const type = byId<HTMLSelectElement>("addListType").value;
-  const before = byId<HTMLInputElement>("addListBefore").checked;
-  const units = unitsOf([...state.lists].sort(byRank));
-  const i = units.findIndex((u) => u.lists.some((l) => l.id === anchor.id));
-  if (i < 0) { addListModal.close(); return; }
-  const lo = before ? units[i - 1] : units[i];
-  const hi = before ? units[i] : units[i + 1];
-  const rank = keyBetween(lo ? lo.lists[lo.lists.length - 1].rank : null, hi ? hi.lists[0].rank : null);
-  setStatus("saving");
-  try {
-    const titleEnc = await xyCrypto.encField(mustDK(), title);
-    const res = await create("createList", `/api/boards/${boardId}/lists`, { title_enc: titleEnc, rank, type });
-    state.lists.push({ id: res.id as number, type, rank, groupId: null, title });
-    setStatus("saved");
-    addListModal.close();
-    render();
-  } catch (err) { setStatus("error"); addListModal.message(S.board.list.addFailed(errMsg(err))); }
-});
-
 // deleteList soft-deletes the list and its cards (server cascades the cards),
 // offline-capable via the sync outbox.
 async function deleteList(list: BoardList): Promise<void> {
@@ -1109,9 +1069,7 @@ function renderAddList(): HTMLElement {
     const ranks = [...state.lists].sort(byRank);
     const rank = keyBetween(ranks.length ? ranks[ranks.length - 1].rank : null, null);
     try {
-      const titleEnc = await xyCrypto.encField(mustDK(), title);
-      const res = await create("createList", `/api/boards/${boardId}/lists`, { title_enc: titleEnc, rank, type });
-      state.lists.push({ id: res.id as number, type, rank, groupId: null, title });
+      await createList(board, title, type, rank);
       input.value = "";
       typeSel.value = type; // the next list is usually the same kind of list
       okBtn.hidden = true;
@@ -1698,7 +1656,7 @@ registerPanel(
   handoutsPanel,
 
   // The list itself
-  starts({ id: "add-list", menu: "list", icon: "list-plus", label: S.board.list.addLabel(), open: (s) => addListNext(s.list) }),
+  starts(createAddListPanel(board)),
   { id: "rename-list", menu: "list", icon: "pencil", label: S.board.rename.listLabel(), open: (s) => { void renameList(s.list); } },
   { id: "retype-list", menu: "list", icon: "list", label: S.board.list.typeChange(), open: (s) => retypeList(s.list) },
   createMoveListPanel(board, transfer),
