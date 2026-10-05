@@ -149,22 +149,9 @@ export function sideTotal(state: TroikaState, side: number): number {
   return total;
 }
 
-// places rank the sides by total; sides that are level share the mean of the
-// places between them (1.5 for a drawn pair) — the regulations pay half a
-// rating ball for a draw, so the bout does not invent a winner. A pinned place
-// wins over the sheet.
-export function places(state: TroikaState): number[] {
-  const totals = state.sides.map((_, side) => sideTotal(state, side));
-  return totals.map((total, side) => {
-    if (state.pin[side] > 0) return state.pin[side];
-    const above = totals.filter((other) => other > total).length;
-    const level = totals.filter((other) => other === total).length;
-    return above + (level + 1) / 2;
-  });
-}
-
-// level is whether any two sides share a place the sheet computed — the bout a
-// host may add a shootout theme to.
+// level is whether any two sides are level on the sheet, the bout a host may
+// add a shootout theme to. The places themselves are the server's: the page
+// draws the ones the bout's view carries.
 export function level(state: TroikaState): boolean {
   const totals = state.sides.map((_, side) => sideTotal(state, side));
   return new Set(totals).size < totals.length;

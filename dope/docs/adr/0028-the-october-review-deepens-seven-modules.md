@@ -137,3 +137,26 @@ becomes a team id, a place a pin, a name a player id) lived inside the
   most-used format onto the bout page means rewriting it, which needs its
   own plan and a hand test before a fest. A refactor series is not the place
   for it.
+
+## 6. The pages' copies of the ranking are held to the server's
+
+ADR-0011 says the server ranks and the client draws. The pages still rank a
+document as the host types, because the server's answer arrives a window
+later and a place should move with the mark: ОД's `placesFor`, КСИ's and
+Мультиигры' `rankedResultRows`, Хамса's `placesFor`. ADR-0018 already
+admitted the ОД and КСИ copies, while Хамса and Мультиигры added two more.
+Nothing checked that any copy agreed with the Go scorer. Тройка's `places()`
+was called by nothing but its own test.
+
+- These copies stay, as optimistic mirrors. They are now held to the
+  server: `domain/fixture/places_test.go` scores every document of the
+  fixture fest (one Game of every format) through the server's Protocols and
+  keeps the result in `web/jstest/testdata/places.json`, and
+  `jstest/places.test.js` checks that each mirror ranks those documents the
+  same way. When a scorer changes on purpose, run `go test ./domain/fixture
+  -update-places`; the deno test then shows which page has to follow.
+- The two sides are compared by ranking (who is above whom, who is level),
+  not by how a tie is spelled. The server stores a shared 15th–16th in ОД as
+  15 and in Хамса as 15.5, and a page writes "15–16".
+- Тройка's `places()` is deleted. Its page draws the places the bout's view
+  carries.

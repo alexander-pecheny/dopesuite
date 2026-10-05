@@ -27,13 +27,12 @@ Deno.test("every correct answer pays the тема's нарицательная o
   assertEquals(troika.themeScore(state, 0, 1), 2);
   assertEquals(troika.sideTotal(state, 0), 6);
   assertEquals(troika.sideTotal(state, 1), 0);
-  assertEquals(troika.places(state), [1, 2]);
 });
 
-Deno.test("a ничья shares the place", () => {
+Deno.test("a ничья is level", () => {
   const one = {themes: [theme([1, 2, 3], ["right", "", ""], none, none)]};
   const state = troika.parseState({values: [1], sides: [one, structuredClone(one)]});
-  assertEquals(troika.places(state), [1.5, 1.5]);
+  assertEquals(troika.level(state), true);
 });
 
 Deno.test("parseState sizes the бой from its values and fills the grid", () => {
@@ -112,12 +111,11 @@ Deno.test("turnedAt is where either side sits differently from the тема befo
   assertEquals([0, 1, 2].map((t) => troika.turnedAt(state, t)), [false, true, true]);
 });
 
-Deno.test("a бой of three ranks all three and shares a tie's mean place", () => {
+Deno.test("a бой of three is level when two of its sides are", () => {
   const one = {themes: [theme([1, 2, 3], ["right", "", ""], none, none)]};
   const two = {themes: [theme([4, 5, 6], ["right", "right", ""], none, none)]};
   const state = troika.parseState({values: [1], sides: [one, two, structuredClone(one)]}, 3);
   assertEquals(state.sides.length, 3);
-  assertEquals(troika.places(state), [2.5, 1, 2.5]);
   assertEquals(troika.level(state), true);
 });
 
@@ -135,14 +133,13 @@ Deno.test("a перестрелка тема counts and is told apart from the �
   const state = troika.parseState({values: [1, 1], shootout: 1, sides: [side("right"), side("")]});
   assertEquals(troika.isShootoutTheme(state, 0), false);
   assertEquals(troika.isShootoutTheme(state, 1), true);
-  assertEquals(troika.places(state), [1, 2]);
   assertEquals(troika.level(state), false);
 });
 
-Deno.test("a pinned place wins over the sheet", () => {
+Deno.test("a pinned place is read off the document", () => {
   const one = {themes: [theme([1, 2, 3], ["right", "", ""], none, none)]};
   const state = troika.parseState({values: [1], sides: [one, structuredClone(one)], pin: [2, 1]});
-  assertEquals(troika.places(state), [2, 1]);
+  assertEquals(state.pin, [2, 1]);
 });
 
 Deno.test("a written бой counts right answers per вопрос at the тема's value", () => {
