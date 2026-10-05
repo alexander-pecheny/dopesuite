@@ -102,3 +102,17 @@ test("the раздатка picker sees an image attached while Поля is open"
   cd.closeCard();
   await new Promise((r) => setTimeout(r, 0));
 });
+
+test("opening Поля and going back changes nothing, even where Поля would write the card differently", async () => {
+  const { cd, card } = setup();
+  // A one-line handout, which Поля composes in the block form.
+  card.desc = "? [Раздаточный материал: текст]\nВопрос?\n! Ответ\n^ Источник";
+  await cd.openCard(card);
+  p.node("cardTabFields").fire("click");
+  p.node("cardTabPreview").fire("click");
+  assert.equal(p.node("cardSave").disabled, true, "nothing was edited, so nothing is dirty");
+  p.node("cardTabText").fire("click");
+  assert.equal(p.node("cardDesc").value, "? [Раздаточный материал: текст]\nВопрос?\n! Ответ\n^ Источник");
+  cd.closeCard();
+  await new Promise((r) => setTimeout(r, 0));
+});

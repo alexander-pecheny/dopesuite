@@ -193,8 +193,8 @@ test("conversion carries the old inline name up to the separator", () => {
 test("the shared раздатка reaches every converted version", () => {
   const old = "? [Раздаточный материал: схема] Первая?\n(PAGEBREAK)\nВторая?\n! Общий ответ";
   const bodies = splitVersions(convertLegacyVersions(old));
-  assert.ok(bodies[0].includes("[Раздаточный материал: схема]"));
-  assert.ok(bodies[1].includes("[Раздаточный материал: схема]"));
+  assert.ok(bodies[0].includes("[Раздаточный материал:\nсхема\n]"));
+  assert.ok(bodies[1].includes("[Раздаточный материал:\nсхема\n]"));
 });
 
 test("a lone version's name never reaches the export", () => {

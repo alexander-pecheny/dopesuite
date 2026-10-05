@@ -340,6 +340,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // render time and re-emitted verbatim on recompose; the text view edits them.
   let cardFieldsPre: string | null = null;
   let cardFieldsExtra: string | null = null;
+  // What the fields view was rendered from, and what its inputs composed to
+  // before anyone typed. Composing is not the identity on 4s (a one-line
+  // handout comes back in the block form, sources come back as a list), so
+  // reading untouched fields back would rewrite the card just for opening the
+  // fields view. While the inputs still compose to `composed`, the card keeps
+  // `source`.
+  let fieldsBaseline: { source: string; composed: string } | null = null;
 
   const CARD_TABS = ["preview", "fields", "text"] as const;
   const tabBtn = (v: string): HTMLButtonElement => ui.tabs[v as (typeof CARD_TABS)[number]];
@@ -499,12 +506,27 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // switching views never loses unsaved input.
   function captureDraft(): void {
     if (cardView === "text") writeVersionDesc(cardDescEl.value);
-    else if (cardView === "fields" && themeReader) writeVersionDesc(themeReader());
+    else if (cardView === "fields" && themeReader) writeVersionDesc(unlessUntouched(themeReader()));
     else if (cardView === "fields" && cardFieldReaders) {
       const r = readCardFields(cardFieldReaders);
-      writeVersionDesc(r.desc);
+      writeVersionDesc(unlessUntouched(r.desc));
       draft.meta = r.meta;
     }
+  }
+
+  // unlessUntouched maps the fields view's composed 4s back to the source it was
+  // rendered from while no field has changed (see fieldsBaseline).
+  function unlessUntouched(composed: string): string {
+    return fieldsBaseline && composed === fieldsBaseline.composed ? fieldsBaseline.source : composed;
+  }
+
+  // markFieldsBaseline records what the fields view was just rendered from. A
+  // fresh card is left out: its pre-filled default author is meant to land in
+  // the draft without a keystroke.
+  function markFieldsBaseline(source: string, compose: () => string): void {
+    fieldsBaseline = null;
+    if (freshCard && !draft.desc.trim()) return;
+    fieldsBaseline = { source, composed: compose() };
   }
 
   // refreshSaveState enables the save button only when the draft differs from what
@@ -768,7 +790,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // settings). The last field (handout-gen markup) binds to draft.meta, not the 4s.
   function renderCardFields(): void {
     if (isTheme()) { renderThemeFields(); return; }
-    const f = xyChgk.splitFields(versionDesc());
+    const source = versionDesc();
+    const f = xyChgk.splitFields(source);
     // A brand-new card pre-fills the user's default author (a /profile setting)
     // and opens the two fields every question has, ready to type into.
     const fresh = freshCard && !draft.desc.trim();
@@ -784,6 +807,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // detached, so the fit during buildField is a no-op for visible content).
     for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
     cardFieldReaders = R.readers;
+    markFieldsBaseline(source, () => readCardFields(R.readers).desc);
   }
 
   // buildQuestionFields is one question's field set — the whole of Fields on an OD
@@ -836,7 +860,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // It draws the slots the 4s holds and no others — the creation template writes
   // five, an import brings what it brought, and nothing here invents one.
   function renderThemeFields(): void {
-    const t = splitTheme(versionDesc());
+    const source = versionDesc();
+    const t = splitTheme(source);
     const fresh = freshCard && !draft.desc.trim();
     if (fresh && t.author === null && state().defaultAuthor) t.author = state().defaultAuthor;
     const box = cardFieldsEl;
@@ -893,6 +918,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
     for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
     themeReader = (): string => composeTheme(current());
+    markFieldsBaseline(source, themeReader);
   }
 
   // ---- versions ----

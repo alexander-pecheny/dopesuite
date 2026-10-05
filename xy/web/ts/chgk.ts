@@ -1121,13 +1121,15 @@ export function extractInlineHandout(q: string | null | undefined): { handout: H
 // marks the handout's home and is swapped for the real bracket (or tidied away
 // when the field was removed); with no anchor the bracket lands after any
 // leading host-note brackets, before the question text itself.
-function insertInlineHandout(q: string | null | undefined, inline: string): string {
+function insertInlineHandout(q: string | null | undefined, h: Handout | null | undefined): string {
   const t = q || "";
   for (const [start, end, body] of bracketSpans(t)) {
     if (!isHandoutBody(body) || handoutBracketContent(body) !== "") continue;
+    const inline = composeInlineHandout(h, !ownsLine(t, start, end));
     if (inline) return t.slice(0, start) + inline + t.slice(end);
     return (t.slice(0, start).replace(/[ \t]+$/, "") + t.slice(end)).replace(/^\s+/, "");
   }
+  const inline = composeInlineHandout(h, false);
   if (!inline) return t;
   let cut = 0; // insertion point: after the leading host-note run
   for (const [start, end, body] of bracketSpans(t)) {
@@ -1139,18 +1141,28 @@ function insertInlineHandout(q: string | null | undefined, inline: string): stri
   return [head, inline, tail].filter((s) => s !== "").join("\n");
 }
 
+// ownsLine says whether t[start:end] has its line to itself: nothing but
+// whitespace between it and the line breaks on either side.
+function ownsLine(t: string, start: number, end: number): boolean {
+  const lineStart = t.lastIndexOf("\n", start - 1) + 1;
+  const nl = t.indexOf("\n", end);
+  const lineEnd = nl === -1 ? t.length : nl;
+  return t.slice(lineStart, start).trim() === "" && t.slice(end, lineEnd).trim() === "";
+}
+
 // composeInlineHandout renders the handout field as the inline question-text
-// bracket: single-line for an image or one line of text (so a human's
-// mid-sentence bracket round-trips verbatim), the block form for multi-line
-// text. "" for an empty handout: unlike the other fields there is no
-// bare-marker form, so present-but-empty does not survive a recompose.
-function composeInlineHandout(h: Handout | null | undefined): string {
+// bracket. A handout on its own line takes the block form, label and closing
+// bracket each on a line of their own, which is how the exporters set it apart
+// from the question; one in the middle of a sentence stays on one line there.
+// "" for an empty handout: unlike the other fields there is no bare-marker
+// form, so present-but-empty does not survive a recompose.
+function composeInlineHandout(h: Handout | null | undefined, midLine: boolean): string {
   if (!h) return "";
-  if (h.kind === "image") return h.name ? `[${S.chgk.label.handout()}: (img ${h.name})]` : "";
-  if (!h.text) return "";
-  return h.text.includes("\n")
-    ? `[${S.chgk.label.handout()}:\n${h.text}\n]`
-    : `[${S.chgk.label.handout()}: ${h.text}]`;
+  const text = h.kind === "image" ? (h.name ? `(img ${h.name})` : "") : h.text;
+  if (!text) return "";
+  return midLine && !text.includes("\n")
+    ? `[${S.chgk.label.handout()}: ${text}]`
+    : `[${S.chgk.label.handout()}:\n${text}\n]`;
 }
 
 // sourcesFromBlock splits a "^" source block into individual source lines,
@@ -1283,10 +1295,8 @@ export function composeFields(f: Partial<CardFields>): string {
   // handout bracket. The old standalone "> " block sat
   // before the "?" marker, where parse_4s reads it as a loose doc element that
   // never reaches the exported Question — docx/PDF silently dropped it.
-  const inline = composeInlineHandout(f.handout);
-  if (inline || (f.question !== null && f.question !== undefined)) {
-    marker("?", insertInlineHandout(f.question, inline));
-  }
+  const q = insertInlineHandout(f.question, f.handout);
+  if (q || (f.question !== null && f.question !== undefined)) marker("?", q);
   if (f.answer !== null && f.answer !== undefined) marker("!", f.answer);
   if (f.zachet !== null && f.zachet !== undefined) marker("=", f.zachet);
   if (f.nezachet !== null && f.nezachet !== undefined) marker("!=", f.nezachet);
