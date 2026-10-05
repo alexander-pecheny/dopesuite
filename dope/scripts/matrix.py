@@ -80,6 +80,7 @@ si-reseed|/fest/{FEST}/game/3/#stage:s2-reseed
 si-stats|/fest/{FEST}/game/3/#stats
 troika-grid|/fest/{FEST}/game/4/#grid
 troika-block1|/fest/{FEST}/game/4/#block:s1
+troika-protocol|/fest/{FEST}/game/4/#protocol:s1
 troika-stats|/fest/{FEST}/game/4/#stats
 hamsa-grid|/fest/{FEST}/game/5/#grid
 hamsa-game1|/fest/{FEST}/game/5/#protocol:s1-r1

@@ -4725,6 +4725,14 @@ body.is-fullscreen.od-page .match-main {
   text-align: left;
 }
 
+/* The pinned columns are as wide as the pins say (troika.ts SIDE_PINS), so
+   the Σ beside the name stands right against it. */
+.troika-sheet .col-name {
+  width: var(--team-col);
+  min-width: var(--team-col);
+  max-width: var(--team-col);
+}
+
 .troika-sheet .troika-team {
   font-weight: var(--fw-semibold);
   color: var(--text-strong);
