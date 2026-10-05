@@ -25,7 +25,8 @@ func festRevision(t *testing.T, srv *dopeserver.Server, festID int64) int64 {
 // seq bump) rather than one broadcast per edit, and the final state reflects
 // every edit.
 func TestEditBatchCoalescesConcurrentEdits(t *testing.T) {
-	t.Parallel()
+	// Serial: its six requests must land in one 150 ms window, which a loaded
+	// box running the parallel tests cannot promise.
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "batch-editor")

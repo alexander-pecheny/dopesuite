@@ -151,17 +151,33 @@ type Batcher struct {
 
 	mu      sync.Mutex
 	pending map[int64]*editBatch
-	// windows counts the windows opened and not yet applied in full. An editor
-	// is answered before its window has finished: the broadcasts and
+	// open counts the windows opened and not yet applied in full, under mu.
+	// An editor is answered before its window has finished: the broadcasts and
 	// OnFestChanged, which reads the database, come after. Wait lets a test
-	// see the window through before it closes the database.
-	windows sync.WaitGroup
+	// see the window through before it closes the database. (A WaitGroup
+	// would not do: a new window may open while another request waits.)
+	open   int
+	closed *sync.Cond
 }
 
-// Wait blocks until every window opened so far has been applied, broadcasts
+// Wait blocks until no window is open, every one applied in full, broadcasts
 // and OnFestChanged included. Only tests call it; production has nothing to
 // wait for.
-func (b *Batcher) Wait() { b.windows.Wait() }
+func (b *Batcher) Wait() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for b.open > 0 {
+		b.cond().Wait()
+	}
+}
+
+// cond is the signal a finished window sends Wait. Caller holds mu.
+func (b *Batcher) cond() *sync.Cond {
+	if b.closed == nil {
+		b.closed = sync.NewCond(&b.mu)
+	}
+	return b.closed
+}
 
 // NewBatcher constructs a Batcher bound to the given engine and metrics
 // recorder.
@@ -258,9 +274,14 @@ func (b *Batcher) enqueueEdit(job *editJob) {
 		batch = &editBatch{scope: job.scope}
 		b.pending[job.scope.GameID] = batch
 		gid := job.scope.GameID
-		b.windows.Add(1)
+		b.open++
 		batch.timer = time.AfterFunc(b.window(), func() {
-			defer b.windows.Done()
+			defer func() {
+				b.mu.Lock()
+				b.open--
+				b.cond().Broadcast()
+				b.mu.Unlock()
+			}()
 			b.flushEditBatch(gid)
 		})
 	}
