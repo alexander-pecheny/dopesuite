@@ -13,7 +13,8 @@ func TestBuildDSN(t *testing.T) {
 		"file:/tmp/x.db":       "file:/tmp/x.db?_pragma=busy_timeout(5000)",
 	}
 	for path, prefix := range cases {
-		if got := BuildDSN(path); !strings.HasPrefix(got, prefix) || !strings.Contains(got, "journal_mode(WAL)") {
+		if got := BuildDSN(path); !strings.HasPrefix(got, prefix) || !strings.Contains(got, "journal_mode(WAL)") ||
+			!strings.Contains(got, "_pragma=synchronous(FULL)") {
 			t.Errorf("BuildDSN(%q) = %q", path, got)
 		}
 	}

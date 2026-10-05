@@ -25,7 +25,7 @@ func TestBackupCopiesBothHalves(t *testing.T) {
 		t.Fatalf("backup: %v", err)
 	}
 
-	db, err := openDB(filepath.Join(dest, "xy.db"))
+	db, err := openTestDB(filepath.Join(dest, "xy.db"))
 	if err != nil {
 		t.Fatalf("open backup db: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestBackupRefusesToOverwrite(t *testing.T) {
 func newBackupServer(t *testing.T) *server {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := openDB(filepath.Join(dir, "xy.db"))
+	db, err := openTestDB(filepath.Join(dir, "xy.db"))
 	if err != nil {
 		t.Fatalf("openDB: %v", err)
 	}

@@ -162,7 +162,7 @@ func TestRemovingAPlayingCascadesItsLabels(t *testing.T) {
 
 func migratedDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := openDB(filepath.Join(t.TempDir(), "xy.db"))
+	db, err := openTestDB(filepath.Join(t.TempDir(), "xy.db"))
 	if err != nil {
 		t.Fatalf("openDB: %v", err)
 	}

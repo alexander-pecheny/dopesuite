@@ -17,7 +17,7 @@ import (
 func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := openDB(dbPath)
+	db, err := openTestDB(dbPath)
 	if err != nil {
 		t.Fatalf("openDB: %v", err)
 	}

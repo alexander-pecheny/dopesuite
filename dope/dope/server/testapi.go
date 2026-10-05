@@ -8,12 +8,14 @@ package dopeserver
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io/fs"
 	"net/http"
 	"time"
 
 	"pecheny.me/dopecore/authcred"
+	"pecheny.me/dopecore/sqlitex/sqlitextest"
 	"pecheny.me/dopecore/tgbot"
 
 	"dope/dope/domain/core"
@@ -43,6 +45,13 @@ func NewTestServer(configure func(*core.Engine)) *Server {
 	}
 	return s
 }
+
+// OpenFestDB opens and migrates a fest database the way openFestDB does, but
+// without the fsyncs (sqlitextest): a test's database is thrown away when the
+// test ends, and on this box's network disk the fsyncs were most of a test's
+// time. Production opens through openFestDB, which keeps synchronous(FULL);
+// TestProductionFestDBIsDurable holds it to that.
+func OpenFestDB(path string) (*sql.DB, error) { return sqlitextest.Open(path, prepareFestDB) }
 
 // ----- field accessors -----
 
@@ -85,7 +94,6 @@ const (
 var (
 	StaticFiles = assets.FS
 
-	OpenFestDB                = openFestDB
 	MigrateDB                 = migrateDB
 	ResolveGameID             = resolveGameID
 	DefaultGameID             = defaultGameID

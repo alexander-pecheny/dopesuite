@@ -7,7 +7,7 @@ import (
 )
 
 func TestMergeDisamoneAccounts(t *testing.T) {
-	db, err := openFestDB(filepath.Join(t.TempDir(), "merge.db"))
+	db, err := OpenFestDB(filepath.Join(t.TempDir(), "merge.db"))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestMergeDisamoneAccounts(t *testing.T) {
 }
 
 func TestUsernamesUniqueIgnoringCase(t *testing.T) {
-	db, err := openFestDB(filepath.Join(t.TempDir(), "nocase.db"))
+	db, err := OpenFestDB(filepath.Join(t.TempDir(), "nocase.db"))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestUsernamesUniqueIgnoringCase(t *testing.T) {
 }
 
 func TestUsernamesUniqueIgnoringCaseNamesAClash(t *testing.T) {
-	db, err := openFestDB(filepath.Join(t.TempDir(), "clash.db"))
+	db, err := OpenFestDB(filepath.Join(t.TempDir(), "clash.db"))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

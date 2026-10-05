@@ -23,7 +23,7 @@ func TestRehearseMigrations(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	db, err := openDB(path)
+	db, err := openTestDB(path)
 	if err != nil {
 		t.Fatalf("миграции не прошли: %v", err)
 	}

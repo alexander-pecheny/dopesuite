@@ -65,7 +65,13 @@ func IsUniqueViolation(err error) bool {
 // then widens the pool. Migrating on one connection keeps concurrent schema
 // changes impossible; widening afterwards restores read concurrency.
 func Open(path string, migrate func(*sql.DB) error) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", BuildDSN(path))
+	return OpenDSN(BuildDSN(path), migrate)
+}
+
+// OpenDSN is Open for a DSN already built. It exists for sqlitextest, which
+// opens test databases without the fsyncs; production opens by path.
+func OpenDSN(dsn string, migrate func(*sql.DB) error) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}

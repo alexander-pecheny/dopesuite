@@ -27,22 +27,25 @@ const (
 // migrations toggle PRAGMA foreign_keys and run multi-statement rewrites, which
 // must land on a single connection — then widens the pool for runtime reads.
 func openFestDB(path string) (*sql.DB, error) {
-	return sqlitex.Open(path, func(db *sql.DB) error {
-		// Disarm the journal row-op triggers for the whole schema-migration +
-		// data-conversion window: structural churn is not an edit and must never
-		// journal. EnsureTriggers reinstalls them before any live write can occur
-		// (bootstrap is single-threaded).
-		if err := journal.DropTriggers(db); err != nil {
-			return err
-		}
-		if err := migrateDB(db); err != nil {
-			return err
-		}
-		if err := journal.EnsureTriggers(db); err != nil {
-			return err
-		}
-		return journal.BackfillGameCheckpoints(db)
-	})
+	return sqlitex.Open(path, prepareFestDB)
+}
+
+// prepareFestDB is the schema work openFestDB runs on the pinned connection.
+func prepareFestDB(db *sql.DB) error {
+	// Disarm the journal row-op triggers for the whole schema-migration +
+	// data-conversion window: structural churn is not an edit and must never
+	// journal. EnsureTriggers reinstalls them before any live write can occur
+	// (bootstrap is single-threaded).
+	if err := journal.DropTriggers(db); err != nil {
+		return err
+	}
+	if err := migrateDB(db); err != nil {
+		return err
+	}
+	if err := journal.EnsureTriggers(db); err != nil {
+		return err
+	}
+	return journal.BackfillGameCheckpoints(db)
 }
 
 // loadActiveContext picks an arbitrary fest/game/first-match to drive the

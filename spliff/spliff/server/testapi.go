@@ -15,6 +15,7 @@ import (
 	"pecheny.me/dopecore/authcred"
 	"pecheny.me/dopecore/blobstore"
 	"pecheny.me/dopecore/session"
+	"pecheny.me/dopecore/sqlitex/sqlitextest"
 
 	"spliff/spliff/domain/rates"
 	"spliff/spliff/storage/store"
@@ -34,7 +35,7 @@ type TestServer struct {
 // pages wired up exactly as Main wires them.
 func NewTestServer(t *testing.T, dir string) *TestServer {
 	t.Helper()
-	db, err := openDB(dir + "/spliff.db")
+	db, err := openTestDB(dir + "/spliff.db")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -139,7 +140,13 @@ func Today() string { return time.Now().UTC().Format(rates.DayFormat) }
 func (ts *TestServer) DB() *sql.DB { return ts.s.db }
 
 // OpenDB opens a database with the migrations applied, for the schema pin.
-func OpenDB(path string) (*sql.DB, error) { return openDB(path) }
+func OpenDB(path string) (*sql.DB, error) { return openTestDB(path) }
+
+// openTestDB opens and migrates a database the way openDB does, but without
+// the fsyncs (sqlitextest): a test's database is thrown away when the test
+// ends. Production opens through openDB, which keeps synchronous(FULL);
+// TestProductionDBIsDurable holds it to that.
+func openTestDB(path string) (*sql.DB, error) { return sqlitextest.Open(path, store.Migrate) }
 
 // Client is one logged-in person driving the API the way a browser does: the
 // session cookie on every request, and the Origin header a same-origin fetch

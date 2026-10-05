@@ -9,7 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"pecheny.me/dopecore/schema"
-	"pecheny.me/dopecore/sqlitex"
+	"pecheny.me/dopecore/sqlitex/sqlitextest"
 )
 
 // A fresh database and an upgraded one walk the same list, so a fresh one can
@@ -22,7 +22,7 @@ import (
 func openAt(t *testing.T, list []schema.Migration) *sql.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "spliff.db")
-	db, err := sqlitex.Open(path, func(db *sql.DB) error { return schema.Apply(db, list) })
+	db, err := sqlitextest.Open(path, func(db *sql.DB) error { return schema.Apply(db, list) })
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
