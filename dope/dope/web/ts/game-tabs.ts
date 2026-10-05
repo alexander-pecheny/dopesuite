@@ -8,7 +8,7 @@ export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "kd" | "tro
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
-  | "stats" | "roster" | "venues" | "entrants" | "seedImport"
+  | "stats" | "roster" | "venues" | "entrants"
   | "results" | "detailed" | "input" | "screen" | "refusals"
   | "personal" | "players";
 
@@ -35,7 +35,8 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "es":
   case "si":
     return [
-      ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()], ...when(host, ["seedImport", S.entrants.tab()])),
+      ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()]),
+      ...entrantsTab(host),
       ...foldReseeds(stages.flatMap((stage) => blockRoundTabs(stage, stages))),
       ...fixedTabs(["stats", S.screen.tabs.stats()], ...when(options.game !== "si", ["roster", S.screen.tabs.roster()])),
     ];

@@ -19,7 +19,7 @@ import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReloa
 import type {PatchPath, ScopedWriter, SendResult, WriteIntent, WriteRequest} from "./state-sync.js";
 import {mountGamePage} from "./game-shell.js";
 import type {CursorKind, GameShell} from "./game-shell.js";
-import {parseGameRoute} from "./game-page.js";
+import {notifyEmbeddedResize, parseGameRoute} from "./game-page.js";
 import type {GameInitLike, GameRoute} from "./game-page.js";
 import {fitScrollFade, renderTabBar} from "./widgets.js";
 import {gameTabs} from "./game-tabs.js";
@@ -66,7 +66,7 @@ export interface BoutFest {
 }
 
 export interface BoutPageSpec<V extends BoutView, S> {
-  app: "brain" | "hamsa" | "troika";
+  app: "brain" | "hamsa" | "troika" | "ek" | "es" | "si";
   // The sheet the tabs draw into, and the strip the tab bar goes in.
   root: HTMLElement;
   tabsRoot: HTMLElement | null;
@@ -105,6 +105,8 @@ export interface BoutPageSpec<V extends BoutView, S> {
   onFest?: () => void;
   // A team's roster in this Game changed (the roster tab, a player override).
   onRoster?: () => void;
+  // Whether the menu offers the Game's downloads (EK's sheets).
+  downloads?: boolean;
   // Test seams: the shell, the route, the stream.
   shell?: GameShell;
   route?: GameRoute;
@@ -161,8 +163,14 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   const {root, scheme, fest} = spec;
   const route = spec.route || parseGameRoute();
   const viewer = Boolean(route.viewer);
+  // An embedded view (?embed=1, a bout in another site's frame) is the sheet
+  // alone: no tabs, no menu items, no presence; it tells its frame its height.
+  const embedded = new URLSearchParams(window.location?.search || "").get("embed") === "1";
+  if (embedded) document.body?.classList.add("embedded-match");
   const shell = spec.shell || mountGamePage({
-    app: spec.app,
+    embedded,
+    // Erudit-Sextet and individual SI are EK's page to the shell.
+    app: spec.app === "es" || spec.app === "si" ? "ek" : spec.app,
     root,
     statusNode: document.getElementById("status"),
     breadcrumbsNode: document.getElementById("gameBreadcrumbs"),
@@ -171,7 +179,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     viewer,
     apiBase: route.apiBase,
     init: spec.init,
-    downloads: false,
+    downloads: Boolean(spec.downloads),
     chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || spec.title()}),
     cursorKinds: spec.cursorKinds,
     activeCursorElement: spec.activeCursorElement,
@@ -467,7 +475,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
 
   function render(): void {
     shell.renderChrome();
-    if (spec.tabsRoot) {
+    if (spec.tabsRoot && !embedded) {
       spec.tabsRoot.hidden = false;
       renderTabBar(spec.tabsRoot, tabs(), activeTab, (key) => {
         activeTab = key;
@@ -494,6 +502,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     for (const cursor of spec.cursors?.() || []) cursor.refresh();
     shell.presence.refresh();
     spec.afterRender?.(tab, node);
+    notifyEmbeddedResize(embedded);
   }
 
   // ---- the host's writes ----

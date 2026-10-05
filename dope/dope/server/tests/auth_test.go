@@ -457,8 +457,16 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	hostVenuesReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: hostToken})
 	hostVenuesResp := httptest.NewRecorder()
 	srv.HostPageServer().HandleHostRouter(hostVenuesResp, hostVenuesReq)
-	if hostVenuesResp.Code != http.StatusOK {
-		t.Fatalf("host venues page status = %d, body %s", hostVenuesResp.Code, hostVenuesResp.Body.String())
+	// The venues are a tab of the game page now: the old address lands on it.
+	if hostVenuesResp.Code != http.StatusFound || !strings.HasSuffix(hostVenuesResp.Header().Get("Location"), "/#venues") {
+		t.Fatalf("host venues page status = %d, location %q", hostVenuesResp.Code, hostVenuesResp.Header().Get("Location"))
+	}
+	hostGameReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d/game/%d/", festID, gameID), nil)
+	hostGameReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: hostToken})
+	hostGameResp := httptest.NewRecorder()
+	srv.HostPageServer().HandleHostRouter(hostGameResp, hostGameReq)
+	if hostGameResp.Code != http.StatusOK {
+		t.Fatalf("host game page status = %d, body %s", hostGameResp.Code, hostGameResp.Body.String())
 	}
 
 	bulkAccessForm := url.Values{

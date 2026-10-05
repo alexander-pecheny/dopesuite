@@ -192,3 +192,32 @@ would lose an entry. So ЭК, ЭС, личная СИ, Тройка and Хамс
 sitting shaped by the creation form's own fields, and a recompile would deal
 it again from scratch. Reshaping a flat document in place (more tours, the
 answers kept) is a separate piece of work.
+
+## Follow-up: ЭК is a bout page
+
+§5 left ЭК on a page of its own. The user decided to move it onto the bout
+page, as one model for every format of бои, with hash tabs and redirects
+rather than path routes, and with undo for every bout page.
+
+- **The view carries the document.** The ЭК family's match view carries its
+  Protocol document under `state`, beside the scored projection. The page
+  writes document paths (`ek-protocol.ts`: `answerPath`, `playersPath`,
+  `pinPath`) and scores the document while a write is in flight
+  (`scoreSection`). `places.json` holds those totals to the Go scorer. The
+  view-path to wire translation (`opPath`, `blobOp`) is gone with the old
+  page.
+- **One page.** `ek.ts` mounts `mountBoutPage`, as Хамса's page does. It
+  went from about 2,600 lines to about 780. `stage-cache.ts`,
+  `stats-sync.ts` and the ЭК init payload (`InitEK`, `buildEKInit`, the
+  path-route parser) are gone. Every page boots the game init, and
+  `games.Definition.Init` is gone too.
+- **Old addresses.** `/matches/<letter>`, `/stage/<code>`, `/venues`,
+  `/stats`, `/roster`, `/entrants` and `/seed-import` redirect
+  (`route.GamePageTarget`) to the tab, with a bout as the hash's `@` anchor.
+  The page opens the bout's tab and scrolls to it.
+- **Undo.** `undo.ts` keeps each page load's own edits. A step is one
+  gesture, up to 200 steps. A cell another host has changed since is never
+  overwritten. Setting a field to null now clears it in `matchops`, so
+  undoing a pin or a seating works.
+- **What changed for a user:** a spectator's bout head is the bout page's,
+  with no title popover. The grid's draw panel is live on ЭК, as on Хамса.

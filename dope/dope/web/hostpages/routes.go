@@ -108,6 +108,9 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, sc ro
 	if !route.GamePagePath(parts, true) {
 		return route.NotFound
 	}
+	if route.RedirectToGamePage(w, r, "/host/fest/"+r.PathValue("fest"), parts, false) {
+		return nil
+	}
 	gameID, err := s.h.ResolveGameID(r.Context(), sc.FestID, parts[1])
 	if err != nil || gameID <= 0 {
 		return route.NotFound
@@ -126,10 +129,6 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, sc ro
 		return nil
 	}
 	scope := core.FestScope{FestID: sc.FestID, GameID: gameID}
-	if def := games.Get(gameType); def.Init == games.InitEK {
-		s.h.ServeEKHTMLWithInit(w, r, scope, parts, def.Page)
-	} else {
-		s.h.ServeGameHTMLWithInit(w, r, def.Page, scope)
-	}
+	s.h.ServeGameHTMLWithInit(w, r, games.Get(gameType).Page, scope)
 	return nil
 }

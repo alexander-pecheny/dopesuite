@@ -3,7 +3,6 @@ package dopeserver
 import (
 	"context"
 	"dope/dope/domain/core"
-	"dope/dope/domain/entrants"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/towns"
 	"dope/dope/storage/festaccess"
@@ -15,34 +14,9 @@ import (
 	"pecheny.me/dopecore/webassets"
 )
 
-func (s *server) serveEKHTML(w http.ResponseWriter, r *http.Request, page string) {
-	s.serveAppHTML(w, r, page)
-}
-
-// ekInitMarker is the placeholder string inside static/ek.html that is
-// replaced with the actual init JSON. Keep in sync with the file.
-const (
-	ekInitMarker   = "null;/*__EK_INIT__*/"
-	gameInitMarker = "null;/*__GAME_INIT__*/"
-)
-
-// ekInitPayload seeds the EK page — the host's /host/fest/… and the spectator's
-// /fest/… alike; the page tells the two apart by its URL.
-type ekInitPayload struct {
-	Route      ekInitRoute      `json:"route"`
-	Fest       json.RawMessage  `json:"fest,omitempty"`
-	Match      *store.MatchView `json:"match,omitempty"`
-	SeedImport *entrants.View   `json:"seedImport,omitempty"`
-	// TeamsUnnumbered mirrors gameInitPayload.TeamsUnnumbered for the EK host
-	// surface: editing is blocked server-side until every team has a number.
-	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
-	// CanEdit reflects table-editor rights, so the page can show host-only
-	// actions (e.g. the .json.gz archive download) without a probe round trip.
-	CanEdit bool `json:"canEdit,omitempty"`
-	// Static marks a snapshot served in static (lockdown) mode: the client skips
-	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
-	Static bool `json:"static,omitempty"`
-}
+// gameInitMarker is the placeholder string inside every game page that is
+// replaced with the actual init JSON. Keep in sync with the pages.
+const gameInitMarker = "null;/*__GAME_INIT__*/"
 
 type gameInitPayload struct {
 	// FestID/GameID are the resolved numeric ids. The client needs the numeric
@@ -80,39 +54,11 @@ type gameInitPayload struct {
 	Static bool `json:"static,omitempty"`
 }
 
-type ekInitRoute struct {
-	Mode      string `json:"mode"`
-	FestID    int64  `json:"festID"`
-	GameID    int64  `json:"gameID"`
-	StageCode string `json:"stageCode,omitempty"`
-	MatchCode string `json:"matchCode,omitempty"`
-}
-
-// serveEKHTMLWithInit renders static/ek.html with window.__EK_INIT__
-// pre-populated for the current route, eliminating the cold API round trips
-// the SPA would otherwise make immediately after parsing ek.js. Falls back
-// to plain serveEKHTML on any error so a payload bug never breaks the page.
-// serveEKHTMLWithInit serves a bracket game's page with the bracket init
-// payload. Which page that is belongs to the format, not to this function:
-// Troika plays a bracket and boots the same payload, on a page of its own.
-func (s *server) serveEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string, page string) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	route := parseEKInitRoute(parts, scope)
-	payload, err := s.buildEKInit(r.Context(), route)
-	if err != nil {
-		s.serveEKHTML(w, r, page)
-		return
-	}
-	payload.CanEdit = s.canEdit(r, scope.FestID, scope.GameID)
-	data, err := json.Marshal(payload)
-	if err != nil {
-		s.serveEKHTML(w, r, page)
-		return
-	}
-	s.serveInjectedHTML(w, r, page, ekInitMarker, data)
+// staticRoute is what a lockdown snapshot is cached under: one per Game, since
+// every game page draws the whole Game whatever its URL says.
+type staticRoute struct {
+	FestID int64
+	GameID int64
 }
 
 // canEdit says whether the request's session may edit this Game's tables —
@@ -213,67 +159,6 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 		payload.TeamsUnnumbered = unnumbered
 	}
 	payload.CityCountry = towns.FestCityCountries(ctx, s.eng.DB, s.eng.Buff, scope.FestID)
-	return payload, nil
-}
-
-// ekRouteCodePart is where a match or stage code stands in the EK page's path
-// parts, after the scope and the mode.
-const ekRouteCodePart = 3
-
-func parseEKInitRoute(parts []string, scope festScope) ekInitRoute {
-	route := ekInitRoute{Mode: "grid", FestID: scope.FestID, GameID: scope.GameID}
-	if len(parts) <= 2 {
-		return route
-	}
-	switch parts[2] {
-	case "venues":
-		route.Mode = "venues"
-	case "entrants", "seed-import":
-		route.Mode = "seedImport"
-	case "matches":
-		if len(parts) > ekRouteCodePart {
-			route.Mode = "match"
-			route.MatchCode = parts[ekRouteCodePart]
-		}
-	case "stage":
-		if len(parts) > ekRouteCodePart {
-			route.Mode = "stage"
-			route.StageCode = parts[ekRouteCodePart]
-		}
-	}
-	return route
-}
-
-func (s *server) buildEKInit(ctx context.Context, route ekInitRoute) (ekInitPayload, error) {
-	payload := ekInitPayload{Route: route}
-
-	festBytes, err := s.festViewBytes(route.FestID, route.GameID)
-	if err != nil {
-		return payload, err
-	}
-	payload.Fest = festBytes
-	if unnumbered, err := numbering.HasUnnumbered(ctx, s.eng.DB, route.FestID); err == nil {
-		payload.TeamsUnnumbered = unnumbered
-	}
-
-	switch route.Mode {
-	case "match":
-		mscope, err := s.verifyMatchInScope(ctx, festScope{FestID: route.FestID, GameID: route.GameID}, route.MatchCode)
-		if err != nil {
-			return payload, nil
-		}
-		match, err := s.loadScopedMatchViewSnapshot(mscope)
-		if err != nil {
-			return payload, nil
-		}
-		payload.Match = &match
-	case "seedImport":
-		view, err := entrants.Load(ctx, s.eng.DB, festScope{FestID: route.FestID, GameID: route.GameID})
-		if err != nil {
-			return payload, nil
-		}
-		payload.SeedImport = &view
-	}
 	return payload, nil
 }
 

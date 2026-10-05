@@ -8,7 +8,7 @@ import dopestrings "dope/i18nstrings"
 // Its history lists events only: the history page reads EK's rows for EK
 // alone.
 var esFormat = Definition{Code: ES, Label: dopestrings.Default.Games.Es.Label(), Title: dopestrings.Default.Host.Games.TypeEs(),
-	Page: "static/ek.html", Init: InitEK, EKBout: true, HandRoster: true, PlayerOverrides: true,
+	Page: "static/ek.html", EKBout: true, HandRoster: true, PlayerOverrides: true,
 	DSL: DSLEditable, PastedScheme: true, Sheets: SheetsEK, Journal: JournalEvents, Protocol: es{}}
 
 // ESPlayersPerTheme is how many players a team seats on a theme when the

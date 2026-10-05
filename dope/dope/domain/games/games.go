@@ -59,7 +59,6 @@ type Definition struct {
 	// no per-theme player cell, so the page draws it as one row where a team's
 	// takes two.
 	Page string
-	Init InitKind
 	// EKBout reports whether the format plays EK's bout: twelve themes of five
 	// questions at 10..50, scored by store.BuildView, edited on EK's page, and
 	// with a team's game roster kept in game_team_players.
@@ -109,15 +108,6 @@ type Definition struct {
 	// for with As (protocol.go).
 	Protocol Protocol
 }
-
-// InitKind names the init payload a page boots from: the flat game init
-// (ChGK, KSI, brain) or EK's bracket init.
-type InitKind int
-
-const (
-	InitGame InitKind = iota
-	InitEK
-)
 
 // DSLUse is how a format takes a scheme in the DSL. The zero value is
 // undeclared, which the registry's tests refuse.

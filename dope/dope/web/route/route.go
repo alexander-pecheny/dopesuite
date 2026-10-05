@@ -362,6 +362,44 @@ func GamePagePath(parts []string, host bool) bool {
 	return false
 }
 
+// GamePageTarget says where an old sub-path of a game page lands, now that
+// every game page keeps its tab in the hash (ADR-0028): a tab is the hash, a
+// bout is the hash's anchor (#@A, its letter or code), which the page opens on
+// its tab and scrolls to. ok is false for the game page itself, which needs no
+// redirect.
+func GamePageTarget(parts []string) (suffix string, ok bool) {
+	if len(parts) <= gameTabPathLen-1 {
+		return "", false
+	}
+	switch parts[2] {
+	case "venues", "stats", "roster":
+		return "#" + parts[2], true
+	case "entrants", "seed-import":
+		return "#entrants", true
+	case "stage":
+		return "#stage:" + url.PathEscape(parts[gameItemPathLen-1]), true
+	case "matches":
+		return "#@" + url.PathEscape(parts[gameItemPathLen-1]), true
+	}
+	return "", false
+}
+
+// RedirectToGamePage sends an old game sub-path (GamePageTarget) to the game
+// page under prefix ("/fest/x" or "/host/fest/x"), keeping the lockdown's
+// /static handle.
+func RedirectToGamePage(w http.ResponseWriter, r *http.Request, prefix string, parts []string, static bool) bool {
+	suffix, ok := GamePageTarget(parts)
+	if !ok {
+		return false
+	}
+	target := prefix + "/game/" + url.PathEscape(parts[1]) + "/"
+	if static {
+		target += "static"
+	}
+	http.Redirect(w, r, target+suffix, http.StatusFound)
+	return true
+}
+
 // ---- the response vocabulary ----
 
 // Status is an error that knows its HTTP status.

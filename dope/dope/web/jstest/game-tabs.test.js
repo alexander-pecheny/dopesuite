@@ -72,9 +72,9 @@ test("ЭК: N reseeds fold into one Пересев, one keeps its tab", () => {
 });
 
 test("ЭК: the host gets «Участники», an individual game has no составы", () => {
-  assert.deepEqual(keys(gameTabs([], {game: "ek", viewer: false})), ["grid", "venues", "seedImport", "stats", "roster"]);
+  assert.deepEqual(keys(gameTabs([], {game: "ek", viewer: false})), ["grid", "venues", "entrants", "stats", "roster"]);
   assert.deepEqual(labels(gameTabs([], {game: "ek", viewer: false}))[2], "Участники");
-  assert.deepEqual(keys(gameTabs([], {game: "si", viewer: false})), ["grid", "venues", "seedImport", "stats"]);
+  assert.deepEqual(keys(gameTabs([], {game: "si", viewer: false})), ["grid", "venues", "entrants", "stats"]);
   assert.deepEqual(keys(gameTabs([], {game: "ek", viewer: true})), ["grid", "venues", "stats", "roster"]);
 });
 

@@ -171,9 +171,11 @@ export type Strings = {
     bout: {
       finished: () => string;
     };
-    crumb: {
-      stats: () => string;
-      venues: () => string;
+    place: {
+      title: (name: string) => string;
+    };
+    seat: {
+      fallback: (n: string) => string;
     };
     seats: {
       label: () => string;
@@ -189,7 +191,6 @@ export type Strings = {
     };
     stage: {
       empty: () => string;
-      matchFallback: (code: string) => string;
     };
     stats: {
       battles: () => string;

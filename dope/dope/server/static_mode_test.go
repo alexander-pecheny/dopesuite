@@ -98,7 +98,7 @@ func TestSpliceInitReplacesTheMarkerOnce(t *testing.T) {
 	if string(out) != `<script>window.__GAME_INIT__ = {"a":1};</script>` {
 		t.Fatalf("got %s", out)
 	}
-	if _, err := spliceInit(page, ekInitMarker, nil); err == nil {
+	if _, err := spliceInit([]byte(`<script></script>`), gameInitMarker, nil); err == nil {
 		t.Fatal("a page without the marker must be an error, not a silent pass-through")
 	}
 }

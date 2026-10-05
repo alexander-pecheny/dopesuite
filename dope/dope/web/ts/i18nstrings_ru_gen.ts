@@ -172,9 +172,11 @@ export const RU: Strings = {
     bout: {
       finished: () => "Закончен",
     },
-    crumb: {
-      stats: () => "Статистика",
-      venues: () => "Площадки",
+    place: {
+      title: (name: string) => `Место: ${name}. Впишите место, чтобы закрепить его, или очистите поле, чтобы место снова считалось по очкам.`,
+    },
+    seat: {
+      fallback: (n: string) => `Участник ${n}`,
     },
     seats: {
       label: () => "Кто выходит на тему",
@@ -190,7 +192,6 @@ export const RU: Strings = {
     },
     stage: {
       empty: () => "В этом этапе нет боёв.",
-      matchFallback: (code: string) => `Бой ${code}`,
     },
     stats: {
       battles: () => "Бои",

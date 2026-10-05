@@ -19,6 +19,9 @@
      in. */
   --hamsa-bout-w: 4400px;
   --hamsa-bout-h: 200px;
+  /* An EK bout's sheet: four seats of two rows by twelve themes. */
+  --ek-bout-w: 3600px;
+  --ek-bout-h: 300px;
   /* A Хамса бой is scored in thousands, so the columns that hold a number are
      wider than the 10..50 ones: Σ takes five figures and a тема's score four.
      The mark cells are ЭК's, because a mark is a mark — the sheet's colgroup
@@ -176,7 +179,6 @@
    bites only when the content reaches the edge, so long text fades where an
    «…» used to sit. Table names get the full fade+popover treatment instead. */
 .battle-title,
-.readonly-battle-venue,
 .numbers-import-raw,
 .public-top h1 {
   -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
@@ -779,15 +781,6 @@
   --cell-fill: var(--structure);
   border-color: var(--structure);
   border-radius: 0;
-}
-
-.match-table .shootout-adjacent-gap,
-.match-table .shootout-adjacent-gap-head {
-  width: 2px;
-  min-width: 2px;
-  max-width: 2px;
-  padding: 0;
-  border: 0;
 }
 
 .shootout-controls-head .shootout-add-button,
@@ -1592,33 +1585,6 @@ body:not(.embedded-match) .grid-match {
 .slot-place {
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-.stage-table-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 14px;
-  min-width: max-content;
-}
-
-.stage-match-frame {
-  width: max-content;
-  content-visibility: auto;
-  contain-intrinsic-size: 1180px 220px;
-}
-
-.stage-match-placeholder {
-  display: flex;
-  align-items: center;
-  width: min(960px, calc(100vw - 48px));
-  min-width: 520px;
-  min-height: 132px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: var(--paper);
-  color: var(--muted);
-  font-size: var(--text-sm);
 }
 
 .embedded-match {
@@ -3102,27 +3068,6 @@ html:has(.game-host-top) {
   padding-left: 8px;
 }
 
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-head {
-  padding-right: 8px;
-  padding-left: 8px;
-}
-
-.readonly-battle-title {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-.readonly-battle-venue {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  text-overflow: clip;
-  white-space: nowrap;
-}
-
 .match-table.od-detailed .od-detailed-team-cell,
 .match-table .ek-team-cell {
   --cell-fill: var(--structure);
@@ -3515,14 +3460,6 @@ html:has(.game-host-top) {
   }
 }
 
-/* Public EK viewer tuning. The frame used to add a static right-edge inset
-   shadow as a "more content" cue; the kit's scroll fade now covers that
-   (content-capped, gone at scroll end), and the full-height shadow painted
-   past short tables' bottom edge. */
-.readonly-battle-popover {
-  display: none;
-}
-
 .viewer-readonly .match-table.ek-stage-table.readonly-table {
   --question-size: 26px;
   --team-col: 158px;
@@ -3559,49 +3496,6 @@ html:has(.game-host-top) {
   width: var(--narrow-col);
   min-width: var(--narrow-col);
   max-width: var(--narrow-col);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-head {
-  padding-right: 6px;
-  padding-left: 6px;
-  font-size: var(--text-xs);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-title {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-title:focus {
-  outline: var(--focus-ring-none);
-  outline-offset: var(--focus-outline-offset-tight);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-name {
-  flex: 0 0 auto;
-}
-
-/* With its venue's whole title the head is two lines: the bout, then where
-   it is played, fading at the column's end (the head's popover has it all). */
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-title:has(.readonly-battle-venue) {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  line-height: var(--leading-tight);
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-venue {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  text-overflow: clip;
-  white-space: nowrap;
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player {
@@ -3772,10 +3666,6 @@ html:has(.game-host-top) {
   }
 
   .viewer-readonly .match-table.ek-stage-table.readonly-table .team-name {
-    font-size: var(--text-xs);
-  }
-
-  .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-head {
     font-size: var(--text-xs);
   }
 
@@ -4910,6 +4800,14 @@ body.is-fullscreen.od-page .match-main {
   contain-intrinsic-size: auto var(--hamsa-bout-w) var(--hamsa-bout-h);
 }
 
+/* An EK round tab stacks every bout of the round, sixteen at a 64-team fest;
+   sizing the ones out of view without laying them out keeps its first paint
+   quick, as the old page's lazy frames did. */
+.ek-bout {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--ek-bout-w) var(--ek-bout-h);
+}
+
 /* The раунды stand over their темы in a header row of their own: one cell per
    game round, spanning every column its темы take. The leading cell covers the
    sheet's own frozen columns and carries no words — the бой names itself in the
@@ -5057,7 +4955,6 @@ body.is-fullscreen.od-page .match-main {
   min-width: var(--hamsa-theme-score-col);
   max-width: var(--hamsa-theme-score-col);
 }
-
 
 /* Кубок Дружбы (ADR-0026): the players' remove buttons fit the row as the
    guest teams' do, and the route cards print one per player. The sheet lives

@@ -13,7 +13,7 @@ import (
 // siFormat is individual SI. Its export is KSI's document sheets, which is
 // what it has always been given, though its Games are brackets on EK's page.
 var siFormat = Definition{Code: SI, Label: dopestrings.Default.Games.Si.Label(), Title: dopestrings.Default.Host.Games.TypeSi(),
-	Individual: true, Page: "static/ek.html", Init: InitEK, DSL: DSLEditable,
+	Individual: true, Page: "static/ek.html", DSL: DSLEditable,
 	DefaultDSL: SIDefaultDSL, Sheets: SheetsKSI, Journal: JournalEvents, Protocol: si{}}
 
 // si is individual jeopardy: three or four players at a table over six, eight

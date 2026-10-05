@@ -63,20 +63,21 @@ STOP_TIMEOUT_S = 10
 GALLERY = "gallery|/gallery"
 
 PAGES = f"""
-ek-grid|/fest/{FEST}/game/1/
-ek-venues|/fest/{FEST}/game/1/venues
-ek-stats|/fest/{FEST}/game/1/stats
-ek-roster|/fest/{FEST}/game/1/roster
+ek-grid|/fest/{FEST}/game/1/#grid
+ek-protocol|/fest/{FEST}/game/1/#stage:s1-r1
+ek-venues|/fest/{FEST}/game/1/#venues
+ek-stats|/fest/{FEST}/game/1/#stats
+ek-roster|/fest/{FEST}/game/1/#roster
 brain-grid|/fest/{FEST}/game/2/#grid
 brain-block1|/fest/{FEST}/game/2/#block:s1
 brain-protocol|/fest/{FEST}/game/2/#protocol:s1
 brain-reseed|/fest/{FEST}/game/2/#reseed
 brain-stats|/fest/{FEST}/game/2/#stats
 brain-roster|/fest/{FEST}/game/2/#roster
-si-grid|/fest/{FEST}/game/3/
-si-groups|/fest/{FEST}/game/3/stage/group-stage
-si-reseed|/fest/{FEST}/game/3/stage/reseeds
-si-stats|/fest/{FEST}/game/3/stats
+si-grid|/fest/{FEST}/game/3/#grid
+si-groups|/fest/{FEST}/game/3/#stage:s1-g1
+si-reseed|/fest/{FEST}/game/3/#stage:s2-reseed
+si-stats|/fest/{FEST}/game/3/#stats
 troika-grid|/fest/{FEST}/game/4/#grid
 troika-block1|/fest/{FEST}/game/4/#block:s1
 troika-stats|/fest/{FEST}/game/4/#stats

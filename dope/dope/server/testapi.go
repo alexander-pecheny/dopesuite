@@ -246,7 +246,7 @@ func (s *Server) VersionAssetRefs(body []byte) []byte { return s.versionAssetRef
 // StaticSnapshotHTML renders the lockdown snapshot of a game's viewer page —
 // the bytes a spectator gets when the live server steps aside.
 func (s *Server) StaticSnapshotHTML(festID, gameID int64) ([]byte, error) {
-	entry, err := s.buildStaticEntry(context.Background(), ekInitRoute{Mode: "grid", FestID: festID, GameID: gameID})
+	entry, err := s.buildStaticEntry(context.Background(), staticRoute{FestID: festID, GameID: gameID})
 	if err != nil {
 		return nil, err
 	}

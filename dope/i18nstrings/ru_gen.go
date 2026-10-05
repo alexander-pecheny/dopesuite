@@ -214,9 +214,13 @@ var RU = Strings{
 		Bout: EkBoutStrings{
 			Finished: func() string { return "Закончен" },
 		},
-		Crumb: EkCrumbStrings{
-			Stats:  func() string { return "Статистика" },
-			Venues: func() string { return "Площадки" },
+		Place: EkPlaceStrings{
+			Title: func(name string) string {
+				return fmt.Sprintf("Место: %s. Впишите место, чтобы закрепить его, или очистите поле, чтобы место снова считалось по очкам.", name)
+			},
+		},
+		Seat: EkSeatStrings{
+			Fallback: func(n string) string { return fmt.Sprintf("Участник %s", n) },
 		},
 		Seats: EkSeatsStrings{
 			Label: func() string { return "Кто выходит на тему" },
@@ -231,8 +235,7 @@ var RU = Strings{
 			RemoveLabel:   func() string { return "−П" },
 		},
 		Stage: EkStageStrings{
-			Empty:         func() string { return "В этом этапе нет боёв." },
-			MatchFallback: func(code string) string { return fmt.Sprintf("Бой %s", code) },
+			Empty: func() string { return "В этом этапе нет боёв." },
 		},
 		Stats: EkStatsStrings{
 			Battles: func() string { return "Бои" },
