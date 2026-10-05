@@ -55,4 +55,7 @@ test("a handout on its own lines is a captioned frame, as the exports set it; on
   assert.equal(node.querySelector(".pv-handout-caption").textContent, "Раздаточный материал");
   assert.equal(node.querySelector(".pv-handout-frame").textContent, "строка");
   assert.ok(node.querySelectorAll(".pv-q-text")[1].textContent.includes("[Раздаточный материал: АБВ]"));
+  assert.ok(node.querySelector(".pv-handout-box").className.includes("pv-handout-line"), "one line: a frame as wide as it");
+  const two = renderPreviewCard({ id: 4, kind: "question", desc: "? [Раздаточный материал:\nраз\nдва\n]\nЧто?\n! х" }, "3", new Map(), false);
+  assert.ok(!two.querySelector(".pv-handout-box").className.includes("pv-handout-line"), "two lines: the full width");
 });

@@ -36,31 +36,51 @@ const optimizeQuality = 80
 // re-encodes the referenced image to PNG, registers it, and returns the inline
 // <w:drawing> run XML. Missing/undecodable images degrade to a bold
 // "MISSING IMAGE …" run so export never fails.
-func (e *exporter) embedImage(arg string) string {
-	im, ok := inline.ParseImg(arg)
-	if !ok {
-		return ""
-	}
-	name := im.Name
-
+// imageBytes is the image a directive names, looked up by its full name and
+// then by its base name; nil when the export was not given it.
+func (e *exporter) imageBytes(name string) []byte {
 	raw := e.images[name]
 	if raw == nil {
 		if base := name[strings.LastIndexAny(name, `/\`)+1:]; base != name {
 			raw = e.images[base]
 		}
 	}
-	if raw == nil {
-		return missingImage(name)
+	return raw
+}
+
+// imageInches is the size an (img …) directive is drawn at. The drawn size
+// comes from the ORIGINAL pixel dimensions (chgksuite's proportional_resize
+// works off those); embedImage then chooses the encoding for that size. ok is
+// false when the directive names nothing, or nothing it can decode.
+func (e *exporter) imageInches(arg string) (im inline.Img, w, h float64, ok bool) {
+	im, ok = inline.ParseImg(arg)
+	if !ok {
+		return im, 0, 0, false
 	}
-	// The drawn size comes from the ORIGINAL pixel dimensions (chgksuite's
-	// proportional_resize works off those); the encoding is then chosen for that
-	// size. So: decode, size, encode.
+	raw := e.imageBytes(im.Name)
+	if raw == nil {
+		return im, 0, 0, false
+	}
 	src, err := imgconv.Decode(raw)
 	if err != nil {
-		return missingImage(name)
+		return im, 0, 0, false
 	}
 	b := src.Bounds()
-	widthIn, heightIn := im.SizeInches(b.Dx(), b.Dy())
+	w, h = im.SizeInches(b.Dx(), b.Dy())
+	return im, w, h, true
+}
+
+func (e *exporter) embedImage(arg string) string {
+	im, ok := inline.ParseImg(arg)
+	if !ok {
+		return ""
+	}
+	name := im.Name
+	_, widthIn, heightIn, ok := e.imageInches(arg)
+	if !ok {
+		return missingImage(name)
+	}
+	raw := e.imageBytes(name)
 	cx, cy := inchesToEMU(widthIn), inchesToEMU(heightIn)
 
 	data, ext, err := imgconv.ForExport(raw, widthIn, heightIn)

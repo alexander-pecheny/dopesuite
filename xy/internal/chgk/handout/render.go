@@ -121,3 +121,13 @@ func BundledFonts() ([][]byte, error) {
 // BundledFontDir exposes the materialised font dir for tests that drive the typst
 // CLI (which can only take a path).
 func BundledFontDir() (string, error) { return bundledFontDir() }
+
+// RegularFont is the bundled Noto Sans Regular, for an exporter that has to
+// measure text the way it will be set.
+func RegularFont() []byte {
+	b, err := fontFS.ReadFile("assets/NotoSans-Regular.ttf")
+	if err != nil {
+		panic(err) // embedded at build time
+	}
+	return b
+}

@@ -127,6 +127,7 @@ type para struct {
 	keepLines       bool
 	pageBreakBefore bool
 	spacingBefore   int  // twips; 0 = none
+	center          bool // <w:jc w:val="center"/>
 	lang            bool // template para0 carries <w:rPr><w:lang w:val="en-US"/>
 	sz              int  // run font size, half-points; 0 = style default
 	runs            []string
@@ -168,6 +169,9 @@ func (p *para) pPr() string {
 	}
 	if p.spacingBefore > 0 {
 		ppr.WriteString(fmt.Sprintf(`<w:spacing w:before="%d"/>`, p.spacingBefore))
+	}
+	if p.center {
+		ppr.WriteString(`<w:jc w:val="center"/>`)
 	}
 	if p.lang {
 		ppr.WriteString(`<w:rPr><w:lang w:val="en-US"/></w:rPr>`)
@@ -538,7 +542,8 @@ func (e *exporter) renderQuestionText(q *fsource.Question, p *para, screen bool)
 	for _, pc := range pieces {
 		if pc.Handout {
 			p.keepNext = true
-			t := &handoutTable{caption: &para{keepNext: true, sz: handoutCaptionSz}, box: &para{}}
+			width := e.handoutBoxTw(pc.Label, pc.Value)
+			t := &handoutTable{caption: &para{keepNext: true, sz: handoutCaptionSz}, box: &para{center: width > 0}, width: width}
 			t.caption.addRaw(pc.Label, "")
 			e.addValue(t.box, pc.Value, textOpts{removeAccents: screen, removeBrackets: screen})
 			e.body = append(e.body, t)
@@ -877,8 +882,6 @@ func injectMediaContentTypes(ct string, media []mediaItem) string {
 // autofit table.
 const cellWidth = 4873
 
-// table is the one-row, two-column table the add_versions_columns screen mode
-// puts a question in, one copy per cell, one paragraph per copy.
 // The handout box (add_handout_table in chgksuite's docx.py): a two-row table,
 // the caption borderless and close above the bordered handout.
 const (
@@ -888,27 +891,40 @@ const (
 	handoutCaptionMarginTw = 20  // between the caption and the frame
 )
 
-type handoutTable struct{ caption, box *para }
+// handoutTable is the handout box. width is in twips, for a one-line handout
+// set in a box as wide as it or its caption (handoutBoxTw), and centred there;
+// 0 is the page's width.
+type handoutTable struct {
+	caption, box *para
+	width        int
+}
 
 func (t *handoutTable) xml() string {
 	var b strings.Builder
-	b.WriteString(`<w:tbl><w:tblPr><w:tblW w:type="pct" w:w="5000"/>` +
-		`<w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/></w:tblPr>`)
-	fmt.Fprintf(&b, `<w:tblGrid><w:gridCol w:w="%d"/></w:tblGrid>`, 2*cellWidth)
-	fmt.Fprintf(&b, `<w:tr><w:tc><w:tcPr><w:tcW w:type="dxa" w:w="%d"/>`, 2*cellWidth)
-	b.WriteString(cellMargins(0, handoutCaptionMarginTw) + "</w:tcPr>" + t.caption.xml() + "</w:tc></w:tr>")
-	fmt.Fprintf(&b, `<w:tr><w:tc><w:tcPr><w:tcW w:type="dxa" w:w="%d"/><w:tcBorders>`, 2*cellWidth)
+	col := fullWidthTw
+	if t.width == 0 {
+		b.WriteString(`<w:tbl><w:tblPr><w:tblW w:type="pct" w:w="5000"/>`)
+	} else {
+		col = t.width
+		fmt.Fprintf(&b, `<w:tbl><w:tblPr><w:tblW w:type="dxa" w:w="%d"/><w:tblLayout w:type="fixed"/>`, col)
+	}
+	b.WriteString(`<w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/></w:tblPr>`)
+	fmt.Fprintf(&b, `<w:tblGrid><w:gridCol w:w="%d"/></w:tblGrid>`, col)
+	// The caption has no left margin: it starts where the frame does.
+	fmt.Fprintf(&b, `<w:tr><w:tc><w:tcPr><w:tcW w:type="dxa" w:w="%d"/>`, col)
+	fmt.Fprintf(&b, `<w:tcMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="%d" w:type="dxa"/></w:tcMar>`, handoutCaptionMarginTw)
+	b.WriteString("</w:tcPr>" + t.caption.xml() + "</w:tc></w:tr>")
+	fmt.Fprintf(&b, `<w:tr><w:tc><w:tcPr><w:tcW w:type="dxa" w:w="%d"/><w:tcBorders>`, col)
 	for _, edge := range []string{"top", "left", "bottom", "right"} {
 		fmt.Fprintf(&b, `<w:%s w:val="single" w:sz="%d" w:space="0" w:color="000000"/>`, edge, handoutBorderEighths)
 	}
-	b.WriteString("</w:tcBorders>" + cellMargins(handoutBoxMarginTw, handoutBoxMarginTw) + "</w:tcPr>" + t.box.xml() + "</w:tc></w:tr></w:tbl>")
+	fmt.Fprintf(&b, `</w:tcBorders><w:tcMar><w:top w:w="%d" w:type="dxa"/><w:bottom w:w="%d" w:type="dxa"/></w:tcMar>`, handoutBoxMarginTw, handoutBoxMarginTw)
+	b.WriteString("</w:tcPr>" + t.box.xml() + "</w:tc></w:tr></w:tbl>")
 	return b.String()
 }
 
-func cellMargins(top, bottom int) string {
-	return fmt.Sprintf(`<w:tcMar><w:top w:w="%d" w:type="dxa"/><w:bottom w:w="%d" w:type="dxa"/></w:tcMar>`, top, bottom)
-}
-
+// table is the one-row, two-column table the add_versions_columns screen mode
+// puts a question in, one copy per cell, one paragraph per copy.
 type table struct{ cells [2]*para }
 
 func (t *table) xml() string {

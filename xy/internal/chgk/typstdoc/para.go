@@ -2,6 +2,7 @@ package typstdoc
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -120,29 +121,49 @@ const (
 )
 
 // handoutBox is a handout set apart from its question (chgksuite's
-// HandoutBox): filled like a para, it renders to the caption, lined up with
-// the text inside the frame and kept with it, then the framed handout. A page
-// break inside a handout is dropped: typst refuses one inside a block.
+// HandoutBox): filled like a para, it renders to the caption, flush with the
+// frame's left edge, over the framed handout. A one-line handout gets a frame
+// only as wide as it or its caption, with the handout centred; anything longer
+// takes the page's width. The caption is the grid's header, so it never ends
+// a page without its frame. A page break inside a handout is dropped: typst
+// refuses one inside a block.
 type handoutBox struct {
 	para
 	caption string
 }
 
+// reTypstString matches a typst string literal, escapes included.
+var reTypstString = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
+
 func (h *handoutBox) typ() string {
-	var body []string
+	var exprs []string
 	for _, e := range h.exprs {
 		if e != pbMarker {
-			body = append(body, e)
+			exprs = append(exprs, e)
 		}
 	}
-	content := strings.Join(body, " + ")
-	if content == "" {
-		content = "[]"
+	// A block picture brings line breaks of its own on either side.
+	for len(exprs) > 0 && exprs[0] == "linebreak()" {
+		exprs = exprs[1:]
 	}
-	return fmt.Sprintf("#block(above: %s, below: 0pt, inset: (left: %s), breakable: false, sticky: true, %s)\n",
-		pt(handoutCaptionAbovePt), pt(handoutInsetPt+handoutStrokePt), wrapText(h.caption, "size: "+pt(handoutCaptionPt))) +
-		fmt.Sprintf("#block(above: %s, below: 0pt, width: 100%%, stroke: %s, inset: %s, %s)\n",
-			pt(handoutCaptionGapPt), pt(handoutStrokePt), pt(handoutInsetPt), content)
+	for len(exprs) > 0 && exprs[len(exprs)-1] == "linebreak()" {
+		exprs = exprs[:len(exprs)-1]
+	}
+	body := strings.Join(exprs, " + ")
+	if body == "" {
+		body = "[]"
+	}
+	// Text runs carry their line breaks inside them; the string literals are
+	// dropped first so that a handout's own text cannot look like one.
+	columns, align := "(auto,)", "center"
+	if strings.Contains(reTypstString.ReplaceAllString(body, `""`), "linebreak()") {
+		columns, align = "(1fr,)", "left"
+	} else {
+		body = "box(align(left, " + body + "))"
+	}
+	return fmt.Sprintf("#block(above: %s, below: 0pt, grid(columns: %s, row-gutter: %s, grid.header(repeat: false, %s), grid.cell(stroke: %s, inset: %s, align: %s, %s)))\n",
+		pt(handoutCaptionAbovePt), columns, pt(handoutCaptionGapPt), wrapText(h.caption, "size: "+pt(handoutCaptionPt)),
+		pt(handoutStrokePt), pt(handoutInsetPt), align, body)
 }
 
 // chunks splits the paragraph's expressions at the page breaks.

@@ -127,11 +127,16 @@ function pvField(field: string, text: string, imgMap: Map<string, string>, scree
 }
 
 // pvHandoutBox is a handout set apart from its question, as the exports set it:
-// a small caption tight above the handout in a frame.
+// a small caption over the handout in a frame, flush with its left edge. A
+// handout of one line gets a frame only as wide as it or its caption, and sits
+// centred in it; a longer one takes the full width, set from the left.
 function pvHandoutBox(label: string, text: string, imgMap: Map<string, string>, screen: boolean): HTMLElement {
-  const frame = el("div", { class: "pv-handout-frame" });
-  frame.append(renderFieldBody(text, imgMap, fieldOpts("handout", screen)));
-  return el("div", { class: "pv-handout-box u-col" }, el("div", { class: "pv-handout-caption", text: label }), frame);
+  const oneLine = !text.includes("\n") && !/\((?:LINEBREAK|PAGEBREAK)\)/.test(text);
+  const body = el("span", { class: "pv-handout-body" });
+  body.append(renderFieldBody(text, imgMap, fieldOpts("handout", screen)));
+  return el("div", { class: "pv-handout-box u-col" + (oneLine ? " pv-handout-line" : "") },
+    el("div", { class: "pv-handout-caption", text: label }),
+    el("div", { class: "pv-handout-frame" }, body));
 }
 
 // renderPreviewCard renders one card the way the docx export would: a question
