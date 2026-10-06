@@ -1535,7 +1535,8 @@ export type Strings = {
     };
     reseed: {
       notReady: () => string;
-      pending: (n: number, codes: string) => string;
+      pending: (n: number, bouts: string) => string;
+      stages: (stages: string) => string;
     };
   };
   roles: {

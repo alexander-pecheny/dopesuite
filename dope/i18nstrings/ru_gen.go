@@ -2164,8 +2164,11 @@ var RU = Strings{
 			NotReady: func() string {
 				return "пересев можно рассчитать после завершения всех исходных боёв"
 			},
-			Pending: func(n int, codes string) string {
-				return fmt.Sprintf("%s %s %s", core.Plural("ru", n, "Бой", "Бои", "Бои"), codes, core.Plural("ru", n, "не закончен", "не закончены", "не закончены"))
+			Pending: func(n int, bouts string) string {
+				return fmt.Sprintf("%s %s %s", core.Plural("ru", n, "Бой", "Бои", "Бои"), bouts, core.Plural("ru", n, "не закончен", "не закончены", "не закончены"))
+			},
+			Stages: func(stages string) string {
+				return fmt.Sprintf("Места ещё не определены: %s", stages)
 			},
 		},
 	},

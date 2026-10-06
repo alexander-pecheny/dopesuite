@@ -68,6 +68,9 @@ type reseedPrerequisiteState struct {
 	Ready          bool
 	SourceMatchIDs []int64
 	PendingMatches []string
+	// Waits is PendingMatches as a host reads them. Only ReseedPrerequisites
+	// fills it.
+	Waits ReseedWaits
 }
 
 // prerequisites is the readiness rule: a reseed can be calculated once every

@@ -73,9 +73,14 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	if early.Code != http.StatusBadRequest {
 		t.Fatalf("early reseed status = %d, want 400", early.Code)
 	}
-	// The refusal names the bout still being played, so the host reads why.
-	if body := early.Body.String(); !strings.Contains(body, "s1-g2-1") {
-		t.Fatalf("early reseed body = %q, want it to name s1-g2-1", body)
+	// The refusal names the bout still being played by its letter, as the
+	// page does, so the host reads why.
+	var pendingLetter string
+	if err := srv.Eng().DB.QueryRow(`select letter from matches where game_id = ? and code = 's1-g2-1'`, brainID).Scan(&pendingLetter); err != nil || pendingLetter == "" {
+		t.Fatalf("letter of s1-g2-1 = %q, %v", pendingLetter, err)
+	}
+	if body := early.Body.String(); !strings.Contains(body, " "+pendingLetter+" ") || strings.Contains(body, "s1-g2-1") {
+		t.Fatalf("early reseed body = %q, want it to name s1-g2-1 by its letter %s", body, pendingLetter)
 	}
 
 	playBout("s1-g2-1", [2]int{0, 2}, [2]int{1, 1}) // Берёза 2:1 Вяз

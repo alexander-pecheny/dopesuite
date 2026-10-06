@@ -27,11 +27,11 @@ var (
 var ErrReseedNotReady = errReseedNotReady
 
 type reseedNotReadyError struct {
-	pending []string
+	waits ReseedWaits
 }
 
 func (e reseedNotReadyError) Error() string {
-	return ReseedNotReadyMessage(e.pending)
+	return ReseedNotReadyMessage(e.waits)
 }
 
 func (e reseedNotReadyError) Is(target error) bool {
@@ -357,7 +357,7 @@ func calculateRequiredReseedEntriesTx(ctx context.Context, tx *sql.Tx, stage res
 		return err
 	}
 	if !state.Ready {
-		return reseedNotReadyError{pending: state.PendingMatches}
+		return reseedNotReadyError{waits: state.Waits}
 	}
 	if err := recomputeReseedEntriesTx(ctx, tx, stage.id, stage.config, gameID); err != nil {
 		return err
@@ -367,34 +367,86 @@ func calculateRequiredReseedEntriesTx(ctx context.Context, tx *sql.Tx, stage res
 }
 
 // ReseedPrerequisites reports whether a reseed stage's source bouts are all
-// finished, listing the source bout ids and the codes of any still-pending ones.
+// finished, listing the source bout ids and the codes of any still-pending ones,
+// and the same pending ones as a host reads them (Waits).
 func ReseedPrerequisites(ctx context.Context, q store.Queryer, config []byte, gameID int64) (reseedPrerequisiteState, error) {
 	cfg := store.ParseStageConfig(string(config))
 	bouts, err := reseedSourceBouts(ctx, q, gameID, cfg)
 	if err != nil {
 		return reseedPrerequisiteState{}, err
 	}
-	return prerequisites(dbSources{ctx, q, gameID}, cfg, bouts)
+	state, err := prerequisites(dbSources{ctx, q, gameID}, cfg, bouts)
+	if err != nil || len(state.PendingMatches) == 0 {
+		return state, err
+	}
+	state.Waits, err = reseedWaits(ctx, q, gameID, state.PendingMatches)
+	return state, err
 }
 
-// ReseedNotReadyMessage formats a human-facing message naming the source bouts
-// that still need to finish before a reseed can be calculated.
-func ReseedNotReadyMessage(pending []string) string {
-	codes := make([]string, 0, len(pending))
+// ReseedWaits is what a held-back reseed waits for, as a host reads it, the
+// same way the bout page says it: the unfinished bouts by their letters (a
+// bout without one by its code), or, once no bout is left, the stages whose
+// places are not settled yet, by their titles.
+type ReseedWaits struct {
+	Bouts  []string
+	Stages []string
+}
+
+// reseedWaits names the pending codes: those of a Match are bouts, the rest
+// are stages.
+func reseedWaits(ctx context.Context, q store.Queryer, gameID int64, pending []string) (ReseedWaits, error) {
+	letters, err := codeNames(ctx, q, `select code, letter from matches where game_id = ?`, gameID)
+	if err != nil {
+		return ReseedWaits{}, err
+	}
+	titles, err := codeNames(ctx, q, `select code, title from stages where game_id = ?`, gameID)
+	if err != nil {
+		return ReseedWaits{}, err
+	}
+	var waits ReseedWaits
 	for _, code := range pending {
-		code = strings.TrimSpace(code)
-		if code != "" {
-			codes = append(codes, code)
+		letter, isBout := letters[code]
+		switch {
+		case isBout && letter != "":
+			waits.Bouts = append(waits.Bouts, letter)
+		case isBout:
+			waits.Bouts = append(waits.Bouts, code)
+		case titles[code] != "":
+			waits.Stages = append(waits.Stages, titles[code])
+		default:
+			waits.Stages = append(waits.Stages, code)
 		}
 	}
-	switch len(codes) {
-	case 0:
-		return dopestrings.Default.Resolver.Reseed.NotReady()
-	case 1:
-		return dopestrings.Default.Resolver.Reseed.Pending(1, codes[0])
-	default:
-		return dopestrings.Default.Resolver.Reseed.Pending(len(codes), strings.Join(codes, ", "))
+	return waits, nil
+}
+
+// codeNames reads a game's code → name pairs off a two-column query.
+func codeNames(ctx context.Context, q store.Queryer, query string, gameID int64) (map[string]string, error) {
+	type pair struct{ code, name string }
+	pairs, err := store.CollectRows(ctx, q, query, []any{gameID}, func(rows *sql.Rows) (pair, error) {
+		var p pair
+		return p, rows.Scan(&p.code, &p.name)
+	})
+	if err != nil {
+		return nil, err
 	}
+	names := make(map[string]string, len(pairs))
+	for _, p := range pairs {
+		names[p.code] = strings.TrimSpace(p.name)
+	}
+	return names, nil
+}
+
+// ReseedNotReadyMessage formats a human-facing message saying what a reseed
+// still waits for before it can be calculated.
+func ReseedNotReadyMessage(waits ReseedWaits) string {
+	switch {
+	case len(waits.Bouts) > 0:
+		return dopestrings.Default.Resolver.Reseed.Pending(len(waits.Bouts), strings.Join(waits.Bouts, ", "))
+	case len(waits.Stages) > 0:
+		return dopestrings.Default.Resolver.Reseed.Stages(strings.Join(waits.Stages, ", "))
+	}
+	return dopestrings.Default.Resolver.Reseed.NotReady()
 }
 
 // recomputeReseedEntriesTx rebuilds a reseed stage's table: the resolver

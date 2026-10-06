@@ -1557,7 +1557,8 @@ shootout: true
     },
     reseed: {
       notReady: () => "пересев можно рассчитать после завершения всех исходных боёв",
-      pending: (n: number, codes: string) => `${plural("ru", n, "Бой", "Бои", "Бои")} ${codes} ${plural("ru", n, "не закончен", "не закончены", "не закончены")}`,
+      pending: (n: number, bouts: string) => `${plural("ru", n, "Бой", "Бои", "Бои")} ${bouts} ${plural("ru", n, "не закончен", "не закончены", "не закончены")}`,
+      stages: (stages: string) => `Места ещё не определены: ${stages}`,
     },
   },
   roles: {

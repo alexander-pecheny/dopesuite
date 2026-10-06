@@ -4,9 +4,12 @@
 [reseed]
 # The explicit-calculate gate: source bouts are still unfinished.
 not_ready = "пересев можно рассчитать после завершения всех исходных боёв"
-# The readiness message naming the pending bouts: n of them, codes
+# The readiness message naming the pending bouts: n of them, their letters
 # comma-joined at the call site.
-pending = '{{plural .n "Бой" "Бои" "Бои"}} {{.codes}} {{plural .n "не закончен" "не закончены" "не закончены"}}'
+pending = '{{plural .n "Бой" "Бои" "Бои"}} {{.bouts}} {{plural .n "не закончен" "не закончены" "не закончены"}}'
+# The readiness message once every bout is over but the places of the stages
+# it names (titles, comma-joined) are not settled yet.
+stages = 'Места ещё не определены: {{.stages}}'
 
 [draw]
 # The mid-game Draw (dope/dope/domain/resolver/draw.go): what a host reads when

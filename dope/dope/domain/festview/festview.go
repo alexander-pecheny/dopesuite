@@ -107,7 +107,7 @@ order by position, id`, stageArgs...)
 			record.Stage.ReseedReady = state.Ready
 			record.Stage.ReseedPending = state.PendingMatches
 			if !state.Ready {
-				record.Stage.ReseedMessage = resolver.ReseedNotReadyMessage(state.PendingMatches)
+				record.Stage.ReseedMessage = resolver.ReseedNotReadyMessage(state.Waits)
 			}
 		} else {
 			matches, err := store.LoadFestMatches(ctx, q, record.ID, view.GameType)
