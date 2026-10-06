@@ -400,7 +400,7 @@ function playerCell(bout: BoutEntry, seat: number, column: ThemeColumn, players:
     title: cap > 1 ? S.ek.seats.label() : undefined,
     nobody: S.seat.nobody(),
     line: seatingLabel,
-    dataset: {match: bout.code, seat: String(seat), theme: String(column.theme), shootout: column.kind === "themes" ? "0" : "1"},
+    dataset: {match: bout.code, seat: String(seat), theme: String(column.theme)},
     onChange: (chosen) => {
       const ids = chosen.map(Number).filter((player) => player > 0);
       const theme = themeAt(bout.code, seat, column.kind, column.theme);
