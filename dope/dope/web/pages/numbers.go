@@ -8,7 +8,6 @@ import (
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
-	"dope/dope/storage/festwrite"
 	ui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 	"errors"
@@ -372,12 +371,10 @@ func (s *Server) purgeFestSoftDeletedTeams(reqCtx context.Context, festID int64)
 }
 
 func (s *Server) SaveFestNumbers(reqCtx context.Context, festID int64, assignments map[int64]int) error {
-	var updates []roster.GameStateBroadcast
-	var revision int64
-	err := s.h.Engine().WithWriteTx(reqCtx, festID, "fest-numbers", func(ctx context.Context, tx *sql.Tx) error {
+	_, err := s.Commit(reqCtx, festID, "fest-numbers", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
 		oldTeams, err := numbering.LoadFestTeams(ctx, tx, festID)
 		if err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
 		oldByID := make(map[int64]int, len(oldTeams))
 		for _, team := range oldTeams {
@@ -392,36 +389,34 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID int64, assignmen
 		}
 
 		if _, err := tx.ExecContext(ctx, `update fest_teams set number = null where fest_id = ? and deleted = 0`, festID); err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
 		for teamID, number := range assignments {
 			if _, err := tx.ExecContext(ctx, `update fest_teams set number = ? where id = ? and fest_id = ? and deleted = 0`, number, teamID, festID); err != nil {
-				return err
+				return core.FestWrite{}, err
 			}
 		}
 		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 		if err != nil {
-			return err
+			return core.FestWrite{}, err
 		}
 		if len(entryRemap) == 0 {
 			entryRemap = nil
 		}
 		// Every flat Protocol carries the universal Number, so a reassignment
 		// flows into each one's document; KSI's answers follow their team.
-		if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, entryRemap); err != nil {
-			return err
+		updates, err := roster.PropagateRosterTx(ctx, tx, festID, teams, entryRemap)
+		if err != nil {
+			return core.FestWrite{}, err
 		}
-		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "fest:numbers", util.MustJSON(map[string]any{
+		written := core.FestWrite{Event: "fest:numbers", Payload: map[string]any{
 			"assigned": len(assignments),
 			"remapped": len(entryRemap),
-		}))
-		return err
+		}}
+		for _, update := range updates {
+			written.Broadcast.States = append(written.Broadcast.States, core.GameState{GameID: update.GameID, StateJSON: update.StateJSON})
+		}
+		return written, nil
 	})
-	if err != nil {
-		return err
-	}
-	for _, update := range updates {
-		s.h.Engine().BroadcastState(festID, core.GameStateScope(update.GameID), revision, update.StateJSON)
-	}
-	return nil
+	return err
 }

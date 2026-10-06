@@ -678,7 +678,7 @@ func (s *Server) AddPlayerOverride(ctx context.Context, festID, playerID, teamID
 	if err != nil {
 		return err
 	}
-	s.broadcastRosterOverride(festID, revision, ekGameIDs)
+	s.fanOut(festID, revision, core.Broadcast{Rosters: ekGameIDs})
 	return nil
 }
 
@@ -689,14 +689,8 @@ func (s *Server) ReplacePlayerOverride(ctx context.Context, festID, playerID, so
 	if err != nil {
 		return err
 	}
-	s.broadcastRosterOverride(festID, revision, ekGameIDs)
+	s.fanOut(festID, revision, core.Broadcast{Rosters: ekGameIDs})
 	return nil
-}
-
-func (s *Server) broadcastRosterOverride(festID, revision int64, ekGameIDs []int64) {
-	for _, gameID := range ekGameIDs {
-		s.h.Engine().BroadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
-	}
 }
 
 func (s *Server) handleHostAddPlayerOverride(w http.ResponseWriter, r *http.Request, festID int64) {
