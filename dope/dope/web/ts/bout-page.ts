@@ -12,8 +12,13 @@
 // tab bar in the URL, and the host's shared writes: finish, venue and start
 // time, the draw and the reseed.
 //
-// EK keeps its own router and stage cache; it borrows finishControl and
-// venueEditor from here.
+// It also owns a bout's address: the one id a bout's box carries
+// (boutAnchorID), a group table's (groupAnchorID), the links to both
+// (boutHref, groupHref), the scroll and flash when a hash names one, and the
+// #@<letter> an old /matches/<letter> address arrives as. The grid tab and
+// the reseed tab are drawn here too, the same on every format: a live draw
+// panel for a host, and the server's word on whether a reseed can be
+// calculated.
 
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import type {PatchPath, ScopedWriter, SendResult, WriteIntent, WriteRequest} from "./state-sync.js";
@@ -24,11 +29,14 @@ import type {GameInitLike, GameRoute} from "./game-page.js";
 import {fitScrollFade, renderTabBar} from "./widgets.js";
 import {gameTabs} from "./game-tabs.js";
 import type {GameKind, GameTab} from "./game-tabs.js";
-import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
-import {redrawSteady} from "./steady-redraw.js";
+import {RESEED_TAB_CODE} from "./game-tabs.js";
+import {hashAnchor, onNavigate, setHashTab, tabFromHash, tabHref} from "./url-state.js";
+import {redrawSteady, scrollIntoViewSteady} from "./steady-redraw.js";
 import {festLetters} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import type {FestGridStage} from "./fest-grid.js";
+import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
+import type {FestGridData, FestGridStage} from "./fest-grid.js";
+import S from "./i18nstrings.js";
 import {boutWhereWhen, buildVenuesTable} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
@@ -39,6 +47,20 @@ import type {EntrantsTab} from "./entrants.js";
 // A resync or a fest refresh waits this long, so a burst of events costs one
 // fetch.
 const REFETCH_DEBOUNCE_MS = 250;
+
+// How long the box a link landed on stays marked.
+const FLASH_MS = 2500;
+
+// boutAnchorID is the id of a bout's box, on whatever tab draws it: the one
+// identity a link, a scroll and a flash find the bout by.
+export function boutAnchorID(code: string): string {
+  return `bout-${code}`;
+}
+
+// groupAnchorID is the id of a group's table.
+export function groupAnchorID(code: string): string {
+  return `group-${code}`;
+}
 
 // What every bout's view carries, whatever its format: the server's match view
 // with the Protocol's document under `state`.
@@ -94,7 +116,7 @@ export interface BoutPageSpec<V extends BoutView, S> {
   cursors?: () => Array<{bind(): void; refresh(): void}>;
   // Old hashes a page still answers to (Brain's, game-tabs.ts canonicalKey).
   canonical?: (tabs: GameTab[], key: string) => string;
-  // After the module drew a tab (the page's own scroll cues, anchors).
+  // After the module drew a tab (the page's own bookkeeping).
   afterRender?: (tab: GameTab | undefined, node: HTMLElement) => void;
   // A host is finishing a bout: what the page writes first (Troika fills the
   // wrong answers a host left blank), in the same gesture, so one undo takes
@@ -156,7 +178,16 @@ export interface BoutPage<V extends BoutView, S> {
   // Seat a drawn Slot; the bouts are read again whatever the server answered.
   draw(slot: string, participant: number): Promise<void>;
   // Calculate a reseed; the fest view and the bouts it seats are read again.
+  // A refusal is kept and shown on the reseed's panel until the next try.
   reseed(code: string): Promise<SendResult>;
+  // Where a link to a bout leads: the tab that holds it, at the bout's box,
+  // by its letter. "" when no tab holds it.
+  boutHref(code: string): string;
+  // Where a link to a group leads: the tab with the group's table, at it.
+  groupHref(code: string): string;
+  // A grid with the module's links and draw panel: the whole Game's, or the
+  // slice a tab draws (a Swiss Block's rounds, Brain's pod board).
+  grid(data?: FestGridData): HTMLElement;
   // Bind the cursors, connect, fetch the bouts, then recover and show presence.
   start(): void;
 }
@@ -215,17 +246,103 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
 
   const tabs = () => gameTabs((scheme.stages || []) as StageRef[], {game: spec.app as GameKind, viewer});
   const fromHash = () => tabFromHash(tabs(), {canonical: spec.canonical});
+  openLandingTab();
   let activeTab = fromHash() || "grid";
   const currentTab = () => tabs().find((tab) => tab.key === activeTab);
 
   onNavigate(() => {
+    openLandingTab();
     const next = fromHash();
     if (next && next !== activeTab) {
       activeTab = next;
       render();
     }
+    showAnchor();
     spec.onNavigate?.();
   });
+
+  // ---- a bout's address ----
+
+  function schemeStages(): StageRef[] {
+    return (scheme.stages || []) as StageRef[];
+  }
+
+  // boutCode reads a bout's letter, or its code, as the bout's code; "" when
+  // it names no bout.
+  function boutCode(named: string): string {
+    for (const [code, letter] of letters) if (letter === named || code === named) return code;
+    for (const stage of schemeStages()) {
+      if ((stage.matches || []).some((match) => match.code === named)) return named;
+    }
+    return "";
+  }
+
+  // boutTab is the tab that draws a bout's box: a stage's tab or a Block's
+  // protocols, or a Block round gathered across its groups.
+  function boutTab(code: string): GameTab | undefined {
+    const stage = schemeStages().find((entry) => (entry.matches || []).some((match) => match.code === code));
+    return tabs().find((tab) => {
+      if (tab.kind === "round") return (tab.stage?.matches || []).some((match) => match.code === code);
+      return (tab.kind === "stage" || tab.kind === "protocol") && Boolean(stage) && tab.stages.includes(stage!.code);
+    });
+  }
+
+  // groupTab is the tab with a group's table.
+  function groupTab(code: string): GameTab | undefined {
+    return tabs().find((tab) => (tab.kind === "block" || tab.kind === "pods") && tab.stages.includes(code));
+  }
+
+  // stageTab is the tab a grid column's head leads to: the first that draws
+  // the stage.
+  function stageTab(code: string): GameTab | undefined {
+    return tabs().find((tab) => tab.kind !== "grid" && tab.stages.includes(code));
+  }
+
+  function boutHref(code: string): string {
+    const tab = boutTab(code);
+    return tab ? tabHref(tab.key, letters.get(code) || code) : "";
+  }
+
+  function groupHref(code: string): string {
+    const tab = groupTab(code);
+    return tab ? tabHref(tab.key, groupAnchorID(code)) : "";
+  }
+
+  // openLandingTab puts in the hash the tab of what a hash with no tab names
+  // (#@A: what an old /matches/<letter> address now arrives as), so the page
+  // opens that tab and scrolls there.
+  function openLandingTab(): void {
+    const anchor = hashAnchor();
+    if (!anchor || !(window.location.hash || "").startsWith("#@")) return;
+    const group = anchor.startsWith("group-") ? anchor.slice("group-".length) : "";
+    const tab = group ? groupTab(group) : boutTab(boutCode(anchor));
+    if (tab) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${tabHref(tab.key, anchor)}`);
+  }
+
+  // anchorNode is the box the hash's anchor names: a bout by its letter or
+  // code, or a group's table. A Troika link used to name a group by its bare
+  // code (#block:s1@s1-g3); that still finds it.
+  function anchorNode(anchor: string): HTMLElement | null {
+    const byID = (id: string) => document.getElementById?.(id) || null;
+    if (anchor.startsWith("group-")) return byID(anchor);
+    const code = boutCode(anchor);
+    return (code ? byID(boutAnchorID(code)) : null) || byID(groupAnchorID(anchor));
+  }
+
+  // showAnchor scrolls to what the hash names, once per tab and anchor: a
+  // later redraw (another host's mark) must not pull the page back to it.
+  let shownAnchor = "";
+  const flash = createFlash();
+  function showAnchor(): void {
+    const anchor = hashAnchor();
+    const key = `${activeTab}@${anchor}`;
+    if (!anchor || key === shownAnchor) return;
+    const node = anchorNode(anchor);
+    if (!node) return;
+    shownAnchor = key;
+    scrollIntoViewSteady(node);
+    flash.mark(node);
+  }
 
   // ---- the bouts ----
 
@@ -249,6 +366,10 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     views.set(code, view);
     states.set(code, spec.parse(view));
     return true;
+  }
+
+  function gridStages(): FestGridStage[] {
+    return (fest?.stages || []).flatMap((stage) => stage?.code ? [festStages.get(stage.code) || stage] : []);
   }
 
   function show(code: string): void {
@@ -467,9 +588,75 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
         onAdd: venueEdits.add,
         onDelete: venueEdits.remove,
       });
+    case "reseed":
+      return reseedTab(tab);
+    case "grid":
+    case undefined:
+      return grid();
     default:
       return spec.buildTab(tab);
     }
+  }
+
+  function grid(data?: FestGridData): HTMLElement {
+    return buildFestGrid(data || {schemaJson: fest?.schemaJson, stages: gridStages()}, {
+      letters,
+      editable: !viewer,
+      onDraw: (slot, participant) => void draw(slot, participant),
+      stageHref: (stage) => {
+        const tab = stageTab(stage.code || "");
+        return tab ? tabHref(tab.key) : "";
+      },
+      matchHref: boutHref,
+      groupHref: (stage) => groupHref(stage.code || ""),
+    });
+  }
+
+  // reseedTab stacks a tab's reseeds. Where a tab holds several, each goes
+  // under the name of the stage it seats; a lone reseed keeps its panel bare.
+  function reseedTab(tab: GameTab): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "reseed-fold";
+    const headed = tab.key === `stage:${RESEED_TAB_CODE}` || tab.stages.length > 1;
+    for (const code of tab.stages) {
+      if (headed) {
+        const head = document.createElement("h3");
+        head.className = "reseed-fold-head";
+        head.textContent = seatedStageTitle(code);
+        wrap.appendChild(head);
+      }
+      const live = festStages.get(code);
+      wrap.appendChild(buildReseedStagePanel(live || {code}, {
+        editable: !viewer,
+        canCalculate: Boolean(live?.reseedReady),
+        blockedMessage: reseedWaits(live),
+        letters,
+        error: reseedErrors.get(code) || "",
+        onCalculate: () => void reseed(code),
+      }));
+    }
+    return wrap;
+  }
+
+  // reseedWaits says what a reseed the server holds back still waits for:
+  // the unfinished bouts by their letters, or, once every bout is done, the
+  // stages whose places are not settled yet.
+  function reseedWaits(live: FestGridStage | undefined): string {
+    const pending = (live?.reseedPendingMatches || []).map((code) => String(code || "")).filter(Boolean);
+    const bouts = pending.filter((code) => boutCode(code)).map((code) => letters.get(code) || code);
+    if (bouts.length === 1) return S.fest.reseed.blockedOne(bouts[0]);
+    if (bouts.length > 1) return S.fest.reseed.blockedMany(bouts.join(", "));
+    const stages = pending.map((code) => schemeStages().find((stage) => stage.code === code)?.title || code);
+    return stages.length ? S.fest.reseed.blockedStages(stages.join(", ")) : "";
+  }
+
+  // seatedStageTitle is the name of the stage a reseed seats: the next one
+  // after it that is not a reseed itself.
+  function seatedStageTitle(code: string): string {
+    const stages = schemeStages();
+    const index = stages.findIndex((stage) => stage.code === code);
+    const isReseed = (stage: StageRef) => [stage.stage_type, stage.type, stage.kind].includes("reseed");
+    return String(stages.slice(index + 1).find((stage) => !isReseed(stage))?.title || "");
   }
 
   // drawnTab is the tab the page last drew: a redraw of it keeps the view.
@@ -504,6 +691,8 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     for (const cursor of spec.cursors?.() || []) cursor.refresh();
     shell.presence.refresh();
     spec.afterRender?.(tab, node);
+    flash.redraw();
+    showAnchor();
     notifyEmbeddedResize(embedded);
   }
 
@@ -531,9 +720,18 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     await fetchMatches().catch(() => indicator.fail());
   }
 
+  // reseedErrors is why the server refused each reseed's last calculation.
+  const reseedErrors = new Map<string, string>();
+
   async function reseed(code: string): Promise<SendResult> {
     const sent = await writer.send(`stage:${code}`, {url: `${apiBase}/stages/${encodeURIComponent(code)}/reseed`});
-    if (sent.ok) await fetchMatches().catch(() => indicator.fail());
+    if (sent.ok) {
+      reseedErrors.delete(code);
+      await fetchMatches().catch(() => indicator.fail());
+    } else {
+      reseedErrors.set(code, sent.error || S.fest.reseed.calculateFailed());
+      render();
+    }
     return sent;
   }
 
@@ -589,7 +787,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     invalidateRoster: () => { rosterView = null; },
     venues,
     festStage: (code) => festStages.get(code),
-    gridStages: () => (fest?.stages || []).flatMap((stage) => stage?.code ? [festStages.get(stage.code) || stage] : []),
+    gridStages,
     whereWhen: (code, options) => {
       const view = views.get(code);
       return boutWhereWhen({
@@ -613,7 +811,44 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     finish,
     draw,
     reseed,
+    boutHref,
+    groupHref,
+    grid,
     start,
+  };
+}
+
+// createFlash marks the box a link landed on for a moment: the mark fades out
+// by itself and goes at the host's first click, so it never stays on. A redraw
+// in the meantime (the bouts arriving, another host's mark) builds the box
+// anew, so redraw puts the mark on the new one, as far into its fade as the
+// old one was.
+function createFlash(): {mark(node: HTMLElement): void; redraw(): void} {
+  let id = "";
+  let since = 0;
+  let timer = 0;
+  const clear = () => {
+    document.getElementById?.(id)?.classList.remove("bout-target");
+    id = "";
+    window.clearTimeout(timer);
+    document.removeEventListener("pointerdown", clear, true);
+  };
+  const paint = () => {
+    const node = id ? document.getElementById?.(id) : null;
+    if (!node) return;
+    node.style.animationDelay = `${since - Date.now()}ms`;
+    node.classList.add("bout-target");
+  };
+  return {
+    mark(node) {
+      clear();
+      id = node.id;
+      since = Date.now();
+      paint();
+      timer = window.setTimeout(clear, FLASH_MS);
+      document.addEventListener("pointerdown", clear, true);
+    },
+    redraw: paint,
   };
 }
 

@@ -11,30 +11,27 @@
 
 import {cssEscape, formatPlace, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
-import {buildGroupStandingsView, festLetters, letteredTitle, standingsTable} from "./standings.js";
+import {buildGroupStandingsView, letteredTitle, standingsTable} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
 import {nameCell} from "./name-cell.js";
 import {seatPicker} from "./seat-picker.js";
 import {seatingLabel} from "./ek-seating.js";
-import {mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
+import {boutAnchorID, groupAnchorID, mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
 import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
-import {parseGameRoute} from "./game-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildFlatScoreTable, buildTwoRowScoreTable, seatingText} from "./score-table.js";
 import type {ScoreTableThemeRow} from "./score-table.js";
-import {buildFestGrid, buildReseedStagePanel, reseedMetricHeader, reseedMetricValue} from "./fest-grid.js";
+import {reseedMetricHeader, reseedMetricValue} from "./fest-grid.js";
 import type {FestGridStage, SortRule} from "./fest-grid.js";
 import {computeGroupBlockRounds} from "./group-stats.js";
-import {canonicalKey, gameTabs, groupLabel, RESEED_TAB_CODE} from "./game-tabs.js";
-import {hashAnchor, tabHref} from "./url-state.js";
+import {canonicalKey, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
 import type {StageRef} from "./standings.js";
 import {buildEKStatsTable, buildIndividualStatsTable, computeEKPlayerStats, computeIndividualPlayerStats} from "./ek-stats.js";
 import * as ek from "./ek-protocol.js";
 import type {EKState, Mark, ThemeKind} from "./ek-protocol.js";
-import {scrollIntoViewSteady} from "./steady-redraw.js";
 import S from "./i18nstrings.js";
 
 // The question values the trailing counts run over, hardest first.
@@ -108,8 +105,6 @@ const gameType = String(fest?.gameType || init?.gameType || "ek");
 const individual = gameType === "si";
 const app: "ek" | "es" | "si" = individual ? "si" : gameType === "es" ? "es" : "ek";
 
-openLinkedBoutTab();
-
 const page: BoutPage<EKMatchView, EKState> = mountBoutPage({
   app,
   root,
@@ -133,33 +128,9 @@ const page: BoutPage<EKMatchView, EKState> = mountBoutPage({
   cursors: () => [cursor],
   // An old stage code or a Block's old @-spelling still opens its tab.
   canonical: canonicalKey,
-  afterRender: () => showLinked(),
 });
 const {viewer} = page;
 const boutLetters = page.letters;
-
-// openLinkedBoutTab opens the tab of the bout a hash names without one (#@A,
-// its letter or its code: what an old /matches/<letter> address now arrives
-// as), so the page mounts on it and scrolls there.
-function openLinkedBoutTab(): void {
-  const anchor = hashAnchor();
-  if (!anchor || !window.location.hash.startsWith("#@")) return;
-  const code = boutCodeOf(anchor);
-  const tabs = gameTabs((scheme.stages || []) as StageRef[], {game: app, viewer: Boolean(parseGameRoute().viewer)});
-  const tab = tabs.find((entry) => tabHolds(entry, code));
-  if (tab) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${tabHref(tab.key, anchor)}`);
-}
-
-// boutCodeOf reads a bout's letter, or its code, as the bout's code.
-function boutCodeOf(named: string): string {
-  const letters = festLetters(fest?.stages as StageRef[] | undefined);
-  return [...letters].find(([, letter]) => letter === named)?.[0] || named;
-}
-
-function tabHolds(tab: GameTab, code: string): boolean {
-  if (tab.kind === "round") return ((tab.stage?.matches || []) as SchemeMatch[]).some((match) => match.code === code);
-  return tab.kind === "stage" && tabStages(scheme.stages, tab).some((stage) => (stage.matches || []).some((match) => match.code === code));
-}
 
 // === the document ===
 
@@ -236,7 +207,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const box = document.createElement("section");
   box.className = "ek-bout";
-  box.dataset.boutAnchor = code;
+  box.id = boutAnchorID(code);
 
   const build = individual ? buildFlatScoreTable : buildTwoRowScoreTable;
   const table = build({
@@ -662,41 +633,15 @@ function buildGroupTable(tab: GameTab | undefined): HTMLElement {
       const sides = !view ? [] : seatsOf(view).map((id, seat) => ({name: seatName(view, seat), score: ek.scoreSection(state.sections.get(id), values).total}));
       return {
         label: boutLetters.get(match.code || "") || match.code || "",
-        href: boutHref(match.code || ""),
+        href: page.boutHref(match.code || ""),
         blockRound: Number(match.round) || undefined,
         sides,
         started: Boolean(view?.finished) || sides.some((side) => Number(side.score)),
       };
     });
-    return {title: stage ? groupLabel(stage as StageRef) : code, anchor: `group-${code}`, blockRoundCount, rows, groupBouts};
+    return {title: stage ? groupLabel(stage as StageRef) : code, anchor: groupAnchorID(code), blockRoundCount, rows, groupBouts};
   });
-  return buildGroupStandingsView(groups, {boutHref: boutHref});
-}
-
-// boutHref is where a bout's link leads: its tab, scrolled to it by its letter.
-function boutHref(code: string): string {
-  const tab = page.tabs().find((entry) => tabHolds(entry, code));
-  return `${window.location.search}${tabHref(tab?.key || "", boutLetters.get(code) || code)}`;
-}
-
-// groupHref is where a group's link leads: its Block's table, scrolled to it.
-function groupHref(code: string): string {
-  const tab = page.tabs().find((entry) => entry.kind === "block" && entry.stages.includes(code));
-  return `${window.location.search}${tabHref(tab?.key || "", `group-${code}`)}`;
-}
-
-// showLinked scrolls once to what the hash's anchor names: a bout, by its
-// letter or code, or a group's table.
-let shownLink = "";
-function showLinked(): void {
-  const anchor = hashAnchor();
-  if (!anchor || anchor === shownLink) return;
-  const node = anchor.startsWith("group-")
-    ? document.getElementById(anchor)
-    : root.querySelector<HTMLElement>(`[data-bout-anchor="${cssEscape(boutCodeOf(anchor))}"]`);
-  if (!node) return;
-  shownLink = anchor;
-  scrollIntoViewSteady(node);
+  return buildGroupStandingsView(groups, {boutHref: page.boutHref});
 }
 
 // buildRankedStageTable draws a ranked stage's table: place, team, and the
@@ -721,33 +666,6 @@ function buildRankedStageTable(stage: FestGridStage): HTMLElement {
   return wrapper;
 }
 
-// buildReseeds is a reseed tab: the folded tab stacks every reseed, each under
-// the name of the round it seats; a lone reseed keeps its single panel.
-function buildReseeds(tab: GameTab | undefined): HTMLElement {
-  const wrap = document.createElement("div");
-  wrap.className = "reseed-fold u-col u-gap-lg";
-  const members = tab?.stages || [];
-  const stages = scheme.stages || [];
-  for (const code of members) {
-    if (tab?.key === `stage:${RESEED_TAB_CODE}` || members.length > 1) {
-      const index = stages.findIndex((stage) => stage.code === code);
-      const next = stages.slice(index + 1).find((stage) => (stage.stage_type || stage.kind) !== "reseed");
-      const head = document.createElement("h3");
-      head.className = "reseed-fold-head";
-      head.textContent = String(next?.title || "");
-      wrap.appendChild(head);
-    }
-    const live = page.festStage(code);
-    wrap.appendChild(buildReseedStagePanel(live, {
-      editable: !viewer,
-      canCalculate: Boolean(live?.reseedReady),
-      letters: boutLetters,
-      onCalculate: () => void page.reseed(code),
-    }));
-  }
-  return wrap;
-}
-
 function buildStats(): HTMLElement {
   const stages = (scheme.stages || []).map((stage) => ({
     code: stage.code,
@@ -759,29 +677,16 @@ function buildStats(): HTMLElement {
     : buildEKStatsTable(computeEKPlayerStats(stages as never));
 }
 
-function buildGrid(): HTMLElement {
-  return buildFestGrid({schemaJson: fest?.schemaJson, stages: page.gridStages()}, {
-    letters: boutLetters,
-    editable: !viewer,
-    matchHref: boutHref,
-    groupHref: (stage) => groupHref(stage.code || ""),
-    onDraw: (slot, participant) => void page.draw(slot, participant),
-  });
-}
-
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "stats":
     return buildStats();
   case "block":
     return buildGroupTable(tab);
-  case "reseed":
-    return buildReseeds(tab);
-  case "stage":
-  case "round":
-    return buildBouts(tab);
   default:
-    return buildGrid();
+    // A stage's tab, or a Block round's: the module draws the grid and the
+    // reseeds.
+    return buildBouts(tab);
   }
 }
 

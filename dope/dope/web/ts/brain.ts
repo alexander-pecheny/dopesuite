@@ -14,7 +14,7 @@ import {buildCrosstables, crossSlot, slotKey, standingsByParticipant} from "./cr
 import type {StageRef} from "./standings.js";
 import {buildGameRosterView, fetchGameRoster} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
-import {mountBoutPage, tabStages, stageBouts} from "./bout-page.js";
+import {boutAnchorID, groupAnchorID, mountBoutPage, tabStages, stageBouts} from "./bout-page.js";
 import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {nameCell} from "./name-cell.js";
@@ -25,8 +25,7 @@ import {computeBrainPlayerStats} from "./brain-stats.js";
 import type {StatsBout} from "./brain-stats.js";
 import * as brain from "./brain-protocol.js";
 import type {BrainMatchState, BrainRow} from "./brain-protocol.js";
-import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
-import type {FestGridStage, ReseedEntry} from "./fest-grid.js";
+import type {FestGridStage} from "./fest-grid.js";
 import {canonicalKey, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
 import S from "./i18nstrings.js";
@@ -237,64 +236,14 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "stats":
     return buildStatsView();
-  case "reseed":
-    return buildReseedTab(tabStages(scheme.stages, tab));
   case "block":
     return buildCrosstable(tabStages(scheme.stages, tab));
   case "pods":
     return buildPodBoard(tabStages(scheme.stages, tab));
-  case "protocol":
-    return buildProtocols(tabStages(scheme.stages, tab));
   default:
-    return buildGrid();
+    // A Block's protocols; the module draws the grid and the reseeds.
+    return buildProtocols(tabStages(scheme.stages, tab));
   }
-}
-
-// The live fest view feeds the reseed panels (entries, sort rules). The init
-// snapshot goes stale, so the calculate button adopts the fresh view it gets back.
-const reseedError = new Map<string, string>();
-
-function reseedPendingBouts(stage: BrainSchemeStage): string[] {
-  const sources = new Set(stage.sources || []);
-  const pending: string[] = [];
-  for (const src of protocolStages()) {
-    if (!src.code || !sources.has(src.code)) continue;
-    for (const planned of src.matches || []) {
-      const code = planned.code || "";
-      if (!page.view(code)?.finished) pending.push(code);
-    }
-  }
-  return pending;
-}
-
-async function calculateReseed(code: string): Promise<void> {
-  const sent = await page.reseed(code);
-  if (sent.ok) reseedError.delete(code);
-  else reseedError.set(code, sent.error || S.brain.reseed.calculateFailed());
-  page.render();
-}
-
-function buildBrainReseedPanel(stage: BrainSchemeStage): HTMLElement {
-  const code = stage.code || "";
-  const pending = reseedPendingBouts(stage);
-  const blocked = pending.length === 1
-    ? S.brain.reseed.pendingOne(pending[0])
-    : pending.length > 1 ? S.brain.reseed.pendingMany(pending.join(", ")) : "";
-  const panel = buildReseedStagePanel({...(page.festStage(code) || {}), code}, {
-    letters: boutLetters,
-    editable: !viewer,
-    canCalculate: pending.length === 0,
-    blockedMessage: blocked,
-    onCalculate: () => void calculateReseed(code),
-  });
-  const errorText = reseedError.get(code);
-  if (errorText) {
-    const note = document.createElement("p");
-    note.className = "brain-seed-error";
-    note.textContent = errorText;
-    panel.appendChild(note);
-  }
-  return panel;
 }
 
 // buildProtocols lays one Block's matches out the way the sheet's protocols tab
@@ -330,13 +279,6 @@ function protocolStageHead(stage: BrainSchemeStage): HTMLElement {
   head.className = "brain-stage-head";
   head.textContent = stage.title || stage.code || "";
   return head;
-}
-
-// buildGrid is the grid tab: the whole Game at a glance from the same fest data
-// the EK pages draw — every Block one column, place-grain, no protocol detail.
-function buildGrid(): HTMLElement {
-  return buildFestGrid({schemaJson: fest?.schemaJson, stages: page.gridStages()},
-    {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
 }
 
 // buildPodBoard is a pod Block's detail tab, the sheet's «Double Elimination»
@@ -383,27 +325,7 @@ function buildPodBoard(pods: BrainSchemeStage[]): HTMLElement {
     stage_type: "matches",
     matches: byBlockRound.get(blockRound),
   }));
-  return buildFestGrid({stages}, {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
-}
-
-// buildReseedTab stacks every reseed's panel, each under the name of the
-// stage it seats.
-function buildReseedTab(reseeds: BrainSchemeStage[]): HTMLElement {
-  const wrap = document.createElement("div");
-  wrap.className = "reseed-fold";
-  const stages = scheme.stages || [];
-  for (const stage of reseeds) {
-    if (reseeds.length > 1) {
-      const index = stages.indexOf(stage);
-      const next = stages.slice(index + 1).find((s) => stageKind(s) !== "reseed");
-      const head = document.createElement("h3");
-      head.className = "reseed-fold-head";
-      head.textContent = String(next?.title || "");
-      wrap.appendChild(head);
-    }
-    wrap.appendChild(buildBrainReseedPanel(stage));
-  }
-  return wrap;
+  return page.grid({stages});
 }
 
 // buildStatsView is the sheet's individual statistics: attempts, right,
@@ -456,8 +378,9 @@ function buildStatsView(): HTMLElement {
 function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   const section = document.createElement("section");
   section.className = "brain-bout";
-  // The bout page keeps a bout's size and the view across redraws by this id.
-  section.id = `brain-bout-${code}`;
+  // The bout page keeps a bout's size and the view across redraws by this id,
+  // and a link lands on it.
+  section.id = boutAnchorID(code);
   const editable = !viewer && !view.finished;
 
   const table = document.createElement("table");
@@ -623,6 +546,7 @@ function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
     className: "brain-groups",
     groups: stages.filter((stage) => stageKind(stage) === "rr").map((stage) => ({
       title: groupLabel(stage as StageRef),
+      anchor: groupAnchorID(stage.code || ""),
       entrants: (groupRules(stage).entrants || []).map(crossSlot),
       bouts: (stage.matches || []).flatMap((planned) => {
         const view = page.view(planned.code || "");
@@ -636,14 +560,13 @@ function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
           })),
           finished: Boolean(view.finished),
           started: started(view),
+          href: page.boutHref(planned.code || ""),
         }];
       }),
       standings: standingsByParticipant(page.festStage(stage.code || "")),
     })),
   });
 }
-
-
 
 // setPlayer writes who answered a question, as the host picked it.
 function setPlayer(code: string, side: number, q: number, player: string): void {

@@ -13,6 +13,9 @@ blocked_default = "Исходные бои ещё не закончены"
 blocked_one = 'Бой {{.match}} не закончен'
 # The blocked-reason line naming the pending bouts, comma-joined.
 blocked_many = 'Бои {{.matches}} не закончены'
+# The blocked-reason line when every bout is over but the places of the
+# stages it names are not settled yet.
+blocked_stages = 'Места ещё не определены: {{.stages}}'
 # The reseed standings table's place column.
 col_place = "Место"
 # The reseed standings table's team column.
@@ -22,6 +25,8 @@ col_team = "Команда"
 col_match = "Бой"
 # The panel's empty state before the first calculation.
 empty = "Пересев пока не рассчитан."
+# Under the panel when the server refused the calculation and gave no reason.
+calculate_failed = "Не удалось рассчитать пересев"
 
 [draw]
 # The Жеребьёвка panel on the Сетка (dope/dope/web/ts/fest-grid.ts): the seats

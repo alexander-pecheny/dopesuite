@@ -3815,11 +3815,6 @@ html:has(.game-host-top) {
   font-style: italic;
 }
 
-.brain-seed-error {
-  margin: var(--space-0);
-  color: var(--red);
-}
-
 .brain-bout {
   display: flex;
   flex-direction: column;

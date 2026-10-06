@@ -85,7 +85,7 @@ test("a Group renders as a table of place against team", () => {
         {code: "s1-g1-2", slots: [], participants: [{name: "Ктулху"}, {name: "ВШЭстером"}]},
       ],
     }],
-  }, {stageHeaderLink: false});
+  });
 
   assert.equal(withClass(grid, "grid-standings").length, 1, "у группы должна быть таблица");
   assert.equal(withClass(grid, "grid-match").length, 0, "боёв в сетке быть не должно");
@@ -117,7 +117,7 @@ test("a Group's table is built of the бой box's cells", () => {
         matches: [{code: "s2-r1-m1", participantCount: 2, slots: [{label: "Ктулху"}, {label: "ВШЭстером"}]}],
       },
     ],
-  }, {stageHeaderLink: false});
+  });
   const [table] = withClass(grid, "grid-standings");
   const [bout] = withClass(grid, "grid-match");
   assert.equal(table.tag, bout.tag);
@@ -138,7 +138,7 @@ test("a round without standings still draws its бои", () => {
       stage_type: "matches",
       matches: [{code: "s2-r1-m1", participantCount: 2, slots: [{label: "Ктулху"}, {label: "ВШЭстером"}]}],
     }],
-  }, {stageHeaderLink: false});
+  });
   assert.equal(withClass(grid, "grid-standings").length, 0);
   assert.equal(withClass(grid, "grid-match").length, 1);
 });
@@ -149,7 +149,7 @@ test("every stage gets a column", () => {
   const stage = (code) => ({code, title: code, stage_type: "matches", matches: []});
   const grid = buildFestGrid({
     stages: ["a", "b", "c", "d", "e", "f", "g"].map(stage),
-  }, {stageHeaderLink: false});
+  });
   assert.equal(withClass(grid, "grid-stage").length, 7);
 });
 
@@ -164,7 +164,7 @@ test("a Block's groups share one column", () => {
     standings: [{rank: 1, name: `Лидер ${n}`, metrics: {place: 1, points: 9}}],
     matches: [],
   });
-  const grid = buildFestGrid({stages: [group(1), group(2), group(3)]}, {stageHeaderLink: false});
+  const grid = buildFestGrid({stages: [group(1), group(2), group(3)]});
   assert.equal(withClass(grid, "grid-stage").length, 1, "групповой этап — одна колонка");
   assert.equal(withClass(grid, "grid-standings").length, 3, "таблица каждой группы на месте");
   const blockHeads = withClass(grid, "grid-stage-head");
@@ -193,7 +193,7 @@ test("a Block of pods draws место against team, not бои", () => {
       {rank: 4, name: "Г", metrics: {place: 4, losses: 2}},
     ],
   };
-  const grid = buildFestGrid({stages: [pod]}, {stageHeaderLink: false});
+  const grid = buildFestGrid({stages: [pod]});
   assert.equal(withClass(grid, "grid-stage").length, 1);
   assert.equal(withClass(grid, "grid-match").length, 0, "бои в Сетке не рисуются");
   assert.equal(withClass(grid, "grid-standings").length, 1);
@@ -213,7 +213,7 @@ test("a Group without a table yet draws placeless rows", () => {
     grain: {block: "s2", group: "1"},
     matches: [{code: "s2-g1-m1", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
   };
-  const grid = buildFestGrid({stages: [pod]}, {stageHeaderLink: false});
+  const grid = buildFestGrid({stages: [pod]});
   assert.deepEqual(column(grid, "place"), ["М", "", ""]);
 });
 
@@ -230,7 +230,7 @@ test("a legacy group without standings keeps its бои", () => {
       participants: [{name: "А", place: 1}, {name: "Б", place: 2}],
     }],
   });
-  const grid = buildFestGrid({stages: [legacy(1), legacy(2)]}, {stageHeaderLink: false});
+  const grid = buildFestGrid({stages: [legacy(1), legacy(2)]});
   assert.equal(withClass(grid, "grid-standings").length, 0);
   assert.equal(withClass(grid, "grid-match").length, 2, "legacy бои остаются в Сетке");
 });
@@ -245,7 +245,7 @@ test("rounds without groups keep their own columns", () => {
   });
   const grid = buildFestGrid({
     stages: [blockRound("s1-r1-w1", "1/16, заход 1"), blockRound("s1-r1-w2", "1/16, заход 2")],
-  }, {stageHeaderLink: false});
+  });
   assert.equal(withClass(grid, "grid-stage").length, 2);
 });
 
@@ -256,7 +256,7 @@ test("every бой names its venue, however the previous column read", () => {
     code, title: code, stage_type: "matches",
     matches: [{code: `${code}-m1`, venue: 1, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
   });
-  const grid = buildFestGrid({stages: [blockRound("s1-r1"), blockRound("s1-r2")]}, {stageHeaderLink: false});
+  const grid = buildFestGrid({stages: [blockRound("s1-r1"), blockRound("s1-r2")]});
   const venues = withClass(grid, "grid-match-venue").map((n) => texts(n, "name-cell-text")[0]);
   assert.deepEqual(venues, ["пл. 1", "пл. 1"]);
 });
@@ -273,7 +273,7 @@ test("a Group's table head names the группа and its table", () => {
     standings: [{rank: 1, name: `Лидер ${n}`, metrics: {place: 1, points: 9}}],
     matches: [{code: `s1-g${n}-1`, venue: n + 2, slots: [], participants: [{name: `Лидер ${n}`}]}],
   });
-  const grid = buildFestGrid({stages: [group(1), group(2)]}, {stageHeaderLink: false});
+  const grid = buildFestGrid({stages: [group(1), group(2)]});
   assert.equal(withClass(grid, "grid-stage-subhead").length, 0, "подзаголовков больше нет");
   const heads = withClass(grid, "grid-standings").map((table) => {
     const head = withClass(table, "grid-match-head-cell")[0];
@@ -292,7 +292,7 @@ test("a lone table's head carries the Block title", () => {
       standings: [{rank: 1, name: "Ктулху", metrics: {place: 1, total: 470}}],
       matches: [{code: "s1-m1", slots: [], participants: [{name: "Ктулху"}]}],
     }],
-  }, {stageHeaderLink: false});
+  });
   const head = withClass(grid, "grid-match-head-cell")[0];
   const spans = walk(head).filter((n) => n.tag === "span" && n.textContent).map((n) => n.textContent);
   assert.deepEqual(spans, ["Письменный отбор"]);
@@ -310,7 +310,7 @@ test("a бой sits on the row it names", () => {
         {code: "b", row: 3, participantCount: 2, slots: [{label: "В"}, {label: "Г"}]},
       ],
     }],
-  }, {stageHeaderLink: false});
+  });
   const rows = withClass(grid, "grid-match").map((box) => box.props["grid-row"]);
   assert.deepEqual(rows, ["1 / span 1", "3 / span 1"]);
 });
@@ -324,7 +324,7 @@ test("a table taller than a бой spans as many rows as it needs", () => {
     grain: {block: "s1", group: String(n)},
     standings: nine, matches: [],
   });
-  const grid = buildFestGrid({stages: [group(1), group(2)]}, {stageHeaderLink: false});
+  const grid = buildFestGrid({stages: [group(1), group(2)]});
   const spans = withClass(grid, "grid-standings").map((table) => table.props["grid-row"]);
   assert.deepEqual(spans, ["span 2", "span 2"]);
 });
@@ -333,13 +333,13 @@ test("a table taller than a бой spans as many rows as it needs", () => {
 // two-seat бои packs three rows to the unit, a Сетка with a group of four five.
 test("the row is as tall as the grid's tallest box, up to a head and four seats", () => {
   const bout = {code: "m", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]};
-  const board = buildFestGrid({stages: [{code: "r1", title: "Раунд 1", stage_type: "matches", matches: [bout]}]}, {stageHeaderLink: false});
+  const board = buildFestGrid({stages: [{code: "r1", title: "Раунд 1", stage_type: "matches", matches: [bout]}]});
   assert.equal(board.props["--grid-unit-rows"], "3");
   const four = Array.from({length: 4}, (_, i) => ({rank: i + 1, name: `К${i}`, metrics: {place: i + 1, points: 1}}));
   const grid = buildFestGrid({stages: [
     {code: "r1", title: "Финал", stage_type: "matches", matches: [bout]},
     {code: "s1-g1", title: "Группа 1", stage_type: "matches", grain: {block: "s1", group: "1"}, standings: four, matches: []},
-  ]}, {stageHeaderLink: false});
+  ]});
   assert.equal(grid.props["--grid-unit-rows"], "5");
 });
 
@@ -405,8 +405,8 @@ test("two grids keep their own rows and letters", () => {
   const wide = buildFestGrid({stages: [
     {code: "s1-g1", title: "Группа 1", stage_type: "matches", grain: {block: "s1", group: "1"}, standings: four, matches: []},
     {code: "s2", title: "Финал", stage_type: "matches", matches: [{...bout, slots: [{label: "Бой 1, м. 1", fromMatch: {match: "s1-g1-1", place: 1}}, {label: "Б"}]}]},
-  ]}, {stageHeaderLink: false, letters: new Map([["s1-g1-1", "A"], ["s2-m1", "Z"]])});
-  const board = buildFestGrid({stages: [{code: "r1", title: "Раунд 1", stage_type: "matches", matches: [bout]}]}, {stageHeaderLink: false});
+  ]}, {letters: new Map([["s1-g1-1", "A"], ["s2-m1", "Z"]])});
+  const board = buildFestGrid({stages: [{code: "r1", title: "Раунд 1", stage_type: "matches", matches: [bout]}]});
   assert.equal(wide.props["--grid-unit-rows"], "5");
   assert.equal(board.props["--grid-unit-rows"], "3");
   // A бой's head says its handle alone; «Бой Z» in full is on its card.
@@ -434,7 +434,7 @@ test("a Round with drawn seats gets a Жеребьёвка panel under its бо�
   };
   const chosen = [];
   const grid = buildFestGrid({stages: [stage]},
-    {stageHeaderLink: false, editable: true, onDraw: (slot, id) => chosen.push([slot, id])});
+    {editable: true, onDraw: (slot, id) => chosen.push([slot, id])});
 
   assert.equal(withClass(grid, "grid-draw-panel").length, 1, "панель одна на раунд");
   const selects = walk(grid).filter((n) => n.tag === "select");
@@ -447,7 +447,7 @@ test("a Round with drawn seats gets a Жеребьёвка panel under its бо�
   assert.deepEqual(chosen, [["s1-r2-m2-d1", 8]]);
 
   // A viewer reads the seats off the боя boxes — «Жребий» — and gets no panel.
-  const viewerGrid = buildFestGrid({stages: [stage]}, {stageHeaderLink: false});
+  const viewerGrid = buildFestGrid({stages: [stage]});
   assert.equal(withClass(viewerGrid, "grid-draw-panel").length, 0);
 });
 
@@ -469,7 +469,7 @@ test("the Жеребьёвка panel offers substitutes under their own heading"
         participants: [{name: "Победитель А", source: "1-е место", draw: winner},
           {name: "Третий Б", source: "2-е место", draw: runnerUp}]}],
     }],
-  }, {stageHeaderLink: false, editable: true, onDraw: () => {}});
+  }, {editable: true, onDraw: () => {}});
   const selects = walk(grid).filter((n) => n.tag === "select");
   const second = selects[1];
   assert.deepEqual(second.children.map((o) => o.tag), ["option", "option", "optgroup"]);
@@ -489,7 +489,7 @@ test("the Жеребьёвка panel waits for the раунд it draws from", ()
       matches: [{code: "s1-r2-m1", participantCount: 2, slots: [{label: "А1"}, {label: "Жребий"}],
         participants: [{name: "Мыслители"}, {name: "", draw: {code: "s1-r2-m1-d1"}}]}],
     }],
-  }, {stageHeaderLink: false, editable: true, onDraw: () => {}});
+  }, {editable: true, onDraw: () => {}});
   assert.equal(walk(grid).filter((n) => n.tag === "select").length, 0);
   assert.equal(texts(grid, "empty").length, 1);
 });
@@ -521,10 +521,28 @@ test("matchHref and groupHref make the titles links", () => {
   const final = {code: "s2-r1", title: "Финал", stage_type: "matches",
     matches: [{code: "s2-r1-m1", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}]};
   const grid = buildFestGrid({stages: [group, final]}, {
-    stageHeaderLink: false, matchTitleLink: false,
     matchHref: (code) => `#protocol:s2@${code}`,
     groupHref: (stage) => `#block:${stage.grain.block}`,
   });
   const links = walk(grid).filter((n) => n.tag === "a").map((n) => [n.textContent, n.href]);
   assert.deepEqual(links, [["Группа 1", "#block:s1"], ["s2-r1-m1", "#protocol:s2@s2-r1-m1"]]);
+});
+
+// A head or a title is a link only where the caller says where it leads: a
+// grid drawn with no links draws no <a> at all (ЭК's column heads used to lead
+// to /stage/<code> at the site's root).
+test("a grid draws no link the caller did not give", () => {
+  const group = {
+    code: "s1-g1", title: "Групповой этап. Группа 1", stage_type: "matches",
+    grain: {block: "s1", group: "1"},
+    standings: [{rank: 1, name: "Лидер", metrics: {place: 1, points: 1}}],
+    matches: [{code: "s1-g1-1", slots: [], participants: [{name: "Лидер"}]}],
+  };
+  const final = {code: "s2-r1", title: "Финал", stage_type: "matches",
+    matches: [{code: "s2-r1-m1", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}]};
+  const bare = buildFestGrid({stages: [group, final]});
+  assert.deepEqual(walk(bare).filter((n) => n.tag === "a"), []);
+  const linked = buildFestGrid({stages: [group, final]}, {stageHref: (stage) => `#stage:${stage.code}`});
+  const heads = walk(linked).filter((n) => n.tag === "a").map((n) => [n.className, n.href]);
+  assert.deepEqual(heads, [["grid-stage-head grid-stage-link", "#stage:s1-g1"], ["grid-stage-head grid-stage-link", "#stage:s2-r1"]]);
 });

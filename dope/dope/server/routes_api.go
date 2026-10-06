@@ -379,7 +379,9 @@ func (s *server) scopedReseed(w http.ResponseWriter, r *http.Request, sc route.S
 	case errors.Is(err, resolver.ErrReseedStageNotFound):
 		return route.NotFound
 	case errors.Is(err, resolver.ErrReseedNotReady):
-		return route.BadUser(err)
+		// The message names the bouts still being played, from the Catalog, and
+		// is written for the host who pressed the button.
+		return route.BadRequest(err.Error())
 	case err != nil:
 		return err
 	}

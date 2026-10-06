@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 // mountBoutPage is driven through its interface: the shell, the stream and
 // the fetch are fakes, and so is the sheet it draws into — it only has to
 // take children and toggle classes. Short timers (the resync and fest-refresh
-// debounces, the write window) fire at once, as in state-sync.test.js.
+// debounces, the write window) fire at once, as in state-sync.test.js. The
+// grid and the reseed tab are the module's own and build real elements, so
+// the document makes small nodes, as in fest-grid.test.js.
 globalThis.window = {
   setTimeout: (fn, ms) => {
     if (!ms || ms < 1000) fn();
@@ -13,8 +15,33 @@ globalThis.window = {
   clearTimeout() {},
   addEventListener() {},
   location: {pathname: "/host/fest/f/game/g/", hash: "", search: "", reload() {}},
+  history: {replaceState(_state, _title, url) { window.location.hash = url.includes("#") ? url.slice(url.indexOf("#")) : ""; }},
 };
-globalThis.document = {addEventListener() {}, visibilityState: "visible", scrollingElement: {scrollTop: 0}, documentElement: {}};
+globalThis.history = window.history;
+
+function element(tag) {
+  const self = {
+    tag, children: [], dataset: {}, attributes: {}, listeners: {}, className: "", textContent: "",
+    style: {setProperty() {}},
+    classList: {
+      add(...names) { self.className = [self.className, ...names].filter(Boolean).join(" "); },
+      toggle() {},
+    },
+    setAttribute(name, value) { self.attributes[name] = String(value); },
+    appendChild(child) { self.children.push(child); return child; },
+    append(...children) { self.children.push(...children); },
+    addEventListener(name, handler) { self.listeners[name] = handler; },
+    matches: () => false,
+    querySelector: () => null,
+  };
+  return self;
+}
+globalThis.document = {
+  addEventListener() {}, visibilityState: "visible", scrollingElement: {scrollTop: 0}, documentElement: {},
+  createElement: element, createElementNS: (_ns, tag) => element(tag), getElementById: () => null,
+};
+globalThis.HTMLAnchorElement = class {};
+globalThis.Node = class {};
 globalThis.requestAnimationFrame = (fn) => { fn(); return 1; };
 globalThis.cancelAnimationFrame = () => {};
 const store = new Map();
@@ -92,17 +119,25 @@ async function settle() {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-function mount({viewer = false, onRoster} = {}) {
+function walk(root, out = []) {
+  out.push(root);
+  (root?.children || []).forEach((child) => walk(child, out));
+  return out;
+}
+
+function mount({viewer = false, onRoster, app = "brain", scheme = {stages: []}, fest = {stages: [{code: "s1", title: "Init"}]}, hash = ""} = {}) {
+  window.location.hash = hash;
   const streams = [];
   const shell = fakeShell(viewer);
   const drawn = [];
+  const root = fakeRoot();
   const page = mountBoutPage({
-    app: "brain",
-    root: fakeRoot(),
+    app,
+    root,
     tabsRoot: null,
     init: null,
-    scheme: {stages: []},
-    fest: {stages: [{code: "s1", title: "Init"}]},
+    scheme,
+    fest,
     title: () => "Brain",
     parse: (view) => ({...view.state, parsed: true}),
     blank: () => ({blank: true}),
@@ -116,7 +151,7 @@ function mount({viewer = false, onRoster} = {}) {
     route: {viewer, festID: "f", gameID: "g", apiBase: API},
     newEventSource: () => { const s = fakeStream(); streams.push(s); return s; },
   });
-  return {page, shell, streams, drawn};
+  return {page, shell, streams, drawn, root};
 }
 
 test("a start fetches the bouts, opens the stream, connects presence and reads the venues", async () => {
@@ -293,4 +328,78 @@ test("a spectator has nothing to undo", async () => {
   await settle();
   page.patch("m1", ["a"], 2);
   assert.equal(page.undo(), null);
+});
+
+// Every format's grid tab is the module's: a host's draw panel seats the slot
+// through the page's draw, whatever the format.
+test("a host's draw on the grid reaches the draw on every format", async () => {
+  const drawStage = {
+    code: "s1", title: "Round 2", stage_type: "matches",
+    matches: [{code: "s1-m1", letter: "A", participantCount: 2, slots: [{label: "A1"}, {label: "Lot"}],
+      participants: [{name: "One"}, {name: "", draw: {code: "s1-m1-d1", seated: 0, candidates: [{id: 7, name: "Seven"}]}}]}],
+  };
+  for (const app of ["ek", "hamsa", "troika", "brain"]) {
+    store.clear();
+    const calls = serve({});
+    const {page, root} = mount({app, fest: {stages: [drawStage]}});
+    page.start();
+    await settle();
+    assert.equal(page.tab()?.key, "grid", `${app} opens on the grid`);
+    const select = walk(root.node).find((n) => n.tag === "select");
+    assert.ok(select, `${app}'s grid draws the panel for a host`);
+    select.value = "7";
+    select.listeners.change();
+    await settle();
+    assert.ok(calls.some((c) => c.method === "PUT" && c.url === `${API}/draw` && c.body.participant === 7), `${app}'s draw went out`);
+  }
+});
+
+// An old /matches/<letter> address arrives as #@A: the page opens the tab that
+// holds bout A, and keeps A as the anchor to scroll to.
+test("#@A opens the tab that holds bout A", () => {
+  store.clear();
+  serve({});
+  const stage = {code: "s1", title: "Game 1", stage_type: "matches", matches: [{code: "s1-m1"}]};
+  const {page} = mount({
+    app: "hamsa",
+    scheme: {stages: [stage]},
+    fest: {stages: [{...stage, matches: [{code: "s1-m1", letter: "A"}]}]},
+    hash: "#@A",
+  });
+  assert.equal(page.tab()?.key, "protocol:s1");
+  assert.equal(window.location.hash, "#protocol:s1@A");
+  assert.equal(page.boutHref("s1-m1"), "#protocol:s1@A");
+  window.location.hash = "";
+});
+
+// The server says whether a reseed can be calculated; when it refuses all the
+// same, its reason stands under the panel until the next try.
+test("a refused reseed shows the server's reason on its panel", async () => {
+  store.clear();
+  const calls = serve({});
+  const reseedStage = {code: "r1", title: "Reseed", stage_type: "reseed", matches: []};
+  const final = {code: "s2", title: "Final", stage_type: "matches", matches: [{code: "s2-m1"}]};
+  const {page, root} = mount({
+    app: "hamsa",
+    scheme: {stages: [reseedStage, final]},
+    fest: {stages: [{...reseedStage, reseedReady: true}, final]},
+    hash: "#reseed:r1",
+  });
+  const refuse = globalThis.fetch;
+  globalThis.fetch = (url, options = {}) => {
+    if (url === `${API}/stages/r1/reseed`) {
+      calls.push({url, method: options.method || "GET"});
+      return Promise.resolve({ok: false, status: 400, text: () => Promise.resolve("Bout A is not finished\n")});
+    }
+    return refuse(url, options);
+  };
+  page.start();
+  await settle();
+  const button = walk(root.node).find((n) => n.tag === "button");
+  assert.equal(button.disabled, false, "the server said it is ready");
+  button.listeners.click();
+  await settle();
+  const errors = walk(root.node).filter((n) => n.className === "hint hint-danger").map((n) => n.textContent);
+  assert.deepEqual(errors, ["Bout A is not finished"]);
+  globalThis.fetch = refuse;
 });

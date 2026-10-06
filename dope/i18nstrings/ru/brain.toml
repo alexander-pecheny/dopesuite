@@ -41,14 +41,6 @@ finished = "Закончен"
 # The column title of a pod round on the pod detail tab.
 block_round = 'Раунд {{.n}}'
 
-[reseed]
-# The reseed panel when the calculate request itself fails.
-calculate_failed = "Не удалось рассчитать пересев"
-# The blocked-calculate message naming the one unfinished bout…
-pending_one = 'Бой {{.names}} не закончен'
-# …and the same message when several bouts stay unfinished.
-pending_many = 'Бои {{.names}} не закончены'
-
 [stats]
 # The individual player statistics tab: the column headers, then its empty state.
 player = "Игрок"

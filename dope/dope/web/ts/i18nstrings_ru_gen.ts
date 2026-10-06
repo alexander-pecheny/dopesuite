@@ -84,11 +84,6 @@ export const RU: Strings = {
     protocol: {
       empty: () => "Бои ещё не загружены.",
     },
-    reseed: {
-      calculateFailed: () => "Не удалось рассчитать пересев",
-      pendingMany: (names: string) => `Бои ${names} не закончены`,
-      pendingOne: (names: string) => `Бой ${names} не закончен`,
-    },
     row: {
       tiebreak: () => "П",
       tiebreakN: (n: string) => `П${n}`,
@@ -388,7 +383,9 @@ export const RU: Strings = {
       blockedDefault: () => "Исходные бои ещё не закончены",
       blockedMany: (matches: string) => `Бои ${matches} не закончены`,
       blockedOne: (match: string) => `Бой ${match} не закончен`,
+      blockedStages: (stages: string) => `Места ещё не определены: ${stages}`,
       calculate: () => "Рассчитать",
+      calculateFailed: () => "Не удалось рассчитать пересев",
       colMatch: () => "Бой",
       colPlace: () => "Место",
       colTeam: () => "Команда",

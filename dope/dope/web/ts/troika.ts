@@ -14,7 +14,7 @@ import {icon} from "./icons_gen.js";
 import {standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
-import {mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
+import {boutAnchorID, groupAnchorID, mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
 import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {nameCell} from "./name-cell.js";
@@ -23,21 +23,16 @@ import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
 import type {SchemeSlotRef} from "./crosstable.js";
-import {buildFestGrid, buildReseedStagePanel, parseScheme} from "./fest-grid.js";
+import {parseScheme} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
 import {groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
-import {hashAnchor, tabHref} from "./url-state.js";
 import * as troika from "./troika-protocol.js";
 import type {Mark, TroikaState} from "./troika-protocol.js";
 import {buildTroikaStatsTable, computeTroikaPlayerStats} from "./troika-stats.js";
 import type {TroikaBout} from "./troika-stats.js";
-import {scrollIntoViewSteady} from "./steady-redraw.js";
 import S from "./i18nstrings.js";
 import {declarePins, sheetHead} from "./sheet-pins.js";
-
-// How long a linked-to node stays marked.
-const FLASH_MS = 2500;
 
 // A bout sheet pins the side's name, which is the whole of its pinned block.
 // A side's name and, on the bout sheet, its Σ stay at the left edge while the
@@ -125,7 +120,6 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   afterRender: () => {
     drawnShape.clear();
     for (const code of page.codes()) drawnShape.set(code, shapeOf(code));
-    showAnchor();
   },
   repaint: (code) => {
     // When only marks changed and the protocols tab is up, the bout's cells
@@ -135,7 +129,6 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
     repaintBout(code);
     return true;
   },
-  onNavigate: () => showAnchor(),
   // The troikas page broadcasts the fest view when a troika's people or the
   // Game's entrants change: the bouts carry the seat rosters, and the roster
   // tab is drawn from them too.
@@ -150,57 +143,6 @@ const boutLetters = page.letters;
 
 function stageKind(stage: SchemeStage): string {
   return stage.kind || stage.stage_type || "";
-}
-
-// boutHref is the link to a bout: its protocols tab, scrolled to it — what a
-// bout's title in the grid and its cell in a group's table lead to.
-function boutHref(code: string): string {
-  const stage = (scheme.stages || []).find((entry) => (entry.matches || []).some((match) => match.code === code));
-  const tab = page.tabs().find((entry) => entry.kind === "protocol" && entry.stages.includes(stage?.code || ""));
-  return tab ? tabHref(tab.key, boutLetters.get(code) || code) : "";
-}
-
-// groupHref is the link a group table's head in the grid gives: the Block's
-// tab with the groups' tables, scrolled to this group's.
-function groupHref(stage: FestGridStage): string {
-  const tab = page.tabs().find((entry) => entry.kind === "block" && entry.stages.includes(stage.code || ""));
-  return tab ? tabHref(tab.key, stage.code || "") : "";
-}
-
-function groupAnchorID(code: string): string {
-  return `group-${code}`;
-}
-
-function boutAnchorID(code: string): string {
-  return `bout-${boutLetters.get(code) || code}`;
-}
-
-// showAnchor scrolls to the bout or group the hash names, once per hash: a later
-// redraw (another host's mark) must not yank the page back to it.
-let shownAnchor = "";
-function showAnchor(): void {
-  const anchor = hashAnchor();
-  const key = `${page.tab()?.key || ""}@${anchor}`;
-  if (!anchor || key === shownAnchor) return;
-  // A bout's letter, or a group's stage code: they never look alike.
-  const node = document.getElementById(`bout-${anchor}`) || document.getElementById(groupAnchorID(anchor));
-  if (!node) return;
-  shownAnchor = key;
-  scrollIntoViewSteady(node);
-  flashTarget(node);
-}
-
-// flashTarget marks the node a link landed on for a moment: the mark fades
-// out by itself and goes at the host's first click, so it never stays on.
-function flashTarget(node: HTMLElement): void {
-  node.classList.add("bout-target");
-  const clear = () => {
-    node.classList.remove("bout-target");
-    window.clearTimeout(timer);
-    document.removeEventListener("pointerdown", clear, true);
-  };
-  const timer = window.setTimeout(clear, FLASH_MS);
-  document.addEventListener("pointerdown", clear, true);
 }
 
 // === the document ===
@@ -879,7 +821,7 @@ function buildGroups(stages: SchemeStage[]): HTMLElement {
           })),
           finished: Boolean(view.finished),
           started: troika.started(state),
-          href: boutHref(planned.code || ""),
+          href: page.boutHref(planned.code || ""),
           label: boutLetters.get(planned.code || "") || planned.code || "",
           blockRound: Number(planned.round) || undefined,
         }];
@@ -948,18 +890,6 @@ function buildStats(): HTMLElement {
   return buildTroikaStatsTable(computeTroikaPlayerStats(bouts));
 }
 
-function buildGrid(): HTMLElement {
-  return buildFestGrid({schemaJson: fest?.schemaJson, stages: page.gridStages()}, {
-    stageHeaderLink: false,
-    matchTitleLink: false,
-    matchHref: boutHref,
-    groupHref,
-    letters: boutLetters,
-    editable: !viewer,
-    onDraw: (slot, participant) => void page.draw(slot, participant),
-  });
-}
-
 // buildGridOf is the grid cut down to some stages: a Block's rounds, each a
 // column of its bouts with who sat there, their Σ and place — the pairings
 // at a glance, the marks left to the protocols tab.
@@ -971,49 +901,19 @@ function buildGridOf(only: SchemeStage[]): HTMLElement {
   for (const stage of fest?.stages || []) {
     if (stage?.code && codes.has(stage.code)) live.push(page.festStage(stage.code) || stage);
   }
-  return buildFestGrid({schemaJson: JSON.stringify({stages: schemeStages}), stages: live}, {
-    stageHeaderLink: false,
-    matchTitleLink: false,
-    matchHref: boutHref,
-    groupHref,
-    letters: boutLetters,
-    editable: !viewer,
-    onDraw: (slot, participant) => void page.draw(slot, participant),
-  });
-}
-
-// buildReseeds is the reseed tab — Hamsa's: each reseed's ranking and its
-// one button. The tab was listed but fell through to the grid, so a Troika
-// whose play-off is drawn (reseed: true, sorting: [place_sum, draw]) had no
-// way to calculate it.
-function buildReseeds(stages: SchemeStage[]): HTMLElement {
-  const wrap = document.createElement("div");
-  wrap.className = "u-col u-gap-lg";
-  for (const stage of stages) {
-    const live = page.festStage(stage.code || "");
-    wrap.appendChild(buildReseedStagePanel(live, {
-      editable: !viewer,
-      canCalculate: Boolean(live?.reseedReady),
-      letters: boutLetters,
-      onCalculate: () => void page.reseed(stage.code || ""),
-    }));
-  }
-  return wrap;
+  return page.grid({schemaJson: JSON.stringify({stages: schemeStages}), stages: live});
 }
 
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
-  case "reseed":
-    return buildReseeds(tabStages(scheme.stages, tab));
   case "stats":
     return buildStats();
   case "block":
   case "pods":
     return buildGroups(tabStages(scheme.stages, tab));
-  case "protocol":
-    return buildProtocols(tabStages(scheme.stages, tab));
   default:
-    return buildGrid();
+    // A Block's protocols; the module draws the grid and the reseeds.
+    return buildProtocols(tabStages(scheme.stages, tab));
   }
 }
 

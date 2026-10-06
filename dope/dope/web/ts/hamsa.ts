@@ -13,14 +13,13 @@ import {letteredTitle, standingsTable} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
 import {nameCell} from "./name-cell.js";
 import {seatPicker} from "./seat-picker.js";
-import {mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
+import {boutAnchorID, mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
 import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {createSheetCursor, parseMark} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {buildTwoRowScoreTable, scoreSheetPins} from "./score-table.js";
 import type {ScoreTableThemeRow} from "./score-table.js";
-import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
 import type {GameTab} from "./game-tabs.js";
 import {buildEKStatsTable} from "./ek-stats.js";
@@ -262,7 +261,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
 
   const box = document.createElement("section");
   box.className = "hamsa-bout u-col u-gap-sm";
-  box.id = `hamsa-bout-${bout.code}`;
+  box.id = boutAnchorID(bout.code);
 
   const table = buildTwoRowScoreTable({
     className: "match-table hamsa-sheet",
@@ -731,21 +730,6 @@ function metricText(value: unknown): string {
   return Number.isInteger(number) ? String(number) : number.toFixed(1);
 }
 
-function buildReseeds(stages: SchemeStage[]): HTMLElement {
-  const wrap = document.createElement("div");
-  wrap.className = "u-col u-gap-lg";
-  for (const stage of stages) {
-    const live = page.festStage(stage.code || "");
-    wrap.appendChild(buildReseedStagePanel(live, {
-      editable: !viewer,
-      canCalculate: Boolean(live?.reseedReady),
-      letters: boutLetters,
-      onCalculate: () => void page.reseed(stage.code || ""),
-    }));
-  }
-  return wrap;
-}
-
 function buildStats(): HTMLElement {
   const bouts: HamsaBout[] = [];
   let values: number[] = [];
@@ -766,28 +750,15 @@ function buildStats(): HTMLElement {
   return buildEKStatsTable(computeHamsaPlayerStats(bouts), values.length ? values : undefined);
 }
 
-function buildGrid(): HTMLElement {
-  return buildFestGrid({schemaJson: fest?.schemaJson, stages: page.gridStages()}, {
-    stageHeaderLink: false,
-    matchTitleLink: false,
-    letters: boutLetters,
-    editable: !viewer,
-    onDraw: (slot, participant) => void page.draw(slot, participant),
-  });
-}
-
 function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "stats":
     return buildStats();
   case "block":
     return buildBlockTable(tabStages(scheme.stages, tab));
-  case "reseed":
-    return buildReseeds(tabStages(scheme.stages, tab));
-  case "protocol":
-    return buildProtocols(tabStages(scheme.stages, tab));
   default:
-    return buildGrid();
+    // A Round's bouts; the module draws the grid and the reseed.
+    return buildProtocols(tabStages(scheme.stages, tab));
   }
 }
 

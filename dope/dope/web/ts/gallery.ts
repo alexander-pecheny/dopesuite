@@ -225,7 +225,7 @@ function render(root: HTMLElement): void {
   // Chromium's infinite width). Each section scrolls its own table.
   root.classList.add("fits-frame");
   root.replaceChildren(
-    section(S.gallery.section.festGrid(), "table-host grid-host", buildFestGrid({stages: festStages}, {stageHeaderLink: false, matchTitleLink: false})),
+    section(S.gallery.section.festGrid(), "table-host grid-host", buildFestGrid({stages: festStages})),
     section(S.gallery.section.reseed(), "table-host fits-frame", buildReseedStagePanel(reseedStage, {letters: new Map([["s1-g1-1", "A"], ["s1-g1-2", "B"]])})),
     section(S.gallery.section.groupStandings(), "table-host fits-frame", buildGroupStandingsView(groups)),
     section(S.gallery.section.ekStats(), "table-host", buildEKStatsTable(ekStats)),

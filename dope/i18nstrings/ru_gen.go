@@ -102,11 +102,6 @@ var RU = Strings{
 		Protocol: BrainProtocolStrings{
 			Empty: func() string { return "Бои ещё не загружены." },
 		},
-		Reseed: BrainReseedStrings{
-			CalculateFailed: func() string { return "Не удалось рассчитать пересев" },
-			PendingMany:     func(names string) string { return fmt.Sprintf("Бои %s не закончены", names) },
-			PendingOne:      func(names string) string { return fmt.Sprintf("Бой %s не закончен", names) },
-		},
 		Row: BrainRowStrings{
 			Tiebreak:  func() string { return "П" },
 			TiebreakN: func(n string) string { return fmt.Sprintf("П%s", n) },
@@ -478,12 +473,16 @@ var RU = Strings{
 			BlockedDefault: func() string { return "Исходные бои ещё не закончены" },
 			BlockedMany:    func(matches string) string { return fmt.Sprintf("Бои %s не закончены", matches) },
 			BlockedOne:     func(match string) string { return fmt.Sprintf("Бой %s не закончен", match) },
-			Calculate:      func() string { return "Рассчитать" },
-			ColMatch:       func() string { return "Бой" },
-			ColPlace:       func() string { return "Место" },
-			ColTeam:        func() string { return "Команда" },
-			Empty:          func() string { return "Пересев пока не рассчитан." },
-			Recalculate:    func() string { return "Пересчитать" },
+			BlockedStages: func(stages string) string {
+				return fmt.Sprintf("Места ещё не определены: %s", stages)
+			},
+			Calculate:       func() string { return "Рассчитать" },
+			CalculateFailed: func() string { return "Не удалось рассчитать пересев" },
+			ColMatch:        func() string { return "Бой" },
+			ColPlace:        func() string { return "Место" },
+			ColTeam:         func() string { return "Команда" },
+			Empty:           func() string { return "Пересев пока не рассчитан." },
+			Recalculate:     func() string { return "Пересчитать" },
 		},
 		Roster: FestRosterStrings{
 			ColPlayers: func() string { return "Игроки" },

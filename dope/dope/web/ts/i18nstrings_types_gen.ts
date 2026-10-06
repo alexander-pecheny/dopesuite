@@ -83,11 +83,6 @@ export type Strings = {
     protocol: {
       empty: () => string;
     };
-    reseed: {
-      calculateFailed: () => string;
-      pendingMany: (names: string) => string;
-      pendingOne: (names: string) => string;
-    };
     row: {
       tiebreak: () => string;
       tiebreakN: (n: string) => string;
@@ -387,7 +382,9 @@ export type Strings = {
       blockedDefault: () => string;
       blockedMany: (matches: string) => string;
       blockedOne: (match: string) => string;
+      blockedStages: (stages: string) => string;
       calculate: () => string;
+      calculateFailed: () => string;
       colMatch: () => string;
       colPlace: () => string;
       colTeam: () => string;

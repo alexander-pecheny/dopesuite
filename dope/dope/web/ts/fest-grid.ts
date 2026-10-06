@@ -116,22 +116,21 @@ export interface FestScheme {
 }
 
 export interface FestGridOptions {
-  basePath?: string;
-  viewer?: boolean;
   editable?: boolean;
   canCalculate?: boolean;
   blockedMessage?: string;
   onCalculate?: () => void;
+  // error is why the server refused the last calculation, shown under the
+  // panel; "" or absent for none.
+  error?: string;
   // onDraw seats a Draw Slot, or clears it with a participant of 0. A grid
   // without it draws the panel read-only.
   onDraw?: (slot: string, participant: number) => void;
-  stageHeaderLink?: boolean;
-  matchTitleLink?: boolean;
-  // matchHref is where a bout's title leads on a page that keeps its bouts
-  // somewhere else than /matches/ (a troika's protocols tab); "" for none.
+  // A head or a title is a link only where the caller says where it leads;
+  // "" or absent for none. stageHref is where a column's head leads,
+  // matchHref a bout's title, groupHref a group table's head.
+  stageHref?: (stage: FestGridStage) => string;
   matchHref?: (code: string) => string;
-  // groupHref is where a group table's head leads: the tab with the group's
-  // bouts or its table; "" or absent for none.
   groupHref?: (stage: FestGridStage) => string;
   // letters is the whole game's letter map — a caller drawing a slice of the
   // scheme passes it, so a slot that names a Match outside the slice still
@@ -507,21 +506,31 @@ export function buildReseedStagePanel(
     empty.textContent = S.fest.reseed.empty();
     wrapper.appendChild(empty);
   }
+  // The line that says what the reseed waits for already says why; a refusal
+  // stands under a panel the server called ready.
+  if (options.editable && options.error && (options.canCalculate || !blockedMessage)) {
+    const refusal = document.createElement("p");
+    refusal.className = "hint hint-danger";
+    refusal.textContent = options.error;
+    wrapper.appendChild(refusal);
+  }
 
   return wrapper;
 }
 
+// reseedBlockedMessage names the bouts a reseed still waits for, by their
+// letters where the caller passed them; the server's own line names them by
+// code, so it comes second.
 function reseedBlockedMessage(stage: FestGridStage | null | undefined, options: FestGridOptions = {}): string {
   const fromOptions = String(options.blockedMessage || "").trim();
   if (fromOptions) return fromOptions;
-  const fromStage = String(stage?.reseedBlockedMessage || "").trim();
-  if (fromStage) return fromStage;
   const pending = Array.isArray(stage?.reseedPendingMatches)
     ? stage.reseedPendingMatches.map((code) => String(code || "").trim()).filter(Boolean)
+      .map((code) => options.letters?.get(code) || code)
     : [];
   if (pending.length === 1) return S.fest.reseed.blockedOne(pending[0]);
   if (pending.length > 1) return S.fest.reseed.blockedMany(pending.join(", "));
-  return "";
+  return String(stage?.reseedBlockedMessage || "").trim();
 }
 
 // buildStandingsStage draws a ranking Kind as its own table — place, team, and
@@ -538,13 +547,14 @@ function buildStandingsStage(section: GridTable, ctx: PaintContext): HTMLElement
   return column;
 }
 
-// stageHead is a column's title, a link to the stage's page unless the caller
-// draws without one.
+// stageHead is a column's title, a link where the caller says where the
+// stage is.
 function stageHead(stage: FestGridStage, title: string | undefined, ctx: PaintContext): HTMLElement {
-  const header = document.createElement(ctx.options.stageHeaderLink === false ? "div" : "a");
+  const href = ctx.options.stageHref?.(stage) || "";
+  const header = document.createElement(href ? "a" : "div");
   header.className = "grid-stage-head";
-  if (header instanceof HTMLAnchorElement) {
-    header.href = stageHref(stage, ctx.options);
+  if (href) {
+    (header as HTMLAnchorElement).href = href;
     header.classList.add("grid-stage-link");
   }
   header.appendChild(el("h2", "", title));
@@ -930,12 +940,9 @@ function matchTitleNode(match: FestGridMatch, ctx: PaintContext): HTMLElement {
 }
 
 // matchTitleHref is where a bout's title leads: the page's own link for it,
-// else the bout's page, unless the page draws its titles without links.
+// or nowhere.
 function matchTitleHref(match: FestGridMatch, ctx: PaintContext): string {
-  const own = ctx.options.matchHref?.(String(match.code || "")) || "";
-  if (own) return own;
-  if (!ctx.options.basePath || ctx.options.matchTitleLink === false) return "";
-  return matchHref(match, ctx);
+  return ctx.options.matchHref?.(String(match.code || "")) || "";
 }
 
 export function parseScheme(raw: unknown): FestScheme | null {
@@ -1011,19 +1018,6 @@ function preferredColumns(count: number): number {
   if (count >= MEDIUM_STAGE_COLUMNS) return MEDIUM_STAGE_COLUMNS;
   if (count >= 2) return 2;
   return 1;
-}
-
-function stageHref(stage: FestGridStage, options: FestGridOptions = {}): string {
-  return `${basePath(options)}/stage/${encodeURIComponent(String(stage.code))}`;
-}
-
-function matchHref(match: FestGridMatch, ctx: PaintContext): string {
-  const code = String(match.code || "");
-  return `${basePath(ctx.options)}/matches/${encodeURIComponent(ctx.letters?.get(code) || code)}`;
-}
-
-function basePath(options: FestGridOptions = {}): string {
-  return options.basePath || "";
 }
 
 // The Matches wear their letter — the sheets' A..Z, AA.. handle — as the
