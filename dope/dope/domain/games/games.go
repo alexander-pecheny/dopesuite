@@ -63,7 +63,7 @@ type Definition struct {
 	// questions at 10..50, edited on EK's page, with a team's game roster kept
 	// in game_team_players and open to player overrides. It is not the same
 	// fact as the Protocol's TeamBlob, which only says the document is keyed by
-	// Participant: личная СИ has a team blob but no EK bout.
+	// Participant: an individual SI game has a team blob but no EK bout.
 	EKBout bool
 	// Flat reports a flat Game: one Match whose document seats the whole fest
 	// roster (or, in a friendship cup, its tables), built from the format's own
