@@ -14,9 +14,10 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"strings"
+	"os"
 
 	"pecheny.me/dopecore/idstr"
+	"pecheny.me/dopecore/sameorigin"
 	"pecheny.me/dopecore/session"
 )
 
@@ -211,23 +212,17 @@ func DenyPage(w http.ResponseWriter, r *http.Request, d Denial) {
 	DenyAPI(w, r, d)
 }
 
-// SameOriginUnsafe is the check every state-changing request passes: a present
-// Origin header must name this very host. The session cookie is SameSite=Lax,
-// so a cross-site POST would not carry it anyway; this is the second lock.
+// TrustedOriginHostsEnv names the extra hosts whose Origin passes on a write:
+// a mirror that proxies to Spliff with Host rewritten. Unset, only Spliff's own
+// host passes.
+const TrustedOriginHostsEnv = "SPLIFF_TRUSTED_ORIGIN_HOSTS"
+
+// SameOriginUnsafe is the check every state-changing request passes
+// (dopecore/sameorigin): a present Origin header must name this very host or a
+// trusted one. The session cookie is SameSite=Lax, so a cross-site POST would
+// not carry it anyway; this is the second lock.
 func SameOriginUnsafe(r *http.Request) bool {
-	switch r.Method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		return true
-	}
-	origin := strings.TrimSpace(r.Header.Get("Origin"))
-	if origin == "" {
-		return true
-	}
-	u, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-	return u.Host == r.Host
+	return sameorigin.Allowed(r, os.Getenv(TrustedOriginHostsEnv))
 }
 
 // Status is an error carrying the status and the words to answer with. A

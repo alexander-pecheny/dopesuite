@@ -83,7 +83,7 @@ func Main() {
 	log.Printf("xy %s serving on %s (assets from %s)", buildinfo.Version(), addr, srv.assets.Mode)
 
 	httpSrv := &http.Server{
-		Handler:           webassets.Gzip(mux),
+		Handler:           webassets.Gzip(guardOrigin(mux)),
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}

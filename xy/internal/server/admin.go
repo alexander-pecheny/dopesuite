@@ -6,13 +6,13 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"net/url"
+	"os"
 	"regexp"
 	"slices"
-	"strings"
 	"time"
 
 	"pecheny.me/dopecore/adminusers"
+	"pecheny.me/dopecore/sameorigin"
 	"pecheny.me/dopecore/session"
 	"pecheny.me/dopecore/sqlitex"
 	kit "pecheny.me/dopeuikit/kit"
@@ -28,21 +28,6 @@ func (s *server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.U
 		// Cookie only: /admin creates users, which no API token may do.
 		return s.lookupCookieSession(w, r)
 	})
-}
-
-// sameOrigin guards state-changing admin POSTs: a present Origin header must
-// match the request host. (The session cookie is SameSite=Lax, so a cross-site
-// POST wouldn't carry it anyway; this is defense in depth.)
-func sameOrigin(r *http.Request) bool {
-	origin := strings.TrimSpace(r.Header.Get("Origin"))
-	if origin == "" {
-		return true
-	}
-	u, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-	return u.Host == r.Host
 }
 
 // The length limits on a username, in bytes.
@@ -247,7 +232,7 @@ func (s *server) HandleAdminCreateUsers(w http.ResponseWriter, r *http.Request) 
 	case http.MethodGet, http.MethodHead:
 		s.renderAdminPage(w, adminCreateUsersDoc(adminusers.CreateUsersData{}))
 	case http.MethodPost:
-		if !sameOrigin(r) {
+		if !sameorigin.Allowed(r, os.Getenv(trustedOriginHostsEnv)) {
 			http.Error(w, "bad origin", http.StatusForbidden)
 			return
 		}

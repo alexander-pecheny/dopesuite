@@ -26,6 +26,7 @@ import (
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopecore/idstr"
+	"pecheny.me/dopecore/sameorigin"
 	"pecheny.me/dopecore/session"
 )
 
@@ -509,44 +510,10 @@ func DecodeJSON(r *http.Request, v any) error {
 // methods (a staging front in front of the app).
 const TrustedOriginHostsEnv = "DOPE_TRUSTED_ORIGIN_HOSTS"
 
-// SameOriginUnsafe is the CSRF check every unsafe request passes: SameSite=Lax
-// on the cookie is the primary defence, this refuses a cross-origin form submit
-// outright. Writes 403 and returns false when it fails.
+// SameOriginUnsafe is the CSRF check every unsafe request passes
+// (dopecore/sameorigin): SameSite=Lax on the cookie is the primary defence,
+// this refuses a cross-origin form submit outright. Writes 403 and returns
+// false when it fails.
 func SameOriginUnsafe(w http.ResponseWriter, r *http.Request) bool {
-	switch r.Method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		return true
-	}
-	origin := strings.TrimSpace(r.Header.Get("Origin"))
-	if origin == "" {
-		return true
-	}
-	u, err := url.Parse(origin)
-	if err != nil || !SameOriginHost(u.Host, r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return false
-	}
-	return true
-}
-
-// SameOriginHost reports whether originHost is the request's own host or a
-// trusted one.
-func SameOriginHost(originHost string, r *http.Request) bool {
-	return strings.EqualFold(originHost, r.Host) || TrustedOriginHost(originHost, os.Getenv(TrustedOriginHostsEnv))
-}
-
-func TrustedOriginHost(originHost, trustedHosts string) bool {
-	for _, candidate := range strings.Split(trustedHosts, ",") {
-		host := strings.TrimSpace(candidate)
-		if host == "" {
-			continue
-		}
-		if u, err := url.Parse(host); err == nil && u.Host != "" {
-			host = u.Host
-		}
-		if strings.EqualFold(originHost, host) {
-			return true
-		}
-	}
-	return false
+	return sameorigin.Guard(w, r, os.Getenv(TrustedOriginHostsEnv))
 }
