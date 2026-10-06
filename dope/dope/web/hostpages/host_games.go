@@ -489,8 +489,8 @@ select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_d
 				return nil, err
 			}
 		}
-		if submitted := strings.TrimSpace(r.Form.Get("brain_dsl")); submitted != "" && errMsg != "" {
-			schemeDSL = r.Form.Get("brain_dsl")
+		if submitted := strings.TrimSpace(r.Form.Get("scheme_dsl")); submitted != "" && errMsg != "" {
+			schemeDSL = r.Form.Get("scheme_dsl")
 		}
 		return hostGameSettingsDoc(hostGameSettingsData{
 			Fest: fest,

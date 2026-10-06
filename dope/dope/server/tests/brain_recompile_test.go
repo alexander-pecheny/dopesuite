@@ -91,6 +91,11 @@ select state_json ->> '$.teams[0].rows[0].mark' from matches where game_id = ? a
 	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "s1-g1-1") {
 		t.Fatalf("shrink status = %d, want error page naming s1-g1-1; body head: %.200s", resp.Code, resp.Body.String())
 	}
+	// The error page keeps the host's edit in the editor, so the host can fix
+	// it rather than type it again.
+	if !strings.Contains(resp.Body.String(), "groups: 2") {
+		t.Fatalf("the refused edit is not in the editor; body head: %.400s", resp.Body.String())
+	}
 	var matchCount int
 	if err := srv.Eng().DB.QueryRow(`select count(*) from matches where game_id = ?`, gameID).Scan(&matchCount); err != nil || matchCount != 6 {
 		t.Fatalf("matches after refused edit = %d, want 6 untouched", matchCount)
