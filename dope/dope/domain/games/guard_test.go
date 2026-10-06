@@ -23,11 +23,6 @@ var guardAllowed = map[string][]string{
 	// The fixture fest seeds one Game of each format and deals each its own
 	// plausible document; it is test data that names what it builds.
 	"domain/fixture/": nil,
-	// storage may not import domain/games (ARCHITECTURE.md); a pasted EK-shaped
-	// scheme must carry stages.
-	"storage/storeutil/scheme_ops.go": {
-		`if (gameType == "" || gameType == "ek" || gameType == "es") && len(scheme.Stages) == 0 {`,
-	},
 	// The roster import's result names the OD and KSI Games it updated, in
 	// fields of the API answer and of the stored journal event.
 	"domain/imports/handroster.go": {

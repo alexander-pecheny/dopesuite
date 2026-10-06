@@ -65,12 +65,11 @@ in the game has a number.
 |---|---|
 | `GET …/entrants` A | whom a game may seat: `id` for `entrants`, `ref` for `entrant_refs` (a rating player not seated anywhere yet has only a ref) |
 | `POST …/games` A | `{game_type, entrants?, …}`, see below → the game |
-| `GET\|PATCH …/games/<game>/settings` A | `{title, slug, scheme_dsl, hidden_divisions}`; `scheme_dsl` changes only for a format whose scheme its page edits (brain, ЭК, ЭС, личная СИ, Тройка, Хамса), and a flat Game refuses a changed one; `hidden_divisions` lists the зачёты (Flag short names) the game does not offer, out of the read-only `divisions` its teams carry (ОД, КСИ, Мультиигры), and is written as sent; or PATCH `shown_divisions` instead, the offered ones to show, as the page ticks them: the other offered ones are hidden, and one hidden before that no team carries now stays hidden |
+| `GET\|PATCH …/games/<game>/settings` A | `{title, slug, scheme_dsl, hidden_divisions}`; `scheme_dsl` changes only for a format whose scheme its page edits (brain, ЭК, ЭС, личная СИ, Тройка, Хамса), a flat Game refuses a changed one, and so does a Game pasted as JSON before 2026-10-06, which has no `scheme_dsl` (production's chr2026/ek-3); a scheme that does not compile answers 400 with the compiler's message; `hidden_divisions` lists the зачёты (Flag short names) the game does not offer, out of the read-only `divisions` its teams carry (ОД, КСИ, Мультиигры), and is written as sent; or PATCH `shown_divisions` instead, the offered ones to show, as the page ticks them: the other offered ones are hidden, and one hidden before that no team carries now stays hidden |
 | `POST …/games/<game>/clear` A | back to just-created, keeps the id and the URLs |
 | `DELETE …/games/<game>` A | |
 | `GET …/games/<game>/journal` A | history, newest first; each entry has `revert_to` |
 | `POST …/games/<game>/revert` A | `{target: <revert_to>}` undoes that entry and everything after it |
-| `POST …/scheme-import` A | a pasted JSON scheme; **replaces every game of the fest** |
 
 `game_type` is `od` (`od_tours`, `od_questions`), `kd` — Кубок Дружбы
 (`od_tours`, `od_questions`, `kd_tables`, a prime no smaller than the tours;
@@ -80,8 +79,8 @@ value `{name, team}`, and free a card with value `null`; cards run 1…tables²;
 `ksi_stickers` (`ksi_themes`, `stickers: {neutral|x2|nowrong|emptywrong: {color,
 max}}`), `multi` (`multi_games`, `multi_sorting`, in the creation form's
 grammar), or `brain`, `si`, `troika`, `hamsa`, `ek`, `es` with `dsl` in the scheme
-language (dope/docs/scheme-dsl.md). `ek` and `es` take a JSON `scheme` instead
-of `dsl`. Leaving `entrants` out seats everyone.
+language (dope/docs/scheme-dsl.md). Every one of them needs a `dsl`: no game is
+created from pasted JSON. Leaving `entrants` out seats everyone.
 
 **Roster**
 
@@ -136,7 +135,7 @@ of `dsl`. Leaving `entrants` out seats everyone.
   undo it, and it also undoes everything after it, including other people's
   edits. So check the journal for later entries before you revert.
 - **Ask before anything destructive**: deleting a fest or a game, `clear`,
-  `scheme-import`, a rating import whose preview drops teams or players, a
+  a rating import whose preview drops teams or players, a
   `revert` over someone else's edits, `drop` in a rating import,
   `numbers/clear` or `numbers/auto` on a numbered fest.
 - **The token cannot change the password, the username or reach /admin.** If

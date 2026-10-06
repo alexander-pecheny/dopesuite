@@ -129,7 +129,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		if err := insertFlatMatchTx(ctx, tx, festID, gameID, title, string(state), now); err != nil {
 			return "", err
 		}
-	case known && def.PastedScheme:
+	case known && def.LegacyPasted:
 		status = "pending"
 		if newScheme, err = rebuildTx(ctx, tx, festID, gameID, gameType, "", schemeJSON, nil, own); err != nil {
 			return "", err

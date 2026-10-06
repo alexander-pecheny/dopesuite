@@ -86,11 +86,6 @@ func (s *server) ResolveGameID(ctx context.Context, festID int64, ref string) (i
 	return resolveGameID(ctx, s.eng.DB, festID, ref)
 }
 
-// ImportSchemeIntoFest rebuilds a fest's game from a parsed JSON scheme.
-func (s *server) ImportSchemeIntoFest(ctx context.Context, festID int64, scheme store.FestScheme) error {
-	return s.importSchemeIntoFest(ctx, festID, scheme)
-}
-
 // LogoutSession invalidates the request's session server-side.
 func (s *server) LogoutSession(r *http.Request) { s.logoutSession(r) }
 

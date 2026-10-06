@@ -53,6 +53,9 @@ type hostGameSettingsData struct {
 	Error     string
 	SchemeDSL string
 	HasDSL    bool
+	// Pasted says the Game's format has a scheme but the Game has none: it
+	// was pasted as JSON before every bracket Game needed one.
+	Pasted bool
 	// Divisions is every division the game's teams offer, Hidden the ones it
 	// does not show; nil Divisions draws no divisions field.
 	Divisions []string
@@ -318,26 +321,17 @@ var formatForms = map[string]formatForm{
 	},
 }
 
-// dslFieldOf names a scheme format's DSL editor on the creation form, and
-// jsonFieldOf its pasted-JSON editor. Every section is in the document at
-// once and the page merely hides the ones not picked — a hidden field still
-// posts — so one shared name would have handed a brain game's prefilled
-// scheme to whatever type the host actually chose. A flat format has no
-// scheme on the form and its DSL is empty.
+// dslFieldOf names a scheme format's DSL editor on the creation form. Every
+// section is in the document at once and the page merely hides the ones not
+// picked — a hidden field still posts — so one shared name would have handed
+// a brain game's prefilled scheme to whatever type the host actually chose. A
+// flat format has no scheme on the form and its DSL is empty.
 func dslFieldOf(code string) (string, bool) {
 	d, ok := games.Lookup(code)
 	if !ok || d.Flat {
 		return "", false
 	}
 	return code + "_dsl", true
-}
-
-func jsonFieldOf(code string) (string, bool) {
-	d, ok := games.Lookup(code)
-	if !ok || !d.PastedScheme {
-		return "", false
-	}
-	return code + "_scheme", true
 }
 
 // typeRadios is the game-type picker: every registered format in the
@@ -368,10 +362,6 @@ func settingsSections(data hostGameCreateData) []dopeui.Item {
 			kids = append(kids, dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()), dopeui.Editor(editor...)))
 			if f.hint != nil {
 				kids = append(kids, dopeui.Hint(dopeui.Text(f.hint())))
-			}
-			if field, ok := jsonFieldOf(d.Code); ok {
-				kids = append(kids, dopeui.Field(dopeui.Label(s.Host.Games.EkJsonLabel()),
-					dopeui.Editor(dopeui.Name(field), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"`+d.Code+`","stages":[...]}`))))
 			}
 		} else if f.knobs != nil {
 			kids = f.knobs()
@@ -463,6 +453,9 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 			dopeui.Hint(dopeui.Text(s.Host.Games.RebuildHint())),
 		)
 	}
+	if data.Pasted {
+		form = append(form, dopeui.Note(dopeui.Text(s.Host.Games.SchemePastedNote())))
+	}
 	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.SaveSubmit()))))
 	page = append(page, dopeui.Form(form...))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
@@ -486,6 +479,8 @@ select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_d
 		if err != nil {
 			return nil, err
 		}
+		editable := games.Get(gameType).DSL == games.DSLEditable
+		hasDSL := editable && strings.TrimSpace(schemeDSL) != ""
 		if submitted := strings.TrimSpace(r.Form.Get("scheme_dsl")); submitted != "" && errMsg != "" {
 			schemeDSL = r.Form.Get("scheme_dsl")
 		}
@@ -501,7 +496,8 @@ select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_d
 			Slug:      slug.String,
 			Error:     errMsg,
 			SchemeDSL: schemeDSL,
-			HasDSL:    games.Get(gameType).DSL == games.DSLEditable && schemeDSL != "",
+			HasDSL:    hasDSL,
+			Pasted:    editable && !hasDSL,
 			Divisions: divisions,
 			Hidden:    store.ParseHiddenDivisions(hidden),
 		}), nil
@@ -720,11 +716,10 @@ type GameCreateRequest struct {
 	// also names a rating player who is not a Participant yet ("fp<id>").
 	EntrantRefs []string `json:"entrant_refs"`
 	// DSL is the format's scheme in the scheme language (brain, si, troika,
-	// hamsa, ek, es). Scheme is a pasted JSON scheme, for ek and es only.
-	DSL         string          `json:"dsl"`
-	Scheme      json.RawMessage `json:"scheme"`
-	ODTours     int             `json:"od_tours"`
-	ODQuestions int             `json:"od_questions"`
+	// hamsa, ek, es). Every format with a bracket needs one.
+	DSL         string `json:"dsl"`
+	ODTours     int    `json:"od_tours"`
+	ODQuestions int    `json:"od_questions"`
 	// KDTables is how many tables a friendship cup seats; its tours and
 	// questions come in od_tours and od_questions.
 	KDTables     int    `json:"kd_tables"`
@@ -765,9 +760,6 @@ func (req GameCreateRequest) form() url.Values {
 	}
 	if field, ok := dslFieldOf(req.GameType); ok {
 		form.Set(field, req.DSL)
-	}
-	if field, ok := jsonFieldOf(req.GameType); ok && len(req.Scheme) > 0 {
-		form.Set(field, string(req.Scheme))
 	}
 	req.setKnobs(form)
 	form.Set("multi_games", req.MultiGames)
@@ -823,30 +815,7 @@ func gameSpecFromForm(ctx context.Context, tx *sql.Tx, festID int64, gameType st
 			return spec, err
 		}
 	}
-	// A format that takes a pasted JSON scheme (EK, Erudit-Sextet) is
-	// describable in the scheme language too, now that an elimination counts
-	// Losses rather than seats, so a DSL wins over the pasted JSON when both
-	// are offered.
-	if field, ok := jsonFieldOf(spec.Type); ok && spec.DSL == "" {
-		if spec.Pasted, err = pastedScheme(form.Get(field)); err != nil {
-			return spec, err
-		}
-	}
 	return spec, nil
-}
-
-// pastedScheme parses the JSON scheme pasted into the creation form.
-func pastedScheme(raw string) (*store.FestScheme, error) {
-	s := dopestrings.Default
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, corei18n.User(s.Host.Games.ErrorEkSchemeMissing())
-	}
-	var scheme store.FestScheme
-	if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
-		return nil, corei18n.User(s.Host.Games.ErrorJsonParse(err.Error()))
-	}
-	return &scheme, nil
 }
 
 func (s *Server) createHostGame(ctx context.Context, festID int64, gameType string, form url.Values) (int64, error) {

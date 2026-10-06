@@ -681,10 +681,6 @@ var RU = Strings{
 			},
 		},
 		Create: GamebuildCreateStrings{
-			EkNoScheme: func() string { return "Вставьте JSON-схему ЭК или опишите её схемой" },
-			JsonTypeMismatch: func(described string, created string) string {
-				return fmt.Sprintf("JSON-схема описывает игру %s, а создаётся %s", described, created)
-			},
 			KdTablesPrime: func(n string) string {
 				return fmt.Sprintf("Число столов Кубка Дружбы должно быть простым (7, 11, 13, 17, 19, 23, 29…), а не %s", n)
 			},
@@ -693,9 +689,6 @@ var RU = Strings{
 			},
 			MultiFromScheme: func() string {
 				return "Мультиигры описываются списком мини-игр, а не схемой"
-			},
-			PastedTeams: func() string {
-				return "команды загружаются отдельным импортом посева; уберите teams из JSON-схемы"
 			},
 			SchemeRequired: func() string { return "опишите схему игры" },
 			SeedUnknown: func(seed string) string {
@@ -722,6 +715,9 @@ var RU = Strings{
 		Recompile: GamebuildRecompileStrings{
 			EnteredBouts: func(names string) string {
 				return fmt.Sprintf("В боях %s уже есть внесённые данные. Новая схема их сотрёт, поэтому она не применена. Очистите эти бои или оставьте схему прежней.", names)
+			},
+			Pasted: func() string {
+				return "Эта игра создана из вставленного JSON, у неё нет схемы. Её сетку поменять нельзя. Чтобы сыграть по другой сетке, создайте новую игру со схемой."
 			},
 			StartedBouts: func(names string) string {
 				return fmt.Sprintf("нельзя менять начатые бои: %s — уберите их изменения или снимите отметку «Закончен» и очистите протокол", names)
@@ -976,17 +972,14 @@ var RU = Strings{
 			},
 			DivisionsLabel: func() string { return "Зачёты" },
 			EkHint: func() string {
-				return "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
+				return "Тот же язык схем, что у брейна. Он описан в docs/scheme-dsl.md."
 			},
-			EkJsonLabel:   func() string { return "JSON-схема" },
 			EntrantTroika: func(name string) string { return fmt.Sprintf("%s · тройка", name) },
 			EntrantsHint: func() string {
 				return "Отметьте, кто играет в этой игре. Если никого не отметить, играют все. Номера эта игра раздаёт свои, начиная с единицы, поэтому одна и та же команда может быть второй в ЭК и четвёртой в брейне. Командная игра сажает за стол команды, личная — игроков: сначала идут команды, потом игроки."
 			},
-			EntrantsSummary:      func() string { return "Состав игры" },
-			ErrorEkSchemeMissing: func() string { return "Вставьте JSON-схему ЭК или опишите её схемой" },
-			ErrorJsonParse:       func(err string) string { return fmt.Sprintf("Не удалось разобрать JSON: %s", err) },
-			ErrorMinigames:       func(err string) string { return fmt.Sprintf("Мини-игры: %s", err) },
+			EntrantsSummary: func() string { return "Состав игры" },
+			ErrorMinigames:  func(err string) string { return fmt.Sprintf("Мини-игры: %s", err) },
 			ErrorMultiSorting: func(err string) string {
 				return fmt.Sprintf("Что решает при равном итоге: %s", err)
 			},
@@ -1033,6 +1026,9 @@ var RU = Strings{
 			},
 			SaveSubmit:  func() string { return "Сохранить" },
 			SchemeLabel: func() string { return "Схема" },
+			SchemePastedNote: func() string {
+				return "Эта игра создана из вставленного JSON, у неё нет схемы. Её сетку здесь поменять нельзя."
+			},
 			SiHint: func() string {
 				return "Тот же язык схем: за столом сидят игроки, а не команды. Бой на троих — match_size: 3, проходят двое — winning_places: 2."
 			},
@@ -1175,8 +1171,6 @@ var RU = Strings{
 			EditOverrideLabel:     func() string { return "Редактировать оверрайд" },
 			EditTeamLabel:         func(team string) string { return fmt.Sprintf("Изменить команду «%s»", team) },
 			ErrorFlagsForeignTeam: func(id string) string { return fmt.Sprintf("Команды %s нет в этом фесте.", id) },
-			ErrorJsonEmpty:        func() string { return "Вставьте JSON схемы." },
-			ErrorJsonParse:        func(err string) string { return fmt.Sprintf("Не удалось разобрать JSON: %s", err) },
 			ErrorObjPlayer:        func() string { return "игрока" },
 			ErrorObjSourceTeam:    func() string { return "исходную команду" },
 			ErrorObjTeam:          func() string { return "команду" },
@@ -1190,7 +1184,6 @@ var RU = Strings{
 			ImportDoneCounts: func(teams string, players string, od string, ksi string) string {
 				return fmt.Sprintf("Загружено команд: %s, игроков: %s. Обновлено игр ЧГК: %s, КСИ: %s.", teams, players, od, ksi)
 			},
-			ImportDoneNotice: func() string { return "Импорт выполнен." },
 			ImportMergedNotice: func(n string) string {
 				return fmt.Sprintf("Сохранены под новым ID, вместе с номером и результатами: %s.", n)
 			},
@@ -1241,15 +1234,8 @@ var RU = Strings{
 			RatingImportTitle: func(title string) string { return fmt.Sprintf("%s · импорт участников", title) },
 			RatingSource:      func(id string) string { return fmt.Sprintf("Источник: rating.chgk.info ID %s", id) },
 			SaveSubmit:        func() string { return "Сохранить" },
-			SchemeImportCrumb: func() string { return "Импорт схемы" },
-			SchemeImportNote: func() string {
-				return "Импорт пересоздаёт игру феста из JSON-схемы. Существующие игры этого феста будут заменены."
-			},
-			SchemeImportSubmit: func() string { return "Импортировать" },
-			SchemeImportTitle:  func(title string) string { return fmt.Sprintf("%s · импорт схемы", title) },
-			SchemeJsonLabel:    func() string { return "JSON-схема" },
-			TeamLabel:          func() string { return "Команда" },
-			TeamsCrumb:         func() string { return "Команды" },
+			TeamLabel:         func() string { return "Команда" },
+			TeamsCrumb:        func() string { return "Команды" },
 			TeamsEditHint: func() string {
 				return "Команду можно добавить, переименовать и поменять её состав прямо здесь. Повторный импорт из rating.chgk.info эти правки сохранит и перед записью покажет, что изменится."
 			},
@@ -2344,48 +2330,6 @@ var RU = Strings{
 			Stage:       func(block string, title string) string { return fmt.Sprintf("%s. %s", block, title) },
 			Venue:       func(n string) string { return fmt.Sprintf("Стол %s", n) },
 			Wave:        func(title string, n string) string { return fmt.Sprintf("%s, заход %s", title, n) },
-		},
-		Validate: SchemeValidateStrings{
-			MatchCodeDup: func(match string) string {
-				return fmt.Sprintf("код боя \"%s\" встречается дважды", match)
-			},
-			MatchCodeRequired: func(stage string) string {
-				return fmt.Sprintf("у боя в этапе \"%s\" нет кода (code)", stage)
-			},
-			SlotCount: func(match string) string {
-				return fmt.Sprintf("в бою \"%s\" participantCount не сходится с числом слотов", match)
-			},
-			SlotSeedBasket: func(match string, slot string) string {
-				return fmt.Sprintf("бой \"%s\", слот %s: корзина посева не может быть отрицательной", match, slot)
-			},
-			SlotSeedNumber: func(match string, slot string) string {
-				return fmt.Sprintf("бой \"%s\", слот %s: номер посева должен быть положительным", match, slot)
-			},
-			SlotTeamSource: func(match string, slot string) string {
-				return fmt.Sprintf("бой \"%s\", слот %s: источник team больше не поддерживается — пишите seed-N или seed{basket, number}, команды приходят отдельным посевом", match, slot)
-			},
-			SlugRequired: func() string { return "схеме нужен slug" },
-			StageCodeDup: func(code string) string {
-				return fmt.Sprintf("код этапа \"%s\" встречается дважды", code)
-			},
-			StageCodeRequired: func() string { return "у этапа нет кода (code)" },
-			StageNoMatches: func(stage string) string {
-				return fmt.Sprintf("в этапе \"%s\" нет ни одного боя", stage)
-			},
-			StageType: func(kind string) string {
-				return fmt.Sprintf("неизвестный stage_type \"%s\" — есть matches и reseed", kind)
-			},
-			StagesRequired: func() string { return "схеме нужен хотя бы один этап (stages)" },
-			TeamAssignment: func(index string, name string) string {
-				return fmt.Sprintf("команде teams[%s] (\"%s\") нужны basket и number от 1", index, name)
-			},
-			TeamCollision: func(index string, name string, basket string, number string, other string) string {
-				return fmt.Sprintf("teams[%s] (\"%s\") встали на ту же корзину %s и номер %s, что и \"%s\"", index, name, basket, number, other)
-			},
-			TeamNameRequired: func(index string) string {
-				return fmt.Sprintf("у команды teams[%s] нет названия", index)
-			},
-			TitleRequired: func() string { return "схеме нужно название (title)" },
 		},
 		Venues: SchemeVenuesStrings{
 			Count: func() string { return "venues: нужен хотя бы один стол" },

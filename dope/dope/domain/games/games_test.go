@@ -68,7 +68,7 @@ func TestEveryFormatDeclaresItsFacts(t *testing.T) {
 		}
 		got := struct {
 			individual, troikas, ekBout, flat, handRoster, divisions, overrides, pasted, toursSeed bool
-		}{d.Individual, d.Troikas, d.EKBout, d.Flat, d.HandRoster, d.Divisions, d.PlayerOverrides, d.PastedScheme, d.ToursSeed}
+		}{d.Individual, d.Troikas, d.EKBout, d.Flat, d.HandRoster, d.Divisions, d.PlayerOverrides, d.LegacyPasted, d.ToursSeed}
 		if got != want {
 			t.Errorf("%s: facts %+v, want %+v", d.Code, got, want)
 		}
@@ -80,7 +80,7 @@ func TestEveryFormatDeclaresItsFacts(t *testing.T) {
 		}
 		// A flat Game is built from its own knobs: it has no scheme to
 		// prefill, paste or upgrade, and keeps no entrant list to hand-roster.
-		if d.Flat && (d.DefaultDSL != nil || d.UpgradeDSL != nil || d.PastedScheme || d.HandRoster || d.DSL == DSLEditable) {
+		if d.Flat && (d.DefaultDSL != nil || d.UpgradeDSL != nil || d.LegacyPasted || d.HandRoster || d.DSL == DSLEditable) {
 			t.Errorf("%s: a flat format declares a scheme-format fact", d.Code)
 		}
 		if d.HandRoster && (d.Individual || d.Troikas) {

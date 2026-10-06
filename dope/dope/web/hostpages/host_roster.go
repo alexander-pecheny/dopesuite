@@ -14,7 +14,6 @@ import (
 	"dope/dope/web/pages"
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -532,25 +531,6 @@ func parseRosterChoice(form url.Values) imports.RosterChoice {
 	return choice
 }
 
-// hostSchemeImportDoc builds the JSON-scheme import page: a paste-and-import form.
-func hostSchemeImportDoc(data hostFestImportData) *dopeui.Doc {
-	festRef := data.Fest.Ref()
-	s := dopestrings.Default
-	page := []dopeui.Item{
-		dopeui.Title(s.Host.Roster.SchemeImportTitle(data.Fest.Title)), dopeui.PagePublic,
-		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(festRef, data.Fest.Title), s.Host.Roster.SchemeImportCrumb())),
-	}
-	page = append(page, importMessages(data.Error, data.Notice)...)
-	page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+festRef+"/import"), dopeui.Autocomplete("off"),
-		dopeui.Note(dopeui.Text(s.Host.Roster.SchemeImportNote())),
-		dopeui.Field(dopeui.Label(s.Host.Roster.SchemeJsonLabel()),
-			dopeui.Editor(dopeui.Name("scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`)),
-		),
-		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.SchemeImportSubmit()))),
-	))
-	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
-}
-
 // importMessages renders the shared error (empty) + notice (muted) lines the
 // import pages show above their forms.
 func importMessages(errMsg, notice string) []dopeui.Item {
@@ -773,12 +753,6 @@ func (s *Server) renderHostRatingImport(w http.ResponseWriter, r *http.Request, 
 	})
 }
 
-func (s *Server) renderHostSchemeImportPage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
-	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
-		return hostSchemeImportDoc(hostFestImportData{Fest: fest, Error: errMsg, Notice: notice}), nil
-	})
-}
-
 func (s *Server) loadHostFestTeams(ctx context.Context, festID int64) ([]hostFestTeam, error) {
 	teams, err := store.CollectRows(ctx, s.h.Engine().DB, `
 select tt.id, coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id)
@@ -862,28 +836,6 @@ func sortHostFestPlayers(players []hostFestPlayer) {
 		}
 		return players[i].RatingID < players[j].RatingID
 	})
-}
-
-func (s *Server) handleHostImportScheme(w http.ResponseWriter, r *http.Request, festID int64) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	raw := strings.TrimSpace(r.Form.Get("scheme"))
-	if raw == "" {
-		s.renderHostSchemeImportPage(w, r, festID, dopestrings.Default.Host.Roster.ErrorJsonEmpty(), "")
-		return
-	}
-	var scheme store.FestScheme
-	if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
-		s.renderHostSchemeImportPage(w, r, festID, dopestrings.Default.Host.Roster.ErrorJsonParse(err.Error()), "")
-		return
-	}
-	if err := s.h.ImportSchemeIntoFest(r.Context(), festID, scheme); err != nil {
-		s.renderHostSchemeImportPage(w, r, festID, err.Error(), "")
-		return
-	}
-	s.renderHostSchemeImportPage(w, r, festID, "", dopestrings.Default.Host.Roster.ImportDoneNotice())
 }
 
 // ImportRatingRoster pulls the fest's roster from rating.chgk.info. A

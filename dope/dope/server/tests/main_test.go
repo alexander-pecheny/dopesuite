@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"bytes"
 	"database/sql"
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
@@ -27,7 +26,6 @@ import (
 
 	"pecheny.me/dopecore/session"
 
-	dopestrings "dope/i18nstrings"
 	"pecheny.me/dopecore/authcred"
 )
 
@@ -323,104 +321,6 @@ func insertTestPlayer(db *sql.DB, festID int64) (int64, error) {
 	return result.LastInsertId()
 }
 
-// A pasted multi-stage scheme lands as one Game with its Blocks, бои and
-// slot sources — and, since gamebuild writes it, each stage carries its Kind
-// and each бой its буква, so the pasted bracket ranks and links like a
-// compiled one.
-func TestImportMultiStageScheme(t *testing.T) {
-	t.Parallel()
-	srv := newAuthTestServer(t)
-	festID, _ := scopedAPITestIDs(t, srv)
-	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
-	scheme := store.FestScheme{
-		SchemaVersion:     2,
-		Slug:              "multi-stage",
-		Title:             "multi-stage",
-		GameType:          "ek",
-		RegularThemeCount: store.ThemeCount,
-		Venues:            []store.SchemeVenue{{Number: 1, Title: "Main"}},
-		Stages: []store.SchemeStage{
-			{
-				Code:      "r1",
-				Title:     "Round 1",
-				StageType: "matches",
-				Kind:      "rr",
-				Position:  1,
-				Matches: []store.SchemeMatch{
-					{
-						Code:             "A",
-						Title:            "Бой 1",
-						Venue:            1,
-						ParticipantCount: 2,
-						Slots: []store.SchemeSlot{
-							{Seed: &store.SchemeSeedRef{Basket: 1, Number: 1}},
-							{Seed: &store.SchemeSeedRef{Basket: 1, Number: 2}},
-						},
-					},
-					{
-						Code:             "B",
-						Title:            "Бой 2",
-						Venue:            1,
-						ParticipantCount: 2,
-						Slots: []store.SchemeSlot{
-							{Seed: &store.SchemeSeedRef{Basket: 1, Number: 3}},
-							{Seed: &store.SchemeSeedRef{Basket: 1, Number: 4}},
-						},
-					},
-				},
-			},
-			{
-				Code:      "final",
-				Title:     "Final",
-				StageType: "matches",
-				Position:  2,
-				Matches: []store.SchemeMatch{{
-					Code:             "C",
-					Title:            "Бой 3",
-					Venue:            1,
-					ParticipantCount: 2,
-					Slots: []store.SchemeSlot{
-						{FromMatch: &store.SchemeFromMatchRef{Match: "A", Place: 1}},
-						{FromMatch: &store.SchemeFromMatchRef{Match: "B", Place: 1}},
-					},
-				}},
-			},
-		},
-	}
-	resp := importScheme(t, srv, festID, scheme, token)
-	if resp.Code != http.StatusOK {
-		t.Fatalf("import: %d %s", resp.Code, resp.Body.String())
-	}
-	var view store.FestView
-	if err := json.Unmarshal(resp.Body.Bytes(), &view); err != nil {
-		t.Fatal(err)
-	}
-	if len(view.Stages) != 2 {
-		t.Fatalf("stages = %d, want 2", len(view.Stages))
-	}
-	if len(view.Stages[0].Matches) != 2 || len(view.Stages[1].Matches) != 1 {
-		t.Fatalf("matches = %d/%d, want 2/1", len(view.Stages[0].Matches), len(view.Stages[1].Matches))
-	}
-	if view.Stages[0].Kind != "rr" {
-		t.Errorf("stage kind = %q, want rr", view.Stages[0].Kind)
-	}
-	final := view.Stages[1].Matches[0]
-	if final.Code != "C" || final.Letter != "C" || final.Participants[0].SourceType != "from_match" || final.Participants[1].SourceType != "from_match" {
-		t.Fatalf("final = %#v, want match C, буква C, fromMatch slots", final)
-	}
-}
-
-func importScheme(t *testing.T, srv *dopeserver.Server, festID int64, scheme store.FestScheme, token string) *httptest.ResponseRecorder {
-	t.Helper()
-	body, _ := json.Marshal(scheme)
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/import?fest_id=%d", festID), bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
-	resp := httptest.NewRecorder()
-	srv.HandleImport(resp, req)
-	return resp
-}
-
 func TestEmptyDatabaseHasNoFest(t *testing.T) {
 	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
@@ -520,37 +420,6 @@ values(11, 7, 'main', 'Main', 'ek', 1, '{}', '{"ok":true}', 'active', 'tournamen
 insert into games(fest_id, code, title, game_type, position, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
 values(7, 'next', 'Next', 'ek', 2, '{}', '{}', 'pending', 'fest', 'fest', 1, 'now', 'now')`); err != nil {
 		t.Fatalf("insert with fest source after migration: %v", err)
-	}
-}
-
-func TestImportRejectsTeamSlot(t *testing.T) {
-	t.Parallel()
-	srv := newAuthTestServer(t)
-	festID, _ := scopedAPITestIDs(t, srv)
-	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
-	scheme := store.FestScheme{
-		SchemaVersion: 2,
-		Slug:          "with-team-slot",
-		Title:         "with team slot",
-		Stages: []store.SchemeStage{{
-			Code:      "stage1",
-			Title:     "stage 1",
-			StageType: "matches",
-			Position:  1,
-			Matches: []store.SchemeMatch{{
-				Code:             "A",
-				Title:            "A",
-				ParticipantCount: 1,
-				Slots: []store.SchemeSlot{{
-					Team: &store.SchemeTeamRef{Name: "Inline"},
-				}},
-			}},
-		}},
-	}
-	resp := importScheme(t, srv, festID, scheme, token)
-	want := dopestrings.Default.Scheme.Validate.SlotTeamSource("A", "0")
-	if resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), want) {
-		t.Fatalf("import = %d %s, want 400 saying %q", resp.Code, resp.Body.String(), want)
 	}
 }
 

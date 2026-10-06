@@ -53,7 +53,6 @@ concern:
 | `db.go` | DB open, active context, id resolution |
 | `migrations.go` | the schema as a `[]schema.Migration` list, and the backfills it calls |
 | `serve_html.go` | host/viewer/game HTML init payloads + asset versioning |
-| `import_scheme.go` | the pasted-scheme importer (`/api/import`, the host form): clears the fest, calls `gamebuild.Materialise` |
 | `matchview.go` | fest/match view loading + match-update application |
 | `scoped_api.go` | tournament-scoped API endpoints |
 | `auth.go` | sessions, auth, Telegram login bridge |
@@ -104,7 +103,7 @@ here when it needs type metadata.
   code elsewhere asks (ADR-0027): what it seats (`Individual`, `Troikas`,
   `Flat`, which also means it keeps no entrant list), `EKBout`, `HandRoster`,
   `Divisions`, `PlayerOverrides`, how it takes a DSL (`DSL`, `DefaultDSL`,
-  `UpgradeDSL`, `PastedScheme`), its `Title`, `Page` and `Init`, its
+  `UpgradeDSL`, `LegacyPasted`), its `Title`, `Page` and `Init`, its
   `Results` view, its xlsx layout (`Sheets`), how the history page reads it
   (`Journal`), and its `Protocol`. Facts about the document a bout holds are
   on the Protocol, as optional capabilities in ADR-0012's pattern, and a
@@ -141,8 +140,9 @@ here when it needs type metadata.
   entrants, the Protocol cascade, the reseed stages and the letters — and then
   asks the registry to expand it. There is no `switch kind` anywhere.
 - `resolver` — bracket/reseed resolution. `roster` — roster + seeding.
-- `gamebuild` is where a Game is created: `Create`, `Recompile`, `Rebuild`,
-  `Materialise` for a pasted scheme, and `Clear`. It is the only thing that
+- `gamebuild` is where a Game is created: `Create`, `Recompile`, `Rebuild`
+  and `Clear`. A Game pasted as JSON before 2026-10-06 has no DSL: `Clear`
+  rebuilds it from its stored scheme and `Recompile` refuses it. It is the only thing that
   writes stages, matches and slots. `flatgame` treats a flat game such as ОД or
   КСИ as a Structure. Its document has two writers, `SetStateTx` and
   `PatchStateTx`, and both of them seat the бой from the team list, score it and
@@ -193,7 +193,7 @@ here when it needs type metadata.
   server's (`server/migrations.go`), since some steps call domain code.
 - `festwrite` — the attribution-aware write/append facade.
 - `festaccess` — per-fest access/role persistence (DB-backed authz).
-- `auditmw` — audit-log write middleware. `storeutil` — scheme/query helpers.
+- `auditmw` — audit-log write middleware. `storeutil` — query helpers.
 - `sqlitez` — low-level SQLite helpers.
 - `buffdb` — buff's mirror of rating.chgk.info (`DOPE_BUFF_DB`), opened
   read-only and failing soft: a missing file, table or query gives an empty
@@ -229,10 +229,9 @@ Stdlib-only or near-it utilities with no domain knowledge:
 - **Registry over switches.** New game-type behaviour is a fact on the
   format's `Definition` or a capability of its Protocol (both in
   `domain/games`), never another `switch gameType` in a handler (ADR-0027,
-  enforced by `games/guard_test.go`). The one literal left in `storage/` is
-  `storeutil.ValidateScheme`'s EK-shaped check, because storage may not import
-  `domain/games`; facts storage needs travel down at registration
-  (`store.RegisterTeamBlob`, `RegisterScoreMetric`).
+  enforced by `games/guard_test.go`). Storage may not import `domain/games`;
+  facts storage needs travel down at registration (`store.RegisterTeamBlob`,
+  `RegisterScoreMetric`).
 - **Refactors preserve behaviour.** The existing test suite (`just test`) and
   `just vet` are what verify that. Never let a functional change ride along with
   a refactor.

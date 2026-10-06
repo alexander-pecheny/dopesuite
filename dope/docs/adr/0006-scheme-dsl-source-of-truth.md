@@ -15,3 +15,26 @@ Detailed scheme JSON (ADR-0001's authoring document) turned out to be a machine 
 - Advancement is deterministic by each Kind's canonical template (teams keep venues); `reseed:` is opt-in per Round boundary. v1 chains blocks linearly — eliminated teams get final classification; consolation brackets are a later Edge extension.
 - v1 DSL kinds: `roundrobin`, `single_elimination`, `double_elimination`; `swiss` parses but reports unimplemented; `manual` is not a DSL word.
 - The game creation form's per-type fields become template prefill for the DSL textarea; the future visual builder edits the same column.
+
+## Amended 2026-10-06 (every bracket Game has a scheme)
+
+Pasted detailed JSON is no longer accepted. The creation form's JSON field,
+its twin's `scheme` field, the fest-wide scheme import (`/api/import`,
+`/api/fest/{fest}/scheme-import` and the host page `/host/fest/{fest}/import`)
+and `gamebuild.Materialise` are gone. A Game with a bracket is created from a
+DSL or not at all. The flat formats (ОД, КСИ, Мультиигры, Кубок Дружбы) are
+not affected: they never had a DSL and are shaped by the creation form's
+fields.
+
+The escape hatch had one real use, chr2026's ЭК bracket (production's
+chr2026/ek-3, a finished July fest). Games like it keep their stored scheme
+and no DSL. They still render, score, take a seed import and clear (a clear
+rebuilds them from the stored scheme). They are never recompiled:
+`festops.UpdateSettingsTx` and `gamebuild.Recompile` refuse a scheme edit with
+a message from the Catalog. Before this, the settings page hid the editor for
+such a Game but the JSON twin recompiled it from any text, which would have
+replaced the bracket. The `manual` Kind stays in the code only for these
+legacy Games.
+
+A scheme that does not compile now reaches the JSON twin as a User Error
+(400) with the compiler's text, as the form already showed it.

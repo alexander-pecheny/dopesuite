@@ -18,7 +18,7 @@
 - [07-implementation.md](07-implementation.md) — порядок внедрения.
 - [08-auth.md](08-auth.md) — учетные записи, инвайты и логин через Telegram-бот.
 - [09-fests-and-games.md](09-fests-and-games.md) — турниры, игры и наследование состава.
-- `python3 scripts/generate_studchr_grid.py` — генерирует JSON-сетку СтудЧР для импорта.
+- `python3 scripts/generate_studchr_grid.py` — генерирует JSON-сетку СтудЧР. Импортировать её больше нельзя (ADR-0006, поправка от 2026-10-06). Скрипт оставлен как описание того, как была устроена сетка.
 
 ## Цель
 

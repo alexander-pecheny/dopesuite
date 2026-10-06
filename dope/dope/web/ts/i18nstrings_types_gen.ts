@@ -546,12 +546,9 @@ export type Strings = {
       unsupported: () => string;
     };
     create: {
-      ekNoScheme: () => string;
-      jsonTypeMismatch: (described: string, created: string) => string;
       kdTablesPrime: (n: string) => string;
       kdToursTables: (tours: string, tables: string) => string;
       multiFromScheme: () => string;
-      pastedTeams: () => string;
       schemeRequired: () => string;
       seedUnknown: (seed: string) => string;
       wholeRoster: (name: string) => string;
@@ -568,6 +565,7 @@ export type Strings = {
     };
     recompile: {
       enteredBouts: (names: string) => string;
+      pasted: () => string;
       startedBouts: (names: string) => string;
     };
     seating: {
@@ -743,12 +741,9 @@ export type Strings = {
       divisionsHint: () => string;
       divisionsLabel: () => string;
       ekHint: () => string;
-      ekJsonLabel: () => string;
       entrantTroika: (name: string) => string;
       entrantsHint: () => string;
       entrantsSummary: () => string;
-      errorEkSchemeMissing: () => string;
-      errorJsonParse: (err: string) => string;
       errorMinigames: (err: string) => string;
       errorMultiSorting: (err: string) => string;
       errorSchemeNotEditable: (kind: string) => string;
@@ -772,6 +767,7 @@ export type Strings = {
       rebuildHint: () => string;
       saveSubmit: () => string;
       schemeLabel: () => string;
+      schemePastedNote: () => string;
       siHint: () => string;
       slugLabel: () => string;
       stickerEmptywrong: () => string;
@@ -886,8 +882,6 @@ export type Strings = {
       editOverrideLabel: () => string;
       editTeamLabel: (team: string) => string;
       errorFlagsForeignTeam: (id: string) => string;
-      errorJsonEmpty: () => string;
-      errorJsonParse: (err: string) => string;
       errorObjPlayer: () => string;
       errorObjSourceTeam: () => string;
       errorObjTeam: () => string;
@@ -897,7 +891,6 @@ export type Strings = {
       flagsSavedNotice: () => string;
       gamesLabel: () => string;
       importDoneCounts: (teams: string, players: string, od: string, ksi: string) => string;
-      importDoneNotice: () => string;
       importMergedNotice: (n: string) => string;
       importSubmit: () => string;
       importUnchangedNotice: (teams: string, players: string) => string;
@@ -932,11 +925,6 @@ export type Strings = {
       ratingImportTitle: (title: string) => string;
       ratingSource: (id: string) => string;
       saveSubmit: () => string;
-      schemeImportCrumb: () => string;
-      schemeImportNote: () => string;
-      schemeImportSubmit: () => string;
-      schemeImportTitle: (title: string) => string;
-      schemeJsonLabel: () => string;
       teamLabel: () => string;
       teamsCrumb: () => string;
       teamsEditHint: () => string;
@@ -1625,24 +1613,6 @@ export type Strings = {
       stage: (block: string, title: string) => string;
       venue: (n: string) => string;
       wave: (title: string, n: string) => string;
-    };
-    validate: {
-      matchCodeDup: (match: string) => string;
-      matchCodeRequired: (stage: string) => string;
-      slotCount: (match: string) => string;
-      slotSeedBasket: (match: string, slot: string) => string;
-      slotSeedNumber: (match: string, slot: string) => string;
-      slotTeamSource: (match: string, slot: string) => string;
-      slugRequired: () => string;
-      stageCodeDup: (code: string) => string;
-      stageCodeRequired: () => string;
-      stageNoMatches: (stage: string) => string;
-      stageType: (kind: string) => string;
-      stagesRequired: () => string;
-      teamAssignment: (index: string, name: string) => string;
-      teamCollision: (index: string, name: string, basket: string, number: string, other: string) => string;
-      teamNameRequired: (index: string) => string;
-      titleRequired: () => string;
     };
     venues: {
       count: () => string;

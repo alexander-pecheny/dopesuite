@@ -13,18 +13,11 @@ kd_tables_prime = 'Число столов Кубка Дружбы должно 
 kd_tours_tables = 'Туров {{.tours}}, а столов {{.tables}}. Столов должно быть не меньше, чем туров, иначе двое игроков встретятся за одним столом дважды'
 # Creating Мультиигры from a scheme DSL: they have no scheme shape.
 multi_from_scheme = "Мультиигры описываются списком мини-игр, а не схемой"
-# Creating ЭК with neither a pasted JSON scheme nor a DSL.
-ek_no_scheme = "Вставьте JSON-схему ЭК или опишите её схемой"
 # Creating any game with nothing describing it at all.
 scheme_required = "опишите схему игры"
 # A flat format created with a hand-picked entrant list: it seats the whole fest
 # roster and marks who did not play in its refusals tab.
 whole_roster = 'В игре «{{.name}}» играют все команды феста, под теми же номерами. Снимите отметки в «Составе игры», а тех, кто не играет, отметьте во вкладке «Отказы» на странице игры.'
-# A pasted JSON scheme describing a different game type than the one being
-# created.
-json_type_mismatch = 'JSON-схема описывает игру {{.described}}, а создаётся {{.created}}'
-# A pasted JSON scheme that carries teams, which travel by seed import.
-pasted_teams = "команды загружаются отдельным импортом посева; уберите teams из JSON-схемы"
 # A seed: source that is neither random, xlsx, players nor this fest's game code.
 seed_unknown = 'seed: {{.seed}} — не random, не xlsx, не players и не код игры этого феста'
 
@@ -64,6 +57,10 @@ started_bouts = 'нельзя менять начатые бои: {{.names}} —
 # A recompile that would reseat or drop bouts nobody has started but where
 # something is already entered (a seat, a pin); the bout codes follow.
 entered_bouts = 'В боях {{.names}} уже есть внесённые данные. Новая схема их сотрёт, поэтому она не применена. Очистите эти бои или оставьте схему прежней.'
+# A scheme edit for a Game that was pasted as JSON before every bracket Game
+# needed a scheme (production's chr2026/ek-3). It has no scheme to edit, and
+# nothing may rebuild its bracket.
+pasted = "Эта игра создана из вставленного JSON, у неё нет схемы. Её сетку поменять нельзя. Чтобы сыграть по другой сетке, создайте новую игру со схемой."
 
 [clear]
 # Clearing a game type that has no clear path.

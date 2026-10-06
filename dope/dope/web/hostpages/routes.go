@@ -62,8 +62,6 @@ func (s *Server) buildRoutes() *route.Table {
 	t.Handle("GET "+fest+"/troikas", route.Manager, page(s.renderHostFestTroikas))
 	t.Handle("POST "+fest+"/troikas", route.Manager, page(s.handleHostSaveTroikas))
 	t.Handle("POST "+fest+"/players/overrides", route.Manager, page(s.handleHostAddPlayerOverride))
-	t.Handle("GET "+fest+"/import", route.Manager, page(func(w http.ResponseWriter, r *http.Request, id int64) { s.renderHostSchemeImportPage(w, r, id, "", "") }))
-	t.Handle("POST "+fest+"/import", route.Manager, page(s.handleHostImportScheme))
 	t.Handle("POST "+fest+"/access", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		s.handleHostSaveAccess(w, r, sc.FestID, sc.User.UserID)
 		return nil

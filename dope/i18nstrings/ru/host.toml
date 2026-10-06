@@ -104,13 +104,11 @@ shootout: true
 """
 # Hint under the hamsa scheme editor.
 hamsa_hint = "Тот же язык схем. kind: placement — групповой этап, где команды не вылетают, а везут места дальше: раунд 1 сеет полосами посева, каждый следующий сажает за стол k места k всех столов, а остатки разыгрываются жребием на Сетке. Письменный отбор играется отдельной игрой КСИ; чтобы посеять отсюда, добавьте [init] seed: <код той игры>."
-# Hint under the EK scheme editor (before the pasted-JSON field).
-ek_hint = "Либо схемой, либо готовым JSON ниже — что заполнено, то и используется."
+# Hint under the EK scheme editor.
+ek_hint = "Тот же язык схем, что у брейна. Он описан в docs/scheme-dsl.md."
 # Hint under the Эрудит-Секстет scheme editor: the same language, plus the
 # per-theme seat cap the format adds.
 es_hint = "Тот же язык схем, что у ЭК. players — сколько игроков команда выводит на тему (по умолчанию 3, можно по раундам: players.r3: 2)."
-# Label of the EK pasted-JSON editor.
-ek_json_label = "JSON-схема"
 # Hint at the top of the entrant picker. Shown only for the formats described by
 # a scheme: those deal their own numbers from one.
 entrants_hint = "Отметьте, кто играет в этой игре. Если никого не отметить, играют все. Номера эта игра раздаёт свои, начиная с единицы, поэтому одна и та же команда может быть второй в ЭК и четвёртой в брейне. Командная игра сажает за стол команды, личная — игроков: сначала идут команды, потом игроки."
@@ -133,16 +131,16 @@ error_slug_taken = "Slug уже занят в этом фесте."
 # The API was asked to change the scheme of a game whose settings page does
 # not offer it: only a brain game's scheme is edited in place.
 error_scheme_not_editable = 'Схему игры типа {{.kind}} здесь поменять нельзя. Удалите игру и создайте её заново.'
+# Shown on the settings page of such a Game instead of the scheme editor.
+scheme_pasted_note = "Эта игра создана из вставленного JSON, у неё нет схемы. Её сетку здесь поменять нельзя."
 error_minigames = 'Мини-игры: {{.err}}'
 error_multi_sorting = 'Что решает при равном итоге: {{.err}}'
-error_ek_scheme_missing = "Вставьте JSON-схему ЭК или опишите её схемой"
-error_json_parse = 'Не удалось разобрать JSON: {{.err}}'
 error_type_missing = "выберите тип игры"
 
 [roster]
 # The fest roster pages: teams table (hostTeamsDoc), players page with the
-# override dialogs (hostPlayersDoc), and the two import pages
-# (hostRatingImportDoc, hostSchemeImportDoc).
+# override dialogs (hostPlayersDoc), and the rating import page
+# (hostRatingImportDoc).
 # Teams page title and crumb: "<fest title> · команды".
 teams_title = '{{.title}} · команды'
 teams_crumb = "Команды"
@@ -266,18 +264,6 @@ conflict_submit = "Продолжить импорт"
 conflict_cancel = "Отменить импорт"
 # Notice after an import that merged teams; {{.n}} is how many.
 import_merged_notice = 'Сохранены под новым ID, вместе с номером и результатами: {{.n}}.'
-# Scheme import page title and crumb: "<fest title> · импорт схемы".
-scheme_import_title = '{{.title}} · импорт схемы'
-scheme_import_crumb = "Импорт схемы"
-# Note above the scheme-import form.
-scheme_import_note = "Импорт пересоздаёт игру феста из JSON-схемы. Существующие игры этого феста будут заменены."
-# The scheme-import form: JSON field and submit.
-scheme_json_label = "JSON-схема"
-scheme_import_submit = "Импортировать"
-# Scheme-import errors and notices.
-error_json_empty = "Вставьте JSON схемы."
-error_json_parse = 'Не удалось разобрать JSON: {{.err}}'
-import_done_notice = "Импорт выполнен."
 import_unchanged_notice = 'Списки уже совпадают с рейтингом — изменений нет. Команд: {{.teams}}, игроков: {{.players}}.'
 import_done_counts = 'Загружено команд: {{.teams}}, игроков: {{.players}}. Обновлено игр ЧГК: {{.od}}, КСИ: {{.ksi}}.'
 # Object words the override-id validation errors name ("Выберите … из

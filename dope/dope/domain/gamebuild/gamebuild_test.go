@@ -3,6 +3,7 @@ package gamebuild_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -67,33 +68,53 @@ func inTx(t *testing.T, db *sql.DB, fn func(tx *sql.Tx) error) {
 	}
 }
 
-// A pasted scheme is the ADR-0006 escape hatch, and its Blocks rank and its
-// бои carry a буква like a compiled one's: the importer used to write stages
-// without kind and matches without letter, so a pasted группа never ranked.
-func TestMaterialiseWritesKindAndLetter(t *testing.T) {
+// legacyPastedGame stores a Game the way a pasted detailed scheme made one
+// before 2026-10-06 — scheme_json and no DSL — and clears it, which writes its
+// Structure from that scheme. Nothing creates such a Game now; production
+// still has one (chr2026/ek-3).
+func legacyPastedGame(t *testing.T, db *sql.DB, festID int64, scheme store.FestScheme) int64 {
+	t.Helper()
+	raw, err := json.Marshal(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gameID int64
+	inTx(t, db, func(tx *sql.Tx) (err error) {
+		gameID, err = store.InsertReturningID(context.Background(), tx, `
+insert into games(fest_id, code, title, game_type, position, scheme_json, scheme_dsl, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, 'ek-1', ?, ?, 1, ?, '', '{}', 'pending', 'fest', 'fest', 1, 'now', 'now')`, festID, scheme.Title, scheme.GameType, string(raw))
+		if err != nil {
+			return err
+		}
+		_, err = gamebuild.Clear(context.Background(), tx, festID, gameID)
+		return err
+	})
+	return gameID
+}
+
+// A Game pasted as detailed JSON before 2026-10-06 keeps working: a clear
+// rebuilds it from its stored scheme, its Blocks rank and its бои carry a
+// буква and a стол, like a compiled one's.
+func TestLegacyPastedGameClearsWithKindsAndLetters(t *testing.T) {
 	db, festID := newFest(t, 4)
 	scheme := store.FestScheme{
 		SchemaVersion: 2, Slug: "pasted", Title: "Вставленная", GameType: "ek",
 		Venues: []store.SchemeVenue{{Number: 1, Title: "Стол 1"}},
 		Stages: []store.SchemeStage{{
-			Code: "s1-g1", Title: "Группа 1", StageType: "matches", Kind: "rr",
+			Code: "s1-g1", Title: "Группа 1", StageType: "matches", Kind: "manual",
 			Matches: []store.SchemeMatch{
 				{Code: "s1-g1-m1", Title: "Бой 1", Venue: 1, Slots: []store.SchemeSlot{{Seed: &store.SchemeSeedRef{Basket: 1, Position: 1}}, {Seed: &store.SchemeSeedRef{Basket: 1, Position: 2}}}},
 				{Code: "s1-g1-m2", Title: "Бой 2", Venue: 1, Slots: []store.SchemeSlot{{Seed: &store.SchemeSeedRef{Basket: 1, Position: 3}}, {Seed: &store.SchemeSeedRef{Basket: 1, Position: 4}}}},
 			},
 		}},
 	}
-	var gameID int64
-	inTx(t, db, func(tx *sql.Tx) (err error) {
-		gameID, err = gamebuild.Materialise(context.Background(), tx, festID, scheme)
-		return err
-	})
+	gameID := legacyPastedGame(t, db, festID, scheme)
 	view, err := festview.Load(context.Background(), db, festID, gameID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(view.Stages) != 1 || view.Stages[0].Kind != "rr" {
-		t.Fatalf("stages = %+v, want one of kind rr", view.Stages)
+	if len(view.Stages) != 1 || view.Stages[0].Kind != "manual" {
+		t.Fatalf("stages = %+v, want one of kind manual", view.Stages)
 	}
 	letters := []string{}
 	for _, m := range view.Stages[0].Matches {

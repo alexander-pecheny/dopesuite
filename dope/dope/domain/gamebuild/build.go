@@ -4,9 +4,11 @@
 // numbering the entrants from 1 (ADR-0009), seating the seeds, and writing
 // the stage, match and slot rows every other module reads. Recompile plays an
 // edited DSL onto a live Game the same way, refusing to touch a Match that
-// has begun. The formats that predate the DSL — OD's tours, KSI's themes, EK's
-// pasted JSON — enter through the same Spec, so a caller never learns which
-// is which.
+// has begun. The flat formats, which have no DSL — OD's tours, KSI's themes,
+// Multi's minigames, the friendship cup's tables — enter through the same
+// Spec, so a caller never learns which is which. Every other Game is built
+// from a DSL; a Game pasted as detailed JSON before 2026-10-06 is still
+// cleared and rendered from its stored scheme, but never recompiled.
 package gamebuild
 
 import (
@@ -27,7 +29,6 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
-	"dope/dope/storage/storeutil"
 	dopestrings "dope/i18nstrings"
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
@@ -72,9 +73,8 @@ func nextGameIdentityTx(ctx context.Context, tx *sql.Tx, festID int64, gameType,
 
 // Spec is everything a Game is created from. Type is the format; Label the
 // title the Game is offered under (a collision gets a numeric suffix); DSL
-// its scheme, which every format is described in now — except the three
-// that predate it, whose knobs ride below and are used only when DSL is
-// empty. Entrants are which of the fest's Participants play, in seed order;
+// its scheme, which every format with a bracket is described in — the flat
+// formats' knobs ride below and are used only when DSL is empty. Entrants are which of the fest's Participants play, in seed order;
 // absent, the whole fest plays, which is what a one-game fest wants.
 type Spec struct {
 	FestID   int64
@@ -82,9 +82,8 @@ type Spec struct {
 	Label    string
 	DSL      string
 	Entrants []int64
-	// The pre-DSL formats. OD: tours of so many questions; KSI: themes and an
-	// optional stickers block; EK: a pasted detailed scheme — the ADR-0006
-	// escape hatch, and the one road to the manual Kind.
+	// The flat formats. OD: tours of so many questions; KSI: themes and an
+	// optional stickers block.
 	ODTours, ODQuestions int
 	// KDTables is how many tables a friendship cup seats (a prime); its
 	// tours and questions ride ODTours and ODQuestions.
@@ -95,7 +94,6 @@ type Spec struct {
 	// break a tie on the total (empty: equal totals share a place).
 	Minigames    []games.MultiGame
 	MultiSorting []string
-	Pasted       *store.FestScheme
 }
 
 // Create makes the Game the Spec describes and returns its id. A fest's Games
@@ -114,18 +112,7 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		}
 		return createSchemeGame(ctx, tx, spec.FestID, spec.Type, spec.Label, spec.DSL, spec.Entrants)
 	}
-	if spec.Pasted != nil {
-		scheme := *spec.Pasted
-		if scheme.GameType == "" {
-			scheme.GameType = spec.Type
-		}
-		if scheme.GameType != spec.Type {
-			return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.JsonTypeMismatch(games.Label(scheme.GameType), games.Label(spec.Type)))
-		}
-		return Materialise(ctx, tx, spec.FestID, scheme)
-	}
-	switch {
-	case known && def.Flat:
+	if known && def.Flat {
 		// A flat format is one Match seating the whole fest roster under the
 		// fest's own numbers, and who did not play is marked on its refusals
 		// tab. It has no way to seat a chosen few, so a chosen list is refused
@@ -134,60 +121,13 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 			return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.WholeRoster(games.Label(spec.Type)))
 		}
 		return createFlatGameTx(ctx, tx, spec.FestID, def, spec.Label, specShape(spec))
-	case known && def.PastedScheme:
-		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.EkNoScheme())
 	}
 	return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
 }
 
-// Materialise makes a Game from a pasted detailed scheme, in the fest given:
-// the scheme row, the game row, its venues, and the Structure — stages with
-// their Kind, matches with their letter (dealt here when the JSON brought none),
-// slots left for a seed import to fill. It returns the game id. Teams travel
-// by that import, never inside the JSON.
-func Materialise(ctx context.Context, tx *sql.Tx, festID int64, scheme store.FestScheme) (int64, error) {
-	if scheme.GameType == "" {
-		scheme.GameType = games.Default
-	}
-	if err := storeutil.ValidateScheme(scheme); err != nil {
-		return 0, err
-	}
-	if len(scheme.Teams) > 0 {
-		return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.PastedTeams())
-	}
-	title := strings.TrimSpace(scheme.Title)
-	if title == "" {
-		title = games.Label(scheme.GameType)
-	}
-	identity, err := nextGameIdentityTx(ctx, tx, festID, scheme.GameType, title)
-	if err != nil {
-		return 0, err
-	}
-	dealLetters(&scheme)
-	schemaJSON, err := json.Marshal(scheme)
-	if err != nil {
-		return 0, err
-	}
-	now := util.UtcNow()
-	schemeID, err := store.InsertReturningID(ctx, tx, `
-insert into schemes(slug, title, version, schema_json, created_at)
-values(?, ?, ?, ?, ?)`, uniqueSchemeSlug(scheme.Slug), title, util.MaxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
-	if err != nil {
-		return 0, err
-	}
-	gameID, err := store.InsertReturningID(ctx, tx, `
-insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
-		festID, identity.Code, title, scheme.GameType, identity.Position, schemeID, string(schemaJSON), now, now)
-	if err != nil {
-		return 0, err
-	}
-	return gameID, writePastedStructureTx(ctx, tx, festID, gameID, scheme)
-}
-
-// writePastedStructureTx writes a pasted scheme's venues and Structure with no
-// seat resolved: its Participants arrive by seed import, and the resolver
-// seats them then.
+// writePastedStructureTx writes a legacy pasted scheme's venues and Structure
+// with no seat resolved, for Clear: its Participants arrive by seed import,
+// and the resolver seats them then.
 func writePastedStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme store.FestScheme) error {
 	venues, err := upsertVenuesTx(ctx, tx, festID, scheme.Venues)
 	if err != nil {
@@ -198,7 +138,7 @@ func writePastedStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int6
 
 func unseated(store.SchemeSlot) any { return nil }
 
-// dealLetters gives a pasted scheme's matches their letters the way the sheets
+// dealLetters gives a legacy pasted scheme's matches their letters the way the sheets
 // do — A.. in stage order, then match order — when the JSON brought none. A
 // sitting whose title does not match boutTitle (the written qualifier) is
 // skipped, as the compiler skips a Block that declined letters.
@@ -773,13 +713,18 @@ func (live *liveStructure) dropLeftTx(ctx context.Context, tx *sql.Tx) error {
 // naming them. A bout the new scheme adds sits at its venue, as on creation.
 // A Game with no recorded Entrant list is seated and recorded the way Clear
 // does it (unrecordedEntrantsTx), so the bouts, the entrants tab and the next
-// recompile agree on who plays.
+// recompile agree on who plays. A Game with no DSL of its own — a bracket
+// pasted as JSON before every Game needed a scheme — is never recompiled: any
+// text would replace its bracket.
 func Recompile(ctx context.Context, tx *sql.Tx, festID, gameID int64, dsl string) error {
-	var oldSchemeJSON, gameType string
+	var oldSchemeJSON, gameType, storedDSL string
 	if err := tx.QueryRowContext(ctx, `
-select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_id = ? and scheme_dsl is not null`,
-		gameID, festID).Scan(&oldSchemeJSON, &gameType); err != nil {
+select coalesce(scheme_json, '{}'), game_type, coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`,
+		gameID, festID).Scan(&oldSchemeJSON, &gameType, &storedDSL); err != nil {
 		return err
+	}
+	if strings.TrimSpace(storedDSL) == "" {
+		return corei18n.User(dopestrings.Default.Gamebuild.Recompile.Pasted())
 	}
 	var meta struct {
 		Slug  string `json:"slug"`

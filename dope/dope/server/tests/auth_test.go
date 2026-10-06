@@ -640,17 +640,23 @@ from games where fest_id = ? and game_type = 'ksi' order by id desc limit 1`, fe
 		t.Fatalf("ksi themes = scheme %d state %d, want 7/7", ksiScheme.Themes, len(ksiState.Themes))
 	}
 
-	ekScheme := `{"schemaVersion":2,"slug":"ek-added","title":"Добавленная ЭК","gameType":"ek","stages":[{"code":"r1","title":"Раунд","stage_type":"matches","matches":[{"code":"A","title":"Бой A","participantCount":1,"slots":[{"placeholder":"TBD"}]}]}]}`
+	// ЭК is described by a scheme like every bracket format; the form has no
+	// pasted-JSON field any more.
+	for i, name := range []string{"Альфа", "Бета", "Гамма", "Дельта"} {
+		if _, err := srv.Eng().DB.Exec(`insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?, ?)`, festID, name, i+1, i+1); err != nil {
+			t.Fatalf("insert fest team: %v", err)
+		}
+	}
 	ekResp := postGameForm(url.Values{
 		"game_type": {"ek"},
-		"ek_scheme": {ekScheme},
+		"ek_dsl":    {"[scheme]\nkind: single_elimination\nparticipants: 4\nmatch_size: 4\nwinning_places: 2\n"},
 	})
 	if ekResp.Code != http.StatusSeeOther {
 		t.Fatalf("create ek status = %d, body %s", ekResp.Code, ekResp.Body.String())
 	}
 	var ekGameID int64
 	if err := srv.Eng().DB.QueryRow(`
-select id from games where fest_id = ? and game_type = 'ek' and title = 'Добавленная ЭК'`, festID).Scan(&ekGameID); err != nil {
+select id from games where fest_id = ? and game_type = 'ek' order by id desc limit 1`, festID).Scan(&ekGameID); err != nil {
 		t.Fatalf("load ek game: %v", err)
 	}
 	var ekMatches int

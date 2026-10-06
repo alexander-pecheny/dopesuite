@@ -103,7 +103,6 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("POST "+game+"/seed-import/run", route.Editor.Numbered(), s.seedImportRoute(func(*http.Request) (imports.SeedSource, error) { return imports.FromScheme(), nil }))
 	t.Handle("POST "+game+"/seed-import/xlsx", route.Editor.Numbered(), s.seedImportRoute(seedXLSXSource))
 	t.Handle("POST "+game+"/seed-import/decline", route.Editor, s.scopedSeedDecline)
-	t.Handle("POST "+fest+"/scheme-import", route.Manager, s.scopedSchemeImport)
 	// The host pages' forms, as JSON (ADR-0021).
 	s.hostPageServer().APIRoutes(t)
 	return t

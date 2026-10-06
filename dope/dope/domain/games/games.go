@@ -91,10 +91,11 @@ type Definition struct {
 	// format that was made before the format had a DSL, from its stored
 	// scheme JSON. Clearing such a Game moves it onto the DSL.
 	UpgradeDSL func(participants int, schemeJSON string) string
-	// PastedScheme reports whether the format may be created from a pasted
-	// JSON scheme instead of a DSL (ADR-0006's escape hatch), and a Game of it
-	// without a DSL is cleared by rebuilding that scheme.
-	PastedScheme bool
+	// LegacyPasted reports whether a Game of this format may be one pasted as
+	// detailed JSON before 2026-10-06, when every bracket Game came to need a
+	// DSL (ADR-0006, amended). Such a Game has no DSL; a clear rebuilds it from
+	// its stored scheme, and nothing recompiles it. No new one is created.
+	LegacyPasted bool
 	// ToursSeed reports whether a seed by players may rank this format's
 	// Game after some of its tours only (`tours:` in `[init]`).
 	ToursSeed bool

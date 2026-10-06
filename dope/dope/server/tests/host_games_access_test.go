@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"dope/dope/platform/roles"
-	"dope/dope/storage/store"
 
 	"pecheny.me/dopecore/session"
 )
@@ -196,51 +195,5 @@ func TestAccessAPISetsAHostsGames(t *testing.T) {
 	}
 	if got := gamesOf(set(adminToken, []string{})); len(got) != 0 {
 		t.Fatalf("after lifting: %v", got)
-	}
-}
-
-// A scheme import deletes the fest's Games and makes them anew. A host limited
-// to one keeps the limit on the Game that comes back under the same slug,
-// rather than silently running every Game.
-func TestSchemeImportKeepsAHostsGames(t *testing.T) {
-	t.Parallel()
-	srv := newAuthTestServer(t)
-	festID, _ := scopedAPITestIDs(t, srv)
-	db := srv.Eng().DB
-	adminID, adminToken := createAPITestSession(t, srv, "boss")
-	addAPITestRole(t, srv, festID, adminID, roles.Admin)
-	hostID, _ := createAPITestSession(t, srv, "troika_host")
-	addAPITestRole(t, srv, festID, hostID, roles.Host)
-	scheme := store.FestScheme{SchemaVersion: 2, Slug: "keep-me", Title: "Keep me", GameType: "ek",
-		Stages: []store.SchemeStage{{Code: "r1", Title: "r1", StageType: "matches", Position: 1,
-			Matches: []store.SchemeMatch{{Code: "A", Title: "A", ParticipantCount: 1,
-				Slots: []store.SchemeSlot{{Seed: &store.SchemeSeedRef{Basket: 1, Number: 1}}}}}}}}
-	importScheme := func() int64 {
-		t.Helper()
-		resp := scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/%d/scheme-import", festID), scheme, adminToken)
-		if resp.Code != http.StatusOK {
-			t.Fatalf("import: %d %s", resp.Code, resp.Body.String())
-		}
-		var id int64
-		if err := db.QueryRow(`select id from games where fest_id = ?`, festID).Scan(&id); err != nil {
-			t.Fatal(err)
-		}
-		return id
-	}
-	first := importScheme()
-	resp := scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/%d/access", festID),
-		map[string]any{"changes": []map[string]any{{"user": "troika_host", "games": []string{fmt.Sprint(first)}}}}, adminToken)
-	if resp.Code != http.StatusOK {
-		t.Fatalf("limit: %d %s", resp.Code, resp.Body.String())
-	}
-	// The wipe deletes the Game and its limit rows with it (the id may come
-	// back, SQLite reuses it); only the carry-over puts the limit back.
-	second := importScheme()
-	var limited int64
-	if err := db.QueryRow(`select game_id from fest_game_hosts where fest_id = ? and user_id = ?`, festID, hostID).Scan(&limited); err != nil {
-		t.Fatalf("the limit is gone after the import: %v", err)
-	}
-	if limited != second {
-		t.Fatalf("limited to %d, want the re-made game %d", limited, second)
 	}
 }

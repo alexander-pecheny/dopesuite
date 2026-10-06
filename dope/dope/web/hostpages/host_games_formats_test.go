@@ -33,7 +33,7 @@ func TestEveryFormatHasACreationForm(t *testing.T) {
 
 // The creation form offers every format, the picker to every format that
 // keeps an entrant list (Erudit-Sextet included), and a DSL editor exactly to
-// those.
+// those. No format takes a pasted JSON scheme any more.
 func TestCreationFormOffersEveryFormat(t *testing.T) {
 	data := hostGameCreateData{SelectedType: games.ES, DSL: map[string]string{}, Entrants: []gameEntrantOption{{ID: 1, Label: "A"}}}
 	html := renderPublic(t, hostGameCreateDoc(data))
@@ -43,6 +43,9 @@ func TestCreationFormOffersEveryFormat(t *testing.T) {
 		}
 		if strings.Contains(html, `name="`+d.Code+`_dsl"`) == d.Flat {
 			t.Errorf("%s: DSL editor present %v, flat %v", d.Code, !d.Flat, d.Flat)
+		}
+		if strings.Contains(html, `name="`+d.Code+`_scheme"`) {
+			t.Errorf("%s: the form still takes a pasted JSON scheme", d.Code)
 		}
 	}
 	if !strings.Contains(html, `value="ksi_stickers"`) {
@@ -56,8 +59,8 @@ func TestCreationFormOffersEveryFormat(t *testing.T) {
 // The JSON twin of the form posts each format's scheme under that format's
 // own field, and the stickers variant reads into an ordinary KSI.
 func TestCreateRequestFields(t *testing.T) {
-	form := GameCreateRequest{GameType: games.ES, DSL: "[scheme]", Scheme: []byte(`{}`)}.form()
-	if form.Get("es_dsl") != "[scheme]" || form.Get("es_scheme") != "{}" {
+	form := GameCreateRequest{GameType: games.ES, DSL: "[scheme]"}.form()
+	if form.Get("es_dsl") != "[scheme]" {
 		t.Errorf("es form: %v", form)
 	}
 	form = GameCreateRequest{GameType: games.OD, DSL: "[scheme]"}.form()

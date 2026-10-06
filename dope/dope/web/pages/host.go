@@ -15,7 +15,6 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/view"
-	"dope/dope/storage/store"
 )
 
 // Host is what the page handlers need of the server: the Engine (the DB, the
@@ -37,8 +36,6 @@ type Host interface {
 	// ResolveGameID resolves a game ref (numeric id or slug) within a fest to
 	// its id, returning sql.ErrNoRows when absent.
 	ResolveGameID(ctx context.Context, festID int64, ref string) (int64, error)
-	// ImportSchemeIntoFest rebuilds a fest's game from a parsed JSON scheme.
-	ImportSchemeIntoFest(ctx context.Context, festID int64, scheme store.FestScheme) error
 	// LogoutSession invalidates the request's session server-side.
 	LogoutSession(r *http.Request)
 	// ServeGameHTMLWithInit serves a game page (od/si) HTML with the bootstrap

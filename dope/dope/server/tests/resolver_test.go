@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"dope/dope/domain/core"
 	"dope/dope/domain/entrants"
-	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
 	"dope/dope/platform/realtime"
@@ -509,7 +508,7 @@ values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 	if err := json.Unmarshal([]byte(rawScheme), &scheme); err != nil {
 		t.Fatalf("decode ek scheme: %v", err)
 	}
-	gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: "ek", Pasted: &scheme})
+	gameID, err := legacyPastedGameTx(ctx, tx, festID, scheme)
 	if err != nil {
 		t.Fatalf("create ek: %v", err)
 	}

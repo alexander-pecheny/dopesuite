@@ -197,8 +197,7 @@ func (s *Server) HandleFestRouter(w http.ResponseWriter, r *http.Request) {
 	s.handleFestRouter(w, r)
 	s.Settle()
 }
-func (s *Server) HandleImport(w http.ResponseWriter, r *http.Request) { s.handleImport(w, r) }
-func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request)  { s.handleLogin(w, r) }
+func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) { s.handleLogin(w, r) }
 func (s *Server) HandleScopedAPI(w http.ResponseWriter, r *http.Request) {
 	s.handleScopedAPI(w, r)
 	s.Settle()

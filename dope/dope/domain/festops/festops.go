@@ -18,6 +18,7 @@ import (
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/schemedsl"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/journal"
@@ -35,7 +36,7 @@ func CreateGameTx(ctx context.Context, tx *sql.Tx, spec gamebuild.Spec) (int64, 
 	}
 	gameID, err := gamebuild.Create(ctx, tx, spec)
 	if err != nil {
-		return 0, core.FestWrite{}, err
+		return 0, core.FestWrite{}, compileErrorForHost(err)
 	}
 	revision, err := bumpTx(ctx, tx, spec.FestID, "game:create", map[string]any{"gameID": gameID, "gameType": spec.Type})
 	if err != nil {
@@ -47,6 +48,17 @@ func CreateGameTx(ctx context.Context, tx *sql.Tx, spec gamebuild.Spec) (int64, 
 		return 0, core.FestWrite{}, err
 	}
 	return gameID, core.FestWrite{Revision: revision}, nil
+}
+
+// compileErrorForHost turns a scheme that does not compile into a message the
+// host may read. The form showed the compiler's text; the JSON twin only
+// shows a User Error, and answered a typo in the scheme with a bare 500.
+func compileErrorForHost(err error) error {
+	var compile *schemedsl.Error
+	if errors.As(err, &compile) {
+		return corei18n.User(compile.Error())
+	}
+	return err
 }
 
 // Settings is what a Game's settings page edits: its title, its slug, its
@@ -79,7 +91,8 @@ type storedSettings struct {
 // seats its troikas (entrants.RecompileTx); the write names the Troika Games
 // for the broadcast. Only a format whose scheme its settings page edits
 // (games.DSLEditable) takes a changed scheme; a flat Game is shaped by its own
-// fields, even one created from a DSL.
+// fields, even one created from a DSL. A Game with no DSL — a bracket pasted
+// as JSON before every Game needed a scheme — takes none either.
 func UpdateSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g Settings) (core.FestWrite, error) {
 	s := dopestrings.Default
 	title := strings.TrimSpace(g.Title)
@@ -93,6 +106,9 @@ func UpdateSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g S
 	schemeChanged := strings.TrimSpace(g.SchemeDSL) != "" && strings.TrimSpace(g.SchemeDSL) != strings.TrimSpace(stored.schemeDSL)
 	if schemeChanged && games.Get(stored.gameType).DSL != games.DSLEditable {
 		return core.FestWrite{}, corei18n.User(s.Host.Games.ErrorSchemeNotEditable(games.Label(stored.gameType)))
+	}
+	if schemeChanged && strings.TrimSpace(stored.schemeDSL) == "" {
+		return core.FestWrite{}, corei18n.User(s.Gamebuild.Recompile.Pasted())
 	}
 	slug, err := freeSlugTx(ctx, tx, festID, gameID, g.Slug)
 	if err != nil {
@@ -111,7 +127,7 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 		return written, nil
 	}
 	if written.Broadcast.Views, err = entrants.RecompileTx(ctx, tx, festID, gameID, g.SchemeDSL); err != nil {
-		return core.FestWrite{}, err
+		return core.FestWrite{}, compileErrorForHost(err)
 	}
 	return written, nil
 }
