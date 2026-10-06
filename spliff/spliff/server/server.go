@@ -7,7 +7,6 @@ package spliffserver
 import (
 	"context"
 	"database/sql"
-	"log"
 	"os"
 	"sync"
 	"time"
@@ -23,14 +22,7 @@ import (
 	"spliff/spliff/storage/store"
 )
 
-const (
-	dbFile = "spliff.db"
-	// The write-tx discipline Spliff inherits from xy and dope: a write never
-	// waits for a pooled connection while holding the lock, and the whole
-	// transaction is bounded, so a starved pool can never pin the lock.
-	slowWriteThreshold = time.Second
-	writeTxTimeout     = 5 * time.Second
-)
+const dbFile = "spliff.db"
 
 // server wires the database, the blob store, the global write lock, the assets
 // and the login bot.
@@ -76,44 +68,11 @@ func newServer() (*server, error) {
 	return s, nil
 }
 
-// withWriteTx runs fn in a bounded, serialised write transaction. It pulls a
-// pooled connection BEFORE taking the write lock, so pool waits stay off-lock
-// and can never pin it, and bounds the whole transaction with writeTxTimeout.
+// withWriteTx runs fn in one serialised write transaction under the global
+// write lock. The discipline (pool wait off the lock, a bounded transaction, the
+// slow-write log) is dopecore's sqlitex.Writer, which dope runs on as well.
 func (s *server) withWriteTx(reqCtx context.Context, label string, fn func(ctx context.Context, tx *sql.Tx) error) error {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(reqCtx), writeTxTimeout)
-	defer cancel()
-
-	start := time.Now()
-	conn, err := s.db.Conn(ctx)
-	if waited := time.Since(start); waited >= slowWriteThreshold {
-		log.Printf("slow write %s: pool-wait=%s err=%v", label, waited.Round(time.Millisecond), err)
-	}
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	waitStart := time.Now()
-	s.mu.Lock()
-	acquired := time.Now()
-	defer func() {
-		hold := time.Since(acquired)
-		s.mu.Unlock()
-		if wait := acquired.Sub(waitStart); wait >= slowWriteThreshold || hold >= slowWriteThreshold {
-			log.Printf("slow write %s: lock-wait=%s lock-hold=%s",
-				label, wait.Round(time.Millisecond), hold.Round(time.Millisecond))
-		}
-	}()
-
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := fn(ctx, tx); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return sqlitex.Writer{DB: s.db, Mu: &s.mu}.Tx(reqCtx, label, fn)
 }
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }

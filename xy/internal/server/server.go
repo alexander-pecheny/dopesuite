@@ -8,10 +8,8 @@ package server
 import (
 	"context"
 	"database/sql"
-	"log"
 	"os"
 	"sync"
-	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -24,11 +22,7 @@ import (
 	"xy/internal/chgk/handout"
 )
 
-const (
-	dbFile             = "xy.db"
-	slowWriteThreshold = time.Second
-	writeTxTimeout     = 5 * time.Second
-)
+const dbFile = "xy.db"
 
 // server wires the DB, the global write lock, and the asset config.
 type server struct {
@@ -81,43 +75,9 @@ func newServer() (*server, error) {
 	return &server{db: db, blobs: blobs, staging: newHandoutStaging()}, nil
 }
 
-// withWriteTx runs fn in a bounded, serialized write transaction. It pulls a
-// pooled connection BEFORE taking the write lock (so pool waits stay off-lock
-// and can never pin the lock), bounds the whole tx with writeTxTimeout, then
-// commits or rolls back. This is dope's write-tx discipline, ported.
+// withWriteTx runs fn in one serialised write transaction under the global
+// write lock. The discipline (pool wait off the lock, a bounded transaction, the
+// slow-write log) is dopecore's sqlitex.Writer, which dope runs on as well.
 func (s *server) withWriteTx(reqCtx context.Context, label string, fn func(ctx context.Context, tx *sql.Tx) error) error {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(reqCtx), writeTxTimeout)
-	defer cancel()
-
-	start := time.Now()
-	conn, err := s.db.Conn(ctx)
-	if waited := time.Since(start); waited >= slowWriteThreshold {
-		log.Printf("slow write %s: pool-wait=%s err=%v", label, waited.Round(time.Millisecond), err)
-	}
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	waitStart := time.Now()
-	s.mu.Lock()
-	acquired := time.Now()
-	defer func() {
-		hold := time.Since(acquired)
-		s.mu.Unlock()
-		if wait := acquired.Sub(waitStart); wait >= slowWriteThreshold || hold >= slowWriteThreshold {
-			log.Printf("slow write %s: lock-wait=%s lock-hold=%s",
-				label, wait.Round(time.Millisecond), hold.Round(time.Millisecond))
-		}
-	}()
-
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := fn(ctx, tx); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return sqlitex.Writer{DB: s.db, Mu: &s.mu}.Tx(reqCtx, label, fn)
 }
