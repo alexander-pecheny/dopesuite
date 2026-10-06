@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyCrypto } from "../web/assets/static/dist/crypto.js";
 import {
-  UNREADABLE, commentText, decodePayload, encodePayload, openPayload, openPayloads, sealPayload,
+  UNREADABLE, commentText, decodePayload, encodePayload, openPayload, openPayloads, remapCommentImages, sealPayload,
 } from "../web/assets/static/dist/eventpayload.js";
 import fixture from "../internal/xycli/testdata/eventpayload.json" with { type: "json" };
 
@@ -55,4 +55,12 @@ test("commentText gives a comment's words and a reaction's emoji, nothing else",
   assert.equal(commentText({ kind: "reaction", emoji: "x" }), "x");
   assert.equal(commentText(decodePayload("label_add", '{"label":"l"}')), "");
   assert.equal(commentText(UNREADABLE), "");
+});
+
+test("remapCommentImages points images at the copies and drops the ones not copied", () => {
+  const ids = new Map([[5, 105], [6, 106]]);
+  assert.equal(remapCommentImages('{"xy":1,"t":"глянь","img":[5,7,6]}', ids), '{"xy":1,"t":"глянь","img":[105,106]}');
+  assert.equal(remapCommentImages('{"xy":1,"t":"глянь","img":[7]}', ids), "глянь");
+  assert.equal(remapCommentImages("просто текст", ids), "просто текст");
+  assert.equal(remapCommentImages('{"img":[5]}', ids), '{"img":[5]}', "a hand-typed JSON comment is not the envelope");
 });

@@ -97,3 +97,33 @@ test("loadMoveBoard refuses a locked board when the passphrase is not given", as
   const { transfer } = board();
   await assert.rejects(() => transfer.loadMoveBoard(9), /отменено/);
 });
+
+test("a copy to another board points a comment's images at the copied attachments", async () => {
+  const { state, transfer } = board();
+  calls.length = 0;
+  const comment = await xyCrypto.encField(srcDk, JSON.stringify({ xy: 1, t: "картинка", img: [70, 71] }));
+  routes["/api/cards/10/timeline"] = [{ id: 1, type: "comment", payload_enc: comment, author_user_id: 3, created_at: "2026-09-01T00:00:00Z" }];
+  routes["/api/cards/10/attachments"] = [
+    { id: 70, filename_enc: await xyCrypto.encField(srcDk, "a.png"), mime: "image/png" },
+    { id: 71, filename_enc: await xyCrypto.encField(srcDk, "b.png"), mime: "image/png" },
+  ];
+  const blob = await xyCrypto.encBytes(srcDk, new Uint8Array([1, 2, 3]));
+  const saved = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    calls.push(["FETCH", String(url)]);
+    if (String(url) === "/api/attachments/70") return { ok: true, arrayBuffer: async () => blob.buffer };
+    if (String(url) === "/api/attachments/71") return { ok: false }; // this one does not copy
+    if (opts?.method === "POST") return { ok: true, json: async () => ({ id: 900 }) };
+    return { ok: false };
+  };
+  try {
+    const ctx = { boardId: 2, dk: dstDk, lists: [{ id: 20, title: "Чужой", rank: "a0" }], cardsByList: new Map(), labels: [], sessions: [], name: "Другая" };
+    const id = await transfer.transferCard(state.cards[0], 20, ctx, false);
+    const imported = calls.find((c) => c[1] === `/api/cards/${id}/timeline/import`)[2].events;
+    assert.equal(await xyCrypto.decField(dstDk, imported[0].payload_enc), JSON.stringify({ xy: 1, t: "картинка", img: [900] }));
+  } finally {
+    globalThis.fetch = saved;
+    delete routes["/api/cards/10/timeline"];
+    delete routes["/api/cards/10/attachments"];
+  }
+});

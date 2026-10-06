@@ -8,7 +8,7 @@
 import S from "./i18nstrings.js";
 import { xyApp, ISO_DATE_LEN } from "./app.js";
 import { xyCrypto } from "./crypto.js";
-import { sealPayload } from "./eventpayload.js";
+import { remapCommentImages, sealPayload } from "./eventpayload.js";
 import { xySync } from "./sync.js";
 import { xyRank } from "./rank.js";
 import { byRank } from "./dragrank.js";
@@ -167,6 +167,9 @@ export function createTransfer(deps: TransferDeps): Transfer {
   async function copyCardExtras(srcCardId: number, targetDk: DataKey, newCardId: number): Promise<void> {
     if (!xySync.isOnline() || !newCardId) return;
     const dk = mustDK();
+    // Attachments go first: a comment's images name attachments by id, so the
+    // comments can only point at the copies once those exist.
+    const attIds = await copyAttachments(srcCardId, dk, targetDk, newCardId);
     // Comments, oldest→newest so the copy keeps the original order, re-encrypted
     // under the destination key but carrying the source author + created_at.
     let events: CardEvent[] = [];
@@ -177,7 +180,8 @@ export function createTransfer(deps: TransferDeps): Transfer {
     const srcComments = events.filter((ev) => ev.type === "comment");
     const texts = await xyCrypto.decFields(dk, srcComments.map((ev) => ev.payload_enc || ""));
     const carried = srcComments.filter((_, i) => texts[i] !== null);
-    const reEnc = await xyCrypto.encFields(targetDk, texts.filter((t): t is string => t !== null));
+    const opened = texts.filter((t): t is string => t !== null).map((t) => remapCommentImages(t, attIds));
+    const reEnc = await xyCrypto.encFields(targetDk, opened);
     const comments: Array<Record<string, unknown>> = carried.map((ev, i) => ({
       // src ids travel so the server can rebuild threading under fresh ids
       src_id: ev.id,
@@ -190,7 +194,13 @@ export function createTransfer(deps: TransferDeps): Transfer {
     if (comments.length) {
       try { await jpost(`/api/cards/${newCardId}/timeline/import`, { events: comments }); } catch (_) {}
     }
-    // Attachments: re-encrypt the ciphertext bytes under the destination key.
+  }
+
+  // copyAttachments re-encrypts a card's attachments under the destination key
+  // and uploads them to the new card, and returns which copy each source id
+  // became. One that fails to copy is left out of the map.
+  async function copyAttachments(srcCardId: number, dk: DataKey, targetDk: DataKey, newCardId: number): Promise<Map<number, number>> {
+    const ids = new Map<number, number>();
     let atts: AttachmentDTO[] = [];
     try { atts = (await fetchJSON(`/api/cards/${srcCardId}/attachments`)) as AttachmentDTO[]; } catch (_) { atts = []; }
     for (const att of atts) {
@@ -211,8 +221,12 @@ export function createTransfer(deps: TransferDeps): Transfer {
         event_payload_enc: await sealPayload(targetDk, "attach_add", { file: name }),
       }));
       fd.append("blob", new Blob([recipher], { type: "application/octet-stream" }), "blob");
-      try { await fetch(`/api/cards/${newCardId}/attachments`, { method: "POST", credentials: "same-origin", body: fd }); } catch (_) {}
+      try {
+        const res = await fetch(`/api/cards/${newCardId}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
+        if (res.ok) ids.set(att.id, ((await res.json()) as { id: number }).id);
+      } catch (_) {}
     }
+    return ids;
   }
 
   // reconcileLabels maps a source card's label assignments onto the target board,

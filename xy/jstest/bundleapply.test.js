@@ -41,7 +41,7 @@ xyApp.jpost = async (url, body) => {
 };
 xyApp.jput = async (url, body) => { calls.push(["PUT", String(url), body]); return {}; };
 xyApp.jdelete = async (url) => { calls.push(["DELETE", String(url)]); return {}; };
-globalThis.fetch = async (url) => { calls.push(["FETCH", String(url)]); return { ok: true }; };
+globalThis.fetch = async (url) => { calls.push(["FETCH", String(url)]); return { ok: true, json: async () => ({ id: ++nextId }) }; };
 
 const { applyBundle } = await import("../web/assets/static/dist/bundleapply.js");
 const { xyBundle } = await import("../web/assets/static/dist/bundle.js");
@@ -198,6 +198,28 @@ test("an attachment the producer cannot hand over is skipped and named", async (
   assert.equal(r.failed, false);
   assert.deepEqual(r.skipped, ["раздатка.png"]);
   assert.equal(r.attachments, 0);
+});
+
+test("a comment's images point at the copied attachments, and an image not copied is dropped", async () => {
+  reset();
+  const b = bundle({
+    attachments: [
+      { id: 50, card_id: 10, filename: "а.png", mime: "image/png", size: 3, lossless: true, is_excerpt: false, path: "attachments/50-а.png" },
+      { id: 51, card_id: 10, filename: "б.png", mime: "image/png", size: 3, lossless: true, is_excerpt: false, path: "attachments/51-б.png" },
+    ],
+    timeline: [
+      { id: 40, card_id: 10, session_id: null, type: "comment", author: null, created_at: "2026-03-01T00:00:00Z", edited_at: null, is_excerpt: false, reply_to_id: null, payload: JSON.stringify({ xy: 1, t: "вот", img: [50, 51] }) },
+    ],
+  });
+  const bytes = async (a) => (a.id === 50 ? new Uint8Array([1, 2, 3]) : null);
+  await applyBundle(b, { boardId: 900, dk, append: null }, bytes, quiet);
+  const upload = calls.findIndex((c) => c[0] === "FETCH" && c[1].endsWith("/attachments"));
+  const history = calls.findIndex((c) => c[0] === "POST" && c[1].endsWith("/timeline/import"));
+  assert.ok(upload >= 0 && upload < history, "the attachment is uploaded before the history goes in");
+  const ev = posts("/timeline/import")[0][2].events[0];
+  const copied = JSON.parse(await xyCrypto.decField(dk, ev.payload_enc));
+  assert.equal(copied.img.length, 1);
+  assert.notEqual(copied.img[0], 50, "the image names the copy, not the source");
 });
 
 // The write path is latency-bound — one HTTP round trip per card — so a board

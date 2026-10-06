@@ -20,6 +20,7 @@ import { parseSession, serializeSession } from "./sessions.js";
 import { parseDeclaration, serializeDeclaration } from "./seen.js";
 import { bundleUnits } from "./bundle.js";
 import type { Bundle, BundleAttachment, BundleEvent, BundleUnit } from "./bundle.js";
+import { remapCommentImages } from "./eventpayload.js";
 import type { DataKey } from "./crypto.js";
 import S from "./i18nstrings.js";
 
@@ -136,6 +137,7 @@ export async function applyBundle(
   const sessionMap = new Map<number, number>();
   const cardMap = new Map<number, number>();
   const eventMap = new Map<number, number>();
+  const attachmentMap = new Map<number, number>();
 
   const result: ApplyResult = { units: [], cards: 0, attachments: 0, events: 0, skipped: [], failed: false };
   const units = bundleUnits(bundle);
@@ -213,7 +215,9 @@ export async function applyBundle(
         created_at: e.created_at,
         edited_at: e.edited_at || "",
         is_excerpt: !!e.is_excerpt,
-        payload_enc: await enc(e.payload),
+        // A comment's images name attachments by id, so they are pointed at
+        // the copies, which is why the attachments go in before the history.
+        payload_enc: await enc(e.type === "comment" ? remapCommentImages(e.payload, attachmentMap) : e.payload),
       };
       if (e.reply_to_id != null) {
         const mapped = eventMap.get(e.reply_to_id);
@@ -345,15 +349,6 @@ export async function applyBundle(
         await jput(`/api/boards/${boardId}/tour-testers`, tour);
       }
 
-      const keptSessions = new Set(newSessions);
-      await importEvents(
-        bundle.timeline.filter((e) =>
-          (e.card_id != null && ours.has(e.card_id)) ||
-          (e.card_id == null && e.session_id != null && keptSessions.has(e.session_id))
-        ),
-        unit.title,
-      );
-
       // Each attachment is a download, a re-encrypt and an upload — two round
       // trips of its own, and nothing between them touches another attachment.
       const atts = bundle.attachments.filter((a) => ours.has(a.card_id));
@@ -376,9 +371,19 @@ export async function applyBundle(
         fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
         const res = await fetch(`/api/cards/${cardMap.get(a.card_id)}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
         if (!res.ok) throw new Error(S.import.apply.attachFailed(a.filename, String(res.status)));
+        attachmentMap.set(a.id, ((await res.json()) as { id: number }).id);
         result.attachments++;
         log(S.import.apply.attachments(unit.title, String(++attDone), String(atts.length)));
       });
+
+      const keptSessions = new Set(newSessions);
+      await importEvents(
+        bundle.timeline.filter((e) =>
+          (e.card_id != null && ours.has(e.card_id)) ||
+          (e.card_id == null && e.session_id != null && keptSessions.has(e.session_id))
+        ),
+        unit.title,
+      );
 
       result.cards += cards.length;
       return cards.length;

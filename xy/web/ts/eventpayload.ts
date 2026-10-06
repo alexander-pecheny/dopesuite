@@ -122,6 +122,17 @@ function decodeAttach(kind: AttachPayload["kind"], raw: string): OpenedPayload {
   return file === null ? UNREADABLE : { kind, file };
 }
 
+// remapCommentImages points a comment's images at the copies of its
+// attachments: ids maps a source attachment's id to its copy's. An image whose
+// attachment was not copied is dropped, since its id would name another card's
+// attachment, or nothing. Any other comment comes back as it was.
+export function remapCommentImages(raw: string, ids: ReadonlyMap<number, number>): string {
+  const p = decodeComment(raw);
+  if (!p.images.length) return raw;
+  const images = p.images.map((id) => ids.get(id)).filter((id): id is number => id != null);
+  return encodePayload("comment", { text: p.text, images });
+}
+
 // decodePayload reads the plaintext of an event of the given type.
 export function decodePayload(type: string, raw: string): OpenedPayload {
   switch (type) {
