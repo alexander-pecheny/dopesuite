@@ -312,7 +312,7 @@ func cardAdd(a *app, args []string) error {
 	list := fs.Int64("list", 0, s.Cli.Card.AddListFlag())
 	text := fs.String("text", "", s.Cli.Card.AddTextFlag())
 	file := fs.String("file", "", s.Cli.Card.FileFlag())
-	kind := fs.String("kind", cardkind.Normal, s.Cli.Card.AddKindFlag(strings.Join(cardkind.Names(), "|")))
+	kind := fs.String("kind", "", s.Cli.Card.AddKindFlag(strings.Join(cardkind.Names(), "|")))
 	alias := fs.String("alias", "", s.Cli.Card.AliasFlag())
 	after := fs.Int64("after", 0, s.Cli.Card.AfterFlag())
 	before := fs.Int64("before", 0, s.Cli.Card.BeforeFlag())
@@ -327,8 +327,12 @@ func cardAdd(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := b.List(*list); err != nil {
+	l, err := b.List(*list)
+	if err != nil {
 		return err
+	}
+	if *kind == "" {
+		*kind = cardkind.ForListType(l.Type)
 	}
 	desc, err := a.readText(*text, *file)
 	if err != nil {

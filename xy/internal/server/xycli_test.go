@@ -68,14 +68,20 @@ func TestXYCLIEndToEnd(t *testing.T) {
 	question := "? Что открывает конверт?\n! Ключ доски\n@ Тестер"
 	mustJSON(t, cli(question, "card", "add", "--board", boardID, "--list", itoa(list.ID), "--json"), &card)
 
-	// It comes back byte for byte, with the hash --expect compares.
+	// It comes back byte for byte, with the hash --expect compares. With no
+	// --kind it is the question the board's add-card button would have made,
+	// so it gets a number.
 	var got struct {
 		Desc string `json:"desc"`
 		Hash string `json:"hash"`
+		Kind string `json:"kind"`
 	}
 	mustJSON(t, cli("", "card", "get", itoa(card.ID), "--board", boardID, "--json"), &got)
 	if got.Desc != question {
 		t.Fatalf("card get = %q, want %q", got.Desc, question)
+	}
+	if got.Kind != "question" {
+		t.Fatalf("card add made kind %q, want question", got.Kind)
 	}
 
 	// A stale --expect refuses; the fresh one writes.

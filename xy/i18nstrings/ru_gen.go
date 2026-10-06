@@ -1342,8 +1342,10 @@ var RU = Strings{
 			},
 		},
 		Card: CliCardStrings{
-			AddEmpty:    func() string { return "пустая карточка: дайте 4s на stdin или --text" },
-			AddKindFlag: func(kinds string) string { return fmt.Sprintf("тип карточки: %s", kinds) },
+			AddEmpty: func() string { return "пустая карточка: дайте 4s на stdin или --text" },
+			AddKindFlag: func(kinds string) string {
+				return fmt.Sprintf("тип карточки: %s. По умолчанию тот же, что у кнопки добавления карточки в этом списке: theme в списке СИ, question в остальных", kinds)
+			},
 			AddListFlag: func() string { return "id списка" },
 			AddTextFlag: func() string { return "4s карточки (иначе stdin)" },
 			AddUsage:    func() string { return "xy-cli card add --board B --list L [--after id|--before id] < вопрос.4s" },

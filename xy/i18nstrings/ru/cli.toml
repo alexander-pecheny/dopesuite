@@ -159,7 +159,7 @@ add_list_flag = "id списка"
 # `card add` --text flag description.
 add_text_flag = "4s карточки (иначе stdin)"
 # `card add` --kind flag description, with the kinds it takes (from cardkind).
-add_kind_flag = 'тип карточки: {{.kinds}}'
+add_kind_flag = 'тип карточки: {{.kinds}}. По умолчанию тот же, что у кнопки добавления карточки в этом списке: theme в списке СИ, question в остальных'
 # --after flag description, shared by `card add` and `card mv`.
 after_flag = "id карточки, после которой встать"
 # --before flag description, shared by `card add` and `card mv`.

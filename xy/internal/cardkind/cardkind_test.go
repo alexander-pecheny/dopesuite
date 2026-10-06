@@ -105,3 +105,13 @@ func TestKindMenuMatchesTable(t *testing.T) {
 		t.Errorf("board.dopeui offers %v, the table's pickable kinds are %v", offered, pickable)
 	}
 }
+
+// ForListType is what the board's add-card button makes (cardkind.ts's
+// forListType, held to the same answers in jstest/cardkind.test.js).
+func TestForListType(t *testing.T) {
+	for listType, want := range map[string]string{"si": Theme, "normal": Question, "test": Question, "": Question} {
+		if got := ForListType(listType); got != want {
+			t.Errorf("ForListType(%q) = %q, want %q", listType, got, want)
+		}
+	}
+}

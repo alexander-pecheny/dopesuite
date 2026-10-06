@@ -126,6 +126,19 @@ func Numbered(name string) bool { return Of(name).Counter != "" }
 // Exported is whether a Card of this kind goes into the package.
 func Exported(name string) bool { return Of(name).Exported }
 
+// ForListType is the kind a new Card gets in a List of this type when nobody
+// names one: what the board's add-card button makes there (cardkind.ts's
+// forListType), a Theme in an SI List and a Question anywhere else.
+func ForListType(listType string) string {
+	if listType == ListTypeSI {
+		return Theme
+	}
+	return Question
+}
+
+// ListTypeSI is the List Type of a List of SI themes (lists.type).
+const ListTypeSI = "si"
+
 // GameOf is the game a scope of Cards with these kinds exports as: the game of
 // the first kind that has a say, GameChgk when none does.
 func GameOf(kinds []string) string {

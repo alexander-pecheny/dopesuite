@@ -1068,7 +1068,7 @@ export const RU: Strings = {
     },
     card: {
       addEmpty: () => "пустая карточка: дайте 4s на stdin или --text",
-      addKindFlag: (kinds: string) => `тип карточки: ${kinds}`,
+      addKindFlag: (kinds: string) => `тип карточки: ${kinds}. По умолчанию тот же, что у кнопки добавления карточки в этом списке: theme в списке СИ, question в остальных`,
       addListFlag: () => "id списка",
       addTextFlag: () => "4s карточки (иначе stdin)",
       addUsage: () => "xy-cli card add --board B --list L [--after id|--before id] < вопрос.4s",
