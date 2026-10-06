@@ -29,44 +29,25 @@ import (
 	"pecheny.me/dopecore/idstr"
 )
 
-// What an entrant is in a format: a team, a troika or a player.
+// What an entrant is in a format: a team, a troika or a player
+// (imports.KindOf).
 const (
-	KindTeam   = "team"
-	KindTroika = "troika"
-	KindPlayer = "player"
+	KindTeam   = imports.KindTeam
+	KindTroika = imports.KindTroika
+	KindPlayer = imports.KindPlayer
 )
 
-// kindOf is what the format seats.
-func kindOf(gameType string) string {
-	switch {
-	case games.SeatsTroikas(gameType):
-		return KindTroika
-	case games.IsIndividual(gameType):
-		return KindPlayer
-	}
-	return KindTeam
-}
-
-// Source is where a list comes from: a Game's table (Game is its code), the
-// fest's own roster, the fest's troikas, a lot, an uploaded sheet or the
-// by-players seeding a scheme declares. Division keeps it to one division.
-type Source struct {
-	// Fresh takes the source's list alone, dropping the host's hand edits
-	// that an import otherwise applies again (ADR-0025).
-	Fresh    bool   `json:"fresh,omitempty"`
-	Kind     string `json:"kind"`
-	Game     string `json:"game,omitempty"`
-	Division string `json:"division,omitempty"`
-}
+// Source is where a list comes from (imports.Source).
+type Source = imports.Source
 
 // The source kinds.
 const (
-	SourceGame    = "game"
-	SourceFest    = "fest"
-	SourceTroikas = "troikas"
-	SourceRandom  = "random"
-	SourceXLSX    = "xlsx"
-	SourcePlayers = "players"
+	SourceGame    = imports.SourceGame
+	SourceFest    = imports.SourceFest
+	SourceTroikas = imports.SourceTroikas
+	SourceRandom  = imports.SourceRandom
+	SourceXLSX    = imports.SourceXLSX
+	SourcePlayers = imports.SourcePlayers
 )
 
 // SourceOption is one choice of the tab's source picker. Divided says the
@@ -134,11 +115,11 @@ func Load(ctx context.Context, q store.Queryer, scope core.FestScope) (View, err
 
 func describe(ctx context.Context, q store.Queryer, scope core.FestScope, list imports.List, base imports.SeedImportView) (View, error) {
 	s := dopestrings.Default
-	view := View{SeedImportView: base, Kind: kindOf(list.GameType)}
+	view := View{SeedImportView: base, Kind: imports.KindOf(list.GameType)}
 	view.Unranked, view.MovesDropped = list.State.Unranked, list.State.MovesDropped
 	view.OneOffs = view.Kind != KindTroika
-	var dsl string
-	if err := q.QueryRowContext(ctx, `select coalesce(scheme_dsl, '') from games where id = ?`, scope.GameID).Scan(&dsl); err != nil {
+	declared, err := imports.LoadDeclared(ctx, q, scope.GameID)
+	if err != nil {
 		return View{}, err
 	}
 	entered, err := imports.GameEntered(ctx, q, scope.GameID, list.GameType)
@@ -146,7 +127,7 @@ func describe(ctx context.Context, q store.Queryer, scope core.FestScope, list i
 		return View{}, err
 	}
 	view.Entered = entered
-	view.Resizes = !entered && imports.EntrantSized(dsl)
+	view.Resizes = !entered && declared.EntrantSized()
 
 	// The picker: what this format can be seeded from.
 	type other struct {
@@ -161,7 +142,6 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 	if err != nil {
 		return View{}, err
 	}
-	declared := view.Declared
 	switch view.Kind {
 	case KindTroika:
 		view.Sources = append(view.Sources, SourceOption{Source: Source{Kind: SourceTroikas}, Label: s.Entrants.Source.Troikas(), Divided: true})
@@ -183,24 +163,24 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 			SourceOption{Source: Source{Kind: SourceRandom}, Label: s.Entrants.Source.Random()},
 			SourceOption{Source: Source{Kind: SourceXLSX}, Label: s.Entrants.Source.Xlsx()})
 	}
-	if declared == SourcePlayers {
+	if declared.Seed == SourcePlayers {
 		view.Sources = append(view.Sources, SourceOption{Source: Source{Kind: SourcePlayers}, Label: s.Entrants.Source.Players()})
 	}
 
 	// Preselected: what the list was last imported from, else what the scheme
 	// declares, else the format's own roster.
-	view.Preselect = sourceOfStored(ctx, q, scope.FestID, list.State.Source, list.State.Division)
-	if view.Preselect.Kind == "" {
-		view.Preselect = sourceOfStored(ctx, q, scope.FestID, declared, "")
-		if seeding, err := schemeDivision(ctx, q, scope.GameID); err == nil && view.Preselect.Kind != "" {
-			view.Preselect.Division = seeding
+	stored := imports.ParseSource(list.State.Source, list.State.Division)
+	view.Preselect = imports.SourceFor(view.Kind, stored, declared)
+	if view.Preselect.Kind == imports.SourceKSI {
+		// The legacy word for the fest's first KSI, which the picker names by
+		// its code. With no KSI left, the list's source says nothing.
+		code, err := imports.FirstKSI(ctx, q, scope.FestID)
+		if err != nil {
+			return View{}, err
 		}
-	}
-	if view.Preselect.Kind == "" {
-		if division, ok := imports.EntrantDivision(dsl); ok && view.Kind == KindTroika {
-			view.Preselect = Source{Kind: SourceTroikas, Division: division}
-		} else {
-			view.Preselect = view.Sources[0].Source
+		view.Preselect = Source{Kind: SourceGame, Game: code}
+		if code == "" {
+			view.Preselect = imports.SourceFor(view.Kind, Source{}, declared)
 		}
 	}
 
@@ -211,33 +191,6 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 		return View{}, err
 	}
 	return view, nil
-}
-
-// sourceOfStored reads a source as the list stores it: a keyword, the legacy
-// "ksi" (the fest's first KSI), or a Game's code.
-func sourceOfStored(ctx context.Context, q store.Queryer, festID int64, stored, division string) Source {
-	switch stored {
-	case "":
-		return Source{}
-	case SourceFest, SourceTroikas, SourceRandom, SourceXLSX, SourcePlayers:
-		return Source{Kind: stored, Division: division}
-	case "ksi":
-		var code string
-		if err := q.QueryRowContext(ctx, `
-select code from games where fest_id = ? and game_type = 'ksi' order by position, id limit 1`, festID).Scan(&code); err != nil {
-			return Source{}
-		}
-		return Source{Kind: SourceGame, Game: code}
-	}
-	return Source{Kind: SourceGame, Game: stored, Division: division}
-}
-
-// schemeDivision is the division the Game's [init] keeps its seeding to.
-func schemeDivision(ctx context.Context, q store.Queryer, gameID int64) (string, error) {
-	var division string
-	err := q.QueryRowContext(ctx, `
-select coalesce(json_extract(scheme_json, '$.seeding.division'), '') from games where id = ?`, gameID).Scan(&division)
-	return division, err
 }
 
 // festDivisions is every Flag the fest's teams carry, in the order first seen.
@@ -423,7 +376,7 @@ func edit(h Host, reqCtx context.Context, scope core.FestScope, event string,
 // the source's list alone. Declines of the list there was survive. file is the
 // uploaded sheet of an xlsx source.
 func Import(h Host, ctx context.Context, scope core.FestScope, source Source, file io.Reader) (Result, error) {
-	src, err := seedSource(source, file)
+	src, err := source.Seeder(file)
 	if err != nil {
 		return Result{}, err
 	}
@@ -534,30 +487,6 @@ where p.game_id = ?
 	return nil
 }
 
-func seedSource(source Source, file io.Reader) (imports.SeedSource, error) {
-	switch source.Kind {
-	case SourceGame:
-		if strings.TrimSpace(source.Game) == "" {
-			return nil, corei18n.User(dopestrings.Default.Entrants.Error.SourceMissing())
-		}
-		return imports.FromGame(source.Game, source.Division), nil
-	case SourceFest:
-		return imports.FromFest(source.Division), nil
-	case SourceTroikas:
-		return imports.FromTroikas(source.Division), nil
-	case SourceRandom:
-		return imports.FromRandom(), nil
-	case SourcePlayers:
-		return imports.FromDeclaredPlayers(), nil
-	case SourceXLSX:
-		if file == nil {
-			return nil, corei18n.User(dopestrings.Default.Server.SeedImport.FileMissing())
-		}
-		return imports.FromXLSX(file), nil
-	}
-	return nil, corei18n.User(dopestrings.Default.Entrants.Error.SourceMissing())
-}
-
 // AddRequest names who to add: a candidate by its key, or a one-off entrant
 // by the name the host typed.
 type AddRequest struct {
@@ -584,7 +513,7 @@ func Add(h Host, ctx context.Context, scope core.FestScope, req AddRequest) (Res
 // participantFor is the Participant an add request means, made when it is new.
 func participantFor(ctx context.Context, tx *sql.Tx, scope core.FestScope, list imports.List, req AddRequest) (int64, string, string, error) {
 	s := dopestrings.Default
-	kind := kindOf(list.GameType)
+	kind := imports.KindOf(list.GameType)
 	if name := strings.TrimSpace(req.Name); name != "" {
 		if kind == KindTroika {
 			return 0, "", "", corei18n.User(s.Entrants.Error.OneOffTroika())

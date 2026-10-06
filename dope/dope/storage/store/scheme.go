@@ -31,7 +31,7 @@ type FestScheme struct {
 	// Division, declared in [init] without a seed, makes the Game's entrants
 	// the fest's troikas in that division: a Flag they carry, or with a leading
 	// minus one they do not. They follow the troikas page until the Game has
-	// anything entered.
+	// anything entered. imports.Declared is how it is read.
 	Division string `json:"division,omitempty"`
 }
 

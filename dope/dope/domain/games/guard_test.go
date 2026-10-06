@@ -37,11 +37,7 @@ var guardAllowed = map[string][]string{
 	// The legacy seed source "the fest's first KSI": the EK page's import
 	// button and the "ksi" keyword an old entrant list stores.
 	"domain/imports/seed.go": {
-		"select code from games where fest_id = ? and game_type = 'ksi' order by position, id limit 1`, scope.FestID).Scan(&code)",
-	},
-	"domain/entrants/entrants.go": {
-		`case "ksi":`,
-		"select code from games where fest_id = ? and game_type = 'ksi' order by position, id limit 1`, festID).Scan(&code); err != nil {",
+		"select code from games where fest_id = ? and game_type = 'ksi' order by position, id limit 1`, festID).Scan(&code)",
 	},
 }
 

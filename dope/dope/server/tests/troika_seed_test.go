@@ -430,6 +430,14 @@ func TestTroikaPlayersSeedPutsUnknownPeopleLast(t *testing.T) {
 		"[scheme]\nkind: roundrobin\ngroup_size: 5\nthemes: 6\nmetric: total\npoints: [1, 0.5, 0]\n", odCode)
 	gameID := createGame(url.Values{"game_type": {"troika"}, "troika_dsl": {dsl}})
 	scope := core.FestScope{FestID: festID, GameID: gameID}
+	// The fest's own roster of a Troika is its troikas, never its teams.
+	fest, err := entrants.Import(srv.Eng(), t.Context(), scope, entrants.Source{Kind: entrants.SourceFest}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fest.View.Rows) != 5 || fest.View.Source != entrants.SourceTroikas {
+		t.Fatalf("the fest source gave %d rows from %q, want the 5 troikas", len(fest.View.Rows), fest.View.Source)
+	}
 	if _, err := entrants.Import(srv.Eng(), t.Context(), scope, entrants.Source{Kind: entrants.SourceTroikas}, nil); err != nil {
 		t.Fatal(err)
 	}

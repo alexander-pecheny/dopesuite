@@ -122,19 +122,19 @@ func LoadSeedImportView(eng *core.Engine, ctx context.Context, scope core.FestSc
 // declareSeeding tells the view where the Game's [init] says its seeding comes
 // from, with the source Game's title when it names one.
 func declareSeeding(ctx context.Context, q store.Queryer, scope core.FestScope, view *SeedImportView) error {
-	declared, err := loadSchemeSeeding(ctx, q, scope)
+	declared, err := LoadDeclared(ctx, q, scope.GameID)
 	if err != nil {
 		return err
 	}
-	view.Declared, view.DeclaredTitle = declared.Source, ""
-	switch declared.Source {
-	case "", "random", "players", "xlsx":
+	view.Declared, view.DeclaredTitle = declared.Seed, ""
+	source := declared.Source()
+	if source.Kind != SourceGame {
 		return nil
 	}
 	err = q.QueryRowContext(ctx, `
-select title from games where fest_id = ? and code = ?`, scope.FestID, declared.Source).Scan(&view.DeclaredTitle)
+select title from games where fest_id = ? and code = ?`, scope.FestID, source.Game).Scan(&view.DeclaredTitle)
 	if errors.Is(err, sql.ErrNoRows) {
-		view.DeclaredTitle = declared.Source
+		view.DeclaredTitle = source.Game
 		return nil
 	}
 	return err
@@ -187,15 +187,25 @@ func FromXLSX(file io.Reader) SeedSource { return fromXLSX{file} }
 
 type fromKSI struct{}
 
-func (fromKSI) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
+// FirstKSI is the code of the fest's first KSI, what the legacy source word
+// "ksi" names; "" when the fest has none.
+func FirstKSI(ctx context.Context, q store.Queryer, festID int64) (string, error) {
 	var code string
-	err := tx.QueryRowContext(ctx, `
-select code from games where fest_id = ? and game_type = 'ksi' order by position, id limit 1`, scope.FestID).Scan(&code)
+	err := q.QueryRowContext(ctx, `
+select code from games where fest_id = ? and game_type = 'ksi' order by position, id limit 1`, festID).Scan(&code)
 	if errors.Is(err, sql.ErrNoRows) {
-		return seeding{}, corei18n.User(dopestrings.Default.Imports.Seed.KsiMissing())
+		return "", nil
 	}
+	return code, err
+}
+
+func (fromKSI) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
+	code, err := FirstKSI(ctx, tx, scope.FestID)
 	if err != nil {
 		return seeding{}, err
+	}
+	if code == "" {
+		return seeding{}, corei18n.User(dopestrings.Default.Imports.Seed.KsiMissing())
 	}
 	gameID, candidates, err := standingsCandidates(ctx, tx, scope.FestID, code, nil)
 	return seeding{source: seedSourceKSI, label: dopestrings.Default.Imports.SeedSource.Ksi(), sourceGameID: gameID, candidates: candidates}, err
@@ -204,22 +214,22 @@ select code from games where fest_id = ? and game_type = 'ksi' order by position
 type fromScheme struct{}
 
 func (fromScheme) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
-	declared, err := loadSchemeSeeding(ctx, tx, scope)
+	declared, err := LoadDeclared(ctx, tx, scope.GameID)
 	if err != nil {
 		return seeding{}, err
 	}
-	switch declared.Source {
+	source := declared.Source()
+	switch source.Kind {
 	case "":
 		return seeding{}, corei18n.User(dopestrings.Default.Imports.Seed.SchemeMissing())
-	case "xlsx":
+	case SourceXLSX:
 		return seeding{}, corei18n.User(dopestrings.Default.Imports.Seed.SchemeXlsx())
-	case "random":
-		candidates, err := randomSeedCandidates(ctx, tx, scope)
-		return seeding{source: "random", label: dopestrings.Default.Imports.SeedSource.Random(), candidates: candidates}, err
-	case "players":
-		return FromPlayers(declared.Players, declared.Sort).resolve(ctx, tx, scope)
 	}
-	return fromGame{code: declared.Source, division: declared.Division, sort: declared.Sort}.resolve(ctx, tx, scope)
+	seeder, err := source.Seeder(nil)
+	if err != nil {
+		return seeding{}, err
+	}
+	return seeder.resolve(ctx, tx, scope)
 }
 
 // inDivision keeps the candidates of one Division, ranked afresh inside it: the
@@ -477,25 +487,6 @@ select game_type, coalesce(state_json, '{}')
 from games
 where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&gameType, &rawState)
 	return gameType, rawState, err
-}
-
-func loadSchemeSeeding(ctx context.Context, q store.Queryer, scope core.FestScope) (store.SchemeSeeding, error) {
-	var schemeJSON string
-	if err := q.QueryRowContext(ctx, `
-select coalesce(scheme_json, '{}') from games where fest_id = ? and id = ?`,
-		scope.FestID, scope.GameID).Scan(&schemeJSON); err != nil {
-		return store.SchemeSeeding{}, err
-	}
-	var scheme struct {
-		Seeding *store.SchemeSeeding `json:"seeding"`
-	}
-	if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
-		return store.SchemeSeeding{}, err
-	}
-	if scheme.Seeding == nil {
-		return store.SchemeSeeding{}, nil
-	}
-	return *scheme.Seeding, nil
 }
 
 // materializeRosterOverridesTx reapplies the Game's player overrides, if it

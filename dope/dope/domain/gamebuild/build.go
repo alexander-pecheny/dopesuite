@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/schemedsl"
 	"dope/dope/platform/util"
@@ -233,15 +234,20 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 	if err != nil {
 		return 0, err
 	}
-	entrants, placeholders, err := createEntrantsTx(ctx, tx, festID, gameType, dsl, entrants)
+	doc, declared, err := parseSchemeDSL(gameType, dsl)
 	if err != nil {
 		return 0, err
 	}
+	entrants, placeholders, err := createEntrantsTx(ctx, tx, festID, gameType, declared, doc, entrants)
+	if err != nil {
+		return 0, err
+	}
+	input := schemedsl.Input{Slug: identity.Code, Title: identity.Title, GameType: gameType}
 	var scheme store.FestScheme
 	if placeholders > 0 {
-		scheme, err = schemeForEmptySeats(gameType, identity.Code, identity.Title, dsl, placeholders)
+		scheme, err = schemedsl.Compile(doc, withEmptySeats(input, placeholders))
 	} else {
-		scheme, err = schemeForEntrantsTx(ctx, tx, festID, gameType, identity.Code, identity.Title, dsl, entrants)
+		scheme, err = compileForEntrantsTx(ctx, tx, festID, doc, declared, input, entrants)
 	}
 	if err != nil {
 		return 0, err
@@ -290,30 +296,54 @@ values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 	return gameID, nil
 }
 
-func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, slug, title, dsl string, chosen []int64) (store.FestScheme, error) {
+// parseSchemeDSL parses a Game's scheme DSL and reads what its [init]
+// declares, which decides who the Game is compiled for.
+func parseSchemeDSL(gameType, dsl string) (*schemedsl.Doc, imports.Declared, error) {
 	if strings.TrimSpace(dsl) == "" {
-		return store.FestScheme{}, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
+		return nil, imports.Declared{}, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
 	}
 	doc, err := schemedsl.Parse(dsl)
 	if err != nil {
+		return nil, imports.Declared{}, err
+	}
+	init, err := schemedsl.ReadInit(doc, gameType)
+	if err != nil {
+		return nil, imports.Declared{}, err
+	}
+	return doc, imports.DeclaredOfInit(init), nil
+}
+
+func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, slug, title, dsl string, chosen []int64) (store.FestScheme, error) {
+	doc, declared, err := parseSchemeDSL(gameType, dsl)
+	if err != nil {
 		return store.FestScheme{}, err
 	}
-	input := schemedsl.Input{Slug: slug, Title: title, GameType: gameType}
-	if seed, hasSeed := doc.Init.Str("seed"); !hasSeed {
-		entrants, err := chosenEntrantsTx(ctx, tx, festID, gameType, chosen)
+	return compileForEntrantsTx(ctx, tx, festID, doc, declared, schemedsl.Input{Slug: slug, Title: title, GameType: gameType}, chosen)
+}
+
+// compileForEntrantsTx compiles a scheme. Unseeded, it is compiled for the
+// chosen entrants, or for the format's default ones when nobody was chosen.
+// Seeded, its seats are the seed's, and the sources the seed reads must be
+// Games of this fest, or the import would fail later, at the host's button,
+// rather than here.
+func compileForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, doc *schemedsl.Doc, declared imports.Declared, input schemedsl.Input, chosen []int64) (store.FestScheme, error) {
+	if !declared.Seeded() {
+		entrants, err := chosenEntrantsTx(ctx, tx, festID, input.GameType, declared, doc, chosen)
 		if err != nil {
 			return store.FestScheme{}, err
 		}
 		input.Entrants = entrants
-	} else if seed == "players" {
-		// A seed composed over players (Troika rules §4.4.2) reads the standings of
-		// the Games its `games:` names: each must be a Game of this fest, or the
-		// import would fail later, at the host's button, rather than here.
-		sources, _, err := doc.Init.List("games")
-		if err != nil {
-			return store.FestScheme{}, err
+		return schemedsl.Compile(doc, input)
+	}
+	switch source := declared.Source(); source.Kind {
+	case imports.SourcePlayers:
+		// A seed composed over players (Troika rules §4.4.2) reads the
+		// standings of the Games its `games:` names.
+		var games []string
+		if declared.Players != nil {
+			games = declared.Players.Games
 		}
-		for _, code := range sources {
+		for _, code := range games {
 			known, err := festHasGameTx(ctx, tx, festID, code)
 			if err != nil {
 				return store.FestScheme{}, err
@@ -322,13 +352,13 @@ func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType
 				return store.FestScheme{}, corei18n.User(dopestrings.Default.Imports.Seed.GameMissing(code))
 			}
 		}
-	} else if seed != "random" && seed != "xlsx" {
-		known, err := festHasGameTx(ctx, tx, festID, seed)
+	case imports.SourceGame:
+		known, err := festHasGameTx(ctx, tx, festID, source.Game)
 		if err != nil {
 			return store.FestScheme{}, err
 		}
 		if !known {
-			return store.FestScheme{}, corei18n.User(dopestrings.Default.Gamebuild.Create.SeedUnknown(seed))
+			return store.FestScheme{}, corei18n.User(dopestrings.Default.Gamebuild.Create.SeedUnknown(source.Game))
 		}
 	}
 	return schemedsl.Compile(doc, input)
@@ -337,9 +367,8 @@ func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType
 // placeholderSeats is how many empty seats a game is built with before it
 // has an entrant: as many as its first stage sends on, the least its scheme
 // can take, and two when it does not say.
-func placeholderSeats(dsl string) int {
-	doc, err := schemedsl.Parse(dsl)
-	if err != nil || len(doc.Blocks) == 0 {
+func placeholderSeats(doc *schemedsl.Doc) int {
+	if len(doc.Blocks) == 0 {
 		return 2
 	}
 	if n, ok := doc.Blocks[0].Int("proceeding_participants"); ok && n > 1 {
@@ -351,18 +380,19 @@ func placeholderSeats(dsl string) int {
 	return 2
 }
 
-// schemeForEmptySeats compiles a scheme for seats nobody sits in yet,
-// numbered 1… like the seeds an entrant list deals.
-func schemeForEmptySeats(gameType, slug, title, dsl string, seats int) (store.FestScheme, error) {
-	doc, err := schemedsl.Parse(dsl)
-	if err != nil {
-		return store.FestScheme{}, err
-	}
-	input := schemedsl.Input{Slug: slug, Title: title, GameType: gameType}
+// withEmptySeats is the input for seats nobody sits in yet, numbered 1… like
+// the seeds an entrant list deals.
+func withEmptySeats(input schemedsl.Input, seats int) schemedsl.Input {
+	input.Entrants = emptySeats(seats)
+	return input
+}
+
+func emptySeats(seats int) []store.SchemeSlot {
+	out := make([]store.SchemeSlot, 0, seats)
 	for i := 1; i <= seats; i++ {
-		input.Entrants = append(input.Entrants, store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i}})
+		out = append(out, store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i}})
 	}
-	return schemedsl.Compile(doc, input)
+	return out
 }
 
 func festHasGameTx(ctx context.Context, tx *sql.Tx, festID int64, code string) (bool, error) {
@@ -993,6 +1023,17 @@ func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, 
 			Title string `json:"title"`
 		}
 		_ = json.Unmarshal([]byte(schemeJSON), &meta)
+		if len(entrants) == 0 {
+			// Nobody recorded: a Game that seats troikas seats the
+			// default ones, never the fest's teams.
+			_, declared, err := parseSchemeDSL(gameType, dsl)
+			if err != nil {
+				return nil, err
+			}
+			if entrants, err = defaultTroikasTx(ctx, tx, festID, gameType, declared); err != nil {
+				return nil, err
+			}
+		}
 		scheme, err := schemeForEntrantsTx(ctx, tx, festID, gameType, meta.Slug, meta.Title, dsl, entrants)
 		if err != nil {
 			return nil, err

@@ -39,24 +39,27 @@ type applied struct {
 // bout nobody has started is dealt again.
 func applyListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, current, next imports.List, event string) (applied, error) {
 	var out applied
-	var dsl string
+	var dsl, schemeJSON string
 	if err := tx.QueryRowContext(ctx, `
-select coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`, scope.GameID, scope.FestID).Scan(&dsl); err != nil {
+select coalesce(scheme_dsl, ''), coalesce(scheme_json, '{}') from games where id = ? and fest_id = ?`, scope.GameID, scope.FestID).Scan(&dsl, &schemeJSON); err != nil {
 		return out, err
 	}
-	if imports.EntrantSized(dsl) {
+	declared, err := imports.DeclaredOfJSON(schemeJSON, dsl)
+	if err != nil {
+		return out, err
+	}
+	if declared.EntrantSized() {
 		var err error
 		if out.rebuilt, out.kept, err = gamebuild.FollowListTx(ctx, tx, scope, dsl, current.GameType, next.Active()); err != nil {
 			return out, err
 		}
 	}
-	var err error
 	out.view, out.revision, out.stateJSON, err = imports.SaveListTx(ctx, tx, scope, current, next, event)
 	return out, err
 }
 
 // A Troika Game whose scheme declares a division in [init] without a seed
-// seats the fest's troikas in that division (imports.EntrantDivision). Its
+// seats the fest's troikas in that division (imports.Declared.EntrantDivision). Its
 // Entrant list follows them: a troika added, moved to another division or
 // deleted changes the list, and so the Game's written qualifier, until the
 // Game has anything entered. After that the list is the host's to edit on the
@@ -116,16 +119,16 @@ func LoadDivisionGames(ctx context.Context, q store.Queryer, festID int64) ([]Di
 
 func divisionGames(ctx context.Context, q store.Queryer, festID, exclude int64) ([]DivisionGame, []imports.List, error) {
 	type row struct {
-		id                   int64
-		title, dsl, gameType string
+		id                               int64
+		title, dsl, schemeJSON, gameType string
 	}
 	filter, args := troikaFormats(festID)
 	rows, err := store.CollectRows(ctx, q, `
-select id, title, scheme_dsl, game_type from games
+select id, title, scheme_dsl, coalesce(scheme_json, '{}'), game_type from games
 where fest_id = ? and `+filter+` and scheme_dsl is not null
 order by position, id`, args, func(rows *sql.Rows) (row, error) {
 		var r row
-		return r, rows.Scan(&r.id, &r.title, &r.dsl, &r.gameType)
+		return r, rows.Scan(&r.id, &r.title, &r.dsl, &r.schemeJSON, &r.gameType)
 	})
 	if err != nil {
 		return nil, nil, err
@@ -133,17 +136,21 @@ order by position, id`, args, func(rows *sql.Rows) (row, error) {
 	var out []DivisionGame
 	var lists []imports.List
 	for _, r := range rows {
-		division, ok := imports.EntrantDivision(r.dsl)
+		declared, err := imports.DeclaredOfJSON(r.schemeJSON, r.dsl)
+		if err != nil {
+			return nil, nil, err
+		}
+		division, ok := declared.EntrantDivision()
 		if !ok {
 			continue
 		}
 		game := DivisionGame{GameID: r.id, Title: r.title, Division: division}
-		troikas, err := roster.AssembledInDivision(ctx, q, festID, division, exclude)
+		troikas, err := imports.DefaultEntrants(ctx, q, festID, KindTroika, division, exclude)
 		if err != nil {
 			return nil, nil, err
 		}
 		for _, t := range troikas {
-			game.Troikas = append(game.Troikas, t.ID)
+			game.Troikas = append(game.Troikas, t.ParticipantID)
 		}
 		list, err := imports.LoadListTx(ctx, q, core.FestScope{FestID: festID, GameID: r.id})
 		if err != nil {
@@ -198,13 +205,13 @@ func FollowDivisionsTx(ctx context.Context, tx *sql.Tx, festID, exclude int64) (
 		for _, row := range list.State.Rows {
 			declined[row.TeamID] = row.Declined
 		}
-		troikas, err := roster.AssembledInDivision(ctx, tx, festID, game.Division, exclude)
+		troikas, err := imports.DefaultEntrants(ctx, tx, festID, KindTroika, game.Division, exclude)
 		if err != nil {
 			return nil, err
 		}
 		state := imports.ListState{Source: SourceTroikas, Division: game.Division}
 		for rank, troika := range troikas {
-			state.Rows = append(state.Rows, imports.ListRow{SourceRank: rank + 1, TeamID: troika.ID, Name: troika.Name, Declined: declined[troika.ID]})
+			state.Rows = append(state.Rows, imports.ListRow{SourceRank: rank + 1, TeamID: troika.ParticipantID, Name: troika.Name, Declined: declined[troika.ParticipantID]})
 		}
 		scope := core.FestScope{FestID: festID, GameID: game.GameID}
 		saved, err := applyListTx(ctx, tx, scope, list, list.With(state), "game:entrants")

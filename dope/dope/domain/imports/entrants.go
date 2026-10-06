@@ -10,8 +10,6 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
-	rosterpkg "dope/dope/domain/roster"
-	"dope/dope/domain/schemedsl"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 	corei18n "pecheny.me/dopecore/i18nstrings"
@@ -368,49 +366,6 @@ where match_id = ? and participant_id is not null`, []any{m.id}, func(rows *sql.
 	return out, nil
 }
 
-// EntrantSized reports whether a scheme DSL compiles against its Game's
-// entrants, so the Structure's size follows the list: a DSL with no seed in
-// [init]. A Game seeded from a source has a Structure of fixed size, and the
-// list fills its seats.
-func EntrantSized(dsl string) bool {
-	if strings.TrimSpace(dsl) == "" {
-		return false
-	}
-	doc, err := schemedsl.Parse(dsl)
-	if err != nil {
-		return false
-	}
-	_, seeded := doc.Init.Str("seed")
-	return !seeded
-}
-
-// EntrantDivision is the division a scheme DSL takes its troikas from:
-// division in [init] with no seed. A Troika Game that takes one follows that
-// division's troikas (entrants.FollowDivisionsTx).
-func EntrantDivision(dsl string) (string, bool) {
-	doc, err := schemedsl.Parse(dsl)
-	if err != nil {
-		return "", false
-	}
-	if _, seeded := doc.Init.Str("seed"); seeded {
-		return "", false
-	}
-	division, ok := doc.Init.Str("division")
-	division = strings.TrimSpace(division)
-	return division, ok && division != ""
-}
-
-// DeclaresSeed reports whether a scheme's [init] names a seed source, which
-// then decides the entrants instead of the form.
-func DeclaresSeed(dsl string) bool {
-	doc, err := schemedsl.Parse(dsl)
-	if err != nil {
-		return false
-	}
-	_, seeded := doc.Init.Str("seed")
-	return seeded
-}
-
 // InBoutTx reports whether a Participant sits in any bout of the Game, begun
 // or not. A bout's seat points at it, so it cannot be deleted. This is a
 // weaker test than PlayedParticipants, which asks whether it has results and
@@ -511,11 +466,11 @@ func recordSeatedTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, seats
 	if err := tx.QueryRowContext(ctx, `select count(*) from game_participants where game_id = ?`, scope.GameID).Scan(&named); err != nil {
 		return err
 	}
-	var dsl string
-	if err := tx.QueryRowContext(ctx, `select coalesce(scheme_dsl, '') from games where id = ?`, scope.GameID).Scan(&dsl); err != nil {
+	declared, err := LoadDeclared(ctx, tx, scope.GameID)
+	if err != nil {
 		return err
 	}
-	if named == 0 && !EntrantSized(dsl) {
+	if named == 0 && !declared.EntrantSized() {
 		return nil
 	}
 	if _, err := tx.ExecContext(ctx, `delete from game_participants where game_id = ?`, scope.GameID); err != nil {
@@ -652,7 +607,7 @@ func (f fromGame) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 	rules := f.sort
 	if rules == nil {
 		// The scheme's own sorting applies when the host picks the Game it declares.
-		if declared, err := loadSchemeSeeding(ctx, tx, scope); err == nil && declared.Source == f.code {
+		if declared, err := LoadDeclared(ctx, tx, scope.GameID); err == nil && declared.Seed == f.code {
 			rules = declared.Sort
 		}
 	}
@@ -680,19 +635,20 @@ func FromDeclaredPlayers() SeedSource { return fromDeclaredPlayers{} }
 type fromDeclaredPlayers struct{}
 
 func (fromDeclaredPlayers) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
-	declared, err := loadSchemeSeeding(ctx, tx, scope)
+	declared, err := LoadDeclared(ctx, tx, scope.GameID)
 	if err != nil {
 		return seeding{}, err
 	}
-	if declared.Source != "players" {
+	if declared.Seed != SourcePlayers {
 		return seeding{}, corei18n.User(dopestrings.Default.Imports.Seed.PlayersUndeclared())
 	}
 	return FromPlayers(declared.Players, declared.Sort).resolve(ctx, tx, scope)
 }
 
-// FromFest is the fest's whole roster in its own order: the numbered teams by
-// number, kept to one Division when one is given, or, in a format that seats
-// players, the fest's players in the order they registered.
+// FromFest is the fest's whole roster in its own order, as DefaultEntrants
+// gives it: the numbered teams by number, kept to one Division when one is
+// given; in a format that seats players, the fest's players in the order they
+// registered; in one that seats troikas, the troikas (FromTroikas).
 func FromFest(division string) SeedSource { return fromFest{division: strings.TrimSpace(division)} }
 
 type fromFest struct{ division string }
@@ -702,29 +658,27 @@ func (f fromFest) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 	if err != nil {
 		return seeding{}, err
 	}
+	kind := KindOf(gameType)
+	if kind == KindTroika {
+		return fromTroikas(f).resolve(ctx, tx, scope)
+	}
 	label := dopestrings.Default.Imports.SeedSource.Fest()
-	if games.IsIndividual(gameType) {
-		players, err := FestPlayerChoices(ctx, tx, scope.FestID)
-		if err != nil {
-			return seeding{}, err
-		}
-		candidates := make([]seedCandidate, 0, len(players))
-		for _, player := range players {
-			id, err := EnsurePlayerParticipantTx(ctx, tx, scope.FestID, player.ID)
+	entrants, err := DefaultEntrants(ctx, tx, scope.FestID, kind, "", 0)
+	if err != nil {
+		return seeding{}, err
+	}
+	var candidates []seedCandidate
+	if kind == KindPlayer {
+		for _, player := range entrants {
+			id, err := EnsurePlayerParticipantTx(ctx, tx, scope.FestID, player.FestPlayerID)
 			if err != nil {
 				return seeding{}, err
 			}
 			candidates = append(candidates, seedCandidate{SourceRank: len(candidates) + 1, Name: player.Name, ParticipantID: id})
 		}
-		return seeding{source: "fest", label: label, candidates: candidates}, nil
+		return seeding{source: SourceFest, label: label, candidates: candidates}, nil
 	}
-	roster, err := loadSeedRosterTeams(ctx, tx, scope.FestID)
-	if err != nil {
-		return seeding{}, err
-	}
-	sort.SliceStable(roster, func(i, j int) bool { return roster[i].Number < roster[j].Number })
-	var candidates []seedCandidate
-	for _, team := range roster {
+	for _, team := range entrants {
 		if team.Number > 0 {
 			candidates = append(candidates, seedCandidate{SourceRank: len(candidates) + 1, Name: team.Name, Number: int(team.Number)})
 		}
@@ -737,11 +691,12 @@ func (f fromFest) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 			return seeding{}, err
 		}
 	}
-	return seeding{source: "fest", label: label, division: f.division, candidates: candidates}, nil
+	return seeding{source: SourceFest, label: label, division: f.division, candidates: candidates}, nil
 }
 
-// FromTroikas is the fest's troikas by name, kept to one Division when one is
-// given: what a Troika Game that takes a division follows.
+// FromTroikas is the fest's troikas in the order of applications, kept to one
+// Division when one is given: what a Troika Game that takes a division
+// follows.
 func FromTroikas(division string) SeedSource {
 	return fromTroikas{division: strings.TrimSpace(division)}
 }
@@ -749,7 +704,7 @@ func FromTroikas(division string) SeedSource {
 type fromTroikas struct{ division string }
 
 func (f fromTroikas) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
-	troikas, err := TroikasIn(ctx, tx, scope.FestID, f.division, 0)
+	troikas, err := DefaultEntrants(ctx, tx, scope.FestID, KindTroika, f.division, 0)
 	if err != nil {
 		return seeding{}, err
 	}
@@ -758,22 +713,9 @@ func (f fromTroikas) resolve(ctx context.Context, tx *sql.Tx, scope core.FestSco
 	}
 	candidates := make([]seedCandidate, len(troikas))
 	for i, troika := range troikas {
-		candidates[i] = seedCandidate{SourceRank: i + 1, Name: troika.Name, ParticipantID: troika.ID}
+		candidates[i] = seedCandidate{SourceRank: i + 1, Name: troika.Name, ParticipantID: troika.ParticipantID}
 	}
-	return seeding{source: "troikas", label: dopestrings.Default.Imports.SeedSource.Troikas(), division: f.division, candidates: candidates}, nil
-}
-
-// TroikasIn is the fest's troikas in a Division, all of them for "", leaving
-// out the one excluded (a troika about to be deleted).
-func TroikasIn(ctx context.Context, q store.Queryer, festID int64, division string, exclude int64) ([]rosterpkg.Assembled, error) {
-	if strings.TrimSpace(division) != "" {
-		return rosterpkg.AssembledInDivision(ctx, q, festID, division, exclude)
-	}
-	all, err := rosterpkg.LoadAssembled(ctx, q, festID)
-	if err != nil {
-		return nil, err
-	}
-	return slices.DeleteFunc(all, func(a rosterpkg.Assembled) bool { return a.ID == exclude }), nil
+	return seeding{source: SourceTroikas, label: dopestrings.Default.Imports.SeedSource.Troikas(), division: f.division, candidates: candidates}, nil
 }
 
 // FestPlayerChoice is one fest player a format that seats players may add.

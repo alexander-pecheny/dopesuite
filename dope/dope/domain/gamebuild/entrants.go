@@ -15,7 +15,7 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
-// FollowListTx makes an entrant-sized Structure (imports.EntrantSized) follow
+// FollowListTx makes an entrant-sized Structure (imports.Declared.EntrantSized) follow
 // the Entrant list's active entrants, the Structure's half of saving the list
 // (entrants owns the other half). While nothing has been entered in the Game
 // it is recompiled for them. A scheme of a fixed size (a roundrobin of groups

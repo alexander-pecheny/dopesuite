@@ -76,8 +76,10 @@ func (s *server) handGameRoster(w http.ResponseWriter, r *http.Request, sc route
 
 // troikaRoster is who a Troika's roster tab lists: the troikas it seats; while
 // it seats nobody yet (a seed: players scheme seats them only once the seed is
-// known), the troikas its entrant list names; with no list either, every
-// troika of the fest. Never the fest's teams: a Troika plays troikas.
+// known), the troikas its entrant list names; with no list either, the
+// troikas it would seat by default (imports.DefaultEntrants): those of its
+// division, or every troika of the fest. Never the fest's teams: a Troika
+// plays troikas.
 func (s *server) troikaRoster(ctx context.Context, sc route.Scope) ([]roster.GameEntrantView, error) {
 	seated, err := roster.LoadGameEntrantsView(ctx, s.eng.DB, sc.FestID, sc.GameID)
 	if err != nil || len(seated) > 0 {
@@ -89,12 +91,17 @@ func (s *server) troikaRoster(ctx context.Context, sc route.Scope) ([]roster.Gam
 	}
 	ids := list.Active()
 	if len(ids) == 0 {
-		all, err := roster.LoadAssembled(ctx, s.eng.DB, sc.FestID)
+		declared, err := imports.LoadDeclared(ctx, s.eng.DB, sc.GameID)
 		if err != nil {
 			return nil, err
 		}
-		for _, a := range all {
-			ids = append(ids, a.ID)
+		division, _ := declared.EntrantDivision()
+		troikas, err := imports.DefaultEntrants(ctx, s.eng.DB, sc.FestID, imports.KindTroika, division, 0)
+		if err != nil {
+			return nil, err
+		}
+		for _, t := range troikas {
+			ids = append(ids, t.ParticipantID)
 		}
 	}
 	return roster.LoadParticipantsView(ctx, s.eng.DB, sc.FestID, ids)

@@ -281,9 +281,9 @@ func (c *compiler) checkKeys() error {
 // readPlayerSeed reads the composed seed: which Games a player's own team
 // is looked up in, the metrics a player carries, and how those fold over the
 // Participant's three.
-func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
-	line := c.doc.Init.Values["seed"].Line
-	games, ok, err := c.doc.Init.List("games")
+func readPlayerSeed(doc *Doc) (*store.SchemePlayerSeed, error) {
+	line := doc.Init.Values["seed"].Line
+	games, ok, err := doc.Init.List("games")
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +291,7 @@ func (c *compiler) readPlayerSeed() (*store.SchemePlayerSeed, error) {
 		return nil, errAt(line, "%s", dopestrings.Default.Scheme.Seed.PlayersNeedGames())
 	}
 	out := &store.SchemePlayerSeed{Games: games, Player: map[string]string{}, Seed: map[string]string{}}
-	for key, v := range c.doc.Init.Values {
+	for key, v := range doc.Init.Values {
 		grain, name, dotted := strings.Cut(key, ".")
 		if !dotted || name == "" {
 			continue
@@ -371,29 +371,49 @@ func parseTours(raw string) ([]int, bool) {
 }
 
 func (c *compiler) readInit() error {
-	seed, ok := c.doc.Init.Str("seed")
+	init, err := ReadInit(c.doc, c.in.GameType)
+	if err != nil {
+		return err
+	}
+	c.scheme.Seeding, c.scheme.Division = init.Seeding, init.Division
+	return nil
+}
+
+// Init is what a scheme's [init] declares about who a Game seats: the seed
+// source it is ranked from, or, with no seed, the division whose troikas it
+// takes. The compiled scheme carries both (FestScheme.Seeding, .Division), and
+// imports.Declared is how everything else reads them.
+type Init struct {
+	Seeding  *store.SchemeSeeding
+	Division string
+}
+
+// ReadInit reads [init]. Game creation calls it before the scheme can be
+// compiled, since who the Game seats decides what it is compiled for.
+func ReadInit(doc *Doc, gameType string) (Init, error) {
+	seed, ok := doc.Init.Str("seed")
 	if !ok {
 		// division without a seed names who plays rather than how they are
 		// ranked: a Troika Game's entrants are the troikas in that division.
-		if division, ok := c.doc.Init.Str("division"); ok {
-			if !games.SeatsTroikas(c.in.GameType) {
-				return errAt(c.doc.Init.Values["division"].Line, "%s", dopestrings.Default.Scheme.Seed.DivisionTroikaOnly())
+		if division, ok := doc.Init.Str("division"); ok {
+			if !games.SeatsTroikas(gameType) {
+				return Init{}, errAt(doc.Init.Values["division"].Line, "%s", dopestrings.Default.Scheme.Seed.DivisionTroikaOnly())
 			}
-			c.scheme.Division = strings.TrimSpace(division)
+			return Init{Division: strings.TrimSpace(division)}, nil
 		}
-		return nil
+		return Init{}, nil
 	}
 	seeding := &store.SchemeSeeding{Source: seed}
 	if seed == "players" {
-		players, err := c.readPlayerSeed()
+		players, err := readPlayerSeed(doc)
 		if err != nil {
-			return err
+			return Init{}, err
 		}
 		seeding.Players = players
 	}
-	rules, ok, err := c.doc.Init.Sorting("sorting")
+	rules, ok, err := doc.Init.Sorting("sorting")
 	if err != nil {
-		return err
+		return Init{}, err
 	}
 	if ok {
 		for _, rule := range rules {
@@ -403,11 +423,10 @@ func (c *compiler) readInit() error {
 	// division keeps the seed to one Division's teams: those carrying a Flag,
 	// or, written with a leading minus, those not carrying it. The student and
 	// the adult Erudit-Sextet seed from one OD table this way.
-	if division, ok := c.doc.Init.Str("division"); ok {
+	if division, ok := doc.Init.Str("division"); ok {
 		seeding.Division = strings.TrimSpace(division)
 	}
-	c.scheme.Seeding = seeding
-	return nil
+	return Init{Seeding: seeding}, nil
 }
 
 // readVenues resolves [defaults] venues (count or titled list); absent, the

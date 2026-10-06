@@ -7,12 +7,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"sort"
 	"strings"
 
-	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
-	"dope/dope/domain/roster"
+	"dope/dope/domain/schemedsl"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
@@ -114,18 +112,28 @@ select participant_id from game_participants where game_id = ? order by position
 }
 
 // chosenEntrantsTx turns the Game's chosen Participants into scheme entrants,
-// numbered from 1 in the order given. Without a choice the whole fest plays.
-func chosenEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, chosen []int64) ([]store.SchemeSlot, error) {
+// numbered from 1 in the order given. Nobody chosen is the format's default
+// entrants (imports.DefaultEntrants): the troikas of a format that seats
+// them, or empty seats while there are none; otherwise the whole fest plays.
+func chosenEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, declared imports.Declared, doc *schemedsl.Doc, chosen []int64) ([]store.SchemeSlot, error) {
+	kind := imports.KindOf(gameType)
 	if len(chosen) == 0 {
-		return seedEntrantsTx(ctx, tx, festID, gameType)
+		if kind != imports.KindTroika {
+			return seedEntrantsTx(ctx, tx, festID, kind)
+		}
+		troikas, err := defaultTroikasTx(ctx, tx, festID, gameType, declared)
+		if err != nil {
+			return nil, err
+		}
+		if len(troikas) == 0 {
+			return emptySeats(placeholderSeats(doc)), nil
+		}
+		chosen = troikas
 	}
 	// A team format seats teams and an individual one players, so a chosen
 	// Participant of the other kind is a mistake worth naming rather than a
 	// seat left empty at the venue.
-	want := "team"
-	if games.IsIndividual(gameType) {
-		want = "player"
-	}
+	want := imports.ParticipantRoster(kind)
 	entrants := make([]store.SchemeSlot, len(chosen))
 	for i, participantID := range chosen {
 		var name, roster string
@@ -147,30 +155,39 @@ select name, roster from participants where id = ? and fest_id = ?`, participant
 	return entrants, nil
 }
 
-// seedEntrantsTx is the fest's own roster as scheme entrants: teams in a team
-// format, players in an individual one. A Participant is whoever the format
-// seats, and the seeding is where that first shows up.
-func seedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string) ([]store.SchemeSlot, error) {
-	if games.IsIndividual(gameType) {
-		return seedPlayerEntrantsTx(ctx, tx, festID)
-	}
-	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+// seedEntrantsTx is the fest's own roster as scheme entrants: teams by their
+// fest numbers in a team format, players numbered in the order they
+// registered in an individual one — that order IS the seeding, the way a
+// fest's registration list is.
+func seedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, kind string) ([]store.SchemeSlot, error) {
+	roster, err := imports.DefaultEntrants(ctx, tx, festID, kind, "", 0)
 	if err != nil {
 		return nil, err
 	}
-	if len(teams) < 2 {
+	if kind == imports.KindPlayer && len(roster) < minPlayers {
+		return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedPlayers())
+	}
+	if kind != imports.KindPlayer && len(roster) < minTeams {
 		return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedTwo())
 	}
-	sort.Slice(teams, func(i, j int) bool { return teams[i].Number < teams[j].Number })
-	entrants := make([]store.SchemeSlot, len(teams))
-	for i, team := range teams {
-		if team.Number <= 0 {
+	entrants := make([]store.SchemeSlot, len(roster))
+	for i, e := range roster {
+		number := int(e.Number)
+		if kind == imports.KindPlayer {
+			number = i + 1
+		} else if e.Number <= 0 {
 			return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.Unnumbered())
 		}
-		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: int(team.Number)}, Label: team.Name}
+		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: number}, Label: e.Name}
 	}
 	return entrants, nil
 }
+
+// The fewest entrants a Game seating the whole fest is built for.
+const (
+	minTeams   = 2
+	minPlayers = 3
+)
 
 // seedSeaterTx builds the seat lookup a recompile reuses: fest teams by
 // number (roster-seeded games) plus the seed-import ladder's assignments
@@ -199,10 +216,11 @@ where game_id = ? and basket = 1 and participant_id is not null`, gameID)
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if !games.IsIndividual(gameType) {
+	if imports.KindOf(gameType) == imports.KindTeam {
 		// A team Game that never named its entrants seats the fest's registry by
 		// its registration numbers, as every game did before Games could differ.
-		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+		// A Game of troikas never seats the fest's teams.
+		teams, err := imports.DefaultEntrants(ctx, tx, festID, imports.KindTeam, "", 0)
 		if err != nil {
 			return nil, err
 		}
@@ -282,43 +300,10 @@ values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, ref.Type, ref.JSON(), seat(slot))
 	return nil
 }
 
-// seedPlayerEntrantsTx lists the fest's players as entrants, in the order they
-// were registered — that order IS the seeding, the way a fest's registration
-// list is. They are numbered here rather than in the roster because a fest
-// numbers its teams; an individual game numbers the players it seats.
-func seedPlayerEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64) ([]store.SchemeSlot, error) {
-	rows, err := tx.QueryContext(ctx, `
-select p.id, trim(p.first_name || ' ' || p.last_name)
-from fest_players p where p.fest_id = ?
-order by p.id`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var entrants []store.SchemeSlot
-	for rows.Next() {
-		var id int64
-		var name string
-		if err := rows.Scan(&id, &name); err != nil {
-			return nil, err
-		}
-		entrants = append(entrants, store.SchemeSlot{
-			Seed:  &store.SchemeSeedRef{Basket: 1, Number: len(entrants) + 1},
-			Label: name,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(entrants) < 3 {
-		return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedPlayers())
-	}
-	return entrants, nil
-}
-
 // seatRosterTx pre-fills a game's seed assignments from the fest roster —
 // teams in a team format, players in an individual one, each becoming a
-// Participant of the matching kind.
+// Participant of the matching kind. A format that seats troikas is seated by
+// its chosen entrants (seatChosenTx), never from the fest's teams.
 func seatRosterTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string) error {
 	assign := func(number, participantID int64) error {
 		_, err := tx.ExecContext(ctx, `
@@ -327,53 +312,27 @@ on conflict(game_id, basket, number) do update set participant_id = excluded.par
 			gameID, number, participantID)
 		return err
 	}
-	if games.IsIndividual(gameType) {
-		rows, err := tx.QueryContext(ctx, `
-select p.id, trim(p.first_name || ' ' || p.last_name)
-from fest_players p where p.fest_id = ?
-order by p.id`, festID)
-		if err != nil {
-			return err
-		}
-		type entry struct {
-			id   int64
-			name string
-		}
-		var players []entry
-		for rows.Next() {
-			var e entry
-			if err := rows.Scan(&e.id, &e.name); err != nil {
-				rows.Close()
-				return err
-			}
-			players = append(players, e)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		for i, player := range players {
-			number := int64(i + 1)
-			participantID, err := imports.EnsureSeedPlayerByNumber(ctx, tx, festID, number, player.name, player.id)
-			if err != nil {
-				return err
-			}
-			if err := assign(number, participantID); err != nil {
-				return err
-			}
-		}
+	kind := imports.KindOf(gameType)
+	if kind == imports.KindTroika {
 		return nil
 	}
-	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+	roster, err := imports.DefaultEntrants(ctx, tx, festID, kind, "", 0)
 	if err != nil {
 		return err
 	}
-	for _, team := range teams {
-		teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
+	for i, e := range roster {
+		var participantID int64
+		number := e.Number
+		if kind == imports.KindPlayer {
+			number = int64(i + 1)
+			participantID, err = imports.EnsureSeedPlayerByNumber(ctx, tx, festID, number, e.Name, e.FestPlayerID)
+		} else {
+			participantID, _, err = imports.EnsureSeedTeamByNumber(ctx, tx, festID, e.Number, e.Name, e.City, nil)
+		}
 		if err != nil {
 			return err
 		}
-		if err := assign(team.Number, teamID); err != nil {
+		if err := assign(number, participantID); err != nil {
 			return err
 		}
 	}
@@ -432,30 +391,22 @@ func festPlayerParticipantTx(ctx context.Context, tx *sql.Tx, festID, festPlayer
 	return imports.EnsurePlayerParticipantTx(ctx, tx, festID, festPlayerID)
 }
 
-// festTroikasTx is every troika of the fest, in the order of applications.
-func festTroikasTx(ctx context.Context, q store.Queryer, festID int64) ([]int64, error) {
-	troikas, err := roster.LoadAssembled(ctx, q, festID)
+// defaultTroikasTx is who a Game that seats troikas seats when nobody chose
+// anyone (imports.DefaultEntrants): the troikas of its division, or every
+// troika of the fest, in the order of applications. Another format, or a
+// seeded Game, has none: its seats come from the roster or the seed.
+func defaultTroikasTx(ctx context.Context, q store.Queryer, festID int64, gameType string, declared imports.Declared) ([]int64, error) {
+	if imports.KindOf(gameType) != imports.KindTroika || declared.Seeded() {
+		return nil, nil
+	}
+	division, _ := declared.EntrantDivision()
+	troikas, err := imports.DefaultEntrants(ctx, q, festID, imports.KindTroika, division, 0)
 	if err != nil {
 		return nil, err
 	}
 	ids := make([]int64, len(troikas))
 	for i, t := range troikas {
-		ids[i] = t.ID
-	}
-	return ids, nil
-}
-
-// divisionEntrantsTx is who a Game of that division seats, by name; empty is a
-// message for the host, since a Game without entrants would seat the whole
-// fest roster instead.
-func divisionEntrantsTx(ctx context.Context, q store.Queryer, festID int64, division string, exclude int64) ([]int64, error) {
-	troikas, err := roster.AssembledInDivision(ctx, q, festID, division, exclude)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int64, len(troikas))
-	for i, t := range troikas {
-		ids[i] = t.ID
+		ids[i] = t.ParticipantID
 	}
 	return ids, nil
 }
@@ -463,34 +414,29 @@ func divisionEntrantsTx(ctx context.Context, q store.Queryer, festID int64, divi
 // createEntrantsTx is who a Game created from a DSL seats, given the
 // entrants ticked on the form, and how many empty seats it is built with
 // instead when there is nobody to seat yet.
-func createEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, dsl string, entrants []int64) ([]int64, int, error) {
-	var placeholders int
-	var err error
-	// A Troika game that takes a division seats that division's troikas,
-	// whatever was ticked on the form. A division with none yet still gets
-	// its game: the Structure is built for as many empty seats as its first
-	// stage sends on, and the troikas fill it as they are entered
-	// (entrants.FollowDivisionsTx).
-	troikas := games.SeatsTroikas(gameType)
-	if division, ok := imports.EntrantDivision(dsl); ok && troikas {
-		if entrants, err = divisionEntrantsTx(ctx, tx, festID, division, 0); err != nil {
-			return nil, 0, err
-		}
-		if len(entrants) == 0 {
-			placeholders = placeholderSeats(dsl)
-		}
+//
+// A Troika game that takes a division seats that division's troikas,
+// whatever was ticked on the form. A division with none yet still gets its
+// game: the Structure is built for as many empty seats as its first stage
+// sends on, and the troikas fill it as they are entered
+// (entrants.FollowDivisionsTx). A Troika game created with none ticked and no
+// seed declared takes every troika of the fest, not the fest's teams.
+func createEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, declared imports.Declared, doc *schemedsl.Doc, ticked []int64) ([]int64, int, error) {
+	_, divided := declared.EntrantDivision()
+	if imports.KindOf(gameType) != imports.KindTroika || (!divided && len(ticked) > 0) {
+		return ticked, 0, nil
 	}
-	// A Troika game seats troikas. Created with none ticked and no seed
-	// declared, it takes every troika of the fest in the order of
-	// applications, not the fest's teams: that is what "none ticked" means
-	// for a team game, and a Troika game never seats teams.
-	if troikas && len(entrants) == 0 && placeholders == 0 && !imports.DeclaresSeed(dsl) {
-		if entrants, err = festTroikasTx(ctx, tx, festID); err != nil {
-			return nil, 0, err
-		}
-		if len(entrants) < 2 {
-			return nil, 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedTroikas())
-		}
+	troikas, err := defaultTroikasTx(ctx, tx, festID, gameType, declared)
+	if err != nil {
+		return nil, 0, err
 	}
-	return entrants, placeholders, nil
+	switch {
+	case declared.Seeded():
+		return ticked, 0, nil
+	case divided && len(troikas) == 0:
+		return nil, placeholderSeats(doc), nil
+	case !divided && len(troikas) < minTeams:
+		return nil, 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedTroikas())
+	}
+	return troikas, 0, nil
 }
