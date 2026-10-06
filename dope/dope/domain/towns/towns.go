@@ -18,7 +18,7 @@ import (
 	"dope/dope/storage/store"
 )
 
-const townURL = "https://api.rating.chgk.net/towns/"
+const townURL = "https://api.rating.chgk.info/towns/"
 
 // fetchLimit is how many towns one import will ask the rating site about. buff
 // knows all but the newest, so a roster that goes over this is a sign that buff

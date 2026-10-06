@@ -2144,3 +2144,464 @@ input[type="radio"]:focus-visible {
 .sizes-hint { margin: 0; font-size: var(--text-xs); color: var(--muted); }
 
 .sizes-row input[type="range"] { width: 100%; accent-color: var(--blue-strong); cursor: var(--cursor-action); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Public pages and results tables, shared by dope and the rating site. They
+   moved here from dope's app layer unchanged, selectors and all: the white
+   header bar of a public page, the stacked results table whose place groups
+   are paper cards on the page grey, the town line and зачёт chips under a
+   team's name, and the pill tabs that switch a view or filter a table.
+   ════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --results-place-col-mobile: 48px;
+  --results-team-col-mobile: 101px;
+  --results-team-pad-mobile: var(--space-1-5);
+  --results-total-col-mobile: 42px;
+  --results-num-col-mobile: 40px;
+  --results-team-city-size-mobile: 9px;
+}
+
+/* ── public + host common page chrome ────────────────────── */
+.public {
+  margin: 0;
+  padding: 0;
+  background: var(--page);
+  color: var(--text);
+}
+
+.public-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  height: var(--header-h);
+  padding: 0 var(--space-5);
+  background: var(--surface);
+}
+
+.public-top h1 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--fw-bold);
+  /* the bar's height is fixed (--header-h) — a long fest title must not wrap */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.public-main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.match-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+}
+
+.match-tab {
+  padding: 6px 14px;
+  border: 1px solid var(--action-border);
+  border-radius: var(--radius-md);
+  background: var(--action-bg);
+  color: var(--text);
+  font-size: var(--text-xs-plus);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+}
+
+.match-tab:hover {
+  background: var(--wash-emphasis);
+}
+
+.match-tab.active {
+  background: var(--paper);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+/* Итог */
+.results-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.results-table {
+  --results-place-col: 60px;
+  --results-team-col: 232px;
+  --results-team-pad: 10px;
+  --results-total-col: 54px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: transparent;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  font-variant-numeric: tabular-nums;
+}
+
+.results-table th,
+.results-table td {
+  padding: 8px 10px;
+  background: var(--paper);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Pinned whatever else the head is, for the reason .match-table's head is. */
+.results-table thead th {
+  position: sticky !important;
+  top: 0;
+  z-index: 2;
+  background: var(--structure);
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: var(--text-xs-plus);
+  font-weight: var(--fw-regular);
+  text-align: center;
+}
+
+.results-place-head,
+.results-num-head,
+.results-tour-head {
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
+}
+
+.results-place-head,
+.results-place {
+  width: var(--results-place-col);
+  min-width: var(--results-place-col);
+  max-width: var(--results-place-col);
+}
+
+.results-table thead th.results-team-head {
+  text-align: left;
+  padding-left: var(--results-team-pad);
+}
+
+.results-table thead th.results-total-head,
+.results-table .results-total {
+  width: var(--results-total-col);
+  min-width: var(--results-total-col);
+  max-width: var(--results-total-col);
+  font-weight: var(--fw-bold);
+}
+
+/* A results table's pinned columns (standings.ts resultsPins): their cells
+   keep the paper a tinted row would show through, and ride over the rest. */
+.results-table :where(tbody) .pinned {
+  z-index: 1;
+  background: var(--paper);
+}
+
+.results-table thead .pinned {
+  z-index: 3;
+}
+
+.results-place {
+  text-align: center;
+  font-weight: var(--fw-regular);
+}
+
+.results-table .results-team {
+  text-align: left;
+  padding-left: var(--results-team-pad);
+  overflow: visible;
+}
+
+/* The city under a team's name is chrome text: it clips and fades the kit's
+   way (.u-clip-fade), with no popover. */
+.results-team-city {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* A team's зачёты, after its name in a results or detailed row (ADR-0020).
+   They state a fact about the team, so they are quiet: the same fill a resting
+   tab has, muted ink, the smallest type on the sheet. Never wider than their
+   text, and never wrapping mid-зачёт. */
+.team-flags {
+  flex: 0 0 auto;
+}
+
+.team-flag {
+  flex: 0 0 auto;
+  padding: var(--space-0-5) var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--action-bg);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  white-space: nowrap;
+}
+
+.results-num,
+.results-tour { text-align: center; }
+
+.results-group-gap td {
+  height: 8px;
+  padding: 0;
+  background: var(--structure);
+  border: 0;
+  line-height: 0;
+}
+
+.results-row:not(.results-group-first) td {
+  border-top: 1px solid var(--structure);
+}
+
+.results-row.results-group-first td:first-child { border-top-left-radius: var(--radius-md); }
+
+.results-row.results-group-first td:last-child { border-top-right-radius: var(--radius-md); }
+
+.results-row.results-group-last td:first-child { border-bottom-left-radius: var(--radius-md); }
+
+.results-row.results-group-last td:last-child { border-bottom-right-radius: var(--radius-md); }
+
+/* Every results table's paper block rounds its corners, marked rows or not:
+   the стата and крестовые tables of a брейн, СИ's групп, the составы. */
+.results-table tbody tr:first-child td:first-child { border-top-left-radius: var(--radius-md); }
+
+.results-table tbody tr:first-child td:last-child { border-top-right-radius: var(--radius-md); }
+
+.results-table tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius-md); }
+
+.results-table tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius-md); }
+
+@media (max-width: 760px) {
+  .match-tabs { padding: 2px 0; }
+
+  .match-tab { padding: 4px 10px; font-size: var(--text-xs); }
+
+  .results-table {
+    --results-place-col: var(--results-place-col-mobile);
+    --results-team-col: var(--results-team-col-mobile);
+    --results-team-pad: var(--results-team-pad-mobile);
+    --results-total-col: var(--results-total-col-mobile);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   The game page's chrome, shared by dope and the rating site: a bar holding
+   the breadcrumb trail beside a strip of joined segment tabs, over a frame as
+   wide as the screen that scrolls on the grey. Moved here from dope's app
+   layer, selectors unchanged; dope's own tab bars share some of these rules
+   and keep a copy there.
+   ════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* A segment tab's corner, and a score cell's in dope. */
+  --cell-radius: 4px;
+}
+
+.game-header-main {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  overflow: hidden;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.game-header-main h1 {
+  flex: 0 0 auto;
+  font-size: var(--text-xl);
+}
+
+/* The game header's trail is the kit's .crumbs, sized down: it shares a fixed
+   44px bar with the stage tabs, so it runs at the small end and gives up room
+   to them rather than pushing them off. The floor is what the last crumb — the
+   game's own name — needs: a game with a dozen stages used to squeeze the whole
+   trail down to one letter per crumb, which reads as broken rather than terse.
+   The tab strip scrolls, so the room comes from there. */
+.game-host-top .crumbs {
+  flex: 0 1 auto;
+  min-width: min(52vw, 230px);
+  max-width: min(34vw, 420px);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+/* The fight page has no corner gutter, so every frozen column starts one term
+   earlier. Zeroing the term does that once, instead of restating four offsets. */
+.fight-frame {
+  --sheet-corner-col: 0px;
+  border: 0;
+  background-color: var(--structure);
+}
+
+/* The kit's scroll shadows are frame backgrounds, visible wherever the
+   content is see-through. A game page stacks бои, Сетка columns and table
+   cells with gaps between them, so once the sheet is scrolled sideways the
+   left and right shadows showed in every gap as a stray dark square. Those
+   pages mark a sideways scroll themselves, with the fade off their frozen
+   columns, so the frame keeps only its top and bottom shadows: the same
+   layers as core.css's .sheet-frame, the side ones sized to nothing. */
+.sheet-frame.fight-frame {
+  background-size:
+    var(--scroll-fade-content-w) var(--scroll-fade-size),
+    var(--scroll-fade-content-w) var(--scroll-fade-size),
+    0 0,
+    0 0,
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
+    0 0,
+    0 0;
+}
+
+.game-host-top .match-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.game-host-top .match-tab {
+  position: relative;
+  height: 24px;
+  padding: 0 8px;
+  margin-left: -1px;
+  border: 1px solid var(--structure);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: var(--text-xs-plus);
+  line-height: 22px;
+}
+
+.game-host-top a.match-tab {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.game-host-top .match-tab:first-child,
+.game-host-top .tab-picker + .match-tab {
+  margin-left: 0;
+  border-top-left-radius: var(--cell-radius);
+  border-bottom-left-radius: var(--cell-radius);
+}
+
+.game-host-top .match-tab:last-child {
+  border-top-right-radius: var(--cell-radius);
+  border-bottom-right-radius: var(--cell-radius);
+}
+
+.game-host-top .match-tab + .match-tab {
+  border-left-color: var(--structure);
+}
+
+.game-host-top .match-tab:hover {
+  background: var(--wash-emphasis);
+}
+
+.game-host-top .match-tab.active {
+  z-index: 1;
+  border-color: var(--text);
+  background: var(--paper);
+  color: var(--text);
+  box-shadow: none;
+}
+
+/* A sideways touchpad swipe on a game page is a scroll — of the tabs, of a
+   wide sheet — never the browser's back or forward. The ЭК page keeps each tab
+   in the history, so a swipe that missed the strip went back through the tabs
+   and looked like the strip scrolling the wrong way round. */
+html:has(.game-host-top) {
+  overscroll-behavior-x: none;
+}
+
+.game-host-top .match-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.game-host-top .match-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.game-host-top .match-tabs .match-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.game-host-top .match-tabs.tabs-scroll-left {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
+  mask-image: linear-gradient(to right, transparent, #000 28px);
+}
+
+.game-host-top .match-tabs.tabs-scroll-right {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+.game-host-top .match-tabs.tabs-scroll-left.tabs-scroll-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+@media (max-width: 760px) {
+  .game-host-top {
+    display: grid;
+    grid-template-columns: minmax(0, auto) 1fr auto;
+    grid-template-rows: auto;
+    align-items: center;
+    column-gap: var(--space-2);
+    row-gap: var(--space-1);
+    height: auto;
+    padding: var(--space-1-5) var(--space-2-5);
+  }
+
+  .game-host-top:has(.match-tabs:not([hidden]):not(:empty)) {
+    grid-template-rows: auto auto;
+  }
+
+  .game-host-top .game-header-main {
+    display: contents;
+  }
+
+  .game-host-top .crumbs {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    max-width: 100%;
+    font-size: var(--text-xs);
+  }
+
+  .game-host-top .match-tabs {
+    grid-column: 1 / span 2;
+    grid-row: 2;
+    width: 100%;
+  }
+
+  .game-host-top .host-actions {
+    grid-column: 3;
+    grid-row: 1 / -1;
+    align-self: center;
+    justify-self: end;
+  }
+}
