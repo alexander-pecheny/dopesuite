@@ -1,5 +1,5 @@
 import {assertEquals} from "https://deno.land/std@0.224.0/assert/mod.ts";
-import {describeHistory} from "./dist/history.js";
+import {describeHistory, memberNames} from "./dist/history.js";
 
 const names = new Map([[1, "pecheny"], [2, "stas"], [3, "Vlada"]]);
 
@@ -58,4 +58,15 @@ Deno.test("a person no longer in the group is still somebody", () => {
 
 Deno.test("a photo says nothing past its verb", () => {
   assertEquals(describeHistory({kind: "photo_added", before: "", after: snap({})}, names), []);
+});
+
+// Somebody who has left is still named on what they were part of, and the
+// name says they have left.
+Deno.test("a Former Member keeps their name, marked as left", () => {
+  const shown = memberNames([{id: 1, name: "pecheny"}, {id: 2, name: "stas"}], [{id: 3, name: "Vlada"}]);
+  assertEquals(describeHistory({kind: "created", before: "", after: snap({})}, shown), [
+    "total 60.00 EUR",
+    "paid: stas 60.00",
+    "for: pecheny 30.00, Vlada (left) 30.00",
+  ]);
 });

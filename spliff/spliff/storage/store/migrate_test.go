@@ -102,7 +102,7 @@ func TestAMemberRowIdIsNeverReused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	if err := RemoveMember(ctx, db, 1, first); err != nil {
+	if err := RemoveMember(ctx, db, 1, first, "b"); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
 	second, err := AddPhantom(ctx, db, 1, "Gio", "b")

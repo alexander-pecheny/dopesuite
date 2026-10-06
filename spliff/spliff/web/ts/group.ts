@@ -14,7 +14,7 @@ import {
   type TransactionDTO,
 } from "./api";
 import { bindCurrency } from "./currency-field";
-import { describeHistory, historyVerb } from "./history";
+import { describeHistory, historyVerb, memberNames } from "./history";
 import { amountNode, amountPlain, badge, byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
 
 const groupID = Number(window.location.pathname.split("/")[2] ?? 0);
@@ -292,7 +292,7 @@ function renderMembers(g: GroupDTO): void {
 // which sum moved.
 function renderHistory(into: HTMLElement, entries: HistoryDTO[], g: GroupDTO): void {
   clear(into);
-  const names = new Map(g.members.map((m) => [m.id, m.name]));
+  const names = memberNames(g.members, g.former);
   for (const entry of entries) {
     const item = el("li");
     const row = el("a", "list-row");

@@ -41,7 +41,7 @@ CREATE TABLE "group_members"(
   group_id integer not null references groups(id) on delete cascade,
   user_id integer references users(id) on delete cascade,
   display_name text,
-  joined_at text not null,
+  joined_at text not null, left_at text,
   unique(group_id, user_id),
   check (user_id is not null or display_name is not null)
 );

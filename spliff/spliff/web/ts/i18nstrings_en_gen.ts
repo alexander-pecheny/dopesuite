@@ -64,6 +64,7 @@ export const EN: Strings = {
   invite: {
     error: {
       alreadyAMember: () => "You are already in this group, so there is nobody to become.",
+      claimAfterLeaving: () => "You were in this group before. Join as yourself, not as a phantom.",
       claimNeedsDirectLink: () => "This link waits for the owner's approval, so it cannot hand you a phantom. Ask for a direct link.",
       decisionInvalid: () => "Approve or decline — there is no third answer.",
       labelTooLong: () => "That label is too long.",
@@ -96,6 +97,7 @@ export const EN: Strings = {
   },
   page: {
     common: {
+      formerMember: (name: string) => `${name} (left)`,
       home: () => "Groups",
     },
     group: {

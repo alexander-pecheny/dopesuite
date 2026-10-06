@@ -26,6 +26,20 @@ interface Snapshot {
   shares?: SnapshotEntry[];
 }
 
+interface Named {
+  id: number;
+  name: string;
+}
+
+// memberNames maps every member row a page may meet to the name to show for
+// it: the current Members as they are, and the Former Members with a marker
+// that says they have left. An old bill or History entry can name either.
+export function memberNames(members: Named[], former: Named[]): Map<number, string> {
+  const out = new Map(members.map((m) => [m.id, m.name]));
+  for (const m of former) out.set(m.id, S.page.common.formerMember(m.name));
+  return out;
+}
+
 export function historyVerb(kind: string): string {
   switch (kind) {
     case "created":

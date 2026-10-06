@@ -5,8 +5,8 @@
 Expense sharing, shaped like Splitwise. People in a **Group** record who paid
 for whom, in any currency, and the Group always knows who owes whom. The terms
 are defined in [`CONTEXT.md`](CONTEXT.md): Group, Transaction, Payment, Share,
-Unclaimed, Rate table, Rate date, Debt graph, Owner, Member, Invite Link,
-History and Photo. Use those words everywhere. What the product should do is
+Unclaimed, Rate table, Rate date, Debt graph, Owner, Member, Former Member,
+Phantom, Invite Link, History and Photo. Use those words everywhere. What the product should do is
 described in [`docs/spec-v1.md`](docs/spec-v1.md).
 
 **This module is English only.** There is no `ru/` catalog, and `just
@@ -78,8 +78,13 @@ spliff/                  module root (go.mod: module "spliff")
 - **Nobody leaves owing.** Leaving a Group, being removed from one and deleting
   one are all refused while any balance is non-zero, and the refusal says how
   much. That is what stops the Debt graph from pointing at someone who is no
-  longer there. Restoring a deleted Transaction that names a former Member is
+  longer there. Restoring a deleted Transaction that names a Former Member is
   refused for the same reason.
+- **Leaving keeps the member row** (`docs/adr/0003`). Removing a Member stamps
+  `group_members.left_at` instead of deleting the row, so an old Transaction or
+  History entry can still name them. `store.Members`, `MemberByID`, `Phantoms`,
+  `IsMember` and `GroupsOf` read current Members only; `store.AllMembers` is
+  for looking up names. A Former Member who joins again gets the same row back.
 - **A Group rule is checked inside the write it guards.** Read the Members,
   the balances or the Transaction's "before" through the `tx` the write runs
   in, never through `s.db` ahead of `withWriteTx`. Load the rate `Book` before

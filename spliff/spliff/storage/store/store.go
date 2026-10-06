@@ -35,16 +35,28 @@ type Group struct {
 // a user id could not serve. Name is what the Group calls them: their username,
 // else the telegram one they arrived with, else the name the Owner gave the
 // Phantom.
+//
+// LeftAt is set on a Former Member: somebody who left or was removed. Their
+// row stays so that an old Transaction or History entry can still name them,
+// but only AllMembers reads it.
 type Member struct {
 	ID       int64
 	UserID   int64 // 0 for a Phantom
 	Name     string
 	JoinedAt string
+	LeftAt   string // "" while they are in the Group
 	IsOwner  bool
 }
 
 // IsPhantom reports whether this Member has no account behind it.
 func (m Member) IsPhantom() bool { return m.UserID == 0 }
+
+// HasLeft reports whether this is a Former Member.
+func (m Member) HasLeft() bool { return m.LeftAt != "" }
+
+// current is the condition every list of the Group's people adds: a Former
+// Member is in none of them.
+const current = `m.left_at is null`
 
 // CreateGroup writes the Group and seats its Owner as its first Member, so join
 // order starts with the person who made it.
@@ -76,7 +88,7 @@ func GroupsOf(ctx context.Context, q Querier, userID int64) ([]Group, error) {
 	rows, err := q.QueryContext(ctx, `
 select g.id, g.name, g.base_currency, g.owner_id, g.created_at
 from groups g join group_members m on m.group_id = g.id
-where m.user_id = ? order by g.id desc`, userID)
+where m.user_id = ? and `+current+` order by g.id desc`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -119,15 +131,23 @@ func DeleteGroup(ctx context.Context, tx Tx, groupID int64) error {
 }
 
 // Members is the Group's people in join order — joined_at, then id, which is
-// the tie-break the Debt graph and every derived split are sorted by.
+// the tie-break the Debt graph and every derived split are sorted by. Former
+// Members are not among them.
 func Members(ctx context.Context, q Querier, groupID int64) ([]Member, error) {
+	return memberRows(ctx, q, `where m.group_id = ? and `+current+` order by m.joined_at, m.id`, groupID)
+}
+
+// AllMembers is every member row the Group has ever had, Former Members
+// included, in join order. It is what a name is looked up in: an old
+// Transaction or History entry may name somebody who has left.
+func AllMembers(ctx context.Context, q Querier, groupID int64) ([]Member, error) {
 	return memberRows(ctx, q, `where m.group_id = ? order by m.joined_at, m.id`, groupID)
 }
 
-// MemberByID reads one Member of one Group; ErrNotFound when the row is not
-// there or belongs to another Group.
+// MemberByID reads one current Member of one Group; ErrNotFound when the row
+// is not there, belongs to another Group, or belongs to a Former Member.
 func MemberByID(ctx context.Context, q Querier, groupID, memberID int64) (Member, error) {
-	list, err := memberRows(ctx, q, `where m.group_id = ? and m.id = ?`, groupID, memberID)
+	list, err := memberRows(ctx, q, `where m.group_id = ? and m.id = ? and `+current, groupID, memberID)
 	if err != nil {
 		return Member{}, err
 	}
@@ -141,7 +161,7 @@ func MemberByID(ctx context.Context, q Querier, groupID, memberID int64) (Member
 // page offers as "I am …".
 func Phantoms(ctx context.Context, q Querier, groupID int64) ([]Member, error) {
 	return memberRows(ctx, q,
-		`where m.group_id = ? and m.user_id is null order by m.joined_at, m.id`, groupID)
+		`where m.group_id = ? and m.user_id is null and `+current+` order by m.joined_at, m.id`, groupID)
 }
 
 // memberRows is the one shape a Member is read in: join order is joined_at then
@@ -155,7 +175,7 @@ func memberRows(ctx context.Context, q Querier, where string, args ...any) ([]Me
 	rows, err := q.QueryContext(ctx, `
 select m.id, coalesce(m.user_id, 0),
        coalesce(nullif(u.username, ''), nullif(u.telegram_username, ''), m.display_name, ''),
-       m.joined_at,
+       m.joined_at, coalesce(m.left_at, ''),
        (m.user_id is not null and g.owner_id = m.user_id)
 from group_members m
 left join users u on u.id = m.user_id
@@ -168,7 +188,7 @@ join groups g on g.id = m.group_id
 	out := []Member{}
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.UserID, &m.Name, &m.JoinedAt, &m.IsOwner); err != nil {
+		if err := rows.Scan(&m.ID, &m.UserID, &m.Name, &m.JoinedAt, &m.LeftAt, &m.IsOwner); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -190,25 +210,44 @@ func MemberIDs(members []Member) []int64 {
 func IsMember(ctx context.Context, q Querier, groupID, userID int64) (bool, error) {
 	var n int
 	err := q.QueryRowContext(ctx,
-		`select count(*) from group_members where group_id = ? and user_id = ?`, groupID, userID).Scan(&n)
+		`select count(*) from group_members m where m.group_id = ? and m.user_id = ? and `+current,
+		groupID, userID).Scan(&n)
+	return n > 0, err
+}
+
+// HasLeft reports whether this person is a Former Member of the Group: they
+// have a row in it, and it carries a left_at stamp.
+func HasLeft(ctx context.Context, q Querier, groupID, userID int64) (bool, error) {
+	var n int
+	err := q.QueryRowContext(ctx, `
+select count(*) from group_members where group_id = ? and user_id = ? and left_at is not null`,
+		groupID, userID).Scan(&n)
 	return n > 0, err
 }
 
 // AddMember seats somebody, idempotently: two people racing the last seat on an
 // Invite Link must not fail the second writer with a unique violation.
+//
+// A Former Member who joins again gets their old row back: the same id, so
+// every Transaction that ever named them names them again, and joined_at moves
+// to now, because join order is the order people came in. A current Member's
+// row is left as it is.
 func AddMember(ctx context.Context, tx Tx, groupID, userID int64, now string) error {
 	_, err := tx.ExecContext(ctx, `
 insert into group_members(group_id, user_id, joined_at) values(?, ?, ?)
-on conflict(group_id, user_id) do nothing`, groupID, userID, now)
+on conflict(group_id, user_id) do update set left_at = null, joined_at = excluded.joined_at
+where group_members.left_at is not null`, groupID, userID, now)
 	return err
 }
 
-// RemoveMember takes one member row out, Phantom or person alike. The caller
-// has already proved their Net balance is zero — nobody leaves owing, so the
-// Debt graph never names a ghost.
-func RemoveMember(ctx context.Context, tx Tx, groupID, memberID int64) error {
-	_, err := tx.ExecContext(ctx,
-		`delete from group_members where group_id = ? and id = ?`, groupID, memberID)
+// RemoveMember marks one member row as left, Phantom or person alike. The row
+// stays, so their name can still be shown on what they were part of. The
+// caller has already proved their Net balance is zero — nobody leaves owing,
+// so the Debt graph never names a ghost.
+func RemoveMember(ctx context.Context, tx Tx, groupID, memberID int64, now string) error {
+	_, err := tx.ExecContext(ctx, `
+update group_members set left_at = ? where group_id = ? and id = ? and left_at is null`,
+		now, groupID, memberID)
 	return err
 }
 
@@ -231,11 +270,11 @@ insert into group_members(group_id, user_id, display_name, joined_at) values(?, 
 // every balance in the Group is the same before and after.
 //
 // The `user_id is null` guard makes it safe to race: the second writer claims
-// nothing and is told so.
+// nothing and is told so. A removed Phantom cannot be claimed.
 func ClaimPhantom(ctx context.Context, tx Tx, groupID, memberID, userID int64) error {
 	res, err := tx.ExecContext(ctx, `
 update group_members set user_id = ?, display_name = null
-where id = ? and group_id = ? and user_id is null`, userID, memberID, groupID)
+where id = ? and group_id = ? and user_id is null and left_at is null`, userID, memberID, groupID)
 	if err != nil {
 		return err
 	}

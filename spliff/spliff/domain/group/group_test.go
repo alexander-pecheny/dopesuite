@@ -114,7 +114,7 @@ func TestRemovingAMemberFailsWhileATransactionNamesThem(t *testing.T) {
 		if _, err := group.Record(ctx, tx, w.groupID, 1, bill(w.alice, w.bob), now); err != nil {
 			return err
 		}
-		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob)
+		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob, now)
 	})
 	wantRefusal(t, err, str.Group.Error.NotSettled("Bob", "-10.00 EUR"))
 
@@ -124,7 +124,7 @@ func TestRemovingAMemberFailsWhileATransactionNamesThem(t *testing.T) {
 		if _, err := group.Record(ctx, tx, w.groupID, 1, bill(w.bob, w.bob), now); err != nil {
 			return err
 		}
-		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob)
+		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob, now)
 	})
 	wantRefusal(t, err, str.Group.Error.StillNamed("Bob"))
 }
@@ -132,7 +132,7 @@ func TestRemovingAMemberFailsWhileATransactionNamesThem(t *testing.T) {
 func TestRecordingFailsForAMemberRemovedInTheSameTransaction(t *testing.T) {
 	w := newWorld(t)
 	err := w.writer.Tx(t.Context(), "test", func(ctx context.Context, tx *sql.Tx) error {
-		if err := group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob); err != nil {
+		if err := group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob, now); err != nil {
 			return err
 		}
 		_, err := group.Record(ctx, tx, w.groupID, 1, bill(w.alice, w.bob), now)
@@ -144,7 +144,7 @@ func TestRecordingFailsForAMemberRemovedInTheSameTransaction(t *testing.T) {
 func TestTheOwnerCannotBeRemoved(t *testing.T) {
 	w := newWorld(t)
 	err := w.writer.Tx(t.Context(), "test", func(ctx context.Context, tx *sql.Tx) error {
-		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.alice)
+		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.alice, now)
 	})
 	wantRefusal(t, err, spliffstrings.Default.Group.Error.OwnerMustHandOver())
 }
@@ -192,7 +192,7 @@ func TestRestoreRefusesATransactionNamingAFormerMember(t *testing.T) {
 		if _, err := group.SetDeleted(ctx, tx, w.groupID, id, 1, true, now); err != nil {
 			return err
 		}
-		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob)
+		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob, now)
 	})
 	err := w.writer.Tx(t.Context(), "test", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := group.SetDeleted(ctx, tx, w.groupID, id, 1, false, now)
@@ -238,7 +238,7 @@ func TestARemoveAndARecordThatRaceLeaveNoGhost(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Go(func() {
 			errs[0] = w.writer.Tx(t.Context(), "remove", func(ctx context.Context, tx *sql.Tx) error {
-				return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, phantom)
+				return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, phantom, now)
 			})
 		})
 		wg.Go(func() {
@@ -256,11 +256,141 @@ func TestARemoveAndARecordThatRaceLeaveNoGhost(t *testing.T) {
 	err := w.db.QueryRow(`
 select count(*) from (
   select member_id from transaction_payments union all select member_id from transaction_shares
-) e where e.member_id not in (select id from group_members)`).Scan(&ghosts)
+) e where e.member_id not in (select id from group_members where left_at is null)`).Scan(&ghosts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ghosts != 0 {
 		t.Fatalf("%d entries name somebody who is not in the Group", ghosts)
+	}
+}
+
+// removeBobAfterADeletedBill records a bill naming Bob, deletes it and removes
+// Bob, who is then level and named on nothing live. It answers the bill.
+func (w *world) removeBobAfterADeletedBill() int64 {
+	var id int64
+	w.write(func(ctx context.Context, tx *sql.Tx) error {
+		var err error
+		if id, err = group.Record(ctx, tx, w.groupID, 1, bill(w.alice, w.bob), now); err != nil {
+			return err
+		}
+		if _, err := group.SetDeleted(ctx, tx, w.groupID, id, 1, true, now); err != nil {
+			return err
+		}
+		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob, now)
+	})
+	return id
+}
+
+// A Former Member is in no list of the Group's people, but the row is still
+// there, so the bill that named them can still say who they were.
+func TestARemovedMemberKeepsTheirName(t *testing.T) {
+	w := newWorld(t)
+	w.removeBobAfterADeletedBill()
+	ctx := t.Context()
+
+	members, err := store.Members(ctx, w.db, w.groupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 1 || members[0].ID != w.alice {
+		t.Errorf("members = %+v, want Alice alone", members)
+	}
+	if list, err := store.Phantoms(ctx, w.db, w.groupID); err != nil || len(list) != 0 {
+		t.Errorf("phantoms = %+v, %v; want none", list, err)
+	}
+	if _, err := store.MemberByID(ctx, w.db, w.groupID, w.bob); err != store.ErrNotFound {
+		t.Errorf("MemberByID(bob) = %v, want ErrNotFound", err)
+	}
+	all, err := store.AllMembers(ctx, w.db, w.groupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 || all[1].ID != w.bob || all[1].Name != "Bob" || !all[1].HasLeft() {
+		t.Errorf("all members = %+v, want Bob's row kept, marked as left", all)
+	}
+}
+
+// Every rule that names a current Member treats a Former Member as gone: they
+// cannot be named on a bill, removed again, handed the Group, or claimed.
+func TestAFormerMemberIsNotAMember(t *testing.T) {
+	str := spliffstrings.Default
+	w := newWorld(t)
+	id := w.removeBobAfterADeletedBill()
+
+	err := w.writer.Tx(t.Context(), "test", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := group.Record(ctx, tx, w.groupID, 1, bill(w.alice, w.bob), now)
+		return err
+	})
+	wantRefusal(t, err, str.Transaction.Error.NotAMember())
+
+	err = w.writer.Tx(t.Context(), "test", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := group.SetDeleted(ctx, tx, w.groupID, id, 1, false, now)
+		return err
+	})
+	wantRefusal(t, err, str.Transaction.Error.NamesFormerMember())
+
+	err = w.writer.Tx(t.Context(), "test", func(ctx context.Context, tx *sql.Tx) error {
+		return group.RemoveMember(ctx, tx, oneTable{}, w.groupID, w.bob, now)
+	})
+	wantRefusal(t, err, str.Group.Error.NotAMember())
+
+	err = w.writer.Tx(t.Context(), "test", func(ctx context.Context, tx *sql.Tx) error {
+		return store.ClaimPhantom(ctx, tx, w.groupID, w.bob, 1)
+	})
+	if err != store.ErrNotFound {
+		t.Errorf("claiming a removed Phantom = %v, want ErrNotFound", err)
+	}
+}
+
+// Somebody who left and joins again gets their old row back: the same id, so
+// a bill deleted while they were away names them again and can be restored.
+// Their place in join order is the day they came back.
+func TestAFormerMemberWhoRejoinsGetsTheirRowBack(t *testing.T) {
+	w := newWorld(t)
+	const later = "2026-10-05T12:00:00Z"
+	var carolUser, carol, id int64
+	w.write(func(ctx context.Context, tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `
+insert into users(username, created_at, updated_at) values('carol', ?, ?)`, now, now)
+		if err != nil {
+			return err
+		}
+		if carolUser, err = res.LastInsertId(); err != nil {
+			return err
+		}
+		if err := store.AddMember(ctx, tx, w.groupID, carolUser, now); err != nil {
+			return err
+		}
+		members, err := store.Members(ctx, tx, w.groupID)
+		if err != nil {
+			return err
+		}
+		carol = members[len(members)-1].ID
+		if id, err = group.Record(ctx, tx, w.groupID, 1, bill(w.alice, carol), now); err != nil {
+			return err
+		}
+		if _, err := group.SetDeleted(ctx, tx, w.groupID, id, 1, true, now); err != nil {
+			return err
+		}
+		return group.Leave(ctx, tx, oneTable{}, w.groupID, carolUser, now)
+	})
+	if in, err := store.IsMember(t.Context(), w.db, w.groupID, carolUser); err != nil || in {
+		t.Fatalf("IsMember after leaving = %v, %v; want false", in, err)
+	}
+	w.write(func(ctx context.Context, tx *sql.Tx) error {
+		if err := store.AddMember(ctx, tx, w.groupID, carolUser, later); err != nil {
+			return err
+		}
+		_, err := group.SetDeleted(ctx, tx, w.groupID, id, 1, false, later)
+		return err
+	})
+	members, err := store.Members(t.Context(), w.db, w.groupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := members[len(members)-1]
+	if last.ID != carol || last.HasLeft() || last.JoinedAt != later {
+		t.Errorf("carol came back as %+v, want row %d, not left, joined %s", last, carol, later)
 	}
 }

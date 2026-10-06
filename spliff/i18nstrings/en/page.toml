@@ -4,6 +4,8 @@
 
 [common]
 home = "Groups"
+# A Former Member's name, wherever an old bill or a History entry names them.
+former_member = '{{.name}} (left)'
 
 [index]
 title = "Spliff"
@@ -88,8 +90,8 @@ row_person = "Who"
 row_currency = "Currency"
 row_amount = "Amount"
 pick_person = "Nobody yet"
-# A row naming somebody who has since left the group. Spliff keeps no name for
-# a removed member, so the row can only say that much.
+# A row naming somebody who left the group before Spliff kept the rows of
+# people who leave. Their name is gone, so the row can only say that much.
 former_member = "Has left"
 add_row = "Add a row"
 add_everyone = "Everyone"

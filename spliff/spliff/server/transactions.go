@@ -121,6 +121,7 @@ type transactionViewDTO struct {
 	Transaction transactionDTO `json:"transaction"`
 	Group       groupHeadDTO   `json:"group"`
 	Members     []memberDTO    `json:"members"`
+	Former      []formerDTO    `json:"former"`
 	History     []historyDTO   `json:"history"`
 }
 
@@ -146,13 +147,18 @@ func (s *server) handleGetTransaction(w http.ResponseWriter, r *http.Request, sc
 	if err != nil {
 		return err
 	}
-	names, actors := memberNames(members), userNames(members)
+	all, err := store.AllMembers(ctx, s.db, sc.GroupID)
+	if err != nil {
+		return err
+	}
+	names, actors := memberNames(all), userNames(all)
 	out := transactionViewDTO{
 		Group: groupHeadDTO{
 			ID: g.ID, Name: g.Name, BaseCurrency: g.BaseCurrency,
 			IsOwner: g.OwnerID == sc.User.UserID, Me: meMember(members, sc.User.UserID),
 		},
 		Members: memberDTOs(members),
+		Former:  formerDTOs(all),
 	}
 	if err := s.fillTransactionView(ctx, &out, t, g, names, actors); err != nil {
 		return err

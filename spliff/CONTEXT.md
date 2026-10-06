@@ -52,8 +52,12 @@ _Avoid_: "simplified debts", since there is no unsimplified view to contrast it 
 **Member**:
 A person who belongs to a Group. Every Share and every Payment names a Member who is currently in the Group. Nobody may leave or be removed while their Net balance is non-zero, which is what stops the Debt graph from naming somebody who is no longer there.
 
+**Former Member**:
+Somebody who has left a Group or been removed from it. They are not a Member: no Share or Payment may name them, they are not in the balances or the Debt graph, and they cannot open the Group. An old Transaction or History entry that names them still shows their name, marked as left. A deleted Transaction that names a Former Member cannot be restored. If they join again, they come back as the same Member they were, and such a Transaction can then be restored.
+_Avoid_: ex-member, removed user. The person may never have had an account, since a Phantom can be removed too.
+
 **Phantom**:
-A Member that has a name but no account: someone at the table who has not joined Spliff yet, or a stand-in used for testing. The Owner creates one, and it can pay and hold Shares like anybody else. Somebody who joins through an Invite Link may claim a Phantom, and its Payments, Shares and History then become theirs. A Phantom whose balance is zero can be removed, like any other Member.
+A Member that has a name but no account: someone at the table who has not joined Spliff yet, or a stand-in used for testing. The Owner creates one, and it can pay and hold Shares like anybody else. Somebody who joins through an Invite Link may claim a Phantom, and its Payments, Shares and History then become theirs. A Phantom whose balance is zero can be removed, like any other Member, and then nobody can claim it.
 _Avoid_: placeholder, fake user, and ghost. A ghost is exactly what the zero-balance rule exists to prevent.
 
 **Owner**:

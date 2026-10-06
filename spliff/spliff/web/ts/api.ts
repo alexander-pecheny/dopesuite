@@ -63,6 +63,15 @@ export interface MemberDTO {
   balance: string;
 }
 
+/**
+ * A Former Member: somebody who left or was removed. An old Payment, Share or
+ * History entry may still name their member row, and this is the name for it.
+ */
+export interface FormerDTO {
+  id: number;
+  name: string;
+}
+
 export interface TransferDTO {
   from_id: number;
   from_name: string;
@@ -91,6 +100,7 @@ export interface GroupDTO {
   /** The caller's own member row. */
   me: number;
   members: MemberDTO[];
+  former: FormerDTO[];
   transfers: TransferDTO[];
   live: TransactionDTO[];
   deleted: TransactionDTO[];
@@ -154,6 +164,7 @@ export interface TransactionViewDTO {
   group: { id: number; name: string; base_currency: string; is_owner: boolean; me: number };
 
   members: MemberDTO[];
+  former: FormerDTO[];
   history: HistoryDTO[];
 }
 

@@ -18,7 +18,7 @@ import {
 import { icon } from "../../../../dopeuikit/assets/ts/icons_gen.js";
 import { bindCurrency, bindCurrencyCell } from "./currency-field";
 import { byId, clear, el, group as rowGroup, maybe, setText, show, stamp } from "./dom";
-import { describeHistory, historyVerb } from "./history";
+import { describeHistory, historyVerb, memberNames } from "./history";
 import { formatMinor, parseAmount } from "./money";
 import {
   buildDraft,
@@ -71,6 +71,9 @@ const historyList = byId("history");
 dayField.type = "date";
 
 let members: MemberDTO[] = [];
+// Every member row this bill may name, Former Members included, to the name
+// shown for it.
+let names = new Map<number, string>();
 let me = 0;
 let baseCurrency = "EUR";
 let groupName = "";
@@ -164,6 +167,7 @@ async function load(): Promise<void> {
     } else {
       const view = await get<TransactionViewDTO>(`/api/transactions/${txID}`);
       members = view.members;
+      names = memberNames(view.members, view.former);
       me = view.group.me;
       baseCurrency = view.group.base_currency;
       groupName = view.group.name;
@@ -268,11 +272,12 @@ function personSelect(selected: number): HTMLSelectElement {
     option.value = String(member.id);
     select.append(option);
   }
-  // A deleted bill can name somebody removed from the Group since. Without an
-  // option of its own the row would read as blank, so it gets one that says
-  // they have left. Spliff keeps no name for them once their row is gone.
+  // A deleted bill can name a Former Member. They are not among the Members,
+  // so without an option of its own the row would read as blank. The option
+  // carries their name and says they have left. Somebody who left before
+  // Spliff kept such rows has no name left, so the row only says "Has left".
   if (selected !== 0 && !members.some((m) => m.id === selected)) {
-    const former = el("option", undefined, S.page.transaction.formerMember());
+    const former = el("option", undefined, names.get(selected) ?? S.page.transaction.formerMember());
     former.value = String(selected);
     select.append(former);
   }
@@ -528,7 +533,6 @@ async function removePhoto(id: number): Promise<void> {
 
 function renderHistory(entries: HistoryDTO[]): void {
   clear(historyList);
-  const names = new Map(members.map((m) => [m.id, m.name]));
   for (const entry of entries) {
     const row = el("li", "list-row");
     const body = el("span", "u-col u-gap-xs u-grow");

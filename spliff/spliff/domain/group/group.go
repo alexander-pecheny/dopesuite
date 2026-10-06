@@ -180,20 +180,22 @@ func AddPhantom(ctx context.Context, tx store.Tx, groupID int64, rawName, now st
 }
 
 // Leave takes the caller's own member row out, under RemoveMember's rules.
-func Leave(ctx context.Context, tx store.Tx, book Rates, groupID, userID int64) error {
+func Leave(ctx context.Context, tx store.Tx, book Rates, groupID, userID int64, now string) error {
 	members, err := store.Members(ctx, tx, groupID)
 	if err != nil {
 		return err
 	}
 	for _, m := range members {
 		if m.UserID == userID {
-			return RemoveMember(ctx, tx, book, groupID, m.ID)
+			return RemoveMember(ctx, tx, book, groupID, m.ID, now)
 		}
 	}
 	return corei18n.User(spliffstrings.Default.Group.Error.NotAMember())
 }
 
-// RemoveMember takes one member row out, Phantom or person alike. Nobody goes
+// RemoveMember makes one Member a Former Member, Phantom or person alike. Their
+// row stays with a left_at stamp, so whatever named them can still say who
+// they were, and they are in no list of the Group's people. Nobody goes
 // while their Net balance is non-zero, and the Owner cannot go at all without
 // handing the Group on first. A Member who is level but still named on a live
 // Transaction stays too, because the Debt graph and the feed must never name
@@ -201,7 +203,7 @@ func Leave(ctx context.Context, tx store.Tx, book Rates, groupID, userID int64) 
 //
 // Who may remove whom (the Owner anybody, everybody themselves) is the
 // caller's check: it is a question about the request, not about the Group.
-func RemoveMember(ctx context.Context, tx store.Tx, book Rates, groupID, memberID int64) error {
+func RemoveMember(ctx context.Context, tx store.Tx, book Rates, groupID, memberID int64, now string) error {
 	str := spliffstrings.Default
 	g, err := store.GroupByID(ctx, tx, groupID)
 	if err != nil {
@@ -220,7 +222,7 @@ func RemoveMember(ctx context.Context, tx store.Tx, book Rates, groupID, memberI
 	if err := checkLevel(ctx, tx, book, g, member); err != nil {
 		return err
 	}
-	return store.RemoveMember(ctx, tx, groupID, memberID)
+	return store.RemoveMember(ctx, tx, groupID, memberID, now)
 }
 
 // checkLevel refuses a Member whose Net balance is not zero, or who is still

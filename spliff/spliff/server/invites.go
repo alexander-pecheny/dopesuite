@@ -345,8 +345,9 @@ func (s *server) handleJoinInvite(w http.ResponseWriter, r *http.Request, sc rou
 
 // checkClaimable is every way "I am <phantom>" can be wrong, checked inside the
 // write transaction so that two people cannot claim the same Phantom. The
-// refusals are the three the spec names, plus the one the approval queue forces:
-// a Join Request is decided later, with nowhere to keep what the joiner claimed.
+// refusals are the three the spec names, plus the one the approval queue forces
+// (a Join Request is decided later, with nowhere to keep what the joiner
+// claimed), plus a Former Member, who already has a row of their own.
 func (s *server) checkClaimable(ctx context.Context, tx *sql.Tx, code string, claim, userID int64) error {
 	str := spliffstrings.Default
 	lk, err := s.invites().ByCode(ctx, tx, code)
@@ -362,6 +363,15 @@ func (s *server) checkClaimable(ctx context.Context, tx *sql.Tx, code string, cl
 	}
 	if already {
 		return corei18n.User(str.Invite.Error.AlreadyAMember())
+	}
+	// A Former Member comes back on their own row (store.AddMember). They
+	// cannot also take a Phantom's: one account has one row per Group.
+	left, err := store.HasLeft(ctx, tx, lk.ScopeID, userID)
+	if err != nil {
+		return err
+	}
+	if left {
+		return corei18n.User(str.Invite.Error.ClaimAfterLeaving())
 	}
 	member, err := store.MemberByID(ctx, tx, lk.ScopeID, claim)
 	if errors.Is(err, store.ErrNotFound) {

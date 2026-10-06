@@ -260,6 +260,24 @@ insert into transaction_shares_new(id, transaction_id, member_id, amount_minor)
 drop table transaction_shares;
 alter table transaction_shares_new rename to transaction_shares;
 `)},
+
+	// Former Members (spliff/CONTEXT.md). Removing a Member, or leaving, used
+	// to delete the member row, and with it the only place their name was
+	// kept: a deleted Transaction or a History entry that named them could
+	// show nothing but "has left". The row now stays and gets a left_at
+	// stamp. Every list of the Group's people reads only the rows with no
+	// stamp; a name is still found for every row.
+	//
+	// Somebody who joins again gets the same row back, with the stamp cleared
+	// and joined_at set to the day they came back. unique(group_id, user_id)
+	// would refuse a second row anyway, and one row is what lets a Transaction
+	// deleted while they were away name them again once it is restored.
+	//
+	// Rows deleted before this step are gone for good. Their entries keep
+	// showing "has left".
+	{Version: 3, Name: "a removed Member keeps their row and their name", Up: schema.Exec(`
+alter table group_members add column left_at text;
+`)},
 }
 
 // Migrate applies the list. sqlitex.Open calls it on the single pinned

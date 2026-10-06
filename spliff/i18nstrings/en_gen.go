@@ -72,7 +72,8 @@ var EN = Strings{
 	},
 	Invite: InviteStrings{
 		Error: InviteErrorStrings{
-			AlreadyAMember: func() string { return "You are already in this group, so there is nobody to become." },
+			AlreadyAMember:    func() string { return "You are already in this group, so there is nobody to become." },
+			ClaimAfterLeaving: func() string { return "You were in this group before. Join as yourself, not as a phantom." },
 			ClaimNeedsDirectLink: func() string {
 				return "This link waits for the owner's approval, so it cannot hand you a phantom. Ask for a direct link."
 			},
@@ -115,7 +116,8 @@ var EN = Strings{
 	},
 	Page: PageStrings{
 		Common: PageCommonStrings{
-			Home: func() string { return "Groups" },
+			FormerMember: func(name string) string { return fmt.Sprintf("%s (left)", name) },
+			Home:         func() string { return "Groups" },
 		},
 		Group: PageGroupStrings{
 			Add:              func() string { return "Add a bill" },

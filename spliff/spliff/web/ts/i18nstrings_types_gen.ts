@@ -64,6 +64,7 @@ export type Strings = {
   invite: {
     error: {
       alreadyAMember: () => string;
+      claimAfterLeaving: () => string;
       claimNeedsDirectLink: () => string;
       decisionInvalid: () => string;
       labelTooLong: () => string;
@@ -96,6 +97,7 @@ export type Strings = {
   };
   page: {
     common: {
+      formerMember: (name: string) => string;
       home: () => string;
     };
     group: {

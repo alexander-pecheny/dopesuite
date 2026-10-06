@@ -313,3 +313,63 @@ func TestAPhantomIsClaimedOnce(t *testing.T) {
 		t.Errorf("members = %d, want 2 — the refused claim seated nobody", got)
 	}
 }
+
+// Somebody who left is still named on the bill they were part of, with the
+// marker that says so, and the Group page lists them apart from its Members.
+// When they come back they sit on their old row, and cannot take a Phantom's.
+func TestAFormerMemberIsNamedAndComesBackOnTheirOwnRow(t *testing.T) {
+	w := newWorld(t)
+	w.invite(t, w.bob, false)
+	bobRow := w.mem(t, "bob")
+	id := w.addBill(t, w.alice, map[string]any{
+		"description": "Wine", "day": spliffserver.Today(), "currency": "EUR",
+		"total_minor": 1000,
+		"payments":    []map[string]any{entry(w.mem(t, "alice"), 1000)},
+		"shares":      []map[string]any{entry(bobRow, 1000)},
+	})
+	path := "/api/transactions/" + strconv.FormatInt(id, 10)
+	w.bob.JSON(http.MethodDelete, path, nil, nil)
+	w.bob.JSON(http.MethodDelete, w.path("/members/me"), nil, nil)
+
+	var detail struct {
+		Transaction struct {
+			Shares []struct {
+				MemberID int64  `json:"member_id"`
+				Name     string `json:"name"`
+			} `json:"shares"`
+		} `json:"transaction"`
+		Former []struct {
+			ID   int64  `json:"id"`
+			Name string `json:"name"`
+		} `json:"former"`
+		History []struct {
+			Actor string `json:"actor"`
+		} `json:"history"`
+	}
+	w.alice.JSON(http.MethodGet, path, nil, &detail)
+	if len(detail.Former) != 1 || detail.Former[0].ID != bobRow || detail.Former[0].Name != "bob" {
+		t.Errorf("former = %+v, want bob on row %d", detail.Former, bobRow)
+	}
+	if s := detail.Transaction.Shares; len(s) != 1 || s[0].Name != "bob (left)" {
+		t.Errorf("shares = %+v, want bob, marked as left", s)
+	}
+	if h := detail.History; len(h) != 2 || h[1].Actor != "bob (left)" {
+		t.Errorf("history = %+v, want the delete by bob, marked as left", h)
+	}
+
+	// He comes back through a link that offers a Phantom, and may not take it.
+	nino := w.phantom(t, "Nino")
+	code := w.mintInvite(t, false)
+	resp := w.bob.Do(http.MethodPost, "/api/invites/code/"+code+"/join", map[string]any{"claim": nino})
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("a former member claiming a phantom = %d, want 400", resp.Code)
+	}
+	w.bob.JSON(http.MethodPost, "/api/invites/code/"+code+"/join", nil, nil)
+	if got := w.mem(t, "bob"); got != bobRow {
+		t.Errorf("bob came back on row %d, want his old %d", got, bobRow)
+	}
+	w.alice.JSON(http.MethodPost, path+"/restore", nil, nil)
+	if got := balanceOf(t, w.read(t, w.alice), "bob"); got != -1000 {
+		t.Errorf("bob = %d after the restore, want -1000", got)
+	}
+}

@@ -48,23 +48,51 @@ func memberDTOs(members []store.Member) []memberDTO {
 	return out
 }
 
-// memberNames is member row -> the name the Group calls them; userNames is
-// account -> the same, for the places that name an ACTOR (who made a change,
-// who uploaded a picture) rather than a party to the money. A Phantom is in the
-// first and never in the second.
-func memberNames(members []store.Member) map[int64]string {
-	out := map[int64]string{}
-	for _, m := range members {
-		out[m.ID] = m.Name
+// formerDTO is a Former Member, as far as a page needs one: the row an old
+// Payment, Share or History entry names, and the name to show for it. The
+// page adds the marker that says they have left.
+type formerDTO struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+func formerDTOs(all []store.Member) []formerDTO {
+	out := []formerDTO{}
+	for _, m := range all {
+		if m.HasLeft() {
+			out = append(out, formerDTO{ID: m.ID, Name: m.Name})
+		}
 	}
 	return out
 }
 
-func userNames(members []store.Member) map[int64]string {
+// shownName is what the Group calls a member row, with the marker for a
+// Former Member.
+func shownName(m store.Member) string {
+	if m.HasLeft() {
+		return spliffstrings.Default.Page.Common.FormerMember(m.Name)
+	}
+	return m.Name
+}
+
+// memberNames is member row -> the name the Group calls them; userNames is
+// account -> the same, for the places that name an ACTOR (who made a change,
+// who uploaded a picture) rather than a party to the money. A Phantom is in the
+// first and never in the second. Both take every row the Group has had
+// (store.AllMembers), because an old bill may name somebody who has left.
+func memberNames(all []store.Member) map[int64]string {
 	out := map[int64]string{}
-	for _, m := range members {
+	for _, m := range all {
+		out[m.ID] = shownName(m)
+	}
+	return out
+}
+
+func userNames(all []store.Member) map[int64]string {
+	out := map[int64]string{}
+	for _, m := range all {
 		if !m.IsPhantom() {
-			out[m.UserID] = m.Name
+			out[m.UserID] = shownName(m)
 		}
 	}
 	return out
@@ -143,6 +171,7 @@ type groupDTO struct {
 	IsOwner      bool             `json:"is_owner"`
 	Me           int64            `json:"me"`
 	Members      []memberDTO      `json:"members"`
+	Former       []formerDTO      `json:"former"`
 	Transfers    []transferDTO    `json:"transfers"`
 	Live         []transactionDTO `json:"live"`
 	Deleted      []transactionDTO `json:"deleted"`
@@ -284,16 +313,21 @@ func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request, sc route
 		return err
 	}
 	g, book, balances, members := st.group, st.book, st.balances, st.members
+	all, err := store.AllMembers(ctx, s.db, g.ID)
+	if err != nil {
+		return err
+	}
 
 	out := groupDTO{
 		ID: g.ID, Name: g.Name, BaseCurrency: g.BaseCurrency,
 		IsOwner: g.OwnerID == sc.User.UserID, Me: meMember(members, sc.User.UserID),
 		NoRates:   book.Empty(),
 		Members:   memberDTOs(members),
+		Former:    formerDTOs(all),
 		Transfers: []transferDTO{},
 	}
-	names := memberNames(members)
-	actors := userNames(members)
+	names := memberNames(all)
+	actors := userNames(all)
 	out.fillBalances(balances, names, g.BaseCurrency)
 	if err := s.fillFeeds(ctx, &out, st, names, actors); err != nil {
 		return err
@@ -552,8 +586,9 @@ func (s *server) handleLeaveGroup(w http.ResponseWriter, r *http.Request, sc rou
 	if err != nil {
 		return err
 	}
+	now := rfc3339(time.Now())
 	err = s.withWriteTx(r.Context(), "leave-group", func(ctx context.Context, tx *sql.Tx) error {
-		return group.Leave(ctx, tx, book, sc.GroupID, sc.User.UserID)
+		return group.Leave(ctx, tx, book, sc.GroupID, sc.User.UserID, now)
 	})
 	if err != nil {
 		return notFound(err)
@@ -575,8 +610,9 @@ func (s *server) handleKickMember(w http.ResponseWriter, r *http.Request, sc rou
 	if err != nil {
 		return err
 	}
+	now := rfc3339(time.Now())
 	err = s.withWriteTx(r.Context(), "remove-member", func(ctx context.Context, tx *sql.Tx) error {
-		return group.RemoveMember(ctx, tx, book, sc.GroupID, id)
+		return group.RemoveMember(ctx, tx, book, sc.GroupID, id, now)
 	})
 	if err != nil {
 		return notFound(err)

@@ -10,6 +10,9 @@ not_found = "There is no such invite link."
 request_not_found = "There is no join request waiting from that person."
 already_a_member = "You are already in this group, so there is nobody to become."
 not_a_phantom = "That is not a phantom of this group."
+# Somebody who left the group and comes back keeps the place they had, so
+# they cannot take a phantom's instead.
+claim_after_leaving = "You were in this group before. Join as yourself, not as a phantom."
 claim_needs_direct_link = "This link waits for the owner's approval, so it cannot hand you a phantom. Ask for a direct link."
 
 [refusal]
