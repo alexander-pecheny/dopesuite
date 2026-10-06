@@ -74,6 +74,7 @@ const (
 	maxImgHIn = 2.0
 )
 
+// sloplint: ignore[hardcoded-color] Word's hyperlink blue, named here
 const (
 	linkColor  = "#0000ff" // Hyperlink character style
 	tabWidth   = "36pt"    // Word's default tab stop (0.5in)

@@ -102,6 +102,7 @@ const (
 
 // The colour each sticker gets when the host does not pick one. They match the
 // --sticker-c-* swatches in styles.css.
+// sloplint: ignore[hardcoded-color] this is the palette
 const (
 	KSIStickerNeutralColor    = "#ffffff"
 	KSIStickerX2Color         = "#fdf66f"

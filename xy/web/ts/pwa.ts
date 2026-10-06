@@ -34,6 +34,7 @@ function injectHeadTag(tag: string, attrs: HeadTagSpec): void {
   document.head.appendChild(node);
 }
 // The dark theme's --structure, which manifest.webmanifest names too.
+// sloplint: ignore[hardcoded-color] named here
 const DARK_TOPBAR = "#262a31";
 
 try {

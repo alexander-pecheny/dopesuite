@@ -119,6 +119,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 // ---- Trello label colors → hex. Green/red match xy's auto test labels so an
 // imported package looks identical to one built in xy. ----
+// sloplint: ignore[hardcoded-color] Trello's own palette
 const TRELLO_COLORS: Record<string, string> = {
   green: "#3aa657", lime: "#51e898", yellow: "#f2d600", orange: "#ff9f1a",
   red: "#dd3322", purple: "#c377e0", blue: "#0079bf", sky: "#00c2e0",

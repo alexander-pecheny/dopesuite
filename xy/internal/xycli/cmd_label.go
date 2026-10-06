@@ -68,6 +68,7 @@ func labelList(a *app, args []string) error {
 }
 
 // defaultLabelColor is the light blue a label gets when --color is not given.
+// sloplint: ignore[hardcoded-color] named here
 const defaultLabelColor = "#8ec7ff"
 
 func labelAdd(a *app, args []string) error {

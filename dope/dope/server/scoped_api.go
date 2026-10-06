@@ -100,6 +100,7 @@ type hostPresenceMessage struct {
 }
 
 func hostPresenceColor(userID int64) string {
+	// sloplint: ignore[hardcoded-color] this is the palette
 	palette := [...]string{
 		"#1a73e8",
 		"#d93025",
