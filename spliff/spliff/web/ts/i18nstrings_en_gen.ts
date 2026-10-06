@@ -296,6 +296,7 @@ export const EN: Strings = {
       descriptionRequired: () => "Say what the money was for.",
       descriptionTooLong: () => "That description is too long.",
       duplicateMember: () => "Somebody is listed twice.",
+      namesFormerMember: () => "This transaction names somebody who is no longer in the group, so it cannot be restored.",
       negativeAmount: () => "Amounts cannot be negative.",
       notAMember: () => "That person is not a member of this group.",
       paymentRequired: () => "Say who paid.",

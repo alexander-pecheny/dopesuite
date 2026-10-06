@@ -325,9 +325,12 @@ var EN = Strings{
 			DescriptionRequired: func() string { return "Say what the money was for." },
 			DescriptionTooLong:  func() string { return "That description is too long." },
 			DuplicateMember:     func() string { return "Somebody is listed twice." },
-			NegativeAmount:      func() string { return "Amounts cannot be negative." },
-			NotAMember:          func() string { return "That person is not a member of this group." },
-			PaymentRequired:     func() string { return "Say who paid." },
+			NamesFormerMember: func() string {
+				return "This transaction names somebody who is no longer in the group, so it cannot be restored."
+			},
+			NegativeAmount:  func() string { return "Amounts cannot be negative." },
+			NotAMember:      func() string { return "That person is not a member of this group." },
+			PaymentRequired: func() string { return "Say who paid." },
 			PaymentsMismatch: func(paid string, total string) string {
 				return fmt.Sprintf("The payments add up to %s, not %s.", paid, total)
 			},

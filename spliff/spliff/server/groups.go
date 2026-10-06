@@ -6,12 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"sort"
-	"strings"
 	"time"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopecore/idstr"
 
+	"spliff/spliff/domain/group"
 	"spliff/spliff/domain/ledger"
 	"spliff/spliff/domain/money"
 	"spliff/spliff/domain/rates"
@@ -20,10 +20,6 @@ import (
 
 	spliffstrings "spliff/i18nstrings"
 )
-
-// MaxNameRunes bounds a Group's name: long enough for "Tbilisi trip, October",
-// short enough that the Groups list stays a list.
-const MaxNameRunes = 80
 
 // ---- what the browser is handed ----
 
@@ -180,7 +176,7 @@ func (s *server) handleListGroups(w http.ResponseWriter, r *http.Request, sc rou
 			ID: g.ID, Name: g.Name, BaseCurrency: g.BaseCurrency,
 			IsOwner: g.OwnerID == sc.User.UserID,
 		}
-		balances, members, err := s.balancesOf(r.Context(), g, book)
+		balances, members, err := group.Balances(r.Context(), s.db, g, book)
 		if err != nil && !errors.Is(err, rates.ErrNoTable) {
 			return err
 		}
@@ -206,10 +202,6 @@ func (s *server) handleCreateGroup(w http.ResponseWriter, r *http.Request, sc ro
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	name, err := checkedName(req.Name)
-	if err != nil {
-		return err
-	}
 	currency, err := s.checkedCurrency(r.Context(), req.BaseCurrency)
 	if err != nil {
 		return err
@@ -218,24 +210,13 @@ func (s *server) handleCreateGroup(w http.ResponseWriter, r *http.Request, sc ro
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-group", func(ctx context.Context, tx *sql.Tx) error {
 		var err error
-		id, err = store.CreateGroup(ctx, tx, name, currency, sc.User.UserID, now)
+		id, err = group.Create(ctx, tx, req.Name, currency, sc.User.UserID, now)
 		return err
 	})
 	if err != nil {
 		return err
 	}
 	return writeJSON(w, map[string]any{"id": id})
-}
-
-func checkedName(raw string) (string, error) {
-	name := strings.TrimSpace(raw)
-	if name == "" {
-		return "", corei18n.User(spliffstrings.Default.Group.Error.NameRequired())
-	}
-	if len([]rune(name)) > MaxNameRunes {
-		return "", corei18n.User(spliffstrings.Default.Group.Error.NameTooLong())
-	}
-	return name, nil
 }
 
 // checkedCurrency refuses a code the Rate tables do not carry: a Group stated
@@ -296,48 +277,6 @@ func (s *server) handleCurrencies(w http.ResponseWriter, r *http.Request, _ rout
 
 // ---- the Group page ----
 
-// balancesOf is the ledger over a Group's live Transactions: every Member's Net
-// balance in the Base currency, in join order.
-func (s *server) balancesOf(ctx context.Context, g store.Group, book *Book) ([]ledger.Balance, []store.Member, error) {
-	members, err := store.Members(ctx, s.db, g.ID)
-	if err != nil {
-		return nil, nil, err
-	}
-	txs, err := store.GroupTransactions(ctx, s.db, g.ID, true)
-	if err != nil {
-		return nil, members, err
-	}
-	if book.Empty() {
-		return nil, members, rates.ErrNoTable
-	}
-	entries := make([]ledger.Transaction, 0, len(txs))
-	for _, t := range txs {
-		table, err := book.For(t.Day)
-		if err != nil {
-			return nil, members, err
-		}
-		entries = append(entries, ledgerTx(t, table))
-	}
-	balances, err := ledger.Balances(g.BaseCurrency, store.MemberIDs(members), entries)
-	return balances, members, err
-}
-
-// ledgerTx is a stored Transaction as the ledger reads it. v1 stores no Pinned
-// rate, so the pin is always nil — the argument is there so that the day it is
-// stored, this is the one line that changes.
-func ledgerTx(t store.Transaction, table rates.Table) ledger.Transaction {
-	out := ledger.Transaction{
-		ID: t.ID, Currency: t.Currency, Total: t.TotalMinor, Table: table, Pin: nil,
-	}
-	for _, e := range t.Payments {
-		out.Payments = append(out.Payments, ledger.Entry{MemberID: e.MemberID, Minor: e.Minor})
-	}
-	for _, e := range t.Shares {
-		out.Shares = append(out.Shares, ledger.Entry{MemberID: e.MemberID, Minor: e.Minor})
-	}
-	return out
-}
-
 func (s *server) handleGetGroup(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	ctx := r.Context()
 	st, err := s.groupState(ctx, sc.GroupID)
@@ -397,7 +336,7 @@ func (s *server) groupState(ctx context.Context, groupID int64) (groupState, err
 	if err != nil {
 		return groupState{}, err
 	}
-	balances, members, err := s.balancesOf(ctx, g, book)
+	balances, members, err := group.Balances(ctx, s.db, g, book)
 	if err != nil && !errors.Is(err, rates.ErrNoTable) {
 		return groupState{}, err
 	}
@@ -536,7 +475,7 @@ func (s *server) handlePatchGroup(w http.ResponseWriter, r *http.Request, sc rou
 	var name, currency string
 	var err error
 	if req.Name != nil {
-		if name, err = checkedName(*req.Name); err != nil {
+		if name, err = group.CheckName(*req.Name); err != nil {
 			return err
 		}
 	}
@@ -546,15 +485,7 @@ func (s *server) handlePatchGroup(w http.ResponseWriter, r *http.Request, sc rou
 		}
 	}
 	err = s.withWriteTx(r.Context(), "patch-group", func(ctx context.Context, tx *sql.Tx) error {
-		if name != "" {
-			if err := store.SetGroupName(ctx, tx, sc.GroupID, name); err != nil {
-				return err
-			}
-		}
-		if currency != "" {
-			return store.SetBaseCurrency(ctx, tx, sc.GroupID, currency)
-		}
-		return nil
+		return group.Patch(ctx, tx, sc.GroupID, name, currency)
 	})
 	if err != nil {
 		return err
@@ -574,15 +505,8 @@ func (s *server) handleHandOver(w http.ResponseWriter, r *http.Request, sc route
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	member, err := store.IsMember(r.Context(), s.db, sc.GroupID, req.UserID)
-	if err != nil {
-		return err
-	}
-	if !member {
-		return corei18n.User(spliffstrings.Default.Group.Error.NotAMember())
-	}
-	err = s.withWriteTx(r.Context(), "hand-over-group", func(ctx context.Context, tx *sql.Tx) error {
-		return store.SetOwner(ctx, tx, sc.GroupID, req.UserID)
+	err := s.withWriteTx(r.Context(), "hand-over-group", func(ctx context.Context, tx *sql.Tx) error {
+		return group.HandOver(ctx, tx, sc.GroupID, req.UserID)
 	})
 	if err != nil {
 		return err
@@ -595,27 +519,18 @@ func (s *server) handleHandOver(w http.ResponseWriter, r *http.Request, sc route
 // names the amount, because "you cannot delete this" without a number is a
 // message that sends somebody hunting.
 func (s *server) handleDeleteGroup(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	ctx := r.Context()
-	st, err := s.groupState(ctx, sc.GroupID)
+	book, err := s.rates.Book(r.Context())
 	if err != nil {
 		return err
 	}
-	g, balances, members := st.group, st.balances, st.members
-	names := memberNames(members)
-	for _, b := range balances {
-		if b.Minor != 0 {
-			return corei18n.User(spliffstrings.Default.Group.Error.NotSettled(
-				names[b.MemberID], money.Format(b.Minor, g.BaseCurrency)+" "+g.BaseCurrency))
-		}
-	}
-	refs, err := store.GroupPhotoRefs(ctx, s.db, g.ID)
+	var refs []string
+	err = s.withWriteTx(r.Context(), "delete-group", func(ctx context.Context, tx *sql.Tx) error {
+		var err error
+		refs, err = group.Delete(ctx, tx, book, sc.GroupID)
+		return err
+	})
 	if err != nil {
-		return err
-	}
-	if err := s.withWriteTx(ctx, "delete-group", func(ctx context.Context, tx *sql.Tx) error {
-		return store.DeleteGroup(ctx, tx, g.ID)
-	}); err != nil {
-		return err
+		return notFound(err)
 	}
 	// The blobs go after the commit: one removed inside the transaction would be
 	// gone even if the transaction rolled back.
@@ -628,98 +543,52 @@ func (s *server) handleDeleteGroup(w http.ResponseWriter, r *http.Request, sc ro
 
 // ---- leaving and being kicked ----
 
+// Nobody leaves or is removed while their Net balance is non-zero, or while a
+// live Transaction still names them (domain/group.RemoveMember). A Phantom is
+// held to all of it, which is what keeps one from being deleted mid-trip.
+
 func (s *server) handleLeaveGroup(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	members, err := store.Members(r.Context(), s.db, sc.GroupID)
+	book, err := s.rates.Book(r.Context())
 	if err != nil {
 		return err
 	}
-	mine := meMember(members, sc.User.UserID)
-	if mine == 0 {
-		return corei18n.User(spliffstrings.Default.Group.Error.NotAMember())
-	}
-	return s.removeMember(w, r, sc, mine, false)
-}
-
-// handleKickMember takes a MEMBER ROW id, not an account: a Phantom has no
-// account, and removing one is the same act under the same rule.
-func (s *server) handleKickMember(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	id, err := idstr.Parse(r.PathValue("memberId"))
-	if err != nil {
-		return route.NotFound(spliffstrings.Default.Group.Error.NotAMember())
-	}
-	return s.removeMember(w, r, sc, id, true)
-}
-
-// removeMember is the one rule both ways round: nobody goes while their Net
-// balance is non-zero, and the Owner cannot go at all without handing the Group
-// on first. A Member who is level but still named on a live Transaction stays
-// too — the Debt graph must never name somebody who is not there. A Phantom is
-// held to all of it, which is what keeps one from being deleted mid-trip.
-func (s *server) removeMember(w http.ResponseWriter, r *http.Request, sc route.Scope, memberID int64, kick bool) error {
-	ctx := r.Context()
-	str := spliffstrings.Default
-	g, err := store.GroupByID(ctx, s.db, sc.GroupID)
+	err = s.withWriteTx(r.Context(), "leave-group", func(ctx context.Context, tx *sql.Tx) error {
+		return group.Leave(ctx, tx, book, sc.GroupID, sc.User.UserID)
+	})
 	if err != nil {
 		return notFound(err)
-	}
-	if kick && !sc.IsOwner {
-		return route.Forbidden(str.Group.Error.OwnerOnly())
-	}
-	member, err := store.MemberByID(ctx, s.db, sc.GroupID, memberID)
-	if errors.Is(err, store.ErrNotFound) {
-		return corei18n.User(str.Group.Error.NotAMember())
-	}
-	if err != nil {
-		return err
-	}
-	if member.IsOwner {
-		return corei18n.User(str.Group.Error.OwnerMustHandOver())
-	}
-	if err := s.checkLevel(ctx, g, member); err != nil {
-		return err
-	}
-	if err := s.withWriteTx(ctx, "remove-member", func(ctx context.Context, tx *sql.Tx) error {
-		return store.RemoveMember(ctx, tx, sc.GroupID, memberID)
-	}); err != nil {
-		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
 
-// checkLevel refuses to remove a Member whose Net balance is not zero, or who
-// is still named on a live Transaction.
-func (s *server) checkLevel(ctx context.Context, g store.Group, member store.Member) error {
+// handleKickMember takes a MEMBER ROW id, not an account: a Phantom has no
+// account, and removing one is the same act under the same rule. Only the
+// Owner may remove somebody else.
+func (s *server) handleKickMember(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	str := spliffstrings.Default
-	book, err := s.rates.Book(ctx)
+	id, err := idstr.Parse(r.PathValue("memberId"))
+	if err != nil {
+		return route.NotFound(str.Group.Error.NotAMember())
+	}
+	if !sc.IsOwner {
+		return route.Forbidden(str.Group.Error.OwnerOnly())
+	}
+	book, err := s.rates.Book(r.Context())
 	if err != nil {
 		return err
 	}
-	balances, _, err := s.balancesOf(ctx, g, book)
-	if err != nil && !errors.Is(err, rates.ErrNoTable) {
-		return err
-	}
-	for _, b := range balances {
-		if b.MemberID == member.ID && b.Minor != 0 {
-			return corei18n.User(str.Group.Error.NotSettled(
-				member.Name, money.Format(b.Minor, g.BaseCurrency)+" "+g.BaseCurrency))
-		}
-	}
-	named, err := store.MemberHasEntries(ctx, s.db, g.ID, member.ID)
+	err = s.withWriteTx(r.Context(), "remove-member", func(ctx context.Context, tx *sql.Tx) error {
+		return group.RemoveMember(ctx, tx, book, sc.GroupID, id)
+	})
 	if err != nil {
-		return err
+		return notFound(err)
 	}
-	if named {
-		return corei18n.User(str.Group.Error.StillNamed(member.Name))
-	}
+	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
 
 // ---- Phantoms ----
-
-// MaxPhantomNameRunes bounds the name the Owner types. It is a person's name at
-// a table, not a description.
-const MaxPhantomNameRunes = 60
 
 type addPhantomRequest struct {
 	Name string `json:"name"`
@@ -733,18 +602,11 @@ func (s *server) handleAddPhantom(w http.ResponseWriter, r *http.Request, sc rou
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		return corei18n.User(spliffstrings.Default.Group.Error.PhantomNameRequired())
-	}
-	if len([]rune(name)) > MaxPhantomNameRunes {
-		return corei18n.User(spliffstrings.Default.Group.Error.PhantomNameTooLong())
-	}
 	now := rfc3339(time.Now())
 	var id int64
 	err := s.withWriteTx(r.Context(), "add-phantom", func(ctx context.Context, tx *sql.Tx) error {
 		var err error
-		id, err = store.AddPhantom(ctx, tx, sc.GroupID, name, now)
+		id, err = group.AddPhantom(ctx, tx, sc.GroupID, req.Name, now)
 		return err
 	})
 	if err != nil {

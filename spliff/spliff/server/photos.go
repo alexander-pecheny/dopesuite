@@ -10,6 +10,7 @@ import (
 	corei18n "pecheny.me/dopecore/i18nstrings"
 	"pecheny.me/dopecore/idstr"
 
+	"spliff/spliff/domain/group"
 	"spliff/spliff/platform/imagex"
 	"spliff/spliff/storage/store"
 	"spliff/spliff/web/route"
@@ -32,17 +33,13 @@ const (
 // travel with it.
 
 func (s *server) handleUploadPhoto(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	t, err := store.TransactionByID(r.Context(), s.db, sc.TxID)
-	if err != nil {
-		return notFound(err)
-	}
 	encoded, err := readUpload(w, r)
 	if err != nil {
 		return err
 	}
-	id, err := s.storePhoto(r.Context(), sc, t, encoded)
+	id, err := s.storePhoto(r.Context(), sc, encoded)
 	if err != nil {
-		return err
+		return notFound(err)
 	}
 	return writeJSON(w, photoDTO{
 		ID: id, URL: "/api/photos/" + idstr.Format(id),
@@ -51,7 +48,7 @@ func (s *server) handleUploadPhoto(w http.ResponseWriter, r *http.Request, sc ro
 }
 
 // storePhoto writes the blob, then the row and its History entry.
-func (s *server) storePhoto(ctx context.Context, sc route.Scope, t store.Transaction, encoded imagex.Encoded) (int64, error) {
+func (s *server) storePhoto(ctx context.Context, sc route.Scope, encoded imagex.Encoded) (int64, error) {
 	ref, size, err := s.blobs.Put(newReader(encoded.Bytes))
 	if err != nil {
 		return 0, err
@@ -61,11 +58,8 @@ func (s *server) storePhoto(ctx context.Context, sc route.Scope, t store.Transac
 	var id int64
 	err = s.withWriteTx(ctx, "add-photo", func(ctx context.Context, tx *sql.Tx) error {
 		var err error
-		if id, err = store.InsertPhoto(ctx, tx, sc.TxID, sc.User.UserID, photo, now); err != nil {
-			return err
-		}
-		return store.AppendHistory(ctx, tx, sc.TxID, sc.User.UserID,
-			store.HistoryPhotoAdded, "", snapshotOf(withPhotoCount(t, len(t.Photos)+1)), now)
+		id, err = group.AttachPhoto(ctx, tx, sc.TxID, sc.User.UserID, photo, now)
+		return err
 	})
 	if err != nil {
 		// The row did not land, so the bytes must not linger either.
@@ -127,25 +121,6 @@ func (s *server) memberPhoto(r *http.Request, sc route.Scope) (int64, store.Phot
 	return id, photo, nil
 }
 
-// photoTransaction is the Transaction a Photo is attached to.
-func (s *server) photoTransaction(ctx context.Context, photoID int64) (store.Transaction, error) {
-	var txID int64
-	if err := s.db.QueryRowContext(ctx,
-		`select transaction_id from transaction_photos where id = ?`, photoID).Scan(&txID); err != nil {
-		return store.Transaction{}, notFound(err)
-	}
-	t, err := store.TransactionByID(ctx, s.db, txID)
-	if err != nil {
-		return store.Transaction{}, notFound(err)
-	}
-	return t, nil
-}
-
-func withPhotoCount(t store.Transaction, n int) store.Transaction {
-	t.Photos = make([]store.Photo, n)
-	return t
-}
-
 // handleGetPhoto serves the bytes to Members of the Group the Photo's
 // Transaction belongs to, and to nobody else. The route cannot carry a {group},
 // because a Photo's URL names the Photo — so the membership check is here.
@@ -177,23 +152,15 @@ func (s *server) handleDeletePhoto(w http.ResponseWriter, r *http.Request, sc ro
 	if err != nil {
 		return err
 	}
-	t, err := s.photoTransaction(r.Context(), id)
-	if err != nil {
-		return err
-	}
-	txID := t.ID
 	now := rfc3339(time.Now())
 	var ref string
 	err = s.withWriteTx(r.Context(), "delete-photo", func(ctx context.Context, tx *sql.Tx) error {
 		var err error
-		if ref, err = store.DeletePhoto(ctx, tx, id); err != nil {
-			return err
-		}
-		return store.AppendHistory(ctx, tx, txID, sc.User.UserID,
-			store.HistoryPhotoRemove, snapshotOf(t), snapshotOf(withPhotoCount(t, len(t.Photos)-1)), now)
+		_, ref, err = group.DetachPhoto(ctx, tx, id, sc.User.UserID, now)
+		return err
 	})
 	if err != nil {
-		return err
+		return notFound(err)
 	}
 	// After the commit: a blob removed inside the transaction would be gone even
 	// if the transaction rolled back.

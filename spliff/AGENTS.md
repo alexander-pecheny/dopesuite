@@ -40,7 +40,8 @@ spliff/                  module root (go.mod: module "spliff")
     cmd/spliff-server/   thin main() → spliffserver.Main()
     server/              package spliffserver — the trunk + server/tests/ (integration)
     web/                 route (the dispatcher), assets (embed), ui (the kit overlay), ts, jstest
-    domain/              money, rates, split, ledger — pure, and tested first
+    domain/              money, rates, split, ledger — pure, and tested first;
+                         group — the Group's rules, run inside the write transaction
     storage/store/       the schema as a migration list, and every query
     platform/imagex/     what happens to a Photo between the phone and the disk
   deploy/                the systemd unit, as an example to copy
@@ -53,12 +54,13 @@ spliff/                  module root (go.mod: module "spliff")
 | `spliff/domain/money` | An `Amount` is an integer number of minor units together with an ISO 4217 code. Also the exponent table (JPY has 0, KWD and five others have 3, everything else has 2), and parsing and formatting. No float ever touches an amount |
 | `spliff/domain/rates` | The Rate table, `ResolveDay` (which picks the nearest day, and the earlier one if two are equally near), and `Convert`, which is the ONLY conversion function. It rounds half-even and takes a Pinned rate argument that v1 never sets |
 | `spliff/domain/split` | Turns an even or percentage split into the amounts that actually get stored. It uses largest remainder, and gives the leftover minor units to the payers in order of descending Payment, then in split order |
+| `spliff/domain/group` | The Group's rules: recording, editing, deleting and restoring a Transaction (with its History entry), attaching Photos, removing Members, handing over and deleting the Group. Each function takes the write transaction and reads what it checks (Members, Net balances, the Transaction as it stood) through it, so no other write can land between the check and the write. Refusals are User Errors. Not pure: it goes through `storage/store` |
 | `spliff/domain/ledger` | Net balances and the greedy Debt graph. Conversion is kept exact the whole way through and the column is rounded only once at the end, so the balances add up to exactly zero. `Balances` asserts that |
 | `spliff/storage/store/schema.go` | the schema as `[]schema.Migration`; `server/tests/testdata/schema.sql` pins what the list makes of an empty file (`SPLIFF_UPDATE_SCHEMA=1` regenerates) |
 | `spliff/web/route/route.go` | **The dispatcher.** A route declares the access it needs (Public, LoggedIn, Member or Owner), and the table resolves the session, the Group and the Owner before the handler runs. The same-origin check on writes is here too |
 | `spliff/server/routes.go` | the whole route table, one row per endpoint |
-| `spliff/server/groups.go` | the Group page's read (balances, Debt graph, feed) and the Group's own settings, leaving and kicking |
-| `spliff/server/transactions.go` | Every write to a Transaction: validate it, write it, append to History, and send the DMs the rules call for |
+| `spliff/server/groups.go` | the Group page's read (balances, Debt graph, feed), and the handlers for the Group's settings, leaving and kicking. Each write handler decodes, runs a `domain/group` function inside `withWriteTx`, and encodes |
+| `spliff/server/transactions.go` | The Transaction handlers: decode, `domain/group` inside one write transaction, then the DMs the rules call for |
 | `spliff/server/invites.go` | The adapter over `dopecore/invitelink`. This file supplies Spliff's tables, its peek and join responses, the Phantom claim and the wording (`inviteTexts`); the state machine, the request bodies, the list's wire shape and the error mapping belong to that package |
 | `spliff/server/rates.go` | The fetcher. It pulls one table a day from open.er-api.com, both when a rate is first needed and on a daily ticker. If a fetch fails, the nearest table already stored stays in use |
 | `spliff/server/auth.go` | the `dopecore/tglogin` adapter and password login |
@@ -76,7 +78,12 @@ spliff/                  module root (go.mod: module "spliff")
 - **Nobody leaves owing.** Leaving a Group, being removed from one and deleting
   one are all refused while any balance is non-zero, and the refusal says how
   much. That is what stops the Debt graph from pointing at someone who is no
-  longer there.
+  longer there. Restoring a deleted Transaction that names a former Member is
+  refused for the same reason.
+- **A Group rule is checked inside the write it guards.** Read the Members,
+  the balances or the Transaction's "before" through the `tx` the write runs
+  in, never through `s.db` ahead of `withWriteTx`. Load the rate `Book` before
+  the transaction opens, because loading it can fetch over the network.
 - **A Member is a ROW, not an account.** `transaction_payments.member_id` and
   `transaction_shares.member_id` both point at a row in `group_members`, and the
   account behind that row may be null. A row with no account is what we call a

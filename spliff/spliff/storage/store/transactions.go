@@ -389,6 +389,17 @@ where p.id = ?`, id).
 	return p, groupID, nil
 }
 
+// PhotoTransaction is the Transaction a Photo is attached to.
+func PhotoTransaction(ctx context.Context, q Querier, photoID int64) (int64, error) {
+	var txID int64
+	err := q.QueryRowContext(ctx,
+		`select transaction_id from transaction_photos where id = ?`, photoID).Scan(&txID)
+	if err != nil {
+		return 0, notFound(err)
+	}
+	return txID, nil
+}
+
 // DeletePhoto drops the row and answers the blob ref, which the caller unlinks
 // after the commit — a blob removed inside the transaction would be gone even
 // if the transaction rolled back.

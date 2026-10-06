@@ -296,6 +296,7 @@ export type Strings = {
       descriptionRequired: () => string;
       descriptionTooLong: () => string;
       duplicateMember: () => string;
+      namesFormerMember: () => string;
       negativeAmount: () => string;
       notAMember: () => string;
       paymentRequired: () => string;
