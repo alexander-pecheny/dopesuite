@@ -273,3 +273,16 @@ func ParseHiddenDivisions(raw string) []string {
 	}
 	return out
 }
+
+// HiddenDivisionsValue is what games.hidden_divisions holds for a list of Flag
+// short names: its JSON, or null for none.
+func HiddenDivisionsValue(hidden []string) any {
+	if len(hidden) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(hidden)
+	if err != nil {
+		return nil
+	}
+	return string(raw)
+}

@@ -30,3 +30,24 @@ func TestSeedTeamNameKeyFoldsCaseAndYo(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// A Division as a scheme writes it is a Flag the Participant carries, or with
+// a leading minus one it does not carry.
+func TestInDivision(t *testing.T) {
+	for _, c := range []struct {
+		flags    []string
+		division string
+		want     bool
+	}{
+		{[]string{"Студ", "Е"}, "Студ", true},
+		{[]string{"Студ"}, " Школ ", false},
+		{[]string{"Студ"}, "-Студ", false},
+		{[]string{"Школ"}, "- Студ", true},
+		{nil, "-Студ", true},
+		{nil, "Студ", false},
+	} {
+		if got := InDivision(c.flags, c.division); got != c.want {
+			t.Errorf("InDivision(%v, %q) = %v, want %v", c.flags, c.division, got, c.want)
+		}
+	}
+}

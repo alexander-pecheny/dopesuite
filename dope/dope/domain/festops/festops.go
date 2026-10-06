@@ -10,14 +10,18 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"strings"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/entrants"
 	"dope/dope/domain/gamebuild"
+	"dope/dope/domain/games"
+	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/journal"
+	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
@@ -45,27 +49,49 @@ func CreateGameTx(ctx context.Context, tx *sql.Tx, spec gamebuild.Spec) (int64, 
 	return gameID, core.FestWrite{Revision: revision}, nil
 }
 
-// Settings is what a Game's settings page edits: its title, its slug, and for
-// a Game built from the scheme language its scheme. An empty SchemeDSL leaves
-// the scheme as it is.
+// Settings is what a Game's settings page edits: its title, its slug, its
+// scheme, and the Divisions it hides. An empty SchemeDSL leaves the scheme as
+// it is.
 type Settings struct {
 	Title     string `json:"title"`
 	Slug      string `json:"slug"`
 	SchemeDSL string `json:"scheme_dsl"`
-	// HiddenDivisions are the Flags whose divisions the Game does not show;
-	// nil leaves them as they are.
+	// HiddenDivisions are the Flags whose Divisions the Game does not show,
+	// written as given; nil leaves them as they are.
 	HiddenDivisions *[]string `json:"hidden_divisions"`
+	// ShownDivisions are the Divisions the Game offers that it shows, as the
+	// settings page ticks them: every other one it offers is hidden, and one
+	// hidden before that it no longer offers stays hidden. When it is set,
+	// HiddenDivisions is not read.
+	ShownDivisions *[]string `json:"shown_divisions"`
+}
+
+// storedSettings is what UpdateSettingsTx checks Settings against.
+type storedSettings struct {
+	gameType  string
+	schemeDSL string
+	hidden    []string
 }
 
 // UpdateSettingsTx saves a Game's settings. A changed scheme recompiles the
 // Game in the same transaction, so a refused recompile leaves nothing
 // half-applied, and a Troika game that now takes a division, or another one,
-// seats its troikas.
+// seats its troikas. Only a format whose scheme its settings page edits
+// (games.DSLEditable) takes a changed scheme; a flat Game is shaped by its own
+// fields, even one created from a DSL.
 func UpdateSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g Settings) (core.FestWrite, error) {
 	s := dopestrings.Default
 	title := strings.TrimSpace(g.Title)
 	if title == "" {
 		return core.FestWrite{}, corei18n.User(s.Host.Games.ErrorTitleRequired())
+	}
+	stored, err := loadStoredSettingsTx(ctx, tx, festID, gameID)
+	if err != nil {
+		return core.FestWrite{}, err
+	}
+	schemeChanged := strings.TrimSpace(g.SchemeDSL) != "" && strings.TrimSpace(g.SchemeDSL) != strings.TrimSpace(stored.schemeDSL)
+	if schemeChanged && games.Get(stored.gameType).DSL != games.DSLEditable {
+		return core.FestWrite{}, corei18n.User(s.Host.Games.ErrorSchemeNotEditable(games.Label(stored.gameType)))
 	}
 	slug, err := freeSlugTx(ctx, tx, festID, gameID, g.Slug)
 	if err != nil {
@@ -76,24 +102,11 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 		title, slug, util.UtcNow(), gameID, festID); err != nil {
 		return core.FestWrite{}, err
 	}
-	if g.HiddenDivisions != nil {
-		var hidden any
-		if cleaned := CleanDivisions(*g.HiddenDivisions); len(cleaned) > 0 {
-			hidden = util.MustJSON(cleaned)
-		}
-		if _, err := tx.ExecContext(ctx, `update games set hidden_divisions = ? where id = ? and fest_id = ?`, hidden, gameID, festID); err != nil {
-			return core.FestWrite{}, err
-		}
-	}
-	written := core.FestWrite{Event: "game:settings", Payload: map[string]any{"gameID": gameID}}
-	if strings.TrimSpace(g.SchemeDSL) == "" {
-		return written, nil
-	}
-	var stored string
-	if err := tx.QueryRowContext(ctx, `select coalesce(scheme_dsl, '') from games where id = ?`, gameID).Scan(&stored); err != nil {
+	if err := writeHiddenDivisionsTx(ctx, tx, festID, gameID, g, stored); err != nil {
 		return core.FestWrite{}, err
 	}
-	if strings.TrimSpace(stored) == strings.TrimSpace(g.SchemeDSL) {
+	written := core.FestWrite{Event: "game:settings", Payload: map[string]any{"gameID": gameID}}
+	if !schemeChanged {
 		return written, nil
 	}
 	if err := gamebuild.Recompile(ctx, tx, festID, gameID, g.SchemeDSL); err != nil {
@@ -101,6 +114,69 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 	}
 	_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
 	return written, err
+}
+
+func loadStoredSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (storedSettings, error) {
+	var stored storedSettings
+	var hidden string
+	if err := tx.QueryRowContext(ctx, `
+select game_type, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, '') from games where id = ? and fest_id = ?`,
+		gameID, festID).Scan(&stored.gameType, &stored.schemeDSL, &hidden); err != nil {
+		return storedSettings{}, err
+	}
+	stored.hidden = store.ParseHiddenDivisions(hidden)
+	return stored, nil
+}
+
+// writeHiddenDivisionsTx saves the Divisions the Game hides, if the Settings
+// say anything about them.
+func writeHiddenDivisionsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g Settings, stored storedSettings) error {
+	var hidden []string
+	switch {
+	case g.ShownDivisions != nil:
+		offered, err := OfferedDivisions(ctx, tx, festID, stored.gameType)
+		if err != nil {
+			return err
+		}
+		hidden = HiddenAfterShown(offered, stored.hidden, *g.ShownDivisions)
+	case g.HiddenDivisions != nil:
+		hidden = *g.HiddenDivisions
+	default:
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `update games set hidden_divisions = ? where id = ? and fest_id = ?`,
+		store.HiddenDivisionsValue(roster.CleanDivisions(hidden)), gameID, festID)
+	return err
+}
+
+// HiddenAfterShown is the Divisions a Game hides once the host has ticked the
+// shown ones: every offered one not ticked, and every one hidden before that is
+// not offered now, so a Flag no team carries for a while stays hidden when it
+// comes back.
+func HiddenAfterShown(offered, hiddenBefore, shown []string) []string {
+	ticked := roster.CleanDivisions(shown)
+	var hidden []string
+	for _, d := range offered {
+		if !slices.Contains(ticked, d) {
+			hidden = append(hidden, d)
+		}
+	}
+	for _, d := range hiddenBefore {
+		if !slices.Contains(offered, d) {
+			hidden = append(hidden, d)
+		}
+	}
+	return roster.CleanDivisions(hidden)
+}
+
+// OfferedDivisions is the Divisions a Game of this format offers to look at:
+// the fest's (roster.FestDivisions) for a format whose results carry the chips
+// (games.Definition.Divisions), and none for the rest.
+func OfferedDivisions(ctx context.Context, q store.Queryer, festID int64, gameType string) ([]string, error) {
+	if def, ok := games.Lookup(gameType); !ok || !def.Divisions {
+		return nil, nil
+	}
+	return roster.FestDivisions(ctx, q, festID)
 }
 
 // freeSlugTx checks a slug the host typed: well formed, and no other Game of
@@ -123,22 +199,6 @@ select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, 
 		return nil, corei18n.User(s.Host.Games.ErrorSlugTaken())
 	}
 	return slug, nil
-}
-
-// CleanDivisions trims a list of division names and drops the empty and the
-// repeated ones, keeping the first spelling's order.
-func CleanDivisions(in []string) []string {
-	var out []string
-	seen := map[string]bool{}
-	for _, d := range in {
-		d = strings.TrimSpace(d)
-		if d == "" || seen[d] {
-			continue
-		}
-		seen[d] = true
-		out = append(out, d)
-	}
-	return out
 }
 
 // ClearGameTx resets a Game to its just-created state (gamebuild.Clear),

@@ -4,10 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"dope/dope/domain/fixture"
 	"dope/dope/domain/games"
+	dopestrings "dope/i18nstrings"
+
+	"pecheny.me/dopecore/session"
 )
 
 // Every format built from a scheme takes a DSL edit on its settings page, and
@@ -80,5 +86,42 @@ func TestEveryDSLGameTakesAnEditAndKeepsItsResults(t *testing.T) {
 	}
 	if edited < 5 {
 		t.Fatalf("edited %d Games; the fixture has brain, ЭК, личная СИ, Тройка and Хамса", edited)
+	}
+}
+
+// A flat Game created from a DSL is shaped by its own fields: the settings
+// form and its JSON twin both refuse a changed scheme, and the scheme stays.
+func TestAFlatGameRefusesASchemeEdit(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	owner := systemUserID(t, db)
+	festID := newFest(t, db, "flat-dsl", "Фест", owner)
+	token := createTestSession(t, srv, owner)
+	for i, name := range []string{"Альфа", "Бета"} {
+		if _, err := db.Exec(`insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?, ?)`, festID, name, i+1, i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const dsl = "[scheme]\nkind: flat\nthemes: 2\n"
+	gameID := createSchemeGame(t, db, festID, "ksi", "КСИ", dsl)
+	edited := "[scheme]\nkind: flat\nthemes: 3\n"
+	form := url.Values{"title": {"КСИ"}, "scheme_dsl": {edited}}
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/%d/settings", festID, gameID), strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+	resp := httptest.NewRecorder()
+	srv.HostPageServer().HandleHostRouter(resp, req)
+	want := dopestrings.Default.Host.Games.ErrorSchemeNotEditable(games.Label("ksi"))
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), want) {
+		t.Fatalf("the form: %d, want the page again saying %q", resp.Code, want)
+	}
+	path := fmt.Sprintf("/api/fest/%d/games/%d/settings", festID, gameID)
+	if resp := scopedAPIRequest(t, srv, http.MethodPatch, path, map[string]any{"scheme_dsl": edited}, token); resp.Code < 400 {
+		t.Fatalf("the twin: %d %s, want a refusal", resp.Code, resp.Body.String())
+	}
+	var stored string
+	if err := db.QueryRow(`select scheme_dsl from games where id = ?`, gameID).Scan(&stored); err != nil || stored != dsl {
+		t.Fatalf("scheme_dsl = %q (%v), want it as created", stored, err)
 	}
 }

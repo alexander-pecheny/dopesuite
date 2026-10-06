@@ -97,6 +97,13 @@ func TestAGameHidesTheDivisionsItDoesNotRank(t *testing.T) {
 	if s := read(); !reflect.DeepEqual(s.Hidden, []string{"Студ"}) {
 		t.Fatalf("after the form: %+v, want Студ hidden", s)
 	}
+	// The twin takes the same ticks: Студ shown again, ЧР hidden.
+	if code, body := api(http.MethodPatch, fmt.Sprintf("/games/%d/settings", game.ID), map[string]any{"shown_divisions": []string{"Студ"}}); code != http.StatusOK {
+		t.Fatalf("shown_divisions: %d %s", code, body)
+	}
+	if s := read(); !reflect.DeepEqual(s.Hidden, []string{"ЧР"}) {
+		t.Fatalf("after shown_divisions: %+v, want ЧР hidden", s)
+	}
 	page := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d/game/%d/settings", festID, game.ID), nil)
 	page.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
 	resp = httptest.NewRecorder()

@@ -482,12 +482,9 @@ func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, 
 select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden); err != nil {
 			return nil, err
 		}
-		var divisions []string
-		if divisionsGame(gameType) {
-			var err error
-			if divisions, err = festDivisions(r.Context(), s.h.Engine().DB, festID); err != nil {
-				return nil, err
-			}
+		divisions, err := festops.OfferedDivisions(r.Context(), s.h.Engine().DB, festID, gameType)
+		if err != nil {
+			return nil, err
 		}
 		if submitted := strings.TrimSpace(r.Form.Get("scheme_dsl")); submitted != "" && errMsg != "" {
 			schemeDSL = r.Form.Get("scheme_dsl")
@@ -523,62 +520,6 @@ func (s *Server) UpdateGameSettings(ctx context.Context, festID, gameID int64, g
 	return err
 }
 
-// hiddenFromForm is the hidden divisions the settings form means: every offered
-// one not ticked, and every one hidden before that is not offered now.
-func (s *Server) hiddenFromForm(ctx context.Context, festID, gameID int64, shown []string) ([]string, error) {
-	offered, err := festDivisions(ctx, s.h.Engine().DB, festID)
-	if err != nil {
-		return nil, err
-	}
-	var stored string
-	if err := s.h.Engine().DB.QueryRowContext(ctx, `select coalesce(hidden_divisions, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&stored); err != nil {
-		return nil, err
-	}
-	ticked := map[string]bool{}
-	for _, d := range shown {
-		ticked[strings.TrimSpace(d)] = true
-	}
-	isOffered := map[string]bool{}
-	var hidden []string
-	for _, d := range offered {
-		isOffered[d] = true
-		if !ticked[d] {
-			hidden = append(hidden, d)
-		}
-	}
-	for _, d := range store.ParseHiddenDivisions(stored) {
-		if !isOffered[d] {
-			hidden = append(hidden, d)
-		}
-	}
-	return festops.CleanDivisions(hidden), nil
-}
-
-// festDivisions is every Flag the fest's teams carry, by short name, in the
-// order the roster lists the teams and each team its Flags: the divisions a game
-// that seats the fest's teams can offer.
-func festDivisions(ctx context.Context, q store.Queryer, festID int64) ([]string, error) {
-	flags, err := store.CollectRows(ctx, q, `
-select f.short from fest_team_flags f join fest_teams t on t.id = f.team_id
-where t.fest_id = ? and t.deleted = 0 and trim(f.short) != ''
-order by t.position, t.id, f.position`, []any{festID}, func(rows *sql.Rows) (string, error) {
-		var short string
-		return short, rows.Scan(&short)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return festops.CleanDivisions(flags), nil
-}
-
-// divisionsGame reports whether a game type shows divisions to choose among
-// (games.Definition.Divisions): the formats whose results tabs and screen
-// carry the chips.
-func divisionsGame(gameType string) bool {
-	d, ok := games.Lookup(gameType)
-	return ok && d.Divisions
-}
-
 func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -586,15 +527,9 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 	}
 	g := GameSettings{Title: r.Form.Get("title"), Slug: r.Form.Get("slug"), SchemeDSL: r.Form.Get("scheme_dsl")}
 	if r.Form.Get("divisions_present") != "" {
-		// The boxes say which offered divisions are shown; the rest of the offered
-		// ones are hidden, and one hidden before that no team carries now
-		// stays hidden.
-		hidden, err := s.hiddenFromForm(r.Context(), festID, gameID, r.Form["division_shown"])
-		if err != nil {
-			s.renderHostGameSettings(w, r, festID, gameID, err.Error())
-			return
-		}
-		g.HiddenDivisions = &hidden
+		// The boxes say which offered Divisions are shown (festops.Settings).
+		shown := r.Form["division_shown"]
+		g.ShownDivisions = &shown
 	}
 	if err := s.UpdateGameSettings(r.Context(), festID, gameID, g); err != nil {
 		s.renderHostGameSettings(w, r, festID, gameID, err.Error())

@@ -267,14 +267,6 @@ func nameKey(first, last string) string {
 	return util.AlphaKey(store.JoinPlayerName(first, last))
 }
 
-// InDivision reports whether a Participant with these Flags plays in a
-// Division as a scheme writes it: a Flag it carries, or with a leading minus a
-// Flag it does not carry (ADR-0020).
-func InDivision(flags []string, division string) bool {
-	flag, exclude := strings.CutPrefix(strings.TrimSpace(division), "-")
-	return slices.Contains(flags, strings.TrimSpace(flag)) != exclude
-}
-
 // AssembledInDivision lists the fest's assembled teams that play in a Division,
 // by name, leaving out the one excluded (a troika about to be deleted).
 func AssembledInDivision(ctx context.Context, q store.Queryer, festID int64, division string, exclude int64) ([]Assembled, error) {

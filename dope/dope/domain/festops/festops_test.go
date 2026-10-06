@@ -4,13 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/festops"
 	"dope/dope/domain/gamebuild"
+	"dope/dope/domain/games"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
@@ -90,5 +93,93 @@ func TestSettingsRefuseATakenSlug(t *testing.T) {
 	var title string
 	if err := eng.DB.QueryRow(`select title from games where id = ?`, second).Scan(&title); err != nil || title == "Вторая" {
 		t.Fatalf("title = %q (%v): a refused save wrote the title", title, err)
+	}
+}
+
+// addFlaggedTeams adds one fest team per Flag, named and numbered after it.
+func addFlaggedTeams(t *testing.T, eng *core.Engine, festID int64, flags ...string) {
+	t.Helper()
+	for i, flag := range flags {
+		res, err := eng.DB.Exec(`insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?, ?)`, festID, flag, i+1, i+1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		teamID, _ := res.LastInsertId()
+		if _, err := eng.DB.Exec(`insert into fest_team_flags(team_id, position, short, full) values(?, 1, ?, ?)`, teamID, flag, flag); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func saveSettings(t *testing.T, eng *core.Engine, festID, gameID int64, g festops.Settings) error {
+	t.Helper()
+	_, err := eng.CommitFestWrite(t.Context(), festID, "test", func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		return festops.UpdateSettingsTx(ctx, tx, festID, gameID, g)
+	})
+	return err
+}
+
+// A flat Game is shaped by its own fields, so its settings refuse a scheme
+// edit even when it was created from a DSL; the scheme it already has passes,
+// which is what the JSON twin sends back when the host changes only the title.
+func TestSettingsRefuseASchemeEditOfAFlatGame(t *testing.T) {
+	eng, festID := newFest(t)
+	addFlaggedTeams(t, eng, festID, "Студ", "Школ")
+	const dsl = "[scheme]\nkind: flat\nthemes: 2\n"
+	var gameID int64
+	if _, err := eng.CommitFestWrite(t.Context(), festID, "test", func(ctx context.Context, tx *sql.Tx) (written core.FestWrite, err error) {
+		gameID, written, err = festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: "ksi", Label: "КСИ", DSL: dsl})
+		return written, err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err := saveSettings(t, eng, festID, gameID, festops.Settings{Title: "КСИ", SchemeDSL: "[scheme]\nkind: flat\nthemes: 3\n"})
+	if msg, _ := corei18n.AsUser(err); msg != dopestrings.Default.Host.Games.ErrorSchemeNotEditable(games.Label("ksi")) {
+		t.Fatalf("err = %v, want the scheme edit refused as not editable", err)
+	}
+	if err := saveSettings(t, eng, festID, gameID, festops.Settings{Title: "КСИ отбора", SchemeDSL: dsl}); err != nil {
+		t.Fatalf("the stored scheme sent back: %v", err)
+	}
+	knobs := createGame(t, eng, festID, "ЧГК")
+	err = saveSettings(t, eng, festID, knobs, festops.Settings{Title: "ЧГК", SchemeDSL: dsl})
+	if _, user := corei18n.AsUser(err); !user {
+		t.Fatalf("err = %v, want a scheme refused on a Game built from its fields", err)
+	}
+}
+
+// The settings page ticks the Divisions a Game shows. Every offered one left
+// unticked is hidden, and one hidden before that no team carries now stays
+// hidden. A list of hidden ones is written as given.
+func TestSettingsHideTheDivisionsNotTicked(t *testing.T) {
+	eng, festID := newFest(t)
+	gameID := createGame(t, eng, festID, "ЧГК")
+	addFlaggedTeams(t, eng, festID, "Студ", "Школ")
+	hidden := func() []string {
+		t.Helper()
+		var raw string
+		if err := eng.DB.QueryRow(`select coalesce(hidden_divisions, '') from games where id = ?`, gameID).Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		return store.ParseHiddenDivisions(raw)
+	}
+	gone := []string{"ЧР"}
+	if err := saveSettings(t, eng, festID, gameID, festops.Settings{Title: "ЧГК", HiddenDivisions: &gone}); err != nil {
+		t.Fatal(err)
+	}
+	if got := hidden(); !slices.Equal(got, gone) {
+		t.Fatalf("hidden = %v, want the list as given", got)
+	}
+	shown := []string{"Студ"}
+	if err := saveSettings(t, eng, festID, gameID, festops.Settings{Title: "ЧГК", ShownDivisions: &shown}); err != nil {
+		t.Fatal(err)
+	}
+	if got := hidden(); !slices.Equal(got, []string{"Школ", "ЧР"}) {
+		t.Fatalf("hidden = %v, want Школ unticked and ЧР kept", got)
+	}
+	if err := saveSettings(t, eng, festID, gameID, festops.Settings{Title: "ЧГК"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := hidden(); !slices.Equal(got, []string{"Школ", "ЧР"}) {
+		t.Fatalf("hidden = %v after a rename, want it left as it was", got)
 	}
 }

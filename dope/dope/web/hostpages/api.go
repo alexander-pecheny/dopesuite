@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"dope/dope/domain/games"
+	"dope/dope/domain/festops"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/overrides"
@@ -404,11 +404,11 @@ select id, code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidd
 	if g.HiddenDivisions == nil {
 		g.HiddenDivisions = []string{}
 	}
-	g.Divisions = []string{}
-	if divisionsGame(g.Type) {
-		if g.Divisions, err = festDivisions(ctx, s.h.Engine().DB, festID); err != nil {
-			return g, err
-		}
+	if g.Divisions, err = festops.OfferedDivisions(ctx, s.h.Engine().DB, festID, g.Type); err != nil {
+		return g, err
+	}
+	if g.Divisions == nil {
+		g.Divisions = []string{}
 	}
 	return g, nil
 }
@@ -429,13 +429,6 @@ func (s *Server) apiUpdateGame(w http.ResponseWriter, r *http.Request, sc route.
 	settings := current.settings()
 	if err := route.DecodeJSON(r, &settings); err != nil {
 		return err
-	}
-	if settings.SchemeDSL != "" && games.Get(current.Type).DSL != games.DSLEditable {
-		// The settings page offers the scheme only to a format whose DSL it
-		// edits (games.DSLEditable); a flat Game is shaped by its own fields.
-		if strings.TrimSpace(settings.SchemeDSL) != strings.TrimSpace(current.SchemeDSL) {
-			return corei18n.User(dopestrings.Default.Host.Games.ErrorSchemeNotEditable(games.Label(current.Type)))
-		}
 	}
 	if err := s.UpdateGameSettings(r.Context(), sc.FestID, sc.GameID, settings); err != nil {
 		return err

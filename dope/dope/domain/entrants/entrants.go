@@ -184,34 +184,13 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 		}
 	}
 
-	if view.Divisions, err = festDivisions(ctx, q, scope.FestID); err != nil {
+	if view.Divisions, err = roster.FestDivisions(ctx, q, scope.FestID); err != nil {
 		return View{}, err
 	}
 	if view.Candidates, err = candidates(ctx, q, scope.FestID, view.Kind, list); err != nil {
 		return View{}, err
 	}
 	return view, nil
-}
-
-// festDivisions is every Flag the fest's teams carry, in the order first seen.
-func festDivisions(ctx context.Context, q store.Queryer, festID int64) ([]string, error) {
-	flags, err := store.CollectRows(ctx, q, `
-select f.short from fest_team_flags f join fest_teams t on t.id = f.team_id
-where t.fest_id = ? and t.deleted = 0 order by t.position, t.id, f.position`, []any{festID},
-		func(rows *sql.Rows) (string, error) {
-			var short string
-			return short, rows.Scan(&short)
-		})
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, flag := range flags {
-		if flag = strings.TrimSpace(flag); flag != "" && !slices.Contains(out, flag) {
-			out = append(out, flag)
-		}
-	}
-	return out, nil
 }
 
 // candidates is who the host may add to the list: the fest's teams, troikas or
