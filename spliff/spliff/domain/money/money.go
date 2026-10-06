@@ -91,12 +91,12 @@ func Parse(s, currency string) (Amount, error) {
 	}
 	currency = Normalise(currency)
 	raw, neg := clean(s)
-	whole, frac, hasFrac := strings.Cut(raw, ".")
-	if whole == "" && !hasFrac {
-		return Amount{}, ErrBadAmount
+	whole, frac, _ := strings.Cut(raw, ".")
+	if whole == "" && frac == "" {
+		return Amount{}, ErrBadAmount // nothing, or a lone "."
 	}
 	exp := Exponent(currency)
-	if hasFrac && len(frac) > exp {
+	if len(frac) > exp {
 		return Amount{}, ErrBadAmount
 	}
 	if !digitsOnly(whole) || !digitsOnly(frac) {
@@ -115,12 +115,11 @@ func Parse(s, currency string) (Amount, error) {
 	return Amount{Minor: minor, Currency: currency}, nil
 }
 
-// clean drops the spaces people type between digit groups, reads a comma as
-// the decimal point, and splits off the sign.
+// clean drops the spaces people type between digit groups (any white space,
+// the no-break space included), reads a comma as the decimal point, and splits
+// off the sign.
 func clean(s string) (raw string, neg bool) {
-	raw = strings.TrimSpace(s)
-	raw = strings.ReplaceAll(raw, " ", "")
-	raw = strings.ReplaceAll(raw, " ", "")
+	raw = strings.Join(strings.Fields(s), "")
 	raw = strings.ReplaceAll(raw, ",", ".")
 	if raw == "" {
 		return "", false

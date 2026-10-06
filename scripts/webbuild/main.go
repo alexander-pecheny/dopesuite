@@ -241,7 +241,7 @@ func targets() []target {
 				},
 				{
 					EntryPointsAdvanced: entries("spliff/spliff/web/ts/",
-						"txform", "money", "profile-model", "currency-pick", "history",
+						"txform", "money", "money_exponents_gen", "profile-model", "currency-pick", "history",
 						// the TS Catalog: the pages import i18nstrings, it the rest
 						"i18nstrings", "i18nstrings_plural_gen", "i18nstrings_types_gen", "i18nstrings_en_gen"),
 					Format: api.FormatESModule,

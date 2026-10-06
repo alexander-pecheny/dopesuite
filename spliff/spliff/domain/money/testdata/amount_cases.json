@@ -1,0 +1,187 @@
+{
+ "comment": "What a person types and what an amount looks like on screen. Read by money_test.go (Parse, Format) and by web/jstest/money-parity.test.js (parseAmount, formatMinor). A null minor is a refusal.",
+ "parse": [
+  {
+   "text": "12.34",
+   "currency": "USD",
+   "minor": 1234
+  },
+  {
+   "text": "12,34",
+   "currency": "USD",
+   "minor": 1234
+  },
+  {
+   "text": "12",
+   "currency": "USD",
+   "minor": 1200
+  },
+  {
+   "text": "12.",
+   "currency": "USD",
+   "minor": 1200
+  },
+  {
+   "text": ".5",
+   "currency": "USD",
+   "minor": 50
+  },
+  {
+   "text": "-0.05",
+   "currency": "USD",
+   "minor": -5
+  },
+  {
+   "text": "+7.10",
+   "currency": "USD",
+   "minor": 710
+  },
+  {
+   "text": " 12 ",
+   "currency": "USD",
+   "minor": 1200
+  },
+  {
+   "text": "1 234.50",
+   "currency": "USD",
+   "minor": 123450
+  },
+  {
+   "text": "1 234.50",
+   "currency": "USD",
+   "minor": 123450
+  },
+  {
+   "text": "1\t234",
+   "currency": "USD",
+   "minor": 123400
+  },
+  {
+   "text": "1234",
+   "currency": "JPY",
+   "minor": 1234
+  },
+  {
+   "text": "1.234",
+   "currency": "KWD",
+   "minor": 1234
+  },
+  {
+   "text": "0.5",
+   "currency": "usd",
+   "minor": 50
+  },
+  {
+   "text": "12.345",
+   "currency": "USD",
+   "minor": null
+  },
+  {
+   "text": "1234.0",
+   "currency": "JPY",
+   "minor": null
+  },
+  {
+   "text": "1.2345",
+   "currency": "KWD",
+   "minor": null
+  },
+  {
+   "text": "",
+   "currency": "USD",
+   "minor": null
+  },
+  {
+   "text": " ",
+   "currency": "USD",
+   "minor": null
+  },
+  {
+   "text": ".",
+   "currency": "USD",
+   "minor": null
+  },
+  {
+   "text": "-",
+   "currency": "USD",
+   "minor": null
+  },
+  {
+   "text": "abc",
+   "currency": "USD",
+   "minor": null
+  },
+  {
+   "text": "1.2.3",
+   "currency": "USD",
+   "minor": null
+  },
+  {
+   "text": "1,234,5",
+   "currency": "USD",
+   "minor": null
+  },
+  {
+   "text": "+-5",
+   "currency": "USD",
+   "minor": null
+  },
+  {
+   "text": "1e3",
+   "currency": "USD",
+   "minor": null
+  }
+ ],
+ "format": [
+  {
+   "minor": 1234,
+   "currency": "USD",
+   "text": "12.34"
+  },
+  {
+   "minor": 5,
+   "currency": "USD",
+   "text": "0.05"
+  },
+  {
+   "minor": 0,
+   "currency": "USD",
+   "text": "0.00"
+  },
+  {
+   "minor": -1234,
+   "currency": "USD",
+   "text": "-12.34"
+  },
+  {
+   "minor": -5,
+   "currency": "USD",
+   "text": "-0.05"
+  },
+  {
+   "minor": 1234,
+   "currency": "JPY",
+   "text": "1234"
+  },
+  {
+   "minor": -1234,
+   "currency": "JPY",
+   "text": "-1234"
+  },
+  {
+   "minor": 1234,
+   "currency": "KWD",
+   "text": "1.234"
+  },
+  {
+   "minor": 4,
+   "currency": "KWD",
+   "text": "0.004"
+  },
+  {
+   "minor": 100,
+   "currency": "ZZZ",
+   "text": "1.00"
+  }
+ ]
+}

@@ -1,18 +1,16 @@
 // The browser's half of spliff/spliff/domain/money: the same exponent table and
-// the same refusal to let a float near an amount. The page needs it because a
-// derived split is computed here — the server stores amounts, never percentages
-// — and two phones showing different numbers for one bill is the failure this
-// whole arrangement exists to prevent.
+// the same refusal to let a float near an amount. The page needs it because an
+// even split is computed here (the server stores amounts, never how they were
+// typed), and two phones showing different numbers for one bill is the failure
+// this whole arrangement exists to prevent.
+//
+// The exponent table is generated from Go's currencies.go, and the parsing and
+// formatting are checked against domain/money/testdata/amount_cases.json, which
+// Go's tests read too (jstest/money-parity.test.js).
 
-// Every ISO 4217 code whose exponent is NOT 2. Everything else is two decimal
-// places, so listing the exceptions keeps the table short and honest.
+import { EXPONENTS } from "./money_exponents_gen.js";
+
 const DECIMAL_BASE = 10;
-
-const EXPONENTS: Record<string, number> = {
-  BIF: 0, CLP: 0, DJF: 0, GNF: 0, ISK: 0, JPY: 0, KMF: 0, KRW: 0, PYG: 0,
-  RWF: 0, UGX: 0, UYI: 0, VND: 0, VUV: 0, XAF: 0, XOF: 0, XPF: 0,
-  BHD: 3, IQD: 3, JOD: 3, KWD: 3, LYD: 3, OMR: 3, TND: 3,
-};
 
 export function normalise(currency: string): string {
   return currency.trim().toUpperCase();
