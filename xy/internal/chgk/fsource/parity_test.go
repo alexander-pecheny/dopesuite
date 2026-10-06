@@ -84,7 +84,7 @@ func TestParity(t *testing.T) {
 
 	imgs := make([]parityImg, len(c.ImgRefs))
 	for i, x := range c.ImgRefs {
-		imgs[i] = parityImg{Source: x.Source, Refs: imgRefs(x.Source)}
+		imgs[i] = parityImg{Source: x.Source, Refs: inline.ImageRefs(x.Source)}
 	}
 
 	// Blocks are typed by the parser: ints, floats and strings. Round-trip them
@@ -123,29 +123,4 @@ func TestParity(t *testing.T) {
 	if blocks[0]["image"] != "pic.png" || blocks[1]["text"] == nil {
 		t.Errorf("hndt: block 0 image = %v, block 1 text = %v", blocks[0]["image"], blocks[1]["text"])
 	}
-}
-
-// imgRefs is the Go spelling of chgk.ts's imgRefs: the (img …) directives the
-// inline tokenizer finds, hidden comments dropped, first-appearance order.
-func imgRefs(source string) []string {
-	out := []string{}
-	for _, r := range inline.Parse4sElem(source) {
-		if r.Kind != "img" {
-			continue
-		}
-		im, ok := inline.ParseImg(r.Text)
-		if !ok {
-			continue
-		}
-		dup := false
-		for _, n := range out {
-			if n == im.Name {
-				dup = true
-			}
-		}
-		if !dup {
-			out = append(out, im.Name)
-		}
-	}
-	return out
 }

@@ -361,6 +361,18 @@
       "refs": [
         "open.png"
       ]
+    },
+    {
+      "source": "? Вложено (см. (img inner.png))",
+      "refs": [
+        "inner.png"
+      ]
+    },
+    {
+      "source": "? Закодировано (img my%5Fpic.png)",
+      "refs": [
+        "my_pic.png"
+      ]
     }
   ],
   "hndt": {

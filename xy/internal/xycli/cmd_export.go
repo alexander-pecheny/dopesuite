@@ -8,6 +8,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
+	"xy/internal/chgk/inline"
 	"xy/internal/listexport"
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
@@ -90,9 +91,10 @@ func cmdExport(a *app, args []string) error {
 
 // gatherImages downloads and decrypts the attachments the source's (img …)
 // directives name, so the server renders the same pictures the browser would.
+// inline.ImageRefs finds them the way the browser's imgRefs does.
 func gatherImages(c *Client, b *Board, cards []Card, source string) (map[string][]byte, error) {
 	wanted := map[string]bool{}
-	for _, name := range imageRefs(source) {
+	for _, name := range inline.ImageRefs(source) {
 		wanted[name] = true
 	}
 	s := xystrings.Default
@@ -122,60 +124,6 @@ func gatherImages(c *Client, b *Board, cards []Card, source string) (map[string]
 		}
 	}
 	return images, nil
-}
-
-// imageRefs collects the (img …) filenames a 4s text references. As in
-// chgksuite's parseimg the filename is the last whitespace token — the rest are
-// w=/h=/big/inline options — and a reference inside a hidden comment is not one,
-// since nothing renders it.
-func imageRefs(source string) []string {
-	var out []string
-	seen := map[string]bool{}
-	for _, directive := range directives(source) {
-		if strings.HasPrefix(directive, "hidden-comment") {
-			continue
-		}
-		rest, ok := strings.CutPrefix(directive, "img ")
-		if !ok {
-			continue
-		}
-		fields := strings.Fields(rest)
-		if len(fields) == 0 {
-			continue
-		}
-		if name := fields[len(fields)-1]; !seen[name] {
-			seen[name] = true
-			out = append(out, name)
-		}
-	}
-	return out
-}
-
-// directives returns the body of every top-level (…) run, brackets balanced so a
-// ")" inside a filename does not end one early.
-func directives(s string) []string {
-	var out []string
-	runes := []rune(s)
-	for i := 0; i < len(runes); i++ {
-		if runes[i] != '(' {
-			continue
-		}
-		depth, start := 1, i+1
-		j := start
-		for ; j < len(runes) && depth > 0; j++ {
-			switch runes[j] {
-			case '(':
-				depth++
-			case ')':
-				depth--
-			}
-		}
-		if depth == 0 {
-			out = append(out, string(runes[start:j-1]))
-			i = j - 1
-		}
-	}
-	return out
 }
 
 // safeName keeps an export's filename usable on any filesystem.

@@ -53,6 +53,26 @@ func ParseImg(arg string) (Img, bool) {
 	return im, true
 }
 
+// ImageRefs is the file names of the (img …) directives in a 4s text, in order
+// of first appearance and never nil. It reads the runs the tokenizer gives, so
+// brackets match as the export matches them, and an image inside a hidden
+// comment is not a reference, since nothing renders it. chgk.ts's imgRefs is
+// the browser's twin, held to it by fsource's parity corpus.
+func ImageRefs(source string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, r := range Parse4sElem(source) {
+		if r.Kind != "img" {
+			continue
+		}
+		if im, ok := ParseImg(r.Text); ok && !seen[im.Name] {
+			seen[im.Name] = true
+			out = append(out, im.Name)
+		}
+	}
+	return out
+}
+
 // SizeInches computes the rendered size of an image in inches, mirroring
 // chgksuite's parseimg + python-docx add_picture (px at 120 dpi;
 // proportional_resize when neither dimension is given). native{W,H} are the
