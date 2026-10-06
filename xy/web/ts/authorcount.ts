@@ -10,7 +10,7 @@ import { xyFind } from "./find.js";
 import { authorsOf as themeAuthorsOf, splitTheme } from "./themes.js";
 import { xyApp } from "./app.js";
 import { iconed } from "./icons_gen.js";
-import { KIND, numbered } from "./cardkind.js";
+import { counter, numbered } from "./cardkind.js";
 import type { ListPanel, PanelShell } from "./panels.js";
 
 const PERCENT = 100;
@@ -44,11 +44,14 @@ function authorsOf(card: ChgkCard): string[] {
 
 export function countAuthors(cards: ReadonlyArray<ChgkCard>, upTo: string, includeZero: boolean): AuthorCount {
   const numbers = xyChgk.numberQuestionCards(cards);
-  const questions: Array<{ names: string[]; number: string }> = [];
+  // zero marks a zero-numbered question, one whose own number says so. A
+  // theme's questions are never zero ones, though their "theme.points" number
+  // is not a plain integer, so the kind decides that, not the number's spelling.
+  const questions: Array<{ names: string[]; number: string; zero: boolean }> = [];
   cards.forEach((card, i) => {
     const n = numbers[i];
     if (n == null) return;
-    if (card.kind !== KIND.theme) { questions.push({ names: authorsOf(card), number: n }); return; }
+    if (counter(card.kind) !== "theme") { questions.push({ names: authorsOf(card), number: n, zero: xyChgk.isZeroNumber(n) }); return; }
     // A theme is not one question: it is paid by the questions inside it, each
     // numbered «theme.points» so the cutoff and the numbers column still read as
     // positions in the tour. A question's own author wins over the theme's.
@@ -57,13 +60,14 @@ export function countAuthors(cards: ReadonlyArray<ChgkCard>, upTo: string, inclu
       questions.push({
         names: themeAuthorsOf(t, slot).filter((x) => authorKey(x)),
         number: `${n}.${slot.number}`,
+        zero: false,
       });
     }
   });
-  const hasZero = questions.some((q) => xyChgk.isZeroNumber(q.number));
+  const hasZero = questions.some((q) => q.zero);
   let end = -1;
   questions.forEach((q, i) => { if (q.number === upTo.trim()) end = i; });
-  const picked = questions.slice(0, end + 1).filter((q) => includeZero || !xyChgk.isZeroNumber(q.number));
+  const picked = questions.slice(0, end + 1).filter((q) => includeZero || !q.zero);
 
   const tally = new Map<string, { spellings: Map<string, number>; row: AuthorRow }>();
   const unauthored: AuthorRow = { name: S.board.authorcount.unauthored(), count: 0, share: 0, numbers: [] };

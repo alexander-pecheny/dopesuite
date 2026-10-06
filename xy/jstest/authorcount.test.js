@@ -63,3 +63,11 @@ test("formatShare is a percentage of the questions counted, one decimal", () => 
   assert.equal(formatShare(1 / 3, 3), "11.1%");
   assert.equal(formatShare(0, 0), "");
 });
+
+test("a theme's questions count as ordinary ones, not as нулевые", () => {
+  const theme = { kind: "theme", desc: "#T Реки\n@ Петя\n№ 10\n? а\n! б\n№ 20\n? в\n! г\n@ Вася\n" };
+  const r = countAuthors([q("Вася"), theme], "1.20", false);
+  assert.equal(r.hasZero, false);
+  assert.equal(r.questions, 3);
+  assert.deepEqual(r.rows.map((x) => [x.name, x.count, x.numbers]), [["Вася", 2, ["1", "1.20"]], ["Петя", 1, ["1.10"]]]);
+});
