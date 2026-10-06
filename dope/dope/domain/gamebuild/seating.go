@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"strings"
 
 	"dope/dope/domain/imports"
@@ -439,4 +440,38 @@ func createEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType st
 		return nil, 0, corei18n.User(dopestrings.Default.Gamebuild.Seating.NeedTroikas())
 	}
 	return troikas, 0, nil
+}
+
+// unrecordedEntrantsTx is who a recompile seats in a Game with no recorded
+// Entrant list: the ones Clear would seat. A Game that seats troikas keeps the
+// troikas its seats hold, in their order, and takes its default troikas after
+// them (a Troika Game from before Games recorded their lists, which troikas joined
+// since). seatRoster says a team or individual Game has no seats yet and takes
+// the fest's roster, as on creation. A seeded Game takes neither: the seed
+// owns its seats.
+func unrecordedEntrantsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, declared imports.Declared) (entrants []int64, seatRoster bool, err error) {
+	if declared.Seeded() {
+		return nil, false, nil
+	}
+	if imports.KindOf(gameType) != imports.KindTroika {
+		seated, err := hasAssignmentsTx(ctx, tx, gameID)
+		return nil, !seated, err
+	}
+	seated, err := firstBasketTx(ctx, tx, gameID)
+	if err != nil {
+		return nil, false, err
+	}
+	defaults, err := defaultTroikasTx(ctx, tx, festID, gameType, declared)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, e := range seated {
+		entrants = append(entrants, e.id)
+	}
+	for _, id := range defaults {
+		if !slices.Contains(entrants, id) {
+			entrants = append(entrants, id)
+		}
+	}
+	return entrants, false, nil
 }

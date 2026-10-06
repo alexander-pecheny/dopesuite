@@ -78,9 +78,8 @@ where match_id in (select id from matches where game_id = ?)`, gameID); err != n
 			t.Fatal(err)
 		}
 	}
-	// A recompile seats the bouts and leaves game_participants as it found
-	// them, so only a clear is held to the recorded Entrants.
-	run := func(name string, records bool, write func(tx *sql.Tx) error) {
+	// Both record the Entrants they seat, so the tab shows who the bouts seat.
+	run := func(name string, write func(tx *sql.Tx) error) {
 		t.Helper()
 		tx, err := db.Begin()
 		if err != nil {
@@ -95,7 +94,7 @@ where match_id in (select id from matches where game_id = ?)`, gameID); err != n
 		}
 		if got := troikaGameNames(t, db, gameID, `
 select p.name, p.assembled from game_participants gp join participants p on p.id = gp.participant_id
-where gp.game_id = ?`); records && !slices.Equal(got, want) {
+where gp.game_id = ?`); !slices.Equal(got, want) {
 			t.Errorf("after %s the Game's Entrants are %v, want the troikas %v", name, got, want)
 		}
 		if got := troikaGameNames(t, db, gameID, `
@@ -107,12 +106,12 @@ where m.game_id = ?`); !slices.Equal(got, want) {
 	}
 
 	forget(false)
-	run("clear", true, func(tx *sql.Tx) error {
+	run("clear", func(tx *sql.Tx) error {
 		_, err := gamebuild.Clear(context.Background(), tx, festID, gameID)
 		return err
 	})
 	forget(true)
-	run("recompile", false, func(tx *sql.Tx) error {
+	run("recompile", func(tx *sql.Tx) error {
 		return gamebuild.Recompile(context.Background(), tx, festID, gameID, dsl)
 	})
 }

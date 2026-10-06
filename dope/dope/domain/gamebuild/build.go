@@ -769,6 +769,9 @@ func (live *liveStructure) dropLeftTx(ctx context.Context, tx *sql.Tx) error {
 // matches follow the new scheme (questions changes included), started matches
 // survive with identical slot sources — else the whole edit is refused,
 // naming them. A bout the new scheme adds sits at its venue, as on creation.
+// A Game with no recorded Entrant list is seated and recorded the way Clear
+// does it (unrecordedEntrantsTx), so the bouts, the entrants tab and the next
+// recompile agree on who plays.
 func Recompile(ctx context.Context, tx *sql.Tx, festID, gameID int64, dsl string) error {
 	var oldSchemeJSON, gameType string
 	if err := tx.QueryRowContext(ctx, `
@@ -788,7 +791,19 @@ select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_i
 	if err != nil {
 		return err
 	}
-	scheme, err := schemeForEntrantsTx(ctx, tx, festID, gameType, meta.Slug, meta.Title, dsl, entrants)
+	doc, declared, err := parseSchemeDSL(gameType, dsl)
+	if err != nil {
+		return err
+	}
+	unrecorded := len(entrants) == 0
+	var seatRoster bool
+	if unrecorded {
+		if entrants, seatRoster, err = unrecordedEntrantsTx(ctx, tx, festID, gameID, gameType, declared); err != nil {
+			return err
+		}
+	}
+	input := schemedsl.Input{Slug: meta.Slug, Title: meta.Title, GameType: gameType}
+	scheme, err := compileForEntrantsTx(ctx, tx, festID, doc, declared, input, entrants)
 	if err != nil {
 		return err
 	}
@@ -801,6 +816,16 @@ select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_i
 	}
 	if err := refuseLosingEntries(gameType, oldSchemeJSON, scheme, live); err != nil {
 		return err
+	}
+	if unrecorded && len(entrants) > 0 {
+		if err := seatChosenTx(ctx, tx, gameID, entrants); err != nil {
+			return err
+		}
+	}
+	if seatRoster {
+		if err := seatRosterTx(ctx, tx, festID, gameID, gameType); err != nil {
+			return err
+		}
 	}
 	seat, err := seedSeaterTx(ctx, tx, festID, gameID, gameType)
 	if err != nil {
@@ -817,7 +842,11 @@ select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_i
 	if err := writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, seat, live); err != nil {
 		return err
 	}
-
+	if unrecorded {
+		if err := recordGameEntrantsTx(ctx, tx, gameID); err != nil {
+			return err
+		}
+	}
 	schemeJSON, err := json.Marshal(scheme)
 	if err != nil {
 		return err

@@ -162,3 +162,11 @@ with ЭК as the exception ARCHITECTURE.md already describes.
 
 The cleanup commits after these name the bouts in a refused reseed by letter
 and fix the smaller gaps each step left. They change no decision above.
+
+One of them finishes §5: a recompile of a Game with no recorded Entrant
+list seats and records the list a clear would (the troikas its seats hold
+first, then its default troikas; the fest's roster for a team Game with no
+seats). Before, a Тройка made for an empty зачёт and then given a scheme
+without `division:` was compiled for every troika and seated none of them.
+A Game without a division still does not follow the fest's troikas: a troika
+added later waits for the host on the entrants tab.
