@@ -23,6 +23,7 @@ import (
 
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
+	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 )
@@ -183,6 +184,7 @@ func registerTeams(ctx context.Context, tx *sql.Tx, festID int64, people cast) (
 	if err != nil {
 		return nil, err
 	}
+	now := util.UtcNow()
 	ids := make([]int64, 0, len(people.Teams))
 	for i, team := range people.Teams {
 		number := i + 1
@@ -201,8 +203,12 @@ insert into participant_players(participant_id, player_id, roster_order) values(
 				return nil, err
 			}
 		}
+		// A team with no rating id is one the host made (ADR-0024): its row
+		// is marked hand and its people are the host's edits. A plain
+		// rating-less row is one no import gave, and the next roster write
+		// drops it.
 		teamID, err := store.InsertReturningID(ctx, tx, `
-insert into fest_teams(fest_id, name, city, position, number) values(?, ?, ?, ?, ?)`,
+insert into fest_teams(fest_id, name, city, position, number, hand) values(?, ?, ?, ?, ?, 1)`,
 			festID, team.Name, team.City, number, number)
 		if err != nil {
 			return nil, err
@@ -210,10 +216,15 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, ?, ?,
 		// Four of the cast per team, walking the list so no two teams field
 		// the same four and the roster tab has something to show.
 		for seat := 0; seat < lineupSize; seat++ {
-			playerID := playerIDs[(i*lineupSize+seat)%len(playerIDs)]
+			k := (i*lineupSize + seat) % len(playerIDs)
 			if _, err := tx.ExecContext(ctx, `
 insert into fest_team_players(team_id, player_id, roster_order) values(?, ?, ?)`,
-				teamID, playerID, seat); err != nil {
+				teamID, playerIDs[k], seat); err != nil {
+				return nil, err
+			}
+			first, last, _ := strings.Cut(people.Players[k], " ")
+			edit := roster.HandEdit{TeamID: teamID, Player: roster.FestRosterImportPlayer{FirstName: first, LastName: last}}
+			if err := roster.SaveHandEditTx(ctx, tx, festID, edit, now); err != nil {
 				return nil, err
 			}
 		}
