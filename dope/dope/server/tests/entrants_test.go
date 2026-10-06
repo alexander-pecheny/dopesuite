@@ -343,11 +343,11 @@ func TestTroikaListFollowsTheDivisionUntilEdited(t *testing.T) {
 
 	add := func(name string, players ...string) int64 {
 		var id int64
-		withTx(t, db, func(ctx context.Context, tx *sql.Tx) (err error) {
-			if id, err = roster.SaveAssembledTx(ctx, tx, festID, 0, roster.AssembledInput{Name: name, Players: players}); err != nil {
-				return err
+		withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+			written, err := entrants.AddTroikasTx(ctx, tx, festID, []roster.AssembledInput{{Name: name, Players: players}})
+			if err == nil {
+				id = written.Added[0]
 			}
-			_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
 			return err
 		})
 		return id

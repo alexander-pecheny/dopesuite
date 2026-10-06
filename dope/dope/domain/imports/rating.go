@@ -46,6 +46,10 @@ type RatingRosterImportResult struct {
 	// Revision is the fest revision the import recorded; zero when it wrote
 	// nothing.
 	Revision int64
+	// Views are the Games whose fest view the import changed beyond the
+	// documents it sends itself (the Troika Games, entrants.ImportFestRoster),
+	// for the caller to tell.
+	Views []int64
 }
 
 type ratingFestResult struct {

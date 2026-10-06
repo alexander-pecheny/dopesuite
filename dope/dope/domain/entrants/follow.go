@@ -10,7 +10,6 @@ import (
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
-	"dope/dope/domain/roster"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 )
@@ -167,16 +166,17 @@ order by position, id`, args, func(rows *sql.Rows) (row, error) {
 	return out, lists, nil
 }
 
-// FollowDivisionsTx brings the Entrant list of every Troika Game of the fest
+// followDivisionsTx brings the Entrant list of every Troika Game of the fest
 // that takes a division, and still follows it, to that division's troikas — as
 // long as nothing is entered in the Game. Every write that may move a troika
 // between divisions calls it in its own transaction: a troika's own edit, and
-// a change to its head team's Flags, by hand or by an import. exclude leaves
+// a change to its head team's Flags, by hand or by an import (festroster.go
+// holds them, and only they call it). exclude leaves
 // one troika out, the one a delete is about to remove. A troika that declined
 // keeps its mark. It returns the Games it looked at; a re-seat the scheme
 // refuses (too few troikas for it) is reported on the Game, not returned, so
 // the write that caused it still saves.
-func FollowDivisionsTx(ctx context.Context, tx *sql.Tx, festID, exclude int64) ([]DivisionGame, error) {
+func followDivisionsTx(ctx context.Context, tx *sql.Tx, festID, exclude int64) ([]DivisionGame, error) {
 	found, lists, err := divisionGames(ctx, tx, festID, exclude)
 	if err != nil {
 		return nil, err
@@ -224,55 +224,4 @@ func FollowDivisionsTx(ctx context.Context, tx *sql.Tx, festID, exclude int64) (
 		game.Problem = saved.kept
 	}
 	return found, nil
-}
-
-// DeleteTroikaTx deletes a troika no bout seats. The Games that take a
-// division let go of it first, and then every Troika Game that lists it
-// without seating it (on a waiting list, say, or in a list the host built by
-// hand) takes it off. A troika that sits in a bout keeps its place there, and
-// the delete refuses it.
-func DeleteTroikaTx(ctx context.Context, tx *sql.Tx, festID, troikaID int64) ([]DivisionGame, error) {
-	followed, err := FollowDivisionsTx(ctx, tx, festID, troikaID)
-	if err != nil {
-		return nil, err
-	}
-	ids, err := TroikaGameIDs(ctx, tx, festID)
-	if err != nil {
-		return nil, err
-	}
-	for _, gameID := range ids {
-		scope := core.FestScope{FestID: festID, GameID: gameID}
-		list, err := imports.LoadListTx(ctx, tx, scope)
-		if err != nil {
-			return nil, err
-		}
-		i := list.Index(troikaID)
-		if i < 0 {
-			continue
-		}
-		seated, err := imports.InBoutTx(ctx, tx, gameID, troikaID)
-		if err != nil {
-			return nil, err
-		}
-		if seated {
-			continue
-		}
-		next := list.Edit(slices.Delete(slices.Clone(list.State.Rows), i, i+1), imports.ListEdit{Op: imports.ListEditRemove, TeamID: troikaID})
-		if _, err := applyListTx(ctx, tx, scope, list, next, "troikas:delete"); err != nil {
-			return nil, err
-		}
-	}
-	return followed, roster.DeleteAssembledTx(ctx, tx, festID, troikaID)
-}
-
-// ImportFestRoster imports the fest roster from rating.chgk.info
-// (imports.ImportFestRoster). The import rewrites the teams' Flags, and a
-// troika follows its head team's division, so the Troika Games that take one
-// follow in the import's own transaction.
-func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID int64, teams []roster.FestRosterImportTeam, choice imports.RosterChoice) (imports.RatingRosterImportResult, error) {
-	choice.Within = func(ctx context.Context, tx *sql.Tx) error {
-		_, err := FollowDivisionsTx(ctx, tx, festID, 0)
-		return err
-	}
-	return imports.ImportFestRoster(eng, ctx, festID, ratingID, teams, choice)
 }

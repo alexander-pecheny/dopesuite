@@ -76,7 +76,8 @@ type storedSettings struct {
 // UpdateSettingsTx saves a Game's settings. A changed scheme recompiles the
 // Game in the same transaction, so a refused recompile leaves nothing
 // half-applied, and a Troika game that now takes a division, or another one,
-// seats its troikas. Only a format whose scheme its settings page edits
+// seats its troikas (entrants.RecompileTx); the write names the Troika Games
+// for the broadcast. Only a format whose scheme its settings page edits
 // (games.DSLEditable) takes a changed scheme; a flat Game is shaped by its own
 // fields, even one created from a DSL.
 func UpdateSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g Settings) (core.FestWrite, error) {
@@ -109,11 +110,10 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 	if !schemeChanged {
 		return written, nil
 	}
-	if err := gamebuild.Recompile(ctx, tx, festID, gameID, g.SchemeDSL); err != nil {
+	if written.Broadcast.Views, err = entrants.RecompileTx(ctx, tx, festID, gameID, g.SchemeDSL); err != nil {
 		return core.FestWrite{}, err
 	}
-	_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
-	return written, err
+	return written, nil
 }
 
 func loadStoredSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (storedSettings, error) {

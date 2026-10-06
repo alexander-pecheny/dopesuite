@@ -191,7 +191,7 @@ func (d Declared) Seeded() bool { return d.Seed != "" }
 func (d Declared) EntrantSized() bool { return d.DSL && !d.Seeded() }
 
 // EntrantDivision is the division a Troika Game takes its troikas from:
-// division in [init] with no seed (entrants.FollowDivisionsTx).
+// division in [init] with no seed (entrants/festroster.go follows it).
 func (d Declared) EntrantDivision() (string, bool) {
 	if d.Seeded() || d.Division == "" {
 		return "", false

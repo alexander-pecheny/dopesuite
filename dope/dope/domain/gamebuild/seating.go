@@ -419,7 +419,7 @@ func defaultTroikasTx(ctx context.Context, q store.Queryer, festID int64, gameTy
 // whatever was ticked on the form. A division with none yet still gets its
 // game: the Structure is built for as many empty seats as its first stage
 // sends on, and the troikas fill it as they are entered
-// (entrants.FollowDivisionsTx). A Troika game created with none ticked and no
+// (entrants.AddTroikasTx and the follow). A Troika game created with none ticked and no
 // seed declared takes every troika of the fest, not the fest's teams.
 func createEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, declared imports.Declared, doc *schemedsl.Doc, ticked []int64) ([]int64, int, error) {
 	_, divided := declared.EntrantDivision()

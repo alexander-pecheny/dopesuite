@@ -635,47 +635,13 @@ func (s *Server) SaveTeamFlags(ctx context.Context, festID int64, typed map[int6
 	return s.saveFestTeamFlags(ctx, festID, flags)
 }
 
-func (s *Server) saveFestTeamFlags(reqCtx context.Context, festID int64, flagsByTeam map[int64][]roster.FestRosterFlag) error {
-	var updates []roster.GameStateBroadcast
-	revision, err := s.commit(reqCtx, festID, "fest-team-flags", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
-		before, err := roster.LoadFestTeamFlags(ctx, tx, festID)
-		if err != nil {
-			return core.FestWrite{}, err
-		}
-		for teamID, flags := range flagsByTeam {
-			// Flags the host typed are the host's: an import leaves them alone
-			// (ADR-0024). Only a team whose Flags this save changes is marked,
-			// since the page posts every team's.
-			if strings.Join(roster.FlagShortNames(before[teamID]), ",") == strings.Join(roster.FlagShortNames(flags), ",") {
-				continue
-			}
-			if err := roster.SetHandFlagsTx(ctx, tx, festID, teamID, flags); err != nil {
-				return core.FestWrite{}, err
-			}
-		}
-		if err := imports.ForgetRosterSnapshotsTx(ctx, tx, festID); err != nil {
-			return core.FestWrite{}, err
-		}
-		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
-		if err != nil {
-			return core.FestWrite{}, err
-		}
-		if updates, err = roster.PropagateRosterTx(ctx, tx, festID, teams, nil); err != nil {
-			return core.FestWrite{}, err
-		}
-		// A troika follows its team's division, so a Troika that takes one may
-		// have gained or lost troikas.
-		_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
-		return core.FestWrite{Event: "fest:team-flags", Payload: map[string]any{"teams": len(flagsByTeam)}}, err
+// saveFestTeamFlags commits the Flags typed for the named teams
+// (entrants.SaveTeamFlagsTx), which tells the game pages they changed.
+func (s *Server) saveFestTeamFlags(ctx context.Context, festID int64, flagsByTeam map[int64][]roster.FestRosterFlag) error {
+	_, err := s.commit(ctx, festID, "fest-team-flags", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		return entrants.SaveTeamFlagsTx(ctx, tx, festID, flagsByTeam)
 	})
-	if err != nil {
-		return err
-	}
-	for _, update := range updates {
-		s.h.Engine().BroadcastState(festID, core.GameStateScope(update.GameID), revision, update.StateJSON)
-	}
-	s.broadcastTroikaGames(reqCtx, festID, revision)
-	return nil
+	return err
 }
 
 func (s *Server) renderHostFestPlayers(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -947,7 +913,7 @@ func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice im
 	if err != nil || result.Revision == 0 {
 		return result, err
 	}
-	s.broadcastTroikaGames(ctx, festID, result.Revision)
+	s.fanOut(festID, result.Revision, core.Broadcast{Views: result.Views})
 	return result, nil
 }
 

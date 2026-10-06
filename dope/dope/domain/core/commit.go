@@ -24,6 +24,28 @@ type FestWrite struct {
 	// as the active game moving off a deleted one, or a read that no other
 	// write may come between.
 	Settled func(e *Engine, revision int64)
+	// Broadcast is what the open pages must learn once the write has
+	// committed. CommitFestWrite does not send it: only the server can build a
+	// fest view, so the caller does.
+	Broadcast Broadcast
+}
+
+// Broadcast names the open pages a fest write changed.
+type Broadcast struct {
+	// States are the game documents the write rewrote, each sent to its
+	// Game's open pages as it is.
+	States []GameState
+	// Rosters are the EK Games whose rosters changed.
+	Rosters []int64
+	// Views are the Games whose fest view changed, so their open pages fetch
+	// it again.
+	Views []int64
+}
+
+// GameState is one game document a write rewrote.
+type GameState struct {
+	GameID    int64
+	StateJSON []byte
 }
 
 // CommitFestWrite runs one write to a fest. It takes the pooled connection
@@ -32,7 +54,8 @@ type FestWrite struct {
 // festwrite.WriteTxTimeout, records the fest revision fn names, commits,
 // drops the fest's cached view, and lets fn's Settled update the engine. It
 // returns the revision the write reached, or 0 when it recorded none.
-// Broadcasting is the caller's, since only the server can build a fest view.
+// Broadcasting what fn names in FestWrite.Broadcast is the caller's, since
+// only the server can build a fest view.
 func (e *Engine) CommitFestWrite(reqCtx context.Context, festID int64, label string, fn func(ctx context.Context, tx *sql.Tx) (FestWrite, error)) (int64, error) {
 	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
 	defer cancel()

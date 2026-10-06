@@ -512,7 +512,8 @@ select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_d
 type GameSettings = festops.Settings
 
 // UpdateGameSettings saves a game's settings (festops.UpdateSettingsTx) and
-// tells the game's open pages.
+// tells the game's open pages, and those of the Troika Games a changed scheme
+// re-seated.
 func (s *Server) UpdateGameSettings(ctx context.Context, festID, gameID int64, g GameSettings) error {
 	_, err := s.commit(ctx, festID, "game-settings", []int64{gameID}, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
 		return festops.UpdateSettingsTx(ctx, tx, festID, gameID, g)

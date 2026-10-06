@@ -153,9 +153,15 @@ here when it needs type metadata.
   seed numbers (ADR-0023).
 - `entrants` — who a buzzer Game seats. It holds the Участники tab (its view,
   its sources and the host's hand edits, with their refusals) and every other
-  write that moves an Entrant list: the Тройка Games that follow a зачёт
-  (`FollowDivisionsTx`), a troika's delete (`DeleteTroikaTx`) and a rating
-  import (`ImportFestRoster`, which follows in the import's own transaction).
+  write that moves an Entrant list. The Тройка Games that follow a зачёт are
+  re-seated by an unexported follow, which only the fest-roster writes in
+  `festroster.go` call: a troika added, edited or deleted (`AddTroikasTx`,
+  `SaveTroikaTx`, `DeleteTroikaTx`), Flags typed by hand (`SaveTeamFlagsTx`),
+  a hand edit to the roster (`EditRosterTx`), a changed scheme
+  (`RecompileTx`, for `festops`) and a rating import (`ImportFestRoster`,
+  which follows in the import's own transaction). Each returns a
+  `core.FestWrite` whose `Broadcast` names the game documents, EK rosters and
+  fest views it changed, and hostpages' `commit` sends whatever it is handed.
   All of them save the list through one `applyListTx`: `gamebuild.FollowListTx`
   rebuilds a Game sized by its entrants, then `imports` seats the list.
 - `festops` — the host's writes to a fest's Games (create, settings, clear,

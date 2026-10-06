@@ -27,27 +27,14 @@ const maxRosterUploadBytes = 4 << 20
 // taken off by hand, and the undo of a rating import. Each goes through the
 // same writer an import uses, and then tells the open pages.
 
-// editFestRoster runs one roster edit in a write transaction: the edit, the
-// Troika games that follow a division, the fest revision, then the broadcasts.
-func (s *Server) editFestRoster(reqCtx context.Context, festID int64, label string, edit func(ctx context.Context, tx *sql.Tx) (imports.RosterWrite, error)) error {
-	var written imports.RosterWrite
-	revision, err := s.commit(reqCtx, festID, label, nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
-		var err error
-		if written, err = edit(ctx, tx); err != nil {
-			return core.FestWrite{}, err
-		}
-		_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
-		return core.FestWrite{Event: label}, err
+// editFestRoster commits one roster edit (entrants.EditRosterTx): the edit,
+// the Troika games that follow a division, the fest revision, then the
+// broadcasts the edit names.
+func (s *Server) editFestRoster(ctx context.Context, festID int64, label string, edit func(ctx context.Context, tx *sql.Tx) (imports.RosterWrite, error)) error {
+	_, err := s.commit(ctx, festID, label, nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		return entrants.EditRosterTx(ctx, tx, festID, label, edit)
 	})
-	if err != nil {
-		return err
-	}
-	for _, update := range written.Updates {
-		s.h.Engine().BroadcastState(festID, core.GameStateScope(update.GameID), revision, update.StateJSON)
-	}
-	s.broadcastRosterOverride(festID, revision, written.EKGameIDs)
-	s.broadcastTroikaGames(reqCtx, festID, revision)
-	return nil
+	return err
 }
 
 // CreateFestTeam adds a team the host made and returns its id.

@@ -207,11 +207,11 @@ func TestTroikaGameFollowsItsDivision(t *testing.T) {
 
 	add := func(name string, players ...string) int64 {
 		var id int64
-		withTx(t, db, func(ctx context.Context, tx *sql.Tx) (err error) {
-			if id, err = roster.SaveAssembledTx(ctx, tx, festID, 0, roster.AssembledInput{Name: name, Players: players}); err != nil {
-				return err
+		withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+			written, err := entrants.AddTroikasTx(ctx, tx, festID, []roster.AssembledInput{{Name: name, Players: players}})
+			if err == nil {
+				id = written.Added[0]
 			}
-			_, err = entrants.FollowDivisionsTx(ctx, tx, festID, 0)
 			return err
 		})
 		return id
@@ -244,11 +244,8 @@ func TestTroikaGameFollowsItsDivision(t *testing.T) {
 	// Out of the зачёт by the host's word: it moves to the adults.
 	none := ""
 	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := roster.SaveAssembledTx(ctx, tx, festID, s3, roster.AssembledInput{Name: "С3", Players: []string{"А Пять", "А Шесть"},
-			Placement: &roster.AssembledPlacement{HeadTeamID: alpha, Division: &none}}); err != nil {
-			return err
-		}
-		_, err := entrants.FollowDivisionsTx(ctx, tx, festID, 0)
+		_, err := entrants.SaveTroikaTx(ctx, tx, festID, s3, roster.AssembledInput{Name: "С3", Players: []string{"А Пять", "А Шесть"},
+			Placement: &roster.AssembledPlacement{HeadTeamID: alpha, Division: &none}})
 		return err
 	})
 	expectEntrants(students, s1, s2)
@@ -256,10 +253,8 @@ func TestTroikaGameFollowsItsDivision(t *testing.T) {
 
 	// A troika only a following game seats can still be deleted.
 	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := entrants.FollowDivisionsTx(ctx, tx, festID, s3); err != nil {
-			return err
-		}
-		return roster.DeleteAssembledTx(ctx, tx, festID, s3)
+		_, err := entrants.DeleteTroikaTx(ctx, tx, festID, s3)
+		return err
 	})
 	expectEntrants(adults, a1, a2)
 
