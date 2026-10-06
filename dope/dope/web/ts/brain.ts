@@ -7,7 +7,7 @@
 // page (bout-page.ts). A self-booting side-effect module bundled by
 // pages/brain.ts.
 
-import {cssEscape, formatDisplayText, percentText, td} from "./cells.js";
+import {formatDisplayText, percentText, td} from "./cells.js";
 import {standingsTable} from "./standings.js";
 import {sheetHead} from "./sheet-pins.js";
 import {buildCrosstables, crossSlot, slotKey, standingsByParticipant} from "./crosstable.js";
@@ -19,8 +19,8 @@ import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js"
 import type {GameInitLike} from "./game-page.js";
 import {nameCell} from "./name-cell.js";
 import {SEAT_PICKER_SELECTOR, seatPicker} from "./seat-picker.js";
-import {createSheetCursor, parseMark} from "./sheet-cursor.js";
-import type {CellCoord, CellEdit} from "./sheet-cursor.js";
+import {paintMark, stackedSheet} from "./stacked-sheet.js";
+import type {Mark} from "./sheet-cursor.js";
 import {computeBrainPlayerStats} from "./brain-stats.js";
 import type {StatsBout} from "./brain-stats.js";
 import * as brain from "./brain-protocol.js";
@@ -103,6 +103,33 @@ const brainRoot = document.getElementById("brainTable")!;
 const init = pageWindow.__GAME_INIT__ || null;
 const scheme = (init?.scheme || {}) as BrainScheme;
 const fest = (init?.fest || null) as FestInfo | null;
+// The sheet a Block's protocols tab draws: its bouts side by side, a column a
+// side of a bout, a row one question. Only the bouts on that tab are in it.
+const answers = stackedSheet({
+  selector: ".answer-cell",
+  fields: brain.SHEET_FIELDS,
+  stack: "columns",
+  bouts: () => (onProtocolTab() ? tabBouts(page.tab()) : []),
+  codeOf: (bout: BoutEntry) => bout.code,
+  rowsOf: (bout: BoutEntry) => brain.sheetRows(page.stateOf(bout.code)),
+  columnsOf: () => brain.sheetColumns(),
+  marks: {
+    markOf: (cell) => {
+      const view = page.view(cell.match);
+      const row = view ? matchRows(view, cell.side)[cell.q] : undefined;
+      return !view || viewer || view.finished || !row ? null : row.mark as Mark;
+    },
+    setMark: (cell, mark) => {
+      const view = page.view(cell.match);
+      const row = view ? matchRows(view, cell.side)[cell.q] : undefined;
+      if (row) row.mark = mark;
+    },
+    pathOf: brain.markPath,
+    patch: (code, path, value) => page.patch(code, path, value),
+    onWritten: (codes) => codes.forEach(refreshScore),
+  },
+});
+
 const page: BoutPage<BrainMatchView, BrainMatchState> = mountBoutPage({
   app: "brain",
   root: brainRoot,
@@ -118,8 +145,9 @@ const page: BoutPage<BrainMatchView, BrainMatchState> = mountBoutPage({
   fitsFrame: (tab) => tab?.kind === "roster" || tab?.kind === "entrants",
   boutSelector: ".brain-bout",
   cursorKinds: {
-    answer: {selector: ".answer-cell", keys: ["match", "side", "q"]},
-    player: {selector: SEAT_PICKER_SELECTOR, keys: ["match", "side", "q"]},
+    answer: answers.cursorKind,
+    // A player picker carries the address of the mark beside it.
+    player: {selector: SEAT_PICKER_SELECTOR, keys: answers.cursorKind.keys},
     finish: {selector: ".finish-toggle", keys: ["match"]},
   },
   activeCursorElement: () => cursor.activeCell,
@@ -226,10 +254,15 @@ function rosterFor(name: string): string[] {
 
 type BoutEntry = BoutEntryOf<BrainMatchView, BrainSchemeStage, BrainSchemeMatch>;
 
-// allBouts flattens every protocol stage's matches in scheme order — the selection
-// grid's column space spans them all.
+// allBouts flattens every protocol stage's matches in scheme order, for the
+// statistics.
 function allBouts(): BoutEntry[] {
   return protocolStages().flatMap((stage) => stageBouts(page, stage));
+}
+
+// tabBouts are the bouts a protocols tab draws, in the order it draws them.
+function tabBouts(tab: GameTab | undefined): BoutEntry[] {
+  return tabStages(scheme.stages, tab).flatMap((stage) => stageBouts(page, stage));
 }
 
 function buildTab(tab: GameTab | undefined): HTMLElement {
@@ -475,7 +508,7 @@ function playerCell(code: string, view: BrainMatchView, side: number, q: number,
     roster: rosterFor(teamName(view, side)).map((player) => ({id: player, name: player})),
     seated: current ? [current] : [],
     disabled: !editable,
-    dataset: {match: code, side: String(side), q: String(q)},
+    dataset: answers.dataset({match: code, side, q}),
     onChange: (seated) => setPlayer(code, side, q, seated[0] || ""),
   }).element);
   return td;
@@ -483,12 +516,10 @@ function playerCell(code: string, view: BrainMatchView, side: number, q: number,
 
 function markCell(code: string, view: BrainMatchView, side: number, q: number, editable: boolean): HTMLElement {
   const td = document.createElement("td");
-  const mark = matchRows(view, side)[q]?.mark || "";
-  td.className = `answer-cell ${mark}`;
+  td.className = "answer-cell";
+  paintMark(td, (matchRows(view, side)[q]?.mark || "") as Mark);
   td.tabIndex = editable ? 0 : -1;
-  td.dataset.match = code;
-  td.dataset.side = String(side);
-  td.dataset.q = String(q);
+  Object.assign(td.dataset, answers.dataset({match: code, side, q}));
   td.title = S.brain.mark.title(teamName(view, side), rowLabel(q, questionsFor(code)));
   return td;
 }
@@ -578,85 +609,17 @@ function setPlayer(code: string, side: number, q: number, player: string): void 
   sendOps(code, [{path: ["teams", side, "rows", q, "player"], value: player}]);
 }
 
-function cellContext(el: HTMLElement): {code: string; view: BrainMatchView; side: number; q: number} | null {
-  const code = el.dataset.match || "";
+// refreshScore repaints a bout's score after its marks changed.
+function refreshScore(code: string): void {
   const view = page.view(code);
-  const side = Number(el.dataset.side);
-  const q = Number(el.dataset.q);
-  if (!view || (side !== 0 && side !== 1) || !Number.isInteger(q)) return null;
-  if (q < 0 || q >= matchRows(view, side).length) return null;
-  return {code, view, side, q};
+  const score = document.getElementById(boutAnchorID(code))?.querySelector(".brain-score-head");
+  if (view && score) score.textContent = `${taken(view, 0)} : ${taken(view, 1)}`;
 }
 
-function cellNode(code: string, side: number, q: number): HTMLElement | null {
-  return brainRoot.querySelector<HTMLElement>(
-    `.answer-cell[data-match="${cssEscape(code)}"][data-side="${side}"][data-q="${q}"]`,
-  );
-}
-
-// The selection treats the matches laid side by side as one sheet: row = the
-// question, col = match × 2 + side. The widget (shared with KSI) then gives
-// click/drag/shift ranges, copy/paste and touch tap-cycling.
-function cellCoord(code: string, side: number, q: number): CellCoord | null {
-  const idx = allBouts().findIndex((bout) => bout.code === code);
-  return idx < 0 ? null : {row: q, col: idx * 2 + side};
-}
-
-function boutAtCol(col: number): {code: string; view: BrainMatchView; side: number} | null {
-  const bout = allBouts()[Math.floor(col / 2)];
-  return bout ? {code: bout.code, view: bout.view, side: col % 2} : null;
-}
-
-function totalCols(): number {
-  return allBouts().length * 2;
-}
-
-// applyMarkEdits updates the local views and DOM, then sends one PATCH per match.
-function applyMarkEdits(edits: CellEdit[]): void {
-  const opsByCode = new Map<string, Array<{path: Array<string | number>; value: unknown}>>();
-  for (const edit of edits) {
-    const cell = edit.cell as HTMLElement;
-    const ctx = cellContext(cell);
-    if (!ctx || viewer || ctx.view.finished) continue;
-    const mark = parseMark(edit.value);
-    const row = matchRows(ctx.view, ctx.side)[ctx.q];
-    if (row.mark === mark) continue;
-    row.mark = mark;
-    cell.classList.remove("right", "wrong");
-    if (mark) cell.classList.add(mark);
-    const score = cell.closest("table")?.querySelector(".brain-score-head");
-    if (score) score.textContent = `${taken(ctx.view, 0)} : ${taken(ctx.view, 1)}`;
-    const ops = opsByCode.get(ctx.code) || [];
-    ops.push({path: ["teams", ctx.side, "rows", ctx.q, "mark"], value: mark});
-    opsByCode.set(ctx.code, ops);
-  }
-  for (const [code, ops] of opsByCode) sendOps(code, ops);
-}
-
-function cellAt(coord: CellCoord | null): HTMLElement | null {
-  if (!coord) return null;
-  const at = boutAtCol(coord.col);
-  return at ? cellNode(at.code, at.side, coord.row) : null;
-}
-
-// The matches laid side by side are one sheet: row = the question, col = match × 2 +
-// side; a match with tiebreak questions is taller than its neighbours.
-const cursor = createSheetCursor({
-  root: brainRoot,
-  rows: (col) => {
-    const at = boutAtCol(col);
-    return at ? matchRows(at.view, 0).length : 0;
-  },
-  cols: () => totalCols(),
+const cursor = answers.cursor(brainRoot, {
   readonly: () => viewer,
   active: onProtocolTab,
-  coordOf: (cell) => {
-    const ctx = cellContext(cell as HTMLElement);
-    return ctx ? cellCoord(ctx.code, ctx.side, ctx.q) : null;
-  },
-  cellAt,
   values: "marks",
-  applyValues: applyMarkEdits,
   classes: {row: ""},
 });
 loadTeamRosters();

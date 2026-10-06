@@ -136,6 +136,73 @@ export function baseValues(state: HamsaState): number[] {
   return state.rounds[0]?.values || DEFAULT_VALUES;
 }
 
+// ---- the bout sheet ----
+
+// A sheet cell is one of three kinds: a question of a theme of the first four
+// game rounds, the team round's bet (one answer), or a question of the
+// shootout theme.
+export type CellKind = "theme" | "bet" | "shootout";
+
+// SheetGroup is a column group of a bout sheet: a theme, the bet, or the
+// shootout theme, over its questions.
+export interface SheetGroup {
+  kind: CellKind;
+  theme: number;
+  questions: number;
+}
+
+// sheetGroups are a bout sheet's column groups in order: the themes, the bet,
+// and the shootout theme where the bout has one.
+export function sheetGroups(state: HamsaState, shootout: boolean): SheetGroup[] {
+  const groups: SheetGroup[] = [];
+  for (let theme = 0; theme < themeCount(state); theme++) groups.push({kind: "theme", theme, questions: QUESTIONS});
+  groups.push({kind: "bet", theme: 0, questions: 1});
+  if (shootout) groups.push({kind: "shootout", theme: 0, questions: QUESTIONS});
+  return groups;
+}
+
+export interface SheetColumn {
+  cellKind: CellKind;
+  theme: number;
+  q: number;
+}
+
+export function sheetColumns(state: HamsaState, shootout: boolean): SheetColumn[] {
+  return sheetGroups(state, shootout).flatMap((group) =>
+    Array.from({length: group.questions}, (_, q) => ({cellKind: group.kind, theme: group.theme, q})));
+}
+
+// SHEET_FIELDS are a sheet cell's address besides its bout: the seat's row,
+// then the column. The kind is part of it: the bet's one answer sits at
+// theme 0, question 0, where the first theme's first question does too. It is
+// not called `kind`: a presence cursor names its own kind by that.
+export const SHEET_FIELDS = ["seat", "cellKind", "theme", "q"] as const;
+
+// markPath is where a cell's mark goes in the document.
+export function markPath(id: number, cell: SheetColumn): Array<string | number> {
+  switch (cell.cellKind) {
+  case "bet":
+    return ["participants", String(id), "bet", "answer"];
+  case "shootout":
+    return ["participants", String(id), "shootout", 0, "answers", cell.q];
+  default:
+    return ["participants", String(id), "themes", cell.theme, "answers", cell.q];
+  }
+}
+
+// cellMark is the mark a cell holds.
+export function cellMark(state: HamsaState, id: number, cell: SheetColumn): Mark {
+  const section = sectionOf(state, id);
+  switch (cell.cellKind) {
+  case "bet":
+    return section?.bet.answer || "";
+  case "shootout":
+    return section?.shootout[0]?.answers[cell.q] || "";
+  default:
+    return markAt(state, id, cell.theme, cell.q);
+  }
+}
+
 export function sectionOf(state: HamsaState, id: number): Participant | undefined {
   return state.participants[String(id)];
 }

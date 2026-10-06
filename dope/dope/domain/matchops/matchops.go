@@ -89,7 +89,10 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 	at := themeCell{participantID: participantID, slot: slot, kind: kind, theme: themeIndex}
 	// The theme itself: a set adds it (shootout grids grow), a remove drops it.
 	if len(path) == segField {
-		return applyTheme(blob, at, remove)
+		if err := applyTheme(blob, at, remove); err != nil || remove {
+			return err
+		}
+		return fillTheme(blob, match, at, op.Value)
 	}
 	return applyThemeField(blob, match, at, op, path, remove)
 }
@@ -130,6 +133,30 @@ func applyTheme(blob *store.MatchBlob, at themeCell, remove bool) error {
 		blob.EnsureTheme(at.participantID, at.kind, at.theme)
 	}
 	return nil
+}
+
+// fillTheme writes what a set of a whole theme carries: its answers and who
+// sat for it. A host's undo of a dropped shootout theme puts it back whole.
+func fillTheme(blob *store.MatchBlob, match store.DBMatchState, at themeCell, raw json.RawMessage) error {
+	var theme struct {
+		Players json.RawMessage `json:"players"`
+		Answers []string        `json:"answers"`
+	}
+	if err := json.Unmarshal(raw, &theme); err != nil {
+		return errors.New("bad theme")
+	}
+	for answer, mark := range theme.Answers {
+		if answer >= len(store.QuestionValues) {
+			return errors.New("bad answer index")
+		}
+		if mark != "" {
+			blob.SetAnswer(at.participantID, at.kind, at.theme, answer, mark)
+		}
+	}
+	if len(theme.Players) == 0 || string(theme.Players) == "null" {
+		return nil
+	}
+	return applyPlayers(blob, match, at, "players", edit.PatchOp{Value: theme.Players}, false)
 }
 
 // applyThemeField edits one field of a theme: who sat for it, or one answer.

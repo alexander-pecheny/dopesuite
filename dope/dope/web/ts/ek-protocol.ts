@@ -68,7 +68,8 @@ export function parseState(raw: unknown, seats: number[], themes: number): EKSta
     const pin = section.pin === null || section.pin === undefined ? null : Number(section.pin);
     sections.set(id, {
       themes: parseThemes(section.themes, themes),
-      shootoutThemes: parseThemes(section.shootoutThemes, 0),
+      // A shootout theme a host just dropped is null until the server answers.
+      shootoutThemes: parseThemes(Array.isArray(section.shootoutThemes) ? section.shootoutThemes.filter((theme) => theme != null) : [], 0),
       pin: pin && pin > 0 ? pin : null,
     });
   }
@@ -122,6 +123,33 @@ export type ThemeKind = "themes" | "shootoutThemes";
 export function answerPath(id: number, kind: ThemeKind, theme: number, answer: number): Array<string | number> {
   return ["participants", String(id), kind, theme, "answers", answer];
 }
+
+// shootoutThemePath is a whole shootout theme: a set adds it, null drops it.
+export function shootoutThemePath(id: number, theme: number): Array<string | number> {
+  return ["participants", String(id), "shootoutThemes", theme];
+}
+
+// SheetColumn is one answer column of a bout sheet; sheetColumns are a bout's
+// in order: the regular themes, then the shootout themes, five questions each.
+export interface SheetColumn {
+  cellKind: ThemeKind;
+  theme: number;
+  q: number;
+}
+
+export function sheetColumns(themes: number, shootouts: number): SheetColumn[] {
+  const out: SheetColumn[] = [];
+  const add = (kind: ThemeKind, count: number) => {
+    for (let theme = 0; theme < count; theme++) for (let q = 0; q < QUESTIONS; q++) out.push({cellKind: kind, theme, q});
+  };
+  add("themes", themes);
+  add("shootoutThemes", shootouts);
+  return out;
+}
+
+// SHEET_FIELDS are a sheet cell's address besides its bout: the seat's row,
+// then the column. Not `kind`: a presence cursor names its own kind by it.
+export const SHEET_FIELDS = ["seat", "cellKind", "theme", "q"] as const;
 
 export function playersPath(id: number, kind: ThemeKind, theme: number): Array<string | number> {
   return ["participants", String(id), kind, theme, "players"];

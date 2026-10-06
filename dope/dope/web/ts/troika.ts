@@ -19,8 +19,8 @@ import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js"
 import type {GameInitLike} from "./game-page.js";
 import {nameCell} from "./name-cell.js";
 import {seatPicker} from "./seat-picker.js";
-import {createSheetCursor, parseMark} from "./sheet-cursor.js";
-import type {CellCoord, CellEdit} from "./sheet-cursor.js";
+import {paintMark, stackedSheet} from "./stacked-sheet.js";
+import type {CellEdit} from "./sheet-cursor.js";
 import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
 import type {SchemeSlotRef} from "./crosstable.js";
 import {parseScheme} from "./fest-grid.js";
@@ -93,6 +93,45 @@ const root = document.getElementById("troikaTable")!;
 const init = pageWindow.__GAME_INIT__ || null;
 const scheme = (init?.scheme || {}) as TroikaScheme;
 const fest = (init?.fest || null) as FestInfo | null;
+// The stacked sheet a protocols tab draws: every bout of the tab but a
+// written one, a row one chair of one side, a column one question. The
+// columns are uniform within a bout and may differ between them.
+const answers = stackedSheet({
+  selector: ".troika-cell",
+  fields: troika.SHEET_FIELDS,
+  bouts: () => sheetBouts(),
+  codeOf: (bout: BoutEntry) => bout.code,
+  rowsOf: (bout: BoutEntry) => troika.sheetRows(stateOf(bout.code)),
+  columnsOf: (bout: BoutEntry) => troika.sheetColumns(stateOf(bout.code)),
+  marks: {
+    markOf: (cell) => {
+      const view = page.view(cell.match);
+      const row = stateOf(cell.match).sides[cell.side]?.themes[cell.theme]?.answers[cell.q];
+      return !view || view.finished || !row ? null : row[cell.chair] ?? "";
+    },
+    setMark: (cell, mark) => {
+      stateOf(cell.match).sides[cell.side].themes[cell.theme].answers[cell.q][cell.chair] = mark;
+    },
+    pathOf: troika.markPath,
+    patch: (code, path, value) => page.patch(code, path, value),
+    onWritten: (codes) => codes.forEach(refreshTotals),
+  },
+});
+
+// The written qualifier's sheet: its one bout, a row per troika, a column one
+// question, a count in each cell.
+const counts = stackedSheet({
+  selector: ".troika-count",
+  fields: troika.WRITTEN_FIELDS,
+  bouts: () => {
+    const bout = writtenBout();
+    return bout ? [bout] : [];
+  },
+  codeOf: (bout: BoutEntry) => bout.code,
+  rowsOf: (bout: BoutEntry) => troika.writtenRows(stateOf(bout.code)),
+  columnsOf: (bout: BoutEntry) => troika.sheetColumns(stateOf(bout.code)),
+});
+
 const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   app: "troika",
   root,
@@ -110,8 +149,8 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   fitsFrame: (tab, node) => tab?.kind !== "grid" && !node.querySelector(".fest-grid"),
   boutSelector: ".troika-bout",
   cursorKinds: {
-    answer: {selector: ".troika-cell", keys: ["match", "side", "theme", "q", "chair"]},
-    count: {selector: ".troika-count", keys: ["match", "side", "theme", "q"]},
+    answer: answers.cursorKind,
+    count: counts.cursorKind,
     finish: {selector: ".finish-toggle", keys: ["match"]},
   },
   activeCursorElement: () => cursor.activeCell || writtenCursor.activeCell,
@@ -188,14 +227,12 @@ function repaintBout(code: string): void {
   const state = stateOf(code);
   const match = `[data-match="${cssEscape(code)}"]`;
   for (const cell of root.querySelectorAll<HTMLElement>(`.troika-cell${match}`)) {
-    const side = Number(cell.dataset.side);
-    const theme = Number(cell.dataset.theme);
-    const q = Number(cell.dataset.q);
-    const chair = Number(cell.dataset.chair);
-    paintMark(cell, troika.markAt(state, side, theme, q, chair));
+    const at = answers.addressOf(cell);
+    if (at) paintMark(cell, troika.markAt(state, at.side, at.theme, at.q, at.chair));
   }
   for (const cell of root.querySelectorAll<HTMLElement>(`.troika-count${match}`)) {
-    const count = troika.countAt(state, Number(cell.dataset.side), Number(cell.dataset.theme), Number(cell.dataset.q));
+    const at = counts.addressOf(cell);
+    const count = at ? troika.countAt(state, at.side, at.theme, at.q) : 0;
     cell.textContent = count ? String(count) : "";
   }
   state.sides.forEach((_side, side) => {
@@ -502,97 +539,26 @@ function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
 
 function markCell(code: string, side: number, theme: number, q: number, chair: number,
   state: TroikaState): HTMLElement {
-  const cell = td("", "troika-cell answer-cell", {dataset: {match: code, side, theme, q, chair}});
+  const cell = td("", "troika-cell answer-cell", {dataset: answers.dataset({match: code, side, chair, theme, q})});
   paintMark(cell, troika.markAt(state, side, theme, q, chair));
   return cell;
 }
 
-// A cell has three faces: paper, red for a wrong answer, green for a right
-// one. The cursor reads the mark off the class.
-function paintMark(cell: HTMLElement, mark: Mark): void {
-  cell.classList.toggle("right", mark === "right");
-  cell.classList.toggle("wrong", mark === "wrong");
-}
-
 // === the cursor ===
 
-// The sheet the cursor walks is every bout of the tab stacked: a row is one
-// chair of one side of one bout, a column one question. The columns are uniform
-// within a bout and may differ between them, which is what the ragged geometry
-// is for.
+// sheetBouts are the bouts the protocols tab stacks into the cursor's sheet:
+// all of them but a written one.
 function sheetBouts(): BoutEntry[] {
   const tab = page.tab();
   if (!tab || tab.kind !== "protocol") return [];
   return tabStages(scheme.stages, tab).flatMap((stage) => stageBouts(page, stage)).filter((bout) => !stateOf(bout.code).written);
 }
 
-function sheetRows(): Array<{code: string; side: number; chair: number}> {
-  const rows: Array<{code: string; side: number; chair: number}> = [];
-  for (const bout of sheetBouts()) {
-    for (let side = 0; side < stateOf(bout.code).sides.length; side++) {
-      for (let chair = 0; chair < troika.CHAIRS; chair++) rows.push({code: bout.code, side, chair});
-    }
-  }
-  return rows;
-}
-
-const cursor = createSheetCursor({
-  root,
-  cellSelector: ".troika-cell",
+const cursor = answers.cursor(root, {
   values: "marks",
   readonly: () => viewer,
   active: () => sheetBouts().length > 0,
-  rows: () => sheetRows().length,
-  cols: (row: number) => {
-    const at = sheetRows()[row];
-    return at ? stateOf(at.code).values.length * troika.THEME_QUESTIONS : 0;
-  },
-  coordOf: (cell) => {
-    const node = cell as HTMLElement;
-    const code = node.dataset.match || "";
-    const side = Number(node.dataset.side);
-    const chair = Number(node.dataset.chair);
-    const theme = Number(node.dataset.theme);
-    const q = Number(node.dataset.q);
-    const row = sheetRows().findIndex((entry) => entry.code === code && entry.side === side && entry.chair === chair);
-    if (row < 0 || !Number.isInteger(theme) || !Number.isInteger(q)) return null;
-    return {row, col: theme * troika.THEME_QUESTIONS + q};
-  },
-  cellAt: (coord: CellCoord) => {
-    const at = sheetRows()[coord.row];
-    if (!at) return null;
-    const theme = Math.floor(coord.col / troika.THEME_QUESTIONS);
-    const q = coord.col % troika.THEME_QUESTIONS;
-    return root.querySelector<HTMLElement>(
-      `.troika-cell[data-match="${cssEscape(at.code)}"][data-side="${cssEscape(String(at.side))}"]` +
-      `[data-chair="${cssEscape(String(at.chair))}"][data-theme="${cssEscape(String(theme))}"]` +
-      `[data-q="${cssEscape(String(q))}"]`);
-  },
-  applyValues: applyMarks,
 });
-
-function applyMarks(edits: CellEdit[]): void {
-  const touched = new Set<string>();
-  for (const edit of edits) {
-    const cell = edit.cell as HTMLElement;
-    const code = cell.dataset.match || "";
-    const side = Number(cell.dataset.side);
-    const theme = Number(cell.dataset.theme);
-    const q = Number(cell.dataset.q);
-    const chair = Number(cell.dataset.chair);
-    const view = page.view(code);
-    if (!view || view.finished) continue;
-    const state = stateOf(code);
-    const mark = parseMark(edit.value);
-    const row = state.sides[side]?.themes[theme]?.answers[q];
-    if (!row || row[chair] === mark) continue;
-    row[chair] = mark;
-    paintMark(cell, mark);
-    patch(code, ["sides", side, "themes", theme, "answers", q, chair], mark);
-    touched.add(code);
-  }
-  for (const code of touched) refreshTotals(code);
-}
 
 // refreshTotals repaints the Σ a bout's cells feed rather than the sheet, so an
 // edit does not move the cursor out from under the host.
@@ -650,7 +616,7 @@ function buildWrittenBout(bout: BoutEntry): HTMLElement {
       for (let q = 0; q < troika.THEME_QUESTIONS; q++) {
         const count = troika.countAt(state, side, t, q);
         tr.appendChild(td(count ? String(count) : "", "troika-count answer-cell",
-          {dataset: {match: bout.code, side, theme: t, q}}));
+          {dataset: counts.dataset({match: bout.code, side, theme: t, q})}));
       }
     });
     const totals = writtenTotals(state, side);
@@ -685,37 +651,10 @@ function writtenBout(): BoutEntry | null {
   return tabStages(scheme.stages, tab).flatMap((stage) => stageBouts(page, stage)).find((bout) => stateOf(bout.code).written) || null;
 }
 
-const writtenCursor = createSheetCursor({
-  root,
-  cellSelector: ".troika-count",
+const writtenCursor = counts.cursor(root, {
   values: "text",
   readonly: () => viewer || Boolean(writtenBout()?.view.finished),
   active: () => writtenBout() !== null,
-  rows: () => {
-    const bout = writtenBout();
-    return bout ? stateOf(bout.code).sides.length : 0;
-  },
-  cols: () => {
-    const bout = writtenBout();
-    return bout ? stateOf(bout.code).values.length * troika.THEME_QUESTIONS : 0;
-  },
-  coordOf: (cell) => {
-    const node = cell as HTMLElement;
-    const side = Number(node.dataset.side);
-    const theme = Number(node.dataset.theme);
-    const q = Number(node.dataset.q);
-    if (!Number.isInteger(side) || !Number.isInteger(theme) || !Number.isInteger(q)) return null;
-    return {row: side, col: theme * troika.THEME_QUESTIONS + q};
-  },
-  cellAt: (coord: CellCoord) => {
-    const bout = writtenBout();
-    if (!bout) return null;
-    const theme = Math.floor(coord.col / troika.THEME_QUESTIONS);
-    const q = coord.col % troika.THEME_QUESTIONS;
-    return root.querySelector<HTMLElement>(
-      `.troika-count[data-match="${cssEscape(bout.code)}"][data-side="${cssEscape(String(coord.row))}"]` +
-      `[data-theme="${cssEscape(String(theme))}"][data-q="${cssEscape(String(q))}"]`);
-  },
   // A click steps 0 → 1 → 2 → 3 → 0; a digit is typed straight in.
   cycle: (cell: Element) => String(((Number(cell.textContent || 0) || 0) + 1) % (troika.CHAIRS + 1)),
   applyValues: applyCounts,
@@ -736,10 +675,9 @@ function applyCounts(edits: CellEdit[]): void {
   const touched = new Set<string>();
   for (const edit of edits) {
     const cell = edit.cell as HTMLElement;
-    const code = cell.dataset.match || "";
-    const side = Number(cell.dataset.side);
-    const theme = Number(cell.dataset.theme);
-    const q = Number(cell.dataset.q);
+    const at = counts.addressOf(cell);
+    if (!at) continue;
+    const {match: code, side, theme, q} = at;
     const view = page.view(code);
     if (!view || view.finished) continue;
     const state = stateOf(code);
@@ -750,7 +688,7 @@ function applyCounts(edits: CellEdit[]): void {
     if (!row || row[q] === count) continue;
     row[q] = count;
     cell.textContent = count ? String(count) : "";
-    patch(code, ["sides", side, "counts", theme, q], count);
+    patch(code, troika.countPath(at), count);
     touched.add(code);
   }
   for (const code of touched) {

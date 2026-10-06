@@ -126,3 +126,31 @@ func TestApplyRejects(t *testing.T) {
 		})
 	}
 }
+
+// A set of a whole shootout theme writes the answers and the seating it
+// carries: that is how a host's undo puts back a theme it dropped.
+func TestApplyThemeCarriesItsCells(t *testing.T) {
+	blob := store.MatchBlob{}
+	err := Apply(&blob, testMatch(), []edit.PatchOp{
+		op("set", `{"players":[101],"answers":["right","","wrong","",""]}`, "participants", "11", "shootoutThemes", 0),
+		op("set", `{"answers":["","","","",""]}`, "participants", "22", "shootoutThemes", 0),
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	theme := blob.Participants["11"].ShootoutThemes[0]
+	if theme.Answers != [5]string{"right", "", "wrong", "", ""} {
+		t.Fatalf("answers = %v", theme.Answers)
+	}
+	if len(theme.Players) != 1 || theme.Players[0] != 101 {
+		t.Fatalf("players = %v", theme.Players)
+	}
+	if len(blob.Participants["22"].ShootoutThemes) != 1 {
+		t.Fatal("an empty theme is still added")
+	}
+	if err := Apply(&blob, testMatch(), []edit.PatchOp{
+		op("set", `{"players":[202]}`, "participants", "11", "shootoutThemes", 1),
+	}); err == nil {
+		t.Fatal("a player from the other team's roster must be refused")
+	}
+}

@@ -19,8 +19,7 @@ import {seatingLabel} from "./ek-seating.js";
 import {boutAnchorID, groupAnchorID, mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
 import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {createSheetCursor, parseMark} from "./sheet-cursor.js";
-import type {CellCoord, CellEdit} from "./sheet-cursor.js";
+import {paintMark, stackedSheet} from "./stacked-sheet.js";
 import {buildFlatScoreTable, buildTwoRowScoreTable, seatingText} from "./score-table.js";
 import type {ScoreTableThemeRow} from "./score-table.js";
 import {reseedMetricHeader, reseedMetricValue} from "./fest-grid.js";
@@ -105,6 +104,31 @@ const gameType = String(fest?.gameType || init?.gameType || "ek");
 const individual = gameType === "si";
 const app: "ek" | "es" | "si" = individual ? "si" : gameType === "es" ? "es" : "ek";
 
+// The stacked sheet a stage's tab (or a Block round's) draws: a row is a seat
+// of a bout, a column one question of a theme or a shootout theme.
+const answers = stackedSheet({
+  selector: ".ek-cell",
+  fields: ek.SHEET_FIELDS,
+  bouts: () => tabBouts(page.tab()),
+  codeOf: (bout: BoutEntry) => bout.code,
+  rowsOf: (bout: BoutEntry) => seatsOf(bout.view).map((_id, seat) => ({seat})),
+  columnsOf: (bout: BoutEntry) => ek.sheetColumns(themeCountOf(bout.view), shootoutCount(bout.code)),
+  marks: {
+    markOf: (cell) => {
+      const view = page.view(cell.match);
+      if (!view || view.finished || !seatsOf(view)[cell.seat]) return null;
+      return themeAt(cell.match, cell.seat, cell.cellKind, cell.theme)?.answers[cell.q] ?? null;
+    },
+    setMark: (cell, mark) => {
+      const theme = themeAt(cell.match, cell.seat, cell.cellKind, cell.theme);
+      if (theme) theme.answers[cell.q] = mark;
+    },
+    pathOf: (cell) => ek.answerPath(seatsOf(page.view(cell.match))[cell.seat], cell.cellKind, cell.theme, cell.q),
+    patch: (code, path, value) => page.patch(code, path, value),
+    onWritten: (codes) => codes.forEach(refreshTotals),
+  },
+});
+
 const page: BoutPage<EKMatchView, EKState> = mountBoutPage({
   app,
   root,
@@ -120,7 +144,7 @@ const page: BoutPage<EKMatchView, EKState> = mountBoutPage({
   fitsFrame: (tab) => !["grid", "stage", "round"].includes(tab?.kind || "grid"),
   boutSelector: ".ek-bout",
   cursorKinds: {
-    answer: {selector: ".ek-cell", keys: ["match", "seat", "theme", "q", "shootout"]},
+    answer: answers.cursorKind,
     place: {selector: ".place-input", keys: ["match", "seat"]},
     finish: {selector: ".finish-toggle", keys: ["match"]},
   },
@@ -157,6 +181,11 @@ function sectionOf(code: string, seat: number): ek.EKSection | undefined {
   return stateOf(code).sections.get(seatsOf(page.view(code))[seat]);
 }
 
+function themeAt(code: string, seat: number, kind: ThemeKind, theme: number): ek.EKTheme | undefined {
+  const section = sectionOf(code, seat);
+  return kind === "themes" ? section?.themes[theme] : section?.shootoutThemes[theme];
+}
+
 // shootoutCount is how many shootout themes the bout has: every seat holds
 // the same number, since a theme is added and dropped for all of them at once.
 function shootoutCount(code: string): number {
@@ -178,11 +207,11 @@ interface ThemeColumn {
   theme: number;
 }
 
+// themeColumns are the sheet's themes, each over its questions' columns.
 function themeColumns(code: string): ThemeColumn[] {
-  const out: ThemeColumn[] = [];
-  for (let theme = 0; theme < themeCountOf(page.view(code)); theme++) out.push({kind: "themes", theme});
-  for (let theme = 0; theme < shootoutCount(code); theme++) out.push({kind: "shootoutThemes", theme});
-  return out;
+  return ek.sheetColumns(themeCountOf(page.view(code)), shootoutCount(code))
+    .filter((column) => column.q === 0)
+    .map(({cellKind, theme}) => ({kind: cellKind, theme}));
 }
 
 function seatName(view: EKMatchView, seat: number): string {
@@ -311,8 +340,7 @@ function placeCell(bout: BoutEntry, seat: number): HTMLElement {
 
 function themeRow(bout: BoutEntry, seat: number, column: ThemeColumn, editable: boolean): ScoreTableThemeRow {
   const {code, view} = bout;
-  const section = sectionOf(code, seat);
-  const theme = column.kind === "themes" ? section?.themes[column.theme] : section?.shootoutThemes[column.theme];
+  const theme = themeAt(code, seat, column.kind, column.theme);
   const values = valuesOf(view);
   const scoreCell = {
     content: theme ? ek.themeScore(theme, values) : 0,
@@ -370,7 +398,7 @@ function playerCell(bout: BoutEntry, seat: number, column: ThemeColumn, players:
     dataset: {match: bout.code, seat: String(seat), theme: String(column.theme), shootout: column.kind === "themes" ? "0" : "1"},
     onChange: (chosen) => {
       const ids = chosen.map(Number).filter((player) => player > 0);
-      const theme = column.kind === "themes" ? sectionOf(bout.code, seat)?.themes[column.theme] : sectionOf(bout.code, seat)?.shootoutThemes[column.theme];
+      const theme = themeAt(bout.code, seat, column.kind, column.theme);
       if (theme) theme.players = ids;
       page.patch(bout.code, ek.playersPath(id, column.kind, column.theme), ids);
     },
@@ -379,20 +407,15 @@ function playerCell(bout: BoutEntry, seat: number, column: ThemeColumn, players:
 
 function markCell(bout: BoutEntry, seat: number, column: ThemeColumn, q: number, mark: Mark, editable: boolean): HTMLElement {
   const {code, view} = bout;
-  const cell = td("", "ek-cell answer-cell theme-block", {dataset: {
-    match: code, seat, theme: column.theme, q, shootout: column.kind === "themes" ? "0" : "1",
-  }});
+  const cell = td("", "ek-cell answer-cell theme-block", {
+    dataset: answers.dataset({match: code, seat, cellKind: column.kind, theme: column.theme, q}),
+  });
   if (q === 0) cell.classList.add("theme-block-bottom-left");
   if (!viewer) cell.tabIndex = editable ? 0 : -1;
   const label = column.kind === "themes" ? S.ek.theme.column(String(column.theme + 1)) : S.ek.shootout.column(String(column.theme + 1));
   cell.title = S.ek.answer.title(seatName(view, seat), label, String(valuesOf(view)[q] || 0));
   paintMark(cell, mark);
   return cell;
-}
-
-function paintMark(cell: HTMLElement, mark: Mark): void {
-  cell.classList.toggle("right", mark === "right");
-  cell.classList.toggle("wrong", mark === "wrong");
 }
 
 // boutHeader is the sheet's name column head: the bout's lettered name, where
@@ -424,7 +447,7 @@ function shootoutControls(code: string, shootouts: number): HTMLElement {
   add.title = S.ek.shootout.add();
   add.setAttribute("aria-label", add.title);
   add.disabled = finished;
-  add.addEventListener("click", () => sendShootoutTheme(code, shootouts, false));
+  add.addEventListener("click", () => addShootoutTheme(code, shootouts));
   node.appendChild(add);
   if (shootouts > 0) {
     const remove = document.createElement("button");
@@ -437,21 +460,29 @@ function shootoutControls(code: string, shootouts: number): HTMLElement {
     remove.addEventListener("click", (event) => {
       event.preventDefault();
       if (!window.confirm(S.ek.shootout.removeConfirm())) return;
-      sendShootoutTheme(code, shootouts - 1, true);
+      dropShootoutTheme(code, shootouts - 1);
     });
     node.appendChild(remove);
   }
   return node;
 }
 
-function sendShootoutTheme(code: string, theme: number, remove: boolean): void {
-  const ops = seatsOf(page.view(code)).filter(Boolean).map((id) => {
-    const path = ["participants", String(id), "shootoutThemes", theme];
-    return remove ? {op: "remove", path} : {path, value: {answers: ["", "", "", "", ""]}};
-  });
-  if (!ops.length) return;
-  const url = `${page.route.apiBase}/matches/${encodeURIComponent(code)}/state`;
-  void page.send(code, {url, method: "PATCH", body: {ops}});
+// addShootoutTheme and dropShootoutTheme write a shootout theme for every
+// seat through the bout page's patch, as one gesture the host can undo.
+function addShootoutTheme(code: string, theme: number): void {
+  for (const [id, section] of stateOf(code).sections) {
+    section.shootoutThemes[theme] = {players: [], answers: ["", "", "", "", ""]};
+    page.patch(code, ek.shootoutThemePath(id, theme), {answers: ["", "", "", "", ""]});
+  }
+  page.render();
+}
+
+function dropShootoutTheme(code: string, theme: number): void {
+  for (const [id, section] of stateOf(code).sections) {
+    section.shootoutThemes.splice(theme, 1);
+    page.patch(code, ek.shootoutThemePath(id, theme), null);
+  }
+  page.render();
 }
 
 // === the cursor ===
@@ -473,80 +504,11 @@ function tabBouts(tab: GameTab | undefined): BoutEntry[] {
   return [];
 }
 
-function sheetBouts(): BoutEntry[] {
-  return tabBouts(page.tab());
-}
-
-interface SheetRow {
-  code: string;
-  seat: number;
-}
-
-function sheetRows(): SheetRow[] {
-  return sheetBouts().flatMap((bout) => seatsOf(bout.view).map((_id, seat) => ({code: bout.code, seat})));
-}
-
-function columnsOf(code: string): Array<{kind: ThemeKind; theme: number; q: number}> {
-  return themeColumns(code).flatMap((column) => Array.from({length: ek.QUESTIONS}, (_, q) => ({...column, q})));
-}
-
-const cursor = createSheetCursor({
-  root,
-  cellSelector: ".ek-cell",
+const cursor = answers.cursor(root, {
   values: "marks",
   readonly: () => viewer,
   active: () => ["stage", "round"].includes(page.tab()?.kind || ""),
-  rows: () => sheetRows().length,
-  cols: (row: number) => {
-    const at = sheetRows()[row];
-    return at ? columnsOf(at.code).length : 0;
-  },
-  coordOf: (cell) => {
-    const node = cell as HTMLElement;
-    const code = node.dataset.match || "";
-    const seat = Number(node.dataset.seat);
-    const kind: ThemeKind = node.dataset.shootout === "1" ? "shootoutThemes" : "themes";
-    const theme = Number(node.dataset.theme);
-    const q = Number(node.dataset.q);
-    const row = sheetRows().findIndex((entry) => entry.code === code && entry.seat === seat);
-    const col = columnsOf(code).findIndex((column) => column.kind === kind && column.theme === theme && column.q === q);
-    return row < 0 || col < 0 ? null : {row, col};
-  },
-  cellAt: (coord: CellCoord) => {
-    const at = sheetRows()[coord.row];
-    const column = at && columnsOf(at.code)[coord.col];
-    if (!column) return null;
-    return root.querySelector<HTMLElement>(
-      `.ek-cell[data-match="${cssEscape(at.code)}"][data-seat="${cssEscape(String(at.seat))}"]` +
-      `[data-theme="${cssEscape(String(column.theme))}"][data-q="${cssEscape(String(column.q))}"]` +
-      `[data-shootout="${column.kind === "themes" ? "0" : "1"}"]`);
-  },
-  applyValues: applyMarks,
 });
-
-function applyMarks(edits: CellEdit[]): void {
-  const touched = new Set<string>();
-  for (const edit of edits) {
-    const cell = edit.cell as HTMLElement;
-    const code = cell.dataset.match || "";
-    const seat = Number(cell.dataset.seat);
-    const kind: ThemeKind = cell.dataset.shootout === "1" ? "shootoutThemes" : "themes";
-    const theme = Number(cell.dataset.theme);
-    const q = Number(cell.dataset.q);
-    const view = page.view(code);
-    const id = seatsOf(view)[seat];
-    if (!view || view.finished || !id) continue;
-    const row = kind === "themes" ? sectionOf(code, seat)?.themes[theme] : sectionOf(code, seat)?.shootoutThemes[theme];
-    if (!row) continue;
-    const mark = parseMark(edit.value) as Mark;
-    if (row.answers[q] === mark) continue;
-    row.answers[q] = mark;
-    page.patch(code, ek.answerPath(id, kind, theme, q), mark);
-    paintMark(cell, mark);
-    touched.add(code);
-  }
-  for (const code of touched) refreshTotals(code);
-}
 
 // refreshTotals repaints what an edit feeds rather than the sheet, so the
 // cursor does not move out from under the host.
@@ -562,7 +524,7 @@ function refreshTotals(code: string): void {
     setCell(`[data-shootout-total="${cssEscape(`${code}-${seat}`)}"]`, String(score.shootout));
     score.correct.forEach((count, q) => setCell(`[data-count="${cssEscape(`${code}-${seat}-${q}`)}"]`, String(count)));
     for (const column of themeColumns(code)) {
-      const theme = column.kind === "themes" ? section?.themes[column.theme] : section?.shootoutThemes[column.theme];
+      const theme = themeAt(code, seat, column.kind, column.theme);
       const key = `${code}-${seat}-${column.kind === "themes" ? "t" : "s"}${column.theme}`;
       setCell(`[data-score="${cssEscape(key)}"]`, String(theme ? ek.themeScore(theme, values) : 0));
     }

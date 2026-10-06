@@ -1483,9 +1483,13 @@ export function createHostPresence(options: HostPresenceOptions): HostPresence {
     let stickyRight = frameRect.left;
     let stickyBottom = frameRect.top;
     const probes = stickyProbes(frame);
+    // Only the target's own table can cover it: on a sheet of stacked bouts
+    // the heads of the bouts below stand lower down the frame, not over it.
+    const table = target.closest?.("table");
     for (const probe of probes) {
       const sticky = probe.node;
       if (sticky === target || sticky.contains(target) || target.contains(sticky)) continue;
+      if (table && sticky.closest("table") !== table) continue;
       const style = probe.style;
       if (style.position !== "sticky") continue;
       const stickyRect = sticky.getBoundingClientRect();

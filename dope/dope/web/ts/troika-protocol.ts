@@ -126,6 +126,34 @@ export function markAt(state: TroikaState, side: number, theme: number, question
   return state.sides[side]?.themes[theme]?.answers[question]?.[chair] ?? "";
 }
 
+// ---- the bout sheet ----
+
+// A sheet cell's address besides its bout: a row is one chair of one side, a
+// column one question of a theme. A written bout's sheet has a row per side.
+export const SHEET_FIELDS = ["side", "chair", "theme", "q"] as const;
+export const WRITTEN_FIELDS = ["side", "theme", "q"] as const;
+
+export function sheetRows(state: TroikaState): Array<{side: number; chair: number}> {
+  return state.sides.flatMap((_side, side) => Array.from({length: CHAIRS}, (_, chair) => ({side, chair})));
+}
+
+export function writtenRows(state: TroikaState): Array<{side: number}> {
+  return state.sides.map((_side, side) => ({side}));
+}
+
+export function sheetColumns(state: TroikaState): Array<{theme: number; q: number}> {
+  return state.values.flatMap((_value, theme) => Array.from({length: THEME_QUESTIONS}, (_, q) => ({theme, q})));
+}
+
+// markPath is where a chair's mark goes; countPath where a written count goes.
+export function markPath(cell: {side: number; chair: number; theme: number; q: number}): Array<string | number> {
+  return ["sides", cell.side, "themes", cell.theme, "answers", cell.q, cell.chair];
+}
+
+export function countPath(cell: {side: number; theme: number; q: number}): Array<string | number> {
+  return ["sides", cell.side, "counts", cell.theme, cell.q];
+}
+
 // questionScore is what one question paid a side: every correct answer at its
 // value, so three players who all took it pay three times over.
 export function questionScore(state: TroikaState, side: number, theme: number, question: number): number {

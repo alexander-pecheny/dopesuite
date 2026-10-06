@@ -32,3 +32,23 @@ export function parseState(raw: unknown, questions: number): BrainMatchState {
   });
   return state;
 }
+
+// ---- the bout sheet ----
+
+// The protocols tab lays a Block's bouts side by side as one sheet: a column
+// is a side of a bout, a row one question of it. A bout with tiebreak
+// questions is taller than its neighbours.
+export const SHEET_FIELDS = ["side", "q"] as const;
+
+export function sheetColumns(): Array<{side: number}> {
+  return [{side: 0}, {side: 1}];
+}
+
+export function sheetRows(state: BrainMatchState): Array<{q: number}> {
+  return (state.teams?.[0]?.rows || []).map((_row, q) => ({q}));
+}
+
+// markPath is where a side's mark on a question goes.
+export function markPath(cell: {side: number; q: number}): Array<string | number> {
+  return ["teams", cell.side, "rows", cell.q, "mark"];
+}
