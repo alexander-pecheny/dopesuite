@@ -1343,7 +1343,7 @@ var RU = Strings{
 		},
 		Card: CliCardStrings{
 			AddEmpty:    func() string { return "пустая карточка: дайте 4s на stdin или --text" },
-			AddKindFlag: func() string { return "тип карточки" },
+			AddKindFlag: func(kinds string) string { return fmt.Sprintf("тип карточки: %s", kinds) },
 			AddListFlag: func() string { return "id списка" },
 			AddTextFlag: func() string { return "4s карточки (иначе stdin)" },
 			AddUsage:    func() string { return "xy-cli card add --board B --list L [--after id|--before id] < вопрос.4s" },
@@ -1382,7 +1382,7 @@ var RU = Strings{
 			SetEmpty: func() string {
 				return "пустой 4s: карточка не стирается молча — дайте текст на stdin, --text или --file"
 			},
-			SetKindFlag: func() string { return "тип карточки: normal|question|test|meta|heading|other" },
+			SetKindFlag: func(kinds string) string { return fmt.Sprintf("тип карточки: %s", kinds) },
 			SetTextFlag: func() string { return "новый 4s (иначе stdin)" },
 			SetUsage: func() string {
 				return "xy-cli card set <id> --board B [--expect hash] < новый.4s\nВсегда пишет правку в ленту (desc_edit)."

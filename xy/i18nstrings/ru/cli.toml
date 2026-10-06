@@ -142,8 +142,8 @@ file_flag = "файл с 4s (иначе stdin)"
 expect_flag = "хэш из `card get` — записать, только если карточка не менялась"
 # --alias flag description, shared by `card set` and `card add`.
 alias_flag = "короткое имя карточки"
-# `card set` --kind flag description, with the kinds it takes.
-set_kind_flag = "тип карточки: normal|question|test|meta|heading|other"
+# `card set` --kind flag description, with the kinds it takes (from cardkind).
+set_kind_flag = 'тип карточки: {{.kinds}}'
 # Error when --expect does not match: the card changed since it was read.
 changed = 'карточка {{.id}} изменилась с момента чтения (сейчас {{.now}}, ожидалось {{.expected}})'
 # Error when `card set` is given empty content: a card is never silently erased.
@@ -158,8 +158,8 @@ add_usage = "xy-cli card add --board B --list L [--after id|--before id] < во�
 add_list_flag = "id списка"
 # `card add` --text flag description.
 add_text_flag = "4s карточки (иначе stdin)"
-# `card add` --kind flag description.
-add_kind_flag = "тип карточки"
+# `card add` --kind flag description, with the kinds it takes (from cardkind).
+add_kind_flag = 'тип карточки: {{.kinds}}'
 # --after flag description, shared by `card add` and `card mv`.
 after_flag = "id карточки, после которой встать"
 # --before flag description, shared by `card add` and `card mv`.

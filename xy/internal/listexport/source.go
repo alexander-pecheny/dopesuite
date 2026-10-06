@@ -1,6 +1,10 @@
 package listexport
 
-import "strings"
+import (
+	"strings"
+
+	"xy/internal/cardkind"
+)
 
 // The 4s document a List exports as. Every format is rendered from this one
 // string, which is why the Versions are folded back into one question here and
@@ -11,7 +15,7 @@ import "strings"
 func source(cards []Card) string {
 	var parts []string
 	for _, c := range cards {
-		if c.Kind == preambleKind {
+		if !cardkind.Exported(c.Kind) {
 			continue
 		}
 		s := foldBlankLines(withQuestionMarker(c.Kind, withKindMarker(c.Kind, strings.TrimSpace(composeVersions(c.Desc)))))
@@ -26,12 +30,11 @@ func source(cards []Card) string {
 // board shows it by its kind, so nobody has to type a `##` or a `#`, while 4s
 // drops a line that has no marker and follows nothing. A heading becomes a `##`
 // section, which is what restarts the theme count in SI, as the board's
-// numbering does after a heading.
-var kindMarker = map[string]string{"heading": "##", "meta": "#"}
-
+// numbering does after a heading. Which kind stands for which marker is
+// cardkind's to say.
 func withKindMarker(kind, desc string) string {
-	marker, ok := kindMarker[kind]
-	if !ok || desc == "" {
+	marker := cardkind.Of(kind).Marker
+	if marker == "" || desc == "" {
 		return desc
 	}
 	if _, _, isMarker := MatchMarker(strings.SplitN(desc, "\n", 2)[0]); isMarker {
@@ -60,14 +63,14 @@ func lineType(l string) string {
 // question itself; 4s continues the element above it with it, so the question
 // would never close and would swallow everything up to the next theme.
 func withQuestionMarker(kind, desc string) string {
-	if kind != "question" && kind != "theme" {
+	if !cardkind.Numbered(kind) {
 		return desc
 	}
 	lines := strings.Split(desc, "\n")
 	// Each part is one question: the lines under a `№`, or for a question Card
 	// also the lines above the first one. A theme's head is not a question.
 	var starts []int
-	if kind == "question" {
+	if kind == cardkind.Question {
 		starts = append(starts, 0)
 	}
 	for i, l := range lines {

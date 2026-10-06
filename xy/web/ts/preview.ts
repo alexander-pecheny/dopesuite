@@ -9,6 +9,7 @@ import { xyApp } from "./app.js";
 import { xyChgk } from "./chgk.js";
 import { splitTheme } from "./themes.js";
 import S from "./i18nstrings.js";
+import { KIND } from "./cardkind.js";
 import type { HandoutPiece, ScreenValue } from "./chgk.js";
 import type { BoardCard } from "./unlock.js";
 
@@ -190,7 +191,7 @@ export function renderPreviewCard(card: PvCard, number: string | null, imgMap: M
   // A an SI theme is a heading and a ladder of questions, each labelled by its bare
   // point value — the layout chgksuite's si_mode sets, which is what the .docx
   // and the .pdf of this card will look like.
-  if (card.kind === "theme" || find("theme")) {
+  if (card.kind === KIND.theme || find("theme")) {
     const t = splitTheme(card.desc);
     const wrap = el("div", { class: "pv-theme", dataset: { cardId: card.id } });
     const head = el("h3", { class: "pv-section" });
@@ -205,7 +206,7 @@ export function renderPreviewCard(card: PvCard, number: string | null, imgMap: M
     return wrap;
   }
 
-  if (card.kind === "question" || find("question")) {
+  if (card.kind === KIND.question || find("question")) {
     return pvQuestion(card, card.desc, number, imgMap, screen, edit);
   }
 

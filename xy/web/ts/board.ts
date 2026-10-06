@@ -28,8 +28,8 @@ import { fillPreviewImages, renderPreviewCard } from "./preview.js";
 import { createCardLabels } from "./cardlabels.js";
 import { createBell } from "./bell.js";
 import { xyVersions } from "./versions.js";
-import { xyHndt } from "./hndt.js";
 import { xyListExport } from "./listexport.js";
+import { carriesHandouts, counter, exported, KIND, label as kindLabel, numbered, versioned } from "./cardkind.js";
 import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
@@ -515,8 +515,8 @@ function countLabel(questions: number, themes: number): string {
 // deleting a card moves the number with it. Hidden at zero — a board with
 // nothing on it does not need telling.
 function renderBoardTitle(): void {
-  const n = state.cards.filter((c) => c.kind === "question").length;
-  const themes = state.cards.filter((c) => c.kind === "theme").length;
+  const n = state.cards.filter((c) => counter(c.kind) === "question").length;
+  const themes = state.cards.filter((c) => counter(c.kind) === "theme").length;
   titleNode.replaceChildren(state.name);
   if (n || themes) titleNode.append(el("span", { class: "board-qcount", text: countLabel(n, themes) }));
 }
@@ -633,7 +633,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const allNumbers = precomputedNumbers || xyChgk.numberQuestionCards(cards);
   const view = shownCards(cards, allNumbers, labelFilter.keep());
   const shown = view.cards;
-  const counted = (cs: ReadonlyArray<BoardCard>): number => cs.filter((c) => c.kind === "question" || c.kind === "theme").length;
+  const counted = (cs: ReadonlyArray<BoardCard>): number => cs.filter((c) => numbered(c.kind)).length;
   const qCount = counted(cards);
   const qShown = counted(shown);
   if (qCount) {
@@ -644,7 +644,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
       // hide nothing, so the head reads the same way across the board.
       text: labelFilter.active()
         ? S.board.count.filtered(String(qShown), String(qCount))
-        : countLabel(cards.filter((c) => c.kind === "question").length, cards.filter((c) => c.kind === "theme").length),
+        : countLabel(cards.filter((c) => counter(c.kind) === "question").length, cards.filter((c) => counter(c.kind) === "theme").length),
     }));
   }
   const headKids: HTMLElement[] = [];
@@ -804,7 +804,7 @@ function forgetCardLabels(deletedCards: BoardCard[]): void {
 // to identify this card at a glance, so it beats any derivation from the text.
 // state.cardTitle is the reader's fallback preference — question text or answer.
 const cardBody = (card: BoardCard): string =>
-  card.kind === xyHndt.PREAMBLE_KIND ? S.card.kind.handoutsPreamble() :
+  card.kind === KIND.handoutsPreamble ? kindLabel(card.kind) ?? "" :
   aliasOf(card) || deriveTitle(xyChgk.previewText(card.kind, card.desc, state.cardTitle), Infinity);
 
 // aliasOf normalizes a card's alias to a non-empty string or "" (absent cards,
@@ -815,7 +815,7 @@ const aliasOf = (card: BoardCard | null | undefined): string => ((card && card.a
 // below is the DOM form.
 function cardTitle(card: BoardCard, number?: string | null): string {
   const body = cardBody(card);
-  if ((card.kind === "question" || card.kind === "theme") && number) return `${number}. ${body}`;
+  if (numbered(card.kind) && number) return `${number}. ${body}`;
   return body;
 }
 
@@ -826,13 +826,13 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
   // An aliased card gets a modifier class: the alias is a label, not an excerpt,
   // so it should not be line-clamped down to nothing by --kcard-lines.
   const cls = "kcard-title" + (aliasOf(card) ? " kcard-title-alias" : "");
-  if ((card.kind === "question" || card.kind === "theme") && number) {
+  if (numbered(card.kind) && number) {
     const title = el("div", { class: cls },
       el("span", { class: "kcard-num", text: `${number}. ` }),
       cardBody(card));
     // A tour in progress is read by which themes are still short, so a theme
     // says how many of its questions are written right where it is looked at.
-    if (card.kind !== "theme") return title;
+    if (card.kind !== KIND.theme) return title;
     const p = progress(card.desc);
     title.append(el("span", {
       class: "kcard-progress", title: S.card.slot.progressTitle(),
@@ -893,13 +893,13 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const labelRow = el("div", { class: "kcard-labels" });
   // Derived from the text, so it leads the row: nobody put it there and nobody
   // can take it off, unlike everything after it.
-  if (card.kind === "question" && xyListExport.handoutForCard(card.desc)) {
+  if (carriesHandouts(card.kind) && xyListExport.handoutForCard(card.desc)) {
     labelRow.append(el("span", { class: "kcard-handout", title: S.board.card.handoutTitle() }, icon("file-text")));
   }
   // Which questions the group has not settled on yet — the card itself shows
   // version 1, and this is the only sign the others exist.
   const versions = xyVersions.versionCount(card.desc);
-  if (card.kind === "question" && versions > 1) {
+  if (versioned(card.kind) && versions > 1) {
     labelRow.append(el("span", { class: "kcard-versions", title: S.board.card.versionsTitle(String(versions)) }, ...iconed("copy", String(versions))));
   }
   // The board card shows the author's own labels; a test's verdict belongs to the
@@ -1212,7 +1212,7 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   // the way exportSource folds it — every wording page-broken under one number.
   // (The card editor's Preview is the other thing: there you are reading ONE
   // version, so it renders the body it is handed.)
-  const cards = scopeLists.flatMap((l) => cardsOf(l.id)).filter((c) => c.kind !== xyHndt.PREAMBLE_KIND)
+  const cards = scopeLists.flatMap((l) => cardsOf(l.id)).filter((c) => exported(c.kind))
     .map((c) => (xyVersions.versionCount(c.desc) > 1 ? { ...c, desc: xyVersions.composeVersions(c.desc) } : c));
   const title = byId("previewTitle");
   if (group) title.replaceChildren(...iconed("link", group.name || S.board.list.groupFallback()));
@@ -1297,7 +1297,7 @@ async function commitCardTo(cardId: number, targetListId: number, rank: string):
 // questionNumberFor returns the display number this question card would show on
 // the board (auto-assigned or directive-driven), matching the kanban preview.
 function questionNumberFor(card: PreviewCardLike): string | null {
-  if (!card || (card.kind !== "question" && card.kind !== "theme")) return null;
+  if (!card || !numbered(card.kind)) return null;
   const list = state.lists.find((l) => l.id === card.listId);
   if (!list) return null;
   const idx = cardsOf(list.id).findIndex((c) => c.id === card.id);

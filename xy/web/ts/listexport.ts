@@ -15,6 +15,7 @@ import { bracketSpans, dropHidden, imgInText, isHandoutBody, numberQuestionCards
 import type { ChgkCard, Handout } from "./chgk.js";
 import { xyVersions } from "./versions.js";
 import { xyHndt } from "./hndt.js";
+import { exported, exportMarker, gameOf, KIND, carriesHandouts, numbered } from "./cardkind.js";
 
 // A Card as the assembly reads it, in board order.
 export interface ExportCard extends ChgkCard { id?: number; handoutMeta?: string | null }
@@ -26,13 +27,13 @@ export interface ExportCard extends ChgkCard { id?: number; handoutMeta?: string
 // folded back into one question block here and nowhere else: a versioned Card
 // is still one numbered question. A handouts preamble is for the handouts alone.
 function exportSource(cards: ReadonlyArray<Pick<ExportCard, "desc"> & { kind?: string }>): string {
-  return cards.filter((c) => c.kind !== xyHndt.PREAMBLE_KIND).map((c) => foldBlankLines(withQuestionMarker(c.kind, withKindMarker(c.kind, xyVersions.composeVersions(c.desc).trim())))).filter(Boolean).join("\n\n") + "\n";
+  return cards.filter((c) => exported(c.kind)).map((c) => foldBlankLines(withQuestionMarker(c.kind, withKindMarker(c.kind, xyVersions.composeVersions(c.desc).trim())))).filter(Boolean).join("\n\n") + "\n";
 }
 
 // exportGame is the game a scope exports as: one Theme makes it SI, whatever
 // the List Type says, since a theme's name and author survive only an SI compose.
 function exportGame(cards: ReadonlyArray<{ kind?: string }>): string {
-  return cards.some((c) => c.kind === "theme") ? "si" : "chgk";
+  return gameOf(cards);
 }
 
 // The card reads text with no marker at the top of a question, or right under a
@@ -40,13 +41,13 @@ function exportGame(cards: ReadonlyArray<{ kind?: string }>): string {
 // continues the element above it, so the question has no `?`, never closes, and
 // swallows everything after it up to the next theme. Such text gets its `?`.
 function withQuestionMarker(kind: string | undefined, desc: string): string {
-  if (kind !== "question" && kind !== "theme") return desc;
+  if (!numbered(kind)) return desc;
   const lines = desc.split("\n");
   const typeOf = (l: string): string | undefined => parseBlocks(l)[0]?.type;
   // Each part is one question: the lines under a `№`, or for a question card
   // also the lines above the first one. A theme's head is not a question.
   const starts = lines.flatMap((l, i) => (typeOf(l) === "number" ? [i + 1] : []));
-  if (kind === "question") starts.unshift(0);
+  if (kind === KIND.question) starts.unshift(0);
   for (let k = 0; k < starts.length; k++) {
     const end = k + 1 < starts.length ? starts[k + 1] - 1 : lines.length;
     const part = lines.slice(starts[k], end);
@@ -62,11 +63,10 @@ function withQuestionMarker(kind: string | undefined, desc: string): string {
 // kind, so nobody has to type a `###` or a `#`. 4s, though, drops a line that has
 // no marker and follows nothing, so such a card gives its first line the marker
 // its kind stands for. A heading becomes a `##` section: that is what restarts
-// the theme count in SI, as the board's numbering does after a heading.
-const KIND_MARKER: Record<string, string> = { heading: "##", meta: "#" };
-
+// the theme count in SI, as the board's numbering does after a heading. Which
+// kind stands for which marker is cardkind.ts's to say.
 function withKindMarker(kind: string | undefined, desc: string): string {
-  const marker = kind ? KIND_MARKER[kind] : undefined;
+  const marker = exportMarker(kind);
   if (!marker || !desc || startsBlock(desc.split("\n")[0])) return desc;
   return `${marker} ${desc}`;
 }
@@ -162,10 +162,10 @@ function hndtBlock(number: string, handout: Handout, metaText: string | null | u
 // a handout, each under its saved settings — joined with chgksuite's "\n---\n".
 function hndtOf(cards: ReadonlyArray<ExportCard>): { numbers: Array<string | null>; source: string } {
   const numbers = numberQuestionCards(cards);
-  const preamble = cards.find((c) => c.kind === xyHndt.PREAMBLE_KIND)?.desc.trim();
+  const preamble = cards.find((c) => c.kind === KIND.handoutsPreamble)?.desc.trim();
   const blocks: string[] = [];
   cards.forEach((c, i) => {
-    if (c.kind !== "question") return;
+    if (!carriesHandouts(c.kind)) return;
     // Version 1's handout, like every other reader outside the card editor. A
     // block per version would print two handouts under one question number, and
     // split-fit names its output by that number — the second would overwrite the

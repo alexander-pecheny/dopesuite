@@ -58,9 +58,8 @@ function parseHndtMetaByQuestion(text: string | null | undefined): Record<string
 }
 
 
-// A tour's ///preamble block lives in a card of its own kind, whose description
-// is the block itself.
-const PREAMBLE_KIND = "handouts_preamble";
+// A tour's ///preamble block lives in a card of its own kind (cardkind.ts
+// KIND.handoutsPreamble), whose description is the block itself.
 const PREAMBLE_MARKER = "///preamble";
 
 function isPreambleBlock(block: string): boolean {
@@ -144,4 +143,4 @@ function composeHndtForm(blocks: ReadonlyArray<HndtFormBlock>): string {
   }).join("\n---\n");
 }
 
-export const xyHndt = { PREAMBLE_KIND, PREAMBLE_MARKER, preambleOf, parseHndtMetaByQuestion, parseHndtForm, composeHndtForm, hndtGet, hndtSet, HNDT_DEFAULT_META };
+export const xyHndt = { PREAMBLE_MARKER, preambleOf, parseHndtMetaByQuestion, parseHndtForm, composeHndtForm, hndtGet, hndtSet, HNDT_DEFAULT_META };

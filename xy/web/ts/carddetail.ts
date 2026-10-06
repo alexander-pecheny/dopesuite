@@ -20,7 +20,7 @@ import { xyTypo } from "./typo.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import { normalizeAlias, xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
-import { xyHndt } from "./hndt.js";
+import { forListType, KIND, label as kindLabel, numbered, versioned } from "./cardkind.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { CardFields, CopyTarget, Handout } from "./chgk.js";
@@ -362,10 +362,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
     // What the list holds decides which card this is, and nothing else: both
     // kinds stay offered on the card itself.
-    const kind = list.type === "si" ? "theme" : "question";
+    const kind = forListType(list.type);
     // A question opens blank and grows its markers as it is typed; a theme is
     // born as its whole ladder, which is the template an editor fills in.
-    const desc = kind === "theme" ? blankTheme(state().defaultAuthor || null) : "";
+    const desc = kind === KIND.theme ? blankTheme(state().defaultAuthor || null) : "";
     try {
       const dk = mustDK();
       const res = await verbs.create("createCard", `/api/lists/${list.id}/cards`, {
@@ -411,14 +411,14 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   function draftKind(): string {
     const c = openCardCard();
-    return c ? c.kind : cardKindEl.value || "question";
+    return c ? c.kind : cardKindEl.value || KIND.question;
   }
-  function isTheme(): boolean { return draftKind() === "theme"; }
+  function isTheme(): boolean { return draftKind() === KIND.theme; }
   // Both card kinds that hold question fields get the Fields tab; a theme fills it
   // with a ladder of them instead of one.
-  function fieldsAvailable(): boolean { return draftKind() === "question" || isTheme(); }
+  function fieldsAvailable(): boolean { return numbered(draftKind()); }
   // A handouts preamble is .hndt, not 4s: it has only its text, and no preview.
-  function isPreamble(): boolean { return draftKind() === xyHndt.PREAMBLE_KIND; }
+  function isPreamble(): boolean { return draftKind() === KIND.handoutsPreamble; }
 
   // boardAuthors / boardSources collect the author names and source lines already
   // used across the board's question cards (deduped, sorted) — the autocomplete
@@ -434,9 +434,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       }
     };
     for (const c of state().cards) {
-      if (c.kind === "question") add(pick(xyChgk.splitFields(c.desc)));
+      if (c.kind === KIND.question) add(pick(xyChgk.splitFields(c.desc)));
       // A theme's authors and sources are those of the questions inside it.
-      else if (c.kind === "theme") for (const slot of splitTheme(c.desc).slots) add(pick(slot.fields));
+      else if (c.kind === KIND.theme) for (const slot of splitTheme(c.desc).slots) add(pick(slot.fields));
     }
     return [...set].sort((a, b) => a.localeCompare(b, "ru"));
   }
@@ -445,7 +445,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function boardAuthors(): string[] {
     const names = new Set(boardFieldValues((f) => f.authors));
     for (const c of state().cards) {
-      if (c.kind !== "theme") continue;
+      if (c.kind !== KIND.theme) continue;
       const a = (splitTheme(c.desc).author || "").trim();
       if (a) names.add(a);
     }
@@ -565,7 +565,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // The tools edit text, so they follow the two edit views. →.4s additionally
     // needs the raw 4s editor it types into.
     ui.editTools.hidden = view === "preview" || isPreamble();
-    ui.addVersion.hidden = !fieldsAvailable() || isTheme();
+    ui.addVersion.hidden = !versioned(draftKind());
     ui.addSlot.hidden = view !== "fields" || !isTheme();
     renderVersionTabs();
     ui.typo.hidden = false;
@@ -982,7 +982,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (versionIdx >= n) versionIdx = n - 1;
     // All three views are scoped to one version now, text included, so the strip
     // belongs above every one of them.
-    const show = n > 1 && fieldsAvailable() && !isTheme();
+    const show = n > 1 && versioned(draftKind());
     box.hidden = !show;
     if (!show) { box.replaceChildren(); return; }
     const nodes: HTMLElement[] = [];
@@ -1033,7 +1033,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (!draft.desc.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: S.card.preview.empty() })); return; }
     const c = openCardCard();
     const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: versionDesc(), listId: c ? c.listId : 0 };
-    const number = card.kind === "question" || card.kind === "theme" ? deps.questionNumberFor(card) : null;
+    const number = numbered(card.kind) ? deps.questionNumberFor(card) : null;
     const reqId = openCardId;
     const screen = ui.previewScreen.checked;
     const imgMap = new Map<string, string>();
@@ -1214,13 +1214,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardAliasEl.value = openAlias || "";
     cardDescEl.value = xyVersions.versionBody(card.desc, 0);
     cardMessageEl.textContent = "";
-    cardKindEl.value = card.kind || "question";
+    cardKindEl.value = card.kind || KIND.question;
     cardKindEl.hidden = isPreamble();
     ui.title.hidden = !isPreamble();
-    ui.title.textContent = isPreamble() ? S.card.kind.handoutsPreamble() : "";
+    ui.title.textContent = isPreamble() ? kindLabel(card.kind) ?? "" : "";
     // The "copy for testing" action only makes sense for question cards (it shares
     // the numbered, screen-mode question text); hide it otherwise.
-    ui.copy.hidden = card.kind !== "question" && card.kind !== "theme";
+    ui.copy.hidden = !numbered(card.kind);
     ui.copyMsg.hidden = true;
   }
 

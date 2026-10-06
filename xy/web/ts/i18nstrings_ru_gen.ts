@@ -1068,7 +1068,7 @@ export const RU: Strings = {
     },
     card: {
       addEmpty: () => "пустая карточка: дайте 4s на stdin или --text",
-      addKindFlag: () => "тип карточки",
+      addKindFlag: (kinds: string) => `тип карточки: ${kinds}`,
       addListFlag: () => "id списка",
       addTextFlag: () => "4s карточки (иначе stdin)",
       addUsage: () => "xy-cli card add --board B --list L [--after id|--before id] < вопрос.4s",
@@ -1093,7 +1093,7 @@ export const RU: Strings = {
 `,
       rmUsage: () => "xy-cli card rm <id> --board B\nУдаление — надгробие на 14 дней (ADR-0002).",
       setEmpty: () => "пустой 4s: карточка не стирается молча — дайте текст на stdin, --text или --file",
-      setKindFlag: () => "тип карточки: normal|question|test|meta|heading|other",
+      setKindFlag: (kinds: string) => `тип карточки: ${kinds}`,
       setTextFlag: () => "новый 4s (иначе stdin)",
       setUsage: () => "xy-cli card set <id> --board B [--expect hash] < новый.4s\nВсегда пишет правку в ленту (desc_edit).",
       summary: () => "card get|set|add|mv|rm — карточки (4s на stdin/stdout)",

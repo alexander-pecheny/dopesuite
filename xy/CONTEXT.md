@@ -13,6 +13,10 @@ One ordered column of Cards on a Board.
 **Card**:
 One question, one Theme, or a note. It holds encrypted content in 4s form, plus Labels, a Timeline, Attachments and an optional Alias.
 
+**Card Kind**:
+What a Card is: a question, a Theme, a Заголовок, a Метаинформация note, a «Другое» note, or a tour's handouts preamble. Two older kinds survive from imports and from xy-cli's default: `normal` and `test`. The kind decides what the board does with the Card. A question or a Theme gets a number, is counted in the List's head, holds question fields, and is what a Test Session plays. A Заголовок restarts the Theme count. Every kind but the handouts preamble goes into the export. One Theme makes its whole tour export as Своя игра. Only a question's Handout goes into the раздатки, and only a question has Versions. Changing a Card's kind rewrites nothing in its text. The list of kinds and these rules live in one table (`internal/cardkind`, read by the browser as `cardkind.ts`).
+_Avoid_: card type in code and docs, since Type is the List's word (the screen still says «Тип карточки»); category
+
 **Theme (тема СИ)**:
 One Своя игра theme, held as a single Card. It has a name, optionally an author and a comment of its own, and a **Ladder** of questions. Those questions are ordinary questions in every respect except their number, which is their point value. A theme is written, tested and judged as a whole: if the 30 turns out to be easier than the 20, that is a fault of the theme rather than of either question. That is why a theme is one Card and not five (ADR-0018).
 _Avoid_: round, category, block
@@ -63,7 +67,7 @@ An author's 1/n part of a question written by several people, added up over the 
 _Avoid_: counting a co-authored question once for each author and calling the result a share.
 
 **Tester List**:
-The «Вопросы тестировали: …» line that a tour carries in its preamble. By ЧГК custom it names the people who tested most of the tour and who therefore should not play it. Somebody who saw only one or two questions may still play, skipping the ones they already know. The list is compiled per tour — a List, or a whole List Group — from Seen on its questions, not from the Board's Sessions in general. It is counted per person: somebody at two sittings that each played half the tour saw all of it.
+The «Вопросы тестировали: …» line that a tour carries in its preamble. By ЧГК custom it names the people who tested most of the tour and who therefore should not play it. Somebody who saw only one or two questions may still play, skipping the ones they already know. The list is compiled per tour — a List, or a whole List Group — from Seen on its questions and Themes, not from the Board's Sessions in general. A Theme counts once, like a question, because it is played and judged as a whole. It is counted per person: somebody at two sittings that each played half the tour saw all of it.
 
 **Declaration**:
 Which people a tour's Tester List names. Before schema v26 it named Sessions, and such a Declaration still reads as everyone who was at them until the tour is declared again. This is Board data rather than a per-reader preference, because the preamble belongs to the tour and ships with the package, so two editors preparing it must see the same answer. If a tour has no Declaration, it falls back to the custom: everyone who saw more than half of its questions.

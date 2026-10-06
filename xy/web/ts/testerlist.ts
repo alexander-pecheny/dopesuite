@@ -14,6 +14,7 @@ import { xyCrypto } from "./crypto.js";
 import { iconed } from "./icons_gen.js";
 import { type Board, type ListPanel, listScope, type PanelShell } from "./panels.js";
 import type { BoardCard, BoardList } from "./unlock.js";
+import { testable } from "./cardkind.js";
 import type { Tester } from "./sessions.js";
 
 const { el, errMsg } = xyApp;
@@ -33,7 +34,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
   interface TourTester { tester: Tester; seen: number }
 
   function tourCoverage(list: BoardList): { cards: BoardCard[]; rows: TourTester[] } {
-    const cards = listScope(board, list).cards.filter((c) => c.kind === "question");
+    const cards = listScope(board, list).cards.filter((c) => testable(c.kind));
     const seen = new Map<string, TourTester>();
     for (const c of cards) {
       for (const t of board.seenOf(c.id)) {
@@ -54,7 +55,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
   // The tests the tour's questions were played at, most questions first, each
   // with how many of them it played.
   function tourSessions(list: BoardList): Array<{ id: number; played: number; testers: Tester[] }> {
-    const cards = listScope(board, list).cards.filter((c) => c.kind === "question");
+    const cards = listScope(board, list).cards.filter((c) => testable(c.kind));
     const played = new Map<number, number>();
     for (const c of cards) for (const sid of board.playingsOf(c.id)) played.set(sid, (played.get(sid) || 0) + 1);
     return [...played.entries()]
@@ -217,7 +218,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
     panel: {
       id: "tester-list", menu: "list", icon: "users",
       label: S.board.testerlist.name(),
-      offered: (scope) => scope.cards.some((c) => c.kind === "question"),
+      offered: (scope) => scope.cards.some((c) => testable(c.kind)),
       open: (scope) => openTesterList(scope.list),
     },
   };

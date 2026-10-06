@@ -13,6 +13,7 @@ import { modal } from "./modal.js";
 import type { Board, BoardPanel } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 import S from "./i18nstrings.js";
+import { numbered, versioned } from "./cardkind.js";
 
 const { el, byId, errMsg } = xyApp;
 
@@ -35,7 +36,7 @@ export function createRewrites(board: Board): Rewrites {
   function collect(next: (c: BoardCard) => string | null): DescChange[] {
     const out: DescChange[] = [];
     for (const c of board.state.cards) {
-      if (c.kind !== "question" && c.kind !== "theme") continue;
+      if (!numbered(c.kind)) continue;
       const desc = next(c);
       if (desc !== null && desc !== c.desc) out.push({ card: c, desc });
     }
@@ -117,7 +118,7 @@ export function createRewrites(board: Board): Rewrites {
 
   async function convertLegacyVersions(): Promise<void> {
     if (!xySync.isOnline()) return;
-    const changes = collect((c) => (c.kind === "question" ? xyVersions.convertLegacyVersions(c.desc) : null));
+    const changes = collect((c) => (versioned(c.kind) ? xyVersions.convertLegacyVersions(c.desc) : null));
     if (!changes.length) return;
     try {
       await apply(changes);

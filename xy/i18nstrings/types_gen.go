@@ -1369,7 +1369,7 @@ type CliBoardsStrings struct {
 
 type CliCardStrings struct {
 	AddEmpty          func() string
-	AddKindFlag       func() string
+	AddKindFlag       func(kinds string) string
 	AddListFlag       func() string
 	AddTextFlag       func() string
 	AddUsage          func() string
@@ -1390,7 +1390,7 @@ type CliCardStrings struct {
 	Removed           func(id string) string
 	RmUsage           func() string
 	SetEmpty          func() string
-	SetKindFlag       func() string
+	SetKindFlag       func(kinds string) string
 	SetTextFlag       func() string
 	SetUsage          func() string
 	Summary           func() string
@@ -4051,8 +4051,6 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Cli.Boards.Usage(), true
 	case "cli.card.add_empty":
 		return s.Cli.Card.AddEmpty(), true
-	case "cli.card.add_kind_flag":
-		return s.Cli.Card.AddKindFlag(), true
 	case "cli.card.add_list_flag":
 		return s.Cli.Card.AddListFlag(), true
 	case "cli.card.add_text_flag":
@@ -4079,8 +4077,6 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Cli.Card.RmUsage(), true
 	case "cli.card.set_empty":
 		return s.Cli.Card.SetEmpty(), true
-	case "cli.card.set_kind_flag":
-		return s.Cli.Card.SetKindFlag(), true
 	case "cli.card.set_text_flag":
 		return s.Cli.Card.SetTextFlag(), true
 	case "cli.card.set_usage":

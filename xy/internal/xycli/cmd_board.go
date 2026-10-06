@@ -10,6 +10,7 @@ import (
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
 
+	"xy/internal/cardkind"
 	"xy/internal/rank"
 )
 
@@ -67,7 +68,7 @@ func cmdBoard(a *app, args []string) error {
 			a.printf("\n [%d] %s%s\n", l.ID, l.Title, group)
 			for _, c := range l.Cards {
 				kind := ""
-				if c.Kind != "normal" && c.Kind != "question" {
+				if c.Kind != cardkind.Normal && c.Kind != cardkind.Question {
 					kind = " (" + c.Kind + ")"
 				}
 				a.printf("   %6d  %s%s\n", c.ID, oneLine(c.Title), kind)
@@ -238,7 +239,7 @@ func cardSet(a *app, args []string) error {
 	file := fs.String("file", "", s.Cli.Card.FileFlag())
 	expect := fs.String("expect", "", s.Cli.Card.ExpectFlag())
 	alias := fs.String("alias", "", s.Cli.Card.AliasFlag())
-	kind := fs.String("kind", "", s.Cli.Card.SetKindFlag())
+	kind := fs.String("kind", "", s.Cli.Card.SetKindFlag(strings.Join(cardkind.Names(), "|")))
 	cardID, err := a.oneID(fs, args, s.Cli.Shared.WhatCard())
 	if err != nil {
 		return err
@@ -316,7 +317,7 @@ func cardAdd(a *app, args []string) error {
 	list := fs.Int64("list", 0, s.Cli.Card.AddListFlag())
 	text := fs.String("text", "", s.Cli.Card.AddTextFlag())
 	file := fs.String("file", "", s.Cli.Card.FileFlag())
-	kind := fs.String("kind", "normal", s.Cli.Card.AddKindFlag())
+	kind := fs.String("kind", cardkind.Normal, s.Cli.Card.AddKindFlag(strings.Join(cardkind.Names(), "|")))
 	alias := fs.String("alias", "", s.Cli.Card.AliasFlag())
 	after := fs.Int64("after", 0, s.Cli.Card.AfterFlag())
 	before := fs.Int64("before", 0, s.Cli.Card.BeforeFlag())

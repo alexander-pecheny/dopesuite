@@ -86,7 +86,8 @@ test-js: build-web
 
 # The kit's guard (root justfile) covers only kit/tags_gen.go; the overlay's
 # tags_gen.go goes just as stale when vocab.json (ours or the kit's) changes,
-# and web/ts/markers_gen.ts when fsource's marker table does.
+# web/ts/markers_gen.ts when fsource's marker table does, and
+# web/ts/cardkind_gen.ts when cardkind's table does.
 generate-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -97,7 +98,8 @@ generate-check:
     trap 'rm -rf "$tmp"' EXIT
     rc=0
     for target in "./internal/ui internal/ui/tags_gen.go" \
-                  "./internal/chgk/fsource web/ts/markers_gen.ts"; do
+                  "./internal/chgk/fsource web/ts/markers_gen.ts" \
+                  "./internal/cardkind web/ts/cardkind_gen.ts"; do
       set -- $target
       gentarget=$1 file=$2
       cp "$file" "$tmp/before"

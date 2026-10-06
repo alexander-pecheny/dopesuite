@@ -7,6 +7,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
+	"xy/internal/cardkind"
 	"xy/internal/chgk/inline"
 )
 
@@ -23,7 +24,6 @@ import (
 // .docx writes it, before the text counts as a handout.
 
 const (
-	preambleKind = "handouts_preamble"
 	// blockSep is chgksuite's .hndt block delimiter.
 	blockSep    = "\n---\n"
 	defaultMeta = "columns: 3"
@@ -105,7 +105,7 @@ func hndt(cards []Card) string {
 	numbers := numberCards(cards)
 	var blocks []string
 	for _, c := range cards {
-		if c.Kind == preambleKind {
+		if c.Kind == cardkind.HandoutsPreamble {
 			if p := strings.TrimSpace(c.Desc); p != "" {
 				blocks = append(blocks, p)
 			}
@@ -113,7 +113,7 @@ func hndt(cards []Card) string {
 		}
 	}
 	for i, c := range cards {
-		if c.Kind != "question" {
+		if !cardkind.Of(c.Kind).Handouts {
 			continue
 		}
 		// Version 1's handout only: a block per Version would print two
@@ -144,16 +144,20 @@ func numberCards(cards []Card) []string {
 	next, nextTheme := 1, 1
 	out := make([]string, len(cards))
 	for i, c := range cards {
-		switch c.Kind {
-		case "theme":
+		k := cardkind.Of(c.Kind)
+		switch k.Counter {
+		case cardkind.CounterTheme:
 			out[i] = strconv.Itoa(nextTheme)
 			nextTheme++
-		case "question":
+			continue
+		case cardkind.CounterQuestion:
 			out[i], next = questionNumber(c.Desc, next)
-		case "heading":
+			continue
+		}
+		if k.Section {
 			nextTheme = 1
-			next = baseReset(c.Desc, next)
-		case "meta":
+		}
+		if k.SetsBase {
 			next = baseReset(c.Desc, next)
 		}
 	}

@@ -10,6 +10,8 @@
 // jstest/listexport_parity.test.js holds the browser to.
 package listexport
 
+import "xy/internal/cardkind"
+
 // Card is one Card as the assembly reads it, in board order.
 type Card struct {
 	ID          int64  `json:"id"`
@@ -38,10 +40,9 @@ func Assemble(cards []Card) Assembly {
 // game is the game a scope exports as: one Theme makes it SI, whatever the
 // List Type says, since a theme's name and author survive only an SI compose.
 func game(cards []Card) string {
-	for _, c := range cards {
-		if c.Kind == "theme" {
-			return "si"
-		}
+	kinds := make([]string, len(cards))
+	for i, c := range cards {
+		kinds[i] = c.Kind
 	}
-	return "chgk"
+	return cardkind.GameOf(kinds)
 }

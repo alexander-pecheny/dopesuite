@@ -1062,7 +1062,7 @@ export type Strings = {
     };
     card: {
       addEmpty: () => string;
-      addKindFlag: () => string;
+      addKindFlag: (kinds: string) => string;
       addListFlag: () => string;
       addTextFlag: () => string;
       addUsage: () => string;
@@ -1083,7 +1083,7 @@ export type Strings = {
       removed: (id: string) => string;
       rmUsage: () => string;
       setEmpty: () => string;
-      setKindFlag: () => string;
+      setKindFlag: (kinds: string) => string;
       setTextFlag: () => string;
       setUsage: () => string;
       summary: () => string;

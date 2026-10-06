@@ -10,6 +10,7 @@ import { xyFind } from "./find.js";
 import { authorsOf as themeAuthorsOf, splitTheme } from "./themes.js";
 import { xyApp } from "./app.js";
 import { iconed } from "./icons_gen.js";
+import { KIND, numbered } from "./cardkind.js";
 import type { ListPanel, PanelShell } from "./panels.js";
 
 const PERCENT = 100;
@@ -47,7 +48,7 @@ export function countAuthors(cards: ReadonlyArray<ChgkCard>, upTo: string, inclu
   cards.forEach((card, i) => {
     const n = numbers[i];
     if (n == null) return;
-    if (card.kind !== "theme") { questions.push({ names: authorsOf(card), number: n }); return; }
+    if (card.kind !== KIND.theme) { questions.push({ names: authorsOf(card), number: n }); return; }
     // A theme is not one question: it is paid by the questions inside it, each
     // numbered «theme.points» so the cutoff and the numbers column still read as
     // positions in the tour. A question's own author wins over the theme's.
@@ -104,7 +105,7 @@ export function createAuthorCountPanel(shell: PanelShell, deps: { copyPlain(text
   return {
     id: "author-count", menu: "list", icon: "calculator",
     label: S.board.authorcount.name(),
-    offered: (scope) => scope.cards.some((c) => c.kind === "question" || c.kind === "theme"),
+    offered: (scope) => scope.cards.some((c) => numbered(c.kind)),
     open(scope) {
       const cards = scope.cards;
       const numbers = scope.numbers.filter((n): n is string => n != null);

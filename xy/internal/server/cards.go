@@ -8,6 +8,8 @@ import (
 
 	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
+
+	"xy/internal/cardkind"
 )
 
 type cardDTO struct {
@@ -100,15 +102,9 @@ type createCardRequest struct {
 	SeenEnc        *string `json:"seen_enc"`         // optional hand corrections to who saw it
 }
 
-// validCardKind allowlists the card kinds the client may set (mirrors the
-// cards.kind CHECK constraint).
-func validCardKind(kind string) bool {
-	switch kind {
-	case "normal", "question", "test", "meta", "heading", "other", "theme", "handouts_preamble":
-		return true
-	}
-	return false
-}
+// validCardKind allowlists the card kinds the client may set: cardkind's
+// table, which TestCardKindCheckMatchesTable holds the cards.kind CHECK to.
+func validCardKind(kind string) bool { return cardkind.Valid(kind) }
 
 func (s *server) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 	_, listID, bid, ok := s.requireChildAccess(w, r, childList)
@@ -126,7 +122,7 @@ func (s *server) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := req.Kind
 	if kind == "" {
-		kind = "normal"
+		kind = cardkind.Normal
 	}
 	if !validCardKind(kind) {
 		httpError(w, http.StatusBadRequest, "bad card kind")

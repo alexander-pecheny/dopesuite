@@ -135,6 +135,12 @@ internal/listexport/   what a List exports as: Assemble(cards) → the 4s (Versi
                        ./internal/listexport -update`, read by jstest/listexport_parity.test.js).
                        The copy stays because a bare .4s is written offline and the board's
                        handout badge is drawn on every render
+internal/cardkind/     the Card Kinds and what each does (numbered and in which count, exported,
+                       carries handouts, versioned, the marker a plain one exports with, restarts
+                       the Theme count, sets the base, makes the tour SI, offered in the kind menu).
+                       One table: the server's allow-list is Valid, tests hold the cards.kind CHECK
+                       and board.dopeui's kind menu to it, listexport and xy-cli ask it, and
+                       `go generate` writes it into web/ts/cardkind_gen.ts for cardkind.ts
 internal/rank/         fractional indexing (keyBetween/After), the Go half of web/ts/rank.ts:
                        the server ranks a Trello upload with it, xy-cli every insert and move
 internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy primitives +
@@ -565,6 +571,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        .hndt, the 4s2hndt port over cards) and handoutForCard (the board's
                        badge). The browser's copy of internal/listexport, which is the
                        reference; both read internal/listexport/testdata/cases.json
+    cardkind.ts        the browser's questions to the Card Kind table (cardkind_gen.ts, GENERATED
+                       from internal/cardkind): numbered, testable, exported, carriesHandouts,
+                       versioned, exportMarker, gameOf, forListType, label. Ask it rather than
+                       comparing c.kind to a literal
     hndt.ts            reading a .hndt back: split into blocks on lines that are exactly
                        "---", parseHndtMetaByQuestion, the preamble, and the Поля model
                        (parseHndtForm/composeHndtForm)

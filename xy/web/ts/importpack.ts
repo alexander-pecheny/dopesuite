@@ -26,6 +26,7 @@ import { sniffBundle } from "./bundleimport.js";
 import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board, BoardPanel } from "./panels.js";
 import S from "./i18nstrings.js";
+import { numbered } from "./cardkind.js";
 
 // Quiet time after the last option change before the preview is redrawn.
 const PREVIEW_DEBOUNCE_MS = 200;
@@ -192,7 +193,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     const numbers = xyChgk.numberQuestionCards(cards);
     body.replaceChildren();
     cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], ctx.imgMap, false)));
-    const qs = cards.filter((c) => c.kind === "question" || c.kind === "theme").length;
+    const qs = cards.filter((c) => numbered(c.kind)).length;
     byId("importCount").textContent = S.import.pack.blockCount(String(cards.length), String(qs));
   }
 

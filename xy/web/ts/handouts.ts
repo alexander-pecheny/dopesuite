@@ -13,6 +13,7 @@ import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
 import { xyHndt } from "./hndt.js";
+import { carriesHandouts, KIND } from "./cardkind.js";
 import { xyListExport } from "./listexport.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
@@ -319,7 +320,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     const { cards, numbers } = handoutsCtx;
     for (let i = 0; i < cards.length; i++) {
       const c = cards[i];
-      if (c.kind !== "question") continue;
+      if (!carriesHandouts(c.kind)) continue;
       const num = numbers[i];
       if (num == null || !(String(num) in byNumber)) continue;
       const meta = byNumber[String(num)] || null;
@@ -340,7 +341,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     if (!handoutsCtx) return;
     const block = xyHndt.preambleOf(byId<HTMLTextAreaElement>("handoutsSource").value);
     const text = block && block !== xyHndt.PREAMBLE_MARKER ? block : null;
-    const card = handoutsCtx.cards.find((c) => c.kind === xyHndt.PREAMBLE_KIND);
+    const card = handoutsCtx.cards.find((c) => c.kind === KIND.handoutsPreamble);
     try {
       if (card && !text) {
         await board.verbs.del("deleteCard", `/api/cards/${card.id}`);
@@ -352,7 +353,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
         const listId = handoutsCtx.listId;
         const first = board.cardsOf(listId)[0];
         const rank = xyRank.keyBetween(null, first ? first.rank : null);
-        const kind = xyHndt.PREAMBLE_KIND;
+        const kind = KIND.handoutsPreamble;
         const res = await board.verbs.create("createCard", `/api/lists/${listId}/cards`, { description_enc: await xyCrypto.encField(board.dk(), text), rank, kind });
         board.state.cards.push({ id: res.id as number, listId, kind, rank, desc: text, handoutMeta: null, alias: null, createdAt: new Date().toISOString() });
       } else return;

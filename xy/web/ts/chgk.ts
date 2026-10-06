@@ -8,6 +8,7 @@
 
 import { MARKERS, type MarkerType } from "./markers_gen.js";
 import S from "./i18nstrings.js";
+import { counter, KIND, restartsThemes, setsBase } from "./cardkind.js";
 export type { MarkerType };
 
 // The block types produced by the line-leading markers, plus "pre" for leading
@@ -148,7 +149,7 @@ function answerText(desc: string | null | undefined): string {
 // a blank card is worse than the old default.
 function previewText(kind: string, desc: string | null | undefined, mode: string | null | undefined): string {
   const text = dropHidden(titleSource(kind, desc, mode));
-  if (kind !== "question" || (mode === "answer" && answerText(desc) !== "")) return text;
+  if (kind !== KIND.question || (mode === "answer" && answerText(desc) !== "")) return text;
   return skipLead(text);
 }
 
@@ -179,16 +180,16 @@ function skipLead(text: string): string {
 }
 
 function titleSource(kind: string, desc: string | null | undefined, mode: string | null | undefined): string {
-  if (kind === "question" && mode === "answer") {
+  if (kind === KIND.question && mode === "answer") {
     const a = answerText(desc);
     if (a !== "") return a;
   }
-  if (kind === "question") return questionText(desc);
+  if (kind === KIND.question) return questionText(desc);
   // A тема is shown by its name; the questions inside it are the card's content,
   // not its title.
-  if (kind === "theme") return blockText(desc, "theme");
-  if (kind === "meta") return blockText(desc, "meta");
-  if (kind === "heading") return blockText(desc, "heading");
+  if (kind === KIND.theme) return blockText(desc, "theme");
+  if (kind === KIND.meta) return blockText(desc, "meta");
+  if (kind === KIND.heading) return blockText(desc, "heading");
   return (desc || "").trim();
 }
 
@@ -235,19 +236,20 @@ export function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<strin
   let nextTheme = 1;
   const out: Array<string | null> = [];
   for (const c of cards) {
-    if (c.kind === "theme") {
+    const seq = counter(c.kind);
+    if (seq === "theme") {
       out.push(String(nextTheme));
       nextTheme++;
       continue;
     }
-    if (c.kind === "heading") nextTheme = 1;
-    if (c.kind === "question") {
+    if (restartsThemes(c.kind)) nextTheme = 1;
+    if (seq === "question") {
       const r = questionNumber(c.desc, next);
       next = r.next;
       out.push(r.num);
       continue;
     }
-    if (c.kind === "heading" || c.kind === "meta") next = baseReset(c.desc, next);
+    if (setsBase(c.kind)) next = baseReset(c.desc, next);
     out.push(null);
   }
   return out;
