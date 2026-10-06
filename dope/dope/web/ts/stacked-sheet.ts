@@ -284,14 +284,15 @@ export function figureData(figure: string, at: Record<string, AddressValue> = {}
 
 // paintFigures writes each figure in a box as textOf says it now reads: a
 // number or a text, or a node that replaces the cell's content (Hamsa's place
-// with its lot). undefined leaves the cell as it is.
+// with its lot). undefined leaves the cell as it is, which is how a caller
+// that updated the cell itself (it is given the cell) keeps a control focused.
 export function paintFigures(
   box: ParentNode | null,
-  textOf: (figure: string, at: DOMStringMap) => string | number | Node | undefined,
+  textOf: (figure: string, at: DOMStringMap, cell: HTMLElement) => string | number | Node | undefined,
 ): void {
   if (!box) return;
   for (const node of box.querySelectorAll<HTMLElement>("[data-figure]")) {
-    const value = textOf(node.dataset.figure || "", node.dataset);
+    const value = textOf(node.dataset.figure || "", node.dataset, node);
     if (value === undefined) continue;
     if (typeof value === "object") {
       node.replaceChildren(value);

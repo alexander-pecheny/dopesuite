@@ -371,13 +371,6 @@ function placeContent(bout: BoutEntry, seat: number, row: hamsa.Row): CellConten
   if (viewer || !id || row.tie < 2) return text;
   const select = document.createElement("select");
   select.className = "hamsa-lot-select";
-  const missing = Boolean(bout.view.finished) && row.lot === null;
-  select.classList.toggle("needs-lot", missing);
-  select.title = missing ? S.hamsa.protocol.lotMissing(seatName(bout.view, seat)) : S.hamsa.protocol.lotTitle(seatName(bout.view, seat));
-  select.setAttribute("aria-label", select.title);
-  select.appendChild(option(0, S.hamsa.draw.none()));
-  for (let lot = 1; lot <= row.tie; lot++) select.appendChild(option(lot, lot));
-  select.value = String(row.lot ?? 0);
   select.addEventListener("change", () => {
     const value = Number(select.value) || null;
     const section = hamsa.sectionOf(stateOf(bout.code), id);
@@ -386,11 +379,32 @@ function placeContent(bout: BoutEntry, seat: number, row: hamsa.Row): CellConten
     page.refresh(bout.code);
   });
   const label = document.createElement("span");
-  label.textContent = text;
   const wrap = document.createElement("span");
   wrap.className = "u-col u-align-center";
   wrap.append(label, select);
+  fillPlace(wrap, bout, seat, row);
   return wrap;
+}
+
+// fillPlace brings a place with its lot in line with the row: the place, the
+// lots the tie allows and the one chosen. It keeps the select, so a host who
+// is on it stays on it when another host's mark repaints the bout.
+function fillPlace(wrap: HTMLElement, bout: BoutEntry, seat: number, row: hamsa.Row): void {
+  const label = wrap.firstElementChild;
+  const select = wrap.querySelector<HTMLSelectElement>(".hamsa-lot-select");
+  if (!label || !select) return;
+  const text = placeText(row.place);
+  if (label.textContent !== text) label.textContent = text;
+  const missing = Boolean(bout.view.finished) && row.lot === null;
+  select.classList.toggle("needs-lot", missing);
+  select.title = missing ? S.hamsa.protocol.lotMissing(seatName(bout.view, seat)) : S.hamsa.protocol.lotTitle(seatName(bout.view, seat));
+  select.setAttribute("aria-label", select.title);
+  if (select.options.length !== row.tie + 1) {
+    select.replaceChildren(option(0, S.hamsa.draw.none()));
+    for (let lot = 1; lot <= row.tie; lot++) select.appendChild(option(lot, lot));
+  }
+  const value = String(row.lot ?? 0);
+  if (select.value !== value) select.value = value;
 }
 
 function themeRow(bout: BoutEntry, id: number, seat: number, group: ThemeGroup, editable: boolean): ScoreTableThemeRow {
@@ -584,7 +598,7 @@ function repaintCells(code: string): void {
   const seats = seatsOf(page.view(code));
   const rows = hamsa.rows(state, seats);
   answers.paint(box, code, (cell) => hamsa.cellMark(state, seats[cell.seat], cell));
-  paintFigures(box, (figure, at) => {
+  paintFigures(box, (figure, at, cell) => {
     const seat = Number(at.seat);
     const row = rows[seat];
     if (!row) return undefined;
@@ -595,6 +609,14 @@ function repaintCells(code: string): void {
     case "bet": return hamsa.betScore(state, row.id);
     case "place": {
       if (!bout) return undefined;
+      // A lot select already there is filled in place, so it keeps focus.
+      // The seat's id is part of the shape, so the select's handler still
+      // writes the right seat.
+      const drawn = cell.querySelector<HTMLElement>(".hamsa-lot-select")?.parentElement;
+      if (drawn && !viewer && row.tie >= 2) {
+        fillPlace(drawn, bout, seat, row);
+        return undefined;
+      }
       const content = placeContent(bout, seat, row);
       return content instanceof Node ? content : String(content ?? "");
     }
