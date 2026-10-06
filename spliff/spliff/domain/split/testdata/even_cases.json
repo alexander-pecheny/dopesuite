@@ -1,0 +1,70 @@
+{
+  "comment": "The even split as a person sees it in the editor. Read by split_test.go (Even over PayerOrder) and by web/jstest/split-parity.test.js (evenShares). joined is the Group's join order, payments are [member, minor] rows as typed, split is the rows under 'For whom', want is what each split row gets.",
+  "even": [
+    {
+      "name": "the odd cent goes to the payer, not to the first name",
+      "total": 1000, "joined": [1, 2, 3], "payments": [[2, 1000]], "split": [1, 2, 3],
+      "want": [333, 334, 333]
+    },
+    {
+      "name": "with no payer yet, split order decides",
+      "total": 1000, "joined": [1, 2, 3], "payments": [], "split": [1, 2, 3],
+      "want": [334, 333, 333]
+    },
+    {
+      "name": "the bigger Payment takes the first spare unit",
+      "total": 100, "joined": [1, 2, 3], "payments": [[1, 40], [3, 60]], "split": [1, 2, 3],
+      "want": [33, 33, 34]
+    },
+    {
+      "name": "equal Payments are ordered by join order",
+      "total": 1000, "joined": [1, 2, 3], "payments": [[3, 500], [2, 500]], "split": [1, 2, 3],
+      "want": [333, 334, 333]
+    },
+    {
+      "name": "two spare units go to both payers, biggest first",
+      "total": 1001, "joined": [1, 2, 3], "payments": [[3, 500], [1, 501]], "split": [1, 2, 3],
+      "want": [334, 333, 334]
+    },
+    {
+      "name": "more spare units than payers: the rest go in split order",
+      "total": 1003, "joined": [1, 2, 3, 4], "payments": [[4, 1003]], "split": [1, 2, 3, 4],
+      "want": [251, 251, 250, 251]
+    },
+    {
+      "name": "four spare units across six, two payers first",
+      "total": 1000, "joined": [1, 2, 3, 4, 5, 6], "payments": [[5, 600], [2, 400]], "split": [1, 2, 3, 4, 5, 6],
+      "want": [167, 167, 167, 166, 167, 166]
+    },
+    {
+      "name": "a payer outside the split is skipped",
+      "total": 1001, "joined": [1, 2, 3], "payments": [[2, 1001]], "split": [1, 3],
+      "want": [501, 500]
+    },
+    {
+      "name": "split order is the order of the rows, not join order",
+      "total": 1001, "joined": [1, 2, 3, 5], "payments": [[5, 1001]], "split": [3, 1, 2],
+      "want": [334, 334, 333]
+    },
+    {
+      "name": "two rows of one payer count as one Payment",
+      "total": 1001, "joined": [1, 2, 3], "payments": [[1, 300], [2, 401], [1, 300]], "split": [1, 2, 3],
+      "want": [334, 334, 333]
+    },
+    {
+      "name": "exact division leaves nothing over",
+      "total": 900, "joined": [1, 2, 3], "payments": [[1, 900]], "split": [1, 2, 3],
+      "want": [300, 300, 300]
+    },
+    {
+      "name": "one person takes the lot",
+      "total": 1234, "joined": [7], "payments": [[7, 1234]], "split": [7],
+      "want": [1234]
+    },
+    {
+      "name": "a zero-exponent currency is no special case",
+      "total": 1000, "joined": [1, 2, 3], "payments": [[1, 1000]], "split": [1, 2, 3],
+      "want": [334, 333, 333]
+    }
+  ]
+}

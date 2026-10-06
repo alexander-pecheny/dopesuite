@@ -1,22 +1,26 @@
 // Package split turns a way of typing Shares into the Shares themselves.
 //
-// Only amounts are ever stored (spliff/CONTEXT.md): an even split and a
-// percentage split are form conveniences, and this is where the convenience
-// becomes the amounts. Three people and a 10.00 bill is 3.34/3.33/3.33, and
-// WHICH of the three gets the extra cent has to be the same on everybody's
-// phone — so the leftover minor units are handed out by largest remainder, and
-// an equal remainder is broken by a stated order: the payers first, in
-// descending Payment, then everyone else in split order.
+// Only amounts are ever stored (spliff/CONTEXT.md). An even split is a form
+// convenience, and this is where the convenience becomes the amounts. Three
+// people and a 10.00 bill is 3.34/3.33/3.33, and WHICH of the three gets the
+// extra cent has to be the same on everybody's phone. So the leftover minor
+// units are handed out by largest remainder, and an equal remainder is broken
+// by a stated order: the payers first, in descending Payment, then everyone
+// else in split order.
+//
+// The editor computes the even split in the browser (web/ts/txform.ts), and
+// this package is the reference it is checked against: testdata/even_cases.json
+// is read by this package's tests and by web/jstest/split-parity.test.js. The
+// server does not recompute a submitted split. It stores the amounts it is
+// sent, because an even split is only one way of typing them.
 package split
 
 import (
 	"errors"
 	"math/big"
+	"slices"
 	"sort"
 )
-
-// percentWhole is the whole bill, in percent.
-const percentWhole = 100
 
 // Share is one Member's computed part of a derived split.
 type Share struct {
@@ -24,16 +28,37 @@ type Share struct {
 	Minor    int64
 }
 
-var (
-	// ErrWeights says the weights do not line up with the Members.
-	ErrWeights = errors.New("split: one weight per member is required")
-	// ErrPercent says a percentage is negative, or they sum past 100 — which
-	// would make the Shares exceed the total, and Shares never may.
-	ErrPercent = errors.New("split: percentages must be non-negative and sum to at most 100")
-)
+// ErrWeights says the weights do not line up with the Members.
+var ErrWeights = errors.New("split: one weight per member is required")
 
-// Even splits total equally across members. The odd minor units go one each in
-// priority order (payers by descending Payment, then split order).
+// PayerOrder is the order spare minor units go to the payers in: by
+// descending Payment, equal Payments by join order. payments are the rows as
+// typed, so one Member's two rows count as one Payment, and a row of nothing
+// is not a Payment at all. joined is the Group's Members in join order.
+func PayerOrder(payments []Share, joined []int64) []int64 {
+	paid := map[int64]int64{}
+	order := []int64{}
+	for _, p := range payments {
+		if p.Minor <= 0 {
+			continue
+		}
+		if _, seen := paid[p.MemberID]; !seen {
+			order = append(order, p.MemberID)
+		}
+		paid[p.MemberID] += p.Minor
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		if paid[order[a]] != paid[order[b]] {
+			return paid[order[a]] > paid[order[b]]
+		}
+		return slices.Index(joined, order[a]) < slices.Index(joined, order[b])
+	})
+	return order
+}
+
+// Even splits total equally across members, in their order. The odd minor
+// units go one each in priority order: payers (as PayerOrder lists them),
+// then split order.
 func Even(total int64, members []int64, payers []int64) []Share {
 	n := len(members)
 	if n == 0 {
@@ -47,30 +72,8 @@ func Even(total int64, members []int64, payers []int64) []Share {
 	return shares
 }
 
-// ByPercent splits total by percentage. Percentages that sum to less than 100
-// leave the rest Unclaimed, which is a normal state and not an error; summing
-// past 100 is refused, because a Share may never exceed the total.
-func ByPercent(total int64, members []int64, percents []*big.Rat, payers []int64) ([]Share, error) {
-	if len(percents) != len(members) {
-		return nil, ErrWeights
-	}
-	whole := big.NewRat(percentWhole, 1)
-	sum := new(big.Rat)
-	weights := make([]*big.Rat, len(percents))
-	for i, p := range percents {
-		if p == nil || p.Sign() < 0 {
-			return nil, ErrPercent
-		}
-		sum.Add(sum, p)
-		weights[i] = new(big.Rat).Quo(p, whole)
-	}
-	if sum.Cmp(whole) > 0 {
-		return nil, ErrPercent
-	}
-	return Allocate(total, members, weights, payers)
-}
-
-// Allocate is the primitive underneath both: each Member's weight is the
+// Allocate is the primitive under Even and under the ledger's spreading of
+// Unclaimed across the payers: each Member's weight is the
 // fraction of the total they answer for, and the exact fractions are rounded
 // into whole minor units by largest remainder.
 //
@@ -103,7 +106,7 @@ func Allocate(total int64, members []int64, weights []*big.Rat, payers []int64) 
 	}
 
 	// What the shares SHOULD add up to: the whole total when the weights cover
-	// it, less when a percentage split leaves part of it Unclaimed.
+	// it, less when they leave part of it Unclaimed.
 	target := roundNearest(sum)
 	leftover := target - floors
 
@@ -148,8 +151,8 @@ func rank(members, payers []int64) []int {
 
 // roundNearest rounds a non-negative rational to the nearest integer, halves
 // up. It is only ever asked about the SUM of the weighted shares, which is the
-// whole total in every split that covers it — the rounding only bites on a
-// percentage split that does not, where a half minor unit belongs to nobody.
+// whole total in every split that covers it. The rounding only bites on
+// weights that do not cover it, where a half minor unit belongs to nobody.
 func roundNearest(r *big.Rat) int64 {
 	twice := new(big.Rat).Mul(r, big.NewRat(2, 1))
 	twice.Add(twice, big.NewRat(1, 1))

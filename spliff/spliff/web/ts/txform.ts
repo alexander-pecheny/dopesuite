@@ -7,9 +7,10 @@
 // a convenience that writes amounts into them, not a second kind of bill.
 //
 // The allocation is the browser's copy of spliff/spliff/domain/split, and it
-// must agree with it minor unit for minor unit — the ordering rule (payers by
+// must agree with it minor unit for minor unit. The ordering rule (payers by
 // descending Payment, then row order) is what makes two phones showing one bill
-// show the same numbers.
+// show the same numbers. Both sides read domain/split/testdata/even_cases.json
+// in their tests (split_test.go and jstest/split-parity.test.js).
 
 export interface Entry {
   member_id: number;
