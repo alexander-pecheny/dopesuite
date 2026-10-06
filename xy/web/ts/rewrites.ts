@@ -6,6 +6,7 @@
 
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { sealPayload } from "./eventpayload.js";
 import { xySync } from "./sync.js";
 import { xyVersions } from "./versions.js";
 import { xyTypo } from "./typo.js";
@@ -48,7 +49,7 @@ export function createRewrites(board: Board): Rewrites {
     for (const ch of changes) {
       await board.verbs.patch("patchCard", `/api/cards/${ch.card.id}`, {
         description_enc: await xyCrypto.encField(key, ch.desc),
-        desc_event_enc: await xyCrypto.encField(key, JSON.stringify({ before: ch.card.desc, after: ch.desc })),
+        desc_event_enc: await sealPayload(key, "desc_edit", { before: ch.card.desc, after: ch.desc, author: "" }),
       });
       ch.card.desc = ch.desc;
     }

@@ -22,6 +22,7 @@
 //    kind from its chgksuite markers, description history → desc_edit events.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { encodePayload } from "./eventpayload.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
 import { xyTrello } from "./trellomodel.js";
@@ -324,7 +325,7 @@ function trelloBundle(source: ImportSource, name: string): { bundle: Bundle; byt
           for (const e of xyTrello.descEdits(source.history.descEdits.get(c.id), desc)) {
             event({
               card_id: cardId, session_id: null, type: "desc_edit", created_at: e.date,
-              payload: JSON.stringify({ before: e.before, after: e.after, author: e.author }),
+              payload: encodePayload("desc_edit", { before: e.before, after: e.after, author: e.author }),
             });
           }
         }

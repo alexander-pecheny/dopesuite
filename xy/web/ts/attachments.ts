@@ -8,6 +8,7 @@ import { overlayStack } from "./overlaystack.js";
 import { modal } from "./modal.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { sealPayload } from "./eventpayload.js";
 import { xySync } from "./sync.js";
 import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
@@ -289,7 +290,7 @@ function pickReplacement(att: NamedAttachment, name: string): void {
       fd.append("meta", JSON.stringify({
         filename_enc: await xyCrypto.encField(key, name),
         mime, lossless,
-        event_payload_enc: await xyCrypto.encField(key, JSON.stringify({ file: name })),
+        event_payload_enc: await sealPayload(key, "attach_replace", { file: name }),
       }));
       fd.append("blob", new Blob([await xyCrypto.encBytes(key, bytes)], { type: "application/octet-stream" }), "blob");
       const res = await fetch(`/api/attachments/${att.id}`, { method: "PUT", credentials: "same-origin", body: fd });
@@ -334,7 +335,7 @@ async function uploadAttachment(file: File, lossless: boolean, name: string): Pr
   fd.append("meta", JSON.stringify({
     filename_enc: await xyCrypto.encField(key, name),
     mime, lossless,
-    event_payload_enc: await xyCrypto.encField(key, JSON.stringify({ file: name })),
+    event_payload_enc: await sealPayload(key, "attach_add", { file: name }),
   }));
   fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
   const res = await fetch(`/api/cards/${oc}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
@@ -547,7 +548,7 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
   if (!confirm(S.attachments.confirm.remove(name))) return;
   if (!xySync.requireOnline(S.attachments.status.offlineDelete(), ui.message)) return;
   try {
-    const ev = await xyCrypto.encField(deps.mustDK(), JSON.stringify({ file: name }));
+    const ev = await sealPayload(deps.mustDK(), "attach_remove", { file: name });
     await jdelete(`/api/attachments/${att.id}?event_payload_enc=${encodeURIComponent(ev)}`);
     const oc = deps.openCardId();
     if (oc != null) {

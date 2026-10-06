@@ -76,11 +76,7 @@ func cmdSearch(a *app, args []string) error {
 			byCard[card.ID] = card.ListID
 		}
 		for _, cm := range comments {
-			plain, err := b.DK.DecField(cm.PayloadEnc)
-			if err != nil {
-				continue
-			}
-			text, _ := decodeCommentPayload(plain)
+			text := EventText(b.DK.OpenPayload(KindComment, cm.PayloadEnc))
 			for _, line := range strings.Split(text, "\n") {
 				if strings.TrimSpace(line) != "" && matches(line) {
 					hits = append(hits, searchHit{CardID: cm.CardID, ListID: byCard[cm.CardID], Where: "comment", Line: strings.TrimSpace(line)})

@@ -1,7 +1,6 @@
 package xycli
 
 import (
-	"encoding/json"
 	"mime"
 	"os"
 	"path/filepath"
@@ -153,11 +152,7 @@ func attachmentAdd(a *app, args []string) error {
 		return err
 	}
 	// The timeline entry that says an attachment arrived, in the browser's shape.
-	event, err := json.Marshal(map[string]string{"file": filename})
-	if err != nil {
-		return err
-	}
-	eventEnc, err := b.DK.EncField(string(event))
+	eventEnc, err := b.DK.SealPayload(KindAttachAdd, AttachPayload{File: filename})
 	if err != nil {
 		return err
 	}

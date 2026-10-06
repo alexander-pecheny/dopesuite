@@ -1,0 +1,387 @@
+{
+ "_comment": "Timeline event payloads, plaintext. Read by internal/xycli/eventpayload_test.go and jstest/eventpayload.test.js; edit by hand. decode: what a stored row reads as, historic shapes included. encode: the exact bytes a writer produces.",
+ "decode": [
+  {
+   "name": "a plain comment",
+   "kind": "comment",
+   "raw": "просто текст",
+   "want": {
+    "kind": "comment",
+    "text": "просто текст",
+    "images": []
+   }
+  },
+  {
+   "name": "a comment carrying images",
+   "kind": "comment",
+   "raw": "{\"xy\":1,\"t\":\"см. картинку\",\"img\":[7,9]}",
+   "want": {
+    "kind": "comment",
+    "text": "см. картинку",
+    "images": [
+     7,
+     9
+    ]
+   }
+  },
+  {
+   "name": "a comment that only looks like JSON",
+   "kind": "comment",
+   "raw": "{\"a\":1}",
+   "want": {
+    "kind": "comment",
+    "text": "{\"a\":1}",
+    "images": []
+   }
+  },
+  {
+   "name": "the marker without its text is a typed comment",
+   "kind": "comment",
+   "raw": "{\"xy\":1}",
+   "want": {
+    "kind": "comment",
+    "text": "{\"xy\":1}",
+    "images": []
+   }
+  },
+  {
+   "name": "another marker value is a typed comment",
+   "kind": "comment",
+   "raw": "{\"xy\":2,\"t\":\"x\",\"img\":[]}",
+   "want": {
+    "kind": "comment",
+    "text": "{\"xy\":2,\"t\":\"x\",\"img\":[]}",
+    "images": []
+   }
+  },
+  {
+   "name": "image ids that are not numbers are dropped",
+   "kind": "comment",
+   "raw": "{\"xy\":1,\"t\":\"a\",\"img\":[3,\"x\",null]}",
+   "want": {
+    "kind": "comment",
+    "text": "a",
+    "images": [
+     3
+    ]
+   }
+  },
+  {
+   "name": "a comment opening with a brace that is not JSON",
+   "kind": "comment",
+   "raw": "{не json",
+   "want": {
+    "kind": "comment",
+    "text": "{не json",
+    "images": []
+   }
+  },
+  {
+   "name": "an empty comment",
+   "kind": "comment",
+   "raw": "",
+   "want": {
+    "kind": "comment",
+    "text": "",
+    "images": []
+   }
+  },
+  {
+   "name": "a description edit from the browser",
+   "kind": "desc_edit",
+   "raw": "{\"before\":\"Вопрос 1\",\"after\":\"Вопрос 2\"}",
+   "want": {
+    "kind": "desc_edit",
+    "before": "Вопрос 1",
+    "after": "Вопрос 2",
+    "author": ""
+   }
+  },
+  {
+   "name": "a description edit from the old xy-cli: sorted keys, HTML escaped",
+   "kind": "desc_edit",
+   "raw": "{\"after\":\"\\u003cb\\u003e\",\"before\":\"a \\u0026 b\"}",
+   "want": {
+    "kind": "desc_edit",
+    "before": "a & b",
+    "after": "<b>",
+    "author": ""
+   }
+  },
+  {
+   "name": "an imported edit names its author",
+   "kind": "desc_edit",
+   "raw": "{\"before\":\"\",\"after\":\"текст\",\"author\":\"ann\"}",
+   "want": {
+    "kind": "desc_edit",
+    "before": "",
+    "after": "текст",
+    "author": "ann"
+   }
+  },
+  {
+   "name": "an imported edit with no author",
+   "kind": "desc_edit",
+   "raw": "{\"before\":\"a\",\"after\":\"b\",\"author\":\"\"}",
+   "want": {
+    "kind": "desc_edit",
+    "before": "a",
+    "after": "b",
+    "author": ""
+   }
+  },
+  {
+   "name": "an empty object is an empty edit",
+   "kind": "desc_edit",
+   "raw": "{}",
+   "want": {
+    "kind": "desc_edit",
+    "before": "",
+    "after": "",
+    "author": ""
+   }
+  },
+  {
+   "name": "a description edit that is not JSON",
+   "kind": "desc_edit",
+   "raw": "garbage",
+   "want": {
+    "kind": "unreadable"
+   }
+  },
+  {
+   "name": "a description edit that is not an object",
+   "kind": "desc_edit",
+   "raw": "[]",
+   "want": {
+    "kind": "unreadable"
+   }
+  },
+  {
+   "name": "a description edit with a wrong type",
+   "kind": "desc_edit",
+   "raw": "{\"before\":1,\"after\":\"b\"}",
+   "want": {
+    "kind": "unreadable"
+   }
+  },
+  {
+   "name": "a label with its id",
+   "kind": "label_add",
+   "raw": "{\"label\":\"взяли\",\"label_id\":12}",
+   "want": {
+    "kind": "label_add",
+    "label": "взяли",
+    "labelId": 12
+   }
+  },
+  {
+   "name": "a label from before ids were stored",
+   "kind": "label_add",
+   "raw": "{\"label\":\"старая\"}",
+   "want": {
+    "kind": "label_add",
+    "label": "старая",
+    "labelId": null
+   }
+  },
+  {
+   "name": "a removed label",
+   "kind": "label_remove",
+   "raw": "{\"label\":\"взяли\",\"label_id\":12}",
+   "want": {
+    "kind": "label_remove",
+    "label": "взяли",
+    "labelId": 12
+   }
+  },
+  {
+   "name": "a null label id",
+   "kind": "label_remove",
+   "raw": "{\"label\":\"x\",\"label_id\":null}",
+   "want": {
+    "kind": "label_remove",
+    "label": "x",
+    "labelId": null
+   }
+  },
+  {
+   "name": "a label id that is a string",
+   "kind": "label_add",
+   "raw": "{\"label\":\"x\",\"label_id\":\"5\"}",
+   "want": {
+    "kind": "unreadable"
+   }
+  },
+  {
+   "name": "a label that is not JSON",
+   "kind": "label_add",
+   "raw": "взяли",
+   "want": {
+    "kind": "unreadable"
+   }
+  },
+  {
+   "name": "an attachment added",
+   "kind": "attach_add",
+   "raw": "{\"file\":\"photo.webp\"}",
+   "want": {
+    "kind": "attach_add",
+    "file": "photo.webp"
+   }
+  },
+  {
+   "name": "an attachment replaced",
+   "kind": "attach_replace",
+   "raw": "{\"file\":\"photo.webp\"}",
+   "want": {
+    "kind": "attach_replace",
+    "file": "photo.webp"
+   }
+  },
+  {
+   "name": "an attachment removed, HTML escaped by the old xy-cli",
+   "kind": "attach_remove",
+   "raw": "{\"file\":\"a\\u003cb\\u003e.png\"}",
+   "want": {
+    "kind": "attach_remove",
+    "file": "a<b>.png"
+   }
+  },
+  {
+   "name": "an attachment that is not JSON",
+   "kind": "attach_add",
+   "raw": "photo.webp",
+   "want": {
+    "kind": "unreadable"
+   }
+  },
+  {
+   "name": "a reaction",
+   "kind": "reaction",
+   "raw": "👍",
+   "want": {
+    "kind": "reaction",
+    "emoji": "👍"
+   }
+  },
+  {
+   "name": "a reaction with a variation selector",
+   "kind": "reaction",
+   "raw": "❤️",
+   "want": {
+    "kind": "reaction",
+    "emoji": "❤️"
+   }
+  },
+  {
+   "name": "an empty reaction",
+   "kind": "reaction",
+   "raw": "",
+   "want": {
+    "kind": "unreadable"
+   }
+  },
+  {
+   "name": "a kind the codec does not know",
+   "kind": "move",
+   "raw": "{}",
+   "want": {
+    "kind": "unreadable"
+   }
+  }
+ ],
+ "encode": [
+  {
+   "name": "a plain comment stays a plain string",
+   "kind": "comment",
+   "data": {
+    "text": "просто текст",
+    "images": []
+   },
+   "raw": "просто текст"
+  },
+  {
+   "name": "a comment with images is the envelope",
+   "kind": "comment",
+   "data": {
+    "text": "см. картинку",
+    "images": [
+     7,
+     9
+    ]
+   },
+   "raw": "{\"xy\":1,\"t\":\"см. картинку\",\"img\":[7,9]}"
+  },
+  {
+   "name": "a description edit, nothing HTML escaped",
+   "kind": "desc_edit",
+   "data": {
+    "before": "a <b> & c",
+    "after": "«ёлочки» — тире",
+    "author": ""
+   },
+   "raw": "{\"before\":\"a <b> & c\",\"after\":\"«ёлочки» — тире\"}"
+  },
+  {
+   "name": "an imported edit keeps its author",
+   "kind": "desc_edit",
+   "data": {
+    "before": "",
+    "after": "x",
+    "author": "ann"
+   },
+   "raw": "{\"before\":\"\",\"after\":\"x\",\"author\":\"ann\"}"
+  },
+  {
+   "name": "a label with its id",
+   "kind": "label_add",
+   "data": {
+    "label": "взяли",
+    "labelId": 12
+   },
+   "raw": "{\"label\":\"взяли\",\"label_id\":12}"
+  },
+  {
+   "name": "a label without an id",
+   "kind": "label_remove",
+   "data": {
+    "label": "старая",
+    "labelId": null
+   },
+   "raw": "{\"label\":\"старая\"}"
+  },
+  {
+   "name": "an attachment",
+   "kind": "attach_add",
+   "data": {
+    "file": "photo.webp"
+   },
+   "raw": "{\"file\":\"photo.webp\"}"
+  },
+  {
+   "name": "an attachment replaced",
+   "kind": "attach_replace",
+   "data": {
+    "file": "a\"b.png"
+   },
+   "raw": "{\"file\":\"a\\\"b.png\"}"
+  },
+  {
+   "name": "an attachment removed",
+   "kind": "attach_remove",
+   "data": {
+    "file": "photo.webp"
+   },
+   "raw": "{\"file\":\"photo.webp\"}"
+  },
+  {
+   "name": "a reaction is the emoji itself",
+   "kind": "reaction",
+   "data": {
+    "emoji": "🔥"
+   },
+   "raw": "🔥"
+  }
+ ]
+}

@@ -12,6 +12,7 @@
 import { overlayStack } from "./overlaystack.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { sealPayload } from "./eventpayload.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
 import { xyVersions } from "./versions.js";
@@ -1745,7 +1746,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const dk = mustDK();
     const body: OpBody = { description_enc: await xyCrypto.encField(dk, newDesc) };
     if (newDesc !== card.desc) {
-      body.desc_event_enc = await xyCrypto.encField(dk, JSON.stringify({ before: card.desc, after: newDesc }));
+      body.desc_event_enc = await sealPayload(dk, "desc_edit", { before: card.desc, after: newDesc, author: "" });
     }
     // Persist handout-gen settings (field #10) when they changed: "" clears them.
     if (newMeta !== (card.handoutMeta || null)) {

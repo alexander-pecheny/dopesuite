@@ -8,10 +8,9 @@
 // which the orchestrator wires back to the carddetail factory's API.
 import { modal } from "./modal.js";
 import { anchorPopup } from "./popup.js";
-import { decodeCommentPayload, encodeCommentPayload } from "./commentpayload.js";
-export { decodeCommentPayload, encodeCommentPayload } from "./commentpayload.js";
+import { UNREADABLE, commentText, openPayloads, sealPayload } from "./eventpayload.js";
+import type { CommentPayload, OpenedPayload } from "./eventpayload.js";
 import { xyApp } from "./app.js";
-import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyDiff } from "./diff.js";
 import { xyVersions } from "./versions.js";
@@ -198,6 +197,12 @@ export interface Timeline {
 }
 
 // ---- pure decision helpers (exported for tests) ----
+
+// asComment is a comment event's payload, or an empty comment when it would not
+// open: the row still renders, since replies may hang off it.
+export function asComment(p: OpenedPayload): CommentPayload {
+  return p.kind === "comment" ? p : { kind: "comment", text: "", images: [] };
+}
 
 // eventVerb words an event kind as a neutral noun phrase — gender-agnostic,
 // since an author's grammatical gender is unknown. The timeline and the 🔔 share it.
@@ -465,20 +470,11 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // is dropped when the card closes (resetFilter), so a card always opens the way
   // /profile says — the selects are a look at this card, not a stored preference.
   let filter: FeedFilter = "all";
-  // decPayloads decrypts a whole run of events in one call — a card with a long
+  // decPayloads opens a whole run of events in one call — a card with a long
   // history used to cost one WebCrypto round trip per event on every open, every
   // feed render and every thread. A payload that will not open (or a board with
-  // no key yet) comes back null and renders as empty, which is what the
-  // per-event try/catch this replaces did.
-  async function decPayloads(events: readonly CardEvent[]): Promise<(string | null)[]> {
-    const dk = deps.getDK();
-    if (!dk) return events.map(() => null);
-    try {
-      return await xyCrypto.decFields(dk, events.map((e) => e.payload_enc || ""));
-    } catch (_) {
-      return events.map(() => null);
-    }
-  }
+  // no key yet) comes back unreadable and renders as empty.
+  const decPayloads = (events: readonly CardEvent[]): Promise<OpenedPayload[]> => openPayloads(deps.getDK(), events);
 
   // Reactions never make rows — they render as chips on their target.
   const shown = (events: readonly CardEvent[]): CardEvent[] =>
@@ -486,7 +482,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
 
   // The open card's decrypted payloads (id → text) and aggregated reaction
   // chips, rebuilt by load(); renderEvent reads both (quotes, chips).
-  let payloadOf = new Map<number, string>();
+  let payloadOf = new Map<number, OpenedPayload>();
   let openChips = new Map<number, ReactionChip[]>();
 
   const rosterNames = (): string[] =>
@@ -554,17 +550,16 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     for (const e of events) e.reply_count = replies.get(e.id) || 0;
     // Every payload is decrypted up front: a reply quotes its parent and a
     // reaction chip needs its emoji, whichever of the two the filter shows.
-    const payloads = new Map<number, string>();
-    for (const [i, text] of (await decPayloads(events)).entries()) {
-      if (text !== null) payloads.set(events[i].id, text);
-    }
+    const payloads = new Map<number, OpenedPayload>();
+    for (const [i, p] of (await decPayloads(events)).entries()) payloads.set(events[i].id, p);
     if (cardId === deps.card.openCardId()) {
       openCardEvents = events;
       payloadOf = payloads;
       openChips = aggregateReactions(
-        events.filter((e) => e.type === "reaction" && !e.deleted).map((e) => ({
-          id: e.id, emoji: payloads.get(e.id) || "", author: e.author_user_id ?? null, target: e.reply_to_id ?? null,
-        })).filter((r) => r.emoji),
+        events.filter((e) => e.type === "reaction" && !e.deleted).map((e) => {
+          const p = payloads.get(e.id);
+          return { id: e.id, emoji: p?.kind === "reaction" ? p.emoji : "", author: e.author_user_id ?? null, target: e.reply_to_id ?? null };
+        }).filter((r) => r.emoji),
         state().me?.user_id ?? null);
       renderExcerptCount();
     }
@@ -572,7 +567,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const frag = document.createDocumentFragment();
     frag.append(cardReactionsRow());
     for (const ev of shown(events).reverse()) {
-      frag.append(renderEvent(ev, payloads.get(ev.id) || ""));
+      frag.append(renderEvent(ev, payloads.get(ev.id) ?? UNREADABLE));
     }
     // Oldest goes last in the newest-first timeline.
     const born = cardCreatedNode(cardId);
@@ -596,7 +591,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       if (mine) await jdelete(`/api/reactions/${mine}`);
       else {
         await jpost(`/api/cards/${oc}/reactions`, {
-          payload_enc: await xyCrypto.encField(mustDK(), emoji), target_id: targetId,
+          payload_enc: await sealPayload(mustDK(), "reaction", { emoji }), target_id: targetId,
         });
       }
       msg.textContent = "";
@@ -667,7 +662,22 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       el("div", { class: "tl-meta", text: S.timeline.feed.cardCreated(new Date(card.createdAt).toLocaleString("ru-RU")) }));
   }
 
-  function renderEvent(ev: CardEvent, payload: string): HTMLElement {
+  // trailText words a metadata-trail entry: the verb, then the label or file it
+  // was done to. A label is named live while it still exists and by the name
+  // frozen into the payload once it doesn't, which keeps a deleted label's
+  // history readable.
+  function trailText(type: string, payload: OpenedPayload): string {
+    let detail = "";
+    if (payload.kind === "label_add" || payload.kind === "label_remove") {
+      detail = (payload.labelId != null ? deps.labelName(payload.labelId) : "") || payload.label;
+    } else if (payload.kind === "attach_add" || payload.kind === "attach_remove" || payload.kind === "attach_replace") {
+      detail = payload.file;
+    }
+    const verb = eventVerb(type);
+    return detail ? `${verb}: ${detail}` : verb;
+  }
+
+  function renderEvent(ev: CardEvent, payload: OpenedPayload): HTMLElement {
     const when = new Date(ev.created_at).toLocaleString("ru-RU");
     const who = author(ev);
     const meta = (rest: string): string => (who ? `${who} · ${rest}` : rest);
@@ -708,7 +718,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         }));
         // The parent's first line and a half, so the answer carries its
         // question — old replies included, since this is derived at render.
-        const parentText = decodeCommentPayload(payloadOf.get(rootId) || "").text;
+        const parentText = commentText(payloadOf.get(rootId) ?? UNREADABLE);
         if (parent && !parent.deleted && parentText) {
           quoteNode = el("button", {
             class: "tl-quote", type: "button", title: S.timeline.thread.openTitle(),
@@ -730,10 +740,10 @@ export function createTimeline(deps: TimelineDeps): Timeline {
           }, icon("link")),
           el("button", {
             class: "tl-menu", type: "button", title: S.timeline.comment.menuTitle(), "aria-haspopup": "true",
-            onclick: (e: Event) => commentMenu(e.currentTarget as HTMLElement, ev, payload),
+            onclick: (e: Event) => commentMenu(e.currentTarget as HTMLElement, ev, asComment(payload)),
           }, icon("ellipsis"))));
       }
-      const decoded = decodeCommentPayload(payload);
+      const decoded = asComment(payload);
       wrap.append(metaRow);
       if (quoteNode) wrap.append(quoteNode);
       wrap.append(mentionBody(decoded.text));
@@ -741,24 +751,16 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       const chips = ev.id > 0 ? chipsRow(ev.id, false) : null;
       if (chips) wrap.append(chips);
       if ((ev.reply_count || 0) > 0) wrap.append(threadButton(ev));
-    } else if (ev.type === "desc_edit") {
-      let diff: { before?: string; after?: string; author?: string } = {};
-      try { diff = JSON.parse(payload) as { before?: string; after?: string; author?: string }; } catch (_) {}
+    } else if (payload.kind === "desc_edit") {
       // An imported edit (Trello history) names its author inside the payload —
       // they are not an xy user, so author_user_id has nobody to point at.
-      const editor = diff.author ? `${diff.author} · ` : meta("");
+      const editor = payload.author ? `${payload.author} · ` : meta("");
       wrap.append(el("div", { class: "tl-meta", text: editor + S.timeline.feed.descEditMeta(when) }),
-        renderDescDiff(diff.before || "", diff.after || ""));
+        renderDescDiff(payload.before, payload.after));
     } else {
-      let info: { label?: string; file?: string; label_id?: number } = {};
-      try { info = JSON.parse(payload) as { label?: string; file?: string; label_id?: number }; } catch (_) {}
-      const verb = eventVerb(ev.type);
-      // Live name when the label still exists, the frozen one when it doesn't —
-      // which keeps a deleted label's history readable, the property freezing the
-      // name was there to protect.
-      const live = info.label_id != null ? deps.labelName(info.label_id) : "";
-      const detail = live || info.label || info.file || "";
-      wrap.append(el("div", { class: "tl-meta", text: meta(`${verb}${detail ? ": " + detail : ""} · ${when}`) }));
+      // The metadata trail, and any entry whose payload will not open: the verb
+      // and, when there is one, what it was done to.
+      wrap.append(el("div", { class: "tl-meta", text: meta(`${trailText(ev.type, payload)} · ${when}`) }));
     }
     return wrap;
   }
@@ -881,7 +883,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const ordered = orderFeedEvents(shown(openCardEvents || []), feedOrder());
     const texts = await decPayloads(ordered);
     for (const [i, ev] of ordered.entries()) {
-      const node = renderEvent(ev, ev.deleted ? "" : texts[i] || "");
+      const node = renderEvent(ev, ev.deleted ? UNREADABLE : texts[i]);
       // The panel's timeline already owns tlev-{id}; these are a SECOND rendering of
       // the same events, so they must not duplicate those ids — deep links and
       // highlightComment resolve by id and would land on whichever came first.
@@ -930,7 +932,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const shownEvents = [root, ...replies].filter((ev): ev is CardEvent => !!ev);
     const texts = await decPayloads(shownEvents);
     for (const [i, ev] of shownEvents.entries()) {
-      const decoded = decodeCommentPayload(ev.deleted ? "" : texts[i] || "");
+      const decoded = asComment(ev.deleted ? UNREADABLE : texts[i]);
       const node = el("div", { class: "thread-item" + (ev.id === rootId ? " thread-root" : "") },
         el("div", { class: "tl-meta" },
           ev.deleted ? S.timeline.comment.deleted()
@@ -955,7 +957,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       const dk = mustDK();
       const sid = deps.testSession?.(oc) ?? null;
       await deps.post("comment", `/api/cards/${oc}/comments`, {
-        payload_enc: await xyCrypto.encField(dk, text), reply_to_id: threadRootId,
+        payload_enc: await sealPayload(dk, "comment", { text, images: [] }), reply_to_id: threadRootId,
         mentions: resolveMentions(text, state().members || []),
         ...(sid != null ? { session_id: sid } : {}),
       });
@@ -979,7 +981,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // handlePatchComment). All three are online-only, like attachment mutations: a
   // queued edit of a comment that has not itself synced yet is a temp-id knot the
   // outbox has no reason to learn.
-  function commentMenu(anchor: HTMLElement, ev: CardEvent, payload: string): void {
+  function commentMenu(anchor: HTMLElement, ev: CardEvent, payload: CommentPayload): void {
     const st = state();
     const mine = !!(st.me && ev.author_user_id === st.me.user_id);
     // Replying opens the thread (with its composer) — for a comment with no
@@ -1043,14 +1045,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
 
   // startCommentEdit swaps the comment's body for a textarea in place, so the
   // surrounding timeline stays put while it is edited.
-  function startCommentEdit(ev: CardEvent, payload: string, wrap: HTMLElement | null): void {
+  function startCommentEdit(ev: CardEvent, decoded: CommentPayload, wrap: HTMLElement | null): void {
     if (!wrap || wrap.querySelector(".tl-edit")) return;
     const body = wrap.querySelector(".tl-comment");
     if (!body) return;
     const ta = el("textarea", { class: "card-desc comment-input tl-edit", spellcheck: "false" }) as HTMLTextAreaElement;
     // The textarea edits the TEXT; images the comment carries ride along
     // untouched, and mentions are re-resolved from what the text now says.
-    const decoded = decodeCommentPayload(payload);
     ta.value = decoded.text;
     const save = el("button", {
       class: "btn btn-small", type: "button", text: S.timeline.comment.save(),
@@ -1058,7 +1059,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         const text = ta.value.trim();
         if (!text) return;
         await commentAction(async () => jpatch(`/api/comments/${ev.id}`, {
-          payload_enc: await xyCrypto.encField(mustDK(), encodeCommentPayload(text, decoded.images)),
+          payload_enc: await sealPayload(mustDK(), "comment", { text, images: decoded.images }),
           mentions: resolveMentions(text, state().members || []),
         }));
       },
@@ -1120,7 +1121,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       // tagged from its own ⋯ menu once it exists.
       const sid = deps.testSession?.(oc) ?? null;
       await deps.post("comment", `/api/cards/${oc}/comments`, {
-        payload_enc: await xyCrypto.encField(mustDK(), encodeCommentPayload(text, draftImages)),
+        payload_enc: await sealPayload(mustDK(), "comment", { text, images: draftImages }),
         mentions: resolveMentions(text, state().members || []),
         ...(sid != null ? { session_id: sid } : {}),
       });
@@ -1199,7 +1200,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const excerpts = excerptComments(openCardEvents || []);
     const texts = await decPayloads(excerpts);
     for (const [i, ev] of excerpts.entries()) {
-      const text = texts[i] || "";
+      const text = commentText(texts[i]);
       body.append(el("div", { class: "excerpt" },
         el("div", { class: "excerpt-meta", text: `${author(ev)} · ${new Date(ev.created_at).toLocaleString("ru-RU")}` }),
         el("div", { class: "excerpt-text", text })));

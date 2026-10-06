@@ -16,6 +16,7 @@
 
 import { xyApp, ISO_DATE_LEN } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { sealPayload } from "./eventpayload.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
 import { xyRank } from "./rank.js";
@@ -338,7 +339,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       fd.append("meta", JSON.stringify({
         filename_enc: await xyCrypto.encField(key, img.name),
         mime: img.mime, lossless: true,
-        event_payload_enc: await xyCrypto.encField(key, JSON.stringify({ file: img.name })),
+        event_payload_enc: await sealPayload(key, "attach_add", { file: img.name }),
       }));
       fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
       const res = await fetch(`/api/cards/${cardId}/attachments`, {

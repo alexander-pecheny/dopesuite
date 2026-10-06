@@ -3,8 +3,9 @@
 // newest first, each row wording the event the way the Timeline does and opening
 // its card. Read tracking is online-only best-effort, never through the outbox.
 import { xyApp } from "./app.js";
-import { xyCrypto } from "./crypto.js";
-import { decodeCommentPayload, eventAuthor, eventVerb } from "./timeline.js";
+import { eventAuthor, eventVerb } from "./timeline.js";
+import { UNREADABLE, commentText, openPayload } from "./eventpayload.js";
+import type { OpenedPayload } from "./eventpayload.js";
 import type { Board } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 import type { DataKey } from "./crypto.js";
@@ -118,9 +119,9 @@ export function createBell(board: Board, ui: BellUI, deps: BellDeps): Bell {
       const bodyWrap = el("div", { class: "notif-row-body" },
         el("div", { class: "notif-row-meta", text: `${eventAuthor(ev, board.state.me, board.state.memberNames)} ${verb} · ${deps.cardTitle(card)} · ${when}` }));
       if (ev.type === "comment" || ev.type === "reaction") {
-        let preview = "";
-        try { preview = await xyCrypto.decField(deps.mustDK(), ev.payload_enc || ""); } catch (_) {}
-        if (ev.type === "comment") preview = decodeCommentPayload(preview).text;
+        let opened: OpenedPayload = UNREADABLE;
+        try { opened = await openPayload(deps.mustDK(), ev.type, ev.payload_enc); } catch (_) {}
+        const preview = commentText(opened);
         bodyWrap.append(el("div", { class: "notif-row-preview u-clip-fade", text: deriveTitle(preview, PREVIEW_CHARS) }));
       }
       row.append(bodyWrap);

@@ -1,7 +1,6 @@
 package xycli
 
 import (
-	"encoding/json"
 	"sort"
 	"strings"
 
@@ -193,25 +192,4 @@ func (c Card) Title() string {
 		return strings.TrimSpace(line)
 	}
 	return ""
-}
-
-// ---- comment payloads ----
-
-// A comment's payload is a plain string until it carries images; then it is
-// {"xy":1,"t":text,"img":[…]}. The marker is what keeps a hand-typed JSON
-// comment from being mistaken for the envelope (web/ts/commentpayload.ts).
-type commentPayload struct {
-	XY  int     `json:"xy"`
-	T   string  `json:"t"`
-	Img []int64 `json:"img"`
-}
-
-func decodeCommentPayload(raw string) (text string, images []int64) {
-	if strings.HasPrefix(raw, "{") {
-		var p commentPayload
-		if err := json.Unmarshal([]byte(raw), &p); err == nil && p.XY == 1 {
-			return p.T, p.Img
-		}
-	}
-	return raw, nil
 }

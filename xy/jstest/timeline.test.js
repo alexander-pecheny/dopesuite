@@ -9,7 +9,7 @@ import {
   eventAuthor, replyCountsOf, orderThreadReplies, orderFeedEvents,
   feedOrderOf, diffViewOf, excerptComments, fullDiffSides,
   feedFilterOf, feedFilterKeeps, readBucketsOf, linkSegments,
-  resolveMentions, encodeCommentPayload, decodeCommentPayload, aggregateReactions,
+  resolveMentions, asComment, aggregateReactions,
   onSubmitOnce,
 } from "../web/assets/static/dist/timeline.js";
 
@@ -234,20 +234,12 @@ test("punctuation and dots in usernames resolve", () => {
   assert.deepEqual(resolveMentions("привет, @b.c-d_e!", roster), [3]);
 });
 
-// ---- comment payload codec (text + attachment refs in one envelope) ----
+// ---- comment rows (the payload codec itself is eventpayload.test.js) ----
 
-test("a plain comment stays a plain string both ways", () => {
-  assert.equal(encodeCommentPayload("просто текст", []), "просто текст");
-  assert.deepEqual(decodeCommentPayload("просто текст"), { text: "просто текст", images: [] });
-});
-
-test("images ride the payload as JSON and fold back out", () => {
-  const raw = encodeCommentPayload("см. картинку", [7, 9]);
-  assert.deepEqual(decodeCommentPayload(raw), { text: "см. картинку", images: [7, 9] });
-});
-
-test("a comment that merely looks like JSON is not mistaken for the envelope", () => {
-  assert.deepEqual(decodeCommentPayload(`{"a":1}`), { text: `{"a":1}`, images: [] });
+test("a comment row whose payload would not open renders as an empty comment", () => {
+  assert.deepEqual(asComment({ kind: "unreadable" }), { kind: "comment", text: "", images: [] });
+  const c = { kind: "comment", text: "t", images: [3] };
+  assert.equal(asComment(c), c);
 });
 
 // ---- reaction chips ----

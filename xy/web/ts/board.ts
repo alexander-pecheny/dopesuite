@@ -35,7 +35,8 @@ import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
 import { createUnlock, listType } from "./unlock.js";
 import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from "./dragrank.js";
-import { createTimeline, decodeCommentPayload, eventAuthor } from "./timeline.js";
+import { createTimeline, eventAuthor } from "./timeline.js";
+import { openPayloads, sealPayload } from "./eventpayload.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
 import { createDwell, liveTestMode } from "./testmode.js";
 import { createChangePass } from "./changepass.js";
@@ -1513,14 +1514,15 @@ const sessionsPanel = createSessionsPanel({
   setTestMode,
   loadNotes: async (sessionId) => {
     const raw = (await fetchJSON(`/api/sessions/${sessionId}/timeline`)) as Array<{
-      id?: number; payload_enc: string; card_id?: number; created_at: string;
+      id?: number; type?: string; payload_enc: string; card_id?: number; created_at: string;
       author_user_id?: number | null; author_username?: string | null;
     }>;
-    const texts = await xyCrypto.decFields(mustDK(), raw.map((e) => e.payload_enc || ""));
+    const opened = await openPayloads(mustDK(), raw.map((e) => ({ type: e.type || "comment", payload_enc: e.payload_enc })));
     const out: Array<{ text: string; card: number | null; when: string; author: string }> = [];
     for (const [i, e] of raw.entries()) {
-      const text = texts[i];
-      if (text === null) continue;
+      const p = opened[i];
+      if (p.kind !== "comment") continue;
+      const text = p.text;
       // Same author resolution the card's feed uses, so the two read alike.
       out.push({ text, card: e.card_id ?? null, when: e.created_at, author: eventAuthor(e, state.me, state.memberNames) });
     }
@@ -1528,7 +1530,7 @@ const sessionsPanel = createSessionsPanel({
   },
   addNote: async (sessionId, text) => {
     await post("addSessionNote", `/api/sessions/${sessionId}/comments`, {
-      payload_enc: await xyCrypto.encField(mustDK(), text),
+      payload_enc: await sealPayload(mustDK(), "comment", { text, images: [] }),
     });
   },
   modal,

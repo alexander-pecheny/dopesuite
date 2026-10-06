@@ -3,7 +3,6 @@ package xycli
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"strings"
 
 	xystrings "xy/i18nstrings"
@@ -275,11 +274,7 @@ func cardSet(a *app, args []string) error {
 			// real change only, as the browser's rewrites do. The server writes the
 			// row, but only from a payload the client seals: before/after are
 			// plaintext it never sees.
-			event, err := json.Marshal(map[string]string{"before": card.Desc, "after": desc})
-			if err != nil {
-				return err
-			}
-			eventEnc, err := b.DK.EncField(string(event))
+			eventEnc, err := b.DK.SealPayload(KindDescEdit, DescEditPayload{Before: card.Desc, After: desc})
 			if err != nil {
 				return err
 			}

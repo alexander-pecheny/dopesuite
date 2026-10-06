@@ -8,6 +8,7 @@
 import S from "./i18nstrings.js";
 import { xyApp, ISO_DATE_LEN } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { sealPayload } from "./eventpayload.js";
 import { xySync } from "./sync.js";
 import { xyRank } from "./rank.js";
 import { byRank } from "./dragrank.js";
@@ -207,7 +208,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
       fd.append("meta", JSON.stringify({
         filename_enc: await xyCrypto.encField(targetDk, name),
         mime: att.mime, lossless: !!att.lossless, is_excerpt: !!att.is_excerpt,
-        event_payload_enc: await xyCrypto.encField(targetDk, JSON.stringify({ file: name })),
+        event_payload_enc: await sealPayload(targetDk, "attach_add", { file: name }),
       }));
       fd.append("blob", new Blob([recipher], { type: "application/octet-stream" }), "blob");
       try { await fetch(`/api/cards/${newCardId}/attachments`, { method: "POST", credentials: "same-origin", body: fd }); } catch (_) {}

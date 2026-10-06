@@ -1,7 +1,6 @@
 package xycli
 
 import (
-	"encoding/json"
 	"strings"
 
 	xystrings "xy/i18nstrings"
@@ -162,15 +161,12 @@ func labelAssign(a *app, args []string) error {
 
 	// The metadata trail: the timeline says which label came and went, in the same
 	// shape the browser writes.
-	eventType := "label_add"
+	eventType := KindLabelAdd
 	if *remove {
-		eventType = "label_remove"
+		eventType = KindLabelRemove
 	}
-	payload, err := json.Marshal(map[string]any{"label": target.Name, "label_id": target.ID})
-	if err != nil {
-		return err
-	}
-	payloadEnc, err := b.DK.EncField(string(payload))
+	labelID := target.ID
+	payloadEnc, err := b.DK.SealPayload(eventType, LabelPayload{Label: target.Name, LabelID: &labelID})
 	if err != nil {
 		return err
 	}

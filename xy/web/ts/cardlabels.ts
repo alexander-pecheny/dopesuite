@@ -5,7 +5,7 @@
 // names. Two pickers over one filtered popup; every write goes up as the card's
 // whole set through the board's verbs.
 import { xyApp } from "./app.js";
-import { xyCrypto } from "./crypto.js";
+import { sealPayload } from "./eventpayload.js";
 import { sortLabels } from "./labelsedit.js";
 import { colorField, LABEL_COLORS } from "./colorpick.js";
 import { copyName, type Tester, testerNames, testersFromList } from "./sessions.js";
@@ -328,10 +328,11 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     const rest = board.state.cardLabels.filter((a) =>
       a.cardId !== card.id || a.labelId !== lbl.id || a.sessionId !== sessionId);
     const next = adding ? [...rest, { cardId: card.id, labelId: lbl.id, sessionId }] : rest;
+    const kind = adding ? "label_add" : "label_remove";
     try {
       const events = [{
-        type: adding ? "label_add" : "label_remove",
-        payload_enc: await xyCrypto.encField(deps.mustDK(), JSON.stringify({ label: lbl.name, label_id: lbl.id })),
+        type: kind,
+        payload_enc: await sealPayload(deps.mustDK(), kind, { label: lbl.name, labelId: lbl.id }),
       }];
       await board.verbs.put("setCardLabels", `/api/cards/${card.id}/labels`, {
         labels: next.filter((a) => a.cardId === card.id).map((a) => ({ label_id: a.labelId, session_id: a.sessionId })),

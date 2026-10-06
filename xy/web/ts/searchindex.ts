@@ -16,7 +16,7 @@ import { xyChgk } from "./chgk.js";
 import { xyCrypto } from "./crypto.js";
 import type { DataKey } from "./crypto.js";
 import { byRank } from "./dragrank.js";
-import { decodeCommentPayload } from "./commentpayload.js";
+import { commentText, openPayloads } from "./eventpayload.js";
 import { xyFind } from "./find.js";
 import type { Haystack, Snippet } from "./find.js";
 import { xyStore } from "./store.js";
@@ -178,14 +178,12 @@ interface CommentRow { id: number; card_id: number; payload_enc: string }
 
 async function decryptComments(dk: DataKey, rows: CommentRow[]): Promise<IndexComment[]> {
   const live = rows.filter((row) => row.card_id && row.payload_enc);
-  const payloads = await xyCrypto.decFields(dk, live.map((row) => row.payload_enc));
+  // Search wants a comment's words, not the envelope a comment with images is
+  // stored in; one that will not open reads as "" and is skipped.
+  const payloads = await openPayloads(dk, live.map((row) => ({ type: "comment", payload_enc: row.payload_enc })));
   const out: IndexComment[] = [];
   for (let i = 0; i < live.length; i++) {
-    const payload = payloads[i];
-    if (payload === null) continue;
-    // decodeCommentPayload: a comment carrying images stores {text, refs} —
-    // search wants the words, not the envelope.
-    const text = decodeCommentPayload(payload).text;
+    const text = commentText(payloads[i]);
     if (text) out.push({ card: live[i].card_id, id: live[i].id, text });
   }
   return out;

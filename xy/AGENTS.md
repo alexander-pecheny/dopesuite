@@ -125,7 +125,8 @@ internal/xycli/        xy-cli: the board from the shell, for an agent. A second 
                        internal/listexport (and so sending the .hndt too); unlocked data keys live in a 0600
                        state file (ADR-0016). Commands: boards/unlock, board show, list, card
                        (4s on stdin/stdout, always with a desc_edit entry), comment (@mentions
-                       resolved), label, search (folded), source, export, attachment
+                       resolved), label, search (folded), source, export, attachment. Timeline
+                       payloads go through eventpayload.go, web/ts/eventpayload.ts's twin
 internal/listexport/   what a List exports as: Assemble(cards) → the 4s (Versions folded, kind
                        markers, blank lines as (LINEBREAK)), the game (a Theme makes it SI) and
                        the .hndt (preamble + one block per question with a Handout; the label
@@ -466,6 +467,14 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     timeline.ts        the card's лента kernel: load/render, comments (drafts with images,
                        replies, выписки), edit diffs, the expanded feed, filters and view
                        prefs; nodes as a TimelineUI record
+    eventpayload.ts    the codec for a Timeline event's payload: sealPayload(dk, kind, data)
+                       and openPayloads(dk, events) → a typed value per kind, {kind:
+                       "unreadable"} for one that will not open. Every writer and reader of
+                       payload_enc goes through it (the comment envelope, the raw-string
+                       reaction, label/attachment/desc_edit JSON). Its Go twin is
+                       internal/xycli/eventpayload.go; both read
+                       internal/xycli/testdata/eventpayload.json, historic shapes included.
+                       Bundles and cross-board copies carry the plaintext as it is
     attachments.ts     the attachment kernel: the per-card list cache and the decrypted
                        bytes/URL LRU keyed id:rev, upload (opt-in WebP), replace, delete,
                        paste-to-attach, download with the offline mirror, the lightbox;
