@@ -13,6 +13,7 @@ import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
 import { xyHndt } from "./hndt.js";
+import { xyListExport } from "./listexport.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { modal } from "./modal.js";
@@ -43,7 +44,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     // question numbers continuous across the group (numberQuestionCards over the
     // concatenated cards), matching the board + docx export.
     const cards = scope.cards;
-    const { numbers, source } = xyHndt.hndtOf(cards);
+    const { numbers, source } = xyListExport.hndtOf(cards);
     handoutsCtx = { cards, numbers, title: scope.title, listId: scope.lists[0].id };
     byId<HTMLTextAreaElement>("handoutsSource").value = source;
     clearHandoutsPdf();
@@ -542,7 +543,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     // settings by its number, and every theme has a № 10. The inline
     // «[handout: …]» still reaches the .docx and the .pdf; it is
     // the PDF generation that is not modelled at this grain yet.
-    offered: (scope) => scope.game !== "si" && xyHndt.hndtOf(scope.cards).source.trim() !== "",
+    offered: (scope) => scope.game !== "si" && xyListExport.hndtOf(scope.cards).source.trim() !== "",
     open: openHandouts,
   };
 }

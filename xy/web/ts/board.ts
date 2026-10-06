@@ -29,6 +29,7 @@ import { createCardLabels } from "./cardlabels.js";
 import { createBell } from "./bell.js";
 import { xyVersions } from "./versions.js";
 import { xyHndt } from "./hndt.js";
+import { xyListExport } from "./listexport.js";
 import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
@@ -892,7 +893,7 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const labelRow = el("div", { class: "kcard-labels" });
   // Derived from the text, so it leads the row: nobody put it there and nobody
   // can take it off, unlike everything after it.
-  if (card.kind === "question" && xyHndt.handoutForCard(card.desc)) {
+  if (card.kind === "question" && xyListExport.handoutForCard(card.desc)) {
     labelRow.append(el("span", { class: "kcard-handout", title: S.board.card.handoutTitle() }, icon("file-text")));
   }
   // Which questions the group has not settled on yet — the card itself shows

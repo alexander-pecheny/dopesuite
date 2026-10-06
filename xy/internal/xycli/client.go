@@ -13,6 +13,8 @@ import (
 	"time"
 
 	xystrings "xy/i18nstrings"
+
+	"xy/internal/listexport"
 )
 
 const (
@@ -192,6 +194,7 @@ type cardDTO struct {
 	DescEnc   string  `json:"description_enc"`
 	Rank      string  `json:"rank"`
 	AliasEnc  *string `json:"alias_enc,omitempty"`
+	MetaEnc   *string `json:"handout_meta_enc,omitempty"`
 	CreatedAt string  `json:"created_at"`
 }
 
@@ -407,9 +410,10 @@ func (c *Client) UploadAttachment(cardID int64, meta map[string]any, blob []byte
 
 // ExportPack renders a 4s source into the requested formats server-side; the
 // answer is the bare file when one format was asked for, a zip when several.
-func (c *Client) ExportPack(source, name, formats, game string, images map[string][]byte) ([]byte, string, error) {
+func (c *Client) ExportPack(a listexport.Assembly, name, formats string, images map[string][]byte) ([]byte, string, error) {
 	return c.postForm("/api/export/pack", func(mw *multipart.Writer) error {
-		for _, field := range [][2]string{{"source", source}, {"filename", name}, {"formats", formats}, {"game", game}} {
+		fields := [][2]string{{"source", a.Source}, {"filename", name}, {"formats", formats}, {"game", a.Game}, {"hndt", a.Hndt}}
+		for _, field := range fields {
 			if err := mw.WriteField(field[0], field[1]); err != nil {
 				return err
 			}

@@ -7,6 +7,8 @@ import (
 
 	xystrings "xy/i18nstrings"
 
+	"xy/internal/listexport"
+
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
@@ -34,13 +36,23 @@ type List struct {
 }
 
 type Card struct {
-	ID        int64
-	ListID    int64
-	Kind      string
-	Desc      string
-	Alias     string
-	Rank      string
-	CreatedAt string
+	ID          int64
+	ListID      int64
+	Kind        string
+	Desc        string
+	Alias       string
+	HandoutMeta string
+	Rank        string
+	CreatedAt   string
+}
+
+// exportCards is cards as the List assembly reads them.
+func exportCards(cards []Card) []listexport.Card {
+	out := make([]listexport.Card, len(cards))
+	for i, c := range cards {
+		out[i] = listexport.Card{ID: c.ID, Kind: c.Kind, Desc: c.Desc, HandoutMeta: c.HandoutMeta}
+	}
+	return out
 }
 
 type Label struct {
@@ -81,6 +93,11 @@ func LoadBoard(c *Client, dk DataKey, boardID int64) (*Board, error) {
 		if c.AliasEnc != nil {
 			if card.Alias, err = dk.DecField(*c.AliasEnc); err != nil {
 				return nil, corei18n.User(s.Cli.Snapshot.CardAlias(itoa(c.ID), err.Error()))
+			}
+		}
+		if c.MetaEnc != nil {
+			if card.HandoutMeta, err = dk.DecField(*c.MetaEnc); err != nil {
+				return nil, corei18n.User(s.Cli.Snapshot.CardHandoutMeta(itoa(c.ID), err.Error()))
 			}
 		}
 		b.Cards = append(b.Cards, card)
@@ -161,13 +178,13 @@ func (c Card) Title() string {
 		return c.Alias
 	}
 	for _, line := range strings.Split(c.Desc, "\n") {
-		if _, isVersion := versionLineName(line); isVersion {
+		if _, isVersion := listexport.VersionLineName(line); isVersion {
 			continue
 		}
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		if _, rest, ok := matchMarker(line); ok {
+		if _, rest, ok := listexport.MatchMarker(line); ok {
 			if rest != "" {
 				return rest
 			}

@@ -1254,6 +1254,7 @@ ${usage}
     snapshot: {
       card: (id: string, err: string) => `карточка ${id}: ${err}`,
       cardAlias: (id: string, err: string) => `карточка ${id} (алиас): ${err}`,
+      cardHandoutMeta: (id: string, err: string) => `карточка ${id} (настройки раздатки): ${err}`,
       cardNotFound: (id: string) => `карточка ${id} не найдена на доске`,
       group: (id: string, err: string) => `группа ${id}: ${err}`,
       label: (id: string, err: string) => `метка ${id}: ${err}`,
@@ -1277,10 +1278,6 @@ ${usage}
       summary: () => "ввести пароль доски и запомнить её ключ",
       usage: () => "xy-cli unlock <id|имя>\nСпрашивает пароль доски и запоминает её ключ.",
       wrongPassphrase: () => "неверный пароль доски",
-    },
-    versions: {
-      fieldLabel: (n: string) => `версия ${n}: `,
-      questionLabel: (n: string) => `Версия ${n}: `,
     },
   },
   docs: {

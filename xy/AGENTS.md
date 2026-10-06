@@ -121,11 +121,20 @@ cmd/chgksuite/         the Go side of chgksuite's own CLI over internal/chgk: `p
                        Nothing in xy uses it; see ../chgksuite_go_rewrite.md
 internal/xycli/        xy-cli: the board from the shell, for an agent. A second implementation
                        of the Envelope (scrypt KEK + AES-GCM, parity-tested both ways against
-                       crypto.ts) and of the export's 4s assembly (parity corpus from export.ts),
-                       over an API-token client (ADR-0015); unlocked data keys live in a 0600
+                       crypto.ts), over an API-token client (ADR-0015), exporting through
+                       internal/listexport (and so sending the .hndt too); unlocked data keys live in a 0600
                        state file (ADR-0016). Commands: boards/unlock, board show, list, card
                        (4s on stdin/stdout, always with a desc_edit entry), comment (@mentions
                        resolved), label, search (folded), source, export, attachment
+internal/listexport/   what a List exports as: Assemble(cards) → the 4s (Versions folded, kind
+                       markers, blank lines as (LINEBREAK)), the game (a Theme makes it SI) and
+                       the .hndt (preamble + one block per question with a Handout; the label
+                       must open an unbracketed one — xy's rule, not handout.Generate's). The
+                       REFERENCE: xy-cli calls it, and web/ts/listexport.ts is the browser's
+                       copy, held to testdata/cases.json (written by `go test
+                       ./internal/listexport -update`, read by jstest/listexport_parity.test.js).
+                       The copy stays because a bare .4s is written offline and the board's
+                       handout badge is drawn on every render
 internal/rank/         fractional indexing (keyBetween/After), the Go half of web/ts/rank.ts:
                        the server ranks a Trello upload with it, xy-cli every insert and move
 internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy primitives +
@@ -501,7 +510,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        into a new list (or a group of lists, one per «## …» tour), each
                        (img …) attached to the card that references it; a .docx first opens
                        the verification screen (editable 4s left, live preview right)
-    export.ts          «Экспорт»: exportSource (the cards' 4s, versions folded) + the
+    export.ts          «Экспорт»: the list's 4s and .hndt (listexport.ts) + the
                        referenced images to /api/export/pack — one format from the
                        dropdown, or several ticked into a zip: .docx, .docx со
                        спойлерами (the screen's text, answers behind dots, for a
@@ -515,7 +524,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        group, then the NDJSON stream rendered as a log. What was typed is kept
                        in IndexedDB (store.ts «meta»): the bot per device, the target per board,
                        and beside it the ids Telegram resolved
-    handouts.ts        «Вёрстка раздаток»: hndtOf (hndt.ts) → editable .hndt, as Поля (a
+    handouts.ts        «Вёрстка раздаток»: hndtOf (listexport.ts) → editable .hndt, as Поля (a
                        form per handout: question, внутри, columns/rows, text or picture,
                        alignment — parseHndtForm/composeHndtForm, written straight back
                        into the text) or as the .hndt itself →
@@ -552,9 +561,13 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     versions.ts        the Version algebra (ADR-0007): split/count/body/name, add/
                        remove/promote, composeVersions (the export's one question with
                        every wording page-broken) and the legacy (PAGEBREAK) conversion
-    hndt.ts            раздатки's .hndt side: generateHndt (the 4s2hndt port),
-                       handoutForCard, parseHndtMetaByQuestion — one document of it is in
-                       the Go/TS parity corpus
+    listexport.ts      what a List exports as: exportSource (the 4s), exportGame, hndtOf (the
+                       .hndt, the 4s2hndt port over cards) and handoutForCard (the board's
+                       badge). The browser's copy of internal/listexport, which is the
+                       reference; both read internal/listexport/testdata/cases.json
+    hndt.ts            reading a .hndt back: split into blocks on lines that are exactly
+                       "---", parseHndtMetaByQuestion, the preamble, and the Поля model
+                       (parseHndtForm/composeHndtForm)
     markers_gen.ts     GENERATED from fsource's markerMapping (`go generate
                        ./internal/chgk/fsource`, guarded by generate-check): the 4s line
                        markers and their element types, longest first. Go and TS cannot

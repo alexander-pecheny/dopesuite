@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyChgk } from "../web/assets/static/dist/chgk.js";
 import { xyHndt } from "../web/assets/static/dist/hndt.js";
+import { xyListExport } from "../web/assets/static/dist/listexport.js";
 import { MARKERS } from "../web/assets/static/dist/markers_gen.js";
 import corpus from "../internal/chgk/fsource/testdata/parity.json" with { type: "json" };
 
@@ -32,9 +33,11 @@ test("imgRefs agrees with the inline tokenizer's img runs", () => {
   }
 });
 
-test("generateHndt writes the corpus .hndt byte for byte, and reads its settings back", () => {
+test("the browser writes the corpus .hndt byte for byte, and reads its settings back", () => {
   const { cards, numbers, metas, text, blocks } = corpus.hndt;
-  assert.equal(xyHndt.generateHndt(cards, numbers, metas), text);
+  const out = xyListExport.hndtOf(cards.map((c) => ({ ...c, handoutMeta: metas[c.id] ?? null })));
+  assert.deepEqual(out.numbers, numbers);
+  assert.equal(out.source, text);
   assert.deepEqual(xyHndt.parseHndtMetaByQuestion(text), { "1": "columns: 3", "3": "columns: 2\nfont_size: 14", "4": "columns: 3" });
   assert.equal(blocks.length, 3, "and the server parsed it into one block per handout");
 });

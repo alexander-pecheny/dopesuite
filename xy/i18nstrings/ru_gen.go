@@ -1596,6 +1596,9 @@ var RU = Strings{
 			CardAlias: func(id string, err string) string {
 				return fmt.Sprintf("карточка %s (алиас): %s", id, err)
 			},
+			CardHandoutMeta: func(id string, err string) string {
+				return fmt.Sprintf("карточка %s (настройки раздатки): %s", id, err)
+			},
 			CardNotFound: func(id string) string {
 				return fmt.Sprintf("карточка %s не найдена на доске", id)
 			},
@@ -1627,10 +1630,6 @@ var RU = Strings{
 				return "xy-cli unlock <id|имя>\nСпрашивает пароль доски и запоминает её ключ."
 			},
 			WrongPassphrase: func() string { return "неверный пароль доски" },
-		},
-		Versions: CliVersionsStrings{
-			FieldLabel:    func(n string) string { return fmt.Sprintf("версия %s: ", n) },
-			QuestionLabel: func(n string) string { return fmt.Sprintf("Версия %s: ", n) },
 		},
 	},
 	Docs: DocsStrings{

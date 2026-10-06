@@ -2,33 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyHndt } from "../web/assets/static/dist/hndt.js";
 
-const { generateHndt, parseHndtMetaByQuestion } = xyHndt;
-
-test("generateHndt emits a block per question with a handout", () => {
-  const cards = [
-    { id: 1, kind: "question", desc: "> Текст раздатки\n? Вопрос 1\n! ответ" },
-    { id: 2, kind: "question", desc: "? Без раздатки\n! ответ" },
-    { id: 3, kind: "question", desc: "> (img foto.png)\n? Что тут?\n! х" },
-  ];
-  const numbers = ["1", "2", "3"];
-  const out = generateHndt(cards, numbers, {});
-  const blocks = out.split("\n---\n");
-  assert.equal(blocks.length, 2);
-  assert.equal(blocks[0], "for_question: 1\ncolumns: 3\n\nТекст раздатки");
-  assert.equal(blocks[1], "for_question: 3\ncolumns: 3\n\nimage: foto.png");
-});
-
-test("generateHndt uses saved per-question settings", () => {
-  const cards = [{ id: 7, kind: "question", desc: "> Раздатка\n? Q\n! a" }];
-  const out = generateHndt(cards, ["4"], { 7: "columns: 2\nrows: 5" });
-  assert.equal(out, "for_question: 4\ncolumns: 2\nrows: 5\n\nРаздатка");
-});
-
-test("generateHndt reads a legacy inline handout bracket", () => {
-  const cards = [{ id: 1, kind: "question", desc: "? Текст [Раздаточный материал: листок] вопроса\n! a" }];
-  const out = generateHndt(cards, ["1"], {});
-  assert.equal(out, "for_question: 1\ncolumns: 3\n\nлисток");
-});
+// What a list's cards write is listexport's, checked against the Go side in
+// listexport_parity.test.js; this file is reading a .hndt back.
+const { parseHndtMetaByQuestion } = xyHndt;
 
 test("parseHndtMetaByQuestion strips content, keeps settings by question", () => {
   const hndt = "for_question: 1\ncolumns: 2\nrows: 3\n\nтекст\n---\nfor_question: 4\ncolumns: 3\n\nimage: a.png";
@@ -40,16 +16,6 @@ test("parseHndtMetaByQuestion strips content, keeps settings by question", () =>
 test("parseHndtMetaByQuestion keeps question_label, so the style survives the modal", () => {
   const hndt = "for_question: 1\ncolumns: 3\nquestion_label: inside\n\nтекст";
   assert.equal(parseHndtMetaByQuestion(hndt)["1"], "columns: 3\nquestion_label: inside");
-});
-
-test("generateHndt reads a handout that has no bracket, as a parsed .docx writes it", () => {
-  const cards = [
-    { id: 1, kind: "question", desc: "? Раздаточный материал.\n(img pic.png)\nЧто изображено?\n! а" },
-    { id: 2, kind: "question", desc: "? Раздаточный материал\nThere is ******* of ******.\nВосстановите слова.\n! б" },
-    { id: 3, kind: "question", desc: "? Без картинки.\n! в" },
-  ];
-  const out = generateHndt(cards, ["1", "2", "3"], {});
-  assert.equal(out, "for_question: 1\ncolumns: 3\n\nimage: pic.png\n---\nfor_question: 2\ncolumns: 3\n\nThere is ******* of ******.\nВосстановите слова.");
 });
 
 test("the Поля model gives back a generated document unchanged", () => {
@@ -78,4 +44,10 @@ test("an empty block, a page break to chgksuite, survives the form", () => {
   const blocks = xyHndt.parseHndtForm(src);
   assert.deepEqual(blocks.map((b) => b.blank), [false, true, false]);
   assert.equal(xyHndt.composeHndtForm(blocks), "for_question: 1\ncolumns: 3\n\nа\n---\n\n---\nfor_question: 2\ncolumns: 3\n\nб");
+});
+
+test("only a line that is exactly --- splits blocks, as chgksuite and the renderer read it", () => {
+  const blocks = xyHndt.parseHndtForm("for_question: 1\ncolumns: 3\n\nа\n--- \nб\n---\nfor_question: 2\ncolumns: 3\n\nв");
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].text, "а\n---\nб");
 });

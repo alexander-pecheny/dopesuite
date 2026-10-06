@@ -224,79 +224,10 @@ func tokenize(s string) []Run {
 	}
 
 	r := []rune(s)
-	var topart []int
+	topart, hidden := scanDirectives(r)
 	hiddenStarts := map[int]bool{}
-	i := 0
-	for i < len(r) {
-		if r[i] == '_' || r[i] == '~' {
-			j := i + 1
-			for j < len(r) && r[j] == r[i] {
-				j++
-			}
-			length := j - i
-			topart = append(topart, i)
-			nxt := findNextUnescaped(r, i, length)
-			if nxt != -1 {
-				topart = append(topart, nxt+length)
-				i = nxt + length + 1
-				continue
-			}
-		}
-		if r[i] == '(' && hasPrefixAt(r, i, "(img") {
-			topart = append(topart, i)
-			if close := findMatchingBracket(r, i); close != -1 {
-				topart = append(topart, close+1)
-				i = close
-			}
-		}
-		if r[i] == '(' && hasPrefixAt(r, i, "(screen") {
-			topart = append(topart, i)
-			if close := findMatchingBracket(r, i); close != -1 {
-				topart = append(topart, close+1)
-				i = close
-			}
-		}
-		if startsHiddenComment(r, i) {
-			// Unterminated, it stays literal: eating the rest of the field would
-			// hide more than the editor meant to hide.
-			if close := findMatchingBracket(r, i); close != -1 {
-				start, end := i, close+1
-				if start > 0 && isSpace(r[start-1]) {
-					start--
-				} else if end < len(r) && isSpace(r[end]) {
-					end++
-				}
-				hiddenStarts[start] = true
-				topart = append(topart, start, end)
-				i = close
-			}
-		}
-		if hasPrefixAt(r, i, "(PAGEBREAK)") {
-			topart = append(topart, i, i+len("(PAGEBREAK)"))
-		}
-		if hasPrefixAt(r, i, "(LINEBREAK)") {
-			topart = append(topart, i, i+len("(LINEBREAK)"))
-		}
-		if hasPrefixAt(r, i, "http://") || hasPrefixAt(r, i, "https://") {
-			topart = append(topart, i)
-			j := i + 1
-			bracket := 0
-			for j < len(r) && !(isSpace(r[j]) || (r[j] == ')' && bracket == 0)) {
-				if r[j] == '(' {
-					bracket++
-				} else if r[j] == ')' && bracket > 0 {
-					bracket--
-				}
-				j++
-			}
-			if j-1 >= 0 && (r[j-1] == ',' || r[j-1] == '.' || r[j-1] == ';') {
-				topart = append(topart, j-1)
-			} else {
-				topart = append(topart, j)
-			}
-			i = j
-		}
-		i++
+	for _, h := range hidden {
+		hiddenStarts[h[0]] = true
 	}
 
 	sort.Ints(topart)
@@ -437,5 +368,101 @@ func URLQuote(s string) string {
 			fmt.Fprintf(&b, "%%%02X", c)
 		}
 	}
+	return b.String()
+}
+
+// scanDirectives walks a 4s element once and reports every index the tokenizer
+// cuts at, plus the [start, end) span of each hidden comment, brackets and the
+// one whitespace rune it takes with it included. DropHidden reads the same walk,
+// as chgk.ts's dropHidden reads its scanDirectives.
+func scanDirectives(r []rune) (topart []int, hidden [][2]int) {
+	i := 0
+	for i < len(r) {
+		if r[i] == '_' || r[i] == '~' {
+			j := i + 1
+			for j < len(r) && r[j] == r[i] {
+				j++
+			}
+			length := j - i
+			topart = append(topart, i)
+			nxt := findNextUnescaped(r, i, length)
+			if nxt != -1 {
+				topart = append(topart, nxt+length)
+				i = nxt + length + 1
+				continue
+			}
+		}
+		if r[i] == '(' && hasPrefixAt(r, i, "(img") {
+			topart = append(topart, i)
+			if close := findMatchingBracket(r, i); close != -1 {
+				topart = append(topart, close+1)
+				i = close
+			}
+		}
+		if r[i] == '(' && hasPrefixAt(r, i, "(screen") {
+			topart = append(topart, i)
+			if close := findMatchingBracket(r, i); close != -1 {
+				topart = append(topart, close+1)
+				i = close
+			}
+		}
+		if startsHiddenComment(r, i) {
+			// Unterminated, it stays literal: eating the rest of the field would
+			// hide more than the editor meant to hide.
+			if close := findMatchingBracket(r, i); close != -1 {
+				start, end := i, close+1
+				if start > 0 && isSpace(r[start-1]) {
+					start--
+				} else if end < len(r) && isSpace(r[end]) {
+					end++
+				}
+				hidden = append(hidden, [2]int{start, end})
+				topart = append(topart, start, end)
+				i = close
+			}
+		}
+		if hasPrefixAt(r, i, "(PAGEBREAK)") {
+			topart = append(topart, i, i+len("(PAGEBREAK)"))
+		}
+		if hasPrefixAt(r, i, "(LINEBREAK)") {
+			topart = append(topart, i, i+len("(LINEBREAK)"))
+		}
+		if hasPrefixAt(r, i, "http://") || hasPrefixAt(r, i, "https://") {
+			topart = append(topart, i)
+			j := i + 1
+			bracket := 0
+			for j < len(r) && !(isSpace(r[j]) || (r[j] == ')' && bracket == 0)) {
+				if r[j] == '(' {
+					bracket++
+				} else if r[j] == ')' && bracket > 0 {
+					bracket--
+				}
+				j++
+			}
+			if j-1 >= 0 && (r[j-1] == ',' || r[j-1] == '.' || r[j-1] == ';') {
+				topart = append(topart, j-1)
+			} else {
+				topart = append(topart, j)
+			}
+			i = j
+		}
+		i++
+	}
+	return topart, hidden
+}
+
+// DropHidden removes every hidden comment from raw 4s, markup and all, for a
+// reader that wants a card's source text unrendered: the handout a .hndt block
+// prints, the board's card titles (chgk.ts dropHidden).
+func DropHidden(s string) string {
+	r := []rune(s)
+	_, hidden := scanDirectives(r)
+	var b strings.Builder
+	last := 0
+	for _, h := range hidden {
+		b.WriteString(string(r[last:h[0]]))
+		last = h[1]
+	}
+	b.WriteString(string(r[last:]))
 	return b.String()
 }

@@ -1,5 +1,5 @@
-// export.ts — the list-scope "Export": concatenate the list's card descriptions (in board
-// order) into a chgksuite "4s" document, gather any images referenced by
+// export.ts — the list-scope "Export": take the 4s document and the .hndt the list's
+// cards assemble into (listexport.ts), gather any images referenced by
 // `(img …)` directives from the cards' attachments, and hand both to the server,
 // which composes the requested formats in memory and streams back one file — or
 // a zip of the several that were ticked. The .docx and the .pdf render the same document: the PDF
@@ -9,8 +9,7 @@
 import { xyApp } from "./app.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
-import { xyVersions } from "./versions.js";
-import { xyHndt } from "./hndt.js";
+import { xyListExport } from "./listexport.js";
 import { modal } from "./modal.js";
 import { createTelegramExport } from "./tgexport.js";
 import type { Attachments } from "./attachments.js";
@@ -19,78 +18,6 @@ import type { BoardCard } from "./unlock.js";
 import S from "./i18nstrings.js";
 
 const { byId, errMsg, downloadBlob } = xyApp;
-
-// exportSource is the 4s document a list exports as: its cards' descriptions in
-// board order, blank-line separated. Every format is rendered from this one
-// string, which is why the versions are folded back into one question block here
-// and nowhere else — a versioned card is still one numbered question. A handouts
-// preamble is for the handouts panel alone.
-export function exportSource(cards: ReadonlyArray<Pick<BoardCard, "desc"> & { kind?: string }>): string {
-  return cards.filter((c) => c.kind !== xyHndt.PREAMBLE_KIND).map((c) => foldBlankLines(withQuestionMarker(c.kind, withKindMarker(c.kind, xyVersions.composeVersions(c.desc).trim())))).filter(Boolean).join("\n\n") + "\n";
-}
-
-// The card reads text with no marker at the top of a question, or right under a
-// theme's `№`, as the question itself (splitFields). 4s does not: there it
-// continues the element above it, so the question has no `?`, never closes, and
-// swallows everything after it up to the next theme. Such text gets its `?`.
-function withQuestionMarker(kind: string | undefined, desc: string): string {
-  if (kind !== "question" && kind !== "theme") return desc;
-  const lines = desc.split("\n");
-  const typeOf = (l: string): string | undefined => xyChgk.parseBlocks(l)[0]?.type;
-  // Each part is one question: the lines under a `№`, or for a question card
-  // also the lines above the first one. A theme's head is not a question.
-  const starts = lines.flatMap((l, i) => (typeOf(l) === "number" ? [i + 1] : []));
-  if (kind === "question") starts.unshift(0);
-  for (let k = 0; k < starts.length; k++) {
-    const end = k + 1 < starts.length ? starts[k + 1] - 1 : lines.length;
-    const part = lines.slice(starts[k], end);
-    if (part.some((l) => typeOf(l) === "question")) continue;
-    const first = part.findIndex((l) => l.trim() !== "");
-    if (first < 0 || typeOf(part[first]) !== "pre") continue;
-    lines[starts[k] + first] = "? " + part[first];
-  }
-  return lines.join("\n");
-}
-
-// A heading or meta card may be plain text: the board shows it by its
-// kind, so nobody has to type a `###` or a `#`. 4s, though, drops a line that has
-// no marker and follows nothing, so such a card gives its first line the marker
-// its kind stands for. A heading becomes a `##` section: that is what restarts
-// the theme count in SI, as the board's numbering does after a heading.
-const KIND_MARKER: Record<string, string> = { heading: "##", meta: "#" };
-
-function withKindMarker(kind: string | undefined, desc: string): string {
-  const marker = kind ? KIND_MARKER[kind] : undefined;
-  if (!marker || !desc || xyChgk.startsBlock(desc.split("\n")[0])) return desc;
-  return `${marker} ${desc}`;
-}
-
-// A blank line inside a card is xy's own liberty: to 4s it ends the element, so
-// everything past it — the rest of the question, and any field after it — falls
-// out of the docx. Each one becomes chgksuite's explicit (LINEBREAK) on the end
-// of the line before, which keeps the field one element and the empty line
-// visible (the directive plus the newline the join keeps = two breaks). Before a
-// marker the blank line separates nothing that is printed, so it just goes.
-//
-// With one exception: the blank line before a `№`. A theme card is a ladder of
-// questions in ONE card, and a blank line is the only thing that ends a question
-// — drop it and the parser merges the rungs into a single question numbered
-// «1020», whose text is every question of the theme in a row and whose answer is
-// every answer (#81). So that one stays a blank line.
-function foldBlankLines(desc: string): string {
-  const out: string[] = [];
-  let blanks = 0;
-  for (const line of desc.split("\n")) {
-    if (!line.trim()) { blanks++; continue; }
-    if (blanks && out.length) {
-      if (xyChgk.opensQuestion(line)) out.push("");
-      else if (!xyChgk.startsBlock(line)) out[out.length - 1] += "(LINEBREAK)".repeat(blanks);
-    }
-    out.push(line);
-    blanks = 0;
-  }
-  return out.join("\n");
-}
 
 export function createExportPanel(board: Board, attachments: Pick<Attachments, "appendImages">): ListPanel {
 
@@ -148,7 +75,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   }
 
   function openExport(scope: ListScope): void {
-    const hndt = xyHndt.hndtOf(scope.cards).source;
+    const hndt = xyListExport.hndtOf(scope.cards).source;
     exportCtx = { cards: scope.cards, title: scope.title, hndt, game: scope.game };
 
     // Offline everything but the .4s is unreachable: the other formats render
@@ -185,7 +112,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     if (!exportCtx) return null;
     const { cards, title } = exportCtx;
     const fd = new FormData();
-    fd.append("source", exportSource(cards));
+    fd.append("source", xyListExport.exportSource(cards));
     fd.append("filename", title);
     fd.append("game", exportCtx.game);
     const needed = xySync.isOnline() ? xyChgk.imageRefs(cards) : new Set<string>();
@@ -204,7 +131,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     const { cards, title, hndt, game } = exportCtx;
     const formats = exportChosen();
     if (!formats.length) return;
-    const source = exportSource(cards);
+    const source = xyListExport.exportSource(cards);
     // Images are fetched (and decrypted) from the server, so offline there are
     // none to be had — the .4s then goes out as bare text rather than not at all.
     const wanted = xySync.isOnline() ? xyChgk.imageRefs(cards) : new Set<string>();

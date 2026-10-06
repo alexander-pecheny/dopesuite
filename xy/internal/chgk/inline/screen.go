@@ -124,3 +124,36 @@ func RemoveSquareBrackets(s string) string {
 	}
 	return ReplaceEscaped(res)
 }
+
+// Span is one top-level square-bracket run: Start and End are byte offsets of
+// the "[" and just past the "]", Body what stands between them.
+type Span struct {
+	Start, End int
+	Body       string
+}
+
+// BracketSpans lists the top-level "[…]" runs of s, nesting counted and escaped
+// brackets skipped (chgk.ts bracketSpans).
+func BracketSpans(s string) []Span {
+	r := []rune(s)
+	var out []Span
+	byteAt := func(i int) int { return len(string(r[:i])) }
+	for i := 0; i < len(r); {
+		if isEscapedBracket(r, i) {
+			i += 2
+			continue
+		}
+		if r[i] != '[' {
+			i++
+			continue
+		}
+		end := matchingSquareBracket(r, i)
+		if end < 0 {
+			i++
+			continue
+		}
+		out = append(out, Span{Start: byteAt(i), End: byteAt(end + 1), Body: string(r[i+1 : end])})
+		i = end + 1
+	}
+	return out
+}

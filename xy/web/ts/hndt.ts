@@ -1,11 +1,6 @@
-// hndt.ts — the .hndt side of handouts: generation (the port of chgksuite
-// handouts 4s2hndt) and the read-back of per-question settings. The corpus in
-// internal/chgk/fsource/testdata/parity.json holds one document this writes
-// and the Go side parses.
-
-import S from "./i18nstrings.js";
-import { blockText, bracketSpans, dropHidden, imgInText, isHandoutBody, numberQuestionCards, parseBlocks, questionText } from "./chgk.js";
-import type { ChgkCard, Handout } from "./chgk.js";
+// hndt.ts — reading a .hndt document back: its blocks, the per-question
+// settings, the preamble, and the Fields form the handouts panel edits it in.
+// Writing one out of a list's cards is listexport.ts's job.
 
 // chgksuite/handouter/utils.RESERVED_WORDS: keys treated as block settings (vs
 // free handout text) in the .hndt format.
@@ -17,92 +12,14 @@ const HNDT_RESERVED = new Set([
 ]);
 const HNDT_DEFAULT_META = "columns: 3";
 
-function postprocessHandout(s: string | null | undefined): string {
-  return dropHidden(s).replace(/\\_/g, "_").trim();
-}
-
-// handoutForCard extracts a question card's handout: the inline
-// handout bracket (the "[<handout label>: …]" 4s construct — chgksuite-native,
-// what 4s2hndt scans, and what the Fields editor composes) or a legacy standalone
-// "> …" block. Returns {kind:'image',name} | {kind:'text',text} | null.
-function handoutForCard(desc: string | null | undefined): Handout | null {
-  const blocks = parseBlocks(desc);
-  const h = blocks.find((b) => b.type === "handout");
-  if (h) {
-    const name = imgInText(h.text);
-    if (name) return { kind: "image", name };
-    return { kind: "text", text: postprocessHandout(h.text) };
-  }
-  const q = questionText(desc);
-  for (const [s, e, body] of bracketSpans(q)) {
-    void s; void e;
-    if (!isHandoutBody(body)) continue;
-    const idx = body.indexOf(":");
-    const text = idx >= 0 ? body.slice(idx + 1).trim() : body;
-    const name = imgInText(text);
-    if (name) return { kind: "image", name };
-    return { kind: "text", text: postprocessHandout(text) };
-  }
-  return unbracketedHandout(q);
-}
-
-// unbracketedHandout is the handout of a question that opens with the label,
-// or carries a picture, without the bracket. A parsed .docx usually arrives
-// like this: the handout label on a line of its own, and the picture or the
-// text under it. The label goes, a picture is the handout, and otherwise the
-// whole text is offered for the author to cut down in the .hndt.
-const HANDOUT_LABEL = new RegExp(`^${S.chgk.label.handout()}[.:]?\\s*`, "i");
-function unbracketedHandout(q: string): Handout | null {
-  const name = imgInText(q);
-  if (name) return { kind: "image", name };
-  if (!HANDOUT_LABEL.test(q)) return null;
-  const text = postprocessHandout(q.replace(HANDOUT_LABEL, ""));
-  return text ? { kind: "text", text } : null;
-}
-
-// hndtBlock formats one .hndt block: a for_question header, the saved per-question
-// settings (or the default), a blank line, then the live handout content (text or
-// an `image: file` line).
-function hndtBlock(number: string | number, handout: Handout, metaText: string | null | undefined): string {
-  const meta = (metaText && metaText.trim()) ? metaText.trim() : HNDT_DEFAULT_META;
-  const header = `for_question: ${number}\n${meta}`;
-  const content = handout.kind === "image" ? `image: ${handout.name}` : handout.text;
-  return `${header}\n\n${content}`;
-}
-
-// generateHndt builds the full .hndt document for a list. `cards` are the list's
-// cards in order, `numbers` the parallel display numbers (numberQuestionCards),
-// `metas` a map cardId → saved handout settings text. Only question cards that
-// actually carry a handout produce a block; blocks are joined with "\n---\n"
-// (chgksuite's delimiter).
-function generateHndt(
-  cards: ReadonlyArray<ChgkCard & { id: number }>,
-  numbers: ReadonlyArray<string | null>,
-  metas: Record<number, string> = {},
-): string {
-  const blocks: string[] = [];
-  cards.forEach((c, i) => {
-    if (c.kind !== "question") return;
-    // Version 1's handout, like every other reader outside the card editor. A
-    // block per version would print two handouts under one question number, and
-    // split-fit names its output by that number — the second would overwrite the
-    // first in the zip.
-    const handout = handoutForCard(c.desc);
-    if (!handout) return;
-    const n = numbers[i];
-    const number = n != null ? n : i + 1;
-    blocks.push(hndtBlock(number, handout, metas[c.id]));
-  });
-  return blocks.join("\n---\n");
-}
-
 // splitHndtBlocks splits a .hndt document on lines that are exactly "---"
-// (chgksuite split_blocks).
+// (chgksuite split_blocks). Exactly: "--- " is handout text to chgksuite and to
+// the server's renderer, so the form must not show it as a break.
 function splitHndtBlocks(text: string | null | undefined): string[] {
   const parts: string[] = [];
   let cur: string[] = [];
   for (const line of String(text || "").split(/\r?\n/)) {
-    if (line.trim() === "---") { parts.push(cur.join("\n")); cur = []; }
+    if (line === "---") { parts.push(cur.join("\n")); cur = []; }
     else cur.push(line);
   }
   parts.push(cur.join("\n"));
@@ -154,17 +71,6 @@ function isPreambleBlock(block: string): boolean {
 function preambleOf(source: string | null | undefined): string | null {
   const first = splitHndtBlocks(source).find((b) => b.trim());
   return first && isPreambleBlock(first) ? first.trim() : null;
-}
-
-// hndtOf is what a list's cards generate: their display numbers and the .hndt
-// document with each card's saved settings, under the tour's preamble — export
-// and the handouts panel both start here.
-function hndtOf(cards: ReadonlyArray<ChgkCard & { id: number; handoutMeta?: string | null }>): { numbers: Array<string | null>; source: string } {
-  const numbers = numberQuestionCards(cards);
-  const metas: Record<number, string> = {};
-  for (const c of cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
-  const preamble = cards.find((c) => c.kind === PREAMBLE_KIND)?.desc.trim();
-  return { numbers, source: [preamble, generateHndt(cards, numbers, metas)].filter(Boolean).join("\n---\n") };
 }
 
 // ---- the fields view's model ----
@@ -226,7 +132,7 @@ function hndtSet(b: HndtFormBlock, key: string, val: string | null): void {
   else b.head.push([key, val]);
 }
 
-// composeHndtForm writes the form back as the document generateHndt would
+// composeHndtForm writes the form back as the document listexport.ts would
 // have written: settings, a blank line, then the handout.
 function composeHndtForm(blocks: ReadonlyArray<HndtFormBlock>): string {
   return blocks.map((b) => {
@@ -238,4 +144,4 @@ function composeHndtForm(blocks: ReadonlyArray<HndtFormBlock>): string {
   }).join("\n---\n");
 }
 
-export const xyHndt = { PREAMBLE_KIND, PREAMBLE_MARKER, preambleOf, generateHndt, hndtOf, handoutForCard, parseHndtMetaByQuestion, parseHndtForm, composeHndtForm, hndtGet, hndtSet, HNDT_DEFAULT_META };
+export const xyHndt = { PREAMBLE_KIND, PREAMBLE_MARKER, preambleOf, parseHndtMetaByQuestion, parseHndtForm, composeHndtForm, hndtGet, hndtSet, HNDT_DEFAULT_META };

@@ -8,13 +8,15 @@ import (
 
 	xystrings "xy/i18nstrings"
 
+	"xy/internal/listexport"
+
 	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // `source` prints the 4s a List (or its whole List Group) exports as — a whole
-// tour as text, in one call. `export` hands that same source, plus the images it
-// references, to the server, which renders the formats and streams back one file
-// or a zip of them.
+// tour as text, in one call. `export` hands that same source, its .hndt and the
+// images both reference, to the server, which renders the formats and streams
+// back one file or a zip of them. Both are assembled by internal/listexport.
 
 func cmdSource(a *app, args []string) error {
 	s := xystrings.Default
@@ -36,7 +38,7 @@ func cmdSource(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	source := ExportSource(cards)
+	source := listexport.Assemble(exportCards(cards)).Source
 	return a.emit(map[string]any{"list_id": *list, "title": title, "source": source}, func() {
 		a.printf("%s", source)
 		a.note("%s", s.Cli.Source.Note(title, strconv.Itoa(len(cards))))
@@ -65,12 +67,12 @@ func cmdExport(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	source := ExportSource(cards)
-	images, err := gatherImages(c, b, cards, source)
+	assembly := listexport.Assemble(exportCards(cards))
+	images, err := gatherImages(c, b, cards, assembly.Source)
 	if err != nil {
 		return err
 	}
-	data, filename, err := c.ExportPack(source, safeName(title), *formats, ExportGame(cards), images)
+	data, filename, err := c.ExportPack(assembly, safeName(title), *formats, images)
 	if err != nil {
 		return err
 	}

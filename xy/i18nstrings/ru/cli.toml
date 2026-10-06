@@ -339,6 +339,7 @@ group = 'группа {{.id}}: {{.err}}'
 list = 'список {{.id}}: {{.err}}'
 card = 'карточка {{.id}}: {{.err}}'
 card_alias = 'карточка {{.id}} (алиас): {{.err}}'
+card_handout_meta = 'карточка {{.id}} (настройки раздатки): {{.err}}'
 label = 'метка {{.id}}: {{.err}}'
 label_color = 'метка {{.id}} (цвет): {{.err}}'
 list_not_found = 'список {{.id}} не найден на доске'
@@ -365,11 +366,3 @@ need_board = "нужен --board <id|имя>"
 no_key = "ключа доски {{.id}} нет: `xy-cli unlock {{.id}}`"
 see_boards = '{{.err}} — см. `xy-cli boards`'
 login_first = "сначала `xy-cli login` (токен создаётся на /profile/tokens)"
-
-[versions]
-# The export composition (source.go): labels written when a card's versions are
-# folded back into one question. The trailing space is part of each label.
-# Prefixed to a field value that disagrees between versions.
-field_label = 'версия {{.n}}: '
-# Heads each version's question block in the composed document.
-question_label = 'Версия {{.n}}: '

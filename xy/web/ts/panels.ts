@@ -20,6 +20,7 @@ import type { WriteState } from "./app.js";
 import type { Modal } from "./modal.js";
 import { icon } from "./icons_gen.js";
 import { xyChgk } from "./chgk.js";
+import { xyListExport } from "./listexport.js";
 
 export interface Board {
   readonly id: number;
@@ -72,9 +73,8 @@ export function listScope(board: Board, list: BoardList): ListScope {
   const cards = lists.flatMap((l) => board.cardsOf(l.id));
   // The game follows what the cards are, not the List Type: that type only picks
   // what the add-card button makes, and a list typed ChGK may well hold themes.
-  // One theme makes the whole scope SI, or the ChGK layout would drop every
-  // theme's name and author.
-  const game = cards.some((c) => c.kind === "theme") ? "si" : "chgk";
+  // One theme makes the whole scope SI (listexport.ts says why).
+  const game = xyListExport.exportGame(cards);
   return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game };
 }
 

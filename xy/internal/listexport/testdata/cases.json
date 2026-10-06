@@ -1,0 +1,597 @@
+[
+ {
+  "name": "one plain question",
+  "cards": [
+   {
+    "id": 1,
+    "kind": "question",
+    "desc": "? Что это?\n! Envelope\n@ Автор"
+   }
+  ],
+  "source": "? Что это?\n! Envelope\n@ Автор\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "two cards, blank line inside one",
+  "cards": [
+   {
+    "id": 2,
+    "kind": "question",
+    "desc": "? Первый вопрос\n\nвторая строка\n! Ответ"
+   },
+   {
+    "id": 3,
+    "kind": "question",
+    "desc": "? Второй вопрос\n! Ответ 2"
+   }
+  ],
+  "source": "? Первый вопрос(LINEBREAK)\nвторая строка\n! Ответ\n\n? Второй вопрос\n! Ответ 2\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "versions differing in question only",
+  "cards": [
+   {
+    "id": 4,
+    "kind": "question",
+    "desc": "(hidden-comment xy-version:)\n? Версия раз\n! Ответ\n(hidden-comment xy-version:)\n? Версия два\n! Ответ"
+   }
+  ],
+  "source": "? Версия 1: Версия раз\n(PAGEBREAK)\nВерсия 2: Версия два\n! Ответ\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "versions differing in answer",
+  "cards": [
+   {
+    "id": 5,
+    "kind": "question",
+    "desc": "(hidden-comment xy-version:)\n? Вопрос\n! Ответ раз\n(hidden-comment xy-version:)\n? Вопрос\n! Ответ два"
+   }
+  ],
+  "source": "? Версия 1: Вопрос\n(PAGEBREAK)\nВерсия 2: Вопрос\n! версия 1: Ответ раз\nверсия 2: Ответ два\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "named version",
+  "cards": [
+   {
+    "id": 6,
+    "kind": "question",
+    "desc": "(hidden-comment xy-version: полегче)\n? Лёгкий\n! Ответ\n(hidden-comment xy-version: посложнее)\n? Трудный\n! Ответ"
+   }
+  ],
+  "source": "? Версия 1: Лёгкий\n(PAGEBREAK)\nВерсия 2: Трудный\n! Ответ\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "heading and question",
+  "cards": [
+   {
+    "id": 7,
+    "kind": "question",
+    "desc": "## Тур 1"
+   },
+   {
+    "id": 8,
+    "kind": "question",
+    "desc": "? Вопрос\n! Ответ\n= Зачёт\n/ Комментарий\n^ Источник\n@ Автор"
+   }
+  ],
+  "source": "## Тур 1\n\n? Вопрос\n! Ответ\n= Зачёт\n/ Комментарий\n^ Источник\n@ Автор\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "handout bracket and image",
+  "cards": [
+   {
+    "id": 9,
+    "kind": "question",
+    "desc": "? [Раздаточный материал: (img pic.png)]\nЧто на картинке?\n! Ничего"
+   }
+  ],
+  "source": "? [Раздаточный материал: (img pic.png)]\nЧто на картинке?\n! Ничего\n",
+  "game": "chgk",
+  "hndt": "for_question: 1\ncolumns: 3\n\nimage: pic.png"
+ },
+ {
+  "name": "multiline fields and a source list",
+  "cards": [
+   {
+    "id": 10,
+    "kind": "question",
+    "desc": "? Первая строка\nвторая строка\n! Ответ\nтоже ответ\n^\n- Источник раз\n- Источник два\n@ !!Авторка Мария"
+   }
+  ],
+  "source": "? Первая строка\nвторая строка\n! Ответ\nтоже ответ\n^\n- Источник раз\n- Источник два\n@ !!Авторка Мария\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "present but empty fields",
+  "cards": [
+   {
+    "id": 11,
+    "kind": "question",
+    "desc": "? Вопрос\n!\n=\n^\n@"
+   }
+  ],
+  "source": "? Вопрос\n!\n=\n^\n@\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "versions disagreeing on sources and authors",
+  "cards": [
+   {
+    "id": 12,
+    "kind": "question",
+    "desc": "(hidden-comment xy-version:)\n? Раз\n! Ответ\n^ Первый источник\n@ Пётр\n(hidden-comment xy-version:)\n? Два\n! Ответ\n^ Второй источник\n@ Мария"
+   }
+  ],
+  "source": "? Версия 1: Раз\n(PAGEBREAK)\nВерсия 2: Два\n! Ответ\n^\n- версия 1: Первый источник\n- версия 2: Второй источник\n@ версия 1: Пётр\nверсия 2: Мария\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "version with a number directive and trailing extra",
+  "cards": [
+   {
+    "id": 13,
+    "kind": "question",
+    "desc": "(hidden-comment xy-version:)\n№ 5\n? Раз\n! Ответ\n(hidden-comment xy-version:)\n? Два\n! Ответ"
+   }
+  ],
+  "source": "№ 5\n? Версия 1: Раз\n(PAGEBREAK)\nВерсия 2: Два\n! Ответ\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "one version missing a field entirely",
+  "cards": [
+   {
+    "id": 14,
+    "kind": "question",
+    "desc": "(hidden-comment xy-version:)\n? Раз\n! Ответ\n/ Комментарий\n(hidden-comment xy-version:)\n? Два\n! Ответ"
+   }
+  ],
+  "source": "? Версия 1: Раз\n(PAGEBREAK)\nВерсия 2: Два\n! Ответ\n/ версия 1: Комментарий\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "card with no marker at all",
+  "cards": [
+   {
+    "id": 15,
+    "kind": "question",
+    "desc": "Просто текст без маркера"
+   }
+  ],
+  "source": "? Просто текст без маркера\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "plain heading and meta cards take their kind's marker",
+  "cards": [
+   {
+    "id": 16,
+    "kind": "meta",
+    "desc": "Редакторы: Пётр.\n\nРедакторы благодарят Марию."
+   },
+   {
+    "id": 17,
+    "kind": "heading",
+    "desc": "Светлый раунд"
+   },
+   {
+    "id": 18,
+    "kind": "heading",
+    "desc": "### Уже с маркером"
+   }
+  ],
+  "source": "# Редакторы: Пётр.(LINEBREAK)\nРедакторы благодарят Марию.\n\n## Светлый раунд\n\n### Уже с маркером\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "questions written with no marker take their ?",
+  "cards": [
+   {
+    "id": 19,
+    "kind": "theme",
+    "desc": "#T Ночная\n\n@ Автор\n\n№ 100\nПо словам Херман\n\n! горшок\n\n№ 200\n? С маркером\n! Б"
+   },
+   {
+    "id": 20,
+    "kind": "question",
+    "desc": "№ 5\nВопрос без маркера\n! А"
+   }
+  ],
+  "source": "#T Ночная\n@ Автор\n\n№ 100\n? По словам Херман\n! горшок\n\n№ 200\n? С маркером\n! Б\n\n№ 5\n? Вопрос без маркера\n! А\n",
+  "game": "si",
+  "hndt": ""
+ },
+ {
+  "name": "theme ladder separated by blank lines",
+  "cards": [
+   {
+    "id": 21,
+    "kind": "theme",
+    "desc": "#T Тема\n\n@ Автор\n\n№ 10\n? Раз\n! А\n\n№ 20\n? Два\n! Б"
+   }
+  ],
+  "source": "#T Тема\n@ Автор\n\n№ 10\n? Раз\n! А\n\n№ 20\n? Два\n! Б\n",
+  "game": "si",
+  "hndt": ""
+ },
+ {
+  "name": "handouts: a bracketed picture, bracketed text, a legacy block, and a question without one",
+  "cards": [
+   {
+    "id": 22,
+    "kind": "question",
+    "desc": "? [Раздаточный материал: (img pic.png)]\nЧто это?\n! Ответ"
+   },
+   {
+    "id": 23,
+    "kind": "question",
+    "desc": "? Без раздатки\n! Ответ"
+   },
+   {
+    "id": 24,
+    "kind": "question",
+    "desc": "? [Раздаточный материал: Первая строка\nВторая строка]\nВопрос\n! Ответ",
+    "handoutMeta": "columns: 2\nfont_size: 14"
+   },
+   {
+    "id": 25,
+    "kind": "meta",
+    "desc": "# просто мета"
+   },
+   {
+    "id": 26,
+    "kind": "question",
+    "desc": "> старый блок раздатки\n? Вопрос\n! Ответ"
+   }
+  ],
+  "source": "? [Раздаточный материал: (img pic.png)]\nЧто это?\n! Ответ\n\n? Без раздатки\n! Ответ\n\n? [Раздаточный материал: Первая строка\nВторая строка]\nВопрос\n! Ответ\n\n# просто мета\n\n> старый блок раздатки\n? Вопрос\n! Ответ\n",
+  "game": "chgk",
+  "hndt": "for_question: 1\ncolumns: 3\n\nimage: pic.png\n---\nfor_question: 3\ncolumns: 2\nfont_size: 14\n\nПервая строка\nВторая строка\n---\nfor_question: 4\ncolumns: 3\n\nстарый блок раздатки"
+ },
+ {
+  "name": "handouts written without the bracket, as a parsed .docx writes them",
+  "cards": [
+   {
+    "id": 27,
+    "kind": "question",
+    "desc": "? Раздаточный материал.\n(img pic.png)\nЧто изображено?\n! а"
+   },
+   {
+    "id": 28,
+    "kind": "question",
+    "desc": "? Раздаточный материал\nThere is ******* of ******.\nВосстановите слова.\n! б"
+   },
+   {
+    "id": 29,
+    "kind": "question",
+    "desc": "? раздаточный материал: строчными\n! в"
+   },
+   {
+    "id": 30,
+    "kind": "question",
+    "desc": "? Без картинки.\n! г"
+   }
+  ],
+  "source": "? Раздаточный материал.\n(img pic.png)\nЧто изображено?\n! а\n\n? Раздаточный материал\nThere is ******* of ******.\nВосстановите слова.\n! б\n\n? раздаточный материал: строчными\n! в\n\n? Без картинки.\n! г\n",
+  "game": "chgk",
+  "hndt": "for_question: 1\ncolumns: 3\n\nimage: pic.png\n---\nfor_question: 2\ncolumns: 3\n\nThere is ******* of ******.\nВосстановите слова.\n---\nfor_question: 3\ncolumns: 3\n\nстрочными"
+ },
+ {
+  "name": "a question that only mentions a handout has none",
+  "cards": [
+   {
+    "id": 31,
+    "kind": "question",
+    "desc": "? В раздаточном материале этого вопроса ничего нет.\n! а"
+   },
+   {
+    "id": 32,
+    "kind": "question",
+    "desc": "? Всё, что было роздано, собрали.\n! б"
+   },
+   {
+    "id": 33,
+    "kind": "question",
+    "desc": "? Раздаточный материал\n! в"
+   }
+  ],
+  "source": "? В раздаточном материале этого вопроса ничего нет.\n! а\n\n? Всё, что было роздано, собрали.\n! б\n\n? Раздаточный материал\n! в\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "a picture anywhere in the question is its handout",
+  "cards": [
+   {
+    "id": 34,
+    "kind": "question",
+    "desc": "? Посмотрите на картинку (img w=5cm фото.jpg) и ответьте.\n! а"
+   },
+   {
+    "id": 35,
+    "kind": "question",
+    "desc": "? (hidden-comment (img скрыто.png)) Вопрос без картинки\n! б"
+   }
+  ],
+  "source": "? Посмотрите на картинку (img w=5cm фото.jpg) и ответьте.\n! а\n\n? (hidden-comment (img скрыто.png)) Вопрос без картинки\n! б\n",
+  "game": "chgk",
+  "hndt": "for_question: 1\ncolumns: 3\n\nimage: фото.jpg"
+ },
+ {
+  "name": "a handout drops its hidden comments and escaped underscores",
+  "cards": [
+   {
+    "id": 36,
+    "kind": "question",
+    "desc": "? [Раздаточный материал: текст (hidden-comment заметка) с snake\\_case]\nВопрос\n! а"
+   }
+  ],
+  "source": "? [Раздаточный материал: текст (hidden-comment заметка) с snake\\_case]\nВопрос\n! а\n",
+  "game": "chgk",
+  "hndt": "for_question: 1\ncolumns: 3\n\nтекст с snake_case"
+ },
+ {
+  "name": "handout settings saved per card, the default otherwise",
+  "cards": [
+   {
+    "id": 7,
+    "kind": "question",
+    "desc": "№ 4\n? [Раздаточный материал: раз]\n! a",
+    "handoutMeta": "  columns: 2\nrows: 5  "
+   },
+   {
+    "id": 8,
+    "kind": "question",
+    "desc": "? [Раздаточный материал: два]\n! b",
+    "handoutMeta": "   "
+   }
+  ],
+  "source": "№ 4\n? [Раздаточный материал: раз]\n! a\n\n? [Раздаточный материал: два]\n! b\n",
+  "game": "chgk",
+  "hndt": "for_question: 4\ncolumns: 2\nrows: 5\n\nраз\n---\nfor_question: 5\ncolumns: 3\n\nдва"
+ },
+ {
+  "name": "a preamble opens the .hndt and stays out of the 4s",
+  "cards": [
+   {
+    "id": 37,
+    "kind": "handouts_preamble",
+    "desc": "///preamble\nfont_size: 14\n"
+   },
+   {
+    "id": 38,
+    "kind": "question",
+    "desc": "? [Раздаточный материал: раз]\n! а"
+   },
+   {
+    "id": 39,
+    "kind": "question",
+    "desc": "? Два\n! б"
+   }
+  ],
+  "source": "? [Раздаточный материал: раз]\n! а\n\n? Два\n! б\n",
+  "game": "chgk",
+  "hndt": "///preamble\nfont_size: 14\n---\nfor_question: 1\ncolumns: 3\n\nраз"
+ },
+ {
+  "name": "a preamble with no handout under it",
+  "cards": [
+   {
+    "id": 40,
+    "kind": "handouts_preamble",
+    "desc": "///preamble\ncolumns: 2"
+   },
+   {
+    "id": 41,
+    "kind": "question",
+    "desc": "? Без раздатки\n! а"
+   }
+  ],
+  "source": "? Без раздатки\n! а\n",
+  "game": "chgk",
+  "hndt": "///preamble\ncolumns: 2"
+ },
+ {
+  "name": "numbering: explicit, zero, counter resets on a question and on a heading",
+  "cards": [
+   {
+    "id": 42,
+    "kind": "question",
+    "desc": "№ 0\n? Разминка [Раздаточный материал: р0]\n! а"
+   },
+   {
+    "id": 43,
+    "kind": "question",
+    "desc": "? Первый [Раздаточный материал: р1]\n! а"
+   },
+   {
+    "id": 44,
+    "kind": "question",
+    "desc": "№№ 10\n? Десятый [Раздаточный материал: р10]\n! а"
+   },
+   {
+    "id": 45,
+    "kind": "question",
+    "desc": "? Одиннадцатый [Раздаточный материал: р11]\n! а"
+   },
+   {
+    "id": 46,
+    "kind": "heading",
+    "desc": "## Тур 2\n№№ 20"
+   },
+   {
+    "id": 47,
+    "kind": "question",
+    "desc": "? Двадцатый [Раздаточный материал: р20]\n! а"
+   },
+   {
+    "id": 48,
+    "kind": "question",
+    "desc": "№ 7а\n? Седьмой-а [Раздаточный материал: р7а]\n! а"
+   },
+   {
+    "id": 49,
+    "kind": "question",
+    "desc": "? Следующий [Раздаточный материал: рN]\n! а"
+   }
+  ],
+  "source": "№ 0\n? Разминка [Раздаточный материал: р0]\n! а\n\n? Первый [Раздаточный материал: р1]\n! а\n\n№№ 10\n? Десятый [Раздаточный материал: р10]\n! а\n\n? Одиннадцатый [Раздаточный материал: р11]\n! а\n\n## Тур 2\n№№ 20\n\n? Двадцатый [Раздаточный материал: р20]\n! а\n\n№ 7а\n? Седьмой-а [Раздаточный материал: р7а]\n! а\n\n? Следующий [Раздаточный материал: рN]\n! а\n",
+  "game": "chgk",
+  "hndt": "for_question: 0\ncolumns: 3\n\nр0\n---\nfor_question: 1\ncolumns: 3\n\nр1\n---\nfor_question: 10\ncolumns: 3\n\nр10\n---\nfor_question: 11\ncolumns: 3\n\nр11\n---\nfor_question: 20\ncolumns: 3\n\nр20\n---\nfor_question: 7а\ncolumns: 3\n\nр7а\n---\nfor_question: 21\ncolumns: 3\n\nрN"
+ },
+ {
+  "name": "a theme makes the scope SI and keeps its handout out of the .hndt",
+  "cards": [
+   {
+    "id": 50,
+    "kind": "theme",
+    "desc": "#T Тема\n@ Автор\n\n№ 10\n? [Раздаточный материал: т]\nРаз\n! А"
+   },
+   {
+    "id": 51,
+    "kind": "question",
+    "desc": "? ЧГК-вопрос [Раздаточный материал: ч]\n! Б"
+   }
+  ],
+  "source": "#T Тема\n@ Автор\n\n№ 10\n? [Раздаточный материал: т]\nРаз\n! А\n\n? ЧГК-вопрос [Раздаточный материал: ч]\n! Б\n",
+  "game": "si",
+  "hndt": "for_question: 1\ncolumns: 3\n\nч"
+ },
+ {
+  "name": "versions: Version 1's handout only, and a Version opening with a handout takes its head on its own line",
+  "cards": [
+   {
+    "id": 52,
+    "kind": "question",
+    "desc": "(hidden-comment xy-version:)\n? Первая без раздатки\n! А\n(hidden-comment xy-version:)\n? [Раздаточный материал:\n(img v2.png)\n]\nВторая\n! А"
+   },
+   {
+    "id": 53,
+    "kind": "question",
+    "desc": "(hidden-comment xy-version:)\n? [Раздаточный материал: р1]\nПервая\n! А\n(hidden-comment xy-version:)\n? Вторая\n! Б"
+   }
+  ],
+  "source": "? Версия 1: Первая без раздатки\n(PAGEBREAK)\nВерсия 2:\n[Раздаточный материал:\n(img v2.png)\n]\nВторая\n! А\n\n? Версия 1:\n[Раздаточный материал: р1]\nПервая\n(PAGEBREAK)\nВерсия 2: Вторая\n! версия 1: А\nверсия 2: Б\n",
+  "game": "chgk",
+  "hndt": "for_question: 2\ncolumns: 3\n\nр1"
+ },
+ {
+  "name": "versions: a legacy handout block and a label-only anchor",
+  "cards": [
+   {
+    "id": 54,
+    "kind": "question",
+    "desc": "(hidden-comment xy-version:)\n> старая раздатка\n? Раз [Раздаточный материал] дальше\n! А\n> вторая\n(hidden-comment xy-version:)\n? Два\n! А"
+   }
+  ],
+  "source": "? Версия 1: Раз дальше\n(PAGEBREAK)\nВерсия 2: Два\n! А\n> вторая\n",
+  "game": "chgk",
+  "hndt": "for_question: 1\ncolumns: 3\n\nстарая раздатка"
+ },
+ {
+  "name": "an empty card drops out of the 4s",
+  "cards": [
+   {
+    "id": 56,
+    "kind": "question",
+    "desc": "? Раз\n! А\n"
+   },
+   {
+    "id": 57,
+    "kind": "question",
+    "desc": "  "
+   },
+   {
+    "id": 58,
+    "kind": "question",
+    "desc": "? Два (img pic.png)\n! Б"
+   }
+  ],
+  "source": "? Раз\n! А\n\n? Два (img pic.png)\n! Б\n",
+  "game": "chgk",
+  "hndt": "for_question: 3\ncolumns: 3\n\nimage: pic.png"
+ },
+ {
+  "name": "a run of blank lines keeps its height: one (LINEBREAK) each",
+  "cards": [
+   {
+    "id": 59,
+    "kind": "question",
+    "desc": "? А\n\n\nБ\n! О"
+   }
+  ],
+  "source": "? А(LINEBREAK)(LINEBREAK)\nБ\n! О\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "a list item is not a marker: the blank line before it still folds",
+  "cards": [
+   {
+    "id": 60,
+    "kind": "question",
+    "desc": "? Вопрос:\n\n- раз\n- два\n! О"
+   }
+  ],
+  "source": "? Вопрос:(LINEBREAK)\n- раз\n- два\n! О\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "a blank line before a marker just goes",
+  "cards": [
+   {
+    "id": 61,
+    "kind": "question",
+    "desc": "? Вопрос\n! Ответ\n\n^ Источник"
+   }
+  ],
+  "source": "? Вопрос\n! Ответ\n^ Источник\n",
+  "game": "chgk",
+  "hndt": ""
+ },
+ {
+  "name": "a blank line inside a rung's own text still becomes a (LINEBREAK)",
+  "cards": [
+   {
+    "id": 62,
+    "kind": "theme",
+    "desc": "#T Тема\n\n№ 10\n? Первый абзац\n\nВторой абзац\n! А\n"
+   }
+  ],
+  "source": "#T Тема\n\n№ 10\n? Первый абзац(LINEBREAK)\nВторой абзац\n! А\n",
+  "game": "si",
+  "hndt": ""
+ },
+ {
+  "name": "a legacy handout block naming a picture",
+  "cards": [
+   {
+    "id": 63,
+    "kind": "question",
+    "desc": "> (img foto.png)\n? Что тут?\n! х"
+   }
+  ],
+  "source": "> (img foto.png)\n? Что тут?\n! х\n",
+  "game": "chgk",
+  "hndt": "for_question: 1\ncolumns: 3\n\nimage: foto.png"
+ }
+]

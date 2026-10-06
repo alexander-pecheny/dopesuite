@@ -262,8 +262,8 @@ attach_failed = 'вложение «{{.name}}»: {{.status}}'
 
 [versions]
 # "версия N: " label prefixed to a field value when versions disagree
-# (versions.ts mergeField/mergeSources/mergeAuthors); the trailing space is
-# part of the label.
+# (versions.ts mergeField/mergeSources/mergeAuthors, and internal/listexport
+# for xy-cli); the trailing space is part of the label.
 label = 'версия {{.n}}: '
 # Head of each version's question block in the composed multi-version export.
 question = 'Версия {{.n}}: {{.question}}'

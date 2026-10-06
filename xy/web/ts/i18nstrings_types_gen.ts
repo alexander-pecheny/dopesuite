@@ -1225,6 +1225,7 @@ export type Strings = {
     snapshot: {
       card: (id: string, err: string) => string;
       cardAlias: (id: string, err: string) => string;
+      cardHandoutMeta: (id: string, err: string) => string;
       cardNotFound: (id: string) => string;
       group: (id: string, err: string) => string;
       label: (id: string, err: string) => string;
@@ -1246,10 +1247,6 @@ export type Strings = {
       summary: () => string;
       usage: () => string;
       wrongPassphrase: () => string;
-    };
-    versions: {
-      fieldLabel: (n: string) => string;
-      questionLabel: (n: string) => string;
     };
   };
   docs: {

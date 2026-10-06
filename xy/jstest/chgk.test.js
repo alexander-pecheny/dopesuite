@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyChgk } from "../web/assets/static/dist/chgk.js";
 import { xyVersions } from "../web/assets/static/dist/versions.js";
-import { xyHndt } from "../web/assets/static/dist/hndt.js";
+import { xyListExport } from "../web/assets/static/dist/listexport.js";
 
 const { questionText, blockText, numberQuestionCards, parseBlocks, numberDirective,
   removeAccents, removeSquareBrackets, screenText, parse4sElem } = xyChgk;
@@ -644,5 +644,5 @@ test("a card on the board shows no hidden comment in its title", () => {
 
 test("a раздатка carries no hidden comment to the print", () => {
   const desc = "? [Раздаточный материал: текст (hidden-comment вырезать)] Вопрос?\n! Ответ";
-  assert.deepEqual(xyHndt.handoutForCard(desc), { kind: "text", text: "текст" });
+  assert.deepEqual(xyListExport.handoutForCard(desc), { kind: "text", text: "текст" });
 });

@@ -51,7 +51,6 @@ xy/internal/chgk/typo/typo.go
 xy/internal/server/exportpack.go
 xy/internal/server/translit.go
 xy/internal/xycli/fold.go
-xy/internal/xycli/source.go
 xy/web/ts/chgk.ts
 xy/web/ts/find.ts
 xy/web/ts/sessions.ts
