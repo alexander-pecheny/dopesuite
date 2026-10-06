@@ -269,16 +269,17 @@ func alphaNumber(value int) string {
 	return result
 }
 
+var romanNumerals = []struct {
+	n int
+	s string
+}{
+	{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"},
+	{50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"},
+}
+
 func romanNumber(value int) string {
-	numerals := []struct {
-		n int
-		s string
-	}{
-		{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"},
-		{50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"},
-	}
 	var b strings.Builder
-	for _, nm := range numerals {
+	for _, nm := range romanNumerals {
 		for value >= nm.n {
 			b.WriteString(nm.s)
 			value -= nm.n

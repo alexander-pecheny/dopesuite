@@ -187,7 +187,7 @@ type Book struct {
 // them if it can be. A fetch that fails is logged and forgotten: the nearest
 // table still answers.
 func (rs *rateService) Book(ctx context.Context) (*Book, error) {
-	if err := rs.Ensure(ctx); err != nil {
+	if err := rs.Ensure(ctx); err != nil { // sloplint: ignore[error-only-printed]
 		log.Printf("rates: %v (falling back on the nearest table we have)", err)
 	}
 	days, err := store.RateDays(ctx, rs.s.db)

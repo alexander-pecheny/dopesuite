@@ -100,6 +100,15 @@ const (
 	KSIStickerEmptyWrong = "emptywrong" // empty answers score -nominal, like wrong
 )
 
+// The colour each sticker gets when the host does not pick one. They match the
+// --sticker-c-* swatches in styles.css.
+const (
+	KSIStickerNeutralColor    = "#ffffff"
+	KSIStickerX2Color         = "#fdf66f"
+	KSIStickerNoWrongColor    = "#aded87"
+	KSIStickerEmptyWrongColor = "#ff7a6b"
+)
+
 // KSIStickerType is one configured sticker: its id (fixed meaning), display
 // label, UI highlight colour, and Max — the most a single team may use (nil =
 // unlimited, as for the neutral sticker).

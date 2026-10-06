@@ -113,6 +113,8 @@ func run(dbPath, slug, root string) error {
 
 	// Whoever organises anything on this instance organises this too, so the
 	// fest is reachable from the host tree rather than only by its public URL.
+	// Failing that is not fatal: the fest still opens by its URL.
+	// sloplint: ignore[error-only-printed]
 	if _, err := db.Exec(`
 insert or ignore into fest_organizers(fest_id, user_id)
 select ?, user_id from fest_organizers group by user_id`, festID); err != nil {

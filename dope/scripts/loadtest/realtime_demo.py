@@ -598,7 +598,7 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
     # teardown restores its finished status from the snapshot.
     try:
         c.post_json(f"/api/fest/{fest}/games/{ek}/matches/{ek_match}/update", {"finished": False})
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001  sloplint: ignore[error-only-printed]
         print(f"  warning: could not reopen EK match {ek_match}: {e}", flush=True)
 
     def timed(fn) -> bool:

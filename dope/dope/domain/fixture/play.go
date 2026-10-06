@@ -618,10 +618,10 @@ func stickerConfig() games.KSIStickerConfig {
 	s := stickerLabels()
 	max := func(n int) *int { return &n }
 	return games.KSIStickerConfig{Types: []games.KSIStickerType{
-		{ID: games.KSIStickerNeutral, Label: s.neutral, Color: "#ffffff", Max: max(stickerThemes)},
-		{ID: games.KSIStickerX2, Label: "×2", Color: "#fdf66f", Max: max(2)},
-		{ID: games.KSIStickerNoWrong, Label: s.noWrong, Color: "#aded87", Max: max(1)},
-		{ID: games.KSIStickerEmptyWrong, Label: s.emptyWrong, Color: "#ff7a6b", Max: max(1)},
+		{ID: games.KSIStickerNeutral, Label: s.neutral, Color: games.KSIStickerNeutralColor, Max: max(stickerThemes)},
+		{ID: games.KSIStickerX2, Label: "×2", Color: games.KSIStickerX2Color, Max: max(2)},
+		{ID: games.KSIStickerNoWrong, Label: s.noWrong, Color: games.KSIStickerNoWrongColor, Max: max(1)},
+		{ID: games.KSIStickerEmptyWrong, Label: s.emptyWrong, Color: games.KSIStickerEmptyWrongColor, Max: max(1)},
 	}}
 }
 

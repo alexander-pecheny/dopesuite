@@ -1141,7 +1141,7 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
       spec.adopt(scope, {data, seq}, null);
       indicator.touch();
       return true;
-    } catch (error) {
+    } catch (error) { // sloplint: ignore[error-only-printed] false tells the caller, and reload() throws on it
       console.error(error);
       return false;
     } finally {

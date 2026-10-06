@@ -245,10 +245,10 @@ var formatForms = map[string]formatForm{
 					dopeui.Field(dopeui.Label(s.Host.Games.ThemesLabel()), dopeui.Textfield(dopeui.Name("ksis_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
 					dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
 					dopeui.Hint(dopeui.Text(s.Host.Games.StickersHint())),
-					stickerRow(s.Host.Games.StickerNeutral(), "ksis_neutral_max", "20", "ksis_neutral_color", "#ffffff"),
-					stickerRow(s.Host.Games.StickerX2Row(), "ksis_x2_max", "2", "ksis_x2_color", "#fdf66f"),
-					stickerRow(s.Host.Games.StickerNowrongRow(), "ksis_nowrong_max", "1", "ksis_nowrong_color", "#aded87"),
-					stickerRow(s.Host.Games.StickerEmptywrongRow(), "ksis_emptywrong_max", "1", "ksis_emptywrong_color", "#ff7a6b"),
+					stickerRow(s.Host.Games.StickerNeutral(), "ksis_neutral_max", "20", "ksis_neutral_color", games.KSIStickerNeutralColor),
+					stickerRow(s.Host.Games.StickerX2Row(), "ksis_x2_max", "2", "ksis_x2_color", games.KSIStickerX2Color),
+					stickerRow(s.Host.Games.StickerNowrongRow(), "ksis_nowrong_max", "1", "ksis_nowrong_color", games.KSIStickerNoWrongColor),
+					stickerRow(s.Host.Games.StickerEmptywrongRow(), "ksis_emptywrong_max", "1", "ksis_emptywrong_color", games.KSIStickerEmptyWrongColor),
 				}
 			},
 			read: func(spec *gamebuild.Spec, form url.Values) (err error) {
@@ -939,10 +939,10 @@ func ksiStickerConfigFromForm(form url.Values) (json.RawMessage, error) {
 	all := []struct {
 		id, label, colorField, maxField, defColor string
 	}{
-		{games.KSIStickerNeutral, dopestrings.Default.Host.Games.StickerNeutral(), "ksis_neutral_color", "ksis_neutral_max", "#ffffff"},
-		{games.KSIStickerX2, "×2", "ksis_x2_color", "ksis_x2_max", "#fdf66f"},
-		{games.KSIStickerNoWrong, dopestrings.Default.Host.Games.StickerNowrong(), "ksis_nowrong_color", "ksis_nowrong_max", "#aded87"},
-		{games.KSIStickerEmptyWrong, dopestrings.Default.Host.Games.StickerEmptywrong(), "ksis_emptywrong_color", "ksis_emptywrong_max", "#ff7a6b"},
+		{games.KSIStickerNeutral, dopestrings.Default.Host.Games.StickerNeutral(), "ksis_neutral_color", "ksis_neutral_max", games.KSIStickerNeutralColor},
+		{games.KSIStickerX2, "×2", "ksis_x2_color", "ksis_x2_max", games.KSIStickerX2Color},
+		{games.KSIStickerNoWrong, dopestrings.Default.Host.Games.StickerNowrong(), "ksis_nowrong_color", "ksis_nowrong_max", games.KSIStickerNoWrongColor},
+		{games.KSIStickerEmptyWrong, dopestrings.Default.Host.Games.StickerEmptywrong(), "ksis_emptywrong_color", "ksis_emptywrong_max", games.KSIStickerEmptyWrongColor},
 	}
 	cfg := games.KSIStickerConfig{}
 	for _, s := range all {

@@ -325,7 +325,7 @@ func newServer() (*server, error) {
 	// A mirror that is missing or unreadable opens as Disabled rather than as an
 	// error: dope runs without it, minus the flags on the screen.
 	buff, err := buffdb.Open(os.Getenv(buffdb.PathEnv))
-	if err != nil {
+	if err != nil { // sloplint: ignore[error-only-printed]
 		log.Printf("buff mirror not opened: %v", err)
 	}
 	srv := &server{

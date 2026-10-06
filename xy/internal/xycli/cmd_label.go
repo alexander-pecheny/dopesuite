@@ -67,12 +67,15 @@ func labelList(a *app, args []string) error {
 	})
 }
 
+// defaultLabelColor is the light blue a label gets when --color is not given.
+const defaultLabelColor = "#8ec7ff"
+
 func labelAdd(a *app, args []string) error {
 	s := xystrings.Default
 	fs := a.flags("label add", s.Cli.Label.AddUsage())
 	board := a.boardFlag(fs)
 	name := fs.String("name", "", s.Cli.Label.AddNameFlag())
-	color := fs.String("color", "#8ec7ff", s.Cli.Label.AddColorFlag())
+	color := fs.String("color", defaultLabelColor, s.Cli.Label.AddColorFlag())
 	_, err := a.parse(fs, args)
 	if err != nil {
 		return err

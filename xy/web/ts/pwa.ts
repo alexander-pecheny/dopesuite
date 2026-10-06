@@ -33,11 +33,14 @@ function injectHeadTag(tag: string, attrs: HeadTagSpec): void {
   for (const [k, v] of Object.entries(attrs.props || {})) node.setAttribute(k, v);
   document.head.appendChild(node);
 }
+// The dark theme's --structure, which manifest.webmanifest names too.
+const DARK_TOPBAR = "#262a31";
+
 try {
   injectHeadTag("link", { dedupe: ['link[rel="manifest"]'], props: { rel: "manifest", href: "/manifest.webmanifest" } });
   // Match the topbar (--structure) rather than a fixed brand colour; menu.js
   // keeps this in sync when the theme flips (fallback = dark topbar).
-  const topbar = getComputedStyle(document.documentElement).getPropertyValue("--structure").trim() || "#262a31";
+  const topbar = getComputedStyle(document.documentElement).getPropertyValue("--structure").trim() || DARK_TOPBAR;
   injectHeadTag("meta", { dedupe: ['meta[name="theme-color"]'], props: { name: "theme-color", content: topbar } });
   injectHeadTag("link", { dedupe: ['link[rel="icon"]'], props: { rel: "icon", type: "image/svg+xml", href: "/static/favicon.svg" } });
   injectHeadTag("meta", { dedupe: ['meta[name="apple-mobile-web-app-capable"]'], props: { name: "apple-mobile-web-app-capable", content: "yes" } });

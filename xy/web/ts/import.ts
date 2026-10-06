@@ -125,9 +125,9 @@ const TRELLO_COLORS: Record<string, string> = {
   pink: "#ff78cb", black: "#344563", grey: "#b3bac5", gray: "#b3bac5",
 };
 function colorHex(c: string | null | undefined): string {
-  if (!c) return "#b3bac5";
+  if (!c) return TRELLO_COLORS.grey;
   const base = String(c).split("_")[0];
-  return TRELLO_COLORS[base] || "#b3bac5";
+  return TRELLO_COLORS[base] || TRELLO_COLORS.grey;
 }
 
 // A list is a test-list if its name ends with "tests" (e.g. "harmony2025_tests").

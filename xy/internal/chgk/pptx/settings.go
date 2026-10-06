@@ -236,16 +236,17 @@ func alphaMarker(n int, upper bool) string {
 	return out
 }
 
+var romanNumerals = []struct {
+	value int
+	text  string
+}{
+	{1000, "m"}, {900, "cm"}, {500, "d"}, {400, "cd"}, {100, "c"}, {90, "xc"},
+	{50, "l"}, {40, "xl"}, {10, "x"}, {9, "ix"}, {5, "v"}, {4, "iv"}, {1, "i"},
+}
+
 func romanMarker(n int, upper bool) string {
-	numerals := []struct {
-		value int
-		text  string
-	}{
-		{1000, "m"}, {900, "cm"}, {500, "d"}, {400, "cd"}, {100, "c"}, {90, "xc"},
-		{50, "l"}, {40, "xl"}, {10, "x"}, {9, "ix"}, {5, "v"}, {4, "iv"}, {1, "i"},
-	}
 	out := ""
-	for _, nm := range numerals {
+	for _, nm := range romanNumerals {
 		for n >= nm.value {
 			out += nm.text
 			n -= nm.value
