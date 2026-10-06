@@ -28,7 +28,7 @@ const (
 	errorBodyLimit = 512
 )
 
-const ratingResultsURL = "https://api.rating.chgk.net/tournaments/%d/results.json?includeTeamMembers=1&includeTeamFlags=1"
+const ratingResultsURL = "https://api.rating.chgk.info/tournaments/%d/results.json?includeTeamMembers=1&includeTeamFlags=1"
 
 type RatingRosterImportResult struct {
 	TeamCount    int

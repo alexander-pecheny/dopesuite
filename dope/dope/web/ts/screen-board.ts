@@ -41,7 +41,7 @@ export function normalizeScreenSettings(raw: unknown): ScreenSettings {
 // fallback one: the server ships the fest's own cities in the init payload,
 // resolved through buff's mirror of rating.chgk.info, and that answer wins.
 // This list is what is left for a page served without a mirror. Extend it
-// freely, but follow api.rating.chgk.net/towns: a town it leaves without a
+// freely, but follow api.rating.chgk.info/towns: a town it leaves without a
 // country — Crimea, Abkhazia, South Ossetia, Karabakh — gets no flag here
 // either.
 export const CITY_COUNTRY: Record<string, string> = {

@@ -14,7 +14,7 @@ import (
 )
 
 // RatingAPI is the endpoint StatsAdder.get_tournament_results calls.
-const RatingAPI = "https://api.rating.chgk.net"
+const RatingAPI = "https://api.rating.chgk.info"
 
 // Fetch reads the results of every tournament in a comma-separated list of
 // rating.chgk.info ids — two of them when a synchronous package also ran async.
