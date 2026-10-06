@@ -1987,6 +1987,7 @@ ${usage}
     },
     seen: {
       partial: (parts: string) => `Видели отдельные вопросы: ${parts}.`,
+      theme: (n: string) => `тема ${n}`,
     },
     summary: {
       players: (names: string) => `Вопросы тестировали: ${names}`,

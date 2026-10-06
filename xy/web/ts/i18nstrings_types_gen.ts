@@ -1947,6 +1947,7 @@ export type Strings = {
     };
     seen: {
       partial: (parts: string) => string;
+      theme: (n: string) => string;
     };
     summary: {
       players: (names: string) => string;

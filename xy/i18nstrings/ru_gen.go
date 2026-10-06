@@ -2540,6 +2540,7 @@ var RU = Strings{
 			Partial: func(parts string) string {
 				return fmt.Sprintf("Видели отдельные вопросы: %s.", parts)
 			},
+			Theme: func(n string) string { return fmt.Sprintf("тема %s", n) },
 		},
 		Summary: SessionsSummaryStrings{
 			Players:   func(names string) string { return fmt.Sprintf("Вопросы тестировали: %s", names) },

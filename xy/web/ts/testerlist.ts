@@ -14,7 +14,7 @@ import { xyCrypto } from "./crypto.js";
 import { iconed } from "./icons_gen.js";
 import { type Board, type ListPanel, listScope, type PanelShell } from "./panels.js";
 import type { BoardCard, BoardList } from "./unlock.js";
-import { testable } from "./cardkind.js";
+import { counter, testable } from "./cardkind.js";
 import type { Tester } from "./sessions.js";
 
 const { el, errMsg } = xyApp;
@@ -110,6 +110,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
 
   // Numbering runs over the whole export scope (a group numbers across its member
   // lists) and is not always 1..n — a № directive can set a number outright.
+  // Themes count from 1 on their own, so a theme is named as one.
   function seenQuestions(list: BoardList): SeenQuestion[] {
     const { cards, numbers } = listScope(board, list);
     const out: SeenQuestion[] = [];
@@ -117,7 +118,8 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
       const num = numbers[i];
       if (!num) return;
       const testers = board.seenOf(card.id);
-      if (testers.length) out.push({ num, testers });
+      if (!testers.length) return;
+      out.push({ num: counter(card.kind) === "theme" ? S.sessions.seen.theme(num) : num, testers });
     });
     return out;
   }

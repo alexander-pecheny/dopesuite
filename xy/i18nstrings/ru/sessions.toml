@@ -122,3 +122,6 @@ teams_only = 'Вопросы тестировали команды: {{.teams}}'
 # The warning naming who saw individual questions of a tour and which ones:
 # parts are "name: 1, 2" clauses joined by "; ".
 partial = 'Видели отдельные вопросы: {{.parts}}.'
+# A theme's place in that list. Themes are numbered on their own, so a bare
+# "1" would read as question 1.
+theme = 'тема {{.n}}'
