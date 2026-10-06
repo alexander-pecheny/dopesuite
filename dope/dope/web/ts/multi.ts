@@ -22,8 +22,9 @@ import type {IconName} from "./icons_gen.js";
 import type {WriteRequest} from "./state-sync.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
-import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
-import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
+import {setHashTab, tabFromHash} from "./url-state.js";
+import {createTeamLens} from "./team-lens.js";
+import type {TeamSort} from "./team-lens.js";
 import * as multi from "./multi-protocol.js";
 import {CYCLE_LIMIT} from "./multi-protocol.js";
 import S from "./i18nstrings.js";
@@ -86,46 +87,21 @@ const TABS = [
 ];
 let activeTab = tabFromHash(TABS) || "detailed";
 
-// The Division the viewer is looking at (ADR-0020): «All» until the URL says so.
-let activeDivision = ALL_DIVISIONS;
-
-onNavigate(() => {
-  const next = tabFromHash(TABS);
-  const division = state ? divisionFromURL(divisions()) : activeDivision;
-  const tabMoved = Boolean(next && next !== activeTab);
-  if (!tabMoved && division === activeDivision) return;
-  activeDivision = division;
-  if (next && tabMoved) activeTab = next;
-  render();
+// The teams as the viewer looks at them: the Division chosen in the URL
+// (ADR-0020), its members, badges and chips, and the sheet's row order.
+const lens = createTeamLens({
+  teams: () => state
+    ? state.participants.map((_, index) => ({flags: multi.participantFlags(state!, index), number: multi.participantNumber(state!, index)}))
+    : null,
+  hidden: () => fest?.hiddenDivisions,
+  render: () => render(),
 });
-
-// divisions is every Division this game's teams carry, in first-seen order.
-function divisions(): string[] {
-  if (!state) return [];
-  return divisionsOf(state.participants.map((_, index) => multi.participantFlags(state!, index)), fest?.hiddenDivisions);
-}
-
-// divisionMembers is the rows the chosen Division takes; undefined for «All».
-function divisionMembers(): number[] | undefined {
-  if (activeDivision === ALL_DIVISIONS) return undefined;
-  const members: number[] = [];
-  state!.participants.forEach((_, index) => {
-    if (inDivision(multi.participantFlags(state!, index), activeDivision)) members.push(index);
-  });
-  return members;
-}
-
-// divisionChips heads the results table when any team carries a Flag.
-function divisionChips(): HTMLElement | null {
-  const offered = divisions();
-  if (!offered.length) return null;
-  return divisionChipRow(offered, activeDivision, (division) => {
-    if (division === activeDivision) return;
-    activeDivision = division;
-    setDivisionInURL(division);
-    render();
-  });
-}
+lens.follow(() => {
+  const next = tabFromHash(TABS);
+  if (!next || next === activeTab) return false;
+  activeTab = next;
+  return true;
+});
 
 const doc = mountGameDocument({
   route,
@@ -307,31 +283,18 @@ function cellNode(participant: number, game: number, column: number): HTMLElemen
   return cell;
 }
 
-// The sheet's row order is the host's own: by name, as the sheet has always
-// listed the teams, or by number — the order the answer slips and the
-// checkers' table come in, so a column pasted from there lands team by team.
-// Local to this page, never synced.
-let detailedSort: "name" | "number" = "name";
-const nameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
+// The sheet's row order is the host's own: by name, the order the server lists
+// the teams in, guest teams last, as the sheet has always listed them; or by
+// number, the order the answer slips and the checkers' table come in, so a
+// column pasted from there lands team by team. Local to this page, never
+// synced.
+let detailedSort: TeamSort = "name";
 
 function rowOrder(): number[] {
-  const order = state!.participants.map((_, index) => index);
-  const byName = (a: number, b: number) =>
-    nameCollator.compare(multi.participantName(state!, a), multi.participantName(state!, b)) || a - b;
-  // By name is the order the server lists the teams in, which is by name
-  // already with the guest teams after them: the sheet the hosts know, kept
-  // exactly as it was.
-  if (detailedSort === "name") return order;
-  // A guest team has no number (it is below zero) and a legacy entry none at
-  // all: they follow the numbered teams, by name.
-  const numberOf = (index: number) => {
-    const number = multi.participantNumber(state!, index);
-    return number > 0 ? number : Infinity;
-  };
-  return order.sort((a, b) => numberOf(a) - numberOf(b) || byName(a, b));
+  return lens.order(detailedSort);
 }
 
-function setDetailedSort(key: "name" | "number"): void {
+function setDetailedSort(key: TeamSort): void {
   if (detailedSort === key) return;
   detailedSort = key;
   render();
@@ -495,7 +458,7 @@ function refreshTotals(): void {
 // === the other tabs ===
 
 function buildResultsTable(): HTMLElement {
-  const rows = multi.rankedResultRows(state!, rules, (index) => multi.participantName(state!, index), divisionMembers());
+  const rows = multi.rankedResultRows(state!, rules, (index) => multi.participantName(state!, index), lens.members());
   // A fest that ranks on the sum of places reads each minigame's place beside
   // its score, and the sum in a column of its own.
   const byPlaces = rules.sorting.includes(multi.PLACE_SUM);
@@ -510,7 +473,7 @@ function buildResultsTable(): HTMLElement {
     ],
     rows: rows.map((row) => [
       row.placeText,
-      resultsTeamCell(row.name),
+      resultsTeamCell(row.name, {badges: lens.badges(row.index)}),
       ...row.games.map((score, g) => byPlaces
         ? S.multi.results.scoreAndPlace(multi.formatScore(score), formatPlace(row.places[g]))
         : multi.formatScore(score)),
@@ -710,7 +673,7 @@ function render(): void {
     render();
   });
   // A roster change can add a Division or take the chosen one away.
-  activeDivision = divisionFromURL(divisions());
+  lens.adopt();
   const node = activeTab === "results"
     ? buildResultsTable()
     : activeTab === "refusals"
@@ -718,7 +681,7 @@ function render(): void {
       : activeTab === "roster"
         ? rosterView()
         : buildTable();
-  const chips = activeTab === "results" ? divisionChips() : null;
+  const chips = activeTab === "results" ? lens.chips() : null;
   root.replaceChildren(...(chips ? [chips, node] : [node]));
   root.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "refusals");
   if (activeTab === "detailed") sheet.refresh();

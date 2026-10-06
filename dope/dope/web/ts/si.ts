@@ -8,7 +8,8 @@ import type {NodeIndex} from "./score-table.js";
 import {nameCell as clippedNameCell} from "./name-cell.js";
 import {resultsPins, resultsTeamCell} from "./standings.js";
 import {sheetHead} from "./sheet-pins.js";
-import {ALL_DIVISIONS, divisionChipRow, divisionFromURL, divisionsOf, inDivision, setDivisionInURL} from "./divisions.js";
+import {createTeamLens} from "./team-lens.js";
+import type {TeamSort} from "./team-lens.js";
 import {buildRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
@@ -17,7 +18,7 @@ import {clamp, fitScrollFade, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
-import {onNavigate, setHashTab, tabFromHash} from "./url-state.js";
+import {setHashTab, tabFromHash} from "./url-state.js";
 import * as ksi from "./ksi-protocol.js";
 import {KSI_THEMES, QUESTION_VALUES, RESULT_VALUES, SI_THEMES, STICKER_NEUTRAL} from "./ksi-protocol.js";
 import S from "./i18nstrings.js";
@@ -79,7 +80,6 @@ function darkenHex(hex: string, factor: number): string {
   const h = (n: number) => n.toString(HEX_RADIX).padStart(2, "0");
   return "#" + HEX_CHANNEL_OFFSETS.map((i) => h(ch(i))).join("");
 }
-const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 
 const route = parseGameRoute();
 const shell = mountGamePage({
@@ -116,75 +116,34 @@ let renderedTab: string | null = null;
 let tableIndex: NodeIndex | null = null;
 let scoreCache: ScoreSheet | null = null;
 let detailedOrderCache: number[] | null = null;
-// Client-local row order for the detailed sheet: "name" (default) or "number".
-// Editors pick whichever identity they read off the floor; never synced.
-let detailedSort: "name" | "number" = "name";
+// Client-local row order for the detailed sheet: "name" (default, the
+// server's order) or "number" (team-lens.ts TeamSort). Editors pick whichever
+// identity they read off the floor; never synced.
+let detailedSort: TeamSort = "name";
 const tabScroll = new Map<string, {top: number; left: number}>();
 // The refusals tab is a host-only control surface; its effect — declined teams
 // dropping out of the results ranking — is visible to spectators in that tab.
 const TABS = gameTabs([], {game: "ksi", viewer});
 let activeTab = tabFromHash(TABS) || "detailed";
-// The Division the viewer is looking at (ADR-0020): «All» until the URL says so.
-let activeDivision = ALL_DIVISIONS;
-
-onNavigate(() => {
-  const next = tabFromHash(TABS);
-  const division = divisionFromURL(divisions());
-  const tabMoved = Boolean(next && next !== activeTab);
-  const divisionMoved = division !== activeDivision;
-  if (!tabMoved && !divisionMoved) return;
-  if (divisionMoved) {
-    activeDivision = division;
-    invalidateDetailedOrder();
-  }
-  if (next && tabMoved) activeTab = next;
-  render();
+// The teams as the viewer looks at them: the Division chosen in the URL
+// (ADR-0020), its members, badges and chips, and the detailed sheet's order.
+// A player-mode game has no teams, so it never shows a chip.
+const lens = createTeamLens({
+  teams: () => {
+    if (!state) return null;
+    if (!isTeamMode()) return [];
+    return state.participants.map((_, index) => ({flags: ksi.participantFlags(state!, index), number: participantNumber(index)}));
+  },
+  hidden: () => fest?.hiddenDivisions,
+  moved: () => invalidateDetailedOrder(),
+  render: () => render(),
 });
-
-// divisions is every Division this game's teams carry, in first-seen order; a
-// player-mode game has none, so it never shows a chip.
-function divisions(): string[] {
-  if (!state || !isTeamMode()) return [];
-  return divisionsOf(state.participants.map((_, index) => ksi.participantFlags(state!, index)), fest?.hiddenDivisions);
-}
-
-// divisionMembers is the participant rows the chosen Division takes. Undefined
-// for «All», so the whole field is ranked exactly as it was.
-function divisionMembers(): number[] | undefined {
-  if (activeDivision === ALL_DIVISIONS) return undefined;
-  const members: number[] = [];
-  state!.participants.forEach((_, index) => {
-    if (inDivision(ksi.participantFlags(state!, index), activeDivision)) members.push(index);
-  });
-  return members;
-}
-
-// adoptDivision re-reads the URL's choice against the Divisions the document
-// now offers: a roster change can add one or take the chosen one away.
-function adoptDivision(): void {
-  const next = divisionFromURL(divisions());
-  if (next === activeDivision) return;
-  activeDivision = next;
-  invalidateDetailedOrder();
-}
-
-function pickDivision(division: string): void {
-  if (division === activeDivision) return;
-  activeDivision = division;
-  setDivisionInURL(division);
-  invalidateDetailedOrder();
-  render();
-}
-
-// teamBadges are the Divisions shown after a team's name — only while the whole
-// field is on screen. Inside one Division every row carries the same badge,
-// which says nothing (ADR-0020).
-function teamBadges(index: number): string[] | undefined {
-  if (activeDivision !== ALL_DIVISIONS) return undefined;
-  // A division the game hides is not a fact worth a badge here either.
-  const hidden = fest?.hiddenDivisions || [];
-  return (ksi.participantFlags(state!, index) || []).filter((flag) => !hidden.includes(flag));
-}
+lens.follow(() => {
+  const next = tabFromHash(TABS);
+  if (!next || next === activeTab) return false;
+  activeTab = next;
+  return true;
+});
 
 const doc = mountGameDocument({
   route,
@@ -225,7 +184,7 @@ function ensureState(): void {
   state = ksi.parseState(state, rules, participants);
   invalidateScores();
   invalidateDetailedOrder();
-  adoptDivision();
+  lens.adopt();
 }
 function participantName(index: number): string { return ksi.participantName(state!, index); }
 function participantNumber(index: number): number { return ksi.participantNumber(state!, index); }
@@ -238,7 +197,7 @@ function getScoreCache(): ScoreSheet {
   if (!scoreCache) scoreCache = ksi.scoreSheet(state!, rules);
   return scoreCache;
 }
-function rankedResultRows(): ResultRow[] { return ksi.rankedResultRows(state!, rules, participantLabel, divisionMembers()); }
+function rankedResultRows(): ResultRow[] { return ksi.rankedResultRows(state!, rules, participantLabel, lens.members()); }
 
 
 
@@ -269,7 +228,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   renderedTable = !team || activeTab === "detailed" ? node : null;
   if (team && activeTab !== "detailed") resetTableIndex();
   // A division chip row heads the two team tables that rank.
-  const chips = team && (activeTab === "results" || activeTab === "detailed") ? divisionChips() : null;
+  const chips = team && (activeTab === "results" || activeTab === "detailed") ? lens.chips() : null;
   siRoot.replaceChildren(...(chips ? [chips, node] : [node]));
 
   if (team) {
@@ -426,14 +385,6 @@ function applyKSIEdits(edits: CellEdit[]): void {
   }
 }
 
-// divisionChips is the chip row a Division-carrying game puts above its
-// results and detailed sheets; null when no team carries a Flag.
-function divisionChips(): HTMLElement | null {
-  const offered = divisions();
-  if (!offered.length) return null;
-  return divisionChipRow(offered, activeDivision, pickDivision);
-}
-
 function buildResultsTable(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
@@ -458,7 +409,7 @@ function buildRefusalsTable(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
 
-  const order = state!.participants.map((_, index) => index).sort(compareParticipantNumbers);
+  const order = lens.order("number");
 
   const table = document.createElement("table");
   table.className = "results-table seed-import-table";
@@ -526,7 +477,7 @@ function buildResultsTableInner(): HTMLTableElement {
     if (rowIdx === rows.length - 1) classes.push("results-group-last");
     tr.className = classes.join(" ");
     tr.appendChild(RESULTS_PINS.mark(td(row.placeText, "results-place"), "place"));
-    tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(row.name, {city: ksi.participantCity(state!, row.index), badges: teamBadges(row.index)}), "name"));
+    tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(row.name, {city: ksi.participantCity(state!, row.index), badges: lens.badges(row.index)}), "name"));
     tr.appendChild(RESULTS_PINS.mark(td(row.metrics.total, "results-num total-cell results-total"), "total"));
     tr.appendChild(td(row.metrics.plus, "results-num"));
     for (const value of RESULT_VALUES) {
@@ -583,28 +534,10 @@ function detailedPlayerOrder(): number[] {
   if (isTeamMode()) {
     // Teams that refused to play are dropped from the detailed sheet entirely,
     // and so are the ones outside the Division the viewer chose.
-    const members = divisionMembers();
-    const taken = members ? new Set(members) : null;
-    order = order.filter((index) => !participantDeclined(index) && (!taken || taken.has(index)));
-    order.sort(detailedSort === "number" ? compareParticipantNumbers : compareParticipantNames);
+    order = lens.order(detailedSort, lens.members()).filter((index) => !participantDeclined(index));
   }
   detailedOrderCache = order;
   return detailedOrderCache;
-}
-
-function compareParticipantNames(a: number, b: number): number {
-  const byName = teamNameCollator.compare(participantLabel(a), participantLabel(b));
-  return byName || a - b;
-}
-
-function compareParticipantNumbers(a: number, b: number): number {
-  const na = participantNumber(a);
-  const nb = participantNumber(b);
-  // Numbered teams ascending; unnumbered fall to the bottom, then by name so the
-  // order is stable regardless of participant index.
-  if (na > 0 && nb > 0 && na !== nb) return na - nb;
-  if (na > 0 !== nb > 0) return na > 0 ? -1 : 1;
-  return compareParticipantNames(a, b);
 }
 
 // setDetailedSort changes the local row order of the detailed sheet and
@@ -646,7 +579,7 @@ function nameCell(name: string, playerIndex: number): HTMLElement {
       className: "team-name od-detailed-team-cell",
       layout: true,
       number: {text: number > 0 ? String(number) : "", className: "od-detailed-team-number"},
-      badges: teamBadges(playerIndex),
+      badges: lens.badges(playerIndex),
     });
   }
   const cell = document.createElement("td");
