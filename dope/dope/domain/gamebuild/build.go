@@ -247,7 +247,7 @@ func createSchemeGame(ctx context.Context, tx *sql.Tx, festID int64, gameType, l
 	if placeholders > 0 {
 		scheme, err = schemedsl.Compile(doc, withEmptySeats(input, placeholders))
 	} else {
-		scheme, err = compileForEntrantsTx(ctx, tx, festID, doc, declared, input, entrants)
+		scheme, err = compileForEntrantsTx(ctx, tx, festID, doc, declared, input, entrants, nil)
 	}
 	if err != nil {
 		return 0, err
@@ -318,17 +318,19 @@ func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType
 	if err != nil {
 		return store.FestScheme{}, err
 	}
-	return compileForEntrantsTx(ctx, tx, festID, doc, declared, schemedsl.Input{Slug: slug, Title: title, GameType: gameType}, chosen)
+	return compileForEntrantsTx(ctx, tx, festID, doc, declared, schemedsl.Input{Slug: slug, Title: title, GameType: gameType}, chosen, nil)
 }
 
 // compileForEntrantsTx compiles a scheme. Unseeded, it is compiled for the
 // chosen entrants, or for the format's default ones when nobody was chosen.
+// numbers, when given, is the number each chosen entrant already sits under
+// (seatedNumbersTx); otherwise they are numbered 1… in the order given.
 // Seeded, its seats are the seed's, and the sources the seed reads must be
 // Games of this fest, or the import would fail later, at the host's button,
 // rather than here.
-func compileForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, doc *schemedsl.Doc, declared imports.Declared, input schemedsl.Input, chosen []int64) (store.FestScheme, error) {
+func compileForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, doc *schemedsl.Doc, declared imports.Declared, input schemedsl.Input, chosen []int64, numbers []int) (store.FestScheme, error) {
 	if !declared.Seeded() {
-		entrants, err := chosenEntrantsTx(ctx, tx, festID, input.GameType, declared, doc, chosen)
+		entrants, err := chosenEntrantsTx(ctx, tx, festID, input.GameType, declared, doc, chosen, numbers)
 		if err != nil {
 			return store.FestScheme{}, err
 		}
@@ -797,13 +799,16 @@ select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_i
 	}
 	unrecorded := len(entrants) == 0
 	var seatRoster bool
+	var numbers []int
 	if unrecorded {
 		if entrants, seatRoster, err = unrecordedEntrantsTx(ctx, tx, festID, gameID, gameType, declared); err != nil {
 			return err
 		}
+	} else if numbers, err = seatedNumbersTx(ctx, tx, gameID, entrants); err != nil {
+		return err
 	}
 	input := schemedsl.Input{Slug: meta.Slug, Title: meta.Title, GameType: gameType}
-	scheme, err := compileForEntrantsTx(ctx, tx, festID, doc, declared, input, entrants)
+	scheme, err := compileForEntrantsTx(ctx, tx, festID, doc, declared, input, entrants, numbers)
 	if err != nil {
 		return err
 	}

@@ -113,10 +113,10 @@ select participant_id from game_participants where game_id = ? order by position
 }
 
 // chosenEntrantsTx turns the Game's chosen Participants into scheme entrants,
-// numbered from 1 in the order given. Nobody chosen is the format's default
+// numbered from 1 in the order given, or under numbers when it is given. Nobody chosen is the format's default
 // entrants (imports.DefaultEntrants): the troikas of a format that seats
 // them, or empty seats while there are none; otherwise the whole fest plays.
-func chosenEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, declared imports.Declared, doc *schemedsl.Doc, chosen []int64) ([]store.SchemeSlot, error) {
+func chosenEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, declared imports.Declared, doc *schemedsl.Doc, chosen []int64, numbers []int) ([]store.SchemeSlot, error) {
 	kind := imports.KindOf(gameType)
 	if len(chosen) == 0 {
 		if kind != imports.KindTroika {
@@ -151,9 +151,39 @@ select name, roster from participants where id = ? and fest_id = ?`, participant
 			}
 			return nil, corei18n.User(dopestrings.Default.Gamebuild.Seating.KindPlayer(name))
 		}
-		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i + 1}, Label: name}
+		number := i + 1
+		if len(numbers) == len(chosen) {
+			number = numbers[i]
+		}
+		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: number}, Label: name}
 	}
 	return entrants, nil
+}
+
+// seatedNumbersTx is the number each entrant sits under in the Game now, in
+// the order given, or nil when one of them has no seat or two share one. A
+// Game that seated the whole fest numbers its teams by their fest numbers,
+// and a fest whose numbers have gaps (1, 2, 5, 7) would otherwise be
+// recompiled for 1…4 and lose the teams numbered above that.
+func seatedNumbersTx(ctx context.Context, tx *sql.Tx, gameID int64, entrants []int64) ([]int, error) {
+	seated, err := firstBasketTx(ctx, tx, gameID)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]int, len(seated))
+	for _, e := range seated {
+		byID[e.id] = e.number
+	}
+	numbers := make([]int, len(entrants))
+	taken := map[int]bool{}
+	for i, id := range entrants {
+		number, ok := byID[id]
+		if !ok || taken[number] {
+			return nil, nil
+		}
+		numbers[i], taken[number] = number, true
+	}
+	return numbers, nil
 }
 
 // seedEntrantsTx is the fest's own roster as scheme entrants: teams by their
