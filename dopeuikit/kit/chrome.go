@@ -1,5 +1,7 @@
 package kit
 
+import kitstrings "pecheny.me/dopeuikit/i18nstrings"
+
 // PageKind maps a page `kind` to the body/main class lists plus an optional
 // frame wrapper around main's content.
 type PageKind struct{ Body, Main, Frame []string }
@@ -37,7 +39,15 @@ type Chrome struct {
 	DefaultKind       string
 	TopbarSync        SyncSpec
 	HeadHook          func(ctx *ExpandCtx, p *Element) []Node
+
+	// kitStrings is the kit Catalog the App was given (Options.KitStrings),
+	// set by NewApp, for the words the kit's own expanders write.
+	kitStrings kitstrings.Strings
 }
+
+// KitStrings is the kit Catalog in the App's language: what an expander reads
+// the kit's own words from, such as the breadcrumb's aria-label.
+func (c Chrome) KitStrings() kitstrings.Strings { return c.kitStrings }
 
 func (c Chrome) withDefaults() Chrome {
 	if c.Lang == "" {

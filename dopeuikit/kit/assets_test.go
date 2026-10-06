@@ -111,7 +111,7 @@ func TestSafeLoginRedirect(t *testing.T) {
 // Russian in it names kitstrings.EN and the shared login page comes out in
 // English, without a single string of its own.
 func TestKitStringsPicksTheFallbackLanguage(t *testing.T) {
-	english, err := NewApp(Options{Chrome: CoreChrome(), KitStrings: kitstrings.EN})
+	english, err := NewApp(Options{Chrome: CoreChrome(), KitStrings: &kitstrings.EN})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +128,18 @@ func TestKitStringsPicksTheFallbackLanguage(t *testing.T) {
 		if strings.Contains(string(html), unwanted) {
 			t.Errorf("the English login page still says %q", unwanted)
 		}
+	}
+	// The kit's own expanders write their words in it too.
+	crumbs := []byte("page title=\"t\"\n  topbar\n    crumbs\n      crumb home href=\"/\" label=\"Home\"\n      crumb \"Here\"\n")
+	page, err := english.Compile("ui/crumbs.dopeui", crumbs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(page), `aria-label="Navigation"`) {
+		t.Errorf("the English breadcrumb is not labelled Navigation:\n%s", page)
+	}
+	if page, err := Compile("ui/crumbs.dopeui", crumbs); err != nil || !strings.Contains(string(page), `aria-label="Навигация"`) {
+		t.Errorf("the default breadcrumb is not labelled in Russian (%v):\n%s", err, page)
 	}
 	// The kit's own default is unchanged for an app that names nothing.
 	russian, err := Compile("ui/login.dopeui", LoginPage("Вход · test", "/"))

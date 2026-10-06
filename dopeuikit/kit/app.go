@@ -24,9 +24,9 @@ type Options struct {
 	Strings      StringSet // the app's Catalog; the kit's answers what it does not
 	// KitStrings is WHICH kit Catalog answers those ids — the login page's
 	// labels, the breadcrumb's aria-label, the words on /admin/create_users.
-	// Empty means the kit's own default (Russian); an app written in another
-	// language names the catalog it wants, e.g. kitstrings.EN.
-	KitStrings StringSet
+	// Nil means the kit's own default (Russian); an app written in another
+	// language names the catalog it wants, e.g. &kitstrings.EN.
+	KitStrings *kitstrings.Strings
 }
 
 // NewApp builds an App with the core pre-registered and the app's overlay on
@@ -48,6 +48,9 @@ func NewApp(opts Options) (*App, error) {
 	for k, v := range opts.Inline {
 		inline[k] = v
 	}
+	kit := kitCatalog(opts.KitStrings)
+	chrome := opts.Chrome.withDefaults()
+	chrome.kitStrings = kit
 	return base.NewApp(base.Options{
 		Base:         CoreVocab,
 		VocabOverlay: opts.VocabOverlay,
@@ -55,18 +58,18 @@ func NewApp(opts Options) (*App, error) {
 		Expand:       expand,
 		Inline:       inline,
 		Mounts:       opts.Mounts,
-		Env:          opts.Chrome.withDefaults(),
-		Strings:      base.Chain(opts.Strings, kitCatalog(opts.KitStrings)),
+		Env:          chrome,
+		Strings:      base.Chain(opts.Strings, kit),
 	})
 }
 
 // kitCatalog is the kit Catalog an App falls back on: the one the app named,
 // else the kit's own default.
-func kitCatalog(s StringSet) StringSet {
+func kitCatalog(s *kitstrings.Strings) kitstrings.Strings {
 	if s == nil {
 		return kitstrings.Default
 	}
-	return s
+	return *s
 }
 
 // CoreChrome is the design system's default page shell (sheet/full kinds, the

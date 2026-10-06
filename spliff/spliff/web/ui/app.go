@@ -26,7 +26,7 @@ var app = mustApp()
 func mustApp() *base.App {
 	a, err := base.NewApp(base.Options{
 		Strings:      spliffstrings.Default,
-		KitStrings:   kitstrings.EN,
+		KitStrings:   &kitstrings.EN,
 		VocabOverlay: overlayVocab,
 		Mounts:       mounts,
 		Chrome: base.CoreChrome().With(base.Chrome{
