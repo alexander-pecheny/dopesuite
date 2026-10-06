@@ -129,8 +129,12 @@ func TestAPhantomCannotBeRemovedWhileItIsOwed(t *testing.T) {
 		t.Errorf("the refusal %q does not name Nino", strings.TrimSpace(resp.Body.String()))
 	}
 
-	// An empty one goes, through the same route anybody is removed by.
+	// An empty one goes, through the same route anybody is removed by, and
+	// only the Owner may take it.
 	gio := w.phantom(t, "Gio")
+	if resp := w.bob.Do(http.MethodDelete, w.path("/members/"+strconv.FormatInt(gio, 10)), nil); resp.Code != http.StatusForbidden {
+		t.Errorf("bob removing Gio = %d, want 403", resp.Code)
+	}
 	w.alice.JSON(http.MethodDelete, w.path("/members/"+strconv.FormatInt(gio, 10)), nil, nil)
 	for _, m := range w.read(t, w.alice).Members {
 		if m.Name == "Gio" {

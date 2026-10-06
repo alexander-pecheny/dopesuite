@@ -564,15 +564,12 @@ func (s *server) handleLeaveGroup(w http.ResponseWriter, r *http.Request, sc rou
 
 // handleKickMember takes a MEMBER ROW id, not an account: a Phantom has no
 // account, and removing one is the same act under the same rule. Only the
-// Owner may remove somebody else.
+// Owner may remove somebody else, which the route (route.Owner) checks.
 func (s *server) handleKickMember(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	str := spliffstrings.Default
 	id, err := idstr.Parse(r.PathValue("memberId"))
 	if err != nil {
 		return route.NotFound(str.Group.Error.NotAMember())
-	}
-	if !sc.IsOwner {
-		return route.Forbidden(str.Group.Error.OwnerOnly())
 	}
 	book, err := s.rates.Book(r.Context())
 	if err != nil {
