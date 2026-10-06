@@ -534,15 +534,7 @@ function tiebreakControls(code: string, view: BrainMatchView): HTMLElement {
   add.className = "btn-xs";
   add.textContent = S.brain.tiebreak.add();
   add.title = S.brain.tiebreak.addHint();
-  add.addEventListener("click", () => {
-    const state = page.stateOf(code);
-    const index = matchRows(view, 0).length;
-    sendOps(code, [
-      {path: ["tiebreaks"], value: (state.tiebreaks || 0) + 1},
-      {path: ["teams", 0, "rows", index], value: {player: "", mark: ""}},
-      {path: ["teams", 1, "rows", index], value: {player: "", mark: ""}},
-    ]);
-  });
+  add.addEventListener("click", () => addTiebreak(code));
   bar.appendChild(add);
   const state = page.stateOf(code);
   const last = matchRows(view, 0).length - 1;
@@ -557,16 +549,44 @@ function tiebreakControls(code: string, view: BrainMatchView): HTMLElement {
     remove.className = "btn-xs";
     remove.textContent = S.brain.tiebreak.remove();
     remove.title = S.brain.tiebreak.removeHint();
-    remove.addEventListener("click", () => {
-      sendOps(code, [
-        {path: ["tiebreaks"], value: (state.tiebreaks || 0) - 1},
-        {path: ["teams", 0, "rows"], value: matchRows(view, 0).slice(0, last)},
-        {path: ["teams", 1, "rows"], value: matchRows(view, 1).slice(0, last)},
-      ]);
-    });
+    remove.addEventListener("click", () => dropTiebreak(code));
     bar.appendChild(remove);
   }
   return bar;
+}
+
+// addTiebreak and dropTiebreak change the bout's state first and then write
+// it through the bout page's patch, like every other change of a bout's
+// shape: the rows appear or go at once, not when the server answers. Both
+// read the state when they fire, since a repaint may have read it again
+// since the button was drawn.
+function addTiebreak(code: string): void {
+  const state = page.stateOf(code);
+  const index = state.teams?.[0]?.rows?.length || 0;
+  state.tiebreaks = (state.tiebreaks || 0) + 1;
+  for (const side of state.teams || []) side?.rows?.push({player: "", mark: ""});
+  sendOps(code, [
+    {path: ["tiebreaks"], value: state.tiebreaks},
+    {path: ["teams", 0, "rows", index], value: {player: "", mark: ""}},
+    {path: ["teams", 1, "rows", index], value: {player: "", mark: ""}},
+  ]);
+  page.refresh(code);
+}
+
+function dropTiebreak(code: string): void {
+  const state = page.stateOf(code);
+  const sides = (state.teams || []).map((side) => (side?.rows || []) as BrainRow[]);
+  const last = (sides[0]?.length || 0) - 1;
+  const lastEmpty = sides.every((rows) => !rows[last]?.player && !rows[last]?.mark);
+  if (!(state.tiebreaks || 0) || last < 0 || !lastEmpty) return;
+  state.tiebreaks = (state.tiebreaks || 0) - 1;
+  for (const rows of sides) rows.splice(last, 1);
+  sendOps(code, [
+    {path: ["tiebreaks"], value: state.tiebreaks},
+    {path: ["teams", 0, "rows"], value: sides[0]?.slice() || []},
+    {path: ["teams", 1, "rows"], value: sides[1]?.slice() || []},
+  ]);
+  page.refresh(code);
 }
 
 
