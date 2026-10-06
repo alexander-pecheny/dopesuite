@@ -10,7 +10,6 @@
 :root {
   /* Score-sheet geometry. Only the rules below read these. */
   --cell-gap: 1.5px;
-  --cell-radius: 4px;
   --theme-radius: var(--cell-radius);
   --team-col: 180px;
   --troika-cross-col: 46px;
@@ -319,19 +318,7 @@
   height: auto;
 }
 
-.game-header-main {
-  display: flex;
-  align-items: center;
-  flex: 1 1 auto;
-  overflow: hidden;
-  min-width: 0;
-  gap: var(--space-3);
-}
 
-.game-header-main h1 {
-  flex: 0 0 auto;
-  font-size: var(--text-xl);
-}
 
 .od-header-progress {
   flex: 0 1 auto;
@@ -344,19 +331,6 @@
   white-space: nowrap;
 }
 
-/* The game header's trail is the kit's .crumbs, sized down: it shares a fixed
-   44px bar with the stage tabs, so it runs at the small end and gives up room
-   to them rather than pushing them off. The floor is what the last crumb — the
-   game's own name — needs: a game with a dozen stages used to squeeze the whole
-   trail down to one letter per crumb, which reads as broken rather than terse.
-   The tab strip scrolls, so the room comes from there. */
-.game-host-top .crumbs {
-  flex: 0 1 auto;
-  min-width: min(52vw, 230px);
-  max-width: min(34vw, 420px);
-  font-size: var(--text-xs);
-  line-height: var(--leading-tight);
-}
 
 .od-page .match-main,
 .si-page .match-main,
@@ -386,13 +360,6 @@
   display: none;
 }
 
-/* The fight page has no corner gutter, so every frozen column starts one term
-   earlier. Zeroing the term does that once, instead of restating four offsets. */
-.fight-frame {
-  --sheet-corner-col: 0px;
-  border: 0;
-  background-color: var(--structure);
-}
 
 .table-host {
   min-width: max-content;
@@ -425,24 +392,6 @@
   line-height: 1.15;
 }
 
-/* The kit's scroll shadows are frame backgrounds, visible wherever the
-   content is see-through. A game page stacks бои, Сетка columns and table
-   cells with gaps between them, so once the sheet is scrolled sideways the
-   left and right shadows showed in every gap as a stray dark square. Those
-   pages mark a sideways scroll themselves, with the fade off their frozen
-   columns, so the frame keeps only its top and bottom shadows: the same
-   layers as core.css's .sheet-frame, the side ones sized to nothing. */
-.sheet-frame.fight-frame {
-  background-size:
-    var(--scroll-fade-content-w) var(--scroll-fade-size),
-    var(--scroll-fade-content-w) var(--scroll-fade-size),
-    0 0,
-    0 0,
-    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
-    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
-    0 0,
-    0 0;
-}
 
 /* The Сетка keeps no scroll shadows at all. Every column head is opaque, so
    the top and bottom shadows only ever showed in the gaps between columns: a
@@ -1785,63 +1734,13 @@ body:not(.embedded-match) .grid-match {
 
 
 
-.game-host-top .match-tabs {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  overflow: visible;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
 
-.game-host-top .match-tab {
-  position: relative;
-  height: 24px;
-  padding: 0 8px;
-  margin-left: -1px;
-  border: 1px solid var(--structure);
-  border-radius: 0;
-  background: var(--paper);
-  color: var(--muted);
-  font-size: var(--text-xs-plus);
-  line-height: 22px;
-}
 
-.game-host-top a.match-tab {
-  display: flex;
-  align-items: center;
-  text-decoration: none;
-}
 
-.game-host-top .match-tab:first-child,
-.game-host-top .tab-picker + .match-tab {
-  margin-left: 0;
-  border-top-left-radius: var(--cell-radius);
-  border-bottom-left-radius: var(--cell-radius);
-}
 
-.game-host-top .match-tab:last-child {
-  border-top-right-radius: var(--cell-radius);
-  border-bottom-right-radius: var(--cell-radius);
-}
 
-.game-host-top .match-tab + .match-tab {
-  border-left-color: var(--structure);
-}
 
-.game-host-top .match-tab:hover {
-  background: var(--wash-emphasis);
-}
 
-.game-host-top .match-tab.active {
-  z-index: 1;
-  border-color: var(--text);
-  background: var(--paper);
-  color: var(--text);
-  box-shadow: none;
-}
 
 /* A брейн or личная СИ carries a dozen tabs — the bar scrolls at every
    width, fading at whichever edge hides more. */
@@ -1856,13 +1755,6 @@ body:not(.embedded-match) .grid-match {
   -webkit-overflow-scrolling: touch;
 }
 
-/* A sideways touchpad swipe on a game page is a scroll — of the tabs, of a
-   wide sheet — never the browser's back or forward. The ЭК page keeps each tab
-   in the history, so a swipe that missed the strip went back through the tabs
-   and looked like the strip scrolling the wrong way round. */
-html:has(.game-host-top) {
-  overscroll-behavior-x: none;
-}
 
 .ek-page .ek-tabs::-webkit-scrollbar,
 .game-host-top .match-tabs::-webkit-scrollbar {
