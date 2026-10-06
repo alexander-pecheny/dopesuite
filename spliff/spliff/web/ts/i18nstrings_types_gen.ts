@@ -212,6 +212,7 @@ export type Strings = {
       descriptionPlaceholder: () => string;
       forWhom: () => string;
       forWhomHint: () => string;
+      formerMember: () => string;
       fullyClaimed: () => string;
       history: () => string;
       needOnce: () => string;

@@ -88,6 +88,9 @@ row_person = "Who"
 row_currency = "Currency"
 row_amount = "Amount"
 pick_person = "Nobody yet"
+# A row naming somebody who has since left the group. Spliff keeps no name for
+# a removed member, so the row can only say that much.
+former_member = "Has left"
 add_row = "Add a row"
 add_everyone = "Everyone"
 split_evenly = "Split evenly"

@@ -239,6 +239,7 @@ var EN = Strings{
 			DescriptionPlaceholder: func() string { return "Dinner at Shavi Lomi" },
 			ForWhom:                func() string { return "For whom" },
 			ForWhomHint:            func() string { return "One row per person whose bill it was. What no row claims stays unclaimed." },
+			FormerMember:           func() string { return "Has left" },
 			FullyClaimed:           func() string { return "Every part of it is claimed." },
 			History:                func() string { return "History" },
 			NeedOnce:               func() string { return "Somebody is listed twice. Put them on one row." },

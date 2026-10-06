@@ -212,6 +212,7 @@ export const EN: Strings = {
       descriptionPlaceholder: () => "Dinner at Shavi Lomi",
       forWhom: () => "For whom",
       forWhomHint: () => "One row per person whose bill it was. What no row claims stays unclaimed.",
+      formerMember: () => "Has left",
       fullyClaimed: () => "Every part of it is claimed.",
       history: () => "History",
       needOnce: () => "Somebody is listed twice. Put them on one row.",

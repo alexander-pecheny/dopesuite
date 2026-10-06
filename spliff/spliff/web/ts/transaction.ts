@@ -268,6 +268,14 @@ function personSelect(selected: number): HTMLSelectElement {
     option.value = String(member.id);
     select.append(option);
   }
+  // A deleted bill can name somebody removed from the Group since. Without an
+  // option of its own the row would read as blank, so it gets one that says
+  // they have left. Spliff keeps no name for them once their row is gone.
+  if (selected !== 0 && !members.some((m) => m.id === selected)) {
+    const former = el("option", undefined, S.page.transaction.formerMember());
+    former.value = String(selected);
+    select.append(former);
+  }
   select.value = String(selected);
   select.setAttribute("aria-label", S.page.transaction.rowPerson());
   return select;
