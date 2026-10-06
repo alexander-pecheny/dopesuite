@@ -116,6 +116,9 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 	return written, nil
 }
 
+// loadStoredSettingsTx reads what a save compares with. A Game that is not in
+// the fest is sql.ErrNoRows, which both the form and the JSON twin answer with
+// a 404.
 func loadStoredSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (storedSettings, error) {
 	var stored storedSettings
 	var hidden string

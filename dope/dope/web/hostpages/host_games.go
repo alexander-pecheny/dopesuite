@@ -532,7 +532,11 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		shown := r.Form["division_shown"]
 		g.ShownDivisions = &shown
 	}
-	if err := s.UpdateGameSettings(r.Context(), festID, gameID, g); err != nil {
+	if err := s.UpdateGameSettings(r.Context(), festID, gameID, g); errors.Is(err, sql.ErrNoRows) {
+		// The Game left the fest after the router found it.
+		http.NotFound(w, r)
+		return
+	} else if err != nil {
 		s.renderHostGameSettings(w, r, festID, gameID, err.Error())
 		return
 	}

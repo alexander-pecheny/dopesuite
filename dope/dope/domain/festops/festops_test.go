@@ -3,6 +3,7 @@ package festops_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -144,6 +145,23 @@ func TestSettingsRefuseASchemeEditOfAFlatGame(t *testing.T) {
 	err = saveSettings(t, eng, festID, knobs, festops.Settings{Title: "ЧГК", SchemeDSL: dsl})
 	if _, user := corei18n.AsUser(err); !user {
 		t.Fatalf("err = %v, want a scheme refused on a Game built from its fields", err)
+	}
+}
+
+// A save for a Game that is not in the fest is sql.ErrNoRows, which the form
+// and the JSON twin answer with a 404, and it writes nothing.
+func TestSettingsOfAGameNotInTheFest(t *testing.T) {
+	eng, festID := newFest(t)
+	gameID := createGame(t, eng, festID, "ЧГК")
+	if err := saveSettings(t, eng, festID+1, gameID, festops.Settings{Title: "Чужая"}); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("err = %v, want sql.ErrNoRows for a Game of another fest", err)
+	}
+	if err := saveSettings(t, eng, festID, gameID+1, festops.Settings{Title: "Нет такой"}); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("err = %v, want sql.ErrNoRows for a Game that does not exist", err)
+	}
+	var title string
+	if err := eng.DB.QueryRow(`select title from games where id = ?`, gameID).Scan(&title); err != nil || title == "Чужая" {
+		t.Fatalf("title = %q (%v): a refused save wrote the title", title, err)
 	}
 }
 
