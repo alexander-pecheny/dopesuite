@@ -59,7 +59,7 @@ spliff/                  module root (go.mod: module "spliff")
 | `spliff/server/routes.go` | the whole route table, one row per endpoint |
 | `spliff/server/groups.go` | the Group page's read (balances, Debt graph, feed) and the Group's own settings, leaving and kicking |
 | `spliff/server/transactions.go` | Every write to a Transaction: validate it, write it, append to History, and send the DMs the rules call for |
-| `spliff/server/invites.go` | The adapter over `dopecore/invitelink`. This file supplies Spliff's tables, DTOs and wording; the state machine itself belongs to that package |
+| `spliff/server/invites.go` | The adapter over `dopecore/invitelink`. This file supplies Spliff's tables, its peek and join responses, the Phantom claim and the wording (`inviteTexts`); the state machine, the request bodies, the list's wire shape and the error mapping belong to that package |
 | `spliff/server/rates.go` | The fetcher. It pulls one table a day from open.er-api.com, both when a rate is first needed and on a daily ticker. If a fetch fails, the nearest table already stored stays in use |
 | `spliff/server/auth.go` | the `dopecore/tglogin` adapter and password login |
 | `spliff/server/testapi.go` | the single exported test seam for `server/tests/` |

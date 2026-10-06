@@ -6,6 +6,7 @@ import S from "./i18nstrings.js";
 import {
   errorText,
   get,
+  inviteUrl,
   request,
   type GroupDTO,
   type HistoryDTO,
@@ -324,14 +325,15 @@ function renderInvites(invites: InviteDTO[]): void {
     const left = rowGroup(true);
     left.append(el("span", "list-row-title split-name u-clip-fade", invite.label || invite.code));
     left.append(badge(inviteState(invite.state), invite.state === "active" ? "positive" : "negative"));
-    left.append(el("code", "invite-code muted", invite.url));
+    const url = inviteUrl(window.location.origin, invite.code);
+    left.append(el("code", "invite-code muted", url));
     row.append(left);
 
     const actions = rowGroup();
     const copy = el("button", "btn btn-ghost", S.page.invite.copy());
     copy.type = "button";
     copy.addEventListener("click", () => {
-      void navigator.clipboard.writeText(invite.url).then(() => {
+      void navigator.clipboard.writeText(url).then(() => {
         copy.textContent = S.page.invite.copied();
       }).catch(() => undefined);
     });

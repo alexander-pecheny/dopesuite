@@ -7,8 +7,9 @@
 // The state machine and the SQL on the two tables live here; the app brings its
 // write transaction, the table names, what a scope is (Scope) and every word a
 // person reads. That is the shape dopecore/tglogin settled on (root
-// docs/adr/0004): the package answers a State or a sentinel error, and the app
-// maps each to its own HTTP status and wording.
+// docs/adr/0004): the package answers a State or a sentinel error. edge.go
+// turns those into HTTP answers in the app's words (Texts.Answer), and holds
+// the request bodies and the owner's list as both apps' frontends read them.
 //
 // Only a use that reached 'joined' spends the cap, so a queue of hopefuls
 // behind a one-seat link costs nothing and a decline refunds nothing. A

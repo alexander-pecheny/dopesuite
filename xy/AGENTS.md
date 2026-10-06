@@ -151,7 +151,8 @@ internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy p
                        cmd/uigen -overlay -base .../kit). DESIGN.md documents the overlay;
                        the DSL engine (ui/) + design system (kit/) + spec live in ../dopeuikit
 internal/server/       package server — the whole HTTP server
-  server.go            DB open (BuildDSN/WAL), write-tx discipline (conn-before-lock)
+  server.go            DB open (BuildDSN/WAL), withWriteTx over dopecore's sqlitex.Writer (conn-before-lock)
+  origin.go            XY_TRUSTED_ORIGIN_HOSTS: once set, dopecore/sameorigin guards every write
   db.go                the schema as a list: `[]schema.Migration` (dopecore/schema applies them once each, in
                        order); a new step takes the next number and goes at the end;
                        XY_REHEARSE_DB=<snapshot> walks a prod copy through them
@@ -172,9 +173,10 @@ internal/server/       package server — the whole HTTP server
   boardinvites.go      invite links (ADR-0017). The owner creates, revokes and deletes them and
                        decides on join requests; the invitee looks up a code and joins. A link
                        grants membership only, never the key. The state machine is in
-                       dopecore/invitelink, and this file adapts it to xy: the routes, the DTOs,
-                       the write transaction, the Russian strings, and a Scope that describes
-                       what a board is
+                       dopecore/invitelink, and so are the request bodies, the list's wire
+                       shape and the error mapping (Texts.Answer). This file adapts it to xy:
+                       the routes, the peek and join responses, the write transaction, the
+                       Russian strings (inviteTexts), and a Scope that describes what a board is
   timeline.go          the Timeline's one writer (insertEvent: every kind's columns; appendEvent for the
                        metadata trail) and one reader (timelineColumns + scanTimelineEvent, readTimeline)
   unread.go            the unread rule as SQL fragments (the two buckets, the watermark, the Mention) that

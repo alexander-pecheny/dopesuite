@@ -16,9 +16,11 @@ const USES_MANY = 100;
 const { fetchJSON, jpost, jdelete, el, errMsg } = xyApp;
 
 // One person's passage through a link: who, and when they joined or asked.
+// name is what the server writes a person as: the username, else the telegram
+// one (dopecore/invitelink's PersonView, shared with Spliff).
 export interface InvitePerson {
   user_id: number;
-  username: string;
+  name: string;
   at: string;
 }
 
@@ -74,12 +76,15 @@ export function inviteTimeLeft(expiresAt: string | undefined, now: number): stri
   return S.invite.time.underHour();
 }
 
+// inviteUrl is built from the page's own origin, never sent by the server: an
+// owner on a mirror (xy.pecheny.ru) reaches xy with Host rewritten, and should
+// hand out a link to the mirror they are on.
 export function inviteUrl(origin: string, code: string): string {
   return `${origin}/join/${code}`;
 }
 
 export function personName(p: InvitePerson): string {
-  return p.username || `#${p.user_id}`;
+  return p.name || `#${p.user_id}`;
 }
 
 export interface InvitesDeps {

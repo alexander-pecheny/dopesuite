@@ -85,10 +85,10 @@ var EN = Strings{
 			RequestNotFound:  func() string { return "There is no join request waiting from that person." },
 		},
 		Refusal: InviteRefusalStrings{
+			Broken:    func() string { return "That link does not work any more." },
 			Declined:  func() string { return "You were declined from this group through this link." },
 			Exhausted: func() string { return "That link has been used up." },
 			Expired:   func() string { return "That link has expired." },
-			Generic:   func() string { return "That link does not work any more." },
 			Revoked:   func() string { return "That link has been revoked." },
 			Spent:     func() string { return "You already used that link once. Ask for a new one." },
 		},

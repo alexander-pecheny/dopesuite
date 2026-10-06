@@ -152,3 +152,42 @@ handlers are thin adapters now, and `boardinvite_test.go` passed unchanged
 through the whole move — it is the gate the extraction was checked against.
 The package's own tests are the tglogin shape: an in-memory SQLite holding the
 two tables under names no app uses, and a map-backed `Scope`.
+
+## Addendum (6 Oct 2026: the write transaction, the origin check, the invite edge)
+
+Three more copies had appeared, each in two or three apps, and each had
+drifted.
+
+- **`sqlitex.Writer{DB, Mu}.Tx(ctx, label, fn)`** is the write transaction xy
+  and spliff had copied from dope: the pooled connection before the lock, a
+  context detached from the request and bounded by `WriteTimeout`, the
+  slow-write log, commit or rollback, and fn's error returned as it is. Each app
+  keeps its own lock. dope's engine builds `AcquireWriteConn`, `LockWrite` and
+  `BeginWriteTxConn` from the same Writer and adds its audit seed through
+  `Writer.Begin`, so `CommitFestWrite` (dope ADR-0028) and the edit batcher are
+  unchanged.
+- **`sameorigin`** is dope's check after its two June fixes: a safe method or a
+  missing Origin passes (there is no Referer fallback), an Origin passes when its
+  host is the request's own or one of the trusted hosts, and `X-Forwarded-Host`
+  is never read. spliff's copy predated the trusted hosts. Each app names its
+  own env var (`DOPE_`, `SPLIFF_`, `XY_TRUSTED_ORIGIN_HOSTS`). xy used to check
+  only `/admin`; setting `XY_TRUSTED_ORIGIN_HOSTS` puts the check in front of
+  every write. It is off by default, because the mirrors rewrite Host while the
+  browser's Origin names the mirror, and a deploy never touches `/etc/xy.env`.
+- **`sqlitextest.Guard` and `RequireDurable`** replace the three
+  `durable_test.go` bodies that differed only in the seam each allowed.
+- **The invite edge** joins `invitelink`, in the shape `tgbot.LoginHandler` set:
+  `Texts{Revoked, …, Broken, NotFound, …}` is the app's words,
+  `Texts.Answer(err)` the status and sentence for each of the package's errors
+  (404 for a link that does not exist, 400 for the rest), `MintRequest` and
+  `DecideRequest` the bodies, `Link.View(now)` the owner's list on the wire.
+  Each app keeps its Scope, its routes and its peek and join responses, which
+  name the scope in the app's own terms. Three drifts were settled. The person
+  in the list is `name` in both apps (xy said `username`; its frontend moved).
+  The invite URL is built by the page from its own origin, as xy did, rather
+  than from `SPLIFF_PUBLIC_URL`, as spliff did: an owner on xy.pecheny.ru
+  reaches the server with Host rewritten and should hand out a mirror link. A
+  refusal in a state the app has no sentence for says `Broken` (spliff's
+  `generic` was renamed). A shared invites panel or join page in dopeuikit was
+  not built: the two apps draw their lists in different places (xy's members
+  modal, spliff's group page) and the join pages differ by spliff's phantoms.

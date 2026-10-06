@@ -74,10 +74,10 @@ export const EN: Strings = {
       requestNotFound: () => "There is no join request waiting from that person.",
     },
     refusal: {
+      broken: () => "That link does not work any more.",
       declined: () => "You were declined from this group through this link.",
       exhausted: () => "That link has been used up.",
       expired: () => "That link has expired.",
-      generic: () => "That link does not work any more.",
       revoked: () => "That link has been revoked.",
       spent: () => "You already used that link once. Ask for a new one.",
     },

@@ -36,6 +36,6 @@ test("the link is the join page on this origin", () => {
 });
 
 test("a person without a username still has a name", () => {
-  assert.equal(personName({ user_id: 7, username: "\u0430\u043d\u044f" }), "\u0430\u043d\u044f");
-  assert.equal(personName({ user_id: 7, username: "" }), "#7");
+  assert.equal(personName({ user_id: 7, name: "\u0430\u043d\u044f" }), "\u0430\u043d\u044f");
+  assert.equal(personName({ user_id: 7, name: "" }), "#7");
 });

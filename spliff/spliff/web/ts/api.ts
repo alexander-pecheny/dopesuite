@@ -113,10 +113,12 @@ export interface InvitePersonDTO {
   at: string;
 }
 
+// One Invite Link as the Owner's list draws it (dopecore/invitelink's View,
+// shared with xy). It carries the code, not a URL: the page builds the URL
+// from its own origin with inviteUrl.
 export interface InviteDTO {
   id: number;
   code: string;
-  url: string;
   label: string;
   created_at: string;
   expires_at?: string;
@@ -127,6 +129,11 @@ export interface InviteDTO {
   state: string;
   joined: InvitePersonDTO[];
   pending: InvitePersonDTO[];
+}
+
+// inviteUrl is the link an Owner hands out, on whatever host they are on.
+export function inviteUrl(origin: string, code: string): string {
+  return `${origin}/join/${code}`;
 }
 
 export interface PhantomDTO {

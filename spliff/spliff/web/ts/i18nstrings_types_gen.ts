@@ -74,10 +74,10 @@ export type Strings = {
       requestNotFound: () => string;
     };
     refusal: {
+      broken: () => string;
       declined: () => string;
       exhausted: () => string;
       expired: () => string;
-      generic: () => string;
       revoked: () => string;
       spent: () => string;
     };

@@ -11,7 +11,6 @@ import (
 	"pecheny.me/dopecore/authcred"
 	"pecheny.me/dopecore/invitelink"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -93,27 +92,6 @@ func (s *server) invites() invitelink.Links {
 	}
 }
 
-type invitePersonDTO struct {
-	UserID   int64  `json:"user_id"`
-	Username string `json:"username"`
-	At       string `json:"at"`
-}
-
-type boardInviteDTO struct {
-	ID               int64             `json:"id"`
-	Code             string            `json:"code"`
-	Label            string            `json:"label"`
-	CreatedAt        string            `json:"created_at"`
-	ExpiresAt        string            `json:"expires_at,omitempty"`
-	MaxUses          *int64            `json:"max_uses"`
-	Used             int64             `json:"used"`
-	Left             *int64            `json:"left"`
-	RequiresApproval bool              `json:"requires_approval"`
-	State            string            `json:"state"`
-	Joined           []invitePersonDTO `json:"joined"`
-	Pending          []invitePersonDTO `json:"pending"`
-}
-
 // boardInvitePeekDTO is all an invitee learns before joining: which board this
 // is, and whether the link still works for them.
 type boardInvitePeekDTO struct {
@@ -123,21 +101,32 @@ type boardInvitePeekDTO struct {
 	RequiresApproval bool   `json:"requires_approval"`
 }
 
-func inviteDTO(lk invitelink.Link, now time.Time) boardInviteDTO {
-	return boardInviteDTO{
-		ID: lk.ID, Code: lk.Code, Label: lk.Label, CreatedAt: lk.CreatedAt,
-		ExpiresAt: lk.ExpiresAt, MaxUses: lk.MaxUses, Used: lk.Used, Left: lk.Left(),
-		RequiresApproval: lk.RequiresApproval, State: string(lk.State(now)),
-		Joined: people(lk.Joined), Pending: people(lk.Waiting),
+// inviteTexts is xy's wording for the shared invite edge.
+func inviteTexts() invitelink.Texts {
+	str := xystrings.Default
+	return invitelink.Texts{
+		Revoked:          str.Server.Refusal.Revoked(),
+		Expired:          str.Server.Refusal.Expired(),
+		Exhausted:        str.Server.Refusal.Exhausted(),
+		Declined:         str.Server.Refusal.Declined(),
+		Spent:            str.Server.Refusal.Spent(),
+		Broken:           str.Server.Refusal.Broken(),
+		NotFound:         str.Server.Invite.NotFound(),
+		RequestNotFound:  str.Server.Invite.RequestNotFound(),
+		NoSeatsLeft:      str.Server.Invite.NoSeatsLeft(),
+		LabelTooLong:     str.Server.Invite.LabelTooLong(),
+		LimitsOutOfRange: str.Server.Invite.LimitsOutOfRange(),
+		DecisionInvalid:  str.Server.Invite.DecisionInvalid(),
 	}
 }
 
-func people(in []invitelink.Person) []invitePersonDTO {
-	out := []invitePersonDTO{}
-	for _, p := range in {
-		out = append(out, invitePersonDTO{UserID: p.UserID, Username: p.Name, At: p.At})
+// inviteError answers one of invitelink's errors with its status and xy's
+// sentence; any other error passes through as itself.
+func inviteError(err error) error {
+	if a, ok := inviteTexts().Answer(err); ok {
+		return &appError{status: a.Status, msg: a.Msg}
 	}
-	return out
+	return err
 }
 
 // ---- owner side ----
@@ -165,19 +154,7 @@ func (s *server) handleListBoardInvites(w http.ResponseWriter, r *http.Request) 
 	if handleErr(w, err) {
 		return
 	}
-	now := time.Now()
-	out := []boardInviteDTO{}
-	for _, lk := range links {
-		out = append(out, inviteDTO(lk, now))
-	}
-	writeJSON(w, out)
-}
-
-type createInviteRequest struct {
-	Label            string `json:"label"`
-	MaxUses          int64  `json:"max_uses"`  // 0 = unlimited
-	TTLHours         int64  `json:"ttl_hours"` // 0 = no expiry
-	RequiresApproval bool   `json:"requires_approval"`
+	writeJSON(w, invitelink.Views(links, time.Now()))
 }
 
 func (s *server) handleCreateBoardInvite(w http.ResponseWriter, r *http.Request) {
@@ -185,16 +162,12 @@ func (s *server) handleCreateBoardInvite(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	var req createInviteRequest
+	var req invitelink.MintRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	opt := invitelink.Options{
-		Label: req.Label, MaxUses: req.MaxUses, TTLHours: req.TTLHours,
-		RequiresApproval: req.RequiresApproval,
-	}
-	if err := opt.Validate(); err != nil {
-		httpError(w, http.StatusBadRequest, inviteBadRequest(err))
+	opt, err := req.Options()
+	if handleErr(w, inviteError(err)) {
 		return
 	}
 	code, err := authcred.NewInviteCode()
@@ -216,15 +189,7 @@ func (s *server) handleCreateBoardInvite(w http.ResponseWriter, r *http.Request)
 	if handleErr(w, err) {
 		return
 	}
-	writeJSON(w, inviteDTO(lk, now))
-}
-
-// inviteBadRequest words the two settings a link's own limits must respect.
-func inviteBadRequest(err error) string {
-	if errors.Is(err, invitelink.ErrLabelTooLong) {
-		return xystrings.Default.Server.Invite.LabelTooLong()
-	}
-	return xystrings.Default.Server.Invite.LimitsOutOfRange()
+	writeJSON(w, lk.View(now))
 }
 
 // requireOwnedInvite resolves the {id} link and checks the caller owns its board.
@@ -238,11 +203,7 @@ func (s *server) requireOwnedInvite(w http.ResponseWriter, r *http.Request) (inv
 		return invitelink.Link{}, false
 	}
 	lk, err := s.invites().ByID(r.Context(), s.db, id)
-	if errors.Is(err, invitelink.ErrNotFound) {
-		httpError(w, http.StatusNotFound, xystrings.Default.Server.Invite.NotFound())
-		return invitelink.Link{}, false
-	}
-	if handleErr(w, err) {
+	if handleErr(w, inviteError(err)) {
 		return invitelink.Link{}, false
 	}
 	role, err := boardRole(r.Context(), s.db, lk.ScopeID, u.UserID)
@@ -288,10 +249,6 @@ func (s *server) handleDeleteBoardInvite(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type decideJoinRequest struct {
-	Decision string `json:"decision"` // approve | decline
-}
-
 func (s *server) handleDecideJoinRequest(w http.ResponseWriter, r *http.Request) {
 	_, bid, ok := s.requireBoardOwner(w, r)
 	if !ok {
@@ -301,35 +258,23 @@ func (s *server) handleDecideJoinRequest(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	var req decideJoinRequest
+	var req invitelink.DecideRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.Decision != "approve" && req.Decision != "decline" {
-		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Invite.DecisionInvalid())
+	approve, err := req.Approve()
+	if handleErr(w, inviteError(err)) {
 		return
 	}
 	links := s.invites()
 	now := time.Now()
-	err := s.withWriteTx(r.Context(), "decide-join-request", func(ctx context.Context, tx *sql.Tx) error {
-		return links.Decide(ctx, tx, bid, requesterID, req.Decision == "approve", now)
+	err = s.withWriteTx(r.Context(), "decide-join-request", func(ctx context.Context, tx *sql.Tx) error {
+		return links.Decide(ctx, tx, bid, requesterID, approve, now)
 	})
-	if handleErr(w, inviteDecideError(err)) {
+	if handleErr(w, inviteError(err)) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// inviteDecideError gives the package's two refusals their xy wording; anything
-// else passes through as itself.
-func inviteDecideError(err error) error {
-	switch {
-	case errors.Is(err, invitelink.ErrRequestNotFound):
-		return corei18n.User(xystrings.Default.Server.Invite.RequestNotFound())
-	case errors.Is(err, invitelink.ErrNoSeatsLeft):
-		return corei18n.User(xystrings.Default.Server.Invite.NoSeatsLeft())
-	}
-	return err
 }
 
 // ---- invitee side ----
@@ -340,11 +285,7 @@ func (s *server) handlePeekInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	peek, err := s.invites().PeekCode(r.Context(), s.db, r.PathValue("code"), u.UserID, time.Now())
-	if errors.Is(err, invitelink.ErrNotFound) {
-		httpError(w, http.StatusNotFound, xystrings.Default.Server.Invite.NotFound())
-		return
-	}
-	if handleErr(w, err) {
+	if handleErr(w, inviteError(err)) {
 		return
 	}
 	writeJSON(w, boardInvitePeekDTO{
@@ -387,42 +328,11 @@ func (s *server) handleJoinInvite(w http.ResponseWriter, r *http.Request) {
 		res, err = links.Join(ctx, tx, code, u.UserID, now)
 		return err
 	})
-	if handleErr(w, inviteJoinError(err)) {
+	if handleErr(w, inviteError(err)) {
 		return
 	}
 	if res.Nudge {
 		links.Nudge(res.ScopeID, u.UserID)
 	}
 	writeJSON(w, joinInviteResponse{BoardID: res.ScopeID, State: string(res.State)})
-}
-
-// inviteJoinError maps the package's answers onto xy's edge: a missing link is
-// a 404, a dead one is a 400 worded for the person holding it.
-func inviteJoinError(err error) error {
-	if errors.Is(err, invitelink.ErrNotFound) {
-		return &appError{status: http.StatusNotFound, msg: xystrings.Default.Server.Invite.NotFound()}
-	}
-	var refused *invitelink.Refused
-	if errors.As(err, &refused) {
-		return corei18n.User(inviteRefusal(refused.State))
-	}
-	return err
-}
-
-// inviteRefusal words a dead link for the person holding it.
-func inviteRefusal(state invitelink.State) string {
-	str := xystrings.Default
-	switch state {
-	case invitelink.Revoked:
-		return str.Server.Refusal.Revoked()
-	case invitelink.Expired:
-		return str.Server.Refusal.Expired()
-	case invitelink.Exhausted:
-		return str.Server.Refusal.Exhausted()
-	case invitelink.Declined:
-		return str.Server.Refusal.Declined()
-	case invitelink.Spent:
-		return str.Server.Refusal.Spent()
-	}
-	return str.Server.Refusal.Broken()
 }

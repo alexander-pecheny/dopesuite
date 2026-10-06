@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"pecheny.me/dopecore/invitelink"
 )
 
 // inviteBoard is the fixture the invite-link tests share: A owns a board, B and
@@ -31,11 +33,11 @@ func inviteBoard(t *testing.T) (srv *server, ts *httptest.Server, a, b, c *apiCl
 	return srv, ts, a, b, c, itoa(created.ID)
 }
 
-func mintInviteLink(t *testing.T, a *apiClient, boardID string, body map[string]any) boardInviteDTO {
+func mintInviteLink(t *testing.T, a *apiClient, boardID string, body map[string]any) invitelink.View {
 	t.Helper()
 	resp := a.do("POST", "/api/boards/"+boardID+"/invites", body)
 	mustStatus(t, resp, 200)
-	var inv boardInviteDTO
+	var inv invitelink.View
 	a.decode(resp, &inv)
 	return inv
 }
@@ -68,7 +70,7 @@ func TestInviteLinkJoin(t *testing.T) {
 		t.Fatalf("members = %+v, want owner + the joiner", members)
 	}
 
-	var links []boardInviteDTO
+	var links []invitelink.View
 	a.decode(a.do("GET", "/api/boards/"+boardID+"/invites", nil), &links)
 	if len(links) != 1 {
 		t.Fatalf("links = %+v, want one", links)
@@ -76,7 +78,7 @@ func TestInviteLinkJoin(t *testing.T) {
 	if links[0].Label != "тестерам" || links[0].Used != 1 || links[0].Left != nil {
 		t.Fatalf("link = %+v, want label, one use and no cap", links[0])
 	}
-	if len(links[0].Joined) != 1 || links[0].Joined[0].Username != "invite-b" {
+	if len(links[0].Joined) != 1 || links[0].Joined[0].Name != "invite-b" {
 		t.Fatalf("joined = %+v, want invite-b", links[0].Joined)
 	}
 }
@@ -118,9 +120,9 @@ func TestInviteLinkLimits(t *testing.T) {
 	mustStatus(t, a.do("POST", "/api/board-invites/"+itoa(open.ID)+"/revoke", nil), 204)
 	mustStatus(t, c.do("POST", "/api/board-invites/code/"+open.Code+"/join", nil), 400)
 
-	var links []boardInviteDTO
+	var links []invitelink.View
 	a.decode(a.do("GET", "/api/boards/"+boardID+"/invites", nil), &links)
-	byID := map[int64]boardInviteDTO{}
+	byID := map[int64]invitelink.View{}
 	for _, l := range links {
 		byID[l.ID] = l
 	}
@@ -159,7 +161,7 @@ func TestInviteLinkApproval(t *testing.T) {
 	if joined.State != "pending" {
 		t.Fatalf("second join state = %q, want pending", joined.State)
 	}
-	var links []boardInviteDTO
+	var links []invitelink.View
 	a.decode(a.do("GET", "/api/boards/"+boardID+"/invites", nil), &links)
 	if len(links) != 1 || links[0].Used != 0 || *links[0].Left != 1 || len(links[0].Pending) != 2 {
 		t.Fatalf("link with two waiting = %+v, want 0 used, 1 left, 2 pending", links[0])
@@ -212,7 +214,7 @@ func TestInviteLinkDelete(t *testing.T) {
 	mustStatus(t, b.do("POST", "/api/board-invites/code/"+inv.Code+"/join", nil), 200)
 	mustStatus(t, a.do("DELETE", "/api/board-invites/"+itoa(inv.ID), nil), 204)
 
-	var links []boardInviteDTO
+	var links []invitelink.View
 	a.decode(a.do("GET", "/api/boards/"+boardID+"/invites", nil), &links)
 	if len(links) != 0 {
 		t.Fatalf("links after delete = %+v, want none", links)
@@ -244,7 +246,7 @@ func TestInviteLinkOnePersonOneRequest(t *testing.T) {
 		t.Fatalf("second join = %q, want the existing request", joined.State)
 	}
 
-	var links []boardInviteDTO
+	var links []invitelink.View
 	a.decode(a.do("GET", "/api/boards/"+boardID+"/invites", nil), &links)
 	waiting := 0
 	for _, l := range links {
