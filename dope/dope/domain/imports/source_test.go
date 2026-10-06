@@ -169,3 +169,53 @@ insert into fests(slug, title, created_by, created_at, updated_at) values('fest'
 		t.Errorf("a troika is named by its Participant: got %d, want %d", troikas[2].ParticipantID, third)
 	}
 }
+
+// A player renamed in the fest roster carries the new name into every Game,
+// whether the Game finds them one at a time or seats the whole roster.
+func TestPlayerParticipantTakesTheRostersCurrentName(t *testing.T) {
+	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	owner, err := dopeserver.EnsureSystemUser(ctx, tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, err := store.InsertReturningID(ctx, tx, `
+insert into fests(slug, title, created_by, created_at, updated_at) values('fest', 'Фест', ?, '2026-10-06', '2026-10-06')`, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	playerID, err := store.InsertReturningID(ctx, tx, `insert into fest_players(fest_id, first_name, last_name) values(?, 'Пётр', 'Иванов')`, festID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := imports.EnsurePlayerParticipantTx(ctx, tx, festID, playerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `update fest_players set first_name = 'Полина', last_name = 'Иванова' where id = ?`, playerID); err != nil {
+		t.Fatal(err)
+	}
+	again, err := imports.EnsurePlayerParticipantTx(ctx, tx, festID, playerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != first {
+		t.Fatalf("participant changed: %d, then %d", first, again)
+	}
+	var name string
+	if err := tx.QueryRowContext(ctx, `select name from participants where id = ?`, again).Scan(&name); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Полина Иванова" {
+		t.Fatalf("name = %q, want the roster's current name", name)
+	}
+}
