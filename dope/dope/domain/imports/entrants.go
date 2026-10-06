@@ -738,6 +738,15 @@ select id, trim(first_name || ' ' || last_name) from fest_players where fest_id 
 // format that seats players. It is numbered by the player's place in the
 // registration order, the way a Game that seats the whole fest numbers them,
 // so the two find the same Participant.
+//
+// It differs from EnsureSeedPlayerByNumber, which it calls to make a missing
+// Participant, in one thing: a Participant the player already has is returned
+// as it is, while EnsureSeedPlayerByNumber renames it to the name it is given.
+// So seating the whole fest roster (gamebuild's seatRosterTx) brings every
+// player Participant's name up to the roster's, while finding players one by
+// one (the entrants tab, a chosen entrant, the fest seed source) does not,
+// even when the player was renamed since. Which of the two is right is not
+// decided yet, so the two stay apart.
 func EnsurePlayerParticipantTx(ctx context.Context, tx *sql.Tx, festID, festPlayerID int64) (int64, error) {
 	var id int64
 	err := tx.QueryRowContext(ctx, `

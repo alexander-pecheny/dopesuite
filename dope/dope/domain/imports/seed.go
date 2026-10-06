@@ -904,7 +904,9 @@ func EnsureSeedTeamByNumber(ctx context.Context, tx *sql.Tx, festID, number int6
 // EnsureSeedPlayerByNumber is EnsureSeedTeamByNumber for an individual format:
 // the Participant it ensures is one player of the fest roster, carrying
 // roster='player' and a link back to the fest_players row it was drawn from
-// (ADR-0007). Individual SI seats these.
+// (ADR-0007). Individual SI seats these. A player who already has a
+// Participant keeps it, and it takes the name given. EnsurePlayerParticipantTx,
+// which finds one player at a time, leaves the name alone.
 func EnsureSeedPlayerByNumber(ctx context.Context, tx *sql.Tx, festID, number int64, name string, festPlayerID int64) (int64, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
