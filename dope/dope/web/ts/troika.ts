@@ -8,18 +8,18 @@
 // bout page (bout-page.ts). A self-booting side-effect module bundled by
 // pages/troika.ts.
 
-import {cssEscape, sameArray, td, th} from "./cells.js";
+import {sameArray, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {icon} from "./icons_gen.js";
 import {standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
-import {boutAnchorID, groupAnchorID, mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
+import {groupAnchorID, mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
 import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {nameCell} from "./name-cell.js";
 import {seatPicker} from "./seat-picker.js";
-import {paintMark, stackedSheet} from "./stacked-sheet.js";
+import {figureData, paintFigures, paintMark, stackedSheet} from "./stacked-sheet.js";
 import type {CellEdit} from "./sheet-cursor.js";
 import {buildCrosstables, CANON_COLUMNS, crossSlot, standingsByParticipant} from "./crosstable.js";
 import type {SchemeSlotRef} from "./crosstable.js";
@@ -114,7 +114,7 @@ const answers = stackedSheet({
     },
     pathOf: troika.markPath,
     patch: (code, path, value) => page.patch(code, path, value),
-    onWritten: (codes) => codes.forEach(refreshTotals),
+    onWritten: (codes) => codes.forEach((code) => page.refresh(code)),
   },
 });
 
@@ -147,7 +147,8 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
     {troikasHref: page.viewer || !page.route.festID ? "" : `/host/fest/${page.route.festID}/troikas`}),
   // Groups and bouts wrap into the frame's width rather than pushing the page sideways.
   fitsFrame: (tab, node) => tab?.kind !== "grid" && !node.querySelector(".fest-grid"),
-  boutSelector: ".troika-bout",
+  shape: shapeOf,
+  repaintCells: repaintBout,
   cursorKinds: {
     answer: answers.cursorKind,
     count: counts.cursorKind,
@@ -156,18 +157,6 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   activeCursorElement: () => cursor.activeCell || writtenCursor.activeCell,
   cursors: () => [cursor, writtenCursor],
   beforeFinish: fillUnmarked,
-  afterRender: () => {
-    drawnShape.clear();
-    for (const code of page.codes()) drawnShape.set(code, shapeOf(code));
-  },
-  repaint: (code) => {
-    // When only marks changed and the protocols tab is up, the bout's cells
-    // and Σ are repainted where they stand.
-    const before = drawnShape.get(code);
-    if (!before || before !== shapeOf(code) || page.tab()?.kind !== "protocol") return false;
-    repaintBout(code);
-    return true;
-  },
   // The troikas page broadcasts the fest view when a troika's people or the
   // Game's entrants change: the bouts carry the seat rosters, and the roster
   // tab is drawn from them too.
@@ -187,9 +176,10 @@ function stageKind(stage: SchemeStage): string {
 // === the document ===
 
 // shapeOf is everything of a bout the protocol sheet is built from except its
-// marks: the themes and their values, the shootout, the chair order, who sits
-// where, the pinned places, whether it is finished. Two views of one shape
-// differ only in marks and counts, which the sheet can repaint in place.
+// marks: the themes and their values, the shootout, the chair order and the
+// seating columns a host opened, who sits where, the pinned places, whether
+// it is finished. Two views of one shape differ only in marks and counts,
+// which the sheet repaints in place (the bout page's repaint contract).
 function shapeOf(code: string): string {
   const view = page.view(code);
   if (!view) return "";
@@ -200,6 +190,7 @@ function shapeOf(code: string): string {
     finished: Boolean(view.finished), title: view.title,
     venue: view.venue ? [view.venue.number, view.venue.title] : null,
     startsAt: view.startsAt || "",
+    open: [...(seatOpen.get(code) || [])],
     seats: (view.participants || []).map((seat) => [seat?.id, seat?.name, (seat?.roster || []).map((p) => p.id)]),
     // What the heads draw from the marks: the add-shootout button waits on a
     // started, level bout, and a shootout theme's × on the theme being empty.
@@ -209,41 +200,23 @@ function shapeOf(code: string): string {
   });
 }
 
-// A bout's view — the server's answer to an edit, or another host's edit
-// arriving live — is shown by repainting it in place when only marks changed
-// and the protocols tab is up, the way the personal SI sheet patches its table:
-// the whole tab used to be rebuilt on every answer, which on a group stage's
-// worth of bouts is a visible stall after each mark and a cursor that jumps
-// under the host.
-// drawnShape is each bout's shape as the page last drew it. A repaint is safe
-// only against what is on screen: the host's own marks are already in the
-// state before the server answers them, so the state just before an answer
-// can match it while the heads on screen are stale.
-const drawnShape = new Map<string, string>();
-
 // repaintBout brings one bout's cells, counts and totals in line with its
 // state without rebuilding anything around them.
 function repaintBout(code: string): void {
   const state = stateOf(code);
-  const match = `[data-match="${cssEscape(code)}"]`;
-  for (const cell of root.querySelectorAll<HTMLElement>(`.troika-cell${match}`)) {
-    const at = answers.addressOf(cell);
-    if (at) paintMark(cell, troika.markAt(state, at.side, at.theme, at.q, at.chair));
-  }
-  for (const cell of root.querySelectorAll<HTMLElement>(`.troika-count${match}`)) {
-    const at = counts.addressOf(cell);
-    const count = at ? troika.countAt(state, at.side, at.theme, at.q) : 0;
+  const box = page.boxOf(code);
+  answers.paint(box, code, (at) => troika.markAt(state, at.side, at.theme, at.q, at.chair));
+  counts.eachCell(box, code, (cell, at) => {
+    const count = troika.countAt(state, at.side, at.theme, at.q);
     cell.textContent = count ? String(count) : "";
-  }
-  state.sides.forEach((_side, side) => {
-    const totals = state.written ? writtenTotals(state, side) : {total: troika.sideTotal(state, side)};
-    for (const [key, value] of Object.entries(totals)) {
-      const node = root.querySelector<HTMLElement>(`[data-${key}="${cssEscape(`${code}-${side}`)}"]`);
-      if (node) node.textContent = String(value);
-    }
   });
-  cursor.refresh();
-  writtenCursor.refresh();
+  paintFigures(box, (figure, at) => {
+    const side = Number(at.side);
+    if (!state.sides[side]) return undefined;
+    if (figure === "total") return troika.sideTotal(state, side);
+    if (figure === "threes" || figure === "twos") return writtenTotals(state, side)[figure];
+    return undefined;
+  });
 }
 
 function stateOf(code: string): TroikaState {
@@ -272,9 +245,7 @@ function seatName(view: TroikaMatchView, side: number): string {
 function buildBout(bout: BoutEntry): HTMLElement {
   const state = stateOf(bout.code);
   if (state.written) return buildWrittenBout(bout);
-  const box = document.createElement("section");
-  box.className = "troika-bout";
-  box.id = boutAnchorID(bout.code);
+  const box = page.boutBox(bout.code, "troika-bout");
   box.appendChild(boutHead(bout));
 
   const table = document.createElement("table");
@@ -307,7 +278,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
       if (chair === 0) {
         tr.appendChild(sideNameCell(seatName(bout.view, side)));
         tr.appendChild(SIDE_PINS.mark(td(String(troika.sideTotal(state, side)), "number col-total troika-total",
-          {rowSpan: troika.CHAIRS, dataset: {total: `${bout.code}-${side}`}}), "total"));
+          {rowSpan: troika.CHAIRS, dataset: figureData("total", {side})}), "total"));
       }
       state.values.forEach((_value, t) => {
         if (t > 0) tr.appendChild(td("", "gap"));
@@ -400,7 +371,7 @@ function saveThemes(code: string, state: TroikaState): void {
     order: theme.order.slice(),
     answers: theme.answers.map((row) => row.slice()),
   }))));
-  page.render();
+  page.refresh(code);
 }
 
 function shootoutThemeEmpty(state: TroikaState, t: number): boolean {
@@ -473,7 +444,7 @@ function themeHead(bout: BoutEntry, t: number, value: number, has: boolean): Cel
       const opened = seatOpen.get(bout.code) || new Set<number>();
       opened.add(t);
       seatOpen.set(bout.code, opened);
-      page.render();
+      page.refresh(bout.code);
     });
   }
   button.setAttribute("aria-label", button.title);
@@ -505,7 +476,7 @@ function deleteTurn(bout: BoutEntry, t: number): void {
     }
   }
   seatOpen.get(bout.code)?.delete(t);
-  page.render();
+  page.refresh(bout.code);
 }
 
 // The chair cell names who is sitting there from the theme its column stands
@@ -524,6 +495,9 @@ function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
     title: chair === troika.CHAIRS - 1 ? S.troika.chair.lead() : S.troika.chair.outrider(String(chair + 1)),
     nobody: S.seat.nobody(),
     onChange: (seated) => {
+      // A repaint keeps the picker, so the state it was drawn from may have
+      // been read again since.
+      const state = stateOf(bout.code);
       const order: number[] = [];
       for (let c = 0; c < troika.CHAIRS; c++) {
         order.push(c === chair ? Number(seated[0]) || 0 : troika.chairAt(state, side, from, c));
@@ -532,7 +506,7 @@ function chairPicker(bout: BoutEntry, side: number, from: number, chair: number,
       for (let t = from; t < state.values.length; t++) {
         patch(bout.code, ["sides", side, "themes", t, "order"], orderAt(state, side, t));
       }
-      page.render();
+      page.refresh(bout.code);
     },
   }).element;
 }
@@ -560,16 +534,6 @@ const cursor = answers.cursor(root, {
   active: () => sheetBouts().length > 0,
 });
 
-// refreshTotals repaints the Σ a bout's cells feed rather than the sheet, so an
-// edit does not move the cursor out from under the host.
-function refreshTotals(code: string): void {
-  const state = stateOf(code);
-  for (let side = 0; side < state.sides.length; side++) {
-    const node = root.querySelector<HTMLElement>(`[data-total="${cssEscape(`${code}-${side}`)}"]`);
-    if (node) node.textContent = String(troika.sideTotal(state, side));
-  }
-}
-
 // === the written qualifier ===
 
 // The written bout is the qualifier: every troika at once, on paper. A row per
@@ -580,10 +544,8 @@ function refreshTotals(code: string): void {
 // the Block's own, lot and all, as the server ranked it.
 function buildWrittenBout(bout: BoutEntry): HTMLElement {
   const state = stateOf(bout.code);
-  const box = document.createElement("section");
-  box.className = "troika-bout";
-  // The same anchor a sheet bout has, so a link from the grid lands here too.
-  box.id = boutAnchorID(bout.code);
+  // The same box a sheet bout has, so a link from the grid lands here too.
+  const box = page.boutBox(bout.code, "troika-bout");
   box.appendChild(boutHead(bout));
 
   const table = document.createElement("table");
@@ -620,9 +582,9 @@ function buildWrittenBout(bout: BoutEntry): HTMLElement {
       }
     });
     const totals = writtenTotals(state, side);
-    tr.appendChild(td(String(totals.total), "number troika-total", {dataset: {total: `${bout.code}-${side}`}}));
-    tr.appendChild(td(String(totals.threes), "number troika-total", {dataset: {threes: `${bout.code}-${side}`}}));
-    tr.appendChild(td(String(totals.twos), "number troika-total", {dataset: {twos: `${bout.code}-${side}`}}));
+    tr.appendChild(td(String(totals.total), "number troika-total", {dataset: figureData("total", {side})}));
+    tr.appendChild(td(String(totals.threes), "number troika-total", {dataset: figureData("threes", {side})}));
+    tr.appendChild(td(String(totals.twos), "number troika-total", {dataset: figureData("twos", {side})}));
     const id = Number(bout.view.participants?.[side]?.id || 0);
     tr.appendChild(td(ranks.has(id) ? String(ranks.get(id)) : "", "number troika-total"));
     tr.appendChild(td("", "troika-finish-gap"));
@@ -691,16 +653,7 @@ function applyCounts(edits: CellEdit[]): void {
     patch(code, troika.countPath(at), count);
     touched.add(code);
   }
-  for (const code of touched) {
-    const state = stateOf(code);
-    state.sides.forEach((_side, side) => {
-      const totals = writtenTotals(state, side);
-      for (const [key, value] of Object.entries(totals)) {
-        const node = root.querySelector<HTMLElement>(`[data-${key}="${cssEscape(`${code}-${side}`)}"]`);
-        if (node) node.textContent = String(value);
-      }
-    });
-  }
+  for (const code of touched) page.refresh(code);
 }
 
 // === the tabs ===

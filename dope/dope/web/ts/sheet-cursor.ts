@@ -443,9 +443,13 @@ export function createSheetCursor(spec: SheetSpec): SheetCursor {
   }
 
   function handleKeydown(event: KeyboardEvent): void {
-    if (!active() || !focusCoord) return;
+    if (!active()) return;
     const target = event.target;
     if (isEditableTarget(target)) return;
+    if (!focusCoord) {
+      startOnArrow(event);
+      return;
+    }
     if (spec.onKey?.(event, focusCoord)) return;
     const action = keyAction(event, values);
     if (!action) return;
@@ -463,6 +467,20 @@ export function createSheetCursor(spec: SheetSpec): SheetCursor {
         return;
       }
     }
+  }
+
+  // startOnArrow: with nothing selected, an arrow selects the sheet's first
+  // cell, so a host can start from the keyboard. A key pressed on a button, a
+  // link or another control is that control's, and a spectator's arrows
+  // scroll the page as before.
+  function startOnArrow(event: KeyboardEvent): void {
+    if (readonly() || keyAction(event, values)?.kind !== "move") return;
+    const target = event.target;
+    if (target instanceof Element && target !== document.body && !root.contains(target)) return;
+    const first = model.clamp({row: 0, col: 0});
+    if (!first) return;
+    event.preventDefault();
+    select(first);
   }
 
   function cellOf(target: EventTarget | null): Element | null {

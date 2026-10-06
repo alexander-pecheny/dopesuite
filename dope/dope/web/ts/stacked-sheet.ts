@@ -54,7 +54,8 @@ export interface SheetMarks<A> {
   pathOf: (address: A) => PatchPath;
   // The bout page's patch, which keeps the host's undo.
   patch: (code: string, path: PatchPath, value: unknown) => void;
-  // After a gesture: repaint what the marks feed (totals, the score).
+  // After a gesture: the bout page's refresh, which repaints the bout or
+  // draws the tab again.
   onWritten?: (codes: string[]) => void;
 }
 
@@ -81,6 +82,11 @@ export interface StackedSheet<B, R extends AddressPart, C extends AddressPart> {
   addressAt(coord: CellCoord): SheetAddress<R, C> | null;
   // Write marks through the page's patch, paint the cells, then onWritten.
   applyMarks(edits: CellEdit[]): void;
+  // Visit every cell of one bout inside its box, with the cell's address,
+  // read against that bout's own rows and columns.
+  eachCell(box: ParentNode | null, code: string, visit: (cell: HTMLElement, address: SheetAddress<R, C>) => void): void;
+  // Paint every mark of one bout inside its box as the page's state has it.
+  paint(box: ParentNode | null, code: string, markAt: (address: SheetAddress<R, C>) => Mark): void;
   cursor(root: HTMLElement, options: StackedCursorOptions): SheetCursor;
   // The bout a code names, among those drawn.
   boutOf(code: string): B | undefined;
@@ -208,6 +214,23 @@ export function stackedSheet<B, R extends AddressPart, C extends AddressPart>(sp
     if (touched.size) marks.onWritten?.([...touched]);
   }
 
+  // eachCell reads a cell's address against its own bout only: a repaint
+  // walks one box, and locating each cell among every bout of the tab would
+  // cost a pass over all of them per cell.
+  function eachCell(box: ParentNode | null, code: string, visit: (cell: HTMLElement, address: A) => void): void {
+    const bout = spec.bouts().find((entry) => spec.codeOf(entry) === code);
+    if (!box || !bout) return;
+    const rows = spec.rowsOf(bout);
+    const columns = spec.columnsOf(bout);
+    for (const cell of box.querySelectorAll<HTMLElement>(cellClass)) {
+      const read = (key: string) => cell.dataset[key];
+      if (read("match") !== code) continue;
+      const row = rows.find((part) => same(part, read));
+      const column = columns.find((part) => same(part, read));
+      if (row && column) visit(cell, {match: code, ...row, ...column} as A);
+    }
+  }
+
   function cursor(root: HTMLElement, options: StackedCursorOptions): SheetCursor {
     return createSheetCursor({
       ...options,
@@ -235,6 +258,8 @@ export function stackedSheet<B, R extends AddressPart, C extends AddressPart>(sp
     coordOf,
     addressAt,
     applyMarks,
+    eachCell,
+    paint: (box, code, markAt) => eachCell(box, code, (cell, address) => paintMark(cell, markAt(address))),
     cursor,
     boutOf: (code) => spec.bouts().find((bout) => spec.codeOf(bout) === code),
   };
@@ -245,6 +270,36 @@ export function stackedSheet<B, R extends AddressPart, C extends AddressPart>(sp
 export function paintMark(cell: Element, mark: Mark): void {
   cell.classList.toggle("right", mark === "right");
   cell.classList.toggle("wrong", mark === "wrong");
+}
+
+// A figure is a number a bout's marks feed — a seat's Σ, a theme's score, a
+// count — drawn in the bout's box. Its cell carries the figure's name and the
+// part of the address it belongs to (a seat, a theme), so a repaint finds
+// every figure of a bout by walking the box, with no selector built by hand.
+export function figureData(figure: string, at: Record<string, AddressValue> = {}): Record<string, string> {
+  const out: Record<string, string> = {figure};
+  for (const [key, value] of Object.entries(at)) out[key] = String(value);
+  return out;
+}
+
+// paintFigures writes each figure in a box as textOf says it now reads: a
+// number or a text, or a node that replaces the cell's content (Hamsa's place
+// with its lot). undefined leaves the cell as it is.
+export function paintFigures(
+  box: ParentNode | null,
+  textOf: (figure: string, at: DOMStringMap) => string | number | Node | undefined,
+): void {
+  if (!box) return;
+  for (const node of box.querySelectorAll<HTMLElement>("[data-figure]")) {
+    const value = textOf(node.dataset.figure || "", node.dataset);
+    if (value === undefined) continue;
+    if (typeof value === "object") {
+      node.replaceChildren(value);
+      continue;
+    }
+    const text = String(value);
+    if (node.textContent !== text) node.textContent = text;
+  }
 }
 
 function dataAttr(key: string): string {

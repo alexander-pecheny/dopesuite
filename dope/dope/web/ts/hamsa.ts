@@ -7,16 +7,16 @@
 // page (bout-page.ts). A self-booting side-effect module bundled by
 // pages/hamsa.ts.
 
-import {cssEscape, option, questionNumberNode, td, th} from "./cells.js";
+import {option, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent, CellSpec} from "./cells.js";
 import {letteredTitle, standingsTable} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
 import {nameCell} from "./name-cell.js";
 import {seatPicker} from "./seat-picker.js";
-import {boutAnchorID, mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
+import {mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
 import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {paintMark, stackedSheet} from "./stacked-sheet.js";
+import {figureData, paintFigures, paintMark, stackedSheet} from "./stacked-sheet.js";
 import {buildTwoRowScoreTable, scoreSheetPins} from "./score-table.js";
 import type {ScoreTableThemeRow} from "./score-table.js";
 import type {FestGridStage} from "./fest-grid.js";
@@ -113,7 +113,7 @@ const answers = stackedSheet({
     },
     pathOf: (cell) => hamsa.markPath(seatsOf(page.view(cell.match))[cell.seat], cell),
     patch: (code, path, value) => page.patch(code, path, value),
-    onWritten: (codes) => codes.forEach(refreshTotals),
+    onWritten: (codes) => codes.forEach((code) => page.refresh(code)),
   },
 });
 
@@ -130,7 +130,8 @@ const page: BoutPage<HamsaMatchView, HamsaState> = mountBoutPage({
   buildTab,
   buildRoster: (): HTMLElement => buildGameRosterView(page.route.apiBase || "", {editable: !page.viewer}),
   fitsFrame: (tab) => tab?.kind !== "grid" && tab?.kind !== "protocol",
-  boutSelector: ".hamsa-bout",
+  shape,
+  repaintCells,
   cursorKinds: {
     answer: answers.cursorKind,
     finish: {selector: ".finish-toggle", keys: ["match"]},
@@ -287,9 +288,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
   const editable = !viewer && !bout.view.finished;
   const rows = hamsa.rows(state, seats);
 
-  const box = document.createElement("section");
-  box.className = "hamsa-bout u-col u-gap-sm";
-  box.id = boutAnchorID(bout.code);
+  const box = page.boutBox(bout.code, "hamsa-bout u-col u-gap-sm");
 
   const table = buildTwoRowScoreTable({
     className: "match-table hamsa-sheet",
@@ -309,16 +308,16 @@ function buildBout(bout: BoutEntry): HTMLElement {
     afterThemeHeaders: trailingHeaders(),
     rows: seats.map((id, seat) => ({
       nameCell: seatNameCell(seatName(bout.view, seat)),
-      totalCell: {content: rows[seat].total, className: "number total-cell", dataset: {total: `${bout.code}-${seat}`}},
-      placeCell: {content: placeContent(bout, seat, rows[seat]), className: "number place-cell", dataset: {place: `${bout.code}-${seat}`}},
+      totalCell: {content: rows[seat].total, className: "number total-cell", dataset: figureData("total", {seat})},
+      placeCell: {content: placeContent(bout, seat, rows[seat]), className: "number place-cell", dataset: figureData("place", {seat})},
       themes: groups.map((group) => themeRow(bout, id, seat, group, editable)),
       afterThemeCells: [
-        {content: rows[seat].plus, className: "number plus-cell", attrs: {rowSpan: 2}, dataset: {plus: `${bout.code}-${seat}`}},
+        {content: rows[seat].plus, className: "number plus-cell", attrs: {rowSpan: 2}, dataset: figureData("plus", {seat})},
         ...rows[seat].correct.slice().reverse().map((count, index) => ({
           content: count,
           className: "number narrow correct-count-cell",
           attrs: {rowSpan: 2},
-          dataset: {count: `${bout.code}-${seat}-${hamsa.QUESTIONS - 1 - index}`},
+          dataset: figureData("count", {seat, q: hamsa.QUESTIONS - 1 - index}),
         })),
       ],
     })),
@@ -384,7 +383,7 @@ function placeContent(bout: BoutEntry, seat: number, row: hamsa.Row): CellConten
     const section = hamsa.sectionOf(stateOf(bout.code), id);
     if (section) section.lot = value;
     patch(bout.code, ["participants", String(id), "lot"], value);
-    refreshTotals(bout.code);
+    page.refresh(bout.code);
   });
   const label = document.createElement("span");
   label.textContent = text;
@@ -402,7 +401,7 @@ function themeRow(bout: BoutEntry, id: number, seat: number, group: ThemeGroup, 
       // number in a column the width of a score.
       playerCell: {content: betInput(bout, id, seat, editable), className: "hamsa-bet-cell theme-block theme-block-top-left"},
       scoreCell: {content: hamsa.betScore(state, id), className: "number theme-score theme-block theme-block-score",
-        attrs: {rowSpan: 2}, dataset: {betScore: `${bout.code}-${seat}`}},
+        attrs: {rowSpan: 2}, dataset: figureData("bet", {seat})},
       answers: [markCell(bout, id, seat, 0, 0, "bet")],
     };
   }
@@ -415,7 +414,7 @@ function themeRow(bout: BoutEntry, id: number, seat: number, group: ThemeGroup, 
       attrs: {colSpan: group.questions},
     },
     scoreCell: {content: score, className: "number theme-score theme-block theme-block-score",
-      attrs: {rowSpan: 2}, dataset: {score: `${bout.code}-${seat}-${shootout ? "s" : "t"}${group.theme}`}},
+      attrs: {rowSpan: 2}, dataset: figureData("score", {seat, cellKind: group.kind, theme: group.theme})},
     answers: group.values.map((_value, q) => markCell(bout, id, seat, group.theme, q, shootout ? "shootout" : "theme")),
   };
 }
@@ -439,12 +438,13 @@ function playerSelect(bout: BoutEntry, id: number, seat: number, group: ThemeGro
       const path = group.kind === "shootout"
         ? ["participants", String(id), "shootout", 0, "player"]
         : ["participants", String(id), "themes", group.theme, "player"];
-      const section = hamsa.sectionOf(state, id);
+      const section = hamsa.sectionOf(stateOf(bout.code), id);
       const theme = section && group.kind === "shootout"
         ? ensureShootout(bout.code, section, id)
         : section?.themes[group.theme];
       if (theme) theme.player = value;
       patch(bout.code, path, value);
+      page.refresh(bout.code);
     },
   }).element;
 }
@@ -460,6 +460,7 @@ function betInput(bout: BoutEntry, id: number, seat: number, editable: boolean):
   input.min = "0";
   input.step = "1";
   input.disabled = !editable || !id;
+  input.dataset.seat = String(seat);
   const amount = hamsa.sectionOf(state, id)?.bet.amount;
   input.value = amount === null || amount === undefined ? "" : String(amount);
   input.title = S.hamsa.protocol.betTitle(seatName(bout.view, seat));
@@ -468,10 +469,12 @@ function betInput(bout: BoutEntry, id: number, seat: number, editable: boolean):
     const text = input.value.trim();
     const value = text === "" ? null : Math.trunc(Number(text));
     if (text !== "" && !Number.isFinite(value)) return;
-    const bet = hamsa.sectionOf(state, id)?.bet;
+    // The state the box was drawn from may have been read again since: a
+    // repaint keeps the box, so the handler reads the state it writes now.
+    const bet = hamsa.sectionOf(stateOf(bout.code), id)?.bet;
     if (bet) bet.amount = value;
     patch(bout.code, ["participants", String(id), "bet", "amount"], value);
-    refreshTotals(bout.code);
+    page.refresh(bout.code);
   });
   return input;
 }
@@ -548,37 +551,64 @@ const cursor = answers.cursor(root, {
   active: () => page.tab()?.kind === "protocol",
 });
 
-// refreshTotals repaints what an edit feeds rather than the sheet, so the
-// cursor does not move out from under the host.
-function refreshTotals(code: string): void {
+// === the repaint contract ===
+
+// shape is everything of a bout its box draws except the marks and the
+// numbers they feed: who sits where, the rounds, the themes and their values,
+// the shootout's column, the head. The bet, the places and the lots are
+// repainted in place.
+function shape(code: string): string {
   const view = page.view(code);
-  const state = stateOf(code);
-  const seats = seatsOf(view);
   const bout = answers.boutOf(code);
-  hamsa.rows(state, seats).forEach((row, seat) => {
-    setCell(`[data-total="${cssEscape(`${code}-${seat}`)}"]`, String(row.total));
-    setCell(`[data-plus="${cssEscape(`${code}-${seat}`)}"]`, String(row.plus));
-    row.correct.forEach((count, q) => setCell(`[data-count="${cssEscape(`${code}-${seat}-${q}`)}"]`, String(count)));
-    const place = root.querySelector<HTMLElement>(`[data-place="${cssEscape(`${code}-${seat}`)}"]`);
-    if (place && bout) {
-      const content = placeContent(bout, seat, row);
-      if (content instanceof Node) place.replaceChildren(content);
-      else place.textContent = String(content ?? "");
-    }
-    setCell(`[data-bet-score="${cssEscape(`${code}-${seat}`)}"]`, String(hamsa.betScore(state, row.id)));
-    if (!bout) return;
-    for (const group of themeGroups(bout)) {
-      if (group.kind === "bet") continue;
-      const shootout = group.kind === "shootout";
-      const score = shootout ? hamsa.shootoutThemeScore(state, row.id, 0) : hamsa.themeScore(state, row.id, group.theme);
-      setCell(`[data-score="${cssEscape(`${code}-${seat}-${shootout ? "s" : "t"}${group.theme}`)}"]`, String(score));
-    }
+  if (!view || !bout) return "";
+  const state = stateOf(code);
+  return JSON.stringify({
+    finished: Boolean(view.finished), title: view.title || "",
+    venue: view.venue ? [view.venue.number, view.venue.title] : null, startsAt: view.startsAt || "",
+    seats: (view.participants || []).map((seat) => [seat?.id, seat?.name, (seat?.roster || []).map((player) => player.id)]),
+    rounds: state.rounds.map((round) => round.values),
+    groups: themeGroups(bout).map((group) => [group.kind, group.theme, group.questions, group.values]),
+    players: seatsOf(view).map((id) => {
+      const section = hamsa.sectionOf(state, id);
+      return section ? [section.themes.map((theme) => theme.player), section.shootout[0]?.player || 0] : null;
+    }),
   });
 }
 
-function setCell(selector: string, text: string): void {
-  const node = root.querySelector<HTMLElement>(selector);
-  if (node) node.textContent = text;
+// repaintCells brings a drawn bout's marks, its figures, its places with their
+// lots and its bets in line with the state, where they stand.
+function repaintCells(code: string): void {
+  const box = page.boxOf(code);
+  const bout = answers.boutOf(code);
+  const state = stateOf(code);
+  const seats = seatsOf(page.view(code));
+  const rows = hamsa.rows(state, seats);
+  answers.paint(box, code, (cell) => hamsa.cellMark(state, seats[cell.seat], cell));
+  paintFigures(box, (figure, at) => {
+    const seat = Number(at.seat);
+    const row = rows[seat];
+    if (!row) return undefined;
+    switch (figure) {
+    case "total": return row.total;
+    case "plus": return row.plus;
+    case "count": return row.correct[Number(at.q)];
+    case "bet": return hamsa.betScore(state, row.id);
+    case "place": {
+      if (!bout) return undefined;
+      const content = placeContent(bout, seat, row);
+      return content instanceof Node ? content : String(content ?? "");
+    }
+    case "score": return at.cellKind === "shootout"
+      ? hamsa.shootoutThemeScore(state, row.id, 0)
+      : hamsa.themeScore(state, row.id, Number(at.theme));
+    default: return undefined;
+    }
+  });
+  for (const input of box?.querySelectorAll<HTMLInputElement>(".hamsa-bet-input") || []) {
+    if (input === document.activeElement) continue;
+    const amount = hamsa.sectionOf(state, seats[Number(input.dataset.seat)])?.bet.amount;
+    input.value = amount === null || amount === undefined ? "" : String(amount);
+  }
 }
 
 // === the tabs ===

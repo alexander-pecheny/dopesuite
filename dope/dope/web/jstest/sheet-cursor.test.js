@@ -71,3 +71,29 @@ test("clipboard grids round-trip, and a trailing newline is not a row", () => {
   assert.deepEqual(parseClipboardGrid("\n"), [[""]], "one empty line is one empty cell");
   assert.equal(serializeGrid([["+", "-"], ["", "+"]]), "+\t-\n\t+");
 });
+
+// With nothing selected, a host's first arrow selects the sheet's first cell;
+// a spectator's arrows stay the page's. The cursor is bound on a fake root
+// that takes the keydown itself.
+test("the first arrow with nothing selected selects the first cell, for a host only", async () => {
+  for (const name of ["Element", "HTMLElement", "HTMLInputElement", "HTMLTextAreaElement", "HTMLSelectElement"]) {
+    globalThis[name] ||= class {};
+  }
+  globalThis.document ||= {addEventListener() {}, removeEventListener() {}};
+  const {createSheetCursor} = await import("./dist/sheet-cursor.js");
+  for (const readonly of [false, true]) {
+    const handlers = {};
+    const cell = {classList: {add() {}, remove() {}}, focus() {}};
+    const root = {addEventListener: (type, fn) => { handlers[type] = fn; }, querySelectorAll: () => [], contains: () => true};
+    const cursor = createSheetCursor({
+      root, keyTarget: "root", values: "marks", readonly: () => readonly,
+      rows: () => 2, cols: () => 3, coordOf: () => null, cellAt: () => cell, applyValues() {},
+      classes: {row: ""},
+    });
+    cursor.bind();
+    let prevented = false;
+    handlers.keydown({key: "ArrowDown", target: null, preventDefault: () => { prevented = true; }});
+    assert.deepEqual(cursor.focus, readonly ? null : {row: 0, col: 0});
+    assert.equal(prevented, !readonly);
+  }
+});

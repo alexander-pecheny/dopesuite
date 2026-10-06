@@ -1,10 +1,8 @@
-// A match's score table — built once (flat or two-row) and then patched in place
-// from a MatchView through a node index keyed by the cells' dataset.
+// A match's score table, flat or two-row, with its leading columns pinned; and
+// a node index that finds its live cells by their dataset.
 
-import {applyAttrs, cellFromSpec, formatDisplayText, formatPlace, sameArray, td, th} from "./cells.js";
+import {applyAttrs, cellFromSpec, formatDisplayText, td, th} from "./cells.js";
 import type {CellAttrs, CellContent, CellSpec} from "./cells.js";
-import {seatedNames, seatingLabel} from "./ek-seating.js";
-import {SEAT_PICKER_SELECTOR, seatPickerOf} from "./seat-picker.js";
 import {declarePins, sheetHead} from "./sheet-pins.js";
 import type {HeadRow, Pins} from "./sheet-pins.js";
 import S from "./i18nstrings.js";
@@ -94,9 +92,6 @@ export function scoreSheetPins({rowMarker = false, place = true, total = "var(--
     ...(place ? [{key: "place", width: "var(--place-col)"}, {key: "place-gap", width: "var(--place-gap)"}] : []),
   ], {start: "var(--sheet-corner-col)"});
 }
-
-// Questions in an EK theme; the correct-count columns show them highest first.
-const QUESTIONS_PER_THEME = 5;
 
 // The leading columns every score table has, each with the class that sizes it
 // and the class a cell gets when the page passes no class of its own.
@@ -343,59 +338,22 @@ export function computePlaces(totals: readonly number[], opts: ComputePlacesOpti
   return places;
 }
 
-export interface ThemeView {
-  score?: number | string | null;
-  // Whoever the team sent to the theme — one player in EK, up to three in
-  // Erudit-Sextet. The order carries no meaning.
-  players?: Array<string | null | undefined> | null;
-  answers?: Array<string | null | undefined>;
-}
-
-export interface ParticipantView {
-  name?: string;
-  // The team's roster, which is what a seating is cut against.
-  roster?: Array<{name?: string}>;
-  total?: number | string | null;
-  plus?: number | string | null;
-  tiebreak?: number | string | null;
-  shootoutTotal?: number | string | null;
-  place?: number;
-  correctCounts?: number[];
-  themes?: ThemeView[];
-  shootoutThemes?: ThemeView[];
-}
-
-export interface MatchView {
-  code?: string;
-  finished?: boolean;
-  questionValues?: unknown[];
-  // How many players a team may seat on one theme — one in EK, up to three in
-  // Erudit-Sextet. Absent means one.
-  players?: number;
-  participants?: ParticipantView[];
-}
-
-export interface PatchScoreTableOptions {
-  formatNumber?: (value: unknown) => string;
-}
-
+// The node index: a built table's live cells, found by the data-* keys they
+// carry, so a page updates one cell without searching the table (KSI's
+// sheet). Each spec says how to find a kind of cell: its selector and keys.
 export interface NodeIndexSpec {
   name: string;
   selector: string;
   keys: string[];
-  sync?: (node: HTMLElement, matchState: MatchView, opts: PatchScoreTableOptions) => void;
 }
 
 export interface NodeIndex {
-  specs: NodeIndexSpec[];
   get(name: string, values?: Record<string, unknown>): HTMLElement | null;
-  eachNode(name: string, cb: (node: HTMLElement) => void): void;
 }
 
 export function createNodeIndex(root: ParentNode, specs: NodeIndexSpec[] | null | undefined): NodeIndex {
-  const list = specs || [];
   const maps = new Map<string, {keys: string[]; map: Map<string, HTMLElement>}>();
-  for (const spec of list) {
+  for (const spec of specs || []) {
     const map = new Map<string, HTMLElement>();
     root.querySelectorAll<HTMLElement>(spec.selector).forEach((node) => {
       map.set(indexKeyFromDataset(node.dataset, spec.keys), node);
@@ -403,129 +361,26 @@ export function createNodeIndex(root: ParentNode, specs: NodeIndexSpec[] | null 
     maps.set(spec.name, {keys: spec.keys, map});
   }
   return {
-    // specs is retained so patchScoreTable can drive the sync from the same
-    // single source of truth used to build the index.
-    specs: list,
     get(name, values = {}) {
       const entry = maps.get(name);
       if (!entry) return null;
       return entry.map.get(indexKeyFromValues(values, entry.keys)) || null;
     },
-    eachNode(name, cb) {
-      const entry = maps.get(name);
-      if (!entry) return;
-      entry.map.forEach((node) => cb(node));
-    },
   };
 }
 
-export interface ScoreCellSpecsOptions {
-  entity?: string;
-  matchScoped?: boolean;
-  shootout?: boolean;
-}
-
-export interface ScoreTableIndexOptions extends ScoreCellSpecsOptions {
-  extraSpecs?: NodeIndexSpec[];
-}
-
-export function createScoreTableIndex(root: ParentNode, options: ScoreTableIndexOptions = {}): NodeIndex {
-  return createNodeIndex(root, scoreCellSpecs(options).concat(options.extraSpecs || []));
-}
-
-// scoreTeamOf / scoreThemeOf resolve the MatchView participant / theme a built cell
-// refers to, straight from the cell's own data-* coordinates — so a sync needs
-// nothing but the node and the new state.
-function scoreTeamOf(node: HTMLElement, matchState: MatchView): ParticipantView | null {
-  return (matchState.participants || [])[Number(node.dataset.team)] || null;
-}
-
-// seatingText is a theme's seating as a cell prints it: the one player's whole
-// name where a theme seats one (EK, and personal SI on its borrowed page), and
-// the surnames where it seats more — three full names never fit five columns.
-export function seatingText(theme: ThemeView, matchState: MatchView): string {
-  const seated = seatedNames(theme.players);
-  if ((matchState.players || 1) <= 1) return seated[0] || "";
-  return seatingLabel(seated);
-}
-
-function scoreThemeOf(node: HTMLElement, matchState: MatchView): ThemeView | null {
-  const team = scoreTeamOf(node, matchState);
-  if (!team) return null;
-  const themes = node.dataset.shootout === "1" ? team.shootoutThemes : team.themes;
-  return (themes || [])[Number(node.dataset.theme)] || null;
-}
-
-// scoreCellSpecs is the SINGLE source of truth for the score table's live
-// cells. Each entry says how to find the cell (selector + dataset keys, used to
-// build the index) AND how to keep it in step with a MatchView (sync, used by
-// patchScoreTable). Adding a new live cell means adding one entry here —
-// indexing and the in-place patch both pick it up, so no cell can be rendered
-// but silently left un-synced (the bug this replaced). A spec without a sync is
-// index-only: its value change is handled by a full rebuild (place medals) or
-// it is host-managed out of band (venue input).
-export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSpec[] {
-  const entity = options.entity || "team";
-  const prefix = options.matchScoped ? ["matchCode"] : [];
-  const teamKeys = prefix.concat([entity]);
-  const themeKeys = teamKeys.concat(options.shootout ? ["shootout"] : [], ["theme"]);
-  return [
-    {name: "answer", selector: ".answer-cell", keys: themeKeys.concat(["answer"]),
-      sync: (node, ms) => {
-        const theme = scoreThemeOf(node, ms);
-        if (theme) setMarkClass(node, (theme.answers || [])[Number(node.dataset.answer)]);
-      }},
-    {name: "themeScore", selector: ".theme-score", keys: themeKeys,
-      sync: (node, ms, o) => {
-        const theme = scoreThemeOf(node, ms);
-        if (theme) setNodeText(node, theme.score, o.formatNumber);
-      }},
-    // The per-round player shows as read-only text on the viewer and as an
-    // editable <select> on the host; each surface has its own spec so both stay
-    // live. (Before, only the host's select was patched — the viewer's text was
-    // forgotten, so player changes never reached spectators.)
-    {name: "playerText", selector: ".readonly-player .name-cell-text", keys: themeKeys,
-      sync: (node, ms) => {
-        const theme = scoreThemeOf(node, ms);
-        if (!theme) return;
-        const text = seatingText(theme, ms);
-        setNodeText(node, text);
-        node.setAttribute("aria-label", text);
-        const popover = node.closest(".readonly-player")?.querySelector(".popover-inline");
-        if (popover) setNodeText(popover, seatedNames(theme.players).join("\n"));
-      }},
-    // The host's seat picker, one seat or several (Erudit-Sextet): the
-    // picker shows the seating it is told and keeps its own line and popover.
-    {name: "seatPicker", selector: SEAT_PICKER_SELECTOR, keys: themeKeys,
-      sync: (node, ms) => {
-        const theme = scoreThemeOf(node, ms);
-        if (theme) seatPickerOf(node)?.update(seatedNames(theme.players));
-      }},
-    {name: "total", selector: ".total-cell", keys: teamKeys,
-      sync: (node, ms, o) => { const t = scoreTeamOf(node, ms); if (t) setNodeText(node, t.total, o.formatNumber); }},
-    {name: "plus", selector: ".plus-cell", keys: teamKeys,
-      sync: (node, ms, o) => { const t = scoreTeamOf(node, ms); if (t) setNodeText(node, t.plus, o.formatNumber); }},
-    {name: "tiebreak", selector: ".tiebreak-cell", keys: teamKeys,
-      sync: (node, ms, o) => { const t = scoreTeamOf(node, ms); if (t) setNodeText(node, t.shootoutTotal ?? t.tiebreak, o.formatNumber); }},
-    {name: "correctCount", selector: ".correct-count-cell", keys: teamKeys.concat(["valueIndex"]),
-      sync: (node, ms, o) => {
-        const t = scoreTeamOf(node, ms);
-        // Columns render reversed: cell valueIndex i shows correctCounts[last - i].
-        if (t) setNodeText(node, (t.correctCounts || [])[QUESTIONS_PER_THEME - 1 - Number(node.dataset.valueIndex)], o.formatNumber);
-      }},
-    {name: "placeInput", selector: ".place-input", keys: teamKeys,
-      sync: (node, ms) => {
-        const input = node as HTMLInputElement;
-        const t = scoreTeamOf(input, ms);
-        if (!t) return;
-        if (document.activeElement !== input) input.value = formatPlace(t.place);
-        input.dataset.committedPlace = String(t.place || 0);
-      }},
-    // Index-only (no sync): place restyles medal classes and the viewer renders
-    // it as text, so a place change forces a rebuild; venue input is host-managed.
-    {name: "place", selector: ".place-cell", keys: teamKeys},
-    {name: "input", selector: ".venue-input", keys: teamKeys},
-  ];
+// createScoreTableIndex indexes a score table's live cells: a mark, a theme's
+// score, a row's Σ and place, each keyed by its row (entity: "team" or
+// "player") and, inside a row, by its theme and answer.
+export function createScoreTableIndex(root: ParentNode, options: {entity?: string} = {}): NodeIndex {
+  const rowKeys = [options.entity || "team"];
+  const themeKeys = rowKeys.concat(["theme"]);
+  return createNodeIndex(root, [
+    {name: "answer", selector: ".answer-cell", keys: themeKeys.concat(["answer"])},
+    {name: "themeScore", selector: ".theme-score", keys: themeKeys},
+    {name: "total", selector: ".total-cell", keys: rowKeys},
+    {name: "place", selector: ".place-cell", keys: rowKeys},
+  ]);
 }
 
 function indexKeyFromDataset(dataset: DOMStringMap, keys: string[]): string {
@@ -548,41 +403,4 @@ export function setMarkClass(node: Element | null | undefined, mark: string | nu
   if (!node) return;
   node.classList.remove("right", "wrong");
   if (mark) node.classList.add(mark);
-}
-
-// canPatchScoreShape reports whether `next` can be patched into a table built
-// for `previous` without a rebuild — i.e. the table SHAPE (team/theme counts,
-// team names, finished flag, question values) is unchanged and only cell
-// VALUES (scores, marks, players, places) differ. Callers add their own extra
-// gates (title, venue, place) for fields their table renders structurally.
-// Shared by the host (editable) and viewer (read-only) so a live edit patches
-// in place instead of tearing down and rebuilding the whole battle.
-export function canPatchScoreShape(previous: MatchView | null | undefined, next: MatchView | null | undefined): boolean {
-  if (!previous || !next) return false;
-  if (previous.code !== next.code || previous.finished !== next.finished) return false;
-  if (!sameArray(previous.questionValues, next.questionValues)) return false;
-  const prevTeams = previous.participants || [];
-  const nextTeams = next.participants || [];
-  if (prevTeams.length !== nextTeams.length) return false;
-  for (let i = 0; i < nextTeams.length; i++) {
-    if (prevTeams[i].name !== nextTeams[i].name) return false;
-    if ((prevTeams[i].themes || []).length !== (nextTeams[i].themes || []).length) return false;
-    if ((prevTeams[i].shootoutThemes || []).length !== (nextTeams[i].shootoutThemes || []).length) return false;
-  }
-  return true;
-}
-
-// patchScoreTable updates a built score table in place from a MatchView. It is
-// data-driven: for every spec that declares a `sync` (see scoreCellSpecs), it
-// runs that sync over each indexed cell of that type, each cell reading its own
-// data-* coordinates. Shared verbatim by the host and viewer — whatever cells
-// their tables contain get patched. opts.formatNumber formats numeric text.
-export function patchScoreTable(index: NodeIndex | null | undefined, matchState: MatchView | null | undefined, opts: PatchScoreTableOptions = {}): void {
-  if (!index || !matchState) return;
-  const state = matchState;
-  for (const spec of index.specs || []) {
-    const sync = spec.sync;
-    if (!sync) continue;
-    index.eachNode(spec.name, (node) => sync(node, state, opts));
-  }
 }

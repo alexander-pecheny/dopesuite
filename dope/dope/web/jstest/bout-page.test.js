@@ -47,7 +47,7 @@ globalThis.cancelAnimationFrame = () => {};
 const store = new Map();
 window.localStorage = {getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k)};
 
-const {mountBoutPage, tabStages, stageBouts, seatRoster} = await import("./dist/bout-page.js");
+const {mountBoutPage, tabStages, stageBouts, seatRoster, boutAnchorID, BOUT_BOX_SELECTOR} = await import("./dist/bout-page.js");
 const {createSyncIndicator} = await import("./dist/state-sync.js");
 
 const API = "/api/fest/f/games/g";
@@ -103,6 +103,7 @@ function serve(bouts) {
     if (url === `${API}/stages/matches`) answer = [{code: "s1", matches: Object.values(bouts)}];
     else if (url === "/api/fest/f/venues") answer = [{number: 1, title: "Hall"}];
     else if (url === API) answer = {stages: [{code: "s1", title: "Fresh"}]};
+    else if (url.startsWith(`${API}/matches/`) && url.endsWith("/finish")) answer = {};
     else if (url.startsWith(`${API}/matches/`) && url.endsWith("/state")) {
       const code = url.split("/").at(-2);
       const view = bouts[code];
@@ -125,7 +126,7 @@ function walk(root, out = []) {
   return out;
 }
 
-function mount({viewer = false, onRoster, app = "brain", scheme = {stages: []}, fest = {stages: [{code: "s1", title: "Init"}]}, hash = ""} = {}) {
+function mount({viewer = false, onRoster, app = "brain", scheme = {stages: []}, fest = {stages: [{code: "s1", title: "Init"}]}, hash = "", buildTab, shape, repaintCells} = {}) {
   window.location.hash = hash;
   const streams = [];
   const shell = fakeShell(viewer);
@@ -141,11 +142,13 @@ function mount({viewer = false, onRoster, app = "brain", scheme = {stages: []}, 
     title: () => "Brain",
     parse: (view) => ({...view.state, parsed: true}),
     blank: () => ({blank: true}),
-    buildTab: (tab) => { drawn.push(tab?.key); return fakeNode(); },
+    buildTab: (tab) => { drawn.push(tab?.key); return buildTab ? buildTab(page, tab) : fakeNode(); },
     buildRoster: () => fakeNode(),
     fitsFrame: () => false,
     boutSelector: ".bout",
     cursorKinds: {},
+    shape,
+    repaintCells,
     onRoster,
     shell,
     route: {viewer, festID: "f", gameID: "g", apiBase: API},
@@ -402,4 +405,115 @@ test("a refused reseed shows the server's reason on its panel", async () => {
   const errors = walk(root.node).filter((n) => n.className === "hint hint-danger").map((n) => n.textContent);
   assert.deepEqual(errors, ["Bout A is not finished"]);
   globalThis.fetch = refuse;
+});
+
+// Two stages of bouts, each its own tab, bout A on the first.
+const SHEET_STAGES = [
+  {code: "s1", title: "Game 1", stage_type: "matches", matches: [{code: "m1"}, {code: "m3"}]},
+  {code: "s2", title: "Game 2", stage_type: "matches", matches: [{code: "m2"}]},
+];
+const SHEET_FEST = {stages: SHEET_STAGES.map((stage) => ({...stage, matches: stage.matches.map((match, i) => ({...match, letter: `${stage.code}${i}`}))}))};
+SHEET_FEST.stages[0].matches[0].letter = "A";
+
+// sheetTab draws the boxes of the bouts a tab's stages hold, the one way a
+// page makes a box.
+function sheetTab(page, tab) {
+  const wrap = element("div");
+  for (const stage of tabStages(SHEET_STAGES, tab)) {
+    for (const bout of stageBouts(page, stage)) wrap.appendChild(page.boutBox(bout.code, "x-bout"));
+  }
+  return wrap;
+}
+
+function sheetBouts() {
+  return {
+    m1: {code: "m1", seq: 3, state: {a: 1, seats: "one"}},
+    m3: {code: "m3", seq: 3, state: {a: 1, seats: "one"}},
+    m2: {code: "m2", seq: 3, state: {a: 1, seats: "one"}},
+  };
+}
+
+const boxesOf = (node) => walk(node).filter((n) => n.dataset?.bout);
+
+test("every bout box carries the id boutAnchorID gives it, on every format", async () => {
+  assert.equal(BOUT_BOX_SELECTOR, "[data-bout]", "the steady redraw finds the boxes by their code");
+  for (const app of ["ek", "hamsa", "troika", "brain"]) {
+    store.clear();
+    serve(sheetBouts());
+    const {page, root} = mount({app, scheme: {stages: SHEET_STAGES}, fest: SHEET_FEST, hash: "#@A", buildTab: sheetTab});
+    page.start();
+    await settle();
+    const boxes = boxesOf(root.node);
+    // Troika keeps a Block's stages on one protocols tab, so m2 comes too.
+    assert.deepEqual(boxes.map((box) => box.dataset.bout).slice(0, 2), ["m1", "m3"], `${app} draws the bouts of the tab that holds A`);
+    for (const box of boxes) assert.equal(box.id, boutAnchorID(box.dataset.bout), `${app}'s box of ${box.dataset.bout}`);
+  }
+  window.location.hash = "";
+});
+
+// The repaint contract: a remote delta that leaves a bout's shape as drawn is
+// repainted in place; one that changes it draws the tab again; one for a bout
+// on another tab leaves the tab alone.
+test("a remote delta of the same shape repaints the bout, a new shape draws the tab again", async () => {
+  store.clear();
+  serve(sheetBouts());
+  const repainted = [];
+  const {page, streams, drawn} = mount({
+    app: "hamsa", scheme: {stages: SHEET_STAGES}, fest: SHEET_FEST, hash: "#@A", buildTab: sheetTab,
+    shape: (code) => String(page.stateOf(code).seats),
+    repaintCells: (code) => repainted.push(code),
+  });
+  page.start();
+  await settle();
+  const draws = drawn.length;
+  streams[0].emit({scope: "match:7:m1", ops: [{op: "set", path: ["state", "a"], value: 2}], seq: 4, prevSeq: 3});
+  assert.deepEqual(repainted, ["m1"], "a mark repaints the bout");
+  assert.equal(drawn.length, draws, "and draws no tab");
+  streams[0].emit({scope: "match:7:m2", ops: [{op: "set", path: ["state", "seats"], value: "two"}], seq: 4, prevSeq: 3});
+  assert.equal(drawn.length, draws, "a bout on another tab draws nothing here");
+  assert.deepEqual(repainted, ["m1"]);
+  streams[0].emit({scope: "match:7:m3", ops: [{op: "set", path: ["state", "seats"], value: "two"}], seq: 4, prevSeq: 3});
+  assert.equal(drawn.length, draws + 1, "a new seating draws the tab again");
+  assert.deepEqual(repainted, ["m1"]);
+  streams[0].emit({scope: "match:7:m3", ops: [{op: "set", path: ["state", "a"], value: 5}], seq: 5, prevSeq: 4});
+  assert.deepEqual(repainted, ["m1", "m3"], "against the shape drawn last, the next mark repaints again");
+  window.location.hash = "";
+});
+
+test("this host's own edit goes through the same contract", async () => {
+  store.clear();
+  serve(sheetBouts());
+  const repainted = [];
+  const {page, drawn} = mount({
+    app: "ek", scheme: {stages: SHEET_STAGES}, fest: SHEET_FEST, hash: "#@A", buildTab: sheetTab,
+    shape: (code) => String(page.stateOf(code).seats),
+    repaintCells: (code) => repainted.push(code),
+  });
+  page.start();
+  await settle();
+  const draws = drawn.length;
+  page.stateOf("m1").a = 3;
+  page.refresh("m1");
+  assert.deepEqual(repainted, ["m1"]);
+  page.stateOf("m1").seats = "two";
+  page.refresh("m1");
+  assert.equal(drawn.length, draws + 1, "an edit of the seating draws the tab again");
+  window.location.hash = "";
+});
+
+// Unticking a finished bout reopens it at once: the sheet reads the flag from
+// the bout's view, and a mark right after the untick must not be refused
+// while the server's answer is on its way.
+test("a host's untick reopens the bout before the server answers", async () => {
+  store.clear();
+  const bouts = sheetBouts();
+  bouts.m1.finished = true;
+  serve(bouts);
+  const {page} = mount({app: "brain", scheme: {stages: SHEET_STAGES}, fest: SHEET_FEST, hash: "#@A", buildTab: sheetTab});
+  page.start();
+  await settle();
+  assert.equal(page.view("m1").finished, true);
+  page.finish("m1", false);
+  assert.equal(page.view("m1").finished, false, "the view says open at once");
+  window.location.hash = "";
 });

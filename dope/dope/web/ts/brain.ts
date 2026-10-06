@@ -14,12 +14,12 @@ import {buildCrosstables, crossSlot, slotKey, standingsByParticipant} from "./cr
 import type {StageRef} from "./standings.js";
 import {buildGameRosterView, fetchGameRoster} from "./fest-roster.js";
 import type {RosterTeam} from "./fest-roster.js";
-import {boutAnchorID, groupAnchorID, mountBoutPage, tabStages, stageBouts} from "./bout-page.js";
+import {groupAnchorID, mountBoutPage, tabStages, stageBouts} from "./bout-page.js";
 import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
 import {nameCell} from "./name-cell.js";
 import {SEAT_PICKER_SELECTOR, seatPicker} from "./seat-picker.js";
-import {paintMark, stackedSheet} from "./stacked-sheet.js";
+import {figureData, paintFigures, paintMark, stackedSheet} from "./stacked-sheet.js";
 import type {Mark} from "./sheet-cursor.js";
 import {computeBrainPlayerStats} from "./brain-stats.js";
 import type {StatsBout} from "./brain-stats.js";
@@ -126,7 +126,7 @@ const answers = stackedSheet({
     },
     pathOf: brain.markPath,
     patch: (code, path, value) => page.patch(code, path, value),
-    onWritten: (codes) => codes.forEach(refreshScore),
+    onWritten: (codes) => codes.forEach((code) => page.refresh(code)),
   },
 });
 
@@ -143,7 +143,8 @@ const page: BoutPage<BrainMatchView, BrainMatchState> = mountBoutPage({
   buildTab,
   buildRoster: (): HTMLElement => buildGameRosterView(page.route.apiBase || "", {editable: !page.viewer}),
   fitsFrame: (tab) => tab?.kind === "roster" || tab?.kind === "entrants",
-  boutSelector: ".brain-bout",
+  shape,
+  repaintCells,
   cursorKinds: {
     answer: answers.cursorKind,
     // A player picker carries the address of the mark beside it.
@@ -409,11 +410,9 @@ function buildStatsView(): HTMLElement {
 }
 
 function buildBout({code, view, planned}: BoutEntry): HTMLElement {
-  const section = document.createElement("section");
-  section.className = "brain-bout";
-  // The bout page keeps a bout's size and the view across redraws by this id,
+  // The bout page keeps a bout's size and the view across redraws by its box,
   // and a link lands on it.
-  section.id = boutAnchorID(code);
+  const section = page.boutBox(code, "brain-bout");
   const editable = !viewer && !view.finished;
 
   const table = document.createElement("table");
@@ -450,6 +449,7 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   const score = document.createElement("th");
   score.className = "number brain-score-head";
   score.colSpan = 2;
+  Object.assign(score.dataset, figureData("score"));
   score.textContent = `${taken(view, 0)} : ${taken(view, 1)}`;
   head.appendChild(score);
   head.appendChild(nameHead(view, 1, planned));
@@ -607,13 +607,37 @@ function setPlayer(code: string, side: number, q: number, player: string): void 
   if (q < 0 || q >= rows.length) return;
   rows[q].player = player;
   sendOps(code, [{path: ["teams", side, "rows", q, "player"], value: player}]);
+  page.refresh(code);
 }
 
-// refreshScore repaints a bout's score after its marks changed.
-function refreshScore(code: string): void {
+// === the repaint contract ===
+
+// shape is everything of a bout its box draws except the marks and the score
+// they feed: the sides, who answered each question, the tiebreak rows and
+// whether the last one may be dropped, the head.
+function shape(code: string): string {
   const view = page.view(code);
-  const score = document.getElementById(boutAnchorID(code))?.querySelector(".brain-score-head");
-  if (view && score) score.textContent = `${taken(view, 0)} : ${taken(view, 1)}`;
+  if (!view) return "";
+  const state = page.stateOf(code);
+  const last = matchRows(view, 0).length - 1;
+  return JSON.stringify({
+    finished: Boolean(view.finished), title: view.title || "",
+    venue: view.venue ? [view.venue.number, view.venue.title] : null, startsAt: view.startsAt || "",
+    sides: (view.participants || []).map((side) => [side?.id, side?.name]),
+    players: [0, 1].map((side) => matchRows(view, side).map((row) => row.player || "")),
+    tiebreaks: state.tiebreaks || 0,
+    lastEmpty: [0, 1].every((side) => !matchRows(view, side)[last]?.mark),
+  });
+}
+
+// repaintCells brings a drawn bout's marks and its score in line with the
+// state, where they stand.
+function repaintCells(code: string): void {
+  const view = page.view(code);
+  if (!view) return;
+  const box = page.boxOf(code);
+  answers.paint(box, code, (cell) => (matchRows(view, cell.side)[cell.q]?.mark || "") as Mark);
+  paintFigures(box, (figure) => (figure === "score" ? `${taken(view, 0)} : ${taken(view, 1)}` : undefined));
 }
 
 const cursor = answers.cursor(brainRoot, {

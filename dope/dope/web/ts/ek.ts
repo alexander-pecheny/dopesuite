@@ -9,18 +9,18 @@
 // through the bout page (bout-page.ts), the same as Brain's, Hamsa's and
 // Troika's. A self-booting side-effect module bundled by pages/ek.ts.
 
-import {cssEscape, formatPlace, td, th} from "./cells.js";
+import {formatPlace, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {buildGroupStandingsView, letteredTitle, standingsTable} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
 import {nameCell} from "./name-cell.js";
 import {seatPicker} from "./seat-picker.js";
-import {seatingLabel} from "./ek-seating.js";
-import {boutAnchorID, groupAnchorID, mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
+import {seatingLabel, seatingText} from "./ek-seating.js";
+import {groupAnchorID, mountBoutPage, tabStages, stageBouts, seatRoster} from "./bout-page.js";
 import type {BoutPage, BoutView, BoutEntry as BoutEntryOf} from "./bout-page.js";
 import type {GameInitLike} from "./game-page.js";
-import {paintMark, stackedSheet} from "./stacked-sheet.js";
-import {buildFlatScoreTable, buildTwoRowScoreTable, seatingText} from "./score-table.js";
+import {figureData, paintFigures, paintMark, stackedSheet} from "./stacked-sheet.js";
+import {buildFlatScoreTable, buildTwoRowScoreTable} from "./score-table.js";
 import type {ScoreTableThemeRow} from "./score-table.js";
 import {reseedMetricHeader, reseedMetricValue} from "./fest-grid.js";
 import type {FestGridStage, SortRule} from "./fest-grid.js";
@@ -125,7 +125,7 @@ const answers = stackedSheet({
     },
     pathOf: (cell) => ek.answerPath(seatsOf(page.view(cell.match))[cell.seat], cell.cellKind, cell.theme, cell.q),
     patch: (code, path, value) => page.patch(code, path, value),
-    onWritten: (codes) => codes.forEach(refreshTotals),
+    onWritten: (codes) => codes.forEach((code) => page.refresh(code)),
   },
 });
 
@@ -142,7 +142,8 @@ const page: BoutPage<EKMatchView, EKState> = mountBoutPage({
   buildTab,
   buildRoster: (): HTMLElement => buildGameRosterView(page.route.apiBase || "", {editable: !page.viewer}),
   fitsFrame: (tab) => !["grid", "stage", "round"].includes(tab?.kind || "grid"),
-  boutSelector: ".ek-bout",
+  shape,
+  repaintCells,
   cursorKinds: {
     answer: answers.cursorKind,
     place: {selector: ".place-input", keys: ["match", "seat"]},
@@ -234,9 +235,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
   const editable = !viewer && !view.finished;
   const shootouts = shootoutCount(code);
 
-  const box = document.createElement("section");
-  box.className = "ek-bout";
-  box.id = boutAnchorID(code);
+  const box = page.boutBox(code, "ek-bout");
 
   const build = individual ? buildFlatScoreTable : buildTwoRowScoreTable;
   const table = build({
@@ -256,10 +255,10 @@ function buildBout(bout: BoutEntry): HTMLElement {
       const score = ek.scoreSection(state.sections.get(id), values);
       return {
         nameCell: seatNameCell(seatName(view, seat)),
-        totalCell: {content: score.total, className: "number total-cell", attrs: {rowSpan}, dataset: {total: `${code}-${seat}`}},
+        totalCell: {content: score.total, className: "number total-cell", attrs: {rowSpan}, dataset: figureData("total", {seat})},
         placeCell: placeCell(bout, seat),
         themes: columns.map((column) => themeRow(bout, seat, column, editable)),
-        afterThemeCells: trailingCells(code, seat, score, shootouts),
+        afterThemeCells: trailingCells(seat, score, shootouts),
       };
     }),
     gapRowClassName: "team-gap-row",
@@ -286,12 +285,12 @@ function trailingHeaders(code: string, shootouts: number): CellContent[] {
   return heads;
 }
 
-function trailingCells(code: string, seat: number, score: ek.SectionScore, shootouts: number): CellContent[] {
+function trailingCells(seat: number, score: ek.SectionScore, shootouts: number): CellContent[] {
   const cells: CellContent[] = viewer ? [] : [td("", "shootout-controls-cell", {rowSpan})];
-  if (shootouts > 0) cells.push(td(score.shootout, "number tiebreak-cell", {rowSpan, dataset: {shootoutTotal: `${code}-${seat}`}}));
-  cells.push(td(score.plus, "number plus-cell", {rowSpan, dataset: {plus: `${code}-${seat}`}}));
+  if (shootouts > 0) cells.push(td(score.shootout, "number tiebreak-cell", {rowSpan, dataset: figureData("shootout", {seat})}));
+  cells.push(td(score.plus, "number plus-cell", {rowSpan, dataset: figureData("plus", {seat})}));
   for (let q = ek.QUESTIONS - 1; q >= 0; q--) {
-    cells.push(td(score.correct[q], "number narrow correct-count-cell", {rowSpan, dataset: {count: `${code}-${seat}-${q}`}}));
+    cells.push(td(score.correct[q], "number narrow correct-count-cell", {rowSpan, dataset: figureData("count", {seat, q})}));
   }
   return cells;
 }
@@ -302,9 +301,8 @@ function trailingCells(code: string, seat: number, score: ek.SectionScore, shoot
 // on one.
 function placeCell(bout: BoutEntry, seat: number): HTMLElement {
   const id = seatsOf(bout.view)[seat];
-  const pin = sectionOf(bout.code, seat)?.pin ?? null;
-  const place = pin ?? bout.view.participants?.[seat]?.place ?? 0;
-  if (viewer) return td(formatPlace(place), "number place-cell", {rowSpan, dataset: {place: `${bout.code}-${seat}`}});
+  const place = placeOf(bout.code, seat);
+  if (viewer) return td(formatPlace(place), "number place-cell", {rowSpan, dataset: figureData("place", {seat})});
   const input = document.createElement("input");
   input.type = "text";
   input.inputMode = "decimal";
@@ -319,11 +317,12 @@ function placeCell(bout: BoutEntry, seat: number): HTMLElement {
     const text = input.value.trim().replace(",", ".");
     const next = text === "" ? null : Number(text);
     if (next !== null && (!Number.isFinite(next) || next < 0)) {
-      input.value = formatPlace(place);
+      input.value = formatPlace(placeOf(bout.code, seat));
       return;
     }
-    if ((next || null) === pin) return;
+    // A repaint keeps the box, so the pin is read as the state has it now.
     const section = sectionOf(bout.code, seat);
+    if ((next || null) === (section?.pin ?? null)) return;
     if (section) section.pin = next || null;
     page.patch(bout.code, ek.pinPath(id), next || null);
   };
@@ -333,9 +332,15 @@ function placeCell(bout: BoutEntry, seat: number): HTMLElement {
     event.preventDefault();
     input.blur();
   });
-  const cell = td("", "number place-cell", {rowSpan, dataset: {place: `${bout.code}-${seat}`}});
+  const cell = td("", "number place-cell", {rowSpan});
   cell.appendChild(input);
   return cell;
+}
+
+// placeOf is the seat's place as the sheet shows it: the host's pin, else the
+// server's.
+function placeOf(code: string, seat: number): number {
+  return sectionOf(code, seat)?.pin ?? page.view(code)?.participants?.[seat]?.place ?? 0;
 }
 
 function themeRow(bout: BoutEntry, seat: number, column: ThemeColumn, editable: boolean): ScoreTableThemeRow {
@@ -346,7 +351,7 @@ function themeRow(bout: BoutEntry, seat: number, column: ThemeColumn, editable: 
     content: theme ? ek.themeScore(theme, values) : 0,
     className: "number theme-score theme-block theme-block-score",
     attrs: {rowSpan},
-    dataset: {score: `${code}-${seat}-${column.kind === "themes" ? "t" : "s"}${column.theme}`},
+    dataset: figureData("score", {seat, cellKind: column.kind, theme: column.theme}),
   };
   const answers = values.map((_value, q) => markCell(bout, seat, column, q, theme?.answers[q] || "", editable));
   // A player seats himself in individual SI: his row has no player cell.
@@ -368,7 +373,7 @@ function themeRow(bout: BoutEntry, seat: number, column: ThemeColumn, editable: 
 function readonlyPlayerCell(bout: BoutEntry, seat: number, players: number[]): HTMLElement {
   const names = rosterNames(bout, seat);
   const seated = players.map((id) => names.get(id) || "").filter(Boolean);
-  const cell = nameCell(seatingText({players: seated}, {players: seatCap(bout.view)}), {
+  const cell = nameCell(seatingText(seated, seatCap(bout.view)), {
     className: "readonly-player theme-block theme-block-top-left",
     popoverText: seated.join("\n"),
   });
@@ -401,6 +406,7 @@ function playerCell(bout: BoutEntry, seat: number, column: ThemeColumn, players:
       const theme = themeAt(bout.code, seat, column.kind, column.theme);
       if (theme) theme.players = ids;
       page.patch(bout.code, ek.playersPath(id, column.kind, column.theme), ids);
+      page.refresh(bout.code);
     },
   }).element;
 }
@@ -474,7 +480,7 @@ function addShootoutTheme(code: string, theme: number): void {
     section.shootoutThemes[theme] = {players: [], answers: ["", "", "", "", ""]};
     page.patch(code, ek.shootoutThemePath(id, theme), {answers: ["", "", "", "", ""]});
   }
-  page.render();
+  page.refresh(code);
 }
 
 function dropShootoutTheme(code: string, theme: number): void {
@@ -482,7 +488,7 @@ function dropShootoutTheme(code: string, theme: number): void {
     section.shootoutThemes.splice(theme, 1);
     page.patch(code, ek.shootoutThemePath(id, theme), null);
   }
-  page.render();
+  page.refresh(code);
 }
 
 // === the cursor ===
@@ -510,30 +516,56 @@ const cursor = answers.cursor(root, {
   active: () => ["stage", "round"].includes(page.tab()?.kind || ""),
 });
 
-// refreshTotals repaints what an edit feeds rather than the sheet, so the
-// cursor does not move out from under the host.
-function refreshTotals(code: string): void {
+// === the repaint contract ===
+
+// shape is everything of a bout its box draws except the marks and the
+// numbers they feed: who sits where, the themes and the shootout, the values,
+// the head (title, venue, time, the finished tick). The place and the pins
+// are numbers too, repainted in place.
+function shape(code: string): string {
   const view = page.view(code);
-  const values = valuesOf(view);
+  if (!view) return "";
   const state = stateOf(code);
-  seatsOf(view).forEach((id, seat) => {
-    const section = state.sections.get(id);
-    const score = ek.scoreSection(section, values);
-    setCell(`[data-total="${cssEscape(`${code}-${seat}`)}"]`, String(score.total));
-    setCell(`[data-plus="${cssEscape(`${code}-${seat}`)}"]`, String(score.plus));
-    setCell(`[data-shootout-total="${cssEscape(`${code}-${seat}`)}"]`, String(score.shootout));
-    score.correct.forEach((count, q) => setCell(`[data-count="${cssEscape(`${code}-${seat}-${q}`)}"]`, String(count)));
-    for (const column of themeColumns(code)) {
-      const theme = themeAt(code, seat, column.kind, column.theme);
-      const key = `${code}-${seat}-${column.kind === "themes" ? "t" : "s"}${column.theme}`;
-      setCell(`[data-score="${cssEscape(key)}"]`, String(theme ? ek.themeScore(theme, values) : 0));
-    }
+  return JSON.stringify({
+    finished: Boolean(view.finished), title: view.title || "",
+    venue: view.venue ? [view.venue.number, view.venue.title] : null, startsAt: view.startsAt || "",
+    values: valuesOf(view), cap: seatCap(view), themes: themeCountOf(view), shootouts: shootoutCount(code),
+    seats: (view.participants || []).map((seat) => [seat?.id, seat?.name, (seat?.roster || []).map((player) => player.id)]),
+    players: seatsOf(view).map((id) => {
+      const section = state.sections.get(id);
+      return section ? [section.themes.map((theme) => theme.players), section.shootoutThemes.map((theme) => theme.players)] : null;
+    }),
   });
 }
 
-function setCell(selector: string, text: string): void {
-  const node = root.querySelector<HTMLElement>(selector);
-  if (node) node.textContent = text;
+// repaintCells brings a drawn bout's marks, its figures and its places in
+// line with the state, where they stand.
+function repaintCells(code: string): void {
+  const box = page.boxOf(code);
+  const view = page.view(code);
+  const values = valuesOf(view);
+  const scores = seatsOf(view).map((id) => ek.scoreSection(stateOf(code).sections.get(id), values));
+  answers.paint(box, code, (cell) => themeAt(code, cell.seat, cell.cellKind, cell.theme)?.answers[cell.q] || "");
+  paintFigures(box, (figure, at) => {
+    const seat = Number(at.seat);
+    const score = scores[seat];
+    if (!score) return undefined;
+    switch (figure) {
+    case "total": return score.total;
+    case "plus": return score.plus;
+    case "shootout": return score.shootout;
+    case "count": return score.correct[Number(at.q)];
+    case "place": return formatPlace(placeOf(code, seat));
+    case "score": {
+      const theme = themeAt(code, seat, at.cellKind as ThemeKind, Number(at.theme));
+      return theme ? ek.themeScore(theme, values) : 0;
+    }
+    default: return undefined;
+    }
+  });
+  for (const input of box?.querySelectorAll<HTMLInputElement>(".place-input") || []) {
+    if (input !== document.activeElement) input.value = formatPlace(placeOf(code, Number(input.dataset.seat)));
+  }
 }
 
 // === the tabs ===
@@ -635,8 +667,8 @@ function buildStats(): HTMLElement {
   }));
   // A personal game has no per-theme players: the participant is the player.
   return individual
-    ? buildIndividualStatsTable(computeIndividualPlayerStats(stages as never))
-    : buildEKStatsTable(computeEKPlayerStats(stages as never));
+    ? buildIndividualStatsTable(computeIndividualPlayerStats(stages))
+    : buildEKStatsTable(computeEKPlayerStats(stages));
 }
 
 function buildTab(tab: GameTab | undefined): HTMLElement {

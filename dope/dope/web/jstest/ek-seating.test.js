@@ -17,6 +17,13 @@ test("seatedNames drops the blanks a cleared seat leaves", () => {
   assert.deepEqual(T.seatedNames(null), []);
 });
 
+test("seatingText prints one seat's whole name, and the surnames where a theme seats more", () => {
+  assert.equal(T.seatingText(["Иван Иванов"], 1), "Иван Иванов");
+  assert.equal(T.seatingText(["", "Иван Иванов"], 1), "Иван Иванов");
+  assert.equal(T.seatingText(["Анна Климович", "Анна Лис"], 3), "Климович, Лис");
+  assert.equal(T.seatingText([], 3), "");
+});
+
 // A theme's points are the team's: they divide equally among whoever sat it,
 // while a question taken or missed counts whole for each of them. Worked by
 // hand: theme 1 (Ann + Bob) is +10 −20 = −10, so each takes −5; theme 2 (Ann

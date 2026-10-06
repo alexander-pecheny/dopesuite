@@ -1,15 +1,28 @@
 // EK stats: per-player and per-participant aggregates folded from the
 // stages' marks (the sibling of brain-stats and group-stats), and their tables.
 
-import type {MatchView} from "./score-table.js";
 import {seatedNames} from "./ek-seating.js";
 import {percentText, roundTo} from "./cells.js";
 import {standingsTable} from "./standings.js";
 import S from "./i18nstrings.js";
 
+// What the statistics read of a bout: the server's view of it, its seats with
+// each theme's seating (the players' names) and marks. Shootout themes are
+// not read at all.
+export interface EKStatsTheme {
+  players?: ReadonlyArray<string | null | undefined> | null;
+  answers?: ReadonlyArray<string | null | undefined>;
+}
+
+export interface EKStatsBout {
+  code?: string;
+  finished?: boolean;
+  participants?: Array<{name?: string; themes?: EKStatsTheme[]}>;
+}
+
 export interface EKStage {
   code?: string;
-  matches?: MatchView[];
+  matches?: EKStatsBout[];
 }
 
 export interface EKPlayerStatsRow {
@@ -28,9 +41,9 @@ export interface EKPlayerStatsRow {
 
 // computeEKPlayerStats aggregates per-player individual stats across every
 // battle of an EK game. `stages` is the payload from /stages/matches:
-// [{code, matches: [MatchView, ...]}, ...]. Only regular themes are counted —
+// [{code, matches: [view, ...]}, ...]. Only regular themes are counted —
 // shootout themes are a tiebreaker and are excluded, matching
-// the Σ+ semantics shown in a battle (ParticipantView.plus ignores shootouts too).
+// the Σ+ a bout shows (its plus ignores shootouts too).
 //
 // Players are keyed by (team, player) so namesakes on different teams stay
 // separate. The team-share column (% of team) is a positive player's
@@ -130,7 +143,7 @@ export interface IndividualStatsRow {
 // only, finished matches only — a seeded but unplayed match is not a match played —
 // sorted by Σ.
 // addIndividualMarks adds one seat's theme marks to a player's row.
-function addIndividualMarks(row: IndividualStatsRow, themes: Array<{answers?: Array<string | null | undefined>}>, values: readonly number[]): void {
+function addIndividualMarks(row: IndividualStatsRow, themes: EKStatsTheme[], values: readonly number[]): void {
   for (const theme of themes) {
     (theme.answers || []).forEach((mark, i) => {
       if (mark === "right") {

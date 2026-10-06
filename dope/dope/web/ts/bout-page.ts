@@ -19,6 +19,16 @@
 // the reseed tab are drawn here too, the same on every format: a live draw
 // panel for a host, and the server's word on whether a reseed can be
 // calculated.
+//
+// And it owns the repaint contract. A page builds each bout's box with
+// page.boutBox and says two things about a bout: shape(code), a fingerprint
+// of everything the box draws except the marks and the numbers they feed,
+// and repaintCells(code), which brings those marks and numbers in line where
+// they stand. Whenever a bout's state moves — this host's own edit, the
+// server's answer, another host's delta — the module compares the shape with
+// the one it drew: the same, and the box is repainted in place; another, and
+// the tab is drawn again, keeping each box's size and the view by the box's
+// id (steady-redraw.ts).
 
 import {createLiveEvents, createScopedWriter, gameEventsURL, scheduleStaticReload} from "./state-sync.js";
 import type {PatchPath, ScopedWriter, SendResult, WriteIntent, WriteRequest} from "./state-sync.js";
@@ -52,10 +62,15 @@ const REFETCH_DEBOUNCE_MS = 250;
 const FLASH_MS = 2500;
 
 // boutAnchorID is the id of a bout's box, on whatever tab draws it: the one
-// identity a link, a scroll and a flash find the bout by.
+// identity a link, a scroll, a flash and a steady redraw find the bout by.
+// Only page.boutBox gives it out.
 export function boutAnchorID(code: string): string {
   return `bout-${code}`;
 }
+
+// BOUT_BOX_SELECTOR finds every bout's box: page.boutBox marks each with its
+// code under data-bout.
+export const BOUT_BOX_SELECTOR = "[data-bout]";
 
 // groupAnchorID is the id of a group's table.
 export function groupAnchorID(code: string): string {
@@ -108,23 +123,23 @@ export interface BoutPageSpec<V extends BoutView, S> {
   buildRoster: () => HTMLElement;
   // Whether a drawn tab fits the frame's width rather than scrolling sideways.
   fitsFrame: (tab: GameTab | undefined, node: HTMLElement) => boolean;
-  // A bout's box on the protocols tab, sized and kept in view across redraws.
-  boutSelector: string;
+  // The repaint contract. shape is a fingerprint of everything a bout's box
+  // draws except its marks and the numbers they feed (seats, themes, the
+  // finished tick, the heads' buttons); repaintCells brings the marks and the
+  // numbers of a drawn box in line with the state. Left out, every change
+  // draws the tab again.
+  shape?: (code: string) => string;
+  repaintCells?: (code: string) => void;
   cursorKinds: Record<string, CursorKind>;
   activeCursorElement?: () => Element | null;
   // The page's sheet cursors: bound at boot, refreshed after every render.
   cursors?: () => Array<{bind(): void; refresh(): void}>;
   // Old hashes a page still answers to (Brain's, game-tabs.ts canonicalKey).
   canonical?: (tabs: GameTab[], key: string) => string;
-  // After the module drew a tab (the page's own bookkeeping).
-  afterRender?: (tab: GameTab | undefined, node: HTMLElement) => void;
   // A host is finishing a bout: what the page writes first (Troika fills the
   // wrong answers a host left blank), in the same gesture, so one undo takes
   // it back with the finish's own effect.
   beforeFinish?: (code: string) => void;
-  // A bout's new view arrived: true when the page repainted it in place, so
-  // the tab need not be drawn again.
-  repaint?: (code: string) => boolean;
   // The URL moved under the page (back, forward, a typed hash).
   onNavigate?: () => void;
   // The fest view arrived, after the module adopted its stages.
@@ -159,6 +174,16 @@ export interface BoutPage<V extends BoutView, S> {
   // A structural write on a bout's scope.
   send(code: string, request: WriteRequest, intent?: WriteIntent): Promise<SendResult>;
   render(): void;
+  // A bout's state moved: repaint its box in place when its shape is the one
+  // drawn, else draw the tab again. A bout the tab in front does not draw
+  // leaves a tab of boxes alone.
+  refresh(code: string): void;
+  // A bout's box, the one way a page makes one: the element with the bout's
+  // id (boutAnchorID) and its code under data-bout. Drawing it tells the
+  // module the bout is on the tab in front.
+  boutBox(code: string, className: string): HTMLElement;
+  // The bout's box as drawn now, or null.
+  boxOf(code: string): HTMLElement | null;
   // Fetch every bout again, soon; a burst of reasons fetches once.
   resync(): void;
   // Drop the roster tab, so the next drawing builds it afresh.
@@ -372,9 +397,43 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     return (fest?.stages || []).flatMap((stage) => stage?.code ? [festStages.get(stage.code) || stage] : []);
   }
 
-  function show(code: string): void {
-    if (spec.repaint?.(code)) return;
-    render();
+  // ---- the repaint contract ----
+
+  // drawing collects the bouts whose boxes the tab being built draws; drawn
+  // is each one's shape as the page last drew it. A repaint is safe only
+  // against what is on screen: this host's own marks are in the state before
+  // the server answers them, so the state just before an answer can match the
+  // answer while the box on screen is older than both.
+  let drawing = new Set<string>();
+  const drawn = new Map<string, string>();
+
+  function boutBox(code: string, className: string): HTMLElement {
+    const box = document.createElement("section");
+    box.className = className;
+    box.id = boutAnchorID(code);
+    box.dataset.bout = code;
+    drawing.add(code);
+    return box;
+  }
+
+  function boxOf(code: string): HTMLElement | null {
+    return document.getElementById?.(boutAnchorID(code)) || null;
+  }
+
+  function refresh(code: string): void {
+    const before = drawn.get(code);
+    if (before === undefined) {
+      // A tab of boxes draws nothing of a bout it holds no box for, unless
+      // the bout belongs there and only now arrived.
+      if (drawn.size === 0 || boutTab(code)?.key === activeTab) render();
+      return;
+    }
+    if (!spec.shape || !spec.repaintCells || spec.shape(code) !== before) {
+      render();
+      return;
+    }
+    spec.repaintCells(code);
+    for (const cursor of spec.cursors?.() || []) cursor.refresh();
   }
 
   async function fetchMatches(): Promise<void> {
@@ -470,7 +529,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
           return;
         }
         next.seq = view.seq;
-        if (adoptView(next)) show(next.code);
+        if (adoptView(next)) refresh(next.code);
       },
       gap: () => resync(),
     }, {
@@ -506,7 +565,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     adopt: (scope, response) => {
       if (scope.startsWith(matchPrefix)) {
         const view = response as V | null;
-        if (adoptView(view) && view?.code) show(view.code);
+        if (adoptView(view) && view?.code) refresh(view.code);
         return;
       }
       if (scope === venuesScope) return; // venueEditor's callback draws it
@@ -546,7 +605,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
       if (view) states.set(code, spec.parse(writer.overlay(matchScope(code), view)));
     }
     if (result.skipped) shell.recorder?.event("undo-skipped", {skipped: result.skipped});
-    if (result.codes.length === 1) show(result.codes[0]);
+    if (result.codes.length === 1) refresh(result.codes[0]);
     else if (result.codes.length) render();
     return result;
   }
@@ -673,14 +732,17 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
       });
     }
     const tab = currentTab();
+    drawing = new Set();
     const node = buildTab(tab);
+    drawn.clear();
+    for (const code of drawing) drawn.set(code, spec.shape?.(code) ?? "");
     const keepView = drawnTab === activeTab;
     const frame = root.closest(".sheet-frame");
     const scrollTop = frame?.scrollTop || 0;
     // Every mark another host saves redraws the tab; the bouts keep their
     // sizes and the one in view stays put, so the sheet does not jump under
     // the cursor. A tab of no bouts keeps its scroll the same way.
-    redrawSteady(root, spec.boutSelector, () => {
+    redrawSteady(root, BOUT_BOX_SELECTOR, () => {
       root.replaceChildren(node);
       if (keepView && frame) frame.scrollTop = scrollTop;
     }, keepView);
@@ -690,7 +752,6 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     root.classList.toggle("grid-host", node.matches(".fest-grid") || Boolean(node.querySelector(".fest-grid")));
     for (const cursor of spec.cursors?.() || []) cursor.refresh();
     shell.presence.refresh();
-    spec.afterRender?.(tab, node);
     flash.redraw();
     showAnchor();
     notifyEmbeddedResize(embedded);
@@ -709,8 +770,19 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     sendFinish(code, finished);
   }
 
+  // sendFinish overlays the finished flag on the bout's view at once, so the
+  // sheet reads it from the tick: a bout the host just unticked takes marks
+  // before the server has answered.
   function sendFinish(code: string, finished: boolean): void {
-    void writer.send(matchScope(code), {url: matchURL(code, "finish"), body: {finished}}, {path: ["finished"], value: finished});
+    const sent = writer.send(matchScope(code), {url: matchURL(code, "finish"), body: {finished}}, {path: ["finished"], value: finished});
+    const view = views.get(code);
+    if (view) {
+      const overlaid = writer.overlay(matchScope(code), view);
+      views.set(code, overlaid);
+      states.set(code, spec.parse(overlaid));
+      refresh(code);
+    }
+    void sent;
   }
 
   async function draw(slot: string, participant: number): Promise<void> {
@@ -783,6 +855,9 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     isPending: (code, path) => writer.isPending(matchScope(code), path),
     send: (code, request, intent) => writer.send(matchScope(code), request, intent),
     render,
+    refresh,
+    boutBox,
+    boxOf,
     resync,
     invalidateRoster: () => { rosterView = null; },
     venues,

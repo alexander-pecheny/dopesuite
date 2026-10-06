@@ -4,8 +4,7 @@
 // full, one line. A line wider than the cell fades out at its edge, and the
 // cell's popover then lists the full names.
 //
-// Pure, so ek.ts and score-table.ts's live patch print the same string and
-// jstest can hold the rule to worked examples.
+// Pure, so jstest can hold the rule to worked examples.
 
 // surnameOf is the family name inside a display name. The roster stores the
 // given name and the surname separately and joins them in that order
@@ -26,4 +25,14 @@ export function seatingLabel(seated: ReadonlyArray<string>): string {
 // prints and what the statistics count as having played the theme.
 export function seatedNames(players: ReadonlyArray<string | null | undefined> | null | undefined): string[] {
   return (players || []).map((name) => String(name || "").trim()).filter(Boolean);
+}
+
+// seatingText is a theme's seating as a spectator's cell prints it: the one
+// player's whole name where a theme seats one (EK, and personal SI on its
+// borrowed page), and the surnames where it seats more (cap, Erudit-Sextet's
+// three), since three full names never fit five columns.
+export function seatingText(players: ReadonlyArray<string | null | undefined>, cap: number): string {
+  const seated = seatedNames(players);
+  if (cap <= 1) return seated[0] || "";
+  return seatingLabel(seated);
 }
