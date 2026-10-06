@@ -142,11 +142,12 @@ const chosenSorts = new Map<string, SortChoice>();
 
 // sortedOrder is the order a column's values sort in, as row indexes, and
 // whether the column is numbers. Numbers run from the biggest down and text
-// from A, unless the reader turned the column round; a tie keeps the order
-// the table came in.
+// from A, unless the reader turned the column round; a number column's blanks
+// stay at the bottom either way, and a tie keeps the order the table came in.
 export function sortedOrder(values: ReadonlyArray<number | string>, turned: boolean): {order: number[]; numeric: boolean} {
   const numeric = values.every((value) => typeof value === "number" || value === "");
   const order = values.map((_, index) => index).sort((a, b) => {
+    if (numeric && (values[a] === "") !== (values[b] === "")) return values[a] === "" ? 1 : -1;
     let by = numeric
       ? (Number(values[b]) || 0) - (Number(values[a]) || 0)
       : String(values[a]).localeCompare(String(values[b]), "ru");
@@ -174,11 +175,16 @@ function sortRows(table: HTMLTableElement, choice: SortChoice): void {
   });
 }
 
+// NO_VALUE is what a statistics cell prints when it has nothing to show.
+const NO_VALUE = "\u2014";
+
 // sortValue reads a cell as the sort compares it: a number where the cell is
-// one (the typographic minus and a decimal comma included), else its text.
+// one (the typographic minus, a decimal comma and a share's % sign included),
+// nothing where it is blank or a dash, else its text.
 export function sortValue(cell: Pick<Element, "textContent"> | undefined): number | string {
   const text = (cell?.textContent || "").trim();
-  const number = Number(text.replace("\u2212", "-").replace(",", "."));
+  if (text === NO_VALUE) return "";
+  const number = Number(text.replace("\u2212", "-").replace(",", ".").replace(/%$/, ""));
   return text !== "" && Number.isFinite(number) ? number : text.toLocaleLowerCase("ru");
 }
 

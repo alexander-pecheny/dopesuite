@@ -159,6 +159,13 @@ test("a statistics column sorts numbers biggest first and names from А, either 
   assert.deepEqual(sums, [300, -10, 1.5, 300]);
   assert.deepEqual(sortedOrder(sums, false), {order: [0, 3, 2, 1], numeric: true}, "a tie keeps its order");
   assert.deepEqual(sortedOrder(sums, true).order, [1, 2, 0, 3]);
+  // A share is a number with its sign after it, and a dash is no value: the
+  // column still sorts as numbers, its blanks last whichever way it runs
+  // (issue #99, 8% → 65% → 20% → 100%).
+  const shares = ["8%", "65%", "—", "20%", "100%"].map((text) => sortValue({textContent: text}));
+  assert.deepEqual(shares, [8, 65, "", 20, 100]);
+  assert.deepEqual(sortedOrder(shares, false), {order: [4, 1, 3, 0, 2], numeric: true});
+  assert.deepEqual(sortedOrder(shares, true).order, [0, 3, 1, 4, 2]);
   const names = ["Вера", "анна", "Борис"].map((text) => sortValue({textContent: text}));
   assert.deepEqual(sortedOrder(names, false), {order: [1, 2, 0], numeric: false});
   assert.deepEqual(sortedOrder(names, true).order, [0, 2, 1]);
