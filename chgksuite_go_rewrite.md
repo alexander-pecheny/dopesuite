@@ -150,12 +150,18 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       path — `make_chunk`, `assemble`, `swrap`, the length-tiered
       `tg_format_question` — is what would need porting.
       The bot runs in this process, the way xy's and dope's login bots do, rather
-      than as chgksuite's second Python process passing updates through a sqlite
-      file. `--tgaccount` is gone with it: the token comes from `--token` or
+      than on chgksuite's bot thread passing updates through a sqlite table.
+      `--tgaccount` is gone with it: the token comes from `--token` or
       `$CHGKSUITE_TG_TOKEN`.
+      The two files chgksuite keeps are shared: `~/.chgksuite/resolve.db` holds
+      the ids of channels named by username, and `~/.chgksuite/telegram.db`
+      records every export and every message it posted, so a post can be
+      found and edited later. The schema is in `xy/docs/telegram-db.md`.
 - [x] **B2. `stop_if_no_stats`**: `compose telegram --stop_if_no_stats` refuses
-      to publish a package whose questions carry no «Взятия:». A switch rather
-      than a settings-file key, until G3 brings the settings file.
+      to publish a package whose questions carry no «Взятия:»;
+      `--allow_no_stats` lifts it. `compose has_stats <file>` prints whether a
+      packet has stats, and chgksuite-gui asks it before every Telegram export
+      and asks the person before publishing a packet without them.
 
 ### C. Statistics
 

@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/buildinfo"
 
 	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/fsource"
@@ -29,6 +32,7 @@ func composeTelegram(args []string) error {
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
 	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", s.Chgkcli.Telegram.StopIfNoStatsFlag())
+	allowNoStats := fs.Bool("allow_no_stats", false, "publish a package without stats even when stop_if_no_stats is on")
 	language := languageFlag(fs)
 	config := configFlag(fs)
 	if err := parseConfigured(fs, args, *config); err != nil {
@@ -76,8 +80,8 @@ func composeTelegram(args []string) error {
 		return fmt.Errorf("the telegram export is ported for chgk only, not %s", game)
 	}
 	doc := fsource.Parse(string(src), "chgk")
-	if *stopIfNoStats && !stats.HasStats(doc) {
-		return fmt.Errorf("don't publish questions without stats")
+	if err := statsGate(doc, *stopIfNoStats, *allowNoStats); err != nil {
+		return err
 	}
 	images, err := loadImages(doc, filepath.Dir(in))
 	if err != nil {
@@ -117,11 +121,65 @@ func composeTelegram(args []string) error {
 		return err
 	}
 	req.Target = target
+	journal := startJournal(ctx, bot, in, src, target)
+	if journal != nil {
+		defer journal.Close()
+		req.Log = journal
+	}
 	reportNote("%s", s.Chgkcli.Telegram.Posting(target.ChannelID, target.ChatID))
 	start := time.Now()
 	if err := tg.Export(ctx, poster, req); err != nil {
 		return err
 	}
+	if journal != nil {
+		if err := journal.Finish(ctx); err != nil {
+			reportNote("telegram.db: the export is not marked finished: %v", err)
+		}
+	}
 	reportDone("%s", s.Chgkcli.Telegram.Done(time.Since(start).Round(time.Second).String()))
 	return nil
+}
+
+// statsGate is the stop_if_no_stats check, which allow_no_stats lifts: the GUI
+// passes it once the person has said yes to publishing without stats.
+func statsGate(doc fsource.Doc, stop, allow bool) error {
+	if stop && !allow && !stats.HasStats(doc) {
+		return fmt.Errorf("don't publish questions without stats")
+	}
+	return nil
+}
+
+// startJournal opens the record of this export in ~/.chgksuite/telegram.db. A
+// record that cannot be opened is reported and the export goes ahead without
+// one: it is what lets the posts be corrected later, not what posts them.
+func startJournal(ctx context.Context, bot *tg.Bot, in string, src []byte, target tg.Target) *tg.Journal {
+	path, err := tg.JournalPath()
+	if err == nil {
+		var j *tg.Journal
+		j, err = tg.StartExport(ctx, path, tg.ExportInfo{
+			ToolVersion: buildinfo.Version(), SourcePath: in, Source: src,
+			BotID: botID(ctx, bot), Target: target,
+		})
+		if err == nil {
+			return j
+		}
+	}
+	reportNote("telegram.db: this export goes unrecorded: %v", err)
+	return nil
+}
+
+// botID is the posting bot's own id, which the record keeps because only that
+// bot may edit what it posted; 0 when Telegram does not say.
+func botID(ctx context.Context, bot *tg.Bot) int64 {
+	res, err := bot.Client().Call(ctx, "getMe", map[string]any{})
+	if err != nil {
+		return 0
+	}
+	var me struct {
+		ID int64 `json:"id"`
+	}
+	if json.Unmarshal(res, &me) != nil {
+		return 0
+	}
+	return me.ID
 }

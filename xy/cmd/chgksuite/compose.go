@@ -31,6 +31,8 @@ func compose(args []string) error {
 		return composePptx(args[1:])
 	case "add_stats":
 		return composeAddStats(args[1:])
+	case "has_stats":
+		return composeHasStats(args[1:])
 	case "pdf":
 		return composePDF(args[1:])
 	case "lj":

@@ -79,6 +79,11 @@ func (d *dryRun) DiscussionMessage(context.Context, string, int64) (int64, error
 	return d.id(), nil
 }
 
+func (d *dryRun) PostPoll(_ context.Context, data map[string]any) (int64, error) {
+	log.Printf("[dry run] sendPoll %v", data)
+	return d.id(), nil
+}
+
 func (d *dryRun) Call(_ context.Context, method string, data map[string]any) error {
 	log.Printf("[dry run] %s %v", method, data)
 	return nil
@@ -194,6 +199,15 @@ func (c *client) wait(ctx context.Context) {
 
 func (c *client) DiscussionMessage(ctx context.Context, _ string, messageID int64) (int64, error) {
 	return c.bot.WaitForDiscussionCopy(ctx, c.channel, c.chat, messageID, c.settle)
+}
+
+func (c *client) PostPoll(ctx context.Context, data map[string]any) (int64, error) {
+	res, err := c.bot.Client().Call(ctx, "sendPoll", data)
+	if err != nil {
+		return 0, err
+	}
+	c.wait(ctx)
+	return messageID(res)
 }
 
 func (c *client) Call(ctx context.Context, method string, data map[string]any) error {

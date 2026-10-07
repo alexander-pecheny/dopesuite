@@ -58,6 +58,11 @@ type gui struct {
 	proc    *exec.Cmd
 	stdin   io.WriteCloser
 	picking bool
+
+	// statsOf and askNoStats stand in for the CLI and the dialog in tests;
+	// nil is the real thing.
+	statsOf    func(cli, packet string) (bool, error)
+	askNoStats func(answer func(bool))
 }
 
 func main() {
@@ -243,7 +248,14 @@ func (g *gui) start() {
 	if g.cur == nil || g.proc != nil {
 		return
 	}
-	args := g.cur.argv()
+	g.gateStats(g.cur.argv(), g.launch)
+}
+
+// launch runs the command line and streams what it prints into the log.
+func (g *gui) launch(args []string) {
+	if g.proc != nil {
+		return
+	}
 	g.appendLine("$ " + previewLine(g.cli, args))
 
 	cmd := exec.Command(g.cli, args...)

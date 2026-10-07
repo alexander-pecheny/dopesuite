@@ -29,7 +29,6 @@ const (
 	shortCodeRange = 0xFFFFFFF
 	hexBase        = 16
 	cacheDirMode   = 0o755
-	cacheFileMode  = 0o600
 	// Stand-in ids a dry run posts to when it was given names.
 	dryRunChannelID = 1111111111
 	dryRunChatID    = 2222222222
@@ -104,19 +103,20 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, sa
 			return t, err
 		}
 	}
+	learnt := map[string]int64{}
 	if channelID == 0 {
 		if channelID, err = askForChannel(ctx, bot, channelName, say); err != nil {
 			return t, err
 		}
-		cache[channelName] = channelID
+		learnt[channelName] = channelID
 	}
 	if chatID, err = askForChat(ctx, bot, chatID, channelID, chatName, say); err != nil {
 		return t, err
 	}
-	if chatName != "" {
-		cache[chatName] = chatID
+	if chatName != "" && cache[chatName] != bare(chatID) {
+		learnt[chatName] = chatID
 	}
-	saveResolveCache(cache)
+	cache.save(learnt)
 
 	t = Target{ChannelID: prefixed(channelID), ChatID: prefixed(chatID)}
 	return t, verifyTarget(ctx, bot, t)
@@ -129,7 +129,7 @@ func askForChannel(ctx context.Context, bot *Bot, name string, say Prompter) (in
 	if err != nil {
 		return 0, fmt.Errorf("channel %s: %w", name, err)
 	}
-	return id, nil
+	return bare(id), nil
 }
 
 // askForChat has the person post a code in the group until the bot sees it
@@ -137,8 +137,8 @@ func askForChannel(ctx context.Context, bot *Bot, name string, say Prompter) (in
 // distinct from the channel is returned as it is.
 func askForChat(ctx context.Context, bot *Bot, chatID, channelID int64, name string, say Prompter) (int64, error) {
 	s := xystrings.Default
-	for chatID == 0 || chatID == channelID {
-		if chatID == channelID {
+	for chatID == 0 || bare(chatID) == bare(channelID) {
+		if chatID != 0 {
 			say("%s", s.Tg.Resolve.SameChannel())
 		}
 		code := shortCode()
@@ -215,37 +215,81 @@ func shortCode() string {
 	return strconv.FormatInt(time.Now().UnixNano()%shortCodeRange, hexBase)
 }
 
-// resolveCachePath is where the ids of named channels are kept, beside
-// chgksuite's own resolve.db rather than inside it: one tool per file.
-func resolveCachePath() string {
+// resolveSchema is chgksuite's resolve.db, word for word: the ids of the
+// channels and groups named by username, which the two tools share. A channel
+// is kept without its "-100", as chgksuite prefixes it again on reading; a
+// group may be kept either way.
+const resolveSchema = "CREATE TABLE IF NOT EXISTS resolve (username TEXT PRIMARY KEY, id INTEGER)"
+
+func resolveDBPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return filepath.Join(home, ".chgksuite", "tg-resolve.json")
+	return filepath.Join(home, ".chgksuite", "resolve.db"), nil
 }
 
-func loadResolveCache() map[string]int64 {
-	cache := map[string]int64{}
-	data, err := os.ReadFile(resolveCachePath())
+// resolveCache is resolve.db, read once at the start of a resolution and
+// written back at its end. Without the file it is empty, and nothing is lost
+// but the conversation that fills it again.
+type resolveCache map[string]int64
+
+func loadResolveCache() resolveCache {
+	cache := resolveCache{}
+	path, err := resolveDBPath()
 	if err != nil {
 		return cache
 	}
-	_ = json.Unmarshal(data, &cache)
+	if _, err := os.Stat(path); err != nil {
+		return cache
+	}
+	db, err := openShared(path, resolveSchema, 0)
+	if err != nil {
+		return cache
+	}
+	defer db.Close()
+	rows, err := db.Query("SELECT username, id FROM resolve")
+	if err != nil {
+		return cache
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		var id int64
+		if rows.Scan(&name, &id) == nil {
+			cache[name] = bare(id)
+		}
+	}
 	return cache
 }
 
-func saveResolveCache(cache map[string]int64) {
-	path := resolveCachePath()
-	if path == "" || len(cache) == 0 {
+// save writes the names this resolution learnt.
+func (c resolveCache) save(learnt map[string]int64) {
+	path, err := resolveDBPath()
+	if err != nil || len(learnt) == 0 {
 		return
 	}
-	data, err := json.MarshalIndent(cache, "", " ")
+	db, err := openShared(path, resolveSchema, 0)
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(filepath.Dir(path), cacheDirMode)
-	_ = os.WriteFile(path, data, cacheFileMode)
+	defer db.Close()
+	for name, id := range learnt {
+		_, _ = db.Exec("INSERT OR REPLACE INTO resolve (username, id) VALUES (?, ?)", name, bare(id))
+		c[name] = bare(id)
+	}
+}
+
+// bare is an id without the "-100" the Bot API puts before a channel's or a
+// supergroup's, which is the form resolve.db keeps channels in.
+func bare(id int64) int64 {
+	s := idstr.Format(id)
+	if rest, ok := strings.CutPrefix(s, "-100"); ok {
+		if n, err := idstr.Parse(rest); err == nil {
+			return n
+		}
+	}
+	return id
 }
 
 // DryRunTarget is where a dry run pretends to post: the ids it was given, or

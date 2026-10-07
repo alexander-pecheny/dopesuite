@@ -14,10 +14,11 @@ import (
 // The export runs its own bot, in this process, for the two things a bot token
 // alone cannot do: recognising the person driving the export (they send it a
 // code), and seeing a channel post arrive in the discussion group so the replies
-// have something to hang off. chgksuite runs a second Python process for this
-// and passes the updates through a sqlite file; xy and dope have run their login
-// bots in-process for a while, and this is the same shape — one long-poll loop,
-// and waiters reading what it hears.
+// have something to hang off. chgksuite runs its bot on a thread of its own and
+// passes the updates to the exporter through a sqlite table, which the exporter
+// polls; xy and dope have run their login bots in-process for a while, and this
+// is the same shape — one long-poll loop, and waiters reading what it hears in
+// memory.
 
 // historyLimit is how many recent updates a waiter can still match. The copy of
 // a channel post can reach the discussion group before anything asks for it, so

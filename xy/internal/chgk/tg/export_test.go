@@ -55,6 +55,13 @@ func (r *recorder) DiscussionMessage(_ context.Context, _ string, messageID int6
 	return r.next(), nil
 }
 
+// PostPoll keeps the transcript's numbering: chgksuite's stub hands a poll no
+// id of its own.
+func (r *recorder) PostPoll(_ context.Context, data map[string]any) (int64, error) {
+	r.calls = append(r.calls, call{Call: "sendPoll", Data: data})
+	return 0, nil
+}
+
 func (r *recorder) Call(_ context.Context, method string, data map[string]any) error {
 	r.calls = append(r.calls, call{Call: method, Data: data})
 	return nil

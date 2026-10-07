@@ -190,6 +190,7 @@ var paths = map[string]string{
 // exporting a packet came to set.
 var advanced = map[string]bool{
 	"add_polls":                   true,
+	"allow_no_stats":              true,
 	"add_ts":                      true,
 	"boxwidth":                    true,
 	"browser":                     true,

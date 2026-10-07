@@ -3,6 +3,7 @@ package tg
 import (
 	"context"
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,7 +22,9 @@ type Poster interface {
 	// DiscussionMessage waits for a channel post to reach the linked group and
 	// returns its id there, which is what replies to that post reply to.
 	DiscussionMessage(ctx context.Context, channelID string, messageID int64) (int64, error)
-	// Call is the rest of the Bot API: polls, pinning, reactions.
+	// PostPoll sends one sendPoll and returns the poll message's id.
+	PostPoll(ctx context.Context, data map[string]any) (int64, error)
+	// Call is the rest of the Bot API: pinning, reactions.
 	Call(ctx context.Context, method string, data map[string]any) error
 }
 
@@ -38,7 +41,10 @@ type exporter struct {
 	t      Target
 	polls  *PollConfig
 	opts   Options
+	log    PostLog
 	buffer []string // headings and loose text, waiting for the next post
+	// bufferRole is what the buffer's first piece was, which names the post.
+	bufferRole string
 
 	heading          string // the package's title, for the navigation post
 	section          bool   // the next post opens a section, so it gets a nav link
@@ -68,6 +74,8 @@ type Request struct {
 	// Polls, when set, adds a poll after each question, each tour and the
 	// package itself.
 	Polls *PollConfig
+	// Log, when set, is told about every message once it is posted.
+	Log PostLog
 }
 
 // Export posts a parsed package to a channel.
@@ -75,7 +83,7 @@ func Export(ctx context.Context, p Poster, r Request) error {
 	t, polls := r.Target, r.Polls
 	e := &exporter{
 		f: &formatter{opts: r.Options, images: r.Images, labels: i18n.LabelsForOrDefault(r.Options.Language, r.Options.LabelsFile)}, p: p, t: t, polls: polls,
-		opts: r.Options, qcount: 1, lastNumber: 1,
+		opts: r.Options, log: r.Log, qcount: 1, lastNumber: 1,
 	}
 	if polls != nil {
 		if err := p.Call(ctx, "setChatAvailableReactions", map[string]any{
@@ -120,7 +128,7 @@ func (e *exporter) element(ctx context.Context, el fsource.Pair) error {
 		if e.heading == "" {
 			e.heading = text
 		}
-		e.buffer = append(e.buffer, heading(text))
+		e.buffered(RoleHeading, heading(text))
 	case "section":
 		if err := e.flush(ctx); err != nil {
 			return err
@@ -133,7 +141,7 @@ func (e *exporter) element(ctx context.Context, el fsource.Pair) error {
 			return err
 		}
 		e.tourNumber = tourNumber(text)
-		e.buffer = append(e.buffer, heading(text))
+		e.buffered(RoleHeading, heading(text))
 		e.section = true
 	default:
 		text, err := e.f.value(el.Content)
@@ -141,7 +149,7 @@ func (e *exporter) element(ctx context.Context, el fsource.Pair) error {
 			return err
 		}
 		if text != "" {
-			e.buffer = append(e.buffer, text)
+			e.buffered(RoleOther, text)
 		}
 	}
 	return nil
@@ -177,7 +185,7 @@ func (e *exporter) question(ctx context.Context, q *fsource.Question) error {
 	if err != nil {
 		return fmt.Errorf("question %s: %w", number, err)
 	}
-	if err := e.postGroup(ctx, html); err != nil {
+	if err := e.postGroup(ctx, html, RoleQuestion, number); err != nil {
 		return err
 	}
 	return e.questionPoll(ctx, number)
@@ -190,6 +198,14 @@ func (e *exporter) skipping() bool {
 	return e.opts.SkipUntil > 0 && (e.lastNumber == 0 || e.lastNumber < e.opts.SkipUntil)
 }
 
+// buffered adds a piece to the buffer; the first piece names the post.
+func (e *exporter) buffered(role, text string) {
+	if len(e.buffer) == 0 {
+		e.bufferRole = role
+	}
+	e.buffer = append(e.buffer, text)
+}
+
 // flush posts whatever the buffer holds as one message.
 func (e *exporter) flush(ctx context.Context) error {
 	if len(e.buffer) == 0 {
@@ -200,18 +216,38 @@ func (e *exporter) flush(ctx context.Context) error {
 	if html == "" {
 		return nil
 	}
-	return e.postGroup(ctx, html)
+	return e.postGroup(ctx, html, e.bufferRole, "")
+}
+
+// record tells the log about a message Telegram has accepted. A record that
+// cannot be written is reported and the export goes on: the message is out
+// either way, and stopping would leave the packet half-posted.
+func (e *exporter) record(ctx context.Context, p Post) {
+	if e.log == nil {
+		return
+	}
+	if err := e.log.Posted(ctx, p); err != nil {
+		log.Printf("telegram.db: message %d not recorded: %v", p.MessageID, err)
+	}
 }
 
 // postGroup posts one message to the channel, waits for its copy in the
 // discussion group (which is what a poll or a reply hangs off), and remembers
 // the link when the message opens a section.
-func (e *exporter) postGroup(ctx context.Context, html string) error {
+func (e *exporter) postGroup(ctx context.Context, html, role, number string) error {
 	final, media := e.f.finalize(html)
 	id, err := e.p.PostRich(ctx, e.t.ChannelID, final, media, 0)
 	if err != nil {
 		return err
 	}
+	content := ContentText
+	if len(media) > 0 {
+		content = ContentPhoto
+	}
+	e.record(ctx, Post{
+		ChatID: e.t.ChannelID, MessageID: id, QuestionNumber: number, Role: role,
+		ContentType: content, Text: final, ParseMode: parseModeHTML,
+	})
 	discussionID, err := e.p.DiscussionMessage(ctx, e.t.ChannelID, id)
 	if err != nil {
 		return err
@@ -237,16 +273,21 @@ func (e *exporter) navigation(ctx context.Context) error {
 	for _, s := range e.sectionLinks {
 		lines = append(lines, e.f.labels.Text("section")+" "+s.tour+": "+s.link)
 	}
-	id, err := e.p.PostText(ctx, e.t.ChannelID, strings.TrimSpace(strings.Join(lines, "\n")), 0)
+	text := strings.TrimSpace(strings.Join(lines, "\n"))
+	id, err := e.p.PostText(ctx, e.t.ChannelID, text, 0)
 	if err != nil {
 		return err
 	}
+	e.record(ctx, Post{
+		ChatID: e.t.ChannelID, MessageID: id, Role: RoleNavigation,
+		ContentType: ContentText, Text: text, ParseMode: parseModeHTML,
+	})
 	if e.polls != nil && e.polls.Packet != nil {
 		discussionID, err := e.p.DiscussionMessage(ctx, e.t.ChannelID, id)
 		if err != nil {
 			return err
 		}
-		if err := e.poll(ctx, e.polls.Packet, map[string]string{"TITLE": e.heading}, discussionID); err != nil {
+		if err := e.poll(ctx, e.polls.Packet, map[string]string{"TITLE": e.heading}, "", discussionID); err != nil {
 			return err
 		}
 	}
@@ -259,19 +300,20 @@ func (e *exporter) questionPoll(ctx context.Context, number string) error {
 	if e.polls == nil || e.polls.Question == nil {
 		return nil
 	}
-	return e.poll(ctx, e.polls.Question, map[string]string{"NUMBER": number}, e.lastDiscussionID)
+	return e.poll(ctx, e.polls.Question, map[string]string{"NUMBER": number}, number, e.lastDiscussionID)
 }
 
 func (e *exporter) tourPoll(ctx context.Context) error {
 	if e.polls == nil || e.polls.Tour == nil || e.tourNumber == "" {
 		return nil
 	}
-	return e.poll(ctx, e.polls.Tour, map[string]string{"NUMBER": e.tourNumber}, e.tourDiscussionID)
+	return e.poll(ctx, e.polls.Tour, map[string]string{"NUMBER": e.tourNumber}, "", e.tourDiscussionID)
 }
 
 // poll posts one poll: in the discussion group under the message it belongs to
-// when the config says "comment", in the channel itself otherwise.
-func (e *exporter) poll(ctx context.Context, cfg *Poll, subs map[string]string, replyTo int64) error {
+// when the config says "comment", in the channel itself otherwise. number is
+// the question's, for a question's poll.
+func (e *exporter) poll(ctx context.Context, cfg *Poll, subs map[string]string, number string, replyTo int64) error {
 	question := cfg.Text
 	for k, v := range subs {
 		question = strings.ReplaceAll(question, "{"+k+"}", v)
@@ -304,7 +346,15 @@ func (e *exporter) poll(ctx context.Context, cfg *Poll, subs map[string]string, 
 	if reply != 0 {
 		data["reply_to_message_id"] = reply
 	}
-	return e.p.Call(ctx, "sendPoll", data)
+	id, err := e.p.PostPoll(ctx, data)
+	if err != nil {
+		return err
+	}
+	e.record(ctx, Post{
+		ChatID: chatID, MessageID: id, QuestionNumber: number, Role: RolePoll,
+		ContentType: ContentPoll, ReplyTo: reply, Text: question,
+	})
+	return nil
 }
 
 func indexOf(list []string, s string) int {
