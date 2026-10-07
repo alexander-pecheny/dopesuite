@@ -1,96 +1,88 @@
-# The Telegram export record
+# The Telegram export record: `~/.chgksuite/telegram.db`
 
-Every Telegram export, by the Python chgksuite or by this Go port, writes down
-what it posted in `~/.chgksuite/telegram.db`. The file is kept across runs, so a
-post can be found and corrected after the export finished: a typo in question
-14's answer, a missing source, a wrong picture. Both tools write the same file
-with the same schema; this page is the contract between them.
+Every Telegram export by chgksuite, the Python tool or the Go one, writes down
+what it posted in `~/.chgksuite/telegram.db`, an SQLite file kept across runs.
+It exists so that posts can be found and corrected after the export, by hand or
+by an agent. Both tools share the file and its schema; a change to one is a
+change to both.
 
-A dry run records nothing: its message ids are invented.
+Dry runs are not recorded: their message ids are made up.
 
-## The file
+## Tables
 
-SQLite in WAL mode, `PRAGMA user_version = 1`. Open it with a busy timeout: an
-export may be writing while you read.
+`exports` has one row per export.
 
-### `exports`: one row per run
+| Column | Meaning |
+| --- | --- |
+| `id` | The export's number. |
+| `tool`, `tool_version` | `chgksuite` (Python) or `chgksuite-go`, and its version. |
+| `source_path`, `source_sha256` | The absolute path of the exported file and the sha256 of its bytes. A merged export lists its files one per line and hashes them in that order. |
+| `tgaccount` | The account name the Python tool looked the bot token up by in `telegram.toml`; empty for the default token and for the Go tool. |
+| `bot_id` | The posting bot's id. A bot token starts with this number and a colon. |
+| `channel_id`, `chat_id` | The channel and its discussion group, as `-100…` ids. |
+| `started_at`, `finished_at` | When the export started and finished. An empty `finished_at` means it is still running or it stopped halfway; its posts up to that point are still recorded. |
 
-| column | what it holds |
-|---|---|
-| `id` | the run |
-| `tool` | `chgksuite` (Python) or `chgksuite-go` |
-| `tool_version` | the build that ran |
-| `source_path` | the absolute path of the exported file |
-| `source_sha256` | the hex SHA-256 of that file's bytes, to tell whether it has changed since |
-| `tgaccount` | the key of the bot token in `~/.chgksuite/telegram.toml`; `''` for the default, and always `''` from the Go port, which takes its token from `--token` or `$CHGKSUITE_TG_TOKEN` |
-| `bot_id` | the posting bot's Telegram id (`getMe`) |
-| `channel_id` | the channel, `-100…` |
-| `chat_id` | the linked discussion group, `-100…`; NULL if none |
-| `started_at` | ISO 8601 with a UTC offset |
-| `finished_at` | when the run completed; NULL while it runs, or for good if it crashed |
+`posts` has one row per message the export sent, written as soon as Telegram
+accepted it.
 
-### `posts`: one row per Telegram message
+| Column | Meaning |
+| --- | --- |
+| `export_id` | The export it belongs to. |
+| `chat_id`, `message_id` | Where the message is: the channel or the discussion group. |
+| `link` | A t.me link to it. |
+| `question_number` | The question's number as printed in the pack; empty for posts that are not about one question, including a post that holds a whole theme. |
+| `role` | What the message is; see below. A message holding several parts is named after its main part. |
+| `content_type` | `text`, `photo` or `poll`. |
+| `reply_to_message_id` | The message it replies to in the discussion group, if any. |
+| `text` | The exact text, caption or poll question sent. |
+| `parse_mode` | `HTML` for `sendMessage` and `sendPhoto`; `rich_html` for `sendRichMessage`, whose `text` is the rich HTML as sent; empty for polls. |
+| `entities` | A JSON array of entities, if any were sent; the exports send none today. |
+| `sent_at` | When it was sent. |
 
-A row is written right after Telegram accepts the message, so a run that died
-halfway still lists everything that reached the channel.
+Roles:
 
-| column | what it holds |
-|---|---|
-| `export_id` | the run, `exports.id` |
-| `chat_id` | where the message is: the channel, or the discussion group for a poll posted under a comment |
-| `message_id` | its id in that chat |
-| `link` | `https://t.me/c/<id>/<message>` |
-| `question_number` | the number as the packet prints it; NULL for a post that is not a question's |
-| `role` | `heading`, `navigation`, `question`, `answer`, `comment`, `handout`, `poll` or `other` |
-| `content_type` | `text`, `photo` or `poll` |
-| `reply_to_message_id` | the message it replies to, if any |
-| `text` | the exact text or caption sent |
-| `parse_mode` | as sent (`HTML`); NULL if none |
-| `entities` | the entities sent, as a JSON array; NULL if none |
-| `sent_at` | ISO 8601 with a UTC offset |
+- `heading`: the pack, tour or theme heading, with any text around it.
+- `navigation`: the pinned post linking to the tours, and its comments.
+- `question`: the question's post. In the rich format it also holds the answer, comment, sources and author in a collapsed block.
+- `answer`, `comment`: a reply in the discussion group holding the answer or the comment, when a question did not fit one post.
+- `handout`: a handout picture posted ahead of its question.
+- `poll`: a poll after a question, a tour or the pack.
+- `other`: anything else.
 
-A message that bundles several parts takes the role of its main part, and
-`text` holds all of it. The rich export posts each question as one message with
-its answer, comment and pictures folded in, so that message is a `question` row
-(`photo` when it carries pictures), and a question's poll is a `poll` row with
-the same `question_number`. The packet's title and each tour's heading are
-`heading` rows; the pinned index at the end is `navigation`.
+The discussion group's automatic copy of each channel post is not recorded:
+Telegram updates it when the channel post is edited.
 
-The Go port writes rich messages (`sendRichMessage`): their `text` is the
-`rich_message.html` that was sent.
+`messages` and `bot_status` are the Python tool's inbox: what its bot
+received during a run. Rows older than seven days are deleted at the next run.
+The Go tool keeps its inbox in memory and leaves these tables empty.
 
-### `messages` and `bot_status`
+Timestamps are ISO 8601 with a UTC offset.
 
-The Python tool's bot inbox: every update its bot received, and whether the bot
-came up. Rows older than seven days are pruned when an export starts. The Go
-port keeps its inbox in memory and leaves these tables empty. Nothing here is
-needed to edit a post.
+## Finding and editing a post
 
-## Editing a post
+The latest export of a file, and question 14's posts in it:
 
-1. Find the run: the latest `exports` row for the file, by `source_path`, with
-   `finished_at` set.
+```sql
+SELECT p.chat_id, p.message_id, p.role, p.content_type, p.parse_mode, p.text,
+       e.bot_id, e.tgaccount
+FROM posts p JOIN exports e ON e.id = p.export_id
+WHERE e.id = (SELECT max(id) FROM exports WHERE source_path = '/path/to/pack.4s')
+  AND p.question_number = '14'
+ORDER BY p.id;
+```
 
-   ```sql
-   SELECT * FROM exports
-   WHERE source_path = '/abs/path/pack.4s' AND finished_at IS NOT NULL
-   ORDER BY id DESC LIMIT 1;
-   ```
+Only the bot that posted a message can edit it, so use the token whose number
+before the colon is `bot_id`. The Python tool keeps tokens in
+`~/.chgksuite/telegram.toml`: `bot_token` for an empty `tgaccount`, otherwise
+`bot_tokens.<tgaccount>`. The Go tool takes it from `--token` or
+`CHGKSUITE_TG_TOKEN`.
 
-2. Find the message:
+Then call the Bot API with `chat_id` and `message_id`:
 
-   ```sql
-   SELECT chat_id, message_id, content_type, text, parse_mode FROM posts
-   WHERE export_id = ? AND question_number = '14' AND role = 'question';
-   ```
+- `text` posts with `parse_mode` `HTML`: `editMessageText` with the new text and `parse_mode` `HTML`.
+- `photo` posts: `editMessageCaption` with the new caption and `parse_mode` `HTML`.
+- `rich_html` posts: the Bot API's edit method for rich messages, with the new rich HTML.
+- Polls cannot be edited; delete and resend them.
 
-3. Edit it as the bot that posted it: Telegram lets only that bot edit a
-   message. Its token is the one under `tgaccount` in
-   `~/.chgksuite/telegram.toml` (for the Go port, the token that run was given),
-   and `bot_id` says which bot that must be. Start from the recorded `text`,
-   change what needs changing, and send it with the same `parse_mode`:
-   `editMessageText` for a `text` row, `editMessageCaption` for a `photo` row.
-   A rich message is edited with the Bot API's matching method for rich
-   messages. A poll cannot be edited.
-
-The record is not updated by an edit made this way.
+Update the stored `text` too if the record should match the channel; neither
+tool reads it back.

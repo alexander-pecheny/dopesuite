@@ -84,8 +84,13 @@ const (
 	ContentPoll  = "poll"
 )
 
-// parseModeHTML is what every text this export sends is written in.
-const parseModeHTML = "HTML"
+// The parse modes a post records: parseModeHTML for sendMessage and
+// sendPhoto, parseModeRichHTML for sendRichMessage, whose text is the rich HTML
+// as sent. The Python tool writes the same values.
+const (
+	parseModeHTML     = "HTML"
+	parseModeRichHTML = "rich_html"
+)
 
 // Post is one message the export sent, as the record keeps it.
 type Post struct {
@@ -202,7 +207,9 @@ func (j *Journal) Finish(ctx context.Context) error {
 // Close closes the file.
 func (j *Journal) Close() error { return j.db.Close() }
 
-func now() string { return time.Now().Format(time.RFC3339) }
+// now is in UTC with microseconds, as the Python tool writes it, so the times
+// of both tools compare as strings.
+func now() string { return time.Now().UTC().Format("2006-01-02T15:04:05.000000-07:00") }
 
 func nullString(s string) any {
 	if s == "" {

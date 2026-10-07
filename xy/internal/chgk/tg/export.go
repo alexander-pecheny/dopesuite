@@ -246,7 +246,7 @@ func (e *exporter) postGroup(ctx context.Context, html, role, number string) err
 	}
 	e.record(ctx, Post{
 		ChatID: e.t.ChannelID, MessageID: id, QuestionNumber: number, Role: role,
-		ContentType: content, Text: final, ParseMode: parseModeHTML,
+		ContentType: content, Text: final, ParseMode: parseModeRichHTML,
 	})
 	discussionID, err := e.p.DiscussionMessage(ctx, e.t.ChannelID, id)
 	if err != nil {
