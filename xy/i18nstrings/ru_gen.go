@@ -1145,9 +1145,22 @@ var RU = Strings{
 			ReplaceNoBreakHyphensFlag: func() string { return "make the hyphen of а short word non-breaking: on|off" },
 		},
 		Telegram: ChgkcliTelegramStrings{
-			Done: func(duration string) string { return fmt.Sprintf("готово за %s", duration) },
+			AllowNoStatsFlag: func() string { return "publish a package without stats even when stop_if_no_stats is on" },
+			Done:             func(duration string) string { return fmt.Sprintf("готово за %s", duration) },
+			NoStatsCancel:    func() string { return "Отмена" },
+			NoStatsPublish:   func() string { return "Опубликовать" },
+			NoStatsQuestion: func() string {
+				return "В пакете нет статистики взятий. Всё равно опубликовать в телеграм?"
+			},
+			NoStatsTitle: func() string { return "Нет статистики" },
 			Posting: func(channel string, chat string) string {
 				return fmt.Sprintf("публикую в %s, комментарии в %s", channel, chat)
+			},
+			RecordUnavailable: func(error string) string {
+				return fmt.Sprintf("telegram.db: экспорт пойдёт без записи постов: %s", error)
+			},
+			RecordUnfinished: func(error string) string {
+				return fmt.Sprintf("telegram.db: экспорт не отмечен законченным: %s", error)
 			},
 			StopIfNoStatsFlag: func() string { return "refuse to publish a package whose questions carry no «Взятия:»" },
 		},

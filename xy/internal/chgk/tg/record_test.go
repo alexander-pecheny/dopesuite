@@ -25,25 +25,25 @@ func TestExportIsRecorded(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "telegram.db")
 	target := Target{ChannelID: "-1001111111111", ChatID: "-1002222222222"}
 	ctx := context.Background()
-	j, err := StartExport(ctx, path, ExportInfo{
+	rec, err := OpenRecord(ctx, path, ExportInfo{
 		ToolVersion: "test", SourcePath: "testdata/tours.4s", Source: src, BotID: 42, Target: target,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	p := &idPoster{}
-	req := Request{Doc: fsource.Parse(string(src), "chgk"), Target: target, Polls: polls, Log: j}
+	req := Request{Doc: fsource.Parse(string(src), "chgk"), Target: target, Polls: polls, Record: rec}
 	if err := Export(ctx, p, req); err != nil {
 		t.Fatal(err)
 	}
-	if err := j.Finish(ctx); err != nil {
+	if err := rec.Finish(ctx); err != nil {
 		t.Fatal(err)
 	}
-	j.Close()
+	rec.Close()
 
 	db := openForTest(t, path)
 	var version int
-	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != journalVersion {
+	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != recordVersion {
 		t.Errorf("user_version = %d, %v", version, err)
 	}
 	var tool, sum, finished string
@@ -62,9 +62,10 @@ func TestExportIsRecorded(t *testing.T) {
 	}
 	defer rows.Close()
 	type row struct {
-		id           int64
-		role, number string
-		chat         string
+		id     int64
+		role   Role
+		number string
+		chat   string
 	}
 	var got []row
 	for rows.Next() {
@@ -82,7 +83,7 @@ func TestExportIsRecorded(t *testing.T) {
 			t.Errorf("row %d: message %d, poster sent %d", i, r.id, p.sent[i])
 		}
 	}
-	count := map[string]int{}
+	count := map[Role]int{}
 	numbered := map[string]bool{}
 	for _, r := range got {
 		count[r.role]++
@@ -93,7 +94,7 @@ func TestExportIsRecorded(t *testing.T) {
 	// The title, each tour's heading (a tour flushes what came before it),
 	// four questions, a poll after each question, each tour and the packet,
 	// and the index.
-	want := map[string]int{RoleHeading: 3, RoleQuestion: 4, RolePoll: 7, RoleNavigation: 1}
+	want := map[Role]int{RoleHeading: 3, RoleQuestion: 4, RolePoll: 7, RoleNavigation: 1}
 	for role, n := range want {
 		if count[role] != n {
 			t.Errorf("%s posts: %d, want %d (all: %v)", role, count[role], n, count)
@@ -106,15 +107,15 @@ func TestExportIsRecorded(t *testing.T) {
 	}
 }
 
-// TestJournalLeavesTheInboxEmpty: the record carries chgksuite's inbox tables,
+// TestRecordLeavesTheInboxEmpty: the record carries chgksuite's inbox tables,
 // so either tool can open the file, and this one writes nothing to them.
-func TestJournalLeavesTheInboxEmpty(t *testing.T) {
+func TestRecordLeavesTheInboxEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "telegram.db")
-	j, err := StartExport(context.Background(), path, ExportInfo{Target: Target{ChannelID: "-1001"}})
+	rec, err := OpenRecord(context.Background(), path, ExportInfo{Target: Target{ChannelID: "-1001"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	j.Close()
+	rec.Close()
 	db := openForTest(t, path)
 	for _, table := range []string{"messages", "bot_status"} {
 		var n int
@@ -123,8 +124,12 @@ func TestJournalLeavesTheInboxEmpty(t *testing.T) {
 		}
 	}
 	var finished sql.NullString
-	if err := db.QueryRow("SELECT finished_at FROM exports").Scan(&finished); err != nil || finished.Valid {
+	var account string
+	if err := db.QueryRow("SELECT finished_at, tgaccount FROM exports").Scan(&finished, &account); err != nil || finished.Valid {
 		t.Errorf("an unfinished run reads finished: %v %v", finished, err)
+	}
+	if account != "" {
+		t.Errorf("tgaccount = %q, want empty", account)
 	}
 }
 
@@ -137,7 +142,7 @@ func TestResolveCacheRoundTrip(t *testing.T) {
 	if got := loadResolveCache(); len(got) != 0 {
 		t.Fatalf("no file, yet %v", got)
 	}
-	loadResolveCache().save(map[string]int64{"channel": -1001234567890})
+	saveResolved(map[string]int64{"channel": -1001234567890})
 
 	db := openForTest(t, filepath.Join(home, ".chgksuite", "resolve.db"))
 	var stored int64
@@ -158,6 +163,34 @@ func TestResolveCacheRoundTrip(t *testing.T) {
 	}
 	if prefixed(cache["group"]) != "-1009876543210" {
 		t.Errorf("group posts to %s", prefixed(cache["group"]))
+	}
+}
+
+// TestResolveDBKeepsItsJournalMode: chgksuite creates resolve.db in SQLite's
+// default rollback journal, and a write from this port leaves it that way, with
+// no -wal file beside it.
+func TestResolveDBKeepsItsJournalMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, ".chgksuite", "resolve.db")
+	if err := os.MkdirAll(filepath.Dir(path), cacheDirMode); err != nil {
+		t.Fatal(err)
+	}
+	db := openForTest(t, path)
+	if _, err := db.Exec(resolveSchema); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	saveResolved(map[string]int64{"channel": -1001234567890})
+
+	db = openForTest(t, path)
+	var mode string
+	if err := db.QueryRow("PRAGMA journal_mode").Scan(&mode); err != nil || mode != "delete" {
+		t.Errorf("journal_mode = %q, %v; want delete", mode, err)
+	}
+	if _, err := os.Stat(path + "-wal"); err == nil {
+		t.Error("a -wal file appeared beside resolve.db")
 	}
 }
 

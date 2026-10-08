@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"xy/internal/chgk/fsource"
@@ -50,5 +51,34 @@ func TestAllowNoStatsLiftsTheStop(t *testing.T) {
 	}
 	if err := statsGate(withStats, true, false); err != nil {
 		t.Errorf("refused a packet with stats: %v", err)
+	}
+}
+
+// TestOnlyTheTelegramExportIsConfirmed: the spec tells chgksuite-gui to check
+// for stats before compose telegram, with the check and the flag this CLI
+// has, and asks about no other command.
+func TestOnlyTheTelegramExportIsConfirmed(t *testing.T) {
+	for _, r := range runnables {
+		c := confirms(r.verb)
+		if r.verb != "compose telegram" {
+			if c != nil {
+				t.Errorf("%s asks before running", r.verb)
+			}
+			continue
+		}
+		if c == nil || !slices.Equal(c.Check, []string{"compose", "has_stats"}) ||
+			c.Field != "has_stats" || c.Flag != "allow_no_stats" ||
+			!slices.Equal(c.SkipIf, []string{"dry_run"}) || c.Question == "" {
+			t.Fatalf("compose telegram confirm: %+v", c)
+		}
+		flags, err := flagsOf(r.verb, r.run)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range append([]string{c.Flag}, c.SkipIf...) {
+			if !slices.ContainsFunc(flags, func(f flagSpec) bool { return f.Name == name }) {
+				t.Errorf("compose telegram has no --%s", name)
+			}
+		}
 	}
 }

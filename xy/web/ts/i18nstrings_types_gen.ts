@@ -916,8 +916,15 @@ export type Strings = {
       replaceNoBreakHyphensFlag: () => string;
     };
     telegram: {
+      allowNoStatsFlag: () => string;
       done: (duration: string) => string;
+      noStatsCancel: () => string;
+      noStatsPublish: () => string;
+      noStatsQuestion: () => string;
+      noStatsTitle: () => string;
       posting: (channel: string, chat: string) => string;
+      recordUnavailable: (error: string) => string;
+      recordUnfinished: (error: string) => string;
       stopIfNoStatsFlag: () => string;
     };
   };

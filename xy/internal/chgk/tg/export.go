@@ -41,10 +41,10 @@ type exporter struct {
 	t      Target
 	polls  *PollConfig
 	opts   Options
-	log    PostLog
+	rec    Recorder
 	buffer []string // headings and loose text, waiting for the next post
-	// bufferRole is what the buffer's first piece was, which names the post.
-	bufferRole string
+	// bufferAbout is what the buffer's first piece was, which names the post.
+	bufferAbout postAbout
 
 	heading          string // the package's title, for the navigation post
 	section          bool   // the next post opens a section, so it gets a nav link
@@ -74,8 +74,15 @@ type Request struct {
 	// Polls, when set, adds a poll after each question, each tour and the
 	// package itself.
 	Polls *PollConfig
-	// Log, when set, is told about every message once it is posted.
-	Log PostLog
+	// Record, when set, is told about every message once it is posted.
+	Record Recorder
+}
+
+// postAbout is what a message is about, as the record files it: its role, and
+// the question's number when it is a question's.
+type postAbout struct {
+	role   Role
+	number string
 }
 
 // Export posts a parsed package to a channel.
@@ -83,7 +90,7 @@ func Export(ctx context.Context, p Poster, r Request) error {
 	t, polls := r.Target, r.Polls
 	e := &exporter{
 		f: &formatter{opts: r.Options, images: r.Images, labels: i18n.LabelsForOrDefault(r.Options.Language, r.Options.LabelsFile)}, p: p, t: t, polls: polls,
-		opts: r.Options, log: r.Log, qcount: 1, lastNumber: 1,
+		opts: r.Options, rec: r.Record, qcount: 1, lastNumber: 1,
 	}
 	if polls != nil {
 		if err := p.Call(ctx, "setChatAvailableReactions", map[string]any{
@@ -185,7 +192,7 @@ func (e *exporter) question(ctx context.Context, q *fsource.Question) error {
 	if err != nil {
 		return fmt.Errorf("question %s: %w", number, err)
 	}
-	if err := e.postGroup(ctx, html, RoleQuestion, number); err != nil {
+	if err := e.postGroup(ctx, html, postAbout{RoleQuestion, number}); err != nil {
 		return err
 	}
 	return e.questionPoll(ctx, number)
@@ -199,9 +206,9 @@ func (e *exporter) skipping() bool {
 }
 
 // buffered adds a piece to the buffer; the first piece names the post.
-func (e *exporter) buffered(role, text string) {
+func (e *exporter) buffered(role Role, text string) {
 	if len(e.buffer) == 0 {
-		e.bufferRole = role
+		e.bufferAbout = postAbout{role: role}
 	}
 	e.buffer = append(e.buffer, text)
 }
@@ -216,17 +223,17 @@ func (e *exporter) flush(ctx context.Context) error {
 	if html == "" {
 		return nil
 	}
-	return e.postGroup(ctx, html, e.bufferRole, "")
+	return e.postGroup(ctx, html, e.bufferAbout)
 }
 
-// record tells the log about a message Telegram has accepted. A record that
+// record writes a message Telegram has accepted into the record. A row that
 // cannot be written is reported and the export goes on: the message is out
 // either way, and stopping would leave the packet half-posted.
 func (e *exporter) record(ctx context.Context, p Post) {
-	if e.log == nil {
+	if e.rec == nil {
 		return
 	}
-	if err := e.log.Posted(ctx, p); err != nil {
+	if err := e.rec.Posted(ctx, p); err != nil {
 		log.Printf("telegram.db: message %d not recorded: %v", p.MessageID, err)
 	}
 }
@@ -234,7 +241,7 @@ func (e *exporter) record(ctx context.Context, p Post) {
 // postGroup posts one message to the channel, waits for its copy in the
 // discussion group (which is what a poll or a reply hangs off), and remembers
 // the link when the message opens a section.
-func (e *exporter) postGroup(ctx context.Context, html, role, number string) error {
+func (e *exporter) postGroup(ctx context.Context, html string, about postAbout) error {
 	final, media := e.f.finalize(html)
 	id, err := e.p.PostRich(ctx, e.t.ChannelID, final, media, 0)
 	if err != nil {
@@ -245,7 +252,7 @@ func (e *exporter) postGroup(ctx context.Context, html, role, number string) err
 		content = ContentPhoto
 	}
 	e.record(ctx, Post{
-		ChatID: e.t.ChannelID, MessageID: id, QuestionNumber: number, Role: role,
+		ChatID: e.t.ChannelID, MessageID: id, QuestionNumber: about.number, Role: about.role,
 		ContentType: content, Text: final, ParseMode: parseModeRichHTML,
 	})
 	discussionID, err := e.p.DiscussionMessage(ctx, e.t.ChannelID, id)

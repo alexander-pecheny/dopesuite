@@ -30,10 +30,25 @@ type input struct {
 }
 
 type commandSpec struct {
-	Verb   string     `json:"verb"`
-	What   string     `json:"what"`
-	Inputs []input    `json:"inputs"`
-	Flags  []flagSpec `json:"flags"`
+	Verb    string       `json:"verb"`
+	What    string       `json:"what"`
+	Inputs  []input      `json:"inputs"`
+	Flags   []flagSpec   `json:"flags"`
+	Confirm *confirmSpec `json:"confirm"`
+}
+
+// confirmSpec is a question to ask before running the command: run Check on
+// the command's file, and when the JSON it prints has Field false, ask; on yes
+// add --Flag. Runs with a SkipIf flag set are not checked.
+type confirmSpec struct {
+	Check    []string `json:"check"`
+	Field    string   `json:"field"`
+	SkipIf   []string `json:"skip_if"`
+	Flag     string   `json:"flag"`
+	Title    string   `json:"title"`
+	Question string   `json:"question"`
+	Yes      string   `json:"yes"`
+	No       string   `json:"no"`
 }
 
 // findCLI looks for the chgksuite binary where it is likely to be: named

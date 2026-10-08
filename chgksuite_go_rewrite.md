@@ -160,8 +160,9 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 - [x] **B2. `stop_if_no_stats`**: `compose telegram --stop_if_no_stats` refuses
       to publish a package whose questions carry no «Взятия:»;
       `--allow_no_stats` lifts it. `compose has_stats <file>` prints whether a
-      packet has stats, and chgksuite-gui asks it before every Telegram export
-      and asks the person before publishing a packet without them.
+      packet has stats. The spec names it as the `confirm` of `compose
+      telegram`, so chgksuite-gui runs it before every Telegram export and
+      asks the person before publishing a packet without stats.
 
 ### C. Statistics
 

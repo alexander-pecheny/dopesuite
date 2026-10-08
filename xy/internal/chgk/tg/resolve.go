@@ -2,6 +2,7 @@ package tg
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -116,7 +117,7 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, sa
 	if chatName != "" && cache[chatName] != bare(chatID) {
 		learnt[chatName] = chatID
 	}
-	cache.save(learnt)
+	saveResolved(learnt)
 
 	t = Target{ChannelID: prefixed(channelID), ChatID: prefixed(chatID)}
 	return t, verifyTarget(ctx, bot, t)
@@ -221,12 +222,26 @@ func shortCode() string {
 // group may be kept either way.
 const resolveSchema = "CREATE TABLE IF NOT EXISTS resolve (username TEXT PRIMARY KEY, id INTEGER)"
 
-func resolveDBPath() (string, error) {
-	home, err := os.UserHomeDir()
+// openResolveDB opens chgksuite's resolve.db as it is: a plain connection with
+// a busy timeout and none of sqlitex's pragmas, so the file keeps the journal
+// mode chgksuite gave it.
+func openResolveDB() (*sql.DB, error) {
+	path, err := sharedPath("resolve.db")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return filepath.Join(home, ".chgksuite", "resolve.db"), nil
+	if err := os.MkdirAll(filepath.Dir(path), cacheDirMode); err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(resolveSchema); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
 }
 
 // resolveCache is resolve.db, read once at the start of a resolution and
@@ -236,14 +251,14 @@ type resolveCache map[string]int64
 
 func loadResolveCache() resolveCache {
 	cache := resolveCache{}
-	path, err := resolveDBPath()
+	path, err := sharedPath("resolve.db")
 	if err != nil {
 		return cache
 	}
 	if _, err := os.Stat(path); err != nil {
 		return cache
 	}
-	db, err := openShared(path, resolveSchema, 0)
+	db, err := openResolveDB()
 	if err != nil {
 		return cache
 	}
@@ -263,20 +278,18 @@ func loadResolveCache() resolveCache {
 	return cache
 }
 
-// save writes the names this resolution learnt.
-func (c resolveCache) save(learnt map[string]int64) {
-	path, err := resolveDBPath()
-	if err != nil || len(learnt) == 0 {
+// saveResolved writes the names a resolution learnt into resolve.db.
+func saveResolved(learnt map[string]int64) {
+	if len(learnt) == 0 {
 		return
 	}
-	db, err := openShared(path, resolveSchema, 0)
+	db, err := openResolveDB()
 	if err != nil {
 		return
 	}
 	defer db.Close()
 	for name, id := range learnt {
 		_, _ = db.Exec("INSERT OR REPLACE INTO resolve (username, id) VALUES (?, ?)", name, bare(id))
-		c[name] = bare(id)
 	}
 }
 

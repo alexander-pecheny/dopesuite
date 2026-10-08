@@ -31,6 +31,14 @@ Anything whose name contains "password" or "token" is masked, both in the input
 and in the preview of the command line. The CLI's `spec.go` decides which is
 which, and this side only draws them.
 
+A command can also ask a question before it runs. Its spec then carries a
+`confirm`: a check command to run on the chosen file, the JSON field in that
+check's answer that makes the question unnecessary, the flags that skip the
+check (a dry run), the flag to add once the person says yes, and the question's
+wording. `confirm.go` follows it without knowing which command it is; today it
+is the telegram export asking about a packet without stats. A check that fails
+asks the question anyway.
+
 ## Building
 
 `just build` builds both binaries into `build/`. `just app` wraps them into a

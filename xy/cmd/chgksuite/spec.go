@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	xystrings "xy/i18nstrings"
 	"xy/internal/chgk/i18n"
 )
 
@@ -93,10 +94,44 @@ type input struct {
 }
 
 type commandSpec struct {
-	Verb   string     `json:"verb"`
-	What   string     `json:"what"`
-	Inputs []input    `json:"inputs,omitempty"`
-	Flags  []flagSpec `json:"flags"`
+	Verb    string       `json:"verb"`
+	What    string       `json:"what"`
+	Inputs  []input      `json:"inputs,omitempty"`
+	Flags   []flagSpec   `json:"flags"`
+	Confirm *confirmSpec `json:"confirm,omitempty"`
+}
+
+// confirmSpec is a question the GUI asks before it runs a command. It runs
+// Check with the command's file input appended, reads the boolean Field of the
+// JSON that prints, and when that is false asks Question; on yes it adds
+// --Flag after the verb. A run with any of the SkipIf flags set is not checked,
+// and a check that fails asks the question anyway.
+type confirmSpec struct {
+	Check    []string `json:"check"`
+	Field    string   `json:"field"`
+	SkipIf   []string `json:"skip_if,omitempty"`
+	Flag     string   `json:"flag"`
+	Title    string   `json:"title"`
+	Question string   `json:"question"`
+	Yes      string   `json:"yes"`
+	No       string   `json:"no"`
+}
+
+// confirms are the commands the GUI asks about before running. A telegram
+// export is asked about whenever the packet has no stats, whatever
+// stop_if_no_stats says: a post without its stats is hard to take back. A dry
+// run posts nothing, so it is not asked about.
+func confirms(verb string) *confirmSpec {
+	if verb != "compose telegram" {
+		return nil
+	}
+	s := xystrings.Default
+	return &confirmSpec{
+		Check: []string{"compose", "has_stats"}, Field: "has_stats",
+		SkipIf: []string{"dry_run"}, Flag: "allow_no_stats",
+		Title: s.Chgkcli.Telegram.NoStatsTitle(), Question: s.Chgkcli.Telegram.NoStatsQuestion(),
+		Yes: s.Chgkcli.Telegram.NoStatsPublish(), No: s.Chgkcli.Telegram.NoStatsCancel(),
+	}
 }
 
 const (
@@ -337,7 +372,7 @@ func specCmd() error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", r.verb, err)
 		}
-		out = append(out, commandSpec{Verb: r.verb, What: whatOf(r.verb), Inputs: r.inputs, Flags: flags})
+		out = append(out, commandSpec{Verb: r.verb, What: whatOf(r.verb), Inputs: r.inputs, Flags: flags, Confirm: confirms(r.verb)})
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")

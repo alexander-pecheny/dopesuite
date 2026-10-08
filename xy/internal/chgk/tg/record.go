@@ -26,10 +26,10 @@ import (
 // keeps its inbox in memory, so it creates those two tables and leaves them
 // empty.
 
-// journalVersion is the schema's PRAGMA user_version.
-const journalVersion = 1
+// recordVersion is the schema's PRAGMA user_version.
+const recordVersion = 1
 
-const journalSchema = `
+const recordSchema = `
 CREATE TABLE IF NOT EXISTS messages (raw_data TEXT, chat_id TEXT, created_at TEXT);
 CREATE TABLE IF NOT EXISTS bot_status (raw_data TEXT, created_at TEXT);
 CREATE TABLE IF NOT EXISTS exports (
@@ -68,28 +68,36 @@ CREATE INDEX IF NOT EXISTS messages_created ON messages(created_at);
 // its own "chgksuite".
 const toolName = "chgksuite-go"
 
-// The roles a post is recorded under.
+// Role is what a post is, in posts.role. chgksuite also writes "answer",
+// "comment" and "handout"; this port folds those into the question's message.
+type Role string
+
 const (
-	RoleHeading    = "heading"
-	RoleNavigation = "navigation"
-	RoleQuestion   = "question"
-	RolePoll       = "poll"
-	RoleOther      = "other"
+	RoleHeading    Role = "heading"
+	RoleNavigation Role = "navigation"
+	RoleQuestion   Role = "question"
+	RolePoll       Role = "poll"
+	RoleOther      Role = "other"
 )
 
-// The kinds of message a post is.
+// ContentType is the kind of message a post is, in posts.content_type.
+type ContentType string
+
 const (
-	ContentText  = "text"
-	ContentPhoto = "photo"
-	ContentPoll  = "poll"
+	ContentText  ContentType = "text"
+	ContentPhoto ContentType = "photo"
+	ContentPoll  ContentType = "poll"
 )
 
-// The parse modes a post records: parseModeHTML for sendMessage and
-// sendPhoto, parseModeRichHTML for sendRichMessage, whose text is the rich HTML
-// as sent. The Python tool writes the same values.
+// ParseMode is how a post's text is marked up, in posts.parse_mode:
+// parseModeHTML for sendMessage and sendPhoto, parseModeRichHTML for
+// sendRichMessage, whose text is the rich HTML as sent. chgksuite writes the
+// same values; a poll has none.
+type ParseMode string
+
 const (
-	parseModeHTML     = "HTML"
-	parseModeRichHTML = "rich_html"
+	parseModeHTML     ParseMode = "HTML"
+	parseModeRichHTML ParseMode = "rich_html"
 )
 
 // Post is one message the export sent, as the record keeps it.
@@ -99,15 +107,16 @@ type Post struct {
 	// QuestionNumber is the number as the packet prints it; empty for a post
 	// that is not a question's.
 	QuestionNumber string
-	Role           string
-	ContentType    string
+	Role           Role
+	ContentType    ContentType
 	ReplyTo        int64
 	Text           string
-	ParseMode      string
+	ParseMode      ParseMode
 }
 
-// PostLog is where the export reports each message once Telegram has it.
-type PostLog interface {
+// Recorder is what the export tells about each message once Telegram has it;
+// a *Record in the CLI, a fake in tests.
+type Recorder interface {
 	Posted(ctx context.Context, p Post) error
 }
 
@@ -116,49 +125,42 @@ type ExportInfo struct {
 	ToolVersion string
 	SourcePath  string
 	Source      []byte
-	// TGAccount names the bot token in chgksuite's telegram.toml; this port
-	// takes its token from a flag, so it records "".
-	TGAccount string
-	BotID     int64
-	Target    Target
+	BotID       int64
+	Target      Target
 }
 
-// Journal is one export's record, open for writing.
-type Journal struct {
+// Record is one export's rows in telegram.db, open for writing.
+type Record struct {
 	db       *sql.DB
 	exportID int64
 }
 
-// JournalPath is the record's place, beside chgksuite's other files.
-func JournalPath() (string, error) {
+// sharedPath is a file in ~/.chgksuite, the folder this port shares with
+// chgksuite.
+func sharedPath(name string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".chgksuite", "telegram.db"), nil
+	return filepath.Join(home, ".chgksuite", name), nil
 }
 
-// openShared opens one of the files this port shares with chgksuite, creating
-// the folder and the schema when they are missing.
-func openShared(path, schema string, version int) (*sql.DB, error) {
+// RecordPath is where telegram.db lives.
+func RecordPath() (string, error) { return sharedPath("telegram.db") }
+
+// OpenRecord opens telegram.db at path, creating it when it is missing, and
+// writes the run's row in exports.
+func OpenRecord(ctx context.Context, path string, info ExportInfo) (*Record, error) {
 	if err := os.MkdirAll(filepath.Dir(path), cacheDirMode); err != nil {
 		return nil, err
 	}
-	return sqlitex.Open(path, func(db *sql.DB) error {
-		if _, err := db.Exec(schema); err != nil {
+	db, err := sqlitex.Open(path, func(db *sql.DB) error {
+		if _, err := db.Exec(recordSchema); err != nil {
 			return err
 		}
-		if version == 0 {
-			return nil
-		}
-		_, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", version))
+		_, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", recordVersion))
 		return err
 	})
-}
-
-// StartExport opens the record at path and writes the run's row.
-func StartExport(ctx context.Context, path string, info ExportInfo) (*Journal, error) {
-	db, err := openShared(path, journalSchema, journalVersion)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -167,10 +169,12 @@ func StartExport(ctx context.Context, path string, info ExportInfo) (*Journal, e
 		abs = info.SourcePath
 	}
 	sum := sha256.Sum256(info.Source)
+	// tgaccount names a bot token in chgksuite's telegram.toml. This port
+	// takes its token from --token, so it has no account name and writes ''.
 	res, err := db.ExecContext(ctx, `INSERT INTO exports
 		(tool, tool_version, source_path, source_sha256, tgaccount, bot_id, channel_id, chat_id, started_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		toolName, info.ToolVersion, abs, hex.EncodeToString(sum[:]), info.TGAccount,
+		VALUES (?, ?, ?, ?, '', ?, ?, ?, ?)`,
+		toolName, info.ToolVersion, abs, hex.EncodeToString(sum[:]),
 		nullInt(info.BotID), info.Target.ChannelID, nullString(info.Target.ChatID), now())
 	if err != nil {
 		_ = db.Close()
@@ -181,31 +185,31 @@ func StartExport(ctx context.Context, path string, info ExportInfo) (*Journal, e
 		_ = db.Close()
 		return nil, err
 	}
-	return &Journal{db: db, exportID: id}, nil
+	return &Record{db: db, exportID: id}, nil
 }
 
 // Posted writes one message's row, right after Telegram has accepted it, so a
 // run that dies halfway still says what reached the channel.
-func (j *Journal) Posted(ctx context.Context, p Post) error {
-	_, err := j.db.ExecContext(ctx, `INSERT INTO posts
+func (r *Record) Posted(ctx context.Context, p Post) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO posts
 		(export_id, chat_id, message_id, link, question_number, role, content_type,
 		 reply_to_message_id, text, parse_mode, sent_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		j.exportID, p.ChatID, p.MessageID, messageLink(p.ChatID, p.MessageID),
-		nullString(p.QuestionNumber), p.Role, p.ContentType, nullInt(p.ReplyTo),
-		p.Text, nullString(p.ParseMode), now())
+		r.exportID, p.ChatID, p.MessageID, messageLink(p.ChatID, p.MessageID),
+		nullString(p.QuestionNumber), string(p.Role), string(p.ContentType), nullInt(p.ReplyTo),
+		p.Text, nullString(string(p.ParseMode)), now())
 	return err
 }
 
 // Finish marks the run complete. A run that never gets here keeps an empty
 // finished_at.
-func (j *Journal) Finish(ctx context.Context) error {
-	_, err := j.db.ExecContext(ctx, `UPDATE exports SET finished_at = ? WHERE id = ?`, now(), j.exportID)
+func (r *Record) Finish(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE exports SET finished_at = ? WHERE id = ?`, now(), r.exportID)
 	return err
 }
 
 // Close closes the file.
-func (j *Journal) Close() error { return j.db.Close() }
+func (r *Record) Close() error { return r.db.Close() }
 
 // now is in UTC with microseconds, as the Python tool writes it, so the times
 // of both tools compare as strings.

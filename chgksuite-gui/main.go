@@ -59,10 +59,10 @@ type gui struct {
 	stdin   io.WriteCloser
 	picking bool
 
-	// statsOf and askNoStats stand in for the CLI and the dialog in tests;
+	// check and ask stand in for the confirm's check and its dialog in tests;
 	// nil is the real thing.
-	statsOf    func(cli, packet string) (bool, error)
-	askNoStats func(answer func(bool))
+	check func(cli string, c *confirmSpec, file string) (bool, error)
+	ask   func(c *confirmSpec, answer func(bool))
 }
 
 func main() {
@@ -248,7 +248,7 @@ func (g *gui) start() {
 	if g.cur == nil || g.proc != nil {
 		return
 	}
-	g.gateStats(g.cur.argv(), g.launch)
+	g.confirmThenRun(g.cur.argv(), g.launch)
 }
 
 // launch runs the command line and streams what it prints into the log.

@@ -32,7 +32,7 @@ func composeTelegram(args []string) error {
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
 	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", s.Chgkcli.Telegram.StopIfNoStatsFlag())
-	allowNoStats := fs.Bool("allow_no_stats", false, "publish a package without stats even when stop_if_no_stats is on")
+	allowNoStats := fs.Bool("allow_no_stats", false, s.Chgkcli.Telegram.AllowNoStatsFlag())
 	language := languageFlag(fs)
 	config := configFlag(fs)
 	if err := parseConfigured(fs, args, *config); err != nil {
@@ -121,19 +121,19 @@ func composeTelegram(args []string) error {
 		return err
 	}
 	req.Target = target
-	journal := startJournal(ctx, bot, in, src, target)
-	if journal != nil {
-		defer journal.Close()
-		req.Log = journal
+	record := openRecord(ctx, bot, in, src, target)
+	if record != nil {
+		defer record.Close()
+		req.Record = record
 	}
 	reportNote("%s", s.Chgkcli.Telegram.Posting(target.ChannelID, target.ChatID))
 	start := time.Now()
 	if err := tg.Export(ctx, poster, req); err != nil {
 		return err
 	}
-	if journal != nil {
-		if err := journal.Finish(ctx); err != nil {
-			reportNote("telegram.db: the export is not marked finished: %v", err)
+	if record != nil {
+		if err := record.Finish(ctx); err != nil {
+			reportNote("%s", s.Chgkcli.Telegram.RecordUnfinished(err.Error()))
 		}
 	}
 	reportDone("%s", s.Chgkcli.Telegram.Done(time.Since(start).Round(time.Second).String()))
@@ -149,22 +149,22 @@ func statsGate(doc fsource.Doc, stop, allow bool) error {
 	return nil
 }
 
-// startJournal opens the record of this export in ~/.chgksuite/telegram.db. A
-// record that cannot be opened is reported and the export goes ahead without
-// one: it is what lets the posts be corrected later, not what posts them.
-func startJournal(ctx context.Context, bot *tg.Bot, in string, src []byte, target tg.Target) *tg.Journal {
-	path, err := tg.JournalPath()
+// openRecord opens this export's record in ~/.chgksuite/telegram.db. When the
+// file cannot be opened, the CLI says so and posts anyway, because the record
+// is only needed to correct the posts later.
+func openRecord(ctx context.Context, bot *tg.Bot, in string, src []byte, target tg.Target) *tg.Record {
+	path, err := tg.RecordPath()
 	if err == nil {
-		var j *tg.Journal
-		j, err = tg.StartExport(ctx, path, tg.ExportInfo{
+		var rec *tg.Record
+		rec, err = tg.OpenRecord(ctx, path, tg.ExportInfo{
 			ToolVersion: buildinfo.Version(), SourcePath: in, Source: src,
 			BotID: botID(ctx, bot), Target: target,
 		})
 		if err == nil {
-			return j
+			return rec
 		}
 	}
-	reportNote("telegram.db: this export goes unrecorded: %v", err)
+	reportNote("%s", xystrings.Default.Chgkcli.Telegram.RecordUnavailable(err.Error()))
 	return nil
 }
 

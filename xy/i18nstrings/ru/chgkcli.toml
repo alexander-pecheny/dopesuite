@@ -28,6 +28,22 @@ genimp_flag = "add the «Общие впечатления» post"
 # Help of --stop_if_no_stats: the stats line the check requires on every
 # question.
 stop_if_no_stats_flag = "refuse to publish a package whose questions carry no «Взятия:»"
+# Help of --allow_no_stats: chgksuite-gui passes it once the person has agreed
+# to publish a package without stats.
+allow_no_stats_flag = "publish a package without stats even when stop_if_no_stats is on"
+# chgksuite-gui's question before publishing a package without stats: the
+# dialog's title, the question, and its two buttons. The question is
+# chgksuite's own Qt and Tk wording, word for word.
+no_stats_title = "Нет статистики"
+no_stats_question = "В пакете нет статистики взятий. Всё равно опубликовать в телеграм?"
+no_stats_publish = "Опубликовать"
+no_stats_cancel = "Отмена"
+# Progress note when telegram.db cannot be opened: the export goes ahead, but
+# leaves no record of its posts. error is the reason.
+record_unavailable = 'telegram.db: экспорт пойдёт без записи постов: {{.error}}'
+# Progress note when the export posted everything but telegram.db could not
+# mark the run finished. error is the reason.
+record_unfinished = 'telegram.db: экспорт не отмечен законченным: {{.error}}'
 # Progress note once the target resolves (reportNote): the channel to post to,
 # then the linked discussion group; both are Telegram's "-100…" ids.
 posting = 'публикую в {{.channel}}, комментарии в {{.chat}}'

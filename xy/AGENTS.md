@@ -318,7 +318,11 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        The export runs its own in-process bot (dopecore/tgbot, like the login
                        bots) for the two things a token alone cannot do: hearing the person who
                        started it, and seeing a post reach the discussion group. Oracle-tested
-                       call-for-call against chgksuite (scripts/gen_tg_oracle.py)
+                       call-for-call against chgksuite (scripts/gen_tg_oracle.py).
+                       record.go writes every export and each message it posted to
+                       ~/.chgksuite/telegram.db, so posts can be corrected later; the schema is
+                       shared with chgksuite and described in xy/docs/telegram-db.md.
+                       resolve.go keeps channel ids in chgksuite's own ~/.chgksuite/resolve.db
   typstwasm/           typst linked in as a library, compiled to wasm32-wasip1 and run under wazero,
                        with its World (typst's filesystem abstraction) served out of memory. This
                        removed the last place where xy had to hand decrypted questions to a

@@ -106,9 +106,10 @@ func csvDelimiter(jsonArgs string) (rune, error) {
 }
 
 // composeHasStats is `chgksuite compose has_stats <file>`: whether a packet
-// already carries a stats line, as {"has_stats": true|false}. It is for
-// chgksuite-gui, which asks before a telegram export so it can warn about a
-// packet without stats, and so it is not in the usage table.
+// already carries a stats line, as {"has_stats": true|false}. It is the check
+// the spec's confirm names for compose telegram, which chgksuite-gui runs
+// before a telegram export; it is for that program, so it is not in the usage
+// table.
 func composeHasStats(args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("compose has_stats takes exactly one packet")
@@ -126,7 +127,9 @@ func hasStatsJSON(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	doc := fsource.Parse(string(src), gameOf(path))
+	// Parsed as chgk, as composeTelegram parses it: this answers for the
+	// telegram export, which takes chgk packets only.
+	doc := fsource.Parse(string(src), "chgk")
 	out, err := json.Marshal(map[string]bool{"has_stats": stats.HasStats(doc)})
 	if err != nil {
 		return nil, err

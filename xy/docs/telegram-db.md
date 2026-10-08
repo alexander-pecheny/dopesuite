@@ -1,5 +1,7 @@
 # The Telegram export record: `~/.chgksuite/telegram.db`
 
+This is a contract between the Python and Go chgksuite, for developers and agents; the user documentation is the chgksuite.pecheny.me site.
+
 Every Telegram export by chgksuite, the Python tool or the Go one, writes down
 what it posted in `~/.chgksuite/telegram.db`, an SQLite file kept across runs.
 It exists so that posts can be found and corrected after the export, by hand or
