@@ -32,7 +32,7 @@ accepted it.
 | `export_id` | The export it belongs to. |
 | `chat_id`, `message_id` | Where the message is: the channel or the discussion group. |
 | `link` | A t.me link to it. |
-| `question_number` | The question's number as printed in the pack; empty for posts that are not about one question, including a post that holds a whole theme. |
+| `question_number` | The question's number as printed in the pack; empty for posts that are not about one question, including a post that holds several questions of a theme. |
 | `role` | What the message is; see below. A message holding several parts is named after its main part. |
 | `content_type` | `text`, `photo` or `poll`. |
 | `reply_to_message_id` | The message it replies to in the discussion group, if any. |
@@ -46,7 +46,8 @@ Roles:
 - `heading`: the pack, tour or theme heading, with any text around it.
 - `navigation`: the pinned post linking to the tours, and its comments.
 - `question`: the question's post. In the rich format it also holds the answer, comment, sources and author in a collapsed block.
-- `answer`, `comment`: a reply in the discussion group holding the answer or the comment, when a question did not fit one post.
+- `answer`: a reply in the discussion group continuing a question too long for one post, with its answer.
+- `comment`: a reply in the discussion group holding what did not fit the question's post: the comment, sources, author or the answer's pictures.
 - `handout`: a handout picture posted ahead of its question.
 - `poll`: a poll after a question, a tour or the pack.
 - `other`: anything else.
