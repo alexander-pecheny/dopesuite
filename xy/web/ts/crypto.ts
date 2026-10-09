@@ -142,7 +142,7 @@ const WORKER_URL = "/static/dist/cryptoworker.js";
 let worker: CryptoWorker | null = null;
 let started: Promise<void> | null = null;
 
-// inBrowser gates the worker: under node/deno — the test runner — there is no
+// inBrowser gates the worker: under node/bun — the test runner — there is no
 // origin to load a worker script from, and the in-thread path below is what runs
 // there. It is also the fallback every browser keeps, so nothing goes untested.
 function inBrowser(): boolean {
@@ -353,6 +353,6 @@ export const xyCrypto = {
 
 // Starting the worker at import time, not at first use: every page that imports
 // this module is a page that will decrypt something, so its startup is the right
-// moment to pay for the worker rather than the passphrase prompt. Under node/deno
+// moment to pay for the worker rather than the passphrase prompt. Under node/bun
 // this is a no-op.
 warm();

@@ -9,7 +9,7 @@ import (
 
 // TestFoldParity holds Folding to the browser's (find.ts foldSearch): a search
 // from the shell must find what a search in the app finds. Regenerate the corpus
-// with `deno run --allow-read --allow-write scripts/gen_fold_fixture.js`.
+// with `bun scripts/gen_fold_fixture.js`.
 func TestFoldParity(t *testing.T) {
 	raw, err := os.ReadFile("testdata/fold.json")
 	if err != nil {

@@ -1,7 +1,7 @@
 // What a History entry says, in words: the verb, and the lines that say what
 // exactly was added, changed, deleted or restored. Both the Group page and the
 // Transaction page read History, and both read it through here. There is no DOM
-// in this file, so the deno tests can check every line it writes.
+// in this file, so the bun tests can check every line it writes.
 
 import S from "./i18nstrings.js";
 import { formatMinor } from "./money.js";

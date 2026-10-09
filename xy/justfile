@@ -74,15 +74,15 @@ vet: wasm build-web
 tidy-check:
     go mod tidy -diff
 
-# Go tests + frontend (deno) tests; typecheck gates here, not in build-web.
+# Go tests + frontend (bun) tests; typecheck gates here, not in build-web.
 test: wasm build-web
     cd .. && just typecheck
     go test ./...
-    deno test --parallel jstest/
+    bun test --parallel ./jstest/
 
 # Frontend unit tests only (run against the built dist — see build-web).
 test-js: build-web
-    deno test --parallel jstest/
+    bun test --parallel ./jstest/
 
 # The kit's guard (root justfile) covers only kit/tags_gen.go; the overlay's
 # tags_gen.go goes just as stale when vocab.json (ours or the kit's) changes,

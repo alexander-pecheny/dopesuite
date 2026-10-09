@@ -5,7 +5,7 @@
 default:
     @just --list
 
-# Go tests + frontend (deno) tests, all five modules.
+# Go tests + frontend (bun) tests, all five modules.
 test: test-core test-uikit
     cd xy && just test
     cd dope && just test
@@ -132,15 +132,15 @@ build-web *targets:
     go -C scripts/webbuild run . {{targets}}
 
 # Typecheck every tsconfig project in parallel with the native tsc binary,
-# exec'd directly (deno only fetches it — no JS runtime in the loop). A test
+# exec'd directly (bun only fetches it — no JS runtime in the loop). A test
 # gate, deliberately not part of build-web: esbuild strips types unchecked, so
 # the dev loop stays fast and types are enforced where tests run.
 typecheck:
     #!/usr/bin/env bash
     set -euo pipefail
-    [ -d node_modules ] || deno install --quiet
+    [ -d node_modules ] || bun install --silent
     tsc=$(find node_modules -path '*@typescript/typescript-*/lib/tsc' -type f | head -1)
-    [ -n "$tsc" ] || { echo "native tsc not found — run 'deno install'" >&2; exit 1; }
+    [ -n "$tsc" ] || { echo "native tsc not found — run 'bun install'" >&2; exit 1; }
     pids=()
     for p in dopeuikit dope xy spliff xy/tsconfig.sw.json xy/tsconfig.worker.json; do "$tsc" -p "$p" & pids+=($!); done
     rc=0
@@ -173,7 +173,7 @@ pre-commit-core: fmt-core vet-core tidy-check-core test-core
 # compiles dopeuikit depends on build-web.
 test-uikit: build-web typecheck
     cd dopeuikit && go test ./...
-    deno test --parallel dopeuikit/jstest/
+    bun test --parallel ./dopeuikit/jstest/
 
 vet-uikit: build-web
     cd dopeuikit && go vet ./...

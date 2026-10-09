@@ -112,7 +112,6 @@ export interface Bundle {
 // two "handout.png" apart; the filename keeps the archive browsable. Path
 // separators and control characters go, everything else (unicode included) stays.
 export function attachmentPath(id: number, filename: string): string {
-  // deno-lint-ignore no-control-regex
   const safe = filename.replace(/[/\\\x00-\x1f]/g, "_").replace(/^\.+/, "_") || "file";
   return `attachments/${id}-${safe}`;
 }
