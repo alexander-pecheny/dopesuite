@@ -650,6 +650,9 @@ if ! sudo systemctl is-active --quiet "$SERVICE"; then
   exit 1
 fi
 
+# Keep the three newest backups for rollback; older ones only fill the disk. A first deploy has none.
+ls -1t "$REMOTE_BIN".*.bak 2>/dev/null | tail -n +4 | xargs -r sudo rm -f -- || true
+
 sudo systemctl --no-pager --full status "$SERVICE" | sed -n '1,12p'
 echo "Deployed $REMOTE_BIN and restarted $SERVICE"
 """
