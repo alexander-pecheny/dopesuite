@@ -3,7 +3,7 @@
 // (internal/xycli/envelope_test.go). The Go half of the same file is written by
 // `go test ./internal/xycli -run TestEnvelopeParity -update`, and jstest/
 // envelope_parity.test.js opens that. Run from xy/:
-//   deno run --allow-read --allow-write scripts/gen_envelope_fixture.js
+//   bun scripts/gen_envelope_fixture.js
 import { xyCrypto } from "../web/assets/static/dist/crypto.js";
 
 const OUT = new URL("../internal/xycli/testdata/envelope.json", import.meta.url);
@@ -20,8 +20,8 @@ for (const p of plain) ts_sealed.push({ plain: p, enc: await xyCrypto.encField(d
 
 let go_sealed = [];
 try {
-  go_sealed = JSON.parse(await Deno.readTextFile(OUT)).go_sealed ?? [];
+  go_sealed = (await Bun.file(OUT).json()).go_sealed ?? [];
 } catch (_) { /* first run */ }
 
-await Deno.writeTextFile(OUT, JSON.stringify({ passphrase, keymeta, ts_sealed, go_sealed }, null, 1) + "\n");
+await Bun.write(OUT, JSON.stringify({ passphrase, keymeta, ts_sealed, go_sealed }, null, 1) + "\n");
 console.log("wrote", OUT.pathname);

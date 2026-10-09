@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "scripts": {
+    "icon": "bun gen-icon.js",
+    "lab": "bun gen-icon.js --lab"
+  }
+}

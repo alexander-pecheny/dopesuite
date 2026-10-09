@@ -17,7 +17,7 @@ the product shape, [`AGENTS.md`](AGENTS.md) the codebase map.
 
 ```sh
 just dev            # server (assets hot-read from disk); polls telegram if SPLIFF_BOT_TOKEN is set
-just test           # go test + deno frontend tests
+just test           # go test + bun frontend tests
 just check          # this module: fmt + vet + tidy-check + test
 just pre-commit     # the whole repo, incl. class-check — run before a commit
 ```

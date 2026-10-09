@@ -1,5 +1,5 @@
 // The pure kernel of the /profile page: who the account is, what a Telegram
-// start answers with, and the poll that waits for the bot. No DOM, so the deno
+// start answers with, and the poll that waits for the bot. No DOM, so the bun
 // tests can drive the whole handshake without a browser.
 //
 // It is the shape of the shared login page's login-model.ts, and deliberately

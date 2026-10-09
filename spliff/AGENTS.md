@@ -20,7 +20,7 @@ entry in the root `CONTEXT.md` says as much.
   `spliff/web/ts/`, bundled by the root `just build-web spliff` into the
   gitignored `static/dist/` the Go build embeds. Pages are `.dopeui` sources
   compiled through `kit.PageSet`; the design system is DopeUIKit.
-- **Frontend tests**: deno (`deno test --parallel spliff/web/jstest/`).
+- **Frontend tests**: bun (`bun test --parallel ./spliff/web/jstest/`).
 - **Deploy**: `just deploy` → the monorepo's `../deploy.py`, targets
   `spliff-server` and `splifftest`, host `vps-he`.
 
@@ -109,7 +109,7 @@ spliff/                  module root (go.mod: module "spliff")
 
 ```bash
 just dev          # server (assets hot-read from disk); polls telegram if SPLIFF_BOT_TOKEN is set
-just test         # go test + deno frontend tests
+just test         # go test + bun frontend tests
 just check        # this module: fmt + vet + tidy-check + test
 just pre-commit   # the whole repo, incl. class-check — run before a commit
 printf 'secret12' | just adduser someone   # a password account, for an instance with no bot

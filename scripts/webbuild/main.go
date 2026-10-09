@@ -1,7 +1,7 @@
 // Shared esbuild pipeline (root ADR-0001) as a pure-Go tool: `go -C
 // scripts/webbuild run . [target...] [--watch]` builds the named targets
 // (default: all). esbuild is a Go library, so the server dev path needs no
-// JS runtime; deno/tsc enter only at the test gates.
+// JS runtime; bun/tsc enter only at the test gates.
 package main
 
 import (
@@ -230,7 +230,7 @@ func targets() []target {
 			}
 		}},
 		// Spliff ships native ES modules like xy: one bundle per page, plus the
-		// pure kernels as ESM for the deno tests.
+		// pure kernels as ESM for the bun tests.
 		{"spliff", func() []api.BuildOptions {
 			return []api.BuildOptions{
 				{

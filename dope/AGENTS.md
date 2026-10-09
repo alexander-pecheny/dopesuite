@@ -9,7 +9,7 @@ domain is Russian, and so is the UI.
 ## Stack
 - **Backend**: Go 1.26, SQLite 3 (WAL mode, modernc.org/sqlite)
 - **Frontend**: strict-TypeScript ES modules (root ADR-0001). The sources are in `dope/web/ts/`. The shared root toolchain (`just build-web`, which uses esbuild and the native tsc) bundles them into `dist/`, which is gitignored and embedded when Go builds the binary. There is a bundle per game page, plus self-contained bundles for the builder pages. No framework is used.
-- **Frontend tests**: deno (`deno test --parallel`, in `dope/web/jstest/`)
+- **Frontend tests**: bun (`bun test --parallel`, in `dope/web/jstest/`)
 - **Build/run**: `justfile` (see commands below)
 - **Deploy**: `just deploy`, which calls the monorepo's `../deploy.py` (SSH-based)
 - **Production** runs on `ssh vps2day-ee`. Use it to run commands on the production server.
@@ -137,7 +137,7 @@ emitted to `web/jstest/dist/`.
 ## How to Run / Build / Test
 ```bash
 just dev              # Server (hot reload from disk); polls telegram if TELEGRAM_BOT_TOKEN is set
-just test             # Go tests plus the deno JS tests, including the whole studchr replays over the direct transport. This is the conformance gate. `go test -short ./...` takes ~45 s.
+just test             # Go tests plus the bun JS tests, including the whole studchr replays over the direct transport. This is the conformance gate. `go test -short ./...` takes ~45 s.
 just test-full        # the same, plus the replays' HTTP twins: each plays over HTTP the first бой of every kind of input its transcript carries, and the бои between direct (ADR-0010). They cover the handlers, auth and the write path. `go test ./...` takes ~60 s. Run this before a merge.
 just test-js          # Frontend tests only
 just fmt              # gofmt

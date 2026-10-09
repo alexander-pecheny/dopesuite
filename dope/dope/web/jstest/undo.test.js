@@ -1,4 +1,5 @@
-import {assertEquals} from "jsr:@std/assert";
+import {test} from "node:test";
+import assert from "node:assert/strict";
 import {createUndo, isUndoKey, valueAt} from "./dist/undo.js";
 
 // A sheet of bouts: code → document. apply writes into it as the writer would.
@@ -25,7 +26,7 @@ function set(doc, path, value) {
   node[path[path.length - 1]] = value;
 }
 
-Deno.test("undo takes back this host's last action, a whole range at once", () => {
+test("undo takes back this host's last action, a whole range at once", () => {
   const docs = {A: {marks: ["", "", ""]}};
   const {undo, edit, gesture} = sheet(docs);
   edit("A", ["marks", 0], "right");
@@ -33,14 +34,14 @@ Deno.test("undo takes back this host's last action, a whole range at once", () =
   edit("A", ["marks", 1], "wrong");
   edit("A", ["marks", 2], "wrong");
   gesture();
-  assertEquals(undo.undo(), {codes: ["A"], skipped: 0});
-  assertEquals(docs.A.marks, ["right", "", ""]);
+  assert.deepEqual(undo.undo(), {codes: ["A"], skipped: 0});
+  assert.deepEqual(docs.A.marks, ["right", "", ""]);
   undo.undo();
-  assertEquals(docs.A.marks, ["", "", ""]);
-  assertEquals(undo.undo(), null);
+  assert.deepEqual(docs.A.marks, ["", "", ""]);
+  assert.deepEqual(undo.undo(), null);
 });
 
-Deno.test("undo never touches another host's edits", () => {
+test("undo never touches another host's edits", () => {
   const docs = {A: {marks: ["", ""]}, B: {marks: [""]}};
   const {undo, edit, gesture} = sheet(docs);
   edit("A", ["marks", 0], "right");
@@ -51,37 +52,37 @@ Deno.test("undo never touches another host's edits", () => {
   docs.B.marks[0] = "wrong";
   docs.A.marks[1] = "wrong";
   const result = undo.undo();
-  assertEquals(result, {codes: ["A"], skipped: 1});
+  assert.deepEqual(result, {codes: ["A"], skipped: 1});
   // This host's own cell goes back; the one the other host changed keeps
   // their mark, and their bout is untouched.
-  assertEquals(docs.A.marks, ["", "wrong"]);
-  assertEquals(docs.B.marks, ["wrong"]);
+  assert.deepEqual(docs.A.marks, ["", "wrong"]);
+  assert.deepEqual(docs.B.marks, ["wrong"]);
 });
 
-Deno.test("a cell set twice in one action goes back to what it held first", () => {
+test("a cell set twice in one action goes back to what it held first", () => {
   const docs = {A: {pin: null}};
   const {undo, edit, gesture} = sheet(docs);
   edit("A", ["pin"], 2);
   edit("A", ["pin"], 3);
   gesture();
   undo.undo();
-  assertEquals(docs.A.pin, null);
+  assert.deepEqual(docs.A.pin, null);
 });
 
-Deno.test("only the last 200 actions are kept", () => {
+test("only the last 200 actions are kept", () => {
   const docs = {A: {n: 0}};
   const {undo, edit, gesture} = sheet(docs);
   for (let i = 1; i <= 205; i++) {
     edit("A", ["n"], i);
     gesture();
   }
-  assertEquals(undo.size(), 200);
+  assert.deepEqual(undo.size(), 200);
 });
 
-Deno.test("Ctrl+Z and ⌘Z are undo on any layout; Shift is not", () => {
+test("Ctrl+Z and ⌘Z are undo on any layout; Shift is not", () => {
   const key = (init) => ({ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, key: "", code: "", ...init});
-  assertEquals(isUndoKey(key({ctrlKey: true, key: "z", code: "KeyZ"})), true);
-  assertEquals(isUndoKey(key({metaKey: true, key: "я", code: "KeyZ"})), true);
-  assertEquals(isUndoKey(key({ctrlKey: true, shiftKey: true, key: "Z", code: "KeyZ"})), false);
-  assertEquals(isUndoKey(key({key: "z", code: "KeyZ"})), false);
+  assert.deepEqual(isUndoKey(key({ctrlKey: true, key: "z", code: "KeyZ"})), true);
+  assert.deepEqual(isUndoKey(key({metaKey: true, key: "я", code: "KeyZ"})), true);
+  assert.deepEqual(isUndoKey(key({ctrlKey: true, shiftKey: true, key: "Z", code: "KeyZ"})), false);
+  assert.deepEqual(isUndoKey(key({key: "z", code: "KeyZ"})), false);
 });

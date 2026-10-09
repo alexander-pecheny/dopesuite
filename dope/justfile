@@ -23,7 +23,7 @@ fmt:
     mapfile -t files < <(find dope -type f -name '*.go')
     ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
 
-# Go tests + frontend (deno) tests; typecheck gates here, not in build-web.
+# Go tests + frontend (bun) tests; typecheck gates here, not in build-web.
 # The studchr replays (ADR-0010) run here on the direct transport, whole: the
 # conformance gate. test-full adds their HTTP twins, which prove the handlers,
 # auth and the write path by playing over HTTP the first бой of each kind of
@@ -31,12 +31,12 @@ fmt:
 test: build-web
     cd .. && just typecheck
     go test -short ./...
-    deno test --parallel dope/web/jstest/
+    bun test --parallel ./dope/web/jstest/
 
 test-full: build-web
     cd .. && just typecheck
     go test ./...
-    deno test --parallel dope/web/jstest/
+    bun test --parallel ./dope/web/jstest/
 
 # dope-cli: the API from the shell, for an agent (ADR-0021, the dope-api skill).
 cli:
@@ -45,7 +45,7 @@ cli:
 
 # Frontend unit tests only (runs against the built dist — see build-web).
 test-js:
-    deno test --parallel dope/web/jstest/
+    bun test --parallel ./dope/web/jstest/
 
 vet:
     go vet ./...

@@ -24,9 +24,9 @@ jobs:
         with:
           go-version-file: xy/go.mod
 
-      - uses: denoland/setup-deno@v2
+      - uses: oven-sh/setup-bun@v2
         with:
-          deno-version: v2.x
+          bun-version: 1.4.x
 
       - name: Install just
         run: curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin

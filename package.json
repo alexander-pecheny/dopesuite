@@ -1,7 +1,7 @@
 {
   "name": "dopesuite-web",
   "private": true,
-  "description": "Delivers the native tsc binary (root ADR-0001); installed by `deno install`, invoked directly by `just typecheck`.",
+  "description": "Delivers the native tsc binary (root ADR-0001); installed by `bun install`, invoked directly by `just typecheck`.",
   "devDependencies": {
     "typescript": "^7.0.0"
   }
