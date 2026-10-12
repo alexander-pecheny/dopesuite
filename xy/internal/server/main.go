@@ -182,6 +182,7 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("POST /api/boards/{id}/members", srv.handleAddMember)
 	mux.HandleFunc("DELETE /api/boards/{id}/members/{userId}", srv.handleRemoveMember)
 	mux.HandleFunc("GET /api/collaborators", srv.handleListCollaborators)
+	mux.HandleFunc("GET /api/ratings", srv.handleRatings)
 
 	// ---- invite links (ADR-0017): owner-side management, invitee-side join ----
 	mux.HandleFunc("GET /api/boards/{id}/invites", srv.handleListBoardInvites)

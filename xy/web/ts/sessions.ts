@@ -16,12 +16,14 @@ import S from "./i18nstrings.js";
 // player-typed string so nothing is silently dropped on migration.
 
 export type TesterType = "player" | "team";
-export interface Tester { text: string; type: TesterType }
+// id is the person's or team's id on the rating site, set where the name alone
+// does not say which one it is.
+export interface Tester { text: string; type: TesterType; id?: number }
 export interface TestCardModel { datetime: string; title: string; testers: Tester[] }
 
 // The lax shape serializeTestCard/testersToText/testerCopyText accept: anything
 // tester-ish, normalized on the way through.
-export interface TesterLike { text?: string | null; type?: string | null }
+export interface TesterLike { text?: string | null; type?: string | null; id?: unknown }
 export interface TestCardDraft {
   datetime?: string | null;
   title?: string | null;
@@ -45,12 +47,16 @@ export function parseTestCard(desc: string): TestCardModel {
   }
   const clean = testers
     .filter((t): t is Record<string, unknown> => Boolean(t) && typeof t === "object")
-    .map((t): Tester => ({ text: String(t.text == null ? "" : t.text), type: t.type === "team" ? "team" : "player" }));
+    .map((t): Tester => ({ text: String(t.text == null ? "" : t.text), type: t.type === "team" ? "team" : "player", ...ratingId(t.id) }));
   return {
     datetime: typeof obj.datetime === "string" ? obj.datetime : "",
     title: typeof obj.title === "string" ? obj.title : "",
     testers: clean,
   };
+}
+
+function ratingId(v: unknown): { id?: number } {
+  return typeof v === "number" && Number.isInteger(v) && v > 0 ? { id: v } : {};
 }
 
 // serializeTestCard: {datetime, title, testers} → JSON desc, dropping blank rows.
@@ -255,6 +261,7 @@ export function serializeSession(m: SessionMeta): string {
     testers: (m.testers || []).map((t: TesterLike) => ({
       text: (t.text || "").trim(),
       type: t.type === "team" ? "team" : "player",
+      ...ratingId(t.id),
     })).filter((t) => t.text),
     cities: m.cities || [],
     key: m.key,

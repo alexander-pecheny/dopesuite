@@ -249,6 +249,9 @@ internal/server/       package server — the whole HTTP server
                        manages, and putting plaintext on disk is exactly what xy must never do.
                        attachments.go still uses ParseMultipartForm, because those uploads are
                        already ciphertext
+  ratings.go           GET /api/ratings: the latest release of rating.chgk.gg's "b" model from
+                       buff.db (XY_BUFF_DB), every rated player with a name and every team,
+                       whole, so the browser matches tester names without sending them
   debug.go             [timing] logs on export/handout endpoints, gated by XY_DEBUG_TIMING
 internal/chgk/         Go port of chgksuite's core (xy no longer shells out to Python for docx/handouts)
   fsource/             the "4s" format, both ways: parse.go = parse_4s (oracle-tested vs
@@ -557,6 +560,11 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        Declaration (tour_testers) or, undeclared, the custom — everyone who
                        saw more than half (tourPicked, shared with the card's «кроме общих
                        тестеров» line). Renders into the panel shell
+    ratings.ts         TrueDL from a tour's tests (pecheny.me/blog/truedl): a Session's lineup
+                       (a Tester's rating id, else a unique name match) → technical rating →
+                       its place among the release's teams → band coefficient → DL; the tour's
+                       TrueDL is the mean. testerlist.ts shows it, the session form asks which
+                       namesake a tester is
     authorcount.ts     «Счётчик авторов»: countAuthors (pure) and its panel in the shell
     pwa.ts             PWA boot on every page: manifest/install <head> tags + sw
                        registration + zoom lockdown (theme boot + ☰ menu come from

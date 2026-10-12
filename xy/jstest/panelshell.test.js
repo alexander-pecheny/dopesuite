@@ -84,8 +84,10 @@ test("the tester list names the people who saw more than half a tour, unless the
   // Only Аня saw more than half, so both tests are partly ticked.
   assert.deepEqual(boxes().map((b) => b.checked), [false, true, false, false, true, false, false]);
   assert.deepEqual(boxes().map((b) => !!b.indeterminate), [true, false, false, true, false, false, false]);
-  const line = p.node("panelBody").querySelector(".sess-invite");
+  const [truedl, line] = p.node("panelBody").querySelectorAll(".sess-invite");
   assert.equal(line.text, "Вопросы тестировали: Аня.");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(truedl.text, "TrueDL не посчитать: рейтинг сейчас недоступен.", "this test serves no /api/ratings");
   // Ticking a test ticks everyone who was there, by name.
   boxes()[3].checked = true;
   boxes()[3].fire("change");

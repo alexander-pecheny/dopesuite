@@ -582,6 +582,22 @@ empty = "Вопросы этого тура никто не тестировал
 seen = '{{.seen}} из {{.total}}'
 # Heading over the people who saw the tour only outside any test.
 outside = "Видели вне тестов"
+# TrueDL of the tour estimated from its tests, and how many tests it rests on.
+truedl = 'TrueDL по тестам: {{.dl}} ({{.n}} {{plural .n "тест" "теста" "тестов"}})'
+# Said when no test of the tour can be placed in the rating.
+truedl_none = "TrueDL не посчитать: ни один тест не попал в рейтинг."
+# Said when the server has no ratings to estimate with.
+truedl_unavailable = "TrueDL не посчитать: рейтинг сейчас недоступен."
+# Caption of the select that picks the label marking a question as taken.
+truedl_label = "Взятые вопросы отмечены меткой"
+# The name of the label picked by default.
+truedl_taken = "взяли"
+# One test's line: how much it saw (the seen string), what it took, the place
+# its lineup would hold, and its DL.
+truedl_session = '{{.seen}}, взяли {{.taken}}, место в рейтинге {{.place}}, DL {{.dl}}'
+truedl_session_low = '{{.seen}}, взяли {{.taken}}, место в рейтинге {{.place}}: слишком низко для TrueDL'
+# Testers the rating does not know or cannot tell from namesakes.
+truedl_unknown = 'Не нашли в рейтинге: {{.names}}. Их можно указать по ID в тесте.'
 
 [listsmanage]
 # Title of the lists-management dialog.

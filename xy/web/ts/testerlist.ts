@@ -16,6 +16,8 @@ import { type Board, type ListPanel, listScope, type PanelShell } from "./panels
 import type { BoardCard, BoardList } from "./unlock.js";
 import { counter, testable } from "./cardkind.js";
 import type { Tester } from "./sessions.js";
+import { loadRatings, meanDL, sessionDLs } from "./ratings.js";
+import { sortLabels } from "./labelsedit.js";
 
 const { el, errMsg } = xyApp;
 
@@ -124,6 +126,66 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
     return out;
   }
 
+  // The label that says a test took a question: the one this device picked for
+  // the board, or else the one named as the catalog names it.
+  const takenKey = (): string => `xy-truedl-label:${board.id}`;
+  function takenLabelId(): number | null {
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(takenKey()); } catch (_) { /* no storage: fall back to the name */ }
+    const labels = board.state.labels;
+    const picked = labels.find((l) => String(l.id) === saved);
+    if (picked) return picked.id;
+    const name = S.board.testerlist.truedlTaken().toLowerCase();
+    return labels.find((l) => l.name.trim().toLowerCase() === name)?.id ?? null;
+  }
+
+  // TrueDL by the tour's tests, under the hint. Each test's own line goes into
+  // its row in metas, keyed by Session id.
+  function truedlBox(list: BoardList, metas: Map<number, HTMLElement>): HTMLElement {
+    const summary = el("p", { class: "sess-invite" });
+    const unknown = el("p", { class: "hint" });
+    unknown.hidden = true;
+    const sel = el("select", { class: "input", "aria-label": S.board.testerlist.truedlLabel() }) as HTMLSelectElement;
+    for (const l of sortLabels(board.state.labels, board.state.cardLabels)) sel.append(el("option", { value: String(l.id), text: l.name }));
+    sel.value = String(takenLabelId() ?? "");
+    const cards = listScope(board, list).cards.filter((c) => testable(c.kind));
+    const draw = async (): Promise<void> => {
+      const rel = await loadRatings();
+      if (!rel) {
+        summary.textContent = S.board.testerlist.truedlUnavailable();
+        return;
+      }
+      const labelId = Number(sel.value);
+      const sessions = tourSessions(list);
+      const results = sessions.map((g) => ({
+        played: g.played, testers: g.testers,
+        taken: cards.filter((c) => board.assignmentsOf(c.id, g.id).some((a) => a.labelId === labelId)).length,
+      }));
+      const dls = sessionDLs(results, rel);
+      dls.forEach((d, i) => {
+        const meta = metas.get(sessions[i].id);
+        if (!meta) return;
+        const seen = S.board.testerlist.seen(String(sessions[i].played), String(cards.length));
+        const taken = String(results[i].taken), place = String(d.place);
+        meta.textContent = d.dl == null ? S.board.testerlist.truedlSessionLow(seen, taken, place) : S.board.testerlist.truedlSession(seen, taken, place, d.dl.toFixed(1));
+      });
+      const mean = meanDL(dls);
+      const placed = dls.filter((d) => d.dl != null).length;
+      summary.textContent = mean == null ? S.board.testerlist.truedlNone() : S.board.testerlist.truedl(mean.toFixed(1), placed);
+      const names = [...new Set(dls.flatMap((d) => d.unknown).map(copyName))].join(", ");
+      unknown.textContent = names ? S.board.testerlist.truedlUnknown(names) : "";
+      unknown.hidden = !names;
+    };
+    sel.addEventListener("change", () => {
+      try { localStorage.setItem(takenKey(), sel.value); } catch (_) { /* the pick lasts until the panel closes */ }
+      void draw();
+    });
+    void draw();
+    return el("div", { class: "sess-invite-box" },
+      el("div", { class: "sess-invite-lines" }, summary, unknown),
+      el("label", { class: "u-row u-wrap u-gap-sm u-align-center" }, el("span", { class: "hint", text: S.board.testerlist.truedlLabel() }), sel));
+  }
+
   function openTesterList(list: BoardList): void {
     const box = el("div");
     const { cards, rows } = tourCoverage(list);
@@ -182,14 +244,17 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
       el("span", { class: "sess-meta", text: S.board.testerlist.seen(String(r.seen), String(total)) }));
 
     const inATest = new Set<string>();
+    const metas = new Map<number, HTMLElement>();
     for (const g of tourSessions(list)) {
       const members = orderedRows(g.testers.map((t) => byName.get(nameOf(t))).filter((r): r is TourTester => r != null));
       if (!members.length) continue;
       const names = members.map((r) => nameOf(r.tester));
       names.forEach((n) => inATest.add(n));
+      const meta = el("span", { class: "sess-meta", text: S.board.testerlist.seen(String(g.played), String(total)) });
+      metas.set(g.id, meta);
       box.append(el("div", { class: "sess-row" },
         el("label", { class: "sess-head" }, checkbox(names), el("span", { class: "sess-title", text: board.sessionName(g.id) })),
-        el("span", { class: "sess-meta", text: S.board.testerlist.seen(String(g.played), String(total)) }),
+        meta,
         el("details", { class: "testerlist-members" },
           el("summary", { class: "sess-meta", text: members.map((r) => copyName(r.tester)).join(", ") }),
           el("div", { class: "u-col" }, ...members.map(personRow)))));
@@ -211,7 +276,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
       el("div", { class: "sess-invite-lines" }, line, partial), copy));
     redraw();
     shell.open({ icon: "users", title: S.board.testerlist.name(), body: el("div", {},
-      el("p", { class: "hint", text: S.board.testerlist.hint() }), box) });
+      el("p", { class: "hint", text: S.board.testerlist.hint() }), truedlBox(list, metas), box) });
   }
 
 

@@ -1964,6 +1964,8 @@ body {
    row wraps by itself. */
 #sessionForm .tester-row { flex-wrap: wrap; }
 #sessionForm .tester-row .fld-row-input { flex: 1 1 8rem; min-width: 0; }
+#sessionForm .tester-row .tester-id { flex: 0 0 6rem; min-width: 0; }
+#sessionForm .tester-row .tester-pick { flex: 1 1 100%; min-width: 0; }
 
 /* These modals hold more than a screenful, so their BODY scrolls — the shape
    .lists-manage-rows already uses, which keeps the title and the «Готово»

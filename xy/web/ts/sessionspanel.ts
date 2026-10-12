@@ -17,6 +17,7 @@ import { autocomplete, type Choice } from "./kit/suggest.js";
 import { townChoices, zoneChoices } from "./suggest.js";
 import type { BoardSession } from "./unlock.js";
 import { type Tester, testersFromList, unbroken } from "./sessions.js";
+import { candidates, loadRatings } from "./ratings.js";
 import * as people from "./people.js";
 import { icon, iconed } from "./icons_gen.js";
 import { commentBody } from "./timeline.js";
@@ -255,10 +256,31 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       seg.append(bP, bT); sync();
       const inp = el("input", { class: "input fld-row-input", type: "text", value: (t && t.text) || "", placeholder: S.sessions.testers.namePlaceholder(), autocomplete: "off" }) as HTMLInputElement;
       autocomplete(inp, testerChoices);
+      const idInp = el("input", { class: "input tester-id", type: "text", inputmode: "numeric", value: t && t.id ? String(t.id) : "", placeholder: S.sessions.testers.idPlaceholder(), title: S.sessions.testers.idTitle() }) as HTMLInputElement;
+      const pick = el("select", { class: "input tester-pick", "aria-label": S.sessions.testers.idPick() }) as HTMLSelectElement;
+      pick.hidden = true;
+      // A name the rating knows several people by asks which one it is.
+      const offerNamesakes = async (): Promise<void> => {
+        const rel = type === "player" && !idInp.value.trim() ? await loadRatings() : null;
+        const found = rel ? candidates(rel, inp.value) : [];
+        pick.hidden = found.length < 2;
+        pick.replaceChildren(el("option", { value: "", text: S.sessions.testers.idPick() }),
+          ...found.map((c) => el("option", { value: String(c.id), text: S.sessions.testers.idOption([c.surname, c.name, c.patronymic].join(" ").trim(), String(c.rating), String(c.id)) })));
+      };
+      pick.addEventListener("change", () => {
+        idInp.value = pick.value;
+        pick.hidden = Boolean(pick.value);
+      });
+      inp.addEventListener("change", () => void offerNamesakes());
+      idInp.addEventListener("change", () => void offerNamesakes());
+      if (t && t.text) void offerNamesakes();
       const rm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: S.sessions.testers.removeRow() });
-      const row = el("div", { class: "fld-row tester-row" }, seg, inp, rm);
+      const row = el("div", { class: "fld-row tester-row" }, seg, inp, idInp, rm, pick);
       rm.addEventListener("click", () => row.remove());
-      (row as TesterRow)._read = () => ({ text: inp.value, type });
+      (row as TesterRow)._read = () => {
+        const id = Number(idInp.value.trim());
+        return { text: inp.value, type, ...(Number.isInteger(id) && id > 0 ? { id } : {}) };
+      };
       // Enter opens the next row, so a list of testers can be typed without the
       // mouse (#90). The picker has already taken an Enter that chose a
       // suggestion, and Ctrl-Enter still closes the form.

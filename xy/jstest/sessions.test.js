@@ -373,3 +373,16 @@ test("a copied line keeps a player's name on one line, and lets a team name wrap
   assert.equal(partialSeen([{ num: "4", testers: [saw("Анна Петрова"), { text: "Команда мечты", type: "team" }] }], new Set()),
     "Видели отдельные вопросы: Анна\u00a0Петрова: 4; Команда мечты: 4.");
 });
+
+test("a tester's rating id survives the round trip, and junk ids are dropped", () => {
+  const m = parseSession(serializeSession({ ...base, testers: [
+    { text: "Иванов Иван", type: "player", id: 42 },
+    { text: "Петров Пётр", type: "player", id: "42" },
+    { text: "Команда", type: "team", id: -1 },
+  ] }));
+  assert.deepEqual(m.testers, [
+    { text: "Иванов Иван", type: "player", id: 42 },
+    { text: "Петров Пётр", type: "player" },
+    { text: "Команда", type: "team" },
+  ]);
+});

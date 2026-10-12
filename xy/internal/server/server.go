@@ -36,6 +36,8 @@ type server struct {
 
 	staging *handoutStaging // staged handout images (see staging.go)
 
+	ratings ratingsCache // see ratings.go
+
 	// typst, compiled to wasm and run in-process (see typst.go). Built lazily and
 	// shared: compiling the module is what costs, not using it. Tests inject a stub
 	// so they neither compile the wasm nor need a real image to render.

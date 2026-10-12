@@ -743,6 +743,26 @@ var RU = Strings{
 			Seen:         func(seen string, total string) string { return fmt.Sprintf("%s из %s", seen, total) },
 			Summary:      func(names string) string { return fmt.Sprintf("Вопросы тестировали: %s.", names) },
 			SummaryEmpty: func() string { return "Никто не отмечен." },
+			Truedl: func(dl string, n int) string {
+				return fmt.Sprintf("TrueDL по тестам: %s (%d %s)", dl, n, core.Plural("ru", n, "тест", "теста", "тестов"))
+			},
+			TruedlLabel: func() string { return "Взятые вопросы отмечены меткой" },
+			TruedlNone: func() string {
+				return "TrueDL не посчитать: ни один тест не попал в рейтинг."
+			},
+			TruedlSession: func(seen string, taken string, place string, dl string) string {
+				return fmt.Sprintf("%s, взяли %s, место в рейтинге %s, DL %s", seen, taken, place, dl)
+			},
+			TruedlSessionLow: func(seen string, taken string, place string) string {
+				return fmt.Sprintf("%s, взяли %s, место в рейтинге %s: слишком низко для TrueDL", seen, taken, place)
+			},
+			TruedlTaken: func() string { return "взяли" },
+			TruedlUnavailable: func() string {
+				return "TrueDL не посчитать: рейтинг сейчас недоступен."
+			},
+			TruedlUnknown: func(names string) string {
+				return fmt.Sprintf("Не нашли в рейтинге: %s. Их можно указать по ID в тесте.", names)
+			},
 		},
 		Testmode: BoardTestmodeStrings{
 			Badge: func(name string) string {
@@ -2552,8 +2572,16 @@ var RU = Strings{
 			},
 		},
 		Testers: SessionsTestersStrings{
-			Add:             func() string { return "+ тестер" },
-			Copy:            func() string { return "Скопировать список тестеров" },
+			Add:  func() string { return "+ тестер" },
+			Copy: func() string { return "Скопировать список тестеров" },
+			IdOption: func(name string, rating string, id string) string {
+				return fmt.Sprintf("%s, рейтинг %s, ID %s", name, rating, id)
+			},
+			IdPick:        func() string { return "Выберите, кто это" },
+			IdPlaceholder: func() string { return "ID" },
+			IdTitle: func() string {
+				return "ID на сайте рейтинга: нужен, если по имени не понять, кто это"
+			},
 			Label:           func() string { return "Тестировали" },
 			NamePlaceholder: func() string { return "имя…" },
 			Player:          func() string { return "игрок" },

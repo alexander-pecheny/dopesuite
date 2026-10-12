@@ -77,6 +77,12 @@ remove_row = "Удалить строку"
 add = "+ тестер"
 # Button in the test editor copying the «Вопросы тестировали: …» line.
 copy = "Скопировать список тестеров"
+# Placeholder and tooltip of a tester row's rating id input.
+id_placeholder = "ID"
+id_title = "ID на сайте рейтинга: нужен, если по имени не понять, кто это"
+# The namesakes the rating knows, offered under a row whose name matches several.
+id_pick = "Выберите, кто это"
+id_option = '{{.name}}, рейтинг {{.rating}}, ID {{.id}}'
 
 [feed]
 # Label above the debrief feed of the test editor.

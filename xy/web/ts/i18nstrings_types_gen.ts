@@ -584,6 +584,14 @@ export type Strings = {
       seen: (seen: string, total: string) => string;
       summary: (names: string) => string;
       summaryEmpty: () => string;
+      truedl: (dl: string, n: number) => string;
+      truedlLabel: () => string;
+      truedlNone: () => string;
+      truedlSession: (seen: string, taken: string, place: string, dl: string) => string;
+      truedlSessionLow: (seen: string, taken: string, place: string) => string;
+      truedlTaken: () => string;
+      truedlUnavailable: () => string;
+      truedlUnknown: (names: string) => string;
     };
     testmode: {
       badge: (name: string) => string;
@@ -1957,6 +1965,10 @@ export type Strings = {
     testers: {
       add: () => string;
       copy: () => string;
+      idOption: (name: string, rating: string, id: string) => string;
+      idPick: () => string;
+      idPlaceholder: () => string;
+      idTitle: () => string;
       label: () => string;
       namePlaceholder: () => string;
       player: () => string;
