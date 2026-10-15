@@ -283,7 +283,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
           title_enc: await xyCrypto.encField(key, part.title), rank, type: listType,
         })) as { id: number };
         listIds.push(lres.id);
-        board.state.lists.push({ id: lres.id, type: listType, rank, groupId: null, title: part.title });
+        board.state.lists.push({ id: lres.id, type: listType, rank, groupId: null, title: part.title, commentFirst: false });
 
         let cardRank: string | null = null;
         for (const c of part.cards) {

@@ -55,6 +55,7 @@ function setup(images = []) {
     renderLabelPicker() {},
     paintLabels() {},
     questionNumberFor: () => "1",
+    commentFirst: () => false,
     popupMenu() {},
     forgetCardLabels() {},
     preview: { renderPreviewCard: () => fakeNode("div", { className: "pv" }), resolveImages: async () => new Map(), imageRefs: () => new Set(), fillPreviewImages() {}, previewList: async () => {} },

@@ -39,8 +39,8 @@ export interface TransferDeps {
   verbs: Pick<MutationVerbs, "patch">;
   cardsOf(listId: number): BoardCard[];
   labelById(id: number): BoardLabel | undefined;
-  // Asks for another board's passphrase; null cancels. Defaults to prompt().
-  askPassphrase?: () => string | null;
+  // Asks for another board's passphrase until unlock accepts one; null cancels.
+  askPassphrase(unlock: (pass: string) => Promise<DataKey>): Promise<DataKey | null>;
 }
 
 export interface Transfer {
@@ -63,17 +63,14 @@ export function createTransfer(deps: TransferDeps): Transfer {
     if (!dk) throw new Error(S.board.error.noKey());
     return dk;
   }
-  const askPassphrase = deps.askPassphrase ?? (() => prompt(S.board.transfer.askPassphrase()));
-
   // ensureDK returns a usable DK for a board, unlocking via passphrase if needed.
   async function ensureDK(bid: number): Promise<DataKey> {
     if (bid === boardId) return mustDK();
     let d = await xyCrypto.loadCachedDK(bid);
     if (d) return d;
-    const pass = askPassphrase();
-    if (pass == null) throw new Error(S.board.error.cancelled());
     const keymeta = (await fetchJSON(`/api/boards/${bid}/keymeta`)) as BoardKeymeta;
-    d = await xyCrypto.unlockBoard(pass, keymeta);
+    d = await deps.askPassphrase((pass) => xyCrypto.unlockBoard(pass, keymeta));
+    if (!d) throw new Error(S.board.error.cancelled());
     await xyCrypto.cacheDK(bid, d);
     return d;
   }

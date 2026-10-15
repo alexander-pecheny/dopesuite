@@ -8,7 +8,7 @@
 // (the card detail's cross-board copy, the attachments cache) takes it as its
 // own dependency, so the board seam stays what every panel needs and no more.
 
-import type { BoardCard, BoardGroup, BoardList, BoardState, CardLabel } from "./unlock.js";
+import type { BoardCard, BoardGroup, BoardList, BoardSession, BoardState, CardLabel } from "./unlock.js";
 import type { SessionMeta, Tester } from "./sessions.js";
 import type { CardSeen, SeenPlaying } from "./seen.js";
 import type { MembersState } from "./boardmembers.js";
@@ -61,6 +61,15 @@ export interface ListScope {
   // exports send it so chgksuite's SI layout is used, and the .4s goes out as
   // .si4s, which is how its CLI reads the game back.
   game: string;
+  // Whether this tour shows a question's comment before its answer.
+  commentFirst: boolean;
+}
+
+// sessionsNewestFirst is the order every test picker offers: a new question is
+// almost always marked with a recent sitting.
+export function sessionsNewestFirst(board: Board): BoardSession[] {
+  const at = (id: number): string => { const m = board.sessionMeta(id); return m ? `${m.date} ${m.time}` : ""; };
+  return [...board.state.sessions].sort((a, b) => at(b.id).localeCompare(at(a.id)) || b.id - a.id);
 }
 
 export function listScope(board: Board, list: BoardList): ListScope {
@@ -75,7 +84,7 @@ export function listScope(board: Board, list: BoardList): ListScope {
   // what the add-card button makes, and a list typed ChGK may well hold themes.
   // One theme makes the whole scope SI (cardkind.ts says why).
   const game = gameOf(cards);
-  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game };
+  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game, commentFirst: group ? group.commentFirst : list.commentFirst };
 }
 
 // listNumbers is one list's slice of its scope's numbering, parallel to

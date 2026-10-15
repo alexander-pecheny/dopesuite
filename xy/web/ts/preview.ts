@@ -147,7 +147,8 @@ function pvHandoutBox(label: string, text: string, imgMap: Map<string, string>, 
 // one; the card-detail preview (already inside the editor) leaves it off.
 // pvQuestion renders one question — a whole OD card, or one rung of a SI theme,
 // where `number` is the rung's point value rather than a position in the tour.
-function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: Map<string, string>, screen: boolean, edit?: (card: BoardCard) => HTMLElement, bareNumber?: boolean): HTMLElement {
+function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: Map<string, string>, screen: boolean, opts: PreviewOpts, bareNumber?: boolean): HTMLElement {
+  const { edit } = opts;
   const find = (t: string): { type: string; text: string } | undefined => xyChgk.parseBlocks(desc).find((b) => b.type === t);
   const wrap = el("article", { class: "pv-q", dataset: { cardId: card.id } });
   // Question line: small inline ✏️ (edit lists only) + bold "Question N." label
@@ -177,14 +178,20 @@ function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: M
     if (fresh) { wrap.append(qline); fresh = false; }
     qline.append(renderFieldBody(p.text, imgMap, fieldOpts("question", screen)));
   }
-  for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
+  for (const f of xyChgk.fieldOrder(!!opts.commentFirst)) {
     const b = find(f);
     if (b) wrap.append(pvField(f, b.text, imgMap, screen, pvSmallCls(f)));
   }
   return wrap;
 }
 
-export function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<string, string>, screen: boolean, edit?: (card: BoardCard) => HTMLElement): HTMLElement {
+export interface PreviewOpts {
+  edit?: (card: BoardCard) => HTMLElement;
+  commentFirst?: boolean;
+}
+
+export function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<string, string>, screen: boolean, opts: PreviewOpts = {}): HTMLElement {
+  const { edit } = opts;
   const blocks = xyChgk.parseBlocks(card.desc);
   const find = (t: string) => blocks.find((b) => b.type === t);
 
@@ -201,13 +208,13 @@ export function renderPreviewCard(card: PvCard, number: string | null, imgMap: M
     if (t.author !== null) wrap.append(pvField("author", t.author, imgMap, screen, ""));
     if (t.comment !== null) wrap.append(pvField("comment", t.comment, imgMap, screen, pvSmallCls("comment")));
     for (const slot of t.slots) {
-      wrap.append(pvQuestion(card, xyChgk.composeFields(slot.fields), slot.number, imgMap, screen, undefined, true));
+      wrap.append(pvQuestion(card, xyChgk.composeFields(slot.fields), slot.number, imgMap, screen, { commentFirst: opts.commentFirst }, true));
     }
     return wrap;
   }
 
   if (card.kind === KIND.question || find("question")) {
-    return pvQuestion(card, card.desc, number, imgMap, screen, edit);
+    return pvQuestion(card, card.desc, number, imgMap, screen, opts);
   }
 
   // Non-question card: render each block by type (never screen-transformed).

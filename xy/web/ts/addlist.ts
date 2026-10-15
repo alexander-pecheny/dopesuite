@@ -21,7 +21,7 @@ const { keyBetween } = xyRank;
 export async function createList(board: Board, title: string, type: string, rank: string): Promise<void> {
   const titleEnc = await xyCrypto.encField(board.dk(), title);
   const res = await board.verbs.create("createList", `/api/boards/${board.id}/lists`, { title_enc: titleEnc, rank, type });
-  board.state.lists.push({ id: res.id as number, type, rank, groupId: null, title });
+  board.state.lists.push({ id: res.id as number, type, rank, groupId: null, title, commentFirst: false });
 }
 
 // rankNextTo is the rank of a new ungrouped list beside `anchor`. A list in a

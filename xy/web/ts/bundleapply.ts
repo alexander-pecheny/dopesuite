@@ -243,7 +243,7 @@ export async function applyBundle(
       const lists = byRank(bundle.lists.filter((l) => unit.listIds.includes(l.id)));
       for (const l of lists) {
         const res = (await jpost(`/api/boards/${boardId}/lists`, {
-          title_enc: await enc(l.title), rank: nextListRank(l.rank), type: l.type,
+          title_enc: await enc(l.title), rank: nextListRank(l.rank), type: l.type, comment_first: !!l.comment_first,
         })) as { id: number };
         listMap.set(l.id, res.id);
         made.push(res.id);

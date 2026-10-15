@@ -373,17 +373,23 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
           button small download id="handoutsDownload" hidden @board.handouts.download
         mount id="handoutsPdf" kind="handouts-pdf"
 
-  -- the ⋯ list-type entry: what the list holds, picked from every type there is
-  modal id="listTypeOverlay" label=@board.list.type_title title=@board.list.type_title
-    form id="listTypeForm" dir="col"
-      selectfield id="listTypeSelect" title=@board.list.type_label
-        option value="normal" @board.list.type_chgk
-        option value="si" @board.list.type_si
+  -- the ⋯ list-settings entry: what the list holds, and where its tour puts the comment
+  modal id="listSettingsOverlay" label=@board.list.settings_title title=@board.list.settings_title
+    form id="listSettingsForm" dir="col"
+      field label=@board.list.type_label
+        selectfield id="listTypeSelect"
+          option value="normal" @board.list.type_chgk
+          option value="si" @board.list.type_si
       hint @board.list.type_hint
-      message id="listTypeMessage"
+      field label=@board.list.order_label
+        selectfield id="listOrderSelect"
+          option value="answer" @board.list.order_answer_first
+          option value="comment" @board.list.order_comment_first
+      hint id="listOrderHint" @board.list.order_hint
+      message id="listSettingsMessage"
       row gap="sm" wrap
         button submit @board.actions.save
-        button kind="ghost" id="listTypeCancel" @board.actions.cancel
+        button kind="ghost" id="listSettingsCancel" @board.actions.cancel
 
   -- the ⋯ add-list entry: a new list right after or before this one
   modal id="addListOverlay" label=@board.list.add_label title=@board.list.add_label
@@ -538,6 +544,15 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       row gap="sm" wrap
         button submit @board.actions.save
         button kind="ghost" id="pasteCancel" @board.actions.cancel
+
+  -- the passphrase of a board a transfer goes to, when this device holds no key for it
+  modal id="targetPassOverlay" label=@board.transfer.target_pass title=@board.transfer.target_pass
+    form id="targetPassForm" dir="col"
+      password id="targetPassInput" placeholder=@board.unlock.pass_placeholder autocomplete="off" required
+      row gap="sm" wrap
+        button submit @board.unlock.submit
+        button kind="ghost" id="targetPassCancel" @board.actions.cancel
+    message id="targetPassMessage"
 
   -- unsaved-changes prompt: leaving a dirty card by any route (the back button, Escape,
   -- Android back, the backdrop, ← / → to the next card) asks rather than

@@ -14,6 +14,9 @@ export interface BundleList {
   title: string;
   rank: string;
   group_id: number | null;
+  // The tour's field order, written on every list of a group. Absent in
+  // bundles made before it existed.
+  comment_first?: boolean;
 }
 export interface BundleGroup {
   id: number;

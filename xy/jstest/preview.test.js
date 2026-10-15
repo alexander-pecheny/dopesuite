@@ -18,9 +18,15 @@ test("a question renders as the docx would: numbered label, fields in order, sou
   assert.ok(!node.querySelectorAll(".pv-edit").length, "no ✏️ unless a builder is passed");
 });
 
+test("a tour that puts the comment first shows it before the answer", () => {
+  const card = { id: 5, kind: "question", desc: "? Что?\n! То.\n/ Потому что.\n@ Аня" };
+  const labels = renderPreviewCard(card, "1", new Map(), false, { commentFirst: true }).querySelectorAll(".pv-label").map((n) => n.textContent);
+  assert.deepEqual(labels, ["Вопрос 1. ", "Комментарий: ", "Ответ: ", "Автор: "]);
+});
+
 test("the ✏️ builder is called for the question line when given", () => {
   let asked = null;
-  const node = renderPreviewCard(q, null, new Map(), false, (card) => { asked = card.id; return document.createElement("button"); });
+  const node = renderPreviewCard(q, null, new Map(), false, { edit: (card) => { asked = card.id; return document.createElement("button"); } });
   assert.equal(asked, 1);
   assert.equal(node.querySelectorAll(".pv-q-text")[0].kids[0].tag, "button");
 });

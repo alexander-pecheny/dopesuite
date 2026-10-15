@@ -92,7 +92,7 @@ export interface PreviewCardLike {
 // The board's docx-style preview machinery (renderPreviewCard and friends stay
 // with the list preview in board.ts; the card preview reuses them).
 export interface PreviewSeam {
-  renderPreviewCard(card: PreviewCardLike, number: string | null, imgMap: Map<string, string>, screen: boolean): HTMLElement;
+  renderPreviewCard(card: PreviewCardLike, number: string | null, imgMap: Map<string, string>, screen: boolean, opts?: { commentFirst?: boolean }): HTMLElement;
   resolveImages(cards: PreviewCardLike[], wanted: Set<string>, onImage: (name: string, url: string) => void): Promise<Map<string, string>>;
   imageRefs(cards: PreviewCardLike[]): Set<string>;
   fillPreviewImages(root: ParentNode, imgMap: Map<string, string>): void;
@@ -198,6 +198,8 @@ export interface CardDetailDeps {
   renderLabelPicker(card: BoardCard): void;
   paintLabels(): void;
   questionNumberFor(card: PreviewCardLike): string | null;
+  // Whether the card's tour shows the comment before the answer.
+  commentFirst(listId: number): boolean;
   // The board's shared transient popup (board.ts popupMenu) — the copy
   // button opens one when a card has more than one thing worth copying.
   popupMenu(anchor: HTMLElement, items: Array<{ label: string; onClick: () => void }>): void;
@@ -595,7 +597,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // buildField is the generic absent/present field control: a "+ label" pill when
   // absent, a labelled input with a "×" (back to absent) when present.
-  function buildField(label: string, kind: "area" | "input", initial: string | null | undefined, opts: { muted?: boolean; open?: boolean; rows?: number; suggest?: string[] } = {}): FieldReader<string | null> {
+  function buildField(label: string, kind: "area" | "input", initial: string | null | undefined, opts: { muted?: boolean; open?: boolean; rows?: number; suggest?: string[]; images?: boolean } = {}): FieldReader<string | null> {
     const wrap = el("div", { class: "fld" + (opts.muted ? " fld-muted" : "") });
     const addBtn = el("button", { class: "fld-add", type: "button", text: S.card.field.add(label), title: S.card.field.addTitle() });
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: S.card.field.removeTitle() });
@@ -609,6 +611,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (kind === "area") autoGrow(input as HTMLTextAreaElement);
     let present = initial !== null && initial !== undefined;
     if (present) input.value = initial as string;
+    if (opts.images && kind === "area") body.append(imageInsert(input as HTMLTextAreaElement));
     // opts.open pre-expands an absent field (new cards open the question and
     // answer fields ready to type). Left untouched it still reads as absent, so
     // an unedited stub composes to the same (empty) draft as before.
@@ -629,18 +632,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     return { node: wrap, read: () => (present ? (autoOpened && input.value === "" ? null : input.value) : null) };
   }
 
-  // buildHandoutField: the handout field with a text/image
-  // toggle. Image mode picks among the card's attached images.
-  function buildHandoutField(initial: Handout | null): FieldReader<Handout | null> {
-    const wrap = el("div", { class: "fld" });
-    const addBtn = el("button", { class: "fld-add", type: "button", text: S.card.field.add(S.card.field.handout()), title: S.card.field.addTitle() });
-    const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: S.card.field.removeTitle() });
-    const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: S.card.field.handout() }), rmBtn);
-    const modeText = el("button", { class: "seg-btn", type: "button", text: S.card.handout.modeText() });
-    const modeImg = el("button", { class: "seg-btn", type: "button", text: S.card.handout.modeImage() });
-    const toggle = el("div", { class: "seg" }, modeText, modeImg);
-    const ta = el("textarea", { class: "card-desc fld-input", spellcheck: "false", rows: "1" }) as HTMLTextAreaElement;
-    autoGrow(ta);
+  // imagePicker chooses a picture among the open card's images, or uploads one
+  // and chooses it in the same gesture, and shows what was chosen. The handout,
+  // a picture row of the sources and the image insert all pick through it.
+  function imagePicker(initial: string): { node: HTMLElement; name(): string } {
     const sel = el("select", { class: "input fld-input" }) as HTMLSelectElement;
     // The card gains images while this field is alive — a paste, the attachments
     // uploader — so the picker rebuilds its options each time it is opened rather
@@ -655,27 +650,96 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     };
     // focus alone misses reopening a select that already has it.
     for (const ev of ["focus", "mousedown"]) sel.addEventListener(ev, () => syncOptions());
-    // Picking a handout picture used to mean attaching the file further down the
-    // card first, then coming back up here to choose it — and on a card that had
-    // no attachments yet the dropdown was simply empty, with no way out of it
-    // (issue #26). This attaches and selects in one gesture.
+    const thumbs = el("span", { class: "tl-draft-imgs fld-thumb", hidden: true });
+    const showThumb = (): void => { void fillThumbs(thumbs, sel.value ? [sel.value] : [], null); };
+    sel.addEventListener("change", showThumb);
+    // Before this, attaching meant a trip down to the attachments and back, and
+    // a card with none had an empty dropdown and no way out of it (issue #26).
+    const attach = uploadButton(S.card.handout.attach(), (name) => { syncOptions(name); showThumb(); sel.dispatchEvent(new Event("input", { bubbles: true })); });
+    syncOptions(initial);
+    showThumb();
+    return { node: el("div", { class: "fld-row" }, sel, ...attach, thumbs), name: () => sel.value };
+  }
+
+  // uploadButton attaches a picture to the open card and hands back its name.
+  function uploadButton(text: string, onName: (name: string) => void): [HTMLElement, HTMLInputElement] {
     const filePick = el("input", { type: "file", accept: "image/*", hidden: true }) as HTMLInputElement;
-    const attachBtn = el("button", { class: "input fld-add-row", type: "button", title: S.card.handout.attachTitle() }, ...iconed("paperclip", S.card.handout.attach()));
-    attachBtn.addEventListener("click", () => filePick.click());
+    const btn = el("button", { class: "input fld-add-row", type: "button", title: S.card.handout.attachTitle() }, ...iconed("paperclip", text));
+    btn.addEventListener("click", () => filePick.click());
     filePick.addEventListener("change", async () => {
       const file = filePick.files && filePick.files[0];
       filePick.value = ""; // so re-picking the same file fires change again
       if (!file) return;
       try {
         await deps.attachments.upload(file, true, file.name);
-        syncOptions(file.name);
+        onName(file.name);
       } catch (err) { cardMessageEl.textContent = errMsg(err); }
     });
-    const imgRow = el("div", { class: "fld-row" }, sel, attachBtn, filePick);
+    return [btn, filePick];
+  }
+
+  // fillThumbs draws the named pictures as chips. With `remove`, each chip gets
+  // a × that takes its reference out of the text.
+  async function fillThumbs(box: HTMLElement, names: string[], remove: ((name: string) => void) | null): Promise<void> {
+    const c = openCardCard();
+    const urls = c && names.length ? await deps.attachments.resolveImages([c], new Set(names)) : new Map<string, string>();
+    box.replaceChildren(...names.map((name) => {
+      const url = urls.get(name);
+      const chip = el("span", { class: "tl-draft-img", title: name },
+        url ? el("img", { class: "pv-img", src: url, alt: name }) : el("span", { class: "muted", text: name }));
+      if (remove) chip.append(el("button", { class: "attach-del", type: "button", title: S.card.image.removeTitle(), text: "×", onclick: () => remove(name) }));
+      return chip;
+    }));
+    box.hidden = names.length === 0;
+  }
+
+  // imageInsert is what a text field gets to hold pictures: a button that puts
+  // (img name) at the caret, and the pictures the text already shows.
+  function imageInsert(input: HTMLTextAreaElement): HTMLElement {
+    const thumbs = el("div", { class: "tl-draft-imgs", hidden: true });
+    const refresh = (): void => {
+      void fillThumbs(thumbs, xyChgk.imgRefs(input.value), (name) => {
+        const ref = new RegExp(String.raw`[ \t]*\(img\s+(?:\S+\s+)*` + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + String.raw`\)`, "g");
+        replaceField(input, input.value.replace(ref, "").trim());
+      });
+    };
+    input.addEventListener("input", refresh);
+    // A picture is a word of the text: it gets a space on each side it touches one.
+    const insert = (name: string): void => {
+      const at = input.selectionStart ?? input.value.length, end = input.selectionEnd ?? at;
+      const pad = (ch: string | undefined): string => (ch && !/\s/.test(ch) ? " " : "");
+      insertAtCaret(input, `${pad(input.value[at - 1])}(img ${name})${pad(input.value[end])}`);
+    };
+    const pick = el("button", { class: "input fld-add-row", type: "button", title: S.card.image.insertTitle() }, ...iconed("image", S.card.image.insert()));
+    // The menu, not a select: a mousedown here would take the caret out of the text.
+    pick.addEventListener("mousedown", (e) => e.preventDefault());
+    pick.addEventListener("click", () => {
+      const names = deps.attachments.imageNames();
+      if (!names.length) { upload[1].click(); return; }
+      deps.popupMenu(pick, names.map((name) => ({ label: name, onClick: () => insert(name) })));
+    });
+    const upload = uploadButton(S.card.image.upload(), insert);
+    refresh();
+    return el("div", { class: "u-col u-gap-xs" }, el("div", { class: "u-row u-gap-xs" }, pick, ...upload), thumbs);
+  }
+
+  // buildHandoutField: the handout field with a text/image
+  // toggle. Image mode picks among the card's attached images.
+  function buildHandoutField(initial: Handout | null): FieldReader<Handout | null> {
+    const wrap = el("div", { class: "fld" });
+    const addBtn = el("button", { class: "fld-add", type: "button", text: S.card.field.add(S.card.field.handout()), title: S.card.field.addTitle() });
+    const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: S.card.field.removeTitle() });
+    const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: S.card.field.handout() }), rmBtn);
+    const modeText = el("button", { class: "seg-btn", type: "button", text: S.card.handout.modeText() });
+    const modeImg = el("button", { class: "seg-btn", type: "button", text: S.card.handout.modeImage() });
+    const toggle = el("div", { class: "seg" }, modeText, modeImg);
+    const ta = el("textarea", { class: "card-desc fld-input", spellcheck: "false", rows: "1" }) as HTMLTextAreaElement;
+    autoGrow(ta);
+    const picker = imagePicker(initial && initial.kind === "image" ? initial.name || "" : "");
+    const imgRow = picker.node;
     const body = el("div", { class: "fld-body" }, toggle, ta, imgRow);
     let mode: "text" | "image" = initial && initial.kind === "image" ? "image" : "text";
     if (initial && initial.kind === "text") ta.value = initial.text || "";
-    syncOptions(initial && initial.kind === "image" ? initial.name || "" : "");
     const syncMode = (): void => {
       modeText.classList.toggle("active", mode === "text");
       modeImg.classList.toggle("active", mode === "image");
@@ -693,45 +757,80 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     sync(); syncMode();
     return {
       node: wrap,
-      read: (): Handout | null => (present ? (mode === "image" ? { kind: "image", name: sel.value } : { kind: "text", text: ta.value }) : null),
+      read: (): Handout | null => (present ? (mode === "image" ? { kind: "image", name: picker.name() } : { kind: "text", text: ta.value }) : null),
     };
   }
 
-  // buildSourcesField: the multi-line source field (one input per source line,
-  // add/remove rows), each row autocompleting from the board's existing sources.
+  // buildSourcesField: the multi-line source field, one row per source line,
+  // each row text that autocompletes from the board's sources or a picture.
   function buildSourcesField(initial: string[] | null, suggestions: string[]): FieldReader<string[] | null> {
     const wrap = el("div", { class: "fld" });
     const addBtn = el("button", { class: "fld-add", type: "button", text: S.card.field.add(S.card.field.source()), title: S.card.field.addTitle() });
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: S.card.field.removeTitle() });
     const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: S.card.field.source() }), rmBtn);
     const rows = el("div", { class: "fld-rows" });
-    // A source is one line of the 4s but often a URL longer than the card is
-    // wide, so it is a textarea: it wraps and grows instead of scrolling out of
-    // sight. Enter still belongs to the row list, not to the text.
-    const addRow = (val: string): HTMLTextAreaElement => {
-      const inp = el("textarea", { class: "card-desc fld-row-input fld-src", spellcheck: "false", rows: "1" }) as HTMLTextAreaElement;
-      inp.value = val || "";
-      autoGrow(inp);
-      const rrm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: S.card.field.removeRowTitle() });
-      const row = el("div", { class: "fld-row" }, suggestWrap(inp, suggestions), rrm);
-      // After suggestWrap, so an Enter that takes a suggestion is stopped before
-      // it reaches this and opens a row nobody asked for.
-      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addRow("").focus(); } });
-      rrm.addEventListener("click", () => row.remove());
-      rows.append(row);
-      return inp;
+    const readers: Array<{ row: HTMLElement; read(): string }> = [];
+    const addRow = (val: string, asImage = false): HTMLElement => {
+      const r = sourceRow(val, asImage, suggestions, () => addRow("").focus());
+      const reader = { row: r.row, read: r.read };
+      readers.push(reader);
+      r.remove.addEventListener("click", () => { r.row.remove(); readers.splice(readers.indexOf(reader), 1); });
+      rows.append(r.row);
+      return r.focusable();
     };
     const rowAdd = el("button", { class: "input fld-add-row", type: "button", text: S.card.field.addRow() });
     rowAdd.addEventListener("click", () => addRow("").focus());
-    const body = el("div", { class: "fld-body" }, rows, rowAdd);
+    const imageAdd = el("button", { class: "input fld-add-row", type: "button", title: S.card.field.addImageRowTitle() }, ...iconed("image", S.card.field.addImageRow()));
+    imageAdd.addEventListener("click", () => { addRow("", true); });
+    const body = el("div", { class: "fld-body" }, rows, el("div", { class: "u-row u-gap-xs" }, rowAdd, imageAdd));
     let present = initial !== null && initial !== undefined;
     (present ? ((initial as string[]).length ? (initial as string[]) : [""]) : []).forEach((s) => addRow(s));
     const sync = (): void => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; wrap.classList.toggle("fld-present", present); };
-    addBtn.addEventListener("click", () => { present = true; if (!rows.children.length) addRow(""); sync(); });
+    addBtn.addEventListener("click", () => { present = true; if (!readers.length) addRow(""); sync(); });
     rmBtn.addEventListener("click", () => { present = false; sync(); });
     wrap.append(addBtn, head, body);
     sync();
-    return { node: wrap, read: () => (present ? [...rows.querySelectorAll<HTMLTextAreaElement>(".fld-row-input")].map((i) => i.value) : null) };
+    return { node: wrap, read: () => (present ? readers.map((r) => r.read()) : null) };
+  }
+
+  // sourceRow is one line of the sources: text, or a picture when the whole line is
+  // one (img …). The row's toggle switches between the two.
+  function sourceRow(val: string, asImage: boolean, suggestions: string[], onEnter: () => void): { row: HTMLElement; remove: HTMLElement; read(): string; focusable(): HTMLElement } {
+    const whole = xyChgk.imgRefs(val);
+    const isImage = asImage || (whole.length === 1 && /^\(img\s[^\n]*\)$/.test(val.trim()));
+    // A line as written, (img w=… name) sizes and all, survives until its picture changes.
+    const original = isImage ? val.trim() : "";
+    // A source is one line of the 4s but often a URL longer than the card is
+    // wide, so it is a textarea: it wraps and grows instead of scrolling out of
+    // sight. Enter still belongs to the row list, not to the text.
+    const inp = el("textarea", { class: "card-desc fld-row-input fld-src", spellcheck: "false", rows: "1" }) as HTMLTextAreaElement;
+    inp.value = isImage ? "" : val || "";
+    autoGrow(inp);
+    const text = suggestWrap(inp, suggestions);
+    // After suggestWrap, so an Enter that takes a suggestion is stopped before
+    // it reaches this and opens a row nobody asked for.
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); onEnter(); } });
+    let picker: { node: HTMLElement; name(): string } | null = null;
+    let image = isImage;
+    const slot = el("div", { class: "fld-row-input" });
+    const toggle = el("button", { class: "fld-row-rm", type: "button" });
+    const remove = el("button", { class: "fld-row-rm", type: "button", text: "×", title: S.card.field.removeRowTitle() });
+    const sync = (): void => {
+      if (image && !picker) picker = imagePicker(whole[0] || "");
+      slot.replaceChildren(image && picker ? picker.node : text);
+      toggle.replaceChildren(icon(image ? "text-cursor-input" : "image"));
+      toggle.title = image ? S.card.field.sourceToText() : S.card.field.sourceToImage();
+      toggle.setAttribute("aria-label", toggle.title);
+    };
+    toggle.addEventListener("click", () => { image = !image; sync(); slot.dispatchEvent(new Event("input", { bubbles: true })); });
+    sync();
+    const read = (): string => {
+      if (!image || !picker) return inp.value;
+      const name = picker.name();
+      if (!name) return "";
+      return original && whole[0] === name ? original : `(img ${name})`;
+    };
+    return { row: el("div", { class: "fld-row" }, slot, toggle, remove), remove, read, focusable: () => (image ? slot : inp) };
   }
 
   // buildAuthorsField: a tag input (like labels) seeded with autocomplete from the
@@ -826,12 +925,14 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       // one line of it was a slot you wrote a paragraph through.
       zachet: buildField(S.card.field.zachet(), "area", f.zachet, { rows: ZACHET_ROWS }),
       nezachet: buildField(S.card.field.nezachet(), "area", f.nezachet, { rows: ZACHET_ROWS }),
-      comment: buildField(S.card.field.comment(), "area", f.comment),
+      comment: buildField(S.card.field.comment(), "area", f.comment, { images: true }),
       sources: buildSourcesField(f.sources, boardSources()),
       authors: buildAuthorsField(f.authors, boardAuthors(), f.authorLabel),
       hndt: buildField(S.card.field.hndt(), "area", draft.meta, { muted: true }),
     };
-    const order = ["handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors"] as const;
+    const c = openCardCard();
+    const rest = xyChgk.fieldOrder(!!c && deps.commentFirst(c.listId)).map((f) => (f === "source" ? "sources" : f === "author" ? "authors" : f));
+    const order = ["handout", "question", ...rest] as const;
     return { nodes: order.map((k) => R[k].node), hndt: R.hndt, readers: R };
   }
 
@@ -1038,7 +1139,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const reqId = openCardId;
     const screen = ui.previewScreen.checked;
     const imgMap = new Map<string, string>();
-    body.replaceChildren(deps.preview.renderPreviewCard(card, number, imgMap, screen));
+    body.replaceChildren(deps.preview.renderPreviewCard(card, number, imgMap, screen, { commentFirst: deps.commentFirst(card.listId) }));
     await deps.preview.resolveImages([card], deps.preview.imageRefs([card]), (name, url) => {
       imgMap.set(name, url);
       if (cardView === "preview" && openCardId === reqId) deps.preview.fillPreviewImages(body, imgMap);
