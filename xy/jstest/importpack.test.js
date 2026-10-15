@@ -28,7 +28,7 @@ test("a .4s imports straight into one new list, one card per block, kinds by the
   parsed = { name: "Пакет", source: "### Тур\n\n? Раз?\n! А\n\n# просто мета\n\n? Два?\n! Б\n", images: [] };
   panel.open();
   assert.equal(p.node("importPickOverlay").hidden, false);
-  p.node("importFile").files = [{ name: "pack.4s" }];
+  p.node("importFile").files = [new File([], "pack.4s")];
   p.node("importSplitTours").checked = false;
   p.node("importPickForm").fire("submit");
   await settle();
@@ -46,7 +46,7 @@ test("split by tours makes one list per «## …» section and links them into a
   posts.length = 0;
   parsed = { name: "Пакет", source: "## Тур 1\n\n? Раз?\n! А\n\n## Тур 2\n\n? Два?\n! Б\n", images: [] };
   panel.open();
-  p.node("importFile").files = [{ name: "pack.4s" }];
+  p.node("importFile").files = [new File([], "pack.4s")];
   p.node("importSplitTours").checked = true;
   p.node("importPickForm").fire("submit");
   await settle();
@@ -87,7 +87,7 @@ test("СИ import folds each #T block and its questions into one theme card", as
     images: [],
   };
   panel.open();
-  p.node("importFile").files = [{ name: "ek.docx" }];
+  p.node("importFile").files = [new File([], "ek.docx")];
   p.node("importGame").value = "si";
   p.node("importSplitTours").checked = false;
   p.node("importPickForm").fire("submit");

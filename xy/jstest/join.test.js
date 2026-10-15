@@ -2,7 +2,12 @@
 // different, and a live one offers the right verb.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { installDOM } from "./dom.js";
 
+// The module runs main() on import; a logged-out answer sends it to /login and ends it there.
+installDOM(["joinBody", "joinMessage"]);
+location.replace = () => {};
+globalThis.fetch = async () => ({ ok: false, status: 401 });
 const { joinView, codeFromPath } = await import("../web/assets/static/dist/join.js");
 
 const peek = (over) => ({ board_id: 7, board_name: "Синхрон", state: "active", requires_approval: false, ...over });

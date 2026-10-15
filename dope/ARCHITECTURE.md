@@ -79,7 +79,7 @@ possible to break the package up without creating import cycles.
   and broadcasts the result. What each edit does is `domain/matchedit`'s.
 - `telegrambridge` — the login conversation's answers, called by the in-process bot.
 - `assets` — the `//go:embed static` package; the FS keeps the `static/` prefix.
-  Frontend source lives under `web/ts/` (built into `static/dist/`); deno tests under `web/jstest/`.
+  Frontend source lives under `web/ts/` (built into `static/dist/`); bun tests under `web/jstest/`.
 
 ### `domain/` — game + festival domain logic
 

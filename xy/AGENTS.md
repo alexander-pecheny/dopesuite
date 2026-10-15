@@ -53,7 +53,7 @@ in the dopesuite monorepo. The rules for the monorepo itself are in the root
   and a `'wasm-unsafe-eval'` entry in the CSP. WebCrypto itself has **no
   scrypt** — only `PBKDF2` and `HKDF` — so the key derivation cannot be
   native.
-- **Tests**: Go (`go test`) + frontend (`deno test --parallel jstest/`).
+- **Tests**: Go (`go test`) + frontend (`bun test --parallel ./jstest/`).
 - **Build/run**: `justfile`.
 - **UI markup**: never write HTML, or a CSS class, by hand. **DopeUIKit**
   (`pecheny.me/dopeuikit`, used through `replace => ../dopeuikit`) has two
@@ -721,7 +721,7 @@ web/assets/            //go:embed static + ui (package assets)
                        overrides); the shared design system is DopeUIKit's core.css,
                        served concatenated ahead of it (see Stack → CSS)
     vendor/            self-hosted @noble/hashes (scrypt + deps), WebCrypto shim
-jstest/                deno test: crypto round-trips, rank ordering, offline sync engine
+jstest/                bun test: crypto round-trips, rank ordering, offline sync engine
 ```
 
 ## Offline / PWA
@@ -773,7 +773,7 @@ just cli            # xy-cli → ~/.local/bin (the board from the shell; .claude
 just invite 7       # mint a registration invite
 # bootstrap a password account (registration is otherwise telegram-only):
 printf '<password>' | XY_DB=… xy-server adduser <username>   # password via stdin
-just test           # go test + deno frontend tests
+just test           # go test + bun frontend tests
 # XY_TYPST_TEST_BIN=/path/to/typst  → also runs the typst-CLI parity tests (the
 #   oracle the in-process wasm typst is checked against). typst is NOT needed to
 #   run xy — only to run those tests.
@@ -808,7 +808,7 @@ without a token does not poll and does not offer telegram login.
 ## Testing
 Go integration tests (`internal/server/*_test.go`) cover the full
 register→board→card→label→timeline→attachment flow + ACL rejection;
-deno tests (`jstest/`) cover crypto round-trips/tamper/rewrap, rank ordering,
+bun tests (`jstest/`) cover crypto round-trips/tamper/rewrap, rank ordering,
 and the offline sync engine (temp-id remapping, snapshot apply, and a full
 offline→online resync against an in-memory IndexedDB).
 

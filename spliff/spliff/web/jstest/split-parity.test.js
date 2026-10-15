@@ -1,4 +1,5 @@
-import {assertEquals} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {test} from "node:test";
+import assert from "node:assert/strict";
 import {evenShares} from "./dist/txform.js";
 import cases from "../../domain/split/testdata/even_cases.json" with {type: "json"};
 
@@ -7,13 +8,13 @@ import cases from "../../domain/split/testdata/even_cases.json" with {type: "jso
 // ever disagree, two phones showing one bill show different numbers.
 
 for (const c of cases.even) {
-  Deno.test(`even split parity: ${c.name}`, () => {
+  test(`even split parity: ${c.name}`, () => {
     const state = {
       totalMinor: c.total,
       members: c.joined,
       payments: c.payments.map(([member, minor]) => ({member, minor})),
       shares: c.split.map((member) => ({member, minor: null})),
     };
-    assertEquals(evenShares(state), c.want);
+    assert.deepEqual(evenShares(state), c.want);
   });
 }

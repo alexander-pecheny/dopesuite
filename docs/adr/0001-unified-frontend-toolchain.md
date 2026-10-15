@@ -56,7 +56,7 @@ dev-web-only`. Node is now gone completely:
   checking, so `just typecheck` (all tsconfig projects in parallel, exec'ing the
   native tsc binary directly) runs from `just test`/`pre-commit`, never from
   `build-web`.
-- **deno replaces node for the JS-adjacent rest**: `deno install` fetches the
+- ~~**deno replaces node for the JS-adjacent rest**: `deno install` fetches the
   tsc binary (the one npm package left), and `deno test --parallel` runs the
   frontend suites — measured fastest (4.0 s vs node 4.3 s vs bun 6.7 s on the
-  full 235-test run).
+  full 235-test run).~~ Superseded by ADR-0007: bun does both jobs now.

@@ -151,8 +151,8 @@ messages, code comments and test names, in Russian and in English.
 
 - **Go** 1.26 or newer, for all five modules.
 - **just**, the task runner. There is a root justfile and one per app.
-- **deno** 2 or newer. It downloads the native tsc binary (`deno install`, see
-  the root `package.json`) and runs the frontend tests (`deno test --parallel`).
+- **bun** 1.4 or newer. It downloads the native tsc binary (`bun install`, see
+  the root `package.json`) and runs the frontend tests (`bun test --parallel`).
   Bundling itself is written in Go (`just build-web [target...]`, in
   `scripts/webbuild/`, using esbuild as a library — see `docs/adr/0001`), so
   neither building nor running the server needs a JS runtime.

@@ -1,11 +1,11 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-net
+#!/usr/bin/env bun
 // Render the xy icon, or serve the live tuner. Geometry lives in icon.js,
 // shared with lab.html.
 //
-//   deno task icon                        # writes design/icon/icon.svg + icon.png
-//   deno task icon --bgTop '#c08bff'      # any knob from RANGES/COLORS, by name
-//   deno task icon --install              # also writes web/assets/static/icon-*.png
-//   deno task lab                         # serve lab.html (ES modules need http://)
+//   bun run icon                          # writes design/icon/icon.svg + icon.png
+//   bun run icon --bgTop '#c08bff'        # any knob from RANGES/COLORS, by name
+//   bun run icon --install                # also writes web/assets/static/icon-*.png
+//   bun run lab                           # serve lab.html (ES modules need http://)
 //
 // Needs `rsvg-convert` (brew install librsvg) and `magick` (brew install
 // imagemagick) on PATH.
@@ -31,59 +31,56 @@ function parseArgs(argv) {
     const key = argv[i].replace(/^--/, "");
     if (!argv[i].startsWith("--") || !known.has(key)) {
       console.error(`unknown flag: ${argv[i]}\nknown: ${[...known].join(", ")}`);
-      Deno.exit(2);
+      process.exit(2);
     }
     if (key === "transparent" || key === "install") { p[key] = true; continue; }
     const value = argv[++i];
     p[key] = numeric.has(key) ? Number(value) : value;
     if (numeric.has(key) && Number.isNaN(p[key])) {
       console.error(`--${key} wants a number, got ${value}`);
-      Deno.exit(2);
+      process.exit(2);
     }
   }
   return p;
 }
 
 async function run(cmd, args) {
-  const { success, stderr } = await new Deno.Command(cmd, { args }).output();
+  const { success, stderr } = Bun.spawnSync([cmd, ...args]);
   if (!success) {
-    console.error(`${cmd} failed:\n${new TextDecoder().decode(stderr)}`);
-    Deno.exit(1);
+    console.error(`${cmd} failed:\n${stderr}`);
+    process.exit(1);
   }
 }
 
 /** Rasterise `params` at `px`; `opaque` flattens the alpha (iOS rejects it). */
 async function png(params, px, out, { opaque = false } = {}) {
   const svg = `${out}.svg`;
-  await Deno.writeTextFile(svg, buildSVG(params));
+  await Bun.write(svg, buildSVG(params));
   await run("rsvg-convert", ["-w", `${px}`, "-h", `${px}`, svg, "-o", out]);
   if (opaque) await run("magick", [out, "-background", params.bgBot, "-alpha", "remove", "-alpha", "off", out]);
-  await Deno.remove(svg);
+  await Bun.file(svg).delete();
 }
 
-async function serveLab() {
+function serveLab() {
   const port = LAB_PORT;
-  const types = { ".html": "text/html", ".js": "text/javascript", ".svg": "image/svg+xml" };
-  Deno.serve({ port }, async (req) => {
-    let path = new URL(req.url).pathname;
-    if (path === "/") path = "/lab.html";
-    try {
-      const body = await Deno.readFile(HERE + path.slice(1));
-      const ext = path.slice(path.lastIndexOf("."));
-      return new Response(body, { headers: { "content-type": types[ext] ?? "application/octet-stream" } });
-    } catch {
-      return new Response("not found", { status: HTTP_NOT_FOUND });
-    }
+  Bun.serve({
+    port,
+    async fetch(req) {
+      let path = new URL(req.url).pathname;
+      if (path === "/") path = "/lab.html";
+      const file = Bun.file(HERE + path.slice(1));
+      return (await file.exists()) ? new Response(file) : new Response("not found", { status: HTTP_NOT_FOUND });
+    },
   });
   console.log(`icon lab: http://localhost:${port}/lab.html`);
-  await new Promise(() => {});
 }
 
-if (Deno.args[0] === "--lab") {
-  await serveLab();
+const argv = Bun.argv.slice(2);
+if (argv[0] === "--lab") {
+  serveLab();
 } else {
-  const p = parseArgs(Deno.args);
-  await Deno.writeTextFile(`${HERE}icon.svg`, buildSVG(p));
+  const p = parseArgs(argv);
+  await Bun.write(`${HERE}icon.svg`, buildSVG(p));
   await png(p, SIZE, `${HERE}icon.png`);
   console.log([...RANGES, ...COLORS].map(([k]) => `${k}=${p[k]}`).join(" "));
   console.log("wrote design/icon/icon.svg, design/icon/icon.png");
@@ -99,11 +96,11 @@ if (Deno.args[0] === "--lab") {
 
     // Favicon: the SVG is what modern browsers use; the .ico (16/32/48) is the
     // fallback every browser asks for at /favicon.ico whether it's linked or not.
-    await Deno.writeTextFile(`${STATIC}favicon.svg`, buildSVG(p));
+    await Bun.write(`${STATIC}favicon.svg`, buildSVG(p));
     const tmp = `${STATIC}favicon.tmp.png`;
     await png(p, FAVICON_SOURCE_PX, tmp);
     await run("magick", [tmp, "-define", "icon:auto-resize=48,32,16", `${STATIC}favicon.ico`]);
-    await Deno.remove(tmp);
+    await Bun.file(tmp).delete();
     console.log("installed icon-192, icon-512, apple-touch-icon, icon-maskable, favicon.svg, favicon.ico into web/assets/static/");
   }
 }

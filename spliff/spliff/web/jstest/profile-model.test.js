@@ -1,40 +1,41 @@
-import {assertEquals} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {test} from "node:test";
+import assert from "node:assert/strict";
 import {handleOf, passwordProblem, pollLink, tgLinkView, whoami} from "./dist/profile-model.js";
 
 // The account page names a person by the first of the three things it has, and
 // an account that has none of them is still somebody: the id is a name too.
-Deno.test("whoami prefers the username, then the telegram, then the id", () => {
-  assertEquals(whoami({user_id: 7, username: "pecheny", telegram: "pecheny_tg"}), "pecheny");
-  assertEquals(whoami({user_id: 7, username: null, telegram: "pecheny_tg"}), "pecheny_tg");
-  assertEquals(whoami({user_id: 7, username: null, telegram: null}), "#7");
-  assertEquals(whoami({user_id: 7}), "#7");
+test("whoami prefers the username, then the telegram, then the id", () => {
+  assert.deepEqual(whoami({user_id: 7, username: "pecheny", telegram: "pecheny_tg"}), "pecheny");
+  assert.deepEqual(whoami({user_id: 7, username: null, telegram: "pecheny_tg"}), "pecheny_tg");
+  assert.deepEqual(whoami({user_id: 7, username: null, telegram: null}), "#7");
+  assert.deepEqual(whoami({user_id: 7}), "#7");
 });
 
-Deno.test("handleOf leaves exactly one @ for the page to put back", () => {
-  assertEquals(handleOf("pecheny"), "pecheny");
-  assertEquals(handleOf("@pecheny"), "pecheny");
-  assertEquals(handleOf(null), "");
-  assertEquals(handleOf(undefined), "");
+test("handleOf leaves exactly one @ for the page to put back", () => {
+  assert.deepEqual(handleOf("pecheny"), "pecheny");
+  assert.deepEqual(handleOf("@pecheny"), "pecheny");
+  assert.deepEqual(handleOf(null), "");
+  assert.deepEqual(handleOf(undefined), "");
 });
 
-Deno.test("tgLinkView builds the deep link only when the bot has a name", () => {
+test("tgLinkView builds the deep link only when the bot has a name", () => {
   const view = tgLinkView({code: "ABC123", bot_username: "spliff_bot"});
-  assertEquals(view.code, "ABC123");
-  assertEquals(view.botName, "@spliff_bot");
-  assertEquals(view.deepLinkLabel, "t.me/spliff_bot");
-  assertEquals(view.deepLinkHref, "https://t.me/spliff_bot?start=ABC123");
+  assert.deepEqual(view.code, "ABC123");
+  assert.deepEqual(view.botName, "@spliff_bot");
+  assert.deepEqual(view.deepLinkLabel, "t.me/spliff_bot");
+  assert.deepEqual(view.deepLinkHref, "https://t.me/spliff_bot?start=ABC123");
 
   // A server that knows no handle would otherwise advertise a dead link.
   const nameless = tgLinkView({code: "ABC123"});
-  assertEquals(nameless.deepLinkHref, null);
-  assertEquals(nameless.botName, "");
-  assertEquals(nameless.code, "ABC123");
+  assert.deepEqual(nameless.deepLinkHref, null);
+  assert.deepEqual(nameless.botName, "");
+  assert.deepEqual(nameless.code, "ABC123");
 });
 
-Deno.test("passwordProblem only judges what the page can see", () => {
-  assertEquals(passwordProblem("correct-horse", "correct-horse"), "");
-  assertEquals(passwordProblem("", ""), "");
-  assertEquals(passwordProblem("correct-horse", "correct horse").length > 0, true);
+test("passwordProblem only judges what the page can see", () => {
+  assert.deepEqual(passwordProblem("correct-horse", "correct-horse"), "");
+  assert.deepEqual(passwordProblem("", ""), "");
+  assert.deepEqual(passwordProblem("correct-horse", "correct horse").length > 0, true);
 });
 
 // The poll: sleep is instant and the answers are scripted, so a wait that takes
@@ -53,35 +54,35 @@ function poller(answers, {current = () => true} = {}) {
   return {asked, run: (code) => pollLink(code, current, deps)};
 }
 
-Deno.test("pollLink waits through pending and answers with the handle", async () => {
+test("pollLink waits through pending and answers with the handle", async () => {
   const p = poller([{status: "pending"}, {status: "pending"}, {status: "linked", telegram: "@pecheny"}]);
-  assertEquals(await p.run("ABC123"), {kind: "linked", telegram: "pecheny"});
-  assertEquals(p.asked, ["ABC123", "ABC123", "ABC123"]);
+  assert.deepEqual(await p.run("ABC123"), {kind: "linked", telegram: "pecheny"});
+  assert.deepEqual(p.asked, ["ABC123", "ABC123", "ABC123"]);
 });
 
-Deno.test("pollLink stops on a refusal and says what the server said", async () => {
+test("pollLink stops on a refusal and says what the server said", async () => {
   const p = poller([{status: "pending"}, {refusal: "That Telegram account is already linked to another user."}]);
-  assertEquals(await p.run("ABC123"), {
+  assert.deepEqual(await p.run("ABC123"), {
     kind: "message",
     text: "That Telegram account is already linked to another user.",
   });
 });
 
-Deno.test("pollLink keeps waiting through a request that never arrived", async () => {
+test("pollLink keeps waiting through a request that never arrived", async () => {
   const p = poller([new Error("network"), {status: "linked", telegram: "pecheny"}]);
-  assertEquals(await p.run("ABC123"), {kind: "linked", telegram: "pecheny"});
+  assert.deepEqual(await p.run("ABC123"), {kind: "linked", telegram: "pecheny"});
 });
 
-Deno.test("pollLink ends on a lapsed or forgotten code", async () => {
+test("pollLink ends on a lapsed or forgotten code", async () => {
   for (const status of ["expired", "not_found"]) {
     const outcome = await poller([{status}]).run("ABC123");
-    assertEquals(outcome.kind, "message");
-    assertEquals(outcome.text.length > 0, true);
+    assert.deepEqual(outcome.kind, "message");
+    assert.deepEqual(outcome.text.length > 0, true);
   }
 });
 
-Deno.test("a code restarted mid-poll leaves the old loop with nothing to say", async () => {
+test("a code restarted mid-poll leaves the old loop with nothing to say", async () => {
   const p = poller([{status: "pending"}], {current: () => false});
-  assertEquals(await p.run("ABC123"), {kind: "stale"});
-  assertEquals(p.asked, []);
+  assert.deepEqual(await p.run("ABC123"), {kind: "stale"});
+  assert.deepEqual(p.asked, []);
 });

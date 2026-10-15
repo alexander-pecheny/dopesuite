@@ -3,7 +3,7 @@ import S from "./i18nstrings.js";
 // The client mirror of a Block's per-match scoring rule (ADR-0008), for the
 // group-stage tab: the source sheets show a player's points split by block
 // round, and the split exists nowhere server-side — only the matches do. Kept
-// pure so deno suite pins it.
+// pure so the bun suite pins it.
 
 // evalScoringRule evaluates an arithmetic expression — numbers, named
 // variables, + - * / and parens — over a match's outcome. Anything it cannot

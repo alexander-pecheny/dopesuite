@@ -157,7 +157,7 @@ const cli = () => {
   const flags = [...RANGES, ...COLORS]
     .filter(([id]) => String(p[id]) !== String(DEFAULTS[id]))
     .map(([id]) => `--${id} '${p[id]}'`);
-  return `deno task icon ${flags.join(" ")}`.trim();
+  return `bun run icon ${flags.join(" ")}`.trim();
 };
 
 const flash = (btn, text) => {

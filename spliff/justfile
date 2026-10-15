@@ -25,14 +25,14 @@ vet: build-web
 tidy-check:
     go mod tidy -diff
 
-# Go tests + frontend (deno) tests; typecheck gates here, not in build-web.
+# Go tests + frontend (bun) tests; typecheck gates here, not in build-web.
 test: build-web
     cd .. && just typecheck
     go test ./...
-    deno test --parallel spliff/web/jstest/
+    bun test --parallel ./spliff/web/jstest/
 
 test-js: build-web
-    deno test --parallel spliff/web/jstest/
+    bun test --parallel ./spliff/web/jstest/
 
 # Spliff has no generated builder of its own (its pages are .dopeui and the
 # /admin pages use the kit's), so the only generated files are the Catalog's —

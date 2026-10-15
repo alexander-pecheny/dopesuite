@@ -33,7 +33,7 @@ install (in Russian, for the people who asked for it) is
 
 ```sh
 just dev            # server (assets hot-read from disk; polls telegram if XY_BOT_TOKEN is set)
-just test           # go test + deno frontend tests
+just test           # go test + bun frontend tests
 just check          # this module: fmt + vet + tidy-check + test
 just pre-commit     # the whole repo, incl. class-check — run before a commit
 just invite 7       # mint a one-shot registration invite

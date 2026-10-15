@@ -2,7 +2,7 @@
 // (or `just test-js`). Uses node's built-in test runner + global WebCrypto.
 //
 // These run on the in-thread path: there is no origin to load a worker script
-// from under deno, so crypto.ts derives the KEK itself — which is also the
+// from under bun, so crypto.ts derives the KEK itself — which is also the
 // fallback every browser keeps when a worker will not start. The worker is the
 // same scrypt behind a postMessage; its client's contract is covered in
 // cryptoworkerclient.test.js.
