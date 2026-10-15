@@ -12,17 +12,18 @@ import (
 // optionVariants maps a testdata suffix to the switches it was generated with
 // (scripts/gen_docx_oracles.sh writes them from chgksuite itself).
 var optionVariants = map[string]Options{
-	"plain":       {},
-	"whiten":      {Spoilers: SpoilersWhiten},
-	"pagebreak":   {Spoilers: SpoilersPagebreak},
-	"dots":        {Spoilers: SpoilersDots},
-	"screen":      {ScreenMode: ScreenReplaceAll},
-	"versions":    {ScreenMode: ScreenAddVersions},
-	"columns":     {ScreenMode: ScreenAddVersionsColumns},
-	"noanswers":   {NoAnswers: true},
-	"noparagraph": {NoParagraph: true},
-	"onlynumber":  {OnlyQuestionNumber: true},
-	"samesize":    {SameSourceAndAuthorSize: true},
+	"plain":        {},
+	"whiten":       {Spoilers: SpoilersWhiten},
+	"pagebreak":    {Spoilers: SpoilersPagebreak},
+	"dots":         {Spoilers: SpoilersDots},
+	"screen":       {ScreenMode: ScreenReplaceAll},
+	"versions":     {ScreenMode: ScreenAddVersions},
+	"columns":      {ScreenMode: ScreenAddVersionsColumns},
+	"noanswers":    {NoAnswers: true},
+	"noparagraph":  {NoParagraph: true},
+	"onlynumber":   {OnlyQuestionNumber: true},
+	"samesize":     {SameSourceAndAuthorSize: true},
+	"commentfirst": {CommentFirst: true},
 }
 
 // TestOptionParity compares the generated body XML against chgksuite's own for

@@ -646,3 +646,12 @@ test("a раздатка carries no hidden comment to the print", () => {
   const desc = "? [Раздаточный материал: текст (hidden-comment вырезать)] Вопрос?\n! Ответ";
   assert.deepEqual(xyListExport.handoutForCard(desc), { kind: "text", text: "текст" });
 });
+
+test("a handout line that starts with a marker survives the fields round trip (issue #103)", () => {
+  const f = xyChgk.splitFields("? Текст");
+  f.handout = { kind: "text", text: "> раз\n< два\n\\> три" };
+  const desc = xyChgk.composeFields(f);
+  assert.ok(desc.includes("\n\\> раз") && desc.includes("\n\\\\> три"), desc);
+  assert.deepEqual(parseBlocks(desc).map((b) => b.type), ["question"]);
+  assert.equal(xyChgk.splitFields(desc).handout.text, "> раз\n< два\n\\> три");
+});

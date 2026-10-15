@@ -29,6 +29,8 @@ type Options struct {
 	Font string
 	// Template is --docx_template: a .docx to build on. nil is the embedded one.
 	Template []byte
+	// CommentFirst is --comment_first: the comment comes before the answer.
+	CommentFirst bool
 	// Game is --game. "si" and "troika" switch on si_mode: themes, battles and
 	// rounds become headings, a stand-alone author or comment is a theme-level
 	// field, and a question is labelled by its bare point value under its theme.
@@ -65,10 +67,10 @@ const (
 	ScreenAddVersionsColumns ScreenMode = "add_versions_columns"
 )
 
-// whitenField is chgksuite's WHITEN: which fields a spoiler hides. The answer
-// is whitened by its own call site; the handout and the author never are.
+// whitenField is chgksuite's WHITEN: which fields a spoiler hides. The handout
+// and the author never are.
 var whitenField = map[string]bool{
-	"zachet": true, "nezachet": true, "comment": true, "source": true,
+	"answer": true, "zachet": true, "nezachet": true, "comment": true, "source": true,
 }
 
 // textOpts are the per-call switches format_docx_element takes: whether to glue

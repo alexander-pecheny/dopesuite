@@ -54,6 +54,9 @@ type Options struct {
 	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
 	// language's.
 	LabelsFile string
+	// CommentFirst is --comment_first: on the answer slide the comment comes
+	// before the answer.
+	CommentFirst bool
 	// OptimizeSize is --optimize_size: re-encode the pictures once the deck is
 	// built. On by default in chgksuite, and the difference between a 30 MB
 	// presentation and a few megabytes.

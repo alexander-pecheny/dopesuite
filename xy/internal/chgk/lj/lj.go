@@ -46,6 +46,8 @@ type Options struct {
 	Language, LabelsFile string
 	// NoBreak is --replace_no_break_spaces / --replace_no_break_hyphens.
 	NoBreak inline.NoBreak
+	// CommentFirst is --comment_first: the comment comes before the answer.
+	CommentFirst bool
 }
 
 // Post is one thing to publish: the subject line and the HTML body. The first
@@ -252,7 +254,7 @@ func (e *exporter) question(q *fsource.Question) (string, error) {
 	if !q.Has("number") {
 		e.counter++
 	}
-	for _, field := range []string{"answer", "zachet", "nezachet", "comment", "source", "author"} {
+	for _, field := range fsource.AnswerFields(e.opts.CommentFirst) {
 		if !q.Has(field) {
 			continue
 		}

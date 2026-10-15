@@ -21,20 +21,6 @@ func TestParity(t *testing.T) {
 	for _, src := range sources {
 		name := strings.TrimSuffix(filepath.Base(src), ".4s")
 		t.Run(name, func(t *testing.T) {
-			raw, err := os.ReadFile(src)
-			if err != nil {
-				t.Fatal(err)
-			}
-			want := readOracle(t, "testdata/"+name+"__pptx")
-			images := map[string][]byte{}
-			pics, _ := filepath.Glob("testdata/*.png")
-			for _, p := range pics {
-				data, err := os.ReadFile(p)
-				if err != nil {
-					t.Fatal(err)
-				}
-				images[filepath.Base(p)] = data
-			}
 			opts := Options{
 				Language: "ru",
 				FontDirs: []string{"/usr/share/fonts/truetype/msttcorefonts"},
@@ -55,33 +41,61 @@ func TestParity(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			out, err := Export(fsource.Parse(string(raw), "chgk"), images, opts)
-			if err != nil {
-				t.Fatal(err)
-			}
-			got := partsOf(t, out)
-			for _, part := range sortedKeys(want) {
-				a, b := want[part], got[part]
-				if a == b {
-					continue
-				}
-				// An inline picture is placed from measured text, so its offset
-				// carries the measurement's residual — see measure.go. Everything
-				// else must match to the byte; this must match to the pixel.
-				if drift, only := pictureOffsetDrift(a, b); only {
-					if drift > emuPerInch/pxPerInch {
-						t.Errorf("%s: an inline picture moved %d EMU, over a pixel", part, drift)
-					}
-					continue
-				}
-				t.Errorf("%s differs:\nwant %s\n got %s", part,
-					firstDiff(a, b), firstDiff(b, a))
-				return
-			}
-			if len(got) != len(want) {
-				t.Errorf("%d parts, want %d", len(got), len(want))
-			}
+			checkParity(t, src, "testdata/"+name+"__pptx", opts)
 		})
+	}
+}
+
+func TestParityCommentFirst(t *testing.T) {
+	opts := Options{
+		Language:     "ru",
+		FontDirs:     []string{"/usr/share/fonts/truetype/msttcorefonts"},
+		CommentFirst: true,
+	}
+	checkParity(t, "testdata/full.4s", "testdata/full__pptx_comment_first", opts)
+}
+
+func checkParity(t *testing.T, src, oracle string, opts Options) {
+	t.Helper()
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := readOracle(t, oracle)
+	images := map[string][]byte{}
+	pics, _ := filepath.Glob("testdata/*.png")
+	for _, p := range pics {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		images[filepath.Base(p)] = data
+	}
+	out, err := Export(fsource.Parse(string(raw), "chgk"), images, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := partsOf(t, out)
+	for _, part := range sortedKeys(want) {
+		a, b := want[part], got[part]
+		if a == b {
+			continue
+		}
+		// An inline picture is placed from measured text, so its offset
+		// carries the measurement's residual — see measure.go. Everything
+		// else must match to the byte; this must match to the pixel.
+		if drift, only := pictureOffsetDrift(a, b); only {
+			if drift > emuPerInch/pxPerInch {
+				t.Errorf("%s: an inline picture moved %d EMU, over a pixel", part, drift)
+			}
+			continue
+		}
+		t.Errorf("%s differs:\nwant %s\n got %s", part,
+			firstDiff(a, b), firstDiff(b, a))
+		return
+	}
+	if len(got) != len(want) {
+		t.Errorf("%d parts, want %d", len(got), len(want))
 	}
 }
 

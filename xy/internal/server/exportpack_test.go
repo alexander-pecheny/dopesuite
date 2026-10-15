@@ -179,3 +179,83 @@ func TestExportPackRejectsNoFormats(t *testing.T) {
 	defer resp.Body.Close()
 	mustStatus(t, resp, 400)
 }
+
+// postExportForm posts a multipart form to an export endpoint and returns the body.
+func postExportForm(t *testing.T, ts *httptest.Server, c *apiClient, path string, fields map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		_ = mw.WriteField(k, v)
+	}
+	mw.Close()
+	req, _ := http.NewRequest("POST", ts.URL+path, &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	for _, ck := range c.jar {
+		req.AddCookie(ck)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	mustStatus(t, resp, 200)
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// zipText is every part of a zip whose name starts with prefix, concatenated.
+func zipText(t *testing.T, b []byte, prefix string) string {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		t.Fatalf("not a zip: %v", err)
+	}
+	var out strings.Builder
+	for _, f := range zr.File {
+		if !strings.HasPrefix(f.Name, prefix) {
+			continue
+		}
+		rc, _ := f.Open()
+		d, _ := io.ReadAll(rc)
+		rc.Close()
+		out.Write(d)
+	}
+	return out.String()
+}
+
+// TestExportCommentFirstReachesTheRenderers sends comment_first=1 to the docx and
+// the pack endpoints and checks the comment comes out before the answer.
+func TestExportCommentFirstReachesTheRenderers(t *testing.T) {
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 770220, "commentfirst")
+	const source = "? Вопрос\n! ОТВЕТИК\n/ КОММЕНТАРИЙ\n@ Автор\n"
+	commentFirst := func(text string) bool {
+		comment, answer := strings.Index(text, "КОММЕНТАРИЙ"), strings.Index(text, "ОТВЕТИК")
+		if comment < 0 || answer < 0 {
+			t.Fatalf("comment at %d, answer at %d", comment, answer)
+		}
+		return comment < answer
+	}
+	for _, on := range []bool{false, true} {
+		fields := map[string]string{"source": source, "filename": "x"}
+		if on {
+			fields["comment_first"] = formOn
+		}
+		docxBody := postExportForm(t, ts, c, "/api/export/docx", fields)
+		if got := commentFirst(zipText(t, docxBody, "word/document.xml")); got != on {
+			t.Errorf("/api/export/docx comment_first=%v: comment first is %v", on, got)
+		}
+		fields["formats"] = "docx_screen,pptx"
+		pack := postExportForm(t, ts, c, "/api/export/pack", fields)
+		for name, prefix := range map[string]string{"x_screen.docx": "word/document.xml", "x.pptx": "ppt/slides/"} {
+			inner := zipText(t, pack, name)
+			if got := commentFirst(zipText(t, []byte(inner), prefix)); got != on {
+				t.Errorf("pack %s comment_first=%v: comment first is %v", name, on, got)
+			}
+		}
+	}
+}

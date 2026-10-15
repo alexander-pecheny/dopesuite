@@ -89,6 +89,8 @@ type Options struct {
 	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
 	// language's.
 	LabelsFile string
+	// CommentFirst is --comment_first: the comment comes before the answer.
+	CommentFirst bool
 	// Game is --game: "si"/"troika" lay the package out as SI, with themes,
 	// battles and rounds as headings. See docx.Options.Game.
 	Game string

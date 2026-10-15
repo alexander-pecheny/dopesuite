@@ -17,6 +17,10 @@ func composePublished(filetype string, args []string) error {
 	fs := newFlagSet("compose " + filetype)
 	clientID := fs.String("imgur_client_id", override("imgur_client_id", ""), "upload pictures as this imgur client instead of chgksuite's")
 	removeAccents := fs.Bool("remove_accents", false, "base only: a stressed vowel becomes a capital one")
+	commentFirst := new(bool)
+	if filetype == "markdown" || filetype == "redditmd" {
+		commentFirst = commentFirstFlag(fs)
+	}
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one packet")
 	noBreak := noBreakFlags(fs)
@@ -40,7 +44,7 @@ func composePublished(filetype string, args []string) error {
 		ext := "md"
 		switch filetype {
 		case "markdown", "redditmd":
-			text, err := markdown.Export(doc, images, host, markdown.Options{Reddit: filetype == "redditmd"})
+			text, err := markdown.Export(doc, images, host, markdown.Options{Reddit: filetype == "redditmd", CommentFirst: *commentFirst})
 			if err != nil {
 				return err
 			}

@@ -48,6 +48,7 @@ func composeDocx(args []string) error {
 	noParagraph := fs.Bool("noparagraph", false, xystrings.Default.Chgkcli.Docx.NoParagraphFlag())
 	onlyNumber := fs.Bool("only_question_number", false, xystrings.Default.Chgkcli.Docx.OnlyQuestionNumberFlag())
 	smallerSource := fs.String("smaller_source_and_author", override("smaller_source_and_author", "on"), "set source and author 2pt below the body: on|off")
+	commentFirst := commentFirstFlag(fs)
 	randomize := fs.Bool("randomize", false, "shuffle the questions")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one packet")
@@ -79,6 +80,7 @@ func composeDocx(args []string) error {
 		NoParagraph:             *noParagraph,
 		OnlyQuestionNumber:      *onlyNumber,
 		SameSourceAndAuthorSize: *smallerSource == "off",
+		CommentFirst:            *commentFirst,
 		OptimizeSize:            *optimizeSize != "off",
 		Language:                lang,
 		LabelsFile:              labelsFile,
@@ -187,6 +189,12 @@ func languageFlag(fs *flagSet) func() (string, string, error) {
 
 // noBreakFlags declares --replace_no_break_spaces and --replace_no_break_hyphens,
 // which every compose subcommand takes, and reads them once it has parsed.
+// commentFirstFlag is --comment_first, which every export that writes a
+// question's fields in order takes.
+func commentFirstFlag(fs *flagSet) *bool {
+	return fs.Bool("comment_first", false, "put the comment before the answer")
+}
+
 func noBreakFlags(fs *flagSet) func() inline.NoBreak {
 	spaces := fs.String("replace_no_break_spaces", override("replace_no_break_spaces", "on"), "glue short words to what follows with a non-breaking space: on|off")
 	hyphens := fs.String("replace_no_break_hyphens", override("replace_no_break_hyphens", "on"), xystrings.Default.Chgkcli.Shared.ReplaceNoBreakHyphensFlag())

@@ -25,7 +25,11 @@ func TestParity(t *testing.T) {
 	for _, v := range []struct {
 		tag  string
 		opts Options
-	}{{"markdown", Options{}}, {"redditmd", Options{Reddit: true}}} {
+	}{
+		{"markdown", Options{}},
+		{"redditmd", Options{Reddit: true}},
+		{"redditmd_commentfirst", Options{Reddit: true, CommentFirst: true}},
+	} {
 		sources, _ := filepath.Glob("testdata/*.4s")
 		for _, src := range sources {
 			name := strings.TrimSuffix(filepath.Base(src), ".4s")

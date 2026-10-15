@@ -79,7 +79,12 @@ type exportRequest struct {
 	device string // "" (desktop) or "mobile" — PDF export only
 	game   string // "" (ChGK) or "si" — taken from the exported List's type
 	images map[string][]byte
+	// commentFirst puts every question's comment before its answer.
+	commentFirst bool
 }
+
+// formOn is how the export modal sends a ticked option.
+const formOn = "1"
 
 // readExportRequest parses and validates the multipart body shared by the docx and
 // PDF exports. ext is stripped off the client-supplied filename, since the handler
@@ -113,6 +118,8 @@ func (s *server) readExportForm(w http.ResponseWriter, r *http.Request, ext stri
 		device: form.Value("device"),
 		game:   exportGame(form.Value("game")),
 		images: map[string][]byte{},
+
+		commentFirst: form.Value("comment_first") == formOn,
 	}
 	for _, f := range form.Files("img") {
 		if base := safeImageName(f.Filename); base != "" {
@@ -185,7 +192,7 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	b, err := docx.Export(fsource.Parse(req.source, req.game), req.images, docx.Options{Game: req.game})
+	b, err := docx.Export(fsource.Parse(req.source, req.game), req.images, docx.Options{Game: req.game, CommentFirst: req.commentFirst})
 	if err != nil {
 		log.Printf("docx export failed: %v", err)
 		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
@@ -218,7 +225,7 @@ func (s *server) handleExportPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), exportPDFTimeout)
 	defer cancel()
-	b, err := typstdoc.Export(ctx, fsource.Parse(req.source, req.game), req.images, ts, typstdoc.Options{Device: device, Game: req.game})
+	b, err := typstdoc.Export(ctx, fsource.Parse(req.source, req.game), req.images, ts, typstdoc.Options{Device: device, Game: req.game, CommentFirst: req.commentFirst})
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "typst timed out")

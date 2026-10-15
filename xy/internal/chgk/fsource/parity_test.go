@@ -17,8 +17,9 @@ import (
 
 // testdata/parity.json is the corpus the TypeScript 4s reader is checked against
 // (jstest/fsource_parity.test.js): every line of every fixture split by
-// SplitMarker, the (img …) references of a few sources, and one .hndt document
-// the browser generates and this side parses. Go is the oracle for what it
+// SplitMarker, UnescapeLine on those with a backslash, the (img …) references
+// of a few sources, and one .hndt document the browser generates and this side
+// parses. Go is the oracle for what it
 // computes; -update rewrites those parts of the file.
 var update = flag.Bool("update", false, "rewrite testdata/parity.json from this side's output")
 
@@ -28,16 +29,24 @@ type parityLine struct {
 	Rest   string `json:"rest"`
 }
 
+// parityEscape is UnescapeLine on a line that has a backslash in it.
+type parityEscape struct {
+	Line    string `json:"line"`
+	Escaped bool   `json:"escaped"`
+	Text    string `json:"text"`
+}
+
 type parityImg struct {
 	Source string   `json:"source"`
 	Refs   []string `json:"refs"`
 }
 
 type parityCorpus struct {
-	Note       string       `json:"_"`
-	ExtraLines []string     `json:"extraLines"`
-	Lines      []parityLine `json:"lines"`
-	ImgRefs    []parityImg  `json:"imgRefs"`
+	Note       string         `json:"_"`
+	ExtraLines []string       `json:"extraLines"`
+	Lines      []parityLine   `json:"lines"`
+	Escapes    []parityEscape `json:"escapes"`
+	ImgRefs    []parityImg    `json:"imgRefs"`
 	Hndt       struct {
 		Cards   json.RawMessage  `json:"cards"`
 		Numbers json.RawMessage  `json:"numbers"`
@@ -72,6 +81,7 @@ func TestParity(t *testing.T) {
 	}
 	inputs = append(inputs, c.ExtraLines...)
 	var lines []parityLine
+	var escapes []parityEscape
 	seen := map[string]bool{}
 	for _, l := range inputs {
 		if seen[l] {
@@ -80,6 +90,10 @@ func TestParity(t *testing.T) {
 		seen[l] = true
 		p, r := fsource.SplitMarker(l)
 		lines = append(lines, parityLine{Line: l, Prefix: p, Rest: r})
+		if strings.Contains(l, `\`) {
+			text, escaped := fsource.UnescapeLine(l)
+			escapes = append(escapes, parityEscape{Line: l, Escaped: escaped, Text: text})
+		}
 	}
 
 	imgs := make([]parityImg, len(c.ImgRefs))
@@ -94,7 +108,7 @@ func TestParity(t *testing.T) {
 	_ = json.Unmarshal(blocksJSON, &blocks)
 
 	if *update {
-		c.Lines, c.ImgRefs, c.Hndt.Blocks = lines, imgs, blocks
+		c.Lines, c.Escapes, c.ImgRefs, c.Hndt.Blocks = lines, escapes, imgs, blocks
 		out, _ := json.MarshalIndent(c, "", "  ")
 		if err := os.WriteFile(corpusPath, append(out, '\n'), 0o644); err != nil {
 			t.Fatal(err)
@@ -103,6 +117,9 @@ func TestParity(t *testing.T) {
 	}
 	if !reflect.DeepEqual(c.Lines, lines) {
 		t.Errorf("parity.json lines are stale: run go test ./internal/chgk/fsource -run TestParity -update")
+	}
+	if !reflect.DeepEqual(c.Escapes, escapes) {
+		t.Errorf("parity.json escapes are stale (got %v): run -update", escapes)
 	}
 	if !reflect.DeepEqual(c.ImgRefs, imgs) {
 		t.Errorf("parity.json imgRefs are stale (got %v): run -update", imgs)

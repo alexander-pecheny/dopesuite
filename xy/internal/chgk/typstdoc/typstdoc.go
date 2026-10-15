@@ -242,7 +242,8 @@ func (e *exporter) generate(doc fsource.Doc) string {
 }
 
 // renderQuestion mirrors docx.renderQuestion: the question (label + handout +
-// text), the answer (with zachet/nezachet/comment glued on), and the shared
+// text), the answer (with zachet/nezachet/comment glued on, the comment first
+// with CommentFirst), and the shared
 // source/author paragraph — smaller type, spaced to start one body line below —
 // each a keep-together paragraph.
 func (e *exporter) renderQuestion(q *fsource.Question) string {
@@ -257,11 +258,9 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 	out.WriteString(e.renderQuestionText(q, p1))
 
 	p2 := &para{above: e.cfg.AnswerAbove, keepLines: true}
-	p2.addStyled(e.labelFor(q, "answer")+": ", "bold")
-	e.addValue(p2, q.Get("answer"), true)
-
+	p2Empty := true
 	var src *para
-	for _, field := range []string{"zachet", "nezachet", "comment", "source", "author"} {
+	for _, field := range fsource.AnswerFields(e.opts.CommentFirst) {
 		v := q.Get(field)
 		if v == nil {
 			continue
@@ -277,7 +276,10 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 			e.addValue(src, v, nbsp)
 			continue
 		}
-		p2.addBreak()
+		if !p2Empty {
+			p2.addBreak()
+		}
+		p2Empty = false
 		p2.addStyled(e.labelFor(q, field)+": ", "bold")
 		e.addValue(p2, v, nbsp)
 	}

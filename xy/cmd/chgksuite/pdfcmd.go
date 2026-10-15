@@ -18,6 +18,7 @@ func composePDF(args []string) error {
 	font := fs.String("font", override("font", override("font_face", "")), "font family; empty is the bundled Noto Sans")
 	language := languageFlag(fs)
 	rawTypst := fs.Bool("rawtypst", false, "write the typst source beside the PDF")
+	commentFirst := commentFirstFlag(fs)
 	typstBin := typstFlag(fs)
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
 	merge := fs.Bool("merge", false, "export the input files as one packet")
@@ -34,11 +35,12 @@ func composePDF(args []string) error {
 		return err
 	}
 	opts := typstdoc.Options{
-		Device:     typstdoc.Device(*device),
-		Font:       *font,
-		Language:   lang,
-		LabelsFile: labelsFile,
-		NoBreak:    noBreak(),
+		Device:       typstdoc.Device(*device),
+		Font:         *font,
+		Language:     lang,
+		LabelsFile:   labelsFile,
+		NoBreak:      noBreak(),
+		CommentFirst: *commentFirst,
 	}
 	if *configPath != "" {
 		raw, err := os.ReadFile(*configPath)

@@ -464,17 +464,18 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 		p.keepLines, p.spacingBefore = true, answerGapTw
 	}
 
-	whiten := e.opts.Spoilers == SpoilersWhiten
-	p.addRaw(e.labelFor(q, "answer")+": ", "bold")
-	// The answer keeps its brackets even on screen — chgksuite passes only the
-	// accent switch here.
-	e.addValue(p, q.Get("answer"), textOpts{nbsp: true, whiten: whiten, removeAccents: screen})
+	e.renderAnswers(q, p, into, screen)
+}
 
-	// Source and author share a paragraph of their own, set 2pt smaller and
-	// spaced to start one body line below the answer (whichever comes first
-	// opens it). In a cell they are runs like the rest, only smaller.
+// renderAnswers writes the answer and the fields that follow it, starting in p.
+// Source and author share a paragraph of their own, set 2pt smaller and spaced
+// to start one body line below the answer (whichever comes first opens it). In
+// a cell they are runs like the rest, only smaller.
+func (e *exporter) renderAnswers(q *fsource.Question, p, into *para, screen bool) {
+	whiten := e.opts.Spoilers == SpoilersWhiten
 	var src *para
-	for _, field := range []string{"zachet", "nezachet", "comment", "source", "author"} {
+	first := true
+	for _, field := range fsource.AnswerFields(e.opts.CommentFirst) {
 		v := q.Get(field)
 		if v == nil {
 			continue
@@ -483,43 +484,54 @@ func (e *exporter) renderQuestionInto(q *fsource.Question, into *para, screen bo
 			nbsp:          field != "source",
 			whiten:        whiten && whitenField[field],
 			removeAccents: screen,
-			// A zachet keeps its brackets: they are part of the answer, not a note.
-			removeBrackets: screen && field != "zachet",
+			// The answer and a zachet keep their brackets even on screen.
+			removeBrackets: screen && field != "answer" && field != "zachet",
 		}
 		if field == "source" || field == "author" {
-			small := !e.opts.SameSourceAndAuthorSize
-			if into != nil {
-				into.addRaw("\n", "")
-				if small {
-					into.sz = srcSz
-				}
-				into.addRaw(e.labelFor(q, field)+": ", "bold")
-				e.addValue(into, v, o)
-				continue
-			}
-			switch {
-			case field == "source" || (small && src == nil):
-				src = e.addPara()
-				src.keepLines = true
-				if small {
-					src.sz, src.spacingBefore = srcSz, srcGapTw
-				}
-			case src != nil:
-				src.addRaw("\n", "")
-			default:
-				// An author with no source and no shrinking to open a paragraph
-				// of its own trails the answer instead.
-				src = p
-				src.addRaw("\n", "")
-			}
-			src.addRaw(e.labelFor(q, field)+": ", "bold")
-			e.addValue(src, v, o)
+			src = e.addCredit(q, field, o, p, into, src)
 			continue
 		}
-		p.addRaw("\n", "")
+		if !first {
+			p.addRaw("\n", "")
+		}
+		first = false
 		p.addRaw(e.labelFor(q, field)+": ", "bold")
 		e.addValue(p, v, o)
 	}
+}
+
+// addCredit writes a source or an author and returns the paragraph credits go
+// into from now on.
+func (e *exporter) addCredit(q *fsource.Question, field string, o textOpts, p, into, src *para) *para {
+	v := q.Get(field)
+	small := !e.opts.SameSourceAndAuthorSize
+	if into != nil {
+		into.addRaw("\n", "")
+		if small {
+			into.sz = srcSz
+		}
+		into.addRaw(e.labelFor(q, field)+": ", "bold")
+		e.addValue(into, v, o)
+		return src
+	}
+	switch {
+	case field == "source" || (small && src == nil):
+		src = e.addPara()
+		src.keepLines = true
+		if small {
+			src.sz, src.spacingBefore = srcSz, srcGapTw
+		}
+	case src != nil:
+		src.addRaw("\n", "")
+	default:
+		// An author with no source and no shrinking to open a paragraph
+		// of its own trails the answer instead.
+		src = p
+		src.addRaw("\n", "")
+	}
+	src.addRaw(e.labelFor(q, field)+": ", "bold")
+	e.addValue(src, v, o)
+	return src
 }
 
 // renderQuestionText writes the question's text after its label paragraph p,

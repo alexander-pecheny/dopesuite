@@ -280,3 +280,16 @@ func TestGenerateTypHandoutFrame(t *testing.T) {
 		t.Errorf("the mid-sentence handout lost its bracket\n---\n%s", typ)
 	}
 }
+
+func TestGenerateTypCommentFirst(t *testing.T) {
+	order := func(opts typstdoc.Options) []int {
+		typ := typstdoc.GenerateTyp(parse(t, sample), nil, opts)
+		return []int{strings.Index(typ, "Комментарий:"), strings.Index(typ, "Ответ:"), strings.Index(typ, "Зачёт:")}
+	}
+	if o := order(typstdoc.Options{}); !(o[1] < o[2] && o[2] < o[0]) {
+		t.Errorf("default: comment at %d, answer at %d, zachet at %d", o[0], o[1], o[2])
+	}
+	if o := order(typstdoc.Options{CommentFirst: true}); !(0 <= o[0] && o[0] < o[1] && o[1] < o[2]) {
+		t.Errorf("comment first: comment at %d, answer at %d, zachet at %d", o[0], o[1], o[2])
+	}
+}

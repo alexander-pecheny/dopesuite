@@ -21,6 +21,7 @@ func composeLJ(args []string) error {
 	splitTours := fs.Bool("splittours", false, "a post per tour")
 	genimp := fs.Bool("genimp", false, xystrings.Default.Chgkcli.Lj.GenimpFlag())
 	navigation := fs.Bool("navigation", false, "link the tours' posts to each other (needs --login)")
+	commentFirst := commentFirstFlag(fs)
 	login := fs.String("login", "", "livejournal user to post as; empty writes the HTML to files instead")
 	password := fs.String("password", "", "that user's password; also read from $CHGKSUITE_LJ_PASSWORD")
 	community := fs.String("community", "", "post to this community's journal")
@@ -46,6 +47,7 @@ func composeLJ(args []string) error {
 		Language:           lang,
 		LabelsFile:         labelsFile,
 		NoBreak:            noBreak(),
+		CommentFirst:       *commentFirst,
 	}
 	sources, err := loadSources(fs.Args(), *merge)
 	if err != nil {
