@@ -42,11 +42,10 @@ def make_args(**over):
     return args
 
 
-def run(src, out_dir, config=None, template=None):
+def run(src, out_dir, config=None, template=None, **over):
     with open(src, encoding="utf8") as f:
         structure = parse_4s(f.read(), game="chgk")
     targetdir = os.path.dirname(src)
-    over = {}
     if config:
         over["pptx_config"] = config
     exporter = PptxExporter(
@@ -84,6 +83,9 @@ def main():
             template = os.path.join(TESTDATA, "service_template.pptx")
         run(src, out, config=config, template=template)
         sys.stderr.write(f"wrote {out}\n")
+    out = os.path.join(TESTDATA, "full__pptx_comment_first")
+    run(os.path.join(TESTDATA, "full.4s"), out, comment_first=True)
+    sys.stderr.write(f"wrote {out}\n")
 
 
 if __name__ == "__main__":

@@ -108,6 +108,40 @@ func TestListGroups(t *testing.T) {
 	}
 }
 
+// TestCommentFirst follows the flag through a tour's life: a group takes its
+// first list's flag, is toggled as a whole, and hands it back to every member
+// when it is dissolved.
+func TestCommentFirst(t *testing.T) {
+	c, boardID, listID1 := boardWithList(t)
+	resp := c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("L2"), "rank": "n"})
+	mustStatus(t, resp, 200)
+	var l2 struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &l2)
+	id1 := mustAtoi(t, listID1)
+
+	mustStatus(t, c.do("PATCH", "/api/lists/"+listID1, map[string]bool{"comment_first": true}), 204)
+	resp = c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name_enc": enc("Тур"), "list_ids": []int64{id1, l2.ID}})
+	mustStatus(t, resp, 200)
+	var grp struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &grp)
+	if snap := getSnap(t, c, boardID); !snap.Groups[0].CommentFirst {
+		t.Fatal("the group did not take its first list's flag")
+	}
+
+	mustStatus(t, c.do("PATCH", "/api/list-groups/"+itoa(grp.ID), map[string]bool{"comment_first": false}), 204)
+	mustStatus(t, c.do("PATCH", "/api/list-groups/"+itoa(grp.ID), map[string]bool{"comment_first": true}), 204)
+	mustStatus(t, c.do("DELETE", "/api/list-groups/"+itoa(grp.ID), nil), 204)
+	for _, l := range getSnap(t, c, boardID).Lists {
+		if !l.CommentFirst {
+			t.Fatalf("list %d lost the group's flag on dissolve", l.ID)
+		}
+	}
+}
+
 func getSnap(t *testing.T, c *apiClient, boardID string) boardSnapshot {
 	t.Helper()
 	resp := c.do("GET", "/api/boards/"+boardID, nil)

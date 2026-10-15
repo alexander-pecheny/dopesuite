@@ -16,17 +16,21 @@ type listDTO struct {
 	TitleEnc string `json:"title_enc"`
 	Rank     string `json:"rank"`
 	GroupID  *int64 `json:"group_id,omitempty"` // nil = not part of a list group
+	// CommentFirst puts a question's comment before its answer in every
+	// rendering. A grouped list follows its group's flag instead of its own.
+	CommentFirst bool `json:"comment_first"`
 }
 
 // groupDTO is a "list_of_lists": a named, ordered run of consecutive lists.
 type groupDTO struct {
-	ID      int64  `json:"id"`
-	NameEnc string `json:"name_enc"`
+	ID           int64  `json:"id"`
+	NameEnc      string `json:"name_enc"`
+	CommentFirst bool   `json:"comment_first"`
 }
 
 func scanLists(ctx context.Context, q querier, boardID int64) ([]listDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, type, title_enc, rank, group_id from lists where board_id = ? and deleted_at is null order by rank`, boardID)
+select id, type, title_enc, rank, group_id, comment_first from lists where board_id = ? and deleted_at is null order by rank`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +40,7 @@ select id, type, title_enc, rank, group_id from lists where board_id = ? and del
 		var l listDTO
 		var titleEnc []byte
 		var groupID sql.NullInt64
-		if err := rows.Scan(&l.ID, &l.Type, &titleEnc, &l.Rank, &groupID); err != nil {
+		if err := rows.Scan(&l.ID, &l.Type, &titleEnc, &l.Rank, &groupID, &l.CommentFirst); err != nil {
 			return nil, err
 		}
 		l.TitleEnc = b64(titleEnc)
@@ -51,7 +55,7 @@ select id, type, title_enc, rank, group_id from lists where board_id = ? and del
 // scanListGroups returns the board's non-deleted list groups.
 func scanListGroups(ctx context.Context, q querier, boardID int64) ([]groupDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, name_enc from list_groups where board_id = ? and deleted_at is null order by id`, boardID)
+select id, name_enc, comment_first from list_groups where board_id = ? and deleted_at is null order by id`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +64,7 @@ select id, name_enc from list_groups where board_id = ? and deleted_at is null o
 	for rows.Next() {
 		var g groupDTO
 		var nameEnc []byte
-		if err := rows.Scan(&g.ID, &nameEnc); err != nil {
+		if err := rows.Scan(&g.ID, &nameEnc, &g.CommentFirst); err != nil {
 			return nil, err
 		}
 		g.NameEnc = b64(nameEnc)
@@ -70,9 +74,10 @@ select id, name_enc from list_groups where board_id = ? and deleted_at is null o
 }
 
 type createListRequest struct {
-	TitleEnc string `json:"title_enc"`
-	Rank     string `json:"rank"`
-	Type     string `json:"type"`
+	TitleEnc     string `json:"title_enc"`
+	Rank         string `json:"rank"`
+	Type         string `json:"type"`
+	CommentFirst bool   `json:"comment_first"`
 }
 
 func (s *server) handleCreateList(w http.ResponseWriter, r *http.Request) {
@@ -101,8 +106,8 @@ func (s *server) handleCreateList(w http.ResponseWriter, r *http.Request) {
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-list", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-insert into lists(board_id, type, title_enc, rank, created_at, updated_at) values(?, ?, ?, ?, ?, ?)`,
-			bid, typ, titleEnc, req.Rank, rfc3339(now), rfc3339(now))
+insert into lists(board_id, type, title_enc, rank, comment_first, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?)`,
+			bid, typ, titleEnc, req.Rank, req.CommentFirst, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -128,9 +133,10 @@ func validListType(typ string) bool {
 }
 
 type patchListRequest struct {
-	TitleEnc *string `json:"title_enc"`
-	Rank     *string `json:"rank"`
-	Type     *string `json:"type"`
+	TitleEnc     *string `json:"title_enc"`
+	Rank         *string `json:"rank"`
+	Type         *string `json:"type"`
+	CommentFirst *bool   `json:"comment_first"`
 }
 
 func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +165,9 @@ func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
 				return corei18n.User("bad list type")
 			}
 			p.set("type", *req.Type)
+		}
+		if req.CommentFirst != nil {
+			p.set("comment_first", *req.CommentFirst)
 		}
 		return p.apply(ctx, tx, "lists", listID)
 	})
@@ -213,8 +222,10 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-list-group", func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `insert into list_groups(board_id, name_enc, created_at, updated_at) values(?, ?, ?, ?)`,
-			bid, nameEnc, rfc3339(now), rfc3339(now))
+		res, err := tx.ExecContext(ctx, `
+insert into list_groups(board_id, name_enc, comment_first, created_at, updated_at)
+values(?, ?, coalesce((select comment_first from lists where id = ? and board_id = ?), 0), ?, ?)`,
+			bid, nameEnc, req.ListIDs[0], bid, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -248,7 +259,8 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 type patchListGroupRequest struct {
-	NameEnc *string `json:"name_enc"`
+	NameEnc      *string `json:"name_enc"`
+	CommentFirst *bool   `json:"comment_first"`
 }
 
 func (s *server) handlePatchListGroup(w http.ResponseWriter, r *http.Request) {
@@ -269,6 +281,9 @@ func (s *server) handlePatchListGroup(w http.ResponseWriter, r *http.Request) {
 			}
 			p.set("name_enc", nameEnc)
 		}
+		if req.CommentFirst != nil {
+			p.set("comment_first", *req.CommentFirst)
+		}
 		return p.apply(ctx, tx, "list_groups", groupID)
 	})
 	if handleErr(w, err) {
@@ -285,7 +300,10 @@ func (s *server) handleDeleteListGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-list-group", func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `update lists set group_id = null, updated_at = ? where group_id = ?`, rfc3339(time.Now()), groupID); err != nil {
+		if _, err := tx.ExecContext(ctx, `
+update lists set group_id = null, updated_at = ?,
+  comment_first = (select comment_first from list_groups where id = ?)
+where group_id = ?`, rfc3339(time.Now()), groupID, groupID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `delete from tour_testers where group_id = ?`, groupID); err != nil {

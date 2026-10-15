@@ -122,3 +122,29 @@ func TestBlankLineEndsElement(t *testing.T) {
 		t.Errorf("question = %q, want both paragraphs in one element", got)
 	}
 }
+
+func TestEscapedMarkerStaysInTheField(t *testing.T) {
+	q := questionAt(Parse("№ 1\n> Раздатка:\n\\> первая\n\\> вторая\n? Вопрос\n! Ответ\n", "chgk"), 0)
+	if got := q.Get("handout"); got != "Раздатка:\n> первая\n> вторая" {
+		t.Errorf("handout = %q, want one handout with the escapes removed", got)
+	}
+}
+
+func TestComposeEscapesMarkerLines(t *testing.T) {
+	src, err := os.ReadFile("testdata/escape.4s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := Parse(string(src), "chgk")
+	composed := Compose(d, NumbersAll)
+	for _, want := range []string{"\n\\> вторая строка\n", "\n\\\\> слеш перед маркером\n", "\n\\x не маркер\n", "\n\\@ не автор\n"} {
+		if !strings.Contains(composed, want) {
+			t.Errorf("composed source lacks %q:\n%s", want, composed)
+		}
+	}
+	again, _ := json.Marshal(Parse(composed, "chgk"))
+	first, _ := json.Marshal(d)
+	if !bytes.Equal(first, again) {
+		t.Errorf("Parse(Compose(d)) != d\n%s\n%s", first, again)
+	}
+}

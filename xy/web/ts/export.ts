@@ -44,7 +44,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   ] as const;
 
   const exportModal = modal("export");
-  let exportCtx: { cards: BoardCard[]; title: string; hndt: string; game: string } | null = null;
+  let exportCtx: { cards: BoardCard[]; title: string; hndt: string; game: string; commentFirst: boolean } | null = null;
 
   function exportBox(box: string): HTMLInputElement { return byId<HTMLInputElement>(box); }
   function oneFormat(): HTMLSelectElement { return byId<HTMLSelectElement>("exportOneFormat"); }
@@ -76,7 +76,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
 
   function openExport(scope: ListScope): void {
     const hndt = xyListExport.hndtOf(scope.cards).source;
-    exportCtx = { cards: scope.cards, title: scope.title, hndt, game: scope.game };
+    exportCtx = { cards: scope.cards, title: scope.title, hndt, game: scope.game, commentFirst: scope.commentFirst };
 
     // Offline everything but the .4s is unreachable: the other formats render
     // server-side, and even the .4s ships without its images (they are fetched).
@@ -115,6 +115,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     fd.append("source", xyListExport.exportSource(cards));
     fd.append("filename", title);
     fd.append("game", exportCtx.game);
+    if (exportCtx.commentFirst) fd.append("comment_first", "1");
     const needed = xySync.isOnline() ? xyChgk.imageRefs(cards) : new Set<string>();
     const found = await attachments.appendImages(fd, cards, needed);
     const missing = [...needed].filter((n) => !found.has(n));

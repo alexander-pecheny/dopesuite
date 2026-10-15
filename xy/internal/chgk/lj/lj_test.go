@@ -59,6 +59,8 @@ func TestParity(t *testing.T) {
 				o.SplitTours = true
 			case "genimp":
 				o.SplitTours, o.GeneralImpressions = true, true
+			case "commentfirst":
+				o.CommentFirst = true
 			}
 			got, err := Render(fsource.Parse(string(src), "chgk"), images, stubHost{}, o)
 			if err != nil {

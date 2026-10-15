@@ -43,15 +43,23 @@ export interface BoardList {
   rank: string;
   groupId: number | null;
   title: string;
+  commentFirst: boolean;
 }
 // listType is what a list holds as the type pickers spell it: "si" for SI
 // themes, "normal" for anything else (an older or unknown type included).
 export function listType(list: BoardList): "si" | "normal" {
   return list.type === "si" ? "si" : "normal";
 }
+// tourCommentFirst is a list's field order, which belongs to its tour: a
+// grouped list follows its group.
+export function tourCommentFirst(state: Pick<BoardState, "groups">, list: BoardList): boolean {
+  const g = list.groupId != null ? state.groups.find((x) => x.id === list.groupId) : undefined;
+  return g ? g.commentFirst : list.commentFirst;
+}
 export interface BoardGroup {
   id: number;
   name: string;
+  commentFirst: boolean;
 }
 export interface BoardCard {
   id: number;
@@ -159,8 +167,8 @@ export interface Snapshot {
   feed_default?: string;
   card_labels?: Array<{ card_id: number; label_id: number; session_id?: number | null }>;
   unread?: Record<string, UnreadFlags>;
-  lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title_enc: string }>;
-  groups?: Array<{ id: number; name_enc: string }>;
+  lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title_enc: string; comment_first?: boolean }>;
+  groups?: Array<{ id: number; name_enc: string; comment_first?: boolean }>;
   cards?: Array<{
     id: number; list_id: number; kind: string; rank: string;
     description_enc: string; handout_meta_enc?: string | null; alias_enc?: string | null; seen_enc?: string | null;
@@ -295,10 +303,10 @@ export async function decryptSnapshot(
     announceCities: snap.announce_cities ?? null,
     lists: await Promise.all((snap.lists || []).map(async (l) => ({
       id: l.id, type: l.type, rank: l.rank, groupId: l.group_id != null ? l.group_id : null,
-      title: await crypto.decField(key, l.title_enc),
+      title: await crypto.decField(key, l.title_enc), commentFirst: !!l.comment_first,
     }))),
     groups: await Promise.all((snap.groups || []).map(async (g) => ({
-      id: g.id, name: await crypto.decField(key, g.name_enc),
+      id: g.id, name: await crypto.decField(key, g.name_enc), commentFirst: !!g.comment_first,
     }))),
     cards: await Promise.all((snap.cards || []).map(async (c) => ({
       id: c.id, listId: c.list_id, kind: c.kind, rank: c.rank,

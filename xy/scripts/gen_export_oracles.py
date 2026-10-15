@@ -52,11 +52,12 @@ def run(cls, src, out, args):
 
 
 def main():
-    for pkg, cls, filetype, ext in (
-        ("markdown", MarkdownExporter, "markdown", "md"),
-        ("markdown", MarkdownExporter, "redditmd", "md"),
-        ("openquiz", OpenquizExporter, "openquiz", "json"),
-        ("dbtext", DbExporter, "base", "txt"),
+    for pkg, cls, filetype, tag, over in (
+        ("markdown", MarkdownExporter, "markdown", "markdown", {}),
+        ("markdown", MarkdownExporter, "redditmd", "redditmd", {}),
+        ("markdown", MarkdownExporter, "redditmd", "redditmd_commentfirst", {"comment_first": True}),
+        ("openquiz", OpenquizExporter, "openquiz", "openquiz", {}),
+        ("dbtext", DbExporter, "base", "base", {}),
     ):
         testdata = os.path.join(ROOT, "internal", "chgk", pkg, "testdata")
         if not os.path.isdir(testdata):
@@ -65,8 +66,8 @@ def main():
             if not name.endswith(".4s"):
                 continue
             src = os.path.join(testdata, name)
-            out = os.path.join(testdata, f"{name[:-3]}__{filetype}.canon")
-            run(cls, src, out, make_args(filetype=filetype))
+            out = os.path.join(testdata, f"{name[:-3]}__{tag}.canon")
+            run(cls, src, out, make_args(filetype=filetype, **over))
             sys.stderr.write(f"wrote {out}\n")
 
 

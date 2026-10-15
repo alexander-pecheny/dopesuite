@@ -19,6 +19,8 @@ type Options struct {
 	// inside a >! … !< spoiler, and a picture is a named link rather than an
 	// embed, because Reddit renders no inline images.
 	Reddit bool
+	// CommentFirst is --comment_first: the comment comes before the answer.
+	CommentFirst bool
 }
 
 // Export renders the questions of a package. images maps a picture's name, as
@@ -74,23 +76,17 @@ func (e *exporter) question(q *fsource.Question) (string, error) {
 	if e.opts.Reddit {
 		open, close = ">!", "!<"
 	}
-	answer, err := e.yap(q.Get("answer"))
-	if err != nil {
-		return "", err
-	}
-	b.WriteString("__" + s.Docs.Markdown.Answer() + ":__ " + open + answer + "  \n")
-	for _, f := range []struct{ field, label string }{
-		{"zachet", s.Docs.Markdown.Zachet()}, {"nezachet", s.Docs.Markdown.Nezachet()},
-		{"comment", s.Docs.Markdown.Comment()}, {"source", s.Docs.Markdown.Source()},
-	} {
-		if !q.Has(f.field) {
+	// The spoiler opens on the first field after the question.
+	for _, field := range fsource.AnswerFields(e.opts.CommentFirst) {
+		if field == "author" || !q.Has(field) {
 			continue
 		}
-		v, err := e.yap(q.Get(f.field))
+		v, err := e.yap(q.Get(field))
 		if err != nil {
 			return "", err
 		}
-		b.WriteString("__" + f.label + ":__ " + v + "  \n")
+		b.WriteString("__" + fieldLabel(field) + ":__ " + open + v + "  \n")
+		open = ""
 	}
 	if q.Has("author") {
 		author, err := e.yap(q.Get("author"))
@@ -102,6 +98,21 @@ func (e *exporter) question(q *fsource.Question) (string, error) {
 		b.WriteString(close + "\n")
 	}
 	return b.String(), nil
+}
+
+func fieldLabel(field string) string {
+	s := xystrings.Default
+	switch field {
+	case "answer":
+		return s.Docs.Markdown.Answer()
+	case "zachet":
+		return s.Docs.Markdown.Zachet()
+	case "nezachet":
+		return s.Docs.Markdown.Nezachet()
+	case "comment":
+		return s.Docs.Markdown.Comment()
+	}
+	return s.Docs.Markdown.Source()
 }
 
 // yap is markdownyapper: a list of lists is laid out line by line, anything

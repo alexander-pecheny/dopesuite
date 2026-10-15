@@ -140,8 +140,9 @@ func (s *server) postToTelegram(ctx context.Context, stream *tgStream, req expor
 	}
 	stream.send(tgLine{Note: xystrings.Default.Tg.Export.Posting(target.ChannelID, target.ChatID)})
 	return target, tg.Export(ctx, poster, tg.Request{
-		Doc:    fsource.Parse(req.source, "chgk"),
-		Images: req.images,
-		Target: target,
+		Doc:     fsource.Parse(req.source, "chgk"),
+		Images:  req.images,
+		Target:  target,
+		Options: tg.Options{CommentFirst: req.commentFirst},
 	})
 }

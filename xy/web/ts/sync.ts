@@ -129,7 +129,17 @@ function applyOpToSnapshot(
       break;
     case "patchList": {
       const l = lists.find((x) => x.id === ids[0]);
-      if (l) { if (body.title_enc != null) l.title_enc = body.title_enc; if (body.rank != null) l.rank = body.rank; }
+      if (l) {
+        if (body.title_enc != null) l.title_enc = body.title_enc;
+        if (body.rank != null) l.rank = body.rank;
+        if (body.type != null) l.type = body.type;
+        if (body.comment_first != null) l.comment_first = body.comment_first;
+      }
+      break;
+    }
+    case "patchGroup": {
+      const g = (snap.groups || []).find((x) => x.id === ids[0]);
+      if (g && body.comment_first != null) g.comment_first = !!body.comment_first;
       break;
     }
     case "deleteList": {

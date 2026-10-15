@@ -99,6 +99,7 @@ export interface BoardSnapshot {
   name?: string;
   schema_version?: number;
   lists?: SnapshotList[];
+  groups?: Array<{ id: number; name_enc: string; comment_first?: boolean }>;
   cards?: SnapshotCard[];
   labels?: SnapshotLabel[];
   card_labels?: SnapshotCardLabel[];

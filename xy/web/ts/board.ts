@@ -33,7 +33,7 @@ import { carriesHandouts, counter, exported, KIND, label as kindLabel, numbered,
 import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
-import { createUnlock, listType } from "./unlock.js";
+import { createUnlock, listType, tourCommentFirst } from "./unlock.js";
 import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from "./dragrank.js";
 import { createTimeline, eventAuthor } from "./timeline.js";
 import { openPayloads, sealPayload } from "./eventpayload.js";
@@ -740,32 +740,44 @@ async function renameList(list: BoardList): Promise<void> {
   } catch (err) { setStatus("error"); alert(S.board.rename.failed(errMsg(err))); }
 }
 
-// retypeList opens the choice of what the list holds — OD questions or SI themes.
-// It reaches the next card the add-card button makes and nothing else: the cards
-// already in the list keep their kinds, and both kinds stay offered on every one.
-let retyping: BoardList | null = null;
-const listTypeModal = modal("listType");
+// listSettings opens what the list holds and its tour's field order. The order
+// is written where it lives: on the group when the list is in one.
+let settingsFor: BoardList | null = null;
+const listSettingsModal = modal("listSettings");
 
-function retypeList(list: BoardList): void {
-  retyping = list;
+function openListSettings(list: BoardList): void {
+  settingsFor = list;
   byId<HTMLSelectElement>("listTypeSelect").value = listType(list);
-  listTypeModal.open({ onClose: () => { retyping = null; } });
+  byId<HTMLSelectElement>("listOrderSelect").value = tourCommentFirst(state, list) ? "comment" : "answer";
+  const group = list.groupId != null ? groupById(list.groupId) : undefined;
+  byId("listOrderHint").textContent = group
+    ? `${S.board.list.orderHint()} ${S.board.list.orderGroupHint(group.name)}`
+    : S.board.list.orderHint();
+  listSettingsModal.open({ onClose: () => { settingsFor = null; } });
 }
 
-byId("listTypeForm").addEventListener("submit", async (e) => {
+byId("listSettingsForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const list = retyping;
+  const list = settingsFor;
   if (!list) return;
-  const next = byId<HTMLSelectElement>("listTypeSelect").value;
-  if (next === listType(list)) { listTypeModal.close(); return; }
+  const type = byId<HTMLSelectElement>("listTypeSelect").value;
+  const commentFirst = byId<HTMLSelectElement>("listOrderSelect").value === "comment";
+  const group = list.groupId != null ? groupById(list.groupId) : undefined;
   setStatus("saving");
   try {
-    await patch("patchList", `/api/lists/${list.id}`, { type: next });
-    list.type = next;
+    if (type !== listType(list)) {
+      await patch("patchList", `/api/lists/${list.id}`, { type });
+      list.type = type;
+    }
+    if (commentFirst !== tourCommentFirst(state, list)) {
+      if (group) await patch("patchGroup", `/api/list-groups/${group.id}`, { comment_first: commentFirst });
+      else await patch("patchList", `/api/lists/${list.id}`, { comment_first: commentFirst });
+      (group || list).commentFirst = commentFirst;
+    }
     setStatus("saved");
-    listTypeModal.close();
+    listSettingsModal.close();
     render();
-  } catch (err) { setStatus("error"); listTypeModal.message(S.board.rename.failed(errMsg(err))); }
+  } catch (err) { setStatus("error"); listSettingsModal.message(S.board.rename.failed(errMsg(err))); }
 });
 
 // deleteList soft-deletes the list and its cards (server cascades the cards),
@@ -1187,7 +1199,8 @@ function renderPreviewBody(screen: boolean): void {
   body.replaceChildren();
   if (!previewCtx) return;
   const { cards, numbers, imgMap } = previewCtx;
-  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap, screen, pvEditBtn)));
+  const order = previewListRef ? tourCommentFirst(state, previewListRef) : false;
+  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap, screen, { edit: pvEditBtn, commentFirst: order })));
 }
 
 function closePreview(): void { overlayStack.pop(); }
@@ -1330,7 +1343,26 @@ const attachments = createAttachments({
 
 // transfer moves and copies cards within and across boards; the card editor,
 // mass action and "move list" share it.
-const transfer = createTransfer({ boardId, getState: () => state, getDK: () => dk, verbs: { patch }, cardsOf, labelById });
+const transfer = createTransfer({ boardId, getState: () => state, getDK: () => dk, verbs: { patch }, cardsOf, labelById, askPassphrase: askTargetPass });
+
+// askTargetPass keeps the dialog open through a wrong passphrase, so a typo
+// costs a retype rather than the whole transfer.
+function askTargetPass(unlock: (pass: string) => Promise<DataKey>): Promise<DataKey | null> {
+  const m = modal("targetPass");
+  const form = byId<HTMLFormElement>("targetPassForm");
+  const input = byId<HTMLInputElement>("targetPassInput");
+  return new Promise((resolve) => {
+    let key: DataKey | null = null;
+    const submit = async (e: Event): Promise<void> => {
+      e.preventDefault();
+      try { key = await unlock(input.value); m.close(); } catch (err) { m.message(errMsg(err)); }
+    };
+    form.addEventListener("submit", submit);
+    input.value = "";
+    m.open({ onClose: () => { form.removeEventListener("submit", submit); resolve(key); } });
+    input.focus();
+  });
+}
 
 const cardDetail = createCardDetail({
   boardId,
@@ -1397,6 +1429,7 @@ const cardDetail = createCardDetail({
   renderLabelPicker: (card) => cardLabels.render(card),
   paintLabels,
   questionNumberFor,
+  commentFirst: (listId) => { const l = state.lists.find((x) => x.id === listId); return !!l && tourCommentFirst(state, l); },
   forgetCardLabels,
   preview: { renderPreviewCard, resolveImages: attachments.resolveImages, imageRefs: xyChgk.imageRefs, fillPreviewImages, previewList },
   attachments,
@@ -1666,7 +1699,7 @@ registerPanel(
   // The list itself
   starts(createAddListPanel(board)),
   { id: "rename-list", menu: "list", icon: "pencil", label: S.board.rename.listLabel(), open: (s) => { void renameList(s.list); } },
-  { id: "retype-list", menu: "list", icon: "list", label: S.board.list.typeChange(), open: (s) => retypeList(s.list) },
+  { id: "list-settings", menu: "list", icon: "settings", label: S.board.list.settings(), open: (s) => openListSettings(s.list) },
   createMoveListPanel(board, transfer),
   { id: "delete-list", menu: "list", icon: "trash-2", label: S.board.delete.listLabel(), open: (s) => { void deleteList(s.list); } },
 );

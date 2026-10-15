@@ -750,6 +750,9 @@ alter table cards_v27 rename to cards;
 create index if not exists idx_cards_list on cards(list_id);
 create index if not exists idx_cards_board on cards(board_id);
 pragma foreign_keys=on;`)},
+	{Version: 28, Name: "comment_first on lists and list_groups", Up: schema.Exec(`
+alter table lists add column comment_first integer not null default 0;
+alter table list_groups add column comment_first integer not null default 0;`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }

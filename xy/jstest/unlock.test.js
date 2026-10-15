@@ -126,8 +126,8 @@ test("cached-DK fast path: no overlay, onDK + decrypted onState, mirror written,
   assert.deepEqual(state.cardLabels, [{ cardId: 2, labelId: 3, sessionId: null }]);
   assert.deepEqual(state.cardSessions, [{ cardId: 2, sessionId: 9 }]);
   assert.deepEqual(state.unread, { 2: { comments: true } });
-  assert.deepEqual(state.lists, [{ id: 1, type: "normal", rank: "a", groupId: 5, title: "d:e:list" }]);
-  assert.deepEqual(state.groups, [{ id: 5, name: "d:e:group" }]);
+  assert.deepEqual(state.lists, [{ id: 1, type: "normal", rank: "a", groupId: 5, title: "d:e:list", commentFirst: false }]);
+  assert.deepEqual(state.groups, [{ id: 5, name: "d:e:group", commentFirst: false }]);
   assert.deepEqual(state.cards, [{
     id: 2, listId: 1, kind: "question", rank: "b",
     desc: "d:e:desc", handoutMeta: "d:e:meta", alias: null, seen: "d:e:seen", createdAt: "2026-01-01",

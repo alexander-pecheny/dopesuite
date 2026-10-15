@@ -174,6 +174,7 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		if !v.want {
 			continue
 		}
+		v.opts.CommentFirst = req.commentFirst
 		b, err := docx.Export(structure(), req.images, v.opts)
 		if err != nil {
 			return nil, err
@@ -191,14 +192,14 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		if !v.want {
 			continue
 		}
-		b, err := typstdoc.Export(ctx, structure(), req.images, ts, typstdoc.Options{Device: v.device, Game: req.game})
+		b, err := typstdoc.Export(ctx, structure(), req.images, ts, typstdoc.Options{Device: v.device, Game: req.game, CommentFirst: req.commentFirst})
 		if err != nil {
 			return nil, err
 		}
 		files = append(files, packFile{req.name + v.suffix, b})
 	}
 	if formats.pptx {
-		b, err := pptx.Export(structure(), req.images, pptx.Options{OptimizeSize: true})
+		b, err := pptx.Export(structure(), req.images, pptx.Options{OptimizeSize: true, CommentFirst: req.commentFirst})
 		if err != nil {
 			return nil, err
 		}

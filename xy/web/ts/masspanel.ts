@@ -10,7 +10,7 @@ import { boardOrder } from "./dragrank.js";
 import { modal } from "./modal.js";
 import type { MoveCtx } from "./carddetail.js";
 import type { Transfer } from "./transfer.js";
-import type { Board, BoardPanel } from "./panels.js";
+import { type Board, type BoardPanel, sessionsNewestFirst } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 import S from "./i18nstrings.js";
 import { type Tester, testerNames, testersFromList } from "./sessions.js";
@@ -183,7 +183,7 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     if (!board.state.sessions.length) { body.append(el("p", { class: "label-empty", text: S.board.mass.noTests() })); return; }
     const sel = el("select", { class: "input" }) as HTMLSelectElement;
     sel.append(el("option", { value: "", text: S.board.mass.pickTest() }));
-    for (const s of board.state.sessions) sel.append(el("option", { value: String(s.id), text: board.sessionName(s.id) }));
+    for (const s of sessionsNewestFirst(board)) sel.append(el("option", { value: String(s.id), text: board.sessionName(s.id) }));
     sel.addEventListener("change", () => { massPick = Number(sel.value) || null; run.disabled = !massPick; });
     body.append(sel);
   }

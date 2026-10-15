@@ -52,6 +52,21 @@ copy_title = "Скопировать текст поля"
 add_row = "+ строка"
 # Tooltip of a source row's "×".
 remove_row_title = "Удалить строку"
+# The button adding a source row that is a picture, and its tooltip.
+add_image_row = "+ картинка"
+add_image_row_title = "Добавить источник-картинку"
+# Tooltips of a source row's toggle between text and a picture.
+source_to_image = "Сделать картинкой"
+source_to_text = "Сделать текстом"
+
+[image]
+# The button under a text field that puts a picture into it, and its tooltip.
+insert = "Вставить картинку"
+insert_title = "Вставить картинку туда, где стоит курсор"
+# The button beside it that uploads a picture and inserts it.
+upload = "Загрузить…"
+# Tooltip of the × on a picture the field's text shows.
+remove_title = "Убрать картинку из текста"
 
 [handout]
 # The текст/картинка segment toggle of the handout field.

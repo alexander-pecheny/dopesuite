@@ -400,22 +400,7 @@ func (e *exporter) addAnswerSlide(q *fsource.Question) {
 		e.setQuestionNumber(s, e.number)
 	}
 
-	fields := []string{"answer"}
-	if q.Get("zachet") != nil && e.cfg.addZachet() {
-		fields = append(fields, "zachet")
-	}
-	if q.Get("nezachet") != nil && e.cfg.addZachet() {
-		fields = append(fields, "nezachet")
-	}
-	if e.cfg.addComment() && q.Has("comment") {
-		fields = append(fields, "comment")
-	}
-	if e.cfg.addSource() && q.Has("source") {
-		fields = append(fields, "source")
-	}
-	if e.cfg.addAuthor() && q.Has("author") {
-		fields = append(fields, "author")
-	}
+	fields := e.answerSlideFields(q)
 	answerSize := e.cfg.fontSizeForText("answer", e.answerGridText(q, fields), "answer_size", defaultFontPt)
 
 	var box *textbox
@@ -431,19 +416,39 @@ func (e *exporter) addAnswerSlide(q *fsource.Question) {
 	e.applyVerticalAlignment(box)
 
 	p := e.configureParagraph(box.tf.first(), answerSize, "", "answer")
-	r := e.addRun(p, e.label(q, "answer")+": ")
-	r.bold, r.boldSet = true, true
-	e.format(e.processText(q.Get("answer"), false, false, true, false), p, box, s, true, false)
-
-	for _, field := range fields[1:] {
-		stripBrackets := field != "zachet"
+	for i, field := range fields {
+		stripBrackets := field != "answer" && field != "zachet"
 		value := e.processText(q.Get(field), false, stripBrackets, true, false)
-		r := e.addRun(p, "\n"+e.label(q, field)+": ")
+		separator := "\n"
+		if i == 0 {
+			separator = ""
+		}
+		r := e.addRun(p, separator+e.label(q, field)+": ")
 		r.bold, r.boldSet = true, true
 		e.format(value, p, box, s, true, false)
 	}
 	e.shrink(box, 0)
 	e.placeInlineImages(box, s)
+}
+
+// answerSlideFields is _answer_slide_fields: the fields the config puts on the
+// answer slide, in the order they are written.
+func (e *exporter) answerSlideFields(q *fsource.Question) []string {
+	shown := map[string]bool{
+		"answer":   true,
+		"zachet":   q.Get("zachet") != nil && e.cfg.addZachet(),
+		"nezachet": q.Get("nezachet") != nil && e.cfg.addZachet(),
+		"comment":  e.cfg.addComment() && q.Has("comment"),
+		"source":   e.cfg.addSource() && q.Has("source"),
+		"author":   e.cfg.addAuthor() && q.Has("author"),
+	}
+	var fields []string
+	for _, field := range fsource.AnswerFields(e.opts.CommentFirst) {
+		if shown[field] {
+			fields = append(fields, field)
+		}
+	}
+	return fields
 }
 
 // answerGridText is _get_answer_grid_text: how long the whole answer slide's

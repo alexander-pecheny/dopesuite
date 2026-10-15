@@ -34,6 +34,29 @@ function matchMarker(line: string): { type: MarkerType; rest: string } | null {
 const MARKER_SET = new Set<string>(MARKERS.map(([m]) => m));
 const DECIMAL = 10;
 
+// A line whose first word is a marker behind backslashes is text, not a new
+// field: parse_4s drops one backslash, and composing adds it back.
+const ESCAPED_HEAD = /^(\s*)(\\*)(\S+)/;
+function unescapeMarker(line: string): string {
+  const m = ESCAPED_HEAD.exec(line);
+  return m && m[2] && MARKER_SET.has(m[3]) ? m[1] + m[2].slice(1) + line.slice(m[1].length + m[2].length) : line;
+}
+function escapeMarkers(value: string): string {
+  return value.split("\n").map((line, i) => {
+    const m = ESCAPED_HEAD.exec(line);
+    return i > 0 && m && MARKER_SET.has(m[3]) ? m[1] + "\\" + line.slice(m[1].length) : line;
+  }).join("\n");
+}
+
+// The fields after a question's text, in the order a tour shows them. A tour
+// may put the comment before the answer (ListScope.commentFirst).
+const AFTER_QUESTION = ["answer", "zachet", "nezachet", "comment", "source", "author"] as const;
+const COMMENT_FIRST = ["comment", "answer", "zachet", "nezachet", "source", "author"] as const;
+export type AfterQuestionField = (typeof AFTER_QUESTION)[number];
+export function fieldOrder(commentFirst: boolean): readonly AfterQuestionField[] {
+  return commentFirst ? COMMENT_FIRST : AFTER_QUESTION;
+}
+
 // startsBlock reports whether a line opens a new 4s element rather than
 // continuing the one before it.
 export function startsBlock(line: string): boolean {
@@ -89,9 +112,9 @@ export function parseBlocks(desc: string | null | undefined, keepVersionLines = 
       cur = { type: m.type, text: m.rest };
       blocks.push(cur);
     } else if (cur) {
-      cur.text += "\n" + line;
+      cur.text += "\n" + unescapeMarker(line);
     } else {
-      cur = { type: "pre", text: line };
+      cur = { type: "pre", text: unescapeMarker(line) };
       blocks.push(cur);
     }
   }
@@ -1314,8 +1337,8 @@ export function splitFields(desc: string | null | undefined): CardFields {
 function composeSources(arr: ReadonlyArray<string> | null | undefined): string {
   const items = (arr || []).map((s) => s.trim()).filter((s) => s !== "");
   if (items.length === 0) return "^";
-  if (items.length === 1) return `^ ${items[0]}`;
-  return "^\n" + items.map((s) => `- ${s}`).join("\n");
+  if (items.length === 1) return `^ ${escapeMarkers(items[0])}`;
+  return "^\n" + items.map((s) => `- ${escapeMarkers(s)}`).join("\n");
 }
 
 // composeFields rebuilds a 4s description from a field record in canonical order.
@@ -1324,7 +1347,7 @@ function composeSources(arr: ReadonlyArray<string> | null | undefined): string {
 // the round-trip is lossless for anything the structured editor doesn't model.
 export function composeFields(f: Partial<CardFields>): string {
   const out: string[] = [];
-  const marker = (m: string, v: string): void => { out.push(v ? `${m} ${v}` : m); };
+  const marker = (m: string, v: string): void => { out.push(v ? `${m} ${escapeMarkers(v)}` : m); };
   if (f.preMarkup && f.preMarkup.trim()) out.push(f.preMarkup.trim());
   // The handout rides INSIDE the question text as the chgksuite-style inline
   // handout bracket. The old standalone "> " block sat
@@ -1345,7 +1368,7 @@ export function composeFields(f: Partial<CardFields>): string {
 }
 
 export const xyChgk = {
-  parseBlocks, splitMarker, startsBlock, opensQuestion, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
+  parseBlocks, splitMarker, startsBlock, fieldOrder, opensQuestion, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,

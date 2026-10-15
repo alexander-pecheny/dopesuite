@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	xystrings "xy/i18nstrings"
@@ -191,6 +192,40 @@ func dropRunes(line string, n int) string {
 	return string(r[n:])
 }
 
+const markerEscape = `\`
+
+func isMarker(token string) bool {
+	_, ok := markerMapping[token]
+	return ok
+}
+
+// UnescapeLine reports whether line starts with an escaped marker such as
+// `\>` or `\\?`, which keeps the line in the previous field, and returns it
+// with one backslash removed.
+func UnescapeLine(line string) (string, bool) {
+	first, ok := firstField(line)
+	if !ok || !strings.HasPrefix(first, markerEscape) || !isMarker(strings.TrimLeft(first, markerEscape)) {
+		return line, false
+	}
+	return strings.Replace(line, markerEscape, "", 1), true
+}
+
+// escapeMarkers is UnescapeLine's inverse for a whole field value: every line
+// after the first whose first token is a marker, escaped or not, gets one more
+// backslash.
+func escapeMarkers(value string) string {
+	lines := strings.Split(value, "\n")
+	for i := 1; i < len(lines); i++ {
+		first, ok := firstField(lines[i])
+		if !ok || !isMarker(strings.TrimLeft(first, markerEscape)) {
+			continue
+		}
+		indent := len(lines[i]) - len(strings.TrimLeftFunc(lines[i], unicode.IsSpace))
+		lines[i] = lines[i][:indent] + markerEscape + lines[i][indent:]
+	}
+	return strings.Join(lines, "\n")
+}
+
 // SplitMarker splits a 4s line into everything structural at its head — an
 // element marker ("? ", "! ", "^ ", "## "…) or a list item's "-", together with
 // the whitespace that follows it — and the editorial text after that. A line
@@ -208,7 +243,7 @@ func SplitMarker(line string) (prefix, rest string) {
 	// A list item is a bare leading "-", which is not in markerMapping: the parser
 	// only sees it later, inside an element's content (processList).
 	head := first
-	if _, isMarker := markerMapping[first]; !isMarker {
+	if !isMarker(first) {
 		if !strings.HasPrefix(strings.TrimLeft(line, " \t"), "-") {
 			return "", line
 		}
@@ -325,6 +360,9 @@ func Parse(s string, game string) Doc {
 		} else if len(structure) >= 1 {
 			last := structure[len(structure)-1]
 			if cur, ok := last.Content.(string); ok {
+				if unescaped, escaped := UnescapeLine(line); escaped {
+					line = unescaped
+				}
 				last.Content = cur + "\n" + line
 			}
 		}

@@ -803,11 +803,17 @@ create = "Создать список"
 type_label = "Что в списке"
 type_chgk = "Вопросы ОД"
 type_si = "Темы СИ"
-type_change = "Тип списка…"
-# Title of the modal the ⋯ entry opens; the hint under its choice says what
-# changing it does and does not do.
-type_title = "Тип списка"
+# The ⋯ entry and the modal it opens: the list's type and its tour's field order.
+settings = "Настройки списка…"
+settings_title = "Настройки списка"
 type_hint = "Тип решает, какую карточку создаёт кнопка «Добавить карточку». На уже созданные карточки не влияет."
+# Where a question's comment goes. The order belongs to the tour, so a grouped
+# list shares it with its whole group.
+order_label = "Порядок полей"
+order_answer_first = "Ответ, затем комментарий"
+order_comment_first = "Комментарий, затем ответ"
+order_hint = "Порядок действует в просмотре, в редакторе карточки и во всех экспортах."
+order_group_hint = 'Порядок общий для всей группы «{{.name}}».'
 # ⋯ entry and the modal it opens: a new list placed next to this one, so a
 # board with many lists needs no scrolling to the add-list column and back.
 add_label = "Добавить список"
@@ -846,8 +852,8 @@ no_list = "не выбран список"
 # board whose name this device cannot read, and the board already open.
 board_number = 'доска #{{.id}}'
 this_board = ' (эта доска)'
-# The prompt for a destination board's passphrase.
-ask_passphrase = "Пароль целевой доски:"
+# Title of the dialog asking for a destination board's passphrase.
+target_pass = "Пароль целевой доски"
 # Fallback name of an attachment whose filename will not decrypt.
 attachment_fallback = "файл"
 

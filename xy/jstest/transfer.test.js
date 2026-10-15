@@ -43,7 +43,7 @@ function board() {
       verbs: { patch: async (k, path, body) => { writes.push([k, path, body]); } },
       cardsOf: (lid) => state.cards.filter((c) => c.listId === lid),
       labelById: (id) => state.labels.find((l) => l.id === id),
-      askPassphrase: () => null,
+      askPassphrase: async () => null,
     }),
   };
 }

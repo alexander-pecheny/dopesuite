@@ -360,6 +360,10 @@
 .tl-draft-img { position: relative; display: inline-block; }
 .tl-draft-img img { max-width: 72px; max-height: 72px; border-radius: 6px; display: block; }
 .tl-draft-img .attach-del { position: absolute; top: -6px; right: -6px; }
+/* A picked picture sits beside its picker at the height of the controls. */
+.fld-thumb { flex: none; margin-top: 0; }
+.fld-thumb .tl-draft-img img { max-height: 32px; cursor: zoom-in; }
+.fld-row > .fld-add-row { flex: none; margin-top: 0; }
 
 /* The @-name hint under a comment box: body-mounted (anchorPopup), and the
    thread reply box lives in a modal, so it outranks --z-modal. */

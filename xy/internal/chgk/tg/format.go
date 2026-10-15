@@ -25,6 +25,8 @@ type Options struct {
 	NoSpoilers bool
 	// DisableAsterisks leaves "*" alone instead of escaping it to &#42;.
 	DisableAsterisks bool
+	// CommentFirst is --comment_first: the comment comes before the answer.
+	CommentFirst bool
 	// SkipUntil starts the export at that question number (0 = from the top).
 	SkipUntil int
 	// Language is --language: which labels_*.toml the headings come from.
@@ -218,6 +220,9 @@ func (f *formatter) questionParts(q *fsource.Question, number string) (questionP
 			return p, err
 		}
 		*spec.dst = s
+	}
+	if p.comment != "" && f.opts.CommentFirst {
+		p.answer, p.comment = p.comment+"\n"+p.answer, ""
 	}
 	return p, nil
 }

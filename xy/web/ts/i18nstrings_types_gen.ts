@@ -401,12 +401,17 @@ export type Strings = {
       groupFallback: () => string;
       groupTitle: () => string;
       menuTitle: () => string;
-      typeChange: () => string;
+      orderAnswerFirst: () => string;
+      orderCommentFirst: () => string;
+      orderGroupHint: (name: string) => string;
+      orderHint: () => string;
+      orderLabel: () => string;
+      settings: () => string;
+      settingsTitle: () => string;
       typeChgk: () => string;
       typeHint: () => string;
       typeLabel: () => string;
       typeSi: () => string;
-      typeTitle: () => string;
       untitled: () => string;
     };
     listsmanage: {
@@ -628,9 +633,9 @@ export type Strings = {
       title: () => string;
     };
     transfer: {
-      askPassphrase: () => string;
       attachmentFallback: () => string;
       boardNumber: (id: string) => string;
+      targetPass: () => string;
       thisBoard: () => string;
     };
     unlock: {
@@ -720,6 +725,8 @@ export type Strings = {
     };
     field: {
       add: (field: string) => string;
+      addImageRow: () => string;
+      addImageRowTitle: () => string;
       addRow: () => string;
       addTitle: () => string;
       answer: () => string;
@@ -733,6 +740,8 @@ export type Strings = {
       removeRowTitle: () => string;
       removeTitle: () => string;
       source: () => string;
+      sourceToImage: () => string;
+      sourceToText: () => string;
       themeAuthor: () => string;
       themeComment: () => string;
       themeName: () => string;
@@ -743,6 +752,12 @@ export type Strings = {
       attachTitle: () => string;
       modeImage: () => string;
       modeText: () => string;
+    };
+    image: {
+      insert: () => string;
+      insertTitle: () => string;
+      removeTitle: () => string;
+      upload: () => string;
     };
     kind: {
       changed: () => string;

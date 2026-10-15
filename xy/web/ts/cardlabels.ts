@@ -14,7 +14,7 @@ import { autocomplete } from "./kit/suggest.js";
 import * as people from "./people.js";
 import { icon } from "./icons_gen.js";
 import S from "./i18nstrings.js";
-import type { Board } from "./panels.js";
+import { type Board, sessionsNewestFirst } from "./panels.js";
 import type { BoardCard, BoardLabel, BoardList } from "./unlock.js";
 import type { DataKey } from "./crypto.js";
 
@@ -486,12 +486,10 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     const card = board.state.cards.find((c) => c.id === deps.openCardId());
     if (!card) return;
     const on = new Set(board.playingsOf(card.id));
-    const pool = board.state.sessions.filter((s) => !on.has(s.id))
-      .map((s) => ({ id: s.id, name: board.sessionName(s.id), date: (board.sessionMeta(s.id) || { date: "" }).date }))
-      .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
+    const pool = sessionsNewestFirst(board).filter((s) => !on.has(s.id));
     filteredPopup({
       anchor: ui.playingAddRow,
-      items: pool.map((s) => ({ id: s.id, name: s.name })),
+      items: pool.map((s) => ({ id: s.id, name: board.sessionName(s.id) })),
       placeholder: S.card.add.playingsPlaceholder(),
       empty: board.state.sessions.length ? S.card.add.playingsAllMarked() : S.card.add.playingsNone(),
       onPick: (item) => { void addPlaying(card, item.id); },

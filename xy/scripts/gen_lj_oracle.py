@@ -63,6 +63,7 @@ CASES = {
     "nospoilers": {"nospoilers": True},
     "splittours": {"splittours": True},
     "genimp": {"splittours": True, "genimp": True},
+    "commentfirst": {"comment_first": True},
 }
 
 

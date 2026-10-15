@@ -34,6 +34,10 @@ A Card's own short display label, stored in its own encrypted column. It is deli
 **List Group**:
 A named, ordered run of Lists that are **next to each other**, sharing one question-numbering sequence and exporting together. A group always moves as a single block. In the schema it is called `list_of_lists`.
 
+**Field Order**:
+Where a tour puts a question's comment: after the answer, зачёт and незачёт, as chgksuite always did, or before the answer. It belongs to the tour, so a grouped List follows its List Group, and a new group takes the order of its first List. It reaches Просмотр, the order of Поля and every export (chgksuite's `--comment_first`). The 4s itself keeps its usual order, so a bare .4s does not carry it.
+_Avoid_: layout, template.
+
 **Version**:
 One candidate form of a Card, kept next to its siblings so that the editors can compare them before choosing. A Version is the whole question — the wording, the ответ, the зачёт, the раздатка and the автор — because a reworded question needs its own зачёт and may come with its own picture. Versions are stored inside the Card's own content, one after another, so they take up no extra column. The first one is what the board displays, and every export merges the rest back into that single numbered question. A Version may have a **Name**, such as «полегче» or «посложнее», which says in one word what «Версия 2» cannot. The Name is for the editors only and never reaches an export. A Version has nothing else: no author and no date. Its rules are in `web/ts/versions.ts` (ADR-0007).
 _Avoid_: draft, variant, revision. A Version is a live alternative, not a past state that has been superseded; recording those is the Timeline's job.

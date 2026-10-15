@@ -25,6 +25,20 @@ var composeOrder = []string{
 	"comment", "source", "author", "number", "setcounter",
 }
 
+var (
+	answerFields       = []string{"answer", "zachet", "nezachet", "comment", "source", "author"}
+	commentFirstFields = []string{"comment", "answer", "zachet", "nezachet", "source", "author"}
+)
+
+// AnswerFields is composer_common.answer_fields: the fields every composer
+// writes after the question, in order. commentFirst is --comment_first.
+func AnswerFields(commentFirst bool) []string {
+	if commentFirst {
+		return commentFirstFields
+	}
+	return answerFields
+}
+
 // NumbersHandling mirrors args.numbers_handling.
 type NumbersHandling string
 
@@ -42,17 +56,19 @@ var reDoubleSep = regexp.MustCompile("\n+")
 
 func removeDoubleSeparators(s string) string { return reDoubleSep.ReplaceAllString(s, "\n") }
 
-// formatElement ports compose_4s.format_element: a plain string passes through,
-// while a list becomes 4s "- " items, optionally preceded by a preamble.
+func cleanValue(s string) string { return escapeMarkers(removeDoubleSeparators(s)) }
+
+// formatElement ports compose_4s.format_element: a plain string passes through
+// with its marker-looking lines escaped, while a list becomes 4s "- " items, optionally preceded by a preamble.
 func formatElement(v any) string {
 	switch t := v.(type) {
 	case string:
-		return removeDoubleSeparators(t)
+		return cleanValue(t)
 	case []any:
 		// The [preamble, [items…]] shape.
 		if len(t) == 2 {
 			if items, ok := t[1].([]any); ok {
-				return removeDoubleSeparators(toString(t[0])) + "\n- " + joinItems(items)
+				return cleanValue(toString(t[0])) + "\n- " + joinItems(items)
 			}
 		}
 		return "\n- " + joinItems(t)
@@ -65,7 +81,7 @@ func formatElement(v any) string {
 func joinItems(items []any) string {
 	parts := make([]string, len(items))
 	for i, x := range items {
-		parts[i] = removeDoubleSeparators(toString(x))
+		parts[i] = cleanValue(toString(x))
 	}
 	return strings.Join(parts, "\n- ")
 }

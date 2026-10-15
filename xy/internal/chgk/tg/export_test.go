@@ -108,6 +108,8 @@ func TestTranscriptParity(t *testing.T) {
 				opts.SkipUntil = 2
 			case "asterisks":
 				opts.DisableAsterisks = true
+			case "commentfirst":
+				opts.CommentFirst = true
 			case "english":
 				opts.Language = "en"
 			}

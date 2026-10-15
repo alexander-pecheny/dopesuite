@@ -17,6 +17,7 @@ func composePptx(args []string) error {
 	fontDir := fs.String("font_dir", override("font_dir", ""), "an extra directory to look for the measurement font in")
 	disableNumbers := fs.Bool("disable_numbers", false, "no question number in the corner")
 	noAccents := fs.Bool("do_not_remove_accents", false, "keep the stress marks")
+	commentFirst := commentFirstFlag(fs)
 	language := languageFlag(fs)
 	optimizeSize := fs.String("optimize_size", override("optimize_size", "on"), "re-encode the pictures to shrink the file: on|off")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
@@ -39,6 +40,7 @@ func composePptx(args []string) error {
 		Font:               *font,
 		OptimizeSize:       *optimizeSize != "off",
 		NoBreak:            noBreak(),
+		CommentFirst:       *commentFirst,
 	}
 	if *fontDir != "" {
 		opts.FontDirs = []string{*fontDir}

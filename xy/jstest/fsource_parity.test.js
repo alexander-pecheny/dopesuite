@@ -41,3 +41,11 @@ test("the browser writes the corpus .hndt byte for byte, and reads its settings 
   assert.deepEqual(xyHndt.parseHndtMetaByQuestion(text), { "1": "columns: 3", "3": "columns: 2\nfont_size: 14", "4": "columns: 3" });
   assert.equal(blocks.length, 3, "and the server parsed it into one block per handout");
 });
+
+test("a backslashed marker line continues its field, one backslash lighter, as fsource.UnescapeLine reads it", () => {
+  assert.ok(corpus.escapes.some((e) => e.escaped), "the corpus holds escaped lines");
+  for (const { line, text } of corpus.escapes) {
+    if (xyChgk.startsBlock(line)) continue;
+    assert.equal(xyChgk.parseBlocks(`? q\n${line}`)[0].text, `q\n${text}`.trimEnd(), line);
+  }
+});

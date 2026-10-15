@@ -25,6 +25,7 @@ func composeTelegram(args []string) error {
 	noSpoilers := fs.Bool("nospoilers", false, "print the answers openly")
 	disableAsterisks := fs.Bool("disable_asterisks_processing", false, "leave * alone")
 	skipUntil := fs.Int("skip_until", 0, "start at question N")
+	commentFirst := commentFirstFlag(fs)
 	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the packet")
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
@@ -49,6 +50,7 @@ func composeTelegram(args []string) error {
 		NoSpoilers:       *noSpoilers,
 		DisableAsterisks: *disableAsterisks,
 		SkipUntil:        *skipUntil,
+		CommentFirst:     *commentFirst,
 	}
 	var polls *tg.PollConfig
 	if *addPolls {
