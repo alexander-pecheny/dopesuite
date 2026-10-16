@@ -121,7 +121,7 @@ _Avoid_: password, which is the account's, and master password.
 A question the Board asks its owner once a month, on a device that holds the key but not the words: either type the Board Passphrase, or set a new one. It is local to the device, it never appears while Тест-режим is on, and it has no «Позже» button, because the only two ways out of it are the two ways the passphrase becomes known again. Members who are not the owner are never asked; they ask the owner.
 
 **Envelope**:
-The single wire format for ciphertext: `magic("xy1") | alg | nonce | ct+tag`, base64-encoded inside JSON. `crypto.js` is the only file that owns it. Each board has a random data key (DK) that does the encrypting, and the passphrase-derived KEK only wraps the DK, so changing a passphrase re-wraps it without re-encrypting anything.
+The single wire format for ciphertext: `magic("xy1") | alg | nonce | ct+tag`, base64-encoded inside JSON. `crypto.js` is the only file that owns it. Each board has a random data key (DK) that does the encrypting, and the passphrase-derived KEK only wraps the DK, so changing a passphrase re-wraps it without re-encrypting anything. Every content column (`cards.description`, `lists.title`, `labels.name`, `timeline_events.payload` and the rest) holds one, base64 in the JSON under the same name. Whether an Envelope is encrypted is a property of its Board (the keymeta), not of the column, so the columns have no `_enc` suffix.
 
 **Outbox**:
 The queue of mutations made while offline, in `sync.js`. Anything created offline gets a negative temporary id, which is remapped to the real id when the queue is flushed.

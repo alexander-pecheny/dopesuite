@@ -9,10 +9,7 @@ to sort, sync and authorise.
 
 **Board names are the one exception.** They are stored as plaintext and the
 server can read them, so that the board list can be shown without unlocking
-every board first. Each board records a `schema_version`: 1 means the old
-encrypted `name_enc`, and 2 means the plaintext `name`. Old boards are converted
-when they are next used, through `POST /api/boards/{id}/migrate-name`; see
-`migrateV10`.
+every board first.
 
 xy was built by reusing patterns and frontend assets from `../dope`, its sibling
 in the dopesuite monorepo. The rules for the monorepo itself are in the root
@@ -310,7 +307,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        CSS vars on <html>: --kanban-max-w, --klist-w, --kcard-lines (a
                        line clamp — don't reintroduce a char cap in cardBody). A card
                        previews alias → (question text | answer): the alias is the card's
-                       own encrypted column (cards.alias_enc, NOT a 4s marker — parity),
+                       own encrypted column (cards.alias, NOT a 4s marker — parity),
                        its input sits below the view panels and PATCHes itself a second
                        after typing stops; the fallback is users.card_title. The card
                        editor's tools row: ударение types U+0301 into the field the caret
@@ -349,7 +346,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     eventpayload.ts    the codec for a Timeline event's payload: sealPayload(dk, kind, data)
                        and openPayloads(dk, events) → a typed value per kind, {kind:
                        "unreadable"} for one that will not open. Every writer and reader of
-                       payload_enc goes through it (the comment envelope, the raw-string
+                       payload goes through it (the comment envelope, the raw-string
                        reaction, label/attachment/desc_edit JSON). Its Go twin is
                        internal/xycli/eventpayload.go; both read
                        internal/xycli/testdata/eventpayload.json, historic shapes included.
@@ -508,7 +505,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        a title already here, report which units landed. No menu entry of
                        its own: «Импорт» (importpack.ts) sniffs the picked file and hands
                        an xy archive here. On the board page because only it holds the key
-    sessions.ts        the test-session kernel, all pure: parse/serialize meta_enc (folding
+    sessions.ts        the test-session kernel, all pure: parse/serialize meta (folding
                        every older shape forward), the derived session name, dd.mm.yyyy +
                        24h parsing (native date/time inputs render in the BROWSER's locale,
                        not the page's), zone offsets and the IANA list off Intl, and the
@@ -677,10 +674,15 @@ without a token does not poll and does not offer telegram login.
 - **Writes**: every mutation goes through `s.withWriteTx`, which takes the
   connection out of the pool before it takes the lock, and puts a bound on the
   transaction. This was ported from dope.
-- **The server never sees plaintext content**: the content columns hold `_enc`
-  BLOB envelopes, and the handlers only validate the structure and the ACL. The
-  one exception is `boards.name`, which is plaintext on purpose; see "What this
-  is" above.
+- **The server never sees plaintext content**: each content column
+  (`cards.description`, `lists.title`, `labels.name`, `timeline_events.payload`
+  and the rest) holds an Envelope, an opaque BLOB that is base64 in the JSON,
+  and the handlers only validate the structure and the ACL. Whether an Envelope
+  is encrypted is a property of the board (its keymeta), not of the column, which
+  is why no name carries an `_enc` suffix since schema v29. Writes still accept
+  the old `_enc` field names (`internal/server/legacynames.go`) for clients that
+  queued them earlier. The one exception is `boards.name`, which is plaintext on
+  purpose; see "What this is" above.
 
 ## Testing
 Go integration tests (`internal/server/*_test.go`) cover the full
@@ -704,10 +706,10 @@ app offline.
 ## List groups (list_of_lists)
 A list group is a named, ordered run of lists that must be **next to each
 other**. The lists in it share one question-numbering sequence and export
-together. In the schema it is `list_groups(name_enc)` plus a nullable
+together. In the schema it is `list_groups(name)` plus a nullable
 `lists.group_id` (added by migrateV6). The board snapshot gains a `groups[]`
 array, and each list carries its `group_id`. Endpoints: `POST /api/boards/{id}/list-groups`
-{name_enc, list_ids} (≥2 lists, folds them in), `PATCH /api/list-groups/{id}`
+{name, list_ids} (≥2 lists, folds them in), `PATCH /api/list-groups/{id}`
 (rename), `DELETE` (dissolve → members released to group_id NULL). The
 «Управление списками» modal (☰ menu, `board.ts`) is the editing surface: one row
 per list, drag / position-input reorder, multi-select move-together, and
