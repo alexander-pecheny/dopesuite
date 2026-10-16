@@ -170,6 +170,7 @@ const unlock = createUnlock({
     // moment, so this costs a pass over a handful of sessions and no decryption.
     rememberPeople();
     render();
+    byId("notifToggle").hidden = !xyInstance.offers("activity");
     renderNotifBadge();
     // best-effort, online only: the author-name map for timelines, and the
     // invite links whose pending count the ☰ row shows.
