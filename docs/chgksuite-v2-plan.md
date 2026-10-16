@@ -109,6 +109,32 @@ These are small, because the seams already exist.
 
 Once this covers what the Fyne window does, `chgksuite-gui` is retired.
 
+## Automatic backups of server boards
+
+People rarely back up by hand, so the app does it for every server it has a tab
+for. A backup is the boards' ciphertext and keymeta exactly as the server holds
+them, plus the attachment blobs. Making one needs no passphrase, and the file on
+disk is as safe as the server's copy.
+
+- **xy side.** `GET /api/backup` streams a zip of every board the user belongs
+  to: keymeta, snapshot, timeline and attachments, all ciphertext. Tokens gain
+  a `read` scope that reaches only GET routes and lives a year, listed and
+  revocable at `/profile/tokens` like the others (ADR-0015 says a token is the
+  whole user and lives a month, which is too much power and too short a life
+  for this). A "connect the app" flow hands the token over: the app opens
+  `/link?code=…` in the server's tab, the user presses Allow, and the app
+  collects the token by polling with that code, the way the Telegram login
+  handshake works.
+- **App side.** Adding a server offers backups. The app checks on start and
+  every hour, and runs a backup in the background when the last good one is
+  older than three days. It keeps the last ten per server in
+  `Documents/chgksuite backups/<server>/`; all three are settings. A failure
+  shows in the tab strip, success stays quiet.
+- **Restore.** "Open backup…" asks for a board's passphrase, decrypts it with
+  `xyenvelope` into a Bundle (`xy.board.v1`), and imports it into the Local
+  tab. The Bundle can also be saved and imported into any xy server, so a
+  backup is useful even if the original server is gone.
+
 ## Module layout
 
 Go does not let another module import `xy/internal/...`, and the app must not
@@ -137,4 +163,7 @@ tagged `chgksuite/vX.Y.Z` and `dopecore/vX.Y.Z`. The app is a third module,
 4. Build the Wails shell on the fork: the tab strip, the Local tab on the local
    server, and adding a server tab.
 5. Add import and the spec-driven export forms in the webview.
-6. Package for macOS (signed and notarised), Windows and Linux.
+6. Automatic backups: on xy, the backup endpoint, the `read` token scope and
+   the connect-the-app flow; in the app, the schedule, retention, and restoring
+   a backup into the Local tab.
+7. Package for macOS (signed and notarised), Windows and Linux.
