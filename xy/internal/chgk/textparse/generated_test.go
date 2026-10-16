@@ -167,7 +167,7 @@ func prefixFirst(prefix string, lines []string) []string {
 	return lines
 }
 
-var update = flag.Bool("update", false, "rewrite testdata/generated_canon.txt")
+var update = flag.Bool("update", false, "rewrite generated_canon.txt and the translations' canons")
 
 const generatedCanonFile = "testdata/generated_canon.txt"
 

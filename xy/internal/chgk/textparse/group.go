@@ -31,7 +31,7 @@ func (p *parser) group(in []*elem) []*elem {
 			out = p.placeRun(out, in[i:j], next)
 			i = j
 		default:
-			if e.Type == "answer" && !hasQuestion(out) {
+			if e.Type == "answer" && !hasQuestion(out) && !answerSide[lastOf(out).Type] {
 				out = insertQuestion(out, &elem{"question", ""})
 			}
 			out = append(out, e)
