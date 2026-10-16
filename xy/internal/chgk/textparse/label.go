@@ -24,6 +24,7 @@ func (p *parser) label(text string) []*elem {
 		p.applyRegexes(&fragment)
 		if len(fragment) > 0 && fragment[0].Type == "" && hasType(fragment, "answer") {
 			fragment[0].Type = "question"
+			fragment[0].Content = p.rx.field("number").ReplaceAllString(fragment[0].str(), "")
 		}
 		out = append(out, fragment...)
 	}

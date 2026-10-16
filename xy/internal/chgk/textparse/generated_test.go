@@ -195,7 +195,7 @@ func TestGeneratedNoWorseThanLegacy(t *testing.T) {
 	wg.Wait()
 	for i, c := range cases {
 		canon, old, got := c.canon, olds[i], gots[i]
-		if old == canon && got != canon {
+		if old == canon && got != canon && !acceptedWorse(c.name) {
 			t.Errorf("%s: legacy reads it back, the parser does not:\n%s", c.name, firstDiff(canon, got))
 		}
 		key := c.name[strings.Index(c.name, "/")+1:]
@@ -213,6 +213,13 @@ func TestGeneratedNoWorseThanLegacy(t *testing.T) {
 		n := tallies[key]
 		t.Logf("%-40s canon read back: legacy %2d, now %2d of %2d; %2d differ", key, n.legacy, n.now, n.total, n.differ)
 	}
+}
+
+// acceptedWorse are the cases the parser reads differently from legacy on
+// purpose. test_blitz's canon keeps "35." in its duplet's text, and without a
+// marker that reads as the question number, which is stripped as everywhere else.
+func acceptedWorse(name string) bool {
+	return strings.HasPrefix(name, "test_blitz.txt/bare/") && strings.HasSuffix(name, "/txt")
 }
 
 func boolInt(b bool) int {
