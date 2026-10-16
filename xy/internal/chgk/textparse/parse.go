@@ -49,18 +49,21 @@ func (e *elem) str() string {
 }
 
 // creditsPatterns match, per language, a line of the editors' credits that
-// stands above a tour's first question: the editor named, or someone thanked.
+// stands above a tour's first question: the editor or the testers named, or
+// someone thanked. Every language also takes the Russian words, which a
+// translated package often keeps.
 var creditsPatterns = map[string]string{
-	"ru":     `^редактор|благодар`,
-	"ua":     `^редактор|дяку|подяк`,
-	"by":     `^рэдактар|дзяку|падзяк`,
-	"by_tar": `^рэдактар|дзяку|падзяк`,
-	"kz_cyr": `^редактор|алғыс|рахмет`,
+	"ru":     `^редактор|благодар|^тестировали|^тестеры`,
+	"ua":     `^(тур\s+)?редактор|дяку|подяк|вдячн|^тестували|^тестери`,
+	"by":     `^(тур\s+)?рэдакт|дзяку|падзяк|^тэсціравалі|^тэставалі`,
+	"by_tar": `^(тур\s+)?рэдакт|дзяку|падзяк|^тэсціравалі|^тэставалі`,
+	"kz_cyr": `^(тур\s+)?редактор|алғыс|рахмет`,
 	"uz_cyr": `^(тур\s+)?муҳаррир|миннатдор|раҳмат|ташаккур`,
 	"uz":     `^(tur\s+)?muharrir|minnatdor|rahmat|tashakkur`,
-	"en":     `^edit(or|ed by)|thank|grateful|gratitude`,
+	"en":     `^edit(or|ed by)|^tested by|^testers\b|thank|grateful|gratitude`,
 	"az":     `^redaktor|təşəkkür|minnətdar`,
-	"sr":     `^urednik|zahvaljuj|zahvalnost`,
+	"sr":     `^(autori i\s+)?urednic|^urednik|zahval`,
+	"ro":     `^redactor|mul[țţ]um|recunosc[ăa]to`,
 }
 
 // questionLabels mirrors common.QUESTION_LABELS — the fields that belong to a

@@ -60,6 +60,9 @@ func newRegexSet(language, labelsFile string) (*regexSet, error) {
 		language = i18n.DefaultLanguage
 	}
 	if pattern, ok := creditsPatterns[language]; ok {
+		if language != i18n.DefaultLanguage {
+			pattern += "|" + creditsPatterns[i18n.DefaultLanguage]
+		}
 		s.credits = regexp.MustCompile(`(?i)` + pattern)
 	}
 	for _, name := range labelledOrder {
