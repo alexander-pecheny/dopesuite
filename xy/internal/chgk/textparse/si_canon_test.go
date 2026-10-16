@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"xy/internal/chgk/corpus"
 	"xy/internal/chgk/docxread"
 	"xy/internal/chgk/fsource"
 )
@@ -18,6 +19,9 @@ var siFixtures = []struct{ file, game string }{
 	{"schr16_ek_all.docx", "si"},
 	{"schr18_otbor_ssi_all.docx", "si"},
 	{"nesova2025_troika.docx", "troika"},
+	{"01 SI studchr 2026_Otbor.docx.encrypted", "si"},
+	{"14 SI studchr 2026_GF.docx.encrypted", "si"},
+	{"7. ЭК СЧР 2026. Весь пакет.docx.encrypted", "si"},
 }
 
 // TestSICanonParity requires the composed 4s to be chgksuite's own, byte for
@@ -25,19 +29,12 @@ var siFixtures = []struct{ file, game string }{
 // point value, a троика's repeats in every theme), which is what parse_wrapper
 // forces and what the canons were written with.
 func TestSICanonParity(t *testing.T) {
-	dir := chgksuiteTests(t)
 	for _, f := range siFixtures {
 		t.Run(f.file, func(t *testing.T) {
-			raw, err := os.ReadFile(filepath.Join(dir, f.file))
-			if err != nil {
-				t.Fatal(err)
-			}
-			want, err := os.ReadFile(filepath.Join(dir, f.file+".canon"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			base := strings.TrimSuffix(f.file, filepath.Ext(f.file))
-			text, _, err := docxread.ToText(raw, docxread.Options{
+			want := corpus.Canon(t, f.file)
+			name := corpus.Name(f.file)
+			base := strings.TrimSuffix(name, filepath.Ext(name))
+			text, _, err := docxread.ToText(corpus.Read(t, f.file), docxread.Options{
 				ImagePrefix:       strings.ReplaceAll(base, " ", "_") + "_",
 				HeadingMarkers:    true,
 				PreserveListStart: true,
@@ -49,8 +46,8 @@ func TestSICanonParity(t *testing.T) {
 			if f.game == "troika" {
 				doc = ParseTroika(text, SIOptions{})
 			}
-			if got := fsource.Compose(doc, fsource.NumbersAll); got != string(want) {
-				t.Errorf("mismatch:\n%s", firstDiff(string(want), got))
+			if got := fsource.Compose(doc, fsource.NumbersAll); got != want {
+				t.Errorf("mismatch:\n%s", firstDiff(want, got))
 			}
 		})
 	}

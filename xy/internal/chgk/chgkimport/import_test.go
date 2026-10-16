@@ -3,25 +3,11 @@ package chgkimport
 import (
 	"archive/zip"
 	"bytes"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-)
 
-// chgksuiteTests locates chgksuite's own test corpus; the canon files there are
-// the output its `parse` command produces and the parity target for the whole
-// import pipeline.
-func chgksuiteTests(t *testing.T) string {
-	dir := os.Getenv("XY_CHGKSUITE_TESTS")
-	if dir == "" {
-		dir = filepath.Join(os.Getenv("HOME"), "chgksuite", "chgksuite", "tests")
-	}
-	if _, err := os.Stat(dir); err != nil {
-		t.Skipf("chgksuite tests dir not found (%s)", dir)
-	}
-	return dir
-}
+	"xy/internal/chgk/corpus"
+)
 
 // docxFixtures are every chgk-game .docx in chgksuite's corpus. The si/troika
 // ones are excluded (different parser, out of scope for xy), as is
@@ -41,6 +27,7 @@ var docxFixtures = []string{
 	"test_amper.docx",
 	"tourrev_with_razmin.docx",
 	"СЧР_Шередега_Ермишкин.docx",
+	"haifa2025.docx.encrypted",
 }
 
 // siDocxFixtures are the СИ packages in chgksuite's corpus. They go through the
@@ -53,23 +40,15 @@ var siDocxFixtures = []string{
 
 // TestSIDocxCanonParity is TestDocxCanonParity for темы СИ.
 func TestSIDocxCanonParity(t *testing.T) {
-	dir := chgksuiteTests(t)
-	for _, name := range siDocxFixtures {
-		t.Run(name, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join(dir, name))
-			if err != nil {
-				t.Fatal(err)
-			}
-			want, err := os.ReadFile(filepath.Join(dir, name+".canon"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			res, err := Parse(name, data, "si")
+	for _, file := range siDocxFixtures {
+		t.Run(file, func(t *testing.T) {
+			want := corpus.Canon(t, file)
+			res, err := Parse(corpus.Name(file), corpus.Read(t, file), "si")
 			if err != nil {
 				t.Fatalf("Parse: %v", err)
 			}
-			if got, w := res.Source, strings.ReplaceAll(string(want), "\r\n", "\n"); got != w {
-				t.Errorf("source mismatch:\n%s", firstDiff(w, got))
+			if got := res.Source; got != want {
+				t.Errorf("source mismatch:\n%s", firstDiff(want, got))
 			}
 		})
 	}
@@ -78,23 +57,15 @@ func TestSIDocxCanonParity(t *testing.T) {
 // TestDocxCanonParity runs the whole pipeline the import endpoint runs — raw
 // .docx bytes in, 4s source out — and requires byte-equality with chgksuite.
 func TestDocxCanonParity(t *testing.T) {
-	dir := chgksuiteTests(t)
-	for _, name := range docxFixtures {
-		t.Run(name, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join(dir, name))
-			if err != nil {
-				t.Fatal(err)
-			}
-			want, err := os.ReadFile(filepath.Join(dir, name+".canon"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			res, err := Parse(name, data, "")
+	for _, file := range docxFixtures {
+		t.Run(file, func(t *testing.T) {
+			want := corpus.Canon(t, file)
+			res, err := Parse(corpus.Name(file), corpus.Read(t, file), "")
 			if err != nil {
 				t.Fatalf("Parse: %v", err)
 			}
-			if got, w := res.Source, strings.ReplaceAll(string(want), "\r\n", "\n"); got != w {
-				t.Errorf("source mismatch:\n%s", firstDiff(w, got))
+			if got := res.Source; got != want {
+				t.Errorf("source mismatch:\n%s", firstDiff(want, got))
 			}
 
 			// After sanitising, every (img …) the source references must resolve
@@ -118,13 +89,8 @@ func TestDocxCanonParity(t *testing.T) {
 // fixture's own filename has parens, so chgksuite emits a name that every reader
 // of the (img …) syntax truncates at the first ')'.
 func TestSafeImageNamesFixesUnreadableDirectives(t *testing.T) {
-	dir := chgksuiteTests(t)
 	name := "Shkolny_Chemp_Estonii-2014_(48v).docx"
-	data, err := os.ReadFile(filepath.Join(dir, name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	res, err := Parse(name, data, "")
+	res, err := Parse(name, corpus.Read(t, name), "")
 	if err != nil {
 		t.Fatal(err)
 	}

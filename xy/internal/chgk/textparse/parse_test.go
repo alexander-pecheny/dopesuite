@@ -1,28 +1,14 @@
 package textparse
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"xy/internal/chgk/corpus"
 	"xy/internal/chgk/fsource"
 	"xy/internal/chgk/textenc"
 	"xy/internal/chgk/typo"
 )
-
-// chgksuiteTests locates chgksuite's own test corpus. Its .canon files are what
-// `chgksuite parse` produces and are the parity target for this port.
-func chgksuiteTests(t *testing.T) string {
-	dir := os.Getenv("XY_CHGKSUITE_TESTS")
-	if dir == "" {
-		dir = filepath.Join(os.Getenv("HOME"), "chgksuite", "chgksuite", "tests")
-	}
-	if _, err := os.Stat(dir); err != nil {
-		t.Skipf("chgksuite tests dir not found (%s)", dir)
-	}
-	return dir
-}
 
 // txtFixtures are the UTF-8 .txt packages in chgksuite's corpus, which reach the
 // parser as plain text — so they test ChgkParser on its own, with no docx reader
@@ -36,32 +22,25 @@ var txtFixtures = []string{
 	"bkd_2021_all.txt",
 	"borromeo.txt",
 	"comment_first.txt",
+	"kinsbf_day_1.txt.encrypted",
 	"test_blitz.txt",
 }
 
 // TestCanonParity mirrors chgk_parse_txt: decode, escape underscores outside
 // URLs, parse, compose — and require chgksuite's exact output.
 func TestCanonParity(t *testing.T) {
-	dir := chgksuiteTests(t)
 	for _, name := range txtFixtures {
 		t.Run(name, func(t *testing.T) {
-			raw, err := os.ReadFile(filepath.Join(dir, name))
-			if err != nil {
-				t.Fatal(err)
-			}
-			want, err := os.ReadFile(filepath.Join(dir, name+".canon"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			text, err := textenc.Decode(raw, "")
+			want := corpus.Canon(t, name)
+			text, err := textenc.Decode(corpus.Read(t, name), "")
 			if err != nil {
 				t.Fatal(err)
 			}
 			text = typo.EscapeUnderscoresExceptURLs(text, false)
 
 			got := fsource.Compose(Parse(text, Options{}), fsource.NumbersDefault)
-			if w := strings.ReplaceAll(string(want), "\r\n", "\n"); got != w {
-				t.Errorf("mismatch:\n%s", firstDiff(w, got))
+			if got != want {
+				t.Errorf("mismatch:\n%s", firstDiff(want, got))
 			}
 		})
 	}
