@@ -1,7 +1,9 @@
 package textparse
 
 import (
+	"flag"
 	"fmt"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -10,13 +12,10 @@ import (
 
 	"xy/internal/chgk/corpus"
 	"xy/internal/chgk/fsource"
-	"xy/internal/chgk/textparse/legacy"
 )
 
 // The generated corpus renders every chgk canon back into the plain text of a
 // package, in each way packages are commonly written, and parses that text.
-// It is how the rewrite of the parser is checked beyond the canons: the new
-// parser must read every generated package exactly as the legacy one does.
 
 // questionStyle is how a package marks where a question starts.
 type questionStyle int
@@ -168,23 +167,22 @@ func prefixFirst(prefix string, lines []string) []string {
 	return lines
 }
 
-// TestGeneratedNoWorseThanLegacy parses every generated package with both
-// parsers and fails when the legacy parser reads it back into its canon and
-// the new one does not. Where they differ otherwise, the new parser may be the
-// one that is right, so those are only counted, per style, order and layout.
-func TestGeneratedNoWorseThanLegacy(t *testing.T) {
-	type tally struct{ legacy, now, differ, total int }
-	tallies := map[string]*tally{}
-	var keys []string
+var update = flag.Bool("update", false, "rewrite testdata/generated_canon.txt")
+
+const generatedCanonFile = "testdata/generated_canon.txt"
+
+// TestGeneratedReadsBack is a ratchet: every generated package listed in
+// generated_canon.txt must still be read back into its canon. One that newly
+// is fails the test too, until -update adds it to the list.
+func TestGeneratedReadsBack(t *testing.T) {
 	cases := generatedCases(t)
-	olds, gots := make([]string, len(cases)), make([]string, len(cases))
+	got := make([]string, len(cases))
 	var wg sync.WaitGroup
 	next := make(chan int)
 	for range runtime.NumCPU() {
 		wg.Go(func() {
 			for i := range next {
-				olds[i] = fsource.Compose(legacy.Parse(cases[i].text, legacy.Options{}), fsource.NumbersDefault)
-				gots[i] = fsource.Compose(Parse(cases[i].text, Options{}), fsource.NumbersDefault)
+				got[i] = fsource.Compose(Parse(cases[i].text, Options{}), fsource.NumbersDefault)
 			}
 		})
 	}
@@ -193,38 +191,40 @@ func TestGeneratedNoWorseThanLegacy(t *testing.T) {
 	}
 	close(next)
 	wg.Wait()
+
+	var readBack []string
 	for i, c := range cases {
-		canon, old, got := c.canon, olds[i], gots[i]
-		if old == canon && got != canon && !acceptedWorse(c.name) {
-			t.Errorf("%s: legacy reads it back, the parser does not:\n%s", c.name, firstDiff(canon, got))
+		if got[i] == c.canon {
+			readBack = append(readBack, c.name)
 		}
-		key := c.name[strings.Index(c.name, "/")+1:]
-		if tallies[key] == nil {
-			tallies[key] = &tally{}
-			keys = append(keys, key)
+	}
+	if *update {
+		if err := os.WriteFile(generatedCanonFile, []byte(strings.Join(readBack, "\n")+"\n"), 0o644); err != nil {
+			t.Fatal(err)
 		}
-		n := tallies[key]
-		n.total++
-		n.legacy += boolInt(old == canon)
-		n.now += boolInt(got == canon)
-		n.differ += boolInt(got != old)
+		return
 	}
-	for _, key := range keys {
-		n := tallies[key]
-		t.Logf("%-40s canon read back: legacy %2d, now %2d of %2d; %2d differ", key, n.legacy, n.now, n.total, n.differ)
+	raw, err := os.ReadFile(generatedCanonFile)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-// acceptedWorse are the cases the parser reads differently from legacy on
-// purpose. test_blitz's canon keeps "35." in its duplet's text, and without a
-// marker that reads as the question number, which is stripped as everywhere else.
-func acceptedWorse(name string) bool {
-	return strings.HasPrefix(name, "test_blitz.txt/bare/") && strings.HasSuffix(name, "/txt")
-}
-
-func boolInt(b bool) int {
-	if b {
-		return 1
+	listed := map[string]bool{}
+	for _, name := range strings.Fields(string(raw)) {
+		listed[name] = true
 	}
-	return 0
+	byName := map[string]int{}
+	for i, c := range cases {
+		byName[c.name] = i
+	}
+	for name := range listed {
+		if i, ok := byName[name]; ok && got[i] != cases[i].canon {
+			t.Errorf("%s no longer reads back:\n%s", name, firstDiff(cases[i].canon, got[i]))
+		}
+	}
+	for _, name := range readBack {
+		if !listed[name] {
+			t.Errorf("%s now reads back; run go test -run TestGeneratedReadsBack -update", name)
+		}
+	}
+	t.Logf("%d of %d generated packages read back into their canon", len(readBack), len(cases))
 }

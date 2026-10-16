@@ -281,7 +281,8 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        marker), starts.go (questions that carry no marker), group.go (which
                        field an unlabelled line belongs to), fields.go, pack.go. It is no
                        longer a literal port: generated_test.go renders every canon in 30
-                       styles and holds it to legacy/, the frozen literal port.
+                       styles, and testdata/generated_canon.txt lists the renderings that
+                       must read back into their canon (a ratchet; -update after a gain).
                        si.go + troika.go are SiParser and TroikaParser, which read the
                        document's outline through the "$$HN$$" markers docxread writes for
                        them; db.go is parser_db's PLY lexer over db.chgk.info's own text
