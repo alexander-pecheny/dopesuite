@@ -97,12 +97,19 @@ func SortedFestRosterImportTeams(teams []FestRosterImportTeam) []FestRosterImpor
 	return out
 }
 
+// Remap is a renumbering of one site's teams (old Number → new), or of the
+// fest's for Site 0.
+type Remap struct {
+	Site    int64
+	Numbers map[int]int
+}
+
 // PropagateRosterTx folds the fest roster into every Game whose Protocol
 // carries it (games.RosterFolder) — OD's teams and entries, KSI's
 // participants and answer rows — and reports the documents it rewrote.
-// entryRemap (old Number → new) renumbers the cells keyed on a Number; nil on
-// a plain re-import.
-func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []FestRosterImportTeam, entryRemap map[int]int) ([]GameStateBroadcast, error) {
+// remap renumbers the cells keyed on a Number in the Games on its site; zero
+// on a plain re-import.
+func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []FestRosterImportTeam, remap Remap) ([]GameStateBroadcast, error) {
 	docs, err := store.LoadGameDocs(ctx, tx, festID)
 	if err != nil {
 		return nil, err
@@ -118,6 +125,10 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 			continue
 		}
 		folded := RosterTeams(OnSite(teams, placement, doc.SiteID))
+		var entryRemap map[int]int
+		if doc.SiteID == remap.Site {
+			entryRemap = remap.Numbers
+		}
 		schemeJSON, stateJSON, err := folder.FoldRoster(doc.SchemeJSON, doc.State, folded, entryRemap)
 		if err != nil {
 			return nil, fmt.Errorf("game %d: %w", doc.GameID, err)
@@ -159,11 +170,15 @@ func ScoredNumbers(ctx context.Context, q store.Queryer, festID int64) (map[int6
 		if !ok {
 			continue
 		}
+		festNumber, err := sites.FestNumbers(ctx, q, festID, doc.SiteID)
+		if err != nil {
+			return nil, err
+		}
 		state := json.RawMessage(doc.State)
 		entered, seats := counter.EnteredSeats(state), counter.Seats(state)
 		for i, seat := range seats {
-			if i < len(entered) && entered[i] && seat.Number > 0 {
-				scored[seat.Number] = append(scored[seat.Number], titles[doc.GameID])
+			if number, ok := festNumber(seat.Number); ok && i < len(entered) && entered[i] {
+				scored[number] = append(scored[number], titles[doc.GameID])
 			}
 		}
 	}
@@ -188,15 +203,16 @@ func gameTitles(ctx context.Context, q store.Queryer, festID int64) (map[int64]s
 	return titles, rows.Err()
 }
 
-// OnSite is the part of the roster a Game on this site seats: all of it
-// for a Game on none.
+// OnSite is the part of the roster a Game on this site seats, under the
+// site's own numbers: all of it, under the fest's, for a Game on none.
 func OnSite(teams []FestRosterImportTeam, placement sites.Placement, siteID int64) []FestRosterImportTeam {
 	if siteID == 0 {
 		return teams
 	}
 	out := make([]FestRosterImportTeam, 0, len(teams))
 	for _, team := range teams {
-		if placement.Of(team.LocalID, team.RatingID, team.Number) == siteID {
+		if place := placement.Of(team.LocalID, team.RatingID, team.Number); place.Site == siteID {
+			team.Number = place.Number
 			out = append(out, team)
 		}
 	}
@@ -240,18 +256,19 @@ type FestRosterTeamView struct {
 	Flags []string `json:"flags,omitempty"`
 }
 
-// LoadFestRosterView loads every active team of a fest with its ordered players,
-// for the public roster view. Teams keep their roster position order; players
-// keep their roster_order within each team.
-func LoadFestRosterView(ctx context.Context, q store.Queryer, festID int64) ([]FestRosterTeamView, error) {
+// LoadFestRosterView loads every active team of a fest, or of one site under
+// the site's numbers, with its ordered players, for the public roster view.
+// Teams keep their roster position order; players keep their roster_order
+// within each team.
+func LoadFestRosterView(ctx context.Context, q store.Queryer, festID, siteID int64) ([]FestRosterTeamView, error) {
 	rows, err := q.QueryContext(ctx, `
-select tt.id, coalesce(tt.number, 0), tt.name, tt.city, coalesce(tt.rating_id, 0),
+select tt.id, coalesce(case when ? > 0 then tt.site_number else tt.number end, 0), tt.name, tt.city, coalesce(tt.rating_id, 0),
        coalesce(p.first_name, ''), coalesce(p.last_name, ''), coalesce(p.rating_id, 0)
 from fest_teams tt
 left join fest_team_players ttp on ttp.team_id = tt.id
 left join fest_players p on p.id = ttp.player_id
-where tt.fest_id = ? and tt.deleted = 0
-order by tt.position, tt.id, ttp.roster_order, p.id`, festID)
+where tt.fest_id = ? and tt.deleted = 0 and (? = 0 or tt.site_id = ?)
+order by tt.position, tt.id, ttp.roster_order, p.id`, siteID, festID, siteID, siteID)
 	if err != nil {
 		return nil, err
 	}

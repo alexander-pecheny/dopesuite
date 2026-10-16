@@ -34,14 +34,23 @@ func DisplayName(team Team) string {
 	return fmt.Sprintf("%s (%s)", team.Name, team.City)
 }
 
-// LoadFestTeams returns the fest's active teams in display order, each with its
-// current number (0 when unset).
-func LoadFestTeams(ctx context.Context, q store.Queryer, festID int64) ([]Team, error) {
-	return store.CollectRows(ctx, q, `
+// LoadTeams returns the active teams a numbering covers in display order, each
+// with its current number (0 when unset): a site's teams under the site's own
+// numbers, or the whole fest's under the fest's for site 0.
+func LoadTeams(ctx context.Context, q store.Queryer, festID, siteID int64) ([]Team, error) {
+	query, args := `
 select id, name, city, coalesce(number, 0)
 from fest_teams
 where fest_id = ? and deleted = 0
-order by position, id`, []any{festID}, func(rows *sql.Rows) (Team, error) {
+order by position, id`, []any{festID}
+	if siteID > 0 {
+		query, args = `
+select id, name, city, coalesce(site_number, 0)
+from fest_teams
+where fest_id = ? and site_id = ? and deleted = 0
+order by position, id`, []any{festID, siteID}
+	}
+	return store.CollectRows(ctx, q, query, args, func(rows *sql.Rows) (Team, error) {
 		var team Team
 		if err := rows.Scan(&team.ID, &team.Name, &team.City, &team.Number); err != nil {
 			return team, err
@@ -50,12 +59,16 @@ order by position, id`, []any{festID}, func(rows *sql.Rows) (Team, error) {
 	})
 }
 
+// Numbered is the SQL condition that a fest team has the number its Games
+// show: its site's, for a team on a site.
+const Numbered = `(case when site_id is null then number else site_number end) is not null`
+
 // AllNumbered reports whether every active team in the fest has a number, plus
 // the active-team count.
 func AllNumbered(ctx context.Context, q store.Queryer, festID int64) (bool, int, error) {
 	var total, numbered int
 	if err := q.QueryRowContext(ctx, `
-select count(*), coalesce(sum(case when number is not null then 1 else 0 end), 0)
+select count(*), coalesce(sum(case when `+Numbered+` then 1 else 0 end), 0)
 from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&total, &numbered); err != nil {
 		return false, 0, err
 	}
@@ -106,6 +119,16 @@ from game_participants where game_id = ?`, gameID).Scan(&entrants, &unnumbered);
 		}
 		if entrants > 0 {
 			return unnumbered > 0, nil
+		}
+		var site sql.NullInt64
+		if err := q.QueryRowContext(ctx, `select site_id from games where id = ?`, gameID).Scan(&site); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return false, err
+		}
+		if site.Int64 > 0 {
+			var unnumberedOnSite bool
+			err := q.QueryRowContext(ctx, `
+select exists(select 1 from fest_teams where site_id = ? and deleted = 0 and site_number is null)`, site.Int64).Scan(&unnumberedOnSite)
+			return unnumberedOnSite, err
 		}
 	}
 	return HasUnnumbered(ctx, q, festID)

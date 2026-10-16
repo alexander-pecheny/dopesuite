@@ -46,8 +46,16 @@ roster stays one list that every Game cuts the same way.
 
 ## Consequences
 
-- Team numbers stay unique across the whole fest, not 1…n per площадка. If
-  площадки want their own numbering, it is a display question for later.
+- Each площадка numbers its own teams 1…n (`fest_teams.site_number`), as
+  the площадки do on the day. The import numbers a площадка's new teams after
+  its last number, in the order of their names, and a team that moves takes
+  the next number at its new площадка. A Game on a площадка shows and stores
+  those numbers. The fest's Number stays: it is the team's identity for the
+  Participants, which are the fest's, so the few places that join a Game's
+  document to the fest (seating, the scored check, the ОД export, seeding
+  from an ОД) turn a площадка's number into the fest's through
+  `sites.FestNumbers` and `sites.ByNumber`. The numbers page and its API
+  number one площадка at a time.
 - Who may run a площадка's Games and edit its roster is still the fest's
   access list, limited by Game (ADR-0030). Scoping a host to a площадка,
   including its roster, is the next step.

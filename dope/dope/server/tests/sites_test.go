@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"testing"
 
 	"dope/dope/domain/entrants"
 	"dope/dope/domain/festops"
+	"dope/dope/domain/flatgame"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
@@ -18,9 +20,10 @@ import (
 )
 
 // A synch fest's import puts each team on the площадка the rating site has it
-// play at. A Game on a площадка seats that площадка's teams alone, a Game on
-// none seats everyone, and a team the site moves to another площадка moves
-// between the Games with it.
+// play at, and each площадка numbers its own teams from 1. A Game on a
+// площадка seats that площадка's teams alone under those numbers, a Game on
+// none seats everyone under the fest's, and a team the site moves to another
+// площадка moves between the Games with it and takes the next number there.
 func TestASynchFestSeatsEachSiteApart(t *testing.T) {
 	t.Parallel()
 	srv := newAuthTestServer(t)
@@ -71,27 +74,57 @@ func TestASynchFestSeatsEachSiteApart(t *testing.T) {
 		}
 		var names []string
 		for _, team := range state.Teams {
-			names = append(names, team.Name)
+			names = append(names, fmt.Sprintf("%d %s", team.Number, team.Name))
 		}
 		slices.Sort(names)
 		return names
 	}
 	minskGame, brestGame, everyone := create(siteOf(minsk)), create(siteOf(brest)), create(0)
-	if got := seated(minskGame); !slices.Equal(got, []string{"Альфа", "Бета"}) {
+	if got := seated(minskGame); !slices.Equal(got, []string{"1 Альфа", "2 Бета"}) {
 		t.Fatalf("Минск seats %v", got)
 	}
-	if got := seated(brestGame); !slices.Equal(got, []string{"Гамма"}) {
+	if got := seated(brestGame); !slices.Equal(got, []string{"1 Гамма"}) {
 		t.Fatalf("Брест seats %v", got)
 	}
-	if got := seated(everyone); len(got) != 3 {
+	if got := seated(everyone); !slices.Equal(got, []string{"1 Альфа", "2 Бета", "3 Гамма"}) {
 		t.Fatalf("the Game on no площадка seats %v", got)
+	}
+	var participants []string
+	for _, game := range []int64{minskGame, brestGame} {
+		withTx(t, db, func(ctx context.Context, tx *sql.Tx) error { return flatgame.SettleTx(ctx, tx, festID, game) })
+	}
+	rows, err := db.Query(`
+select distinct p.number || ' ' || p.name from game_participants gp join participants p on p.id = gp.participant_id
+where gp.game_id in (?, ?) order by 1`, minskGame, brestGame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var row string
+		if err := rows.Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		participants = append(participants, row)
+	}
+	if !slices.Equal(participants, []string{"1 Альфа", "2 Бета", "3 Гамма"}) {
+		t.Fatalf("the площадки' Games seat the fest's Participants %v", participants)
 	}
 
 	load(brest)
-	if got := seated(minskGame); !slices.Equal(got, []string{"Бета"}) {
+	if got := seated(minskGame); !slices.Equal(got, []string{"2 Бета"}) {
 		t.Fatalf("after the move Минск seats %v", got)
 	}
-	if got := seated(brestGame); !slices.Equal(got, []string{"Альфа", "Гамма"}) {
+	if got := seated(brestGame); !slices.Equal(got, []string{"1 Гамма", "2 Альфа"}) {
 		t.Fatalf("after the move Брест seats %v", got)
+	}
+
+	if err := srv.PageServer().AutoFestNumbers(t.Context(), festID, siteOf(minsk)); err != nil {
+		t.Fatal(err)
+	}
+	if got := seated(minskGame); !slices.Equal(got, []string{"1 Бета"}) {
+		t.Fatalf("after numbering Минск anew it seats %v", got)
+	}
+	if got := seated(brestGame); !slices.Equal(got, []string{"1 Гамма", "2 Альфа"}) {
+		t.Fatalf("numbering Минск anew changed Брест to %v", got)
 	}
 }

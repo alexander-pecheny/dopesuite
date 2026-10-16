@@ -422,7 +422,7 @@ function getTabPane(tab: string): HTMLElement {
   let node;
   if (tab === "input") node = buildInputView();
   else if (tab === "detailed") node = buildDetailedTable();
-  else if (tab === "roster") node = buildRosterView(route.festID);
+  else if (tab === "roster") node = buildRosterView(route.festID, route.gameID);
   else if (tab === "screen") node = buildScreenView();
   else if (tab === "personal") node = buildPersonalView(kdContext());
   else if (tab === "players") {

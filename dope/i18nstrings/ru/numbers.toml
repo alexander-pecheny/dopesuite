@@ -11,6 +11,8 @@ crumb = "Номера команд"
 empty = "Сначала загрузите команды на странице феста."
 # The handler error when an action runs against a fest with no teams.
 no_teams = "Сначала загрузите команды."
+# The picker of a fest with площадки: each numbers its own teams.
+site = "Площадка"
 
 [action]
 # The actions cluster and the save/cancel row beneath the number list.
@@ -39,6 +41,8 @@ team_two_rows = 'Команда выбрана сразу в строках {{.f
 row_range = 'Строка {{.n}}: номер должен быть целым от 1 до {{.max}}.'
 # The same number given on two rows.
 number_two_rows = 'Номер {{.number}} указан сразу в строках {{.first}} и {{.second}}.'
+# An API call about numbers in a fest with площадки that names none of them.
+site_required = "У каждой площадки свои номера. Укажите площадку: ?site=<id>."
 
 [notice]
 # The save/auto/clear outcomes shown as the page note.

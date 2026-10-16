@@ -26,9 +26,9 @@ func openDB(t *testing.T) *sql.DB {
 	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
 	if _, err := db.Exec(`
-create table fest_teams(id integer primary key, fest_id integer, name text, city text default '', position real, number integer, deleted integer default 0);
+create table fest_teams(id integer primary key, fest_id integer, name text, city text default '', position real, number integer, deleted integer default 0, site_id integer, site_number integer);
 create table game_participants(game_id integer, participant_id integer, position integer, number integer default 0);
-create table games(id integer primary key, fest_id integer, game_type text);
+create table games(id integer primary key, fest_id integer, game_type text, site_id integer);
 insert into games(id, fest_id, game_type) values (10, 1, 'ek'), (11, 1, 'ek'), (12, 1, 'od'), (13, 1, 'kd');
 insert into fest_teams(fest_id, name, city, position, number) values
   (1, 'B', '', 2, 5), (1, 'A', 'X', 1, null), (1, 'gone', '', 0, null), (2, 'C', '', 1, 1);
@@ -40,7 +40,7 @@ update fest_teams set deleted = 1 where name = 'gone';`); err != nil {
 
 func TestLoadFestTeamsOrdersActiveTeamsByPosition(t *testing.T) {
 	db := openDB(t)
-	teams, err := LoadFestTeams(context.Background(), db, 1)
+	teams, err := LoadTeams(context.Background(), db, 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

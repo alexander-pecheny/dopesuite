@@ -1282,6 +1282,7 @@ export type Strings = {
       rowForeignTeam: (n: string) => string;
       rowNoTeam: (n: string) => string;
       rowRange: (n: string, max: string) => string;
+      siteRequired: () => string;
       teamTwoRows: (first: string, second: string) => string;
     };
     help: {
@@ -1310,6 +1311,7 @@ export type Strings = {
       crumb: () => string;
       empty: () => string;
       noTeams: () => string;
+      site: () => string;
       title: (fest: string) => string;
     };
   };

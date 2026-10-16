@@ -1304,6 +1304,7 @@ shootout: true
       rowForeignTeam: (n: string) => `Строка ${n}: команда не из этого феста.`,
       rowNoTeam: (n: string) => `Строка ${n}: укажите команду или удалите номер.`,
       rowRange: (n: string, max: string) => `Строка ${n}: номер должен быть целым от 1 до ${max}.`,
+      siteRequired: () => "У каждой площадки свои номера. Укажите площадку: ?site=<id>.",
       teamTwoRows: (first: string, second: string) => `Команда выбрана сразу в строках ${first} и ${second}.`,
     },
     help: {
@@ -1332,6 +1333,7 @@ shootout: true
       crumb: () => "Номера команд",
       empty: () => "Сначала загрузите команды на странице феста.",
       noTeams: () => "Сначала загрузите команды.",
+      site: () => "Площадка",
       title: (fest: string) => `${fest} · номера команд`,
     },
   },

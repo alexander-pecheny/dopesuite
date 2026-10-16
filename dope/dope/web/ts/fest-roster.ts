@@ -47,15 +47,18 @@ export interface FestPlayerChoice {
 }
 
 // Roster — the fest-level team→players list, shared by every game
-// page (EK/OD/KSI, host and viewer). The data is the same for all games in a
-// fest, so it is fetched once per festID and cached for the page's lifetime.
-const rosterCache = new Map<string | number, Promise<RosterTeam[]>>();
+// page (EK/OD/KSI, host and viewer). A game on a site gets its site's
+// part under that site's numbers, so a game names itself when it asks.
+// Each answer is cached for the page's lifetime.
+const rosterCache = new Map<string, Promise<RosterTeam[]>>();
 
-export function fetchFestRoster(festID: string | number | null | undefined): Promise<RosterTeam[]> {
+export function fetchFestRoster(festID: string | number | null | undefined, gameID?: string): Promise<RosterTeam[]> {
   if (!festID) return Promise.resolve([]);
-  const cached = rosterCache.get(festID);
+  const fest = `/api/fest/${encodeURIComponent(festID)}`;
+  const url = gameID ? `${fest}/games/${encodeURIComponent(gameID)}/roster` : `${fest}/roster`;
+  const cached = rosterCache.get(url);
   if (cached) return cached;
-  const promise = fetch(`/api/fest/${encodeURIComponent(festID)}/roster`)
+  const promise = fetch(url)
     .then((response) => {
       if (!response.ok) throw new Error(`roster ${response.status}`);
       return response.json();
@@ -66,10 +69,10 @@ export function fetchFestRoster(festID: string | number | null | undefined): Pro
     })
     .catch((err: unknown) => {
       // Don't cache a failure — let a later render retry the fetch.
-      rosterCache.delete(festID);
+      rosterCache.delete(url);
       throw err;
     });
-  rosterCache.set(festID, promise);
+  rosterCache.set(url, promise);
   return promise;
 }
 
@@ -180,8 +183,8 @@ function troikaLine(team: RosterTeam): string {
 // itself asynchronously: it shows a loading line, fetches the fest roster, then
 // swaps in the table (or an error line on failure). Safe to drop straight into
 // a tab pane by any page — no roster data needs to be threaded through.
-export function buildRosterView(festID: string | number | null | undefined): HTMLElement {
-  return rosterView(fetchFestRoster(festID), {});
+export function buildRosterView(festID: string | number | null | undefined, gameID?: string): HTMLElement {
+  return rosterView(fetchFestRoster(festID, gameID), {});
 }
 
 export interface GameRosterOptions {

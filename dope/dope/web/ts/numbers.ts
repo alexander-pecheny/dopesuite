@@ -80,7 +80,8 @@ interface ImportApplyResponse {
   }
 
   const importBtn = document.getElementById("numbers-import-btn");
-  const baseAction = form.getAttribute("action");
+  const [basePath, siteQuery] = (form.getAttribute("action") ?? "").split("?");
+  const endpoint = (path: string) => `${basePath}${path}${siteQuery ? `?${siteQuery}` : ""}`;
 
   const closeDialog = (dialog: HTMLDialogElement) => {
     if (dialog && dialog.parentNode) dialog.close();
@@ -126,7 +127,7 @@ interface ImportApplyResponse {
       }
       submit.disabled = true;
       err.hidden = true;
-      fetch(`${baseAction}/import/match`, {
+      fetch(endpoint("/import/match"), {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ text }),
@@ -284,7 +285,7 @@ interface ImportApplyResponse {
       }
       apply.disabled = true;
       err.hidden = true;
-      fetch(`${baseAction}/import/apply`, {
+      fetch(endpoint("/import/apply"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignments }),

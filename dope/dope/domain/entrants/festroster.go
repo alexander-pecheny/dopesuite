@@ -148,7 +148,7 @@ func SaveTeamFlagsTx(ctx context.Context, tx *sql.Tx, festID int64, flagsByTeam 
 	if err != nil {
 		return core.FestWrite{}, err
 	}
-	updates, err := roster.PropagateRosterTx(ctx, tx, festID, teams, nil)
+	updates, err := roster.PropagateRosterTx(ctx, tx, festID, teams, roster.Remap{})
 	if err != nil {
 		return core.FestWrite{}, err
 	}

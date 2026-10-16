@@ -19,6 +19,9 @@ CREATE INDEX fest_team_flags_team_idx on fest_team_flags(team_id, position);
 -- index fest_teams_fest_number_idx
 CREATE UNIQUE INDEX fest_teams_fest_number_idx on fest_teams(fest_id, number) where number is not null;
 
+-- index fest_teams_site_number_idx
+CREATE UNIQUE INDEX fest_teams_site_number_idx on fest_teams(site_id, site_number) where site_number is not null;
+
 -- index game_invites_game_idx
 CREATE INDEX game_invites_game_idx on game_invites(game_id);
 
@@ -152,7 +155,7 @@ CREATE TABLE fest_teams(
   position real not null,
   number integer,
   deleted integer not null default 0
-, country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0, site_id INTEGER REFERENCES fest_sites(id) ON DELETE SET NULL);
+, country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0, site_id INTEGER REFERENCES fest_sites(id) ON DELETE SET NULL, site_number INTEGER);
 
 -- table fests
 CREATE TABLE fests(

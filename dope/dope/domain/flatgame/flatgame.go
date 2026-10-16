@@ -16,6 +16,7 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
+	"dope/dope/domain/sites"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
@@ -117,6 +118,14 @@ select g.game_type, m.state_json from matches m join games g on g.id = m.game_id
 // entrant list follows when every seat is numbered, and is dropped otherwise
 // so the numbering guard falls back to the fest's registry.
 func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seats []games.Seat) error {
+	siteID, err := sites.GameSite(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	festNumber, err := sites.FestNumbers(ctx, tx, festID, siteID)
+	if err != nil {
+		return err
+	}
 	wanted := make([]int64, len(seats))
 	numbered := true
 	for i, seat := range seats {
@@ -126,11 +135,12 @@ func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seat
 			// stop the numbered teams from being the Game's entrant list.
 			continue
 		}
-		if seat.Number == 0 || seat.Name == "" {
+		number, ok := festNumber(seat.Number)
+		if !ok || seat.Name == "" {
 			numbered = false
 			continue
 		}
-		id, err := store.EnsureParticipantByNumber(ctx, tx, festID, "team", seat.Number, seat.Name, seat.City)
+		id, err := store.EnsureParticipantByNumber(ctx, tx, festID, "team", number, seat.Name, seat.City)
 		if err != nil {
 			return err
 		}

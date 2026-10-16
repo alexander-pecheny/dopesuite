@@ -78,7 +78,7 @@ func writeRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster
 	// OD/KSI game state is a pure function of the TEAM list, so only re-propagate
 	// when teams actually changed — a player-only change leaves it identical.
 	if teamsChanged {
-		updates, err := roster.PropagateRosterTx(ctx, tx, festID, teams, nil)
+		updates, err := roster.PropagateRosterTx(ctx, tx, festID, teams, roster.Remap{})
 		if err != nil {
 			return out, err
 		}

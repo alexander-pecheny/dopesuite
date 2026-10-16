@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/numbering"
 	"dope/dope/domain/sites"
 	"dope/dope/domain/view"
 	"dope/dope/platform/roles"
@@ -689,7 +690,7 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 	}
 	var numbersAssigned int
 	if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select coalesce(sum(case when number is not null then 1 else 0 end), 0)
+select coalesce(sum(case when `+numbering.Numbered+` then 1 else 0 end), 0)
 from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigned); err != nil {
 		route.WriteError(w, r, err)
 		return

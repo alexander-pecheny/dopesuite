@@ -1765,6 +1765,9 @@ var RU = Strings{
 			RowRange: func(n string, max string) string {
 				return fmt.Sprintf("Строка %s: номер должен быть целым от 1 до %s.", n, max)
 			},
+			SiteRequired: func() string {
+				return "У каждой площадки свои номера. Укажите площадку: ?site=<id>."
+			},
 			TeamTwoRows: func(first string, second string) string {
 				return fmt.Sprintf("Команда выбрана сразу в строках %s и %s.", first, second)
 			},
@@ -1811,6 +1814,7 @@ var RU = Strings{
 				return "Сначала загрузите команды на странице феста."
 			},
 			NoTeams: func() string { return "Сначала загрузите команды." },
+			Site:    func() string { return "Площадка" },
 			Title:   func(fest string) string { return fmt.Sprintf("%s · номера команд", fest) },
 		},
 	},

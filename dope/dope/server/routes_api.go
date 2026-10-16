@@ -19,6 +19,7 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/sites"
 	"dope/dope/export/gameexport"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
@@ -139,9 +140,14 @@ func (s *server) scopedGame(w http.ResponseWriter, r *http.Request, sc route.Sco
 }
 
 // scopedFestRoster serves the fest's canonical team→players roster for the
-// read-only rosters tab, visible to every visitor of a public fest.
+// read-only rosters tab, visible to every visitor of a public fest: the part a
+// Game on a site seats, when a Game asks.
 func (s *server) scopedFestRoster(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	teams, err := roster.LoadFestRosterView(r.Context(), s.eng.DB, sc.FestID)
+	siteID, err := sites.GameSite(r.Context(), s.eng.DB, sc.GameID)
+	if err != nil {
+		return err
+	}
+	teams, err := roster.LoadFestRosterView(r.Context(), s.eng.DB, sc.FestID, siteID)
 	if err != nil {
 		return err
 	}

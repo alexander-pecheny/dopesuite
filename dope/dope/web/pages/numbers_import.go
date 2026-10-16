@@ -214,9 +214,10 @@ func matchNumberImport(entries []importEntry, teams []numbering.Team) []importMa
 	return matches
 }
 
-// MatchFestNumbers pairs pasted lines with the fest's teams. Nothing is saved.
-func (s *Server) MatchFestNumbers(ctx context.Context, festID int64, text string) (NumbersMatch, error) {
-	teams, err := numbering.LoadFestTeams(ctx, s.h.Engine().DB, festID)
+// MatchFestNumbers pairs pasted lines with the teams of the fest, or of one
+// site. Nothing is saved.
+func (s *Server) MatchFestNumbers(ctx context.Context, festID, siteID int64, text string) (NumbersMatch, error) {
+	teams, err := numbering.LoadTeams(ctx, s.h.Engine().DB, festID, siteID)
 	if err != nil {
 		return NumbersMatch{}, err
 	}
@@ -248,7 +249,12 @@ func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	match, err := s.MatchFestNumbers(r.Context(), festID, r.Form.Get("text"))
+	site, _, err := s.numbersSite(r, festID)
+	if err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
+	match, err := s.MatchFestNumbers(r.Context(), festID, site, r.Form.Get("text"))
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -278,9 +284,9 @@ type importApplyResponse struct {
 // AssignFestNumbers gives the named teams their numbers and leaves every other
 // team's as it is, except that a number moved onto a team is taken from
 // whoever held it. The assignments are the authority, as printed blanks are.
-func (s *Server) AssignFestNumbers(ctx context.Context, festID int64, assignments []NumberAssignment) error {
+func (s *Server) AssignFestNumbers(ctx context.Context, festID, siteID int64, assignments []NumberAssignment) error {
 	str := dopestrings.Default
-	teams, err := numbering.LoadFestTeams(ctx, s.h.Engine().DB, festID)
+	teams, err := numbering.LoadTeams(ctx, s.h.Engine().DB, festID, siteID)
 	if err != nil {
 		return err
 	}
@@ -317,7 +323,7 @@ func (s *Server) AssignFestNumbers(ctx context.Context, festID int64, assignment
 		}
 		final[a.TeamID] = a.Number
 	}
-	return s.SaveFestNumbers(ctx, festID, final)
+	return s.SaveFestNumbers(ctx, festID, siteID, final)
 }
 
 func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -328,7 +334,11 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 		}
 		return
 	}
-	if err := s.AssignFestNumbers(r.Context(), festID, req.Assignments); err != nil {
+	site, _, err := s.numbersSite(r, festID)
+	if err == nil {
+		err = s.AssignFestNumbers(r.Context(), festID, site, req.Assignments)
+	}
+	if err != nil {
 		msg, _ := corei18n.Reveal(err, dopestrings.Default.Server.Error.Internal())
 		if err := route.JSON(w, importApplyResponse{Error: msg}); err != nil {
 			route.WriteError(w, r, err)

@@ -398,7 +398,7 @@ function buildResultsTable(): HTMLElement {
 // delta while this tab is open.
 let siRosterView: HTMLElement | null = null;
 function rosterView(): HTMLElement {
-  if (!siRosterView) siRosterView = buildRosterView(route.festID);
+  if (!siRosterView) siRosterView = buildRosterView(route.festID, route.gameID);
   return siRosterView;
 }
 

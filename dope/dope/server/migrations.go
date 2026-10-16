@@ -1006,6 +1006,13 @@ create unique index if not exists fest_sites_venue_idx on fest_sites(fest_id, ra
 		// its games along.
 		return store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{{Name: "site_id", Type: "INTEGER"}})
 	}},
+	{Version: 45, Name: "fest_teams.site_number", Up: func(db *sql.DB) error {
+		if err := store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{{Name: "site_number", Type: "INTEGER"}}); err != nil {
+			return err
+		}
+		_, err := db.Exec(`create unique index if not exists fest_teams_site_number_idx on fest_teams(site_id, site_number) where site_number is not null`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

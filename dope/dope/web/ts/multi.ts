@@ -689,7 +689,7 @@ function render(): void {
 
 let rosterCache: HTMLElement | null = null;
 function rosterView(): HTMLElement {
-  if (!rosterCache) rosterCache = buildRosterView(route.festID);
+  if (!rosterCache) rosterCache = buildRosterView(route.festID, route.gameID);
   return rosterCache;
 }
 

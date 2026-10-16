@@ -1076,7 +1076,7 @@ func TestFestNumbersFlow(t *testing.T) {
 	}
 
 	// Auto-assign numbers by alphabet (idempotent here — import already did this).
-	teams, err := numbering.LoadFestTeams(t.Context(), db, festID)
+	teams, err := numbering.LoadTeams(t.Context(), db, festID, 0)
 	if err != nil {
 		t.Fatalf("load teams: %v", err)
 	}
@@ -1087,7 +1087,7 @@ func TestFestNumbersFlow(t *testing.T) {
 	for i, team := range teams {
 		assignments[team.ID] = i + 1
 	}
-	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, assignments); err != nil {
+	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, 0, assignments); err != nil {
 		t.Fatalf("save numbers: %v", err)
 	}
 
@@ -1127,7 +1127,7 @@ func TestFestNumbersFlow(t *testing.T) {
 
 	// Rejecting duplicate number is the responsibility of the handler; saveFestNumbers
 	// dedupes by map key, so we just verify clearing wipes numbers.
-	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, nil); err != nil {
+	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, 0, nil); err != nil {
 		t.Fatalf("clear numbers: %v", err)
 	}
 	allSet, _, err = numbering.AllNumbered(t.Context(), db, festID)
@@ -1197,7 +1197,7 @@ func TestHostFestNumbersPage(t *testing.T) {
 		t.Fatalf("auto status = %d body=%s", auto.Code, auto.Body.String())
 	}
 
-	teams, err := numbering.LoadFestTeams(t.Context(), srv.Eng().DB, festID)
+	teams, err := numbering.LoadTeams(t.Context(), srv.Eng().DB, festID, 0)
 	if err != nil {
 		t.Fatalf("load teams: %v", err)
 	}
@@ -1212,7 +1212,7 @@ func TestHostFestNumbersPage(t *testing.T) {
 
 	// Sort to know which team currently has number 1 / 2.
 	byNum := func() (lo, hi numbering.Team) {
-		teams, err := numbering.LoadFestTeams(t.Context(), srv.Eng().DB, festID)
+		teams, err := numbering.LoadTeams(t.Context(), srv.Eng().DB, festID, 0)
 		if err != nil {
 			t.Fatalf("load teams: %v", err)
 		}
@@ -1322,7 +1322,7 @@ func TestFestNumbersRemapEntries(t *testing.T) {
 	}, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import roster: %v", err)
 	}
-	teams, err := numbering.LoadFestTeams(t.Context(), db, festID)
+	teams, err := numbering.LoadTeams(t.Context(), db, festID, 0)
 	if err != nil {
 		t.Fatalf("load teams: %v", err)
 	}
@@ -1331,7 +1331,7 @@ func TestFestNumbersRemapEntries(t *testing.T) {
 	}
 	// Initial 1..3 alphabetical numbering.
 	initial := map[int64]int{teams[0].ID: 1, teams[1].ID: 2, teams[2].ID: 3}
-	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, initial); err != nil {
+	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, 0, initial); err != nil {
 		t.Fatalf("initial numbers: %v", err)
 	}
 
@@ -1353,7 +1353,7 @@ where game_id = ? and code = 'main'`, string(entriesJSON), string(shootoutRounds
 
 	// Reassign: team[0] gets reserve 101 (was 1), team[1] gets 1 (was 2), team[2] keeps 3.
 	reassign := map[int64]int{teams[0].ID: 101, teams[1].ID: 1, teams[2].ID: 3}
-	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, reassign); err != nil {
+	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, 0, reassign); err != nil {
 		t.Fatalf("reassign: %v", err)
 	}
 
@@ -1429,7 +1429,7 @@ where game_id = ? and code = 'main'`, `[["",""],["right",""],["",""]]`, ksiGameI
 		t.Fatalf("seed answers: %v", err)
 	}
 
-	teams, err := numbering.LoadFestTeams(t.Context(), db, festID)
+	teams, err := numbering.LoadTeams(t.Context(), db, festID, 0)
 	if err != nil {
 		t.Fatalf("load teams: %v", err)
 	}
@@ -1440,7 +1440,7 @@ where game_id = ? and code = 'main'`, `[["",""],["right",""],["",""]]`, ksiGameI
 	// Reassign to numbers far from the 1..3 import default so a stale KSI state
 	// is unmistakable.
 	reassign := map[int64]int{byName["Алёша"]: 201, byName["Боря"]: 202, byName["Витя"]: 203}
-	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, reassign); err != nil {
+	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, 0, reassign); err != nil {
 		t.Fatalf("reassign: %v", err)
 	}
 
@@ -1506,7 +1506,7 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 999, initial, imports.RosterChoice{}); err != nil {
 		t.Fatalf("initial import: %v", err)
 	}
-	teams, err := numbering.LoadFestTeams(t.Context(), db, festID)
+	teams, err := numbering.LoadTeams(t.Context(), db, festID, 0)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -1525,7 +1525,7 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 		}
 		byRating[ratingID] = team.ID
 	}
-	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, assignments); err != nil {
+	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, 0, assignments); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 

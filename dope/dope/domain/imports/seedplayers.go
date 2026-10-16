@@ -14,6 +14,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/expr"
 	"dope/dope/domain/games"
+	"dope/dope/domain/sites"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
@@ -306,7 +307,7 @@ func loadSeedSourceGame(ctx context.Context, q store.Queryer, festID int64, code
 		if !games.Get(doc.GameType).ToursSeed {
 			return seedSourceGame{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.ToursOd(code))
 		}
-		places, err = odPlacesAfterTours(ctx, q, festID, code, doc.SchemeJSON, doc.State, tours)
+		places, err = odPlacesAfterTours(ctx, q, festID, code, doc, tours)
 	} else {
 		places, err = teamPlacesByFestTeam(ctx, q, festID, code)
 	}
@@ -394,9 +395,10 @@ order by st.stage_id, st.rank`, []any{festID, code}, func(rs *sql.Rows) (row, er
 // counted as the OD counts them (by total, a tie shared at the mean of the
 // places it covers). The troika regulations seed on the question-game after its
 // first two tours, whatever has been played since.
-func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code, schemeJSON, stateJSON string, tours []int) (map[int64]float64, error) {
+func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code string, doc store.GameDoc, tours []int) (map[int64]float64, error) {
+	schemeJSON := doc.SchemeJSON
 	var state games.ODState
-	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+	if err := json.Unmarshal([]byte(doc.State), &state); err != nil {
 		return nil, fmt.Errorf("parse OD state: %w", err)
 	}
 	comp := games.ParseTourComp(schemeJSON)
@@ -433,7 +435,7 @@ func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code
 	if err != nil {
 		return nil, err
 	}
-	teamOf, err := festTeamsByNumber(ctx, q, festID)
+	teamOf, err := sites.ByNumber(ctx, q, festID, doc.SiteID)
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +449,7 @@ func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code
 		mean := float64(i+1+j+1) / 2
 		for k := i; k <= j; k++ {
 			if team, ok := teamOf[ranked[k].Number]; ok {
-				places[team] = mean
+				places[team.ID] = mean
 			}
 		}
 		i = j + 1
@@ -455,25 +457,6 @@ func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code
 	// A team that did not play stands one place behind the last that did.
 	places[0] = float64(len(ranked) + 1)
 	return places, nil
-}
-
-// festTeamsByNumber maps the fest's team numbers to its teams: an OD's
-// document names its teams by number.
-func festTeamsByNumber(ctx context.Context, q store.Queryer, festID int64) (map[int64]int64, error) {
-	rows, err := store.CollectRows(ctx, q, `
-select number, id from fest_teams where fest_id = ? and deleted = 0 and number is not null`, []any{festID},
-		func(rs *sql.Rows) ([2]int64, error) {
-			var pair [2]int64
-			return pair, rs.Scan(&pair[0], &pair[1])
-		})
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[int64]int64, len(rows))
-	for _, pair := range rows {
-		out[pair[0]] = pair[1]
-	}
-	return out, nil
 }
 
 // samePlace reports whether two standings rows share a place: both carry

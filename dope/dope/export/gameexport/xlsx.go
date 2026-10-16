@@ -11,6 +11,7 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/sites"
 	"dope/dope/export/xlsxexport"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
@@ -29,8 +30,8 @@ type sheetBuilder func(ctx context.Context, s Host, f *excelize.File, festID, ga
 // (games.Definition.Sheets). A format whose layout has no builder fails
 // TestEveryFormatHasAnExport.
 var sheetBuilders = map[games.Sheets]sheetBuilder{
-	games.SheetsODRating: func(ctx context.Context, s Host, f *excelize.File, festID, _ int64, schemeJSON, stateJSON string) error {
-		ratingByNumber, err := loadTeamRatingIDsByNumber(ctx, s.DB(), festID)
+	games.SheetsODRating: func(ctx context.Context, s Host, f *excelize.File, festID, gameID int64, schemeJSON, stateJSON string) error {
+		ratingByNumber, err := loadTeamRatingIDsByNumber(ctx, s.DB(), festID, gameID)
 		if err != nil {
 			return err
 		}
@@ -130,24 +131,23 @@ func ContentDispositionAttachment(name string) string {
 
 // --- OD: rating.chgk.info "tournament-tours" layout ---------------------------
 
-// loadTeamRatingIDsByNumber returns a map from team number to rating.chgk.info ID
-// for all non-deleted, numbered teams in the given fest. Teams without a rating_id
-// are omitted (caller falls back to the internal number).
-func loadTeamRatingIDsByNumber(ctx context.Context, db *sql.DB, festID int64) (map[int64]int64, error) {
-	rows, err := db.QueryContext(ctx,
-		`select number, rating_id from fest_teams where fest_id = ? and deleted = 0 and number is not null and rating_id is not null`,
-		festID)
+// loadTeamRatingIDsByNumber maps the numbers the Game names its teams by to
+// their rating.chgk.info ids. Teams without one are left out, and the sheet
+// falls back to the number.
+func loadTeamRatingIDsByNumber(ctx context.Context, db *sql.DB, festID, gameID int64) (map[int64]int64, error) {
+	siteID, err := sites.GameSite(ctx, db, gameID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	m := make(map[int64]int64)
-	for rows.Next() {
-		var num, rid int64
-		if err := rows.Scan(&num, &rid); err != nil {
-			return nil, err
-		}
-		m[num] = rid
+	teams, err := sites.ByNumber(ctx, db, festID, siteID)
+	if err != nil {
+		return nil, err
 	}
-	return m, rows.Err()
+	m := make(map[int64]int64)
+	for number, team := range teams {
+		if team.RatingID > 0 {
+			m[number] = team.RatingID
+		}
+	}
+	return m, nil
 }
