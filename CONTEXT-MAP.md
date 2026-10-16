@@ -1,7 +1,9 @@
 # Context map
 
 There are four bounded contexts, one for each app and for the UI module.
-`dopecore` is a shared platform layer and has no glossary of its own.
+`dopecore` is a shared platform layer and has no glossary of its own. `chgksuite`
+uses the words of `xy/CONTEXT.md` for packages and questions, and has no
+glossary of its own either.
 
 The root [`CONTEXT.md`](CONTEXT.md) holds the few terms that mean the same thing
 everywhere: Catalog, Surface, String Id and User Error. Read the `CONTEXT.md` of

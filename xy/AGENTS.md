@@ -110,38 +110,20 @@ in the dopesuite monorepo. The rules for the monorepo itself are in the root
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
 cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.local/bin
-cmd/chgksuite/         the Go side of chgksuite's own CLI over internal/chgk: `parse`,
-                       `compose docx|pdf|pptx|telegram|markdown|redditmd|base|openquiz|lj|add_stats`,
-                       `handouts generate|run|split_fit|pack|create_html`, checked against the
-                       Python tool's output. Renders with the typst BINARY (--typst /
-                       $CHGKSUITE_TYPST / PATH): a shell user's plaintext is already on their
-                       disk, and the binary starts in milliseconds. `just chgksuite` builds it
-                       at 14 MB and needs no Rust and no wasm; `just chgksuite-wasm` carries
-                       typst along (-tags wasmtypst, 49 MB) for a machine that has none.
-                       Nothing in xy uses it; see ../chgksuite_go_rewrite.md
-internal/xycli/        xy-cli: the board from the shell, for an agent. A second implementation
-                       of the Envelope (scrypt KEK + AES-GCM, parity-tested both ways against
-                       crypto.ts), over an API-token client (ADR-0015), exporting through
-                       internal/listexport (and so sending the .hndt too); unlocked data keys live in a 0600
+../chgksuite/          a module of its own (../chgksuite/AGENTS.md): the Go port of chgksuite
+                       (4s, docx, pdf, pptx, handouts, import, telegram and the rest), listexport,
+                       cardkind, xyenvelope and the chgksuite CLI. xy imports it through a
+                       replace; the server's exports, import and handouts and xy-cli are built
+                       on it, and its generators write web/ts/markers_gen.ts and cardkind_gen.ts
+internal/xycli/        xy-cli: the board from the shell, for an agent. It seals and opens through
+                       chgksuite/xyenvelope, the second implementation of the Envelope (scrypt
+                       KEK + AES-GCM, parity-tested both ways against crypto.ts), over an
+                       API-token client (ADR-0015), exporting through chgksuite/listexport
+                       (and so sending the .hndt too); unlocked data keys live in a 0600
                        state file (ADR-0016). Commands: boards/unlock, board show, list, card
                        (4s on stdin/stdout, always with a desc_edit entry), comment (@mentions
                        resolved), label, search (folded), source, export, attachment. Timeline
                        payloads go through eventpayload.go, web/ts/eventpayload.ts's twin
-internal/listexport/   what a List exports as: Assemble(cards) → the 4s (Versions folded, kind
-                       markers, blank lines as (LINEBREAK)), the game (a Theme makes it SI) and
-                       the .hndt (preamble + one block per question with a Handout; the label
-                       must open an unbracketed one — xy's rule, not handout.Generate's). The
-                       REFERENCE: xy-cli calls it, and web/ts/listexport.ts is the browser's
-                       copy, held to testdata/cases.json (written by `go test
-                       ./internal/listexport -update`, read by jstest/listexport_parity.test.js).
-                       The copy stays because a bare .4s is written offline and the board's
-                       handout badge is drawn on every render
-internal/cardkind/     the Card Kinds and what each does (numbered and in which count, exported,
-                       carries handouts, versioned, the marker a plain one exports with, restarts
-                       the Theme count, sets the base, makes the tour SI, offered in the kind menu).
-                       One table: the server's allow-list is Valid, tests hold the cards.kind CHECK
-                       and board.dopeui's kind menu to it, listexport and xy-cli ask it, and
-                       `go generate` writes it into web/ts/cardkind_gen.ts for cardkind.ts
 internal/rank/         fractional indexing (keyBetween/After), the Go half of web/ts/rank.ts:
                        the server ranks a Trello upload with it, xy-cli every insert and move
 internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy primitives +
@@ -207,7 +189,7 @@ internal/server/       package server — the whole HTTP server
   invite.go            invite minting (subcommand)
   admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny"); the create-users body is kit.AdminCreateUsers, xy wraps its chrome
   export.go            POST /api/export/{docx,pdf}. One 4s source plus its images, exported two
-                       ways. Both run entirely in-process (chgk/docx and chgk/typstdoc) and
+                       ways. Both run entirely in-process (chgksuite/docx and chgksuite/typstdoc) and
                        include the images; no Python is involved. The PDF goes through the shared
                        typst wasm pool (typst.go), so it writes nothing to disk either
   exportpack.go        POST /api/export/pack, which is what the export modal calls. It takes one 4s
@@ -217,7 +199,7 @@ internal/server/       package server — the whole HTTP server
                        zip if several were. The images are sent separately only for the .4s, since
                        docx and pdf embed their own. The PDFs from split-fit go into раздатки/
   exporttg.go          POST /api/export/telegram, the export that publishes instead of downloading
-                       (internal/chgk/tg). It is the only export that is a conversation. A bot
+                       (chgksuite/tg). It is the only export that is a conversation. A bot
                        cannot look up a channel by its @username, so the person running the export
                        has to show the bot the channel and the group from the inside while the bot
                        polls. The response is therefore a stream of NDJSON lines: progress notes,
@@ -227,11 +209,11 @@ internal/server/       package server — the whole HTTP server
                        the thing people most often forget. The bot token is passed through the
                        server, because the posting is done in Go and the CSP does not let the page
                        reach api.telegram.org. It is never stored
-  import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
+  import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgksuite/chgkimport),
                        parsed in memory, nothing persisted; the client encrypts the result into a new list.
                        POST /api/import/text — the same pipeline without the file: one card's plain text
                        (a question pasted as prose) → 4s, behind the card editor's →.4s button
-  handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgk/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
+  handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgksuite/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
   typst.go             the shared typst (wasm) pool: built once, warmed at boot, injectable so handler tests stub it. XY_WASM_CACHE must be persistent (~15s cold compile vs ~0.6s cached)
   sessions.go          test sessions (ADR-0004): a board-level entity, not a card in a list.
                        CRUD + the session's own лента (a comment may hang off a card, off a
@@ -250,116 +232,6 @@ internal/server/       package server — the whole HTTP server
                        attachments.go still uses ParseMultipartForm, because those uploads are
                        already ciphertext
   debug.go             [timing] logs on export/handout endpoints, gated by XY_DEBUG_TIMING
-internal/chgk/         Go port of chgksuite's core (xy no longer shells out to Python for docx/handouts)
-  fsource/             the "4s" format, both ways: parse.go = parse_4s (oracle-tested vs
-                       chgksuite --debug), compose.go = compose_4s (structure → 4s text).
-                       testdata/parity.json is the Go/TS corpus: every fixture line split
-                       at its marker, (img …) references, one .hndt the browser writes and
-                       Go parses; parity_test.go is the oracle (regenerate with
-                       `go test ./internal/chgk/fsource -run TestParity -update`),
-                       jstest/fsource_parity.test.js the other reader. markerMapping is the
-                       one marker table: `go generate` writes web/ts/markers_gen.ts
-  typo/                typotools.py: the typography pass (quotes/dashes/stress accents/
-                       %-decoding) + URL-aware underscore escaping
-  typoedit/            the typography pass: typo (quotes, dashes and %-decoding, which is every
-                       knob except accents, as those have their own button), plus inline's gluing
-                       of nbsp and nbhyphen. It is applied to the 4s SOURCE, not to the value of a
-                       field. Every line is split at its marker first (fsource.SplitMarker),
-                       because a pass run over raw 4s reads a list item's leading "-" as a stray
-                       hyphen, turns it into an em dash, and destroys the list.
-                       NOTHING IN PRODUCTION CALLS THIS. The button runs the TypeScript port in
-                       web/ts/typo.ts instead, because question text must not be sent to a server
-                       that may not be allowed to see it. This package is the parity oracle, and
-                       both test suites read testdata/pass_cases.json
-  docxread/            .docx → plain text — a hand-rolled python-docx (zip/OPC, runs,
-                       hyperlinks, numbering, tables, image extraction, in memory, no fs)
-  docread/             Word 97–2003 .doc → the same plain text, minus images, list numbers
-                       and formatting: OLE container, FIB, piece table. Only `chgksuite
-                       credits` uses it; doctest/ writes minimal .doc files for tests
-  textparse/           parser.py's parsers: plain text → structure. The chgk/brain parser
-                       runs in stages, one file each: label.go (each line typed by its
-                       marker), starts.go (questions that carry no marker), group.go (which
-                       field an unlabelled line belongs to), fields.go, pack.go. It is no
-                       longer a literal port: generated_test.go renders every canon in 30
-                       styles, and testdata/generated_canon.txt lists the renderings that
-                       must read back into their canon (a ratchet; -update after a gain).
-                       si.go + troika.go are SiParser and TroikaParser, which read the
-                       document's outline through the "$$HN$$" markers docxread writes for
-                       them; db.go is parser_db's PLY lexer over db.chgk.info's own text
-                       export (a .txt that opens «Чемпионат:»). All byte-parity tested
-                       against chgksuite's corpus canons
-  textenc/             a .txt package whose encoding nobody recorded: UTF-8, or whichever of
-                       CP1251/KOI8-R/CP866/ISO8859-5 spells the most Russian-looking letters
-                       (chgksuite asks chardet; Go has none)
-  pptx/                `compose pptx`: the deck a package is played from. A hand-rolled
-                       OOXML pptx writer over a template (chgksuite's, or one the config
-                       names), the slide builders, service slides cloned off that template,
-                       pptx_config.toml, the shrink-to-fit pass and --optimize_size.
-                       Byte-parity per authored part vs chgksuite. Two things are not:
-                       optimize.go re-encodes pictures with Go's encoders (same sizes, to
-                       0.1% — imgconv/jpegopt.go is the Huffman pass Pillow's optimize=True
-                       does), and measure.go says why text measurement is only pixel-close
-  markdown/            `compose markdown|redditmd`: a package as Markdown, or as the
-                       Reddit dialect where the answer is a >! … !< spoiler
-  dbtext/              `compose base`: the plain text db.chgk.info takes as a submission —
-                       the other side of textparse/db.go. #DATE is read by a parser that
-                       covers the shapes packages use, not by chgksuite's dateparser
-  openquiz/            `compose openquiz`: open-quiz.com's JSON, one object per question
-  imghost/             what those three need and the .docx/.pdf ones do not: a picture as
-                       a URL. Imgur, sharing chgksuite's own ~/.chgksuite/image_cache.json;
-                       the server's openquiz export keeps its own cache beside the DB,
-                       since ProtectHome puts that one out of reach
-  chgkimport/          the import entry point: .docx/.4s/.zip → 4s source + its images.
-                       Byte-parity with chgksuite's `parse` on all 12 chgk .docx fixtures
-  handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans.
-                       typesetter.go: the Typesetter interface. The server uses the wasm one (typstwasm), so
-                       nothing is written anywhere. CLITypesetter drives the typst binary and is kept ONLY as the
-                       oracle the wasm path is checked against (wasm_parity_test.go: the fitted row counts must
-                       match, since split_fit binary-searches them).
-                       splitfit.go: `handouts split_fit` port — per-block binary-search row fit using typst's own pagination (typst query page count, not pypdf), per-question + all-q PDFs, pdfcpu compress; ~12× faster, row counts match chgksuite. The image-shrink refinement needs a Typesetter that also measures (handout.Measurer): the typst binary answers with a query, the wasm pool cannot yet, and under it an image block simply keeps its size
-  tg/                  `compose telegram`: a package posted to a channel, one rich message per
-                       question (<p>/<details>/<footer>/<img>), the copy Telegram makes in the
-                       discussion group carrying the polls, a pinned navigation post at the end.
-                       The export runs its own in-process bot (dopecore/tgbot, like the login
-                       bots) for the two things a token alone cannot do: hearing the person who
-                       started it, and seeing a post reach the discussion group. Oracle-tested
-                       call-for-call against chgksuite (scripts/gen_tg_oracle.py)
-  typstwasm/           typst linked in as a library, compiled to wasm32-wasip1 and run under wazero,
-                       with its World (typst's filesystem abstraction) served out of memory. This
-                       removed the last place where xy had to hand decrypted questions to a
-                       filesystem. It keeps a pool of instances, because split_fit fits blocks in
-                       parallel; fonts are parsed once and images once per generation.
-                       Each probe is about 8 times faster than spawning the CLI: 1.4ms against
-                       11.3ms.
-                       typst.wasm is //go:embed-ed but NOT in git (30 MB): `just build-wasm` compiles
-                       typst-wasm/ (Rust) into it — once per clone, then only on a typst bump. Every Go
-                       recipe (build/dev/test) depends on a guard that says so if the file is missing.
-  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite, for every `compose docx` switch (docx.Options: spoilers, screen mode, noanswers/noparagraph/only_question_number). xy passes Options{} for the host's copy, screen mode for the screen copy, and screen mode + spoilers=dots for the written-testing one, each with CommentFirst from the tour's Field Order; the rest of the switches are the CLI's; regenerate the oracles with scripts/gen_docx_oracles.sh.
-                       (img …) images go through imgconv.ForExport like the PDF's — see below (images.go)
-  typstdoc/            parsed structure → .typ → PDF via typst (the same wasm pool handouts use): the docx
-                       export in the other format. template.docx's page setup transcribed into the preamble
-                       (A4, 1"/0.75" margins, 12pt body, 16/14pt headings, no auto-hyphenation, page number
-                       bottom-left) and Word's keeps mapped onto typst blocks: keepLines → breakable: false,
-                       keepNext → sticky, pageBreakBefore → #pagebreak(weak: true). Arial → Noto Sans (the
-                       faces already embedded for handouts). Emitted in typst CODE mode — every piece of
-                       editorial text is a typst string literal inside text("…"), so a question full of typst
-                       syntax is just characters. Two things typst forced: a pagebreak may not sit inside a
-                       block (a mid-question (PAGEBREAK) splits the block in two), and a line box is measured
-                       cap-height→baseline by default, which makes Word's flush paragraphs overlap by a
-                       descender — hence top-edge/bottom-edge + leading: 0 in the preamble. Noto Sans has no
-                       `smcp`, so (sc …) small caps are synthesized (upper + 0.8em), as Word synthesizes them.
-  inline/              the 4s inline layer BOTH exporters share, so the .docx and the .pdf agree
-                       character-for-character: markup tokenizing (bold/italic/img/screen/hyperlink…),
-                       backtick stress accents, the non-breaking space/hyphen gluing, and (img …) sizing.
-                       Lifted out of docx/ when typstdoc needed it — do not fork it back.
-  imgconv/             jpegopt.go: OptimizeJPEG rebuilds a baseline JPEG's Huffman tables
-                       for the image it holds — lossless, 2-20% off, and what Go's encoder
-                       lacks against Pillow's optimize=True.
-                       ForExport: encode a picture for the size it is DRAWN at — downscale to 200 dpi of that
-                       size (never up), JPEG q85 unless it has transparency (then PNG). Both exporters use it.
-                       Re-encoding is unavoidable (neither Word nor typst reads WebP), but re-encoding a photo
-                       as PNG is lossless and huge: an 800 KB JPEG attachment used to come back as a megabyte
-                       of PNG — most of the exported file. Don't "simplify" this back to a plain ToPNG.
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
 (dopecore/blobstore)   attachment bytes ON DISK (random-ref, sharded, write-once); the DB
@@ -585,24 +457,24 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        every wording page-broken) and the legacy (PAGEBREAK) conversion
     listexport.ts      what a List exports as: exportSource (the 4s), exportGame, hndtOf (the
                        .hndt, the 4s2hndt port over cards) and handoutForCard (the board's
-                       badge). The browser's copy of internal/listexport, which is the
-                       reference; both read internal/listexport/testdata/cases.json
+                       badge). The browser's copy of chgksuite/listexport, which is the
+                       reference; both read chgksuite/listexport/testdata/cases.json
     cardkind.ts        the browser's questions to the Card Kind table (cardkind_gen.ts, GENERATED
-                       from internal/cardkind): numbered, testable, exported, carriesHandouts,
+                       from chgksuite/cardkind): numbered, testable, exported, carriesHandouts,
                        versioned, exportMarker, gameOf, forListType, label. Ask it rather than
                        comparing c.kind to a literal
     hndt.ts            reading a .hndt back: split into blocks on lines that are exactly
                        "---", parseHndtMetaByQuestion, the preamble, and the Поля model
                        (parseHndtForm/composeHndtForm)
     markers_gen.ts     GENERATED from fsource's markerMapping (`go generate
-                       ./internal/chgk/fsource`, guarded by generate-check): the 4s line
+                       ./fsource` in chgksuite/, guarded by its generate-check): the 4s line
                        markers and their element types, longest first. Go and TS cannot
                        drift on what a marker is
-    typo.ts            the typography pass, ported from internal/chgk/{typo,typoedit}:
+    typo.ts            the typography pass, ported from chgksuite/{typo,typoedit}:
                        quotes/dashes/%-decoding + nbsp gluing over 4s source, per version.
                        In the browser so no question text is posted and it works offline;
                        the Go packages stay as the oracle and both suites read
-                       internal/chgk/typoedit/testdata/pass_cases.json. One known
+                       chgksuite/typoedit/testdata/pass_cases.json. One known
                        divergence (the nbhyphen bounds) is documented at the top of the file
     import.ts          /import — a new board from an archive or from Trello (implicit
                        OAuth, server proxy /api/import/trello/proxy, comments past the
@@ -770,7 +642,7 @@ origin, so it fits under that CSP.
 
 ## Run / build / test
 ```
-just build-wasm     # compile typst → internal/chgk/typstwasm/typst.wasm (needs Rust;
+just build-wasm     # compile typst → ../chgksuite/typstwasm/typst.wasm (needs Rust;
                     #   not in git — run once per clone, then only on a typst bump)
 just build          # the app (pure Go; embeds the wasm above)
 just dev            # server (assets hot-read from disk; polls telegram if XY_BOT_TOKEN is set)

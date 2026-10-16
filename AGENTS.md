@@ -1,8 +1,9 @@
 # dopesuite — monorepo
 
-This repo holds six Go modules: three apps (xy, dope, spliff), two shared
-layers they are built on (dopeuikit, dopecore), and one desktop GUI. Each app
-has its own `AGENTS.md`, so start there.
+This repo holds seven Go modules: three apps (xy, dope, spliff), two shared
+layers they are built on (dopeuikit, dopecore), the chgksuite module that xy
+builds its exports on, and one desktop GUI. Each app and chgksuite has its own
+`AGENTS.md`, so start there.
 
 ```
 dopeuikit/   pecheny.me/dopeuikit — the shared UI system:
@@ -14,28 +15,34 @@ dopecore/    code.pecheny.me/pecheny/dopesuite/dopecore — the shared platform 
              the migration runner (schema), webassets, the admin bulk-create,
              the on-disk blob store (blobstore), the Telegram bot (client, poll
              lock and the login conversation) and the login handshake (tglogin)
+chgksuite/   code.pecheny.me/pecheny/dopesuite/chgksuite — the Go port of
+             chgksuite: the 4s format, the docx/pdf/pptx exports, handouts,
+             import, the publishers and the `chgksuite` CLI. xy builds its
+             exports on it.
 xy/          ЧГК question-editing boards (encrypted, Trello-style)
 dope/        tournament management (EK/OD/KSI) + realtime web UI
 spliff/      shared expenses: who paid for whom, in any currency, and who owes
              whom. This is the only module whose UI is in English.
 chgksuite-gui/
-             a Fyne window over xy's chgksuite CLI, generated from the flags
+             a Fyne window over the chgksuite CLI, generated from the flags
              that CLI declares (`chgksuite spec`)
 ```
 
 - xy, dope and spliff use the shared layers through `replace
   pecheny.me/dopeuikit => ../dopeuikit` and `replace code.pecheny.me/pecheny/dopesuite/dopecore =>
-  ../dopecore`. The monorepo keeps the modules as siblings, which is the layout
-  those paths expect, so a build needs no extra setup. The kit imports dopecore
-  the same way. dopecore imports no other module of ours (`docs/adr/0004`).
+  ../dopecore`. xy also uses chgksuite through `replace
+  code.pecheny.me/pecheny/dopesuite/chgksuite => ../chgksuite`. The monorepo
+  keeps the modules as siblings, which is the layout those paths expect, so a
+  build needs no extra setup. The kit and chgksuite import dopecore the same
+  way. dopecore imports no other module of ours (`docs/adr/0004`).
 - `chgksuite-gui` is deliberately left out of the cross-module recipes below. It
   needs cgo and a desktop toolchain, and neither server depends on it. Build and
   test it with its own `just check`, which also checks that it still matches the
   CLI it wraps.
 - xy, dope and spliff each have a `justfile` with `just dev`, `just test` and
-  `just check`. dopeuikit and dopecore have none: their recipes live in the root
-  `justfile`, which also runs `test`, `fmt` and `vet` across all five modules at
-  once. `just pre-commit` is the gate for the whole repo and you can run it from
+  `just check`, and chgksuite has one with `just test` and `just check`.
+  dopeuikit and dopecore have none: their recipes live in the root `justfile`,
+  which also runs `test`, `fmt` and `vet` across all six modules at once. `just pre-commit` is the gate for the whole repo and you can run it from
   anywhere. The per-module `pre-commit` recipes just call the root one, because
   class-check needs every app's TypeScript and the shared core.css together.
 - **Deploying** is done by one script for the whole repo, `deploy.py`. It has a
@@ -149,18 +156,19 @@ messages, code comments and test names, in Russian and in English.
 
 ## Toolchain
 
-- **Go** 1.26 or newer, for all five modules.
-- **just**, the task runner. There is a root justfile and one per app.
+- **Go** 1.26 or newer, for all six modules.
+- **just**, the task runner. There is a root justfile, one per app and one for
+  chgksuite.
 - **bun** 1.4 or newer. It downloads the native tsc binary (`bun install`, see
   the root `package.json`) and runs the frontend tests (`bun test --parallel`).
   Bundling itself is written in Go (`just build-web [target...]`, in
   `scripts/webbuild/`, using esbuild as a library — see `docs/adr/0001`), so
   neither building nor running the server needs a JS runtime.
-- **Rust** with the `wasm32-wasip1` target. Only xy needs it, and only to build
-  typst into `xy/internal/chgk/typstwasm/typst.wasm` (`cd xy && just
+- **Rust** with the `wasm32-wasip1` target. Only chgksuite needs it, and only
+  to build typst into `chgksuite/typstwasm/typst.wasm` (`cd chgksuite && just
   build-wasm`). That file is 30 MB, it is embedded with `//go:embed`, and it is
-  not in git, so every Go recipe in xy fails with an instruction until you have
-  built it once.
+  not in git, so every Go recipe in chgksuite and xy fails with an instruction
+  until you have built it once.
 - **sloplint** (`cargo install --git https://code.pecheny.me/pecheny/sloplint`)
   and **jq**, for `just slop-check`. It fails on a new error-level finding in a
   changed line, and when the whole tree's slop score goes above `max-slop-score`

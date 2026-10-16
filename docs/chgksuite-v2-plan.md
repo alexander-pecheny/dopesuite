@@ -7,7 +7,7 @@ exporter of the Python tool as ported and checked against its output: every
 import (docx, txt, db.chgk.info, СИ, Тройка, zip) and every export (docx, pdf,
 pptx, telegram, markdown, redditmd, base, openquiz, lj, add_stats, handouts).
 The only things left out on purpose are the pandoc and mammoth docx engines.
-`xy/cmd/chgksuite` runs all of it from the shell, and `chgksuite-gui` draws Fyne
+`chgksuite/cmd/chgksuite` runs all of it from the shell, and `chgksuite-gui` draws Fyne
 forms for it from `chgksuite spec`.
 
 So v2 is mostly an application problem, not a format problem. It needs a window,
@@ -55,7 +55,7 @@ login survives a restart. When the PR is merged upstream, we switch back.
 ### Files are the source of truth
 
 A card's description in xy is already raw 4s, and a list exports as the
-concatenation of its cards (`internal/listexport`). That makes the mapping
+concatenation of its cards (`chgksuite/listexport`). That makes the mapping
 direct. Reading a file splits it into cards at question boundaries, and writing
 puts the cards back together.
 
