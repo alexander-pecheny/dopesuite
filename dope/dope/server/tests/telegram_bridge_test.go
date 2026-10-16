@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"pecheny.me/dopecore/tgbot"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 
 	"dope/dope/web/telegrambridge"
 )

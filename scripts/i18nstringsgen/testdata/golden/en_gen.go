@@ -5,7 +5,7 @@ package i18nstrings
 import (
 	"fmt"
 
-	core "pecheny.me/dopecore/i18nstrings"
+	core "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // EN is the en Catalog.

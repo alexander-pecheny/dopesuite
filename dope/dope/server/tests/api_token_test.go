@@ -14,7 +14,7 @@ import (
 	"dope/dope/domain/roster"
 	dopeserver "dope/dope/server"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // bearerRequest sends a JSON request through the /api table with an API

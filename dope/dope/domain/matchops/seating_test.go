@@ -7,7 +7,7 @@ import (
 	"dope/dope/domain/edit"
 	"dope/dope/storage/store"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // sextetMatch is a бой of Эрудит-Секстет: three seats per theme and a team of

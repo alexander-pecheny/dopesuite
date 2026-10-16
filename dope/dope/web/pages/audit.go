@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	ui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"

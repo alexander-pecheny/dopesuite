@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	core "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	dopestrings "dope/i18nstrings"
-	core "pecheny.me/dopecore/i18nstrings"
 )
 
 // Canonical fest roles, ordered creator > admin > host. Stored verbatim in the

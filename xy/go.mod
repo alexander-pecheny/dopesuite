@@ -33,6 +33,7 @@ require (
 )
 
 require (
+	code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -49,12 +50,11 @@ require (
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	pecheny.me/dopecore v0.0.0
 	pecheny.me/dopeuikit v0.0.0
 )
 
 replace pecheny.me/dopeuikit => ../dopeuikit
 
-replace pecheny.me/dopecore => ../dopecore
+replace code.pecheny.me/pecheny/dopesuite/dopecore => ../dopecore
 
 replace github.com/pemistahl/lingua-go => ./third_party/lingua-go

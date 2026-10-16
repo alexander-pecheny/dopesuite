@@ -11,7 +11,7 @@ import (
 
 	"dope/dope/storage/store"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // The whole brain rr-group loop through the real handlers: creating the game

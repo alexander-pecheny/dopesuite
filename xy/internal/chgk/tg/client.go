@@ -13,8 +13,8 @@ import (
 
 	"golang.org/x/image/draw"
 
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/tgbot"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 	"xy/internal/chgk/imgconv"
 )
 

@@ -9,7 +9,7 @@ import (
 
 	"xy/internal/rank"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // trelloPosStep is the gap between the positions given to consecutive lists,

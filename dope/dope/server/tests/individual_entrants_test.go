@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A fest's first личная СИ could not pick its players: the picker offered

@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/session"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 type hostLandingData struct {

@@ -13,7 +13,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
 	"golang.org/x/crypto/scrypt"
 	"golang.org/x/text/unicode/norm"

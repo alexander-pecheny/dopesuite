@@ -11,7 +11,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // Attachments carry ciphertext bytes (already an xy envelope) plus encrypted

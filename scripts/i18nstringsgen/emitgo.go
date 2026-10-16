@@ -109,7 +109,7 @@ func emitGoCatalog(c *catalog) ([]byte, error) {
 		imports = append(imports, `"fmt"`)
 	}
 	if strings.Contains(text, "core.Plural") {
-		imports = append(imports, `core "pecheny.me/dopecore/i18nstrings"`)
+		imports = append(imports, `core "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"`)
 	}
 	if len(imports) > 0 {
 		fmt.Fprintf(&b, "import (\n%s\n)\n\n", strings.Join(imports, "\n\n"))

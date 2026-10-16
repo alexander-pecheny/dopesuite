@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"pecheny.me/dopecore/tgbot"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 )
 
 // The export runs its own bot, in this process, for the two things a bot token

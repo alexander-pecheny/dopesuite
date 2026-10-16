@@ -11,7 +11,7 @@ import (
 	"xy/internal/chgk/inline"
 	"xy/internal/listexport"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // `source` prints the 4s a List (or its whole List Group) exports as — a whole

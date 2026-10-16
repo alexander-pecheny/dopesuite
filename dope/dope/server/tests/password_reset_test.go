@@ -15,7 +15,7 @@ import (
 
 	dopeserver "dope/dope/server"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 func seedPasswordUser(t *testing.T, srv *dopeserver.Server, username, password string) int64 {

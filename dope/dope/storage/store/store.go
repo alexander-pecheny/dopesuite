@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"sort"
 
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 
 	// Blank-imported so its init() registers the dope_z/dope_unz scalar SQL
 	// functions (audit-log zstd compression) on the shared sqlite driver. The

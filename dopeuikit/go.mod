@@ -2,7 +2,7 @@ module pecheny.me/dopeuikit
 
 go 1.26.4
 
-require pecheny.me/dopecore v0.0.0
+require code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0
 
 require (
 	github.com/tdewolff/minify/v2 v2.24.17 // indirect
@@ -10,4 +10,4 @@ require (
 	golang.org/x/crypto v0.52.0 // indirect
 )
 
-replace pecheny.me/dopecore => ../dopecore
+replace code.pecheny.me/pecheny/dopesuite/dopecore => ../dopecore

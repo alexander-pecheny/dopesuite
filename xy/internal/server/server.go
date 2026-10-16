@@ -13,10 +13,10 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"pecheny.me/dopecore/blobstore"
-	"pecheny.me/dopecore/sqlitex"
-	"pecheny.me/dopecore/tgbot"
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/blobstore"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
 	"xy/internal/chgk/handout"

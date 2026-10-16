@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/invitelink"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/invitelink"
 
 	xystrings "xy/i18nstrings"
 )

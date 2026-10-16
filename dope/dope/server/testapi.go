@@ -14,9 +14,9 @@ import (
 	"net/http"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/sqlitex/sqlitextest"
-	"pecheny.me/dopecore/tgbot"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"

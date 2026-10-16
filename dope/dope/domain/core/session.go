@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // dopeSessions is authcred's session store over dope's users table, which

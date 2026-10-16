@@ -17,9 +17,9 @@ import (
 	ui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 
-	"pecheny.me/dopecore/authcred"
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A reset link works for this long, and once.

@@ -10,9 +10,9 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/sqlitex"
-	"pecheny.me/dopecore/sqlitex/sqlitextest"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 
 	"spliff/spliff/domain/group"
 	"spliff/spliff/domain/rates"

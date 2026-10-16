@@ -1,4 +1,4 @@
-module pecheny.me/dopecore
+module code.pecheny.me/pecheny/dopesuite/dopecore
 
 go 1.26.4
 

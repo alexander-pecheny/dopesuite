@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/adminusers"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 	kitstrings "pecheny.me/dopeuikit/i18nstrings"
 )
 

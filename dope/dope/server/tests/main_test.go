@@ -24,9 +24,9 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 )
 
 func TestDefaultMatchScores(t *testing.T) {

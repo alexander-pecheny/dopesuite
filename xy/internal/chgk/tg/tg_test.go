@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"pecheny.me/dopecore/tgbot"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 )
 
 // TestPollConfigReadsChgksuites reads the file chgksuite ships, so the reader

@@ -10,7 +10,7 @@ import (
 
 	"dope/dope/platform/roles"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // An admin limits a host to some of the fest's Games: the host writes to

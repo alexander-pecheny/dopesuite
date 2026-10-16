@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	dopestrings "dope/i18nstrings"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Multi (Daugavpils, media games, handout contests) pure domain logic.

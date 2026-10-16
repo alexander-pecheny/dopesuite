@@ -20,7 +20,7 @@ import (
 	"errors"
 	"strings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
 	"spliff/spliff/domain/ledger"
 	"spliff/spliff/domain/money"

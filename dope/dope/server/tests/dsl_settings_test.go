@@ -13,7 +13,7 @@ import (
 	"dope/dope/domain/games"
 	dopestrings "dope/i18nstrings"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // Every format built from a scheme takes a DSL edit on its settings page, and

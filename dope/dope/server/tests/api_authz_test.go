@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 func scopedAPITestIDs(t *testing.T, srv *dopeserver.Server) (int64, int64) {

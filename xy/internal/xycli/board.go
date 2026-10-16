@@ -8,7 +8,7 @@ import (
 
 	"xy/internal/listexport"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // Board is a snapshot decrypted under a held key — the plaintext model every

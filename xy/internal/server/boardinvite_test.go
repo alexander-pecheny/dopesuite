@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"pecheny.me/dopecore/invitelink"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/invitelink"
 )
 
 // inviteBoard is the fixture the invite-link tests share: A owns a board, B and

@@ -3,7 +3,7 @@ package spliffserver
 import (
 	"testing"
 
-	"pecheny.me/dopecore/sqlitex/sqlitextest"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 )
 
 // Production opens with synchronous(FULL), so an acknowledged write survives a

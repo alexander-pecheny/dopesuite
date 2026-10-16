@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"code.pecheny.me/pecheny/dopesuite/dopecore/buildinfo"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 	dopestrings "dope/i18nstrings"
-	"pecheny.me/dopecore/buildinfo"
-	"pecheny.me/dopecore/tgbot"
 )
 
 // botPollTimeout is how long one getUpdates long-poll waits for news.

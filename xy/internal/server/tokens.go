@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 
 	xystrings "xy/i18nstrings"
 )

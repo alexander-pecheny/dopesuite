@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // The access matrix. Every level × every kind of caller, once, so that the one

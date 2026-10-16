@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // dopeCSP locks pages to same-origin scripts and styles: no inline script, no

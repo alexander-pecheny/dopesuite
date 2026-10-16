@@ -11,9 +11,9 @@ import (
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 	"github.com/xuri/excelize/v2"
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
 )
 
 // The fest roster as a spreadsheet (ADR-0024): exported one row per person,

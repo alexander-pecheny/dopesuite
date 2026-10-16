@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/blobstore"
-	"pecheny.me/dopecore/session"
-	"pecheny.me/dopecore/sqlitex/sqlitextest"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/blobstore"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 
 	"spliff/spliff/domain/rates"
 	"spliff/spliff/storage/store"

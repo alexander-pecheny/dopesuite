@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/invitelink"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/invitelink"
 
 	"spliff/spliff/storage/store"
 	"spliff/spliff/web/route"

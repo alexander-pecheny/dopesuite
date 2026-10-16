@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A game says which of its teams' зачёты it shows. Every Flag is one by

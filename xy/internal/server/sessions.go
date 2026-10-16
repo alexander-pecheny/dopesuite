@@ -1,10 +1,10 @@
 package server
 
 import (
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"context"
 	"database/sql"
 	"net/http"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	"time"
 )
 

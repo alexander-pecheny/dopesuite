@@ -8,7 +8,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 const (

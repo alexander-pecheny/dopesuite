@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"spliff/spliff/domain/group"
 	"spliff/spliff/platform/imagex"

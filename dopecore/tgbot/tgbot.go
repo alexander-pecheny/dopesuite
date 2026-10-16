@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 const defaultAPIBase = "https://api.telegram.org"

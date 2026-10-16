@@ -3,7 +3,7 @@ package dopeserver
 import (
 	"testing"
 
-	"pecheny.me/dopecore/sqlitex/sqlitextest"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 )
 
 // Production opens the fest database with synchronous(FULL), so an

@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"errors"
 
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // The Draw a host makes in the middle of a Game: Hamsa seats the three

@@ -15,9 +15,9 @@ import (
 	"net/url"
 	"slices"
 
-	"pecheny.me/dopecore/adminusers"
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	kit "pecheny.me/dopeuikit/kit"
 )
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 
 	spliffserver "spliff/spliff/server"
 )

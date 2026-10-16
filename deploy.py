@@ -574,7 +574,7 @@ def build_binary(target: Target, goarch: str) -> Path:
     output = DIST_DIR / target.binary
     env = os.environ.copy()
     env.update({"CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": goarch})
-    ldflags = f"-s -w -X pecheny.me/dopecore/buildinfo.stamped={describe_build()}"
+    ldflags = f"-s -w -X code.pecheny.me/pecheny/dopesuite/dopecore/buildinfo.stamped={describe_build()}"
     run(
         ["go", "build", "-trimpath", "-ldflags", ldflags, "-o", output, target.package],
         cwd=target.module,

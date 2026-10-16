@@ -15,7 +15,7 @@ import (
 	"database/sql"
 	"strings"
 
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 )
 
 const (

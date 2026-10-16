@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 )
 
 const (

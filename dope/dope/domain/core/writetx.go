@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 
 	"dope/dope/storage/festwrite"
 )

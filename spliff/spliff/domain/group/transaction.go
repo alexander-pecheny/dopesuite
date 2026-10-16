@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
 	"spliff/spliff/domain/money"
 	"spliff/spliff/domain/rates"

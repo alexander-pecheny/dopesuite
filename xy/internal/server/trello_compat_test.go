@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 )
 
 func TestTrelloCompatAPI(t *testing.T) {

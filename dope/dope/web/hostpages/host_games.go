@@ -22,8 +22,8 @@ import (
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 	"pecheny.me/dopeuikit/palette"
 
 	"dope/dope/domain/festops"

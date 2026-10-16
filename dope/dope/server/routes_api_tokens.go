@@ -7,7 +7,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/web/route"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // The caller's own API tokens (ADR-0021). A token may list and mint its

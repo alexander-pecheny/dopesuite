@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 )
 
 // addUser provisions a username+password account directly, bypassing the

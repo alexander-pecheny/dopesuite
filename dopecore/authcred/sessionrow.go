@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"pecheny.me/dopecore/session"
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 )
 
 // Execer is the write side of a session store: a *sql.Tx, or any type that

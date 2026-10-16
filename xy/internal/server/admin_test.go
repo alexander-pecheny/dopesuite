@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"pecheny.me/dopecore/adminusers"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 )
 
 // postForm sends a form-encoded POST carrying the client's session cookies.

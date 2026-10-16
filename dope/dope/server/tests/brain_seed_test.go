@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // The declared-seed loop: a brain scheme with [init] seed: {od-code} compiles

@@ -10,7 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 )
 
 // memUsers is an app's users table in a map: enough to drive the state machine

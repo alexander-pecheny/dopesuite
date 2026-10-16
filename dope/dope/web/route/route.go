@@ -24,10 +24,10 @@ import (
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/sameorigin"
-	"pecheny.me/dopecore/session"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sameorigin"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // Access is what a route asks of its caller, from nothing to the fest's creator.

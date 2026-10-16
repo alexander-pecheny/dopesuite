@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // Hamsa pure domain logic.

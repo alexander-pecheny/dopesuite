@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/buildinfo"
-	"pecheny.me/dopecore/session"
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/buildinfo"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 )
 
 const (

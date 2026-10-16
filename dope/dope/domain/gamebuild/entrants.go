@@ -12,7 +12,7 @@ import (
 	"dope/dope/domain/schemedsl"
 	dopestrings "dope/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // FollowListTx makes an entrant-sized Structure (imports.Declared.EntrantSized) follow

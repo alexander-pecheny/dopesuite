@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"time"
 
-	"pecheny.me/dopecore/schema"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/schema"
 )
 
 // migrations is xy's schema as a list (dopecore/schema): each step runs once

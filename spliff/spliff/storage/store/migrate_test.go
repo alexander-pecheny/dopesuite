@@ -8,8 +8,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"pecheny.me/dopecore/schema"
-	"pecheny.me/dopecore/sqlitex/sqlitextest"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/schema"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 )
 
 // A fresh database and an upgraded one walk the same list, so a fresh one can

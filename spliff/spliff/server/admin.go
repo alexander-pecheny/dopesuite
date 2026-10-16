@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"pecheny.me/dopecore/adminusers"
-	"pecheny.me/dopecore/session"
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 	kitstrings "pecheny.me/dopeuikit/i18nstrings"
 	kit "pecheny.me/dopeuikit/kit"
 

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"pecheny.me/dopecore/adminusers"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 
 	xystrings "xy/i18nstrings"
 )

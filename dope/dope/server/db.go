@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 
 	_ "modernc.org/sqlite"
 

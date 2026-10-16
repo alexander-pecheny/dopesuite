@@ -8,7 +8,7 @@ import (
 	"dope/dope/export/gameexport"
 	"dope/dope/web/route"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // handleFestRouter serves /fest/…: the public fest page and the viewer game

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 const (

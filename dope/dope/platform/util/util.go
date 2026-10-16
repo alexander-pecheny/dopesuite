@@ -14,8 +14,8 @@ import (
 	"time"
 	"unicode"
 
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 )
 
 const (

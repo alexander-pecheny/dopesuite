@@ -13,8 +13,8 @@ import (
 
 	"dope/dope/domain/core"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // The access matrix: every level × every caller, on a public and a private

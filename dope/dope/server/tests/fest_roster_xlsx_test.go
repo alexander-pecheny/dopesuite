@@ -13,8 +13,8 @@ import (
 
 	"dope/dope/domain/imports"
 
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"github.com/xuri/excelize/v2"
-	"pecheny.me/dopecore/session"
 )
 
 func postSheet(t *testing.T, game *serverGame, book []byte, preview bool) *httptest.ResponseRecorder {

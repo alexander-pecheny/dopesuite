@@ -11,7 +11,7 @@ import (
 
 	dopeserver "dope/dope/server"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A flat game is a Structure like every other: its one Block ranks into

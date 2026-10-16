@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/session"
-	"pecheny.me/dopecore/tglogin"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tglogin"
 
 	"dope/dope/storage/store"
 	"dope/dope/web/route"

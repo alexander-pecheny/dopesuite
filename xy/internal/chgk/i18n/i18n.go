@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"pecheny.me/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 //go:embed assets/labels_*.toml assets/regexes_*.json

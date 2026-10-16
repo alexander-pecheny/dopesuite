@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // The state holds data keys, so only its owner may read it.

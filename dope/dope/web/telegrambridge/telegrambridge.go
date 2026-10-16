@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"pecheny.me/dopecore/tgbridge"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbridge"
 
 	dopestrings "dope/i18nstrings"
 )

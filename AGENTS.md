@@ -8,7 +8,7 @@ has its own `AGENTS.md`, so start there.
 dopeuikit/   pecheny.me/dopeuikit — the shared UI system:
              ui/ = generic DSL engine (no design opinions), kit/ = the design
              system (core vocabulary + expansions + core.css + fonts)
-dopecore/    pecheny.me/dopecore — the shared platform layer that was extracted
+dopecore/    code.pecheny.me/pecheny/dopesuite/dopecore — the shared platform layer that was extracted
              out of xy and dope. It has no AGENTS or CONTEXT of its own, and
              contains: sessions, credentials, the SQLite pool conventions and
              the migration runner (schema), webassets, the admin bulk-create,
@@ -24,7 +24,7 @@ chgksuite-gui/
 ```
 
 - xy, dope and spliff use the shared layers through `replace
-  pecheny.me/dopeuikit => ../dopeuikit` and `replace pecheny.me/dopecore =>
+  pecheny.me/dopeuikit => ../dopeuikit` and `replace code.pecheny.me/pecheny/dopesuite/dopecore =>
   ../dopecore`. The monorepo keeps the modules as siblings, which is the layout
   those paths expect, so a build needs no extra setup. The kit imports dopecore
   the same way. dopecore imports no other module of ours (`docs/adr/0004`).

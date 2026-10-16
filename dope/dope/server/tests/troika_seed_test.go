@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"github.com/xuri/excelize/v2"
-	"pecheny.me/dopecore/session"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/entrants"
