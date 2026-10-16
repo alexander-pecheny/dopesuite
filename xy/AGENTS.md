@@ -110,7 +110,9 @@ cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.l
 cmd/xy-local/          serves localserver on a port (-dir, -addr), so local mode can be tried in a
                        browser before the desktop app exists; `just local`
 localserver/           the public face of local mode for the desktop app: Open(dir) → Handler(),
-                       Close(). xy.db and blobs/ live under dir; no port, no login, one user
+                       Close(). xy.db and blobs/ live under dir; no port, no login, one user.
+                       Import(path) makes a board of a package file or a folder of .4s files,
+                       writing through the server's own handlers as the browser's import does
 ../chgksuite/          a module of its own (../chgksuite/AGENTS.md): the Go port of chgksuite
                        (4s, docx, pdf, pptx, handouts, import, telegram and the rest), listexport,
                        cardkind, xyenvelope and the chgksuite CLI. xy imports it through a
