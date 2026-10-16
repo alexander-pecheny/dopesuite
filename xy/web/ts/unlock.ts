@@ -17,7 +17,7 @@ import type { Tester } from "./sessions.js";
 // is that its dependency graph stays fake-able (tests import the built file
 // under node with no vendor chain, no IndexedDB, no DOM).
 export interface DataKey {
-  key: CryptoKey;
+  key: CryptoKey | null;
   raw: Uint8Array<ArrayBuffer>;
 }
 // What a member may read before holding a key: /meta answers the overlay's one

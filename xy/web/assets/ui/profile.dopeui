@@ -51,7 +51,7 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
       textfield id="authorValue" placeholder=@profile.author.placeholder autocomplete="off" maxlength="200"
     message id="authorMessage"
 
-  section
+  section id="tzSection"
     field label=@profile.tz.tz_label
       textfield id="tzValue" placeholder="Europe/Moscow" autocomplete="off" maxlength="64"
     field label=@profile.tz.cities_label
@@ -66,7 +66,7 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
   section
     button kind="ghost" id="passwordBtn" @profile.password.name
     button kind="ghost" id="sizesBtn" @profile.sizes.name
-    button kind="ghost" href="/profile/tokens" @profile.account.tokens
+    button kind="ghost" id="tokensLink" href="/profile/tokens" @profile.account.tokens
     button kind="ghost" id="logoutBtn" @profile.account.logout
 
   -- change-password dialog

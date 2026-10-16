@@ -2,6 +2,7 @@
 import { xyApp } from "./app.js";
 import { modal } from "./modal.js";
 import { xyCrypto } from "./crypto.js";
+import { xyInstance } from "./instance.js";
 import { xyFind } from "./find.js";
 import { xySearchIndex } from "./searchindex.js";
 import type { BoardIndex, Hit } from "./searchindex.js";
@@ -46,6 +47,11 @@ const setStatus = badge.set;
 
 async function boot(): Promise<void> {
   if (!(await xyApp.requireLogin())) return;
+  if (!xyInstance.offers("passphrase")) {
+    byId("createPassBlock").hidden = true;
+    boardPass.required = false;
+    byId<HTMLButtonElement>("createSubmit").disabled = false;
+  }
   xySync.start();
   xySync.onStatus(badge.onSync);
   await refresh();
@@ -301,8 +307,10 @@ const passSetup = xyApp.wirePassphraseSetup({
 // are ever shown in the clear.
 byId("newBoardBtn").addEventListener("click", () => {
   createForm.reset();
-  passSetup.reset();
-  void passSetup.roll(true);
+  if (xyInstance.offers("passphrase")) {
+    passSetup.reset();
+    void passSetup.roll(true);
+  }
   createModal.open();
   byId("boardName").focus();
 });
@@ -312,8 +320,9 @@ createForm.addEventListener("submit", async (e) => {
   createMessage.textContent = "";
   const name = byId<HTMLInputElement>("boardName").value.trim();
   const pass = boardPass.value;
-  if (!name || !pass) return;
-  const passErr = xyCrypto.validatePassphrase(pass);
+  const plain = !xyInstance.offers("passphrase");
+  if (!name || (!pass && !plain)) return;
+  const passErr = plain ? null : xyCrypto.validatePassphrase(pass);
   if (passErr) { createMessage.textContent = passErr; return; }
   if (!xySync.requireOnline(S.chrome.home.createOffline(), createMessage)) return;
   try {

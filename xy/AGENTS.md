@@ -107,6 +107,10 @@ in the dopesuite monorepo. The rules for the monorepo itself are in the root
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
 cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.local/bin
+cmd/xy-local/          serves localserver on a port (-dir, -addr), so local mode can be tried in a
+                       browser before the desktop app exists; `just local`
+localserver/           the public face of local mode for the desktop app: Open(dir) → Handler(),
+                       Close(). xy.db and blobs/ live under dir; no port, no login, one user
 ../chgksuite/          a module of its own (../chgksuite/AGENTS.md): the Go port of chgksuite
                        (4s, docx, pdf, pptx, handouts, import, telegram and the rest), listexport,
                        cardkind, xyenvelope and the chgksuite CLI. xy imports it through a
@@ -131,6 +135,11 @@ internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy p
                        the DSL engine (ui/) + design system (kit/) + spec live in ../dopeuikit
 internal/server/       package server — the whole HTTP server
   server.go            DB open (BuildDSN/WAL), withWriteTx over dopecore's sqlitex.Writer (conn-before-lock)
+  local.go             local mode (Config.Local): the one local user every request is, the plaintext
+                       keymeta rule ({"kdf":"none"} locally, never on a server), the capability set
+                       /api/auth/me carries as `instance`, and serverOnly, which 404s the routes
+                       that need a server or a second person (login, tokens, members, invites,
+                       test sessions, admin, the Trello API)
   origin.go            XY_TRUSTED_ORIGIN_HOSTS: once set, dopecore/sameorigin guards every write
   db.go                the schema as a list: `[]schema.Migration` (dopecore/schema applies them once each, in
                        order); a new step takes the next number and goes at the end;
@@ -263,6 +272,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        (forgetDK / board delete). search() is pure and jstest-covered
     store.ts           offline IndexedDB layer: snapshot/timeline/attachment mirror,
                        mutation outbox, temp-id↔real-id map (DB "xy-offline")
+    instance.ts        what this xy offers: requireLogin reads /api/auth/me's `instance`, and
+                       pages, panels (Entry.needs), crypto and sync ask offers(feature). A local
+                       xy turns off login, tokens, members, invites, sessions, passphrase, offline;
+                       its boards get crypto.ts's PLAINTEXT_KEY and sync.ts sends writes direct
     sync.ts            offline engine: mutate()/flush() outbox replay with negative
                        temp-id remapping, snapshot apply, pending-timeline synthesis,
                        online/offline status events (PWA resync)

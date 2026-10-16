@@ -8,6 +8,7 @@
 // Bundle: a board's worth of handouts must not sit on the heap just because
 // something downstream might want them.
 
+import { xyInstance } from "./instance.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import type { DataKey } from "./crypto.js";
@@ -81,7 +82,7 @@ export async function buildBundle(
   };
 
   log(S.import.export.collecting());
-  const members = (await fetchJSON(`/api/boards/${board.id}/members`)) as MemberRow[];
+  const members = xyInstance.offers("members") ? (await fetchJSON(`/api/boards/${board.id}/members`)) as MemberRow[] : [];
   const rawEvents = (await fetchJSON(`/api/boards/${board.id}/timeline`)) as EventRow[];
   const rawAtts = (await fetchJSON(`/api/boards/${board.id}/attachments`)) as AttachmentRow[];
 

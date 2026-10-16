@@ -21,6 +21,7 @@ import { createBundleImport } from "./bundleimportpanel.js";
 import { createCopyBoardPanel } from "./copyboard.js";
 import { createAuthorCountPanel } from "./authorcount.js";
 import { xyApp, xySizes } from "./app.js";
+import { xyInstance } from "./instance.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
@@ -131,6 +132,12 @@ let listDragCommitted = false;
 const badge = xyApp.syncBadge(statusNode);
 const setStatus = badge.set;
 
+// A local xy has no testing, so the open card's Tests block goes with it.
+function hideAbsentFeatures(): void {
+  if (xyInstance.offers("sessions")) return;
+  for (const id of ["cardPlayingsLabel", "cardPlayings", "cardPlayingsRow"]) byId(id).hidden = true;
+}
+
 // ---- boot + unlock ----
 // The whole boot → unlock → snapshot-load flow lives in unlock.js; the board
 // hands it the DOM nodes, the singletons and the callbacks it owns.
@@ -147,7 +154,7 @@ const unlock = createUnlock({
   },
   crypto: xyCrypto,
   sync: xySync,
-  net: xyApp,
+  net: { ...xyApp, requireLogin: async () => { const me = await xyApp.requireLogin(); hideAbsentFeatures(); return me; } },
   status: badge,
   applySizes: xySizes.apply,
   onDK: (k, from) => {
@@ -176,7 +183,7 @@ const unlock = createUnlock({
     void rewrites.convertLegacyVersions();
     if (dk) void xySearchIndex.refreshComments(boardId, dk);
     cardDetail.maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
-    passCheck.maybe({
+    if (xyInstance.offers("passphrase")) passCheck.maybe({
       owner: state.role === "owner",
       cached: dkFromCache,
       online: xySync.isOnline(),
@@ -1647,7 +1654,7 @@ registerPanel(
   listsManage.panel,
   labelsEditor.panel,
   labelFilter.panel,
-  { id: "sessions", menu: "board", icon: "flask-conical", label: S.board.sessions.name(), title: S.board.sessions.menuTitle(), open: () => sessionsPanel.open() },
+  { id: "sessions", menu: "board", needs: "sessions", icon: "flask-conical", label: S.board.sessions.name(), title: S.board.sessions.menuTitle(), open: () => sessionsPanel.open() },
 
   // Board-wide edits
   starts(mass.panel),
@@ -1665,12 +1672,12 @@ registerPanel(
   // it has no place in the 🔔 (which reads encrypted card events), and the owner
   // would otherwise never learn someone is queued (ADR-0017).
   {
-    id: "members", menu: "board", icon: "users", title: S.board.members.menuTitle(),
+    id: "members", menu: "board", needs: "members", icon: "users", title: S.board.members.menuTitle(),
     label: () => { const n = boardMembers.pendingCount(); return n ? S.board.members.menuPending(String(n)) : S.board.members.name(); },
     open: () => boardMembers.open(),
   },
   {
-    id: "forget-password", menu: "board", icon: "lock", label: S.board.forget.label(), title: S.board.forget.title(),
+    id: "forget-password", menu: "board", needs: "passphrase", icon: "lock", label: S.board.forget.label(), title: S.board.forget.title(),
     // Once the DK is gone the board is ciphertext with no key on this device, so
     // everything derived from it goes too — the Search Index for a sharper reason
     // (ADR-0008): plaintext outliving its key would keep the board readable with none.
@@ -1679,9 +1686,9 @@ registerPanel(
       location.reload();
     },
   },
-  changePass.panel,
+  { ...changePass.panel, needs: "passphrase" },
   { id: "delete-board", menu: "board", icon: "trash-2", label: S.board.delete.label(), title: S.board.delete.title(), offered: () => state.role === "owner", open: () => { void deleteBoard(state.name); } },
-  { id: "leave-board", menu: "board", icon: "unlink", label: S.board.leave.label(), title: S.board.leave.title(), offered: () => state.role !== "" && state.role !== "owner", open: () => { void leaveBoard(state.name); } },
+  { id: "leave-board", menu: "board", needs: "members", icon: "unlink", label: S.board.leave.label(), title: S.board.leave.title(), offered: () => state.role !== "" && state.role !== "owner", open: () => { void leaveBoard(state.name); } },
 
   // The list's cards
   { id: "add-card", menu: "list", icon: "plus", label: S.board.list.addCard(), open: (s) => { void cardDetail.addCard(s.list); } },
@@ -1689,7 +1696,7 @@ registerPanel(
   { id: "preview-group", menu: "list", icon: "eye", label: S.board.preview.group(), offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } },
 
   // What is counted within it
-  starts(testerList.panel),
+  starts({ ...testerList.panel, needs: "sessions" }),
   createAuthorCountPanel(shell, cardDetail),
 
   // What comes out of it

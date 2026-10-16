@@ -3,6 +3,7 @@
 // order, how a partly-failed run reads) live in massaction.ts; this is the mode,
 // the bar, the checkboxes' state, the one dialog with its pickers, and the writes.
 
+import { xyInstance } from "./instance.js";
 import { xyApp } from "./app.js";
 import { xySync } from "./sync.js";
 import { type MassAction, xyMass } from "./massaction.js";
@@ -114,7 +115,7 @@ export function createMassPanel(board: Board, deps: MassPanelDeps): MassPanel {
     if (!massMode) return;
     const n = massSelected.size;
     const actions = n
-      ? xyMass.MASS_ACTIONS.map((a) => {
+      ? xyMass.MASS_ACTIONS.filter((a) => !a.testing || xyInstance.offers("sessions")).map((a) => {
           const b = el("button", { class: "input mass-act" + (a.danger ? " mass-act-danger" : ""), type: "button", title: a.title, text: a.label });
           b.addEventListener("click", () => { void openMass(a); });
           return b;

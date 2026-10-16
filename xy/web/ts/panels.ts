@@ -8,6 +8,7 @@
 // (the card detail's cross-board copy, the attachments cache) takes it as its
 // own dependency, so the board seam stays what every panel needs and no more.
 
+import { type Feature, xyInstance } from "./instance.js";
 import type { BoardCard, BoardGroup, BoardList, BoardSession, BoardState, CardLabel } from "./unlock.js";
 import type { SessionMeta, Tester } from "./sessions.js";
 import type { CardSeen, SeenPlaying } from "./seen.js";
@@ -109,6 +110,8 @@ interface Entry<S> {
   // that survives `offered` — not above this one, which may not be offered at
   // all — so a conditional cluster head cannot take the grouping with it.
   divider?: boolean;
+  // The instance feature this entry is part of; a local xy leaves some out.
+  needs?: Feature;
   offered?(scope: S): boolean;
   open(scope: S): void;
 }
@@ -153,6 +156,7 @@ function cluster<S>(panels: Array<Entry<S> & { menu: string }>, scope: S): Panel
   const out: PanelMenuItem[] = [];
   let last: number | null = null;
   for (const { p, n: mine } of numbered) {
+    if (p.needs && !xyInstance.offers(p.needs)) continue;
     if (p.offered && !p.offered(scope)) continue;
     const it = item(p, scope);
     if (last !== null && mine !== last) it.divider = true;

@@ -13,6 +13,7 @@
 // The List is the unit of atomicity: a unit that fails takes its own lists down
 // with it and the ones before it stay. The caller reports which is which.
 
+import { xyInstance } from "./instance.js";
 import { xyApp, ISO_DATE_LEN } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
@@ -121,6 +122,13 @@ export interface ApplyResult {
 
 const byRank = <T extends { rank: string }>(rows: T[]): T[] => [...rows].sort((a, b) => a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0);
 
+// withoutTesting is a Bundle as a local xy takes it. It has no Sessions, so
+// the Playings, the session-scoped labels and the session-based tester lists
+// go too; the Declarations by name and the hand-corrected Seen stay.
+export function withoutTesting(b: Bundle): Bundle {
+  return { ...b, sessions: [], card_sessions: [], tour_testers: [], card_labels: b.card_labels.filter((a) => a.session_id == null) };
+}
+
 export async function applyBundle(
   bundle: Bundle,
   target: ApplyTarget,
@@ -129,6 +137,7 @@ export async function applyBundle(
 ): Promise<ApplyResult> {
   const { boardId, dk, append } = target;
   const enc = (s: string): Promise<string> => xyCrypto.encField(dk, s);
+  if (!xyInstance.offers("sessions")) bundle = withoutTesting(bundle);
 
   // Every id in the Bundle is its source's; each create records the fresh one,
   // and everything downstream resolves through these maps.

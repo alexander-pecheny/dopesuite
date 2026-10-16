@@ -15,6 +15,7 @@
 // The pure functions (substitute*, applyOpToSnapshot, pendingTimeline) carry the
 // tricky logic and take no globals, so jstest can exercise them without IndexedDB.
 import { xyStore } from "./store.js";
+import { xyInstance } from "./instance.js";
 import type { BoardSnapshot, OpBody, OutboxOp, SnapshotCardLabel, SnapshotPlaying, TimelineEvent } from "./store.js";
 
 const HTTP_NO_CONTENT = 204;
@@ -302,7 +303,12 @@ const listeners = new Set<(st: SyncStatus) => void>();
 let pending = 0; // outbox length (cached for synchronous status reads)
 const deadletters: DeadLetter[] = []; // ops the server rejected (surfaced once)
 
+// direct is a local xy, which runs in the same app as the page: every write
+// lands on its disk at once, so there is no outbox and no mirror to keep.
+function direct(): boolean { return !xyInstance.offers("offline"); }
+
 function isOnline(): boolean {
+  if (direct()) return true;
   return typeof navigator === "undefined" ? true : navigator.onLine !== false;
 }
 function status(): SyncStatus {
@@ -325,7 +331,7 @@ function emitBoardSynced(boardId: number): void { for (const cb of boardListener
 
 // applyToMirror updates the cached snapshot for op.board, if one exists.
 async function applyToMirror(op: OutboxOp, resultId?: number | null): Promise<void> {
-  if (!op.board) return;
+  if (!op.board || direct()) return;
   const snap = await xyStore.getSnapshot(op.board);
   if (!snap) return;
   applyOpToSnapshot(snap, op, resultId);
@@ -359,6 +365,10 @@ function nowISO(): string {
 async function mutate(op: OutboxOp): Promise<{ id: number | null }> {
   // Preserve ordering: if anything is already queued we must queue too, even
   // when online, so dependent ops never overtake their creates.
+  if (direct()) {
+    const res = (await rawSend(op.method, op.path, op.body)) as MutationResult | null;
+    return { id: res && res.id != null ? res.id : null };
+  }
   const queued = pending > 0 || (await xyStore.countOps()) > 0;
   if (isOnline() && !queued) {
     try {
@@ -438,23 +448,46 @@ async function flush(): Promise<void> {
 
 // ---- snapshot mirror helpers (used by board.js) ----
 
-async function saveSnapshot(boardId: number | string, snap: BoardSnapshot): Promise<void> { await xyStore.putSnapshot(boardId, snap); }
-async function loadSnapshot(boardId: number | string): Promise<BoardSnapshot | undefined> { return xyStore.getSnapshot(boardId); }
-async function pendingCount(): Promise<number> { pending = await xyStore.countOps(); return pending; }
+async function saveSnapshot(boardId: number | string, snap: BoardSnapshot): Promise<void> {
+  if (!direct()) await xyStore.putSnapshot(boardId, snap);
+}
+async function loadSnapshot(boardId: number | string): Promise<BoardSnapshot | undefined> {
+  return direct() ? undefined : xyStore.getSnapshot(boardId);
+}
+async function pendingCount(): Promise<number> {
+  pending = direct() ? 0 : await xyStore.countOps();
+  return pending;
+}
 async function pendingCountForBoard(board: number): Promise<number> {
+  if (direct()) return 0;
   const ops = await xyStore.allOps();
   return ops.filter((o) => o.board === board).length;
 }
-async function pendingOps(): Promise<OutboxOp[]> { return xyStore.allOps(); }
+async function pendingOps(): Promise<OutboxOp[]> { return direct() ? [] : xyStore.allOps(); }
 
 // timelineFor returns the cached server timeline for a card merged with any
 // pending (un-synced) events derived from the outbox, oldest→newest.
 async function timelineFor(cardId: number | string): Promise<TimelineEvent[]> {
+  if (direct()) return pageTimelines.get(String(cardId)) ?? [];
   const cached = (await xyStore.getTimeline(cardId)) || [];
   const ops = await xyStore.allOps();
   return cached.concat(pendingTimeline(ops, Number(cardId)));
 }
-async function cacheTimeline(cardId: number | string, events: TimelineEvent[]): Promise<void> { await xyStore.putTimeline(cardId, events); }
+async function cacheTimeline(cardId: number | string, events: TimelineEvent[]): Promise<void> {
+  if (direct()) pageTimelines.set(String(cardId), events);
+  else await xyStore.putTimeline(cardId, events);
+}
+
+// A local xy hands the timeline it just fetched back to the reader through
+// this page's memory, and keeps no copy past the page.
+const pageTimelines = new Map<string, TimelineEvent[]>();
+
+// The mirror's other halves, the attachment bytes and the board list, which a
+// local xy keeps nowhere but on its server.
+const getAttachment: typeof xyStore.getAttachment = (id) => direct() ? Promise.resolve(undefined) : xyStore.getAttachment(id);
+const putAttachment: typeof xyStore.putAttachment = (id, rec) => direct() ? Promise.resolve(id) : xyStore.putAttachment(id, rec);
+const getBoardList: typeof xyStore.getBoardList = () => direct() ? Promise.resolve(undefined) : xyStore.getBoardList();
+const putBoardList: typeof xyStore.putBoardList = (boards) => direct() ? Promise.resolve(0) : xyStore.putBoardList(boards);
 
 // requireOnline gates actions the outbox can't queue (cross-board copy,
 // exports, attachment bytes, board rename…): true when online; offline it
@@ -471,7 +504,7 @@ function requireOnline(message: string, messageNode?: { textContent: string | nu
 
 let started = false;
 function start(): void {
-  if (started || typeof window === "undefined") return;
+  if (started || typeof window === "undefined" || direct()) return;
   started = true;
   window.addEventListener("online", () => { emit(); flush(); });
   window.addEventListener("offline", () => emit());
@@ -484,8 +517,7 @@ export const xySync = {
   isOnline, requireOnline, status, onStatus, onBoardSynced,
   saveSnapshot, loadSnapshot, pendingCount, pendingCountForBoard, pendingOps,
   timelineFor, cacheTimeline,
-  getAttachment: xyStore.getAttachment, putAttachment: xyStore.putAttachment,
-  getBoardList: xyStore.getBoardList, putBoardList: xyStore.putBoardList,
+  getAttachment, putAttachment, getBoardList, putBoardList,
   // pure helpers (exported for tests)
   _substituteValue: substituteValue, _substitutePath: substitutePath,
   _applyOpToSnapshot: applyOpToSnapshot, _pendingTimeline: pendingTimeline,

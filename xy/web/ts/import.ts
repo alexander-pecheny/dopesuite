@@ -22,6 +22,7 @@
 //    kind from its chgksuite markers, description history → desc_edit events.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { xyInstance } from "./instance.js";
 import { encodePayload } from "./eventpayload.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
@@ -485,7 +486,7 @@ form.addEventListener("submit", async (e) => {
   log("");
   const pass = byId<HTMLInputElement>("boardPass").value;
   const name = byId<HTMLInputElement>("boardName").value.trim();
-  const passErr = xyCrypto.validatePassphrase(pass);
+  const passErr = xyInstance.offers("passphrase") ? xyCrypto.validatePassphrase(pass) : null;
   if (passErr) {
     log(passErr);
     return;
@@ -562,6 +563,11 @@ form.addEventListener("submit", async (e) => {
 
 (async () => {
   await xyApp.requireLogin();
+  if (!xyInstance.offers("passphrase")) {
+    byId("importPassBlock").hidden = true;
+    byId<HTMLInputElement>("boardPass").required = false;
+    importBtn.disabled = false;
+  }
 
   for (const id of ["sourceArchive", "sourceTrello"]) byId(id).addEventListener("change", syncSource);
   syncSource();

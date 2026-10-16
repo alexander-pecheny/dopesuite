@@ -11,6 +11,7 @@ import { modal } from "./modal.js";
 import { xyApp } from "./app.js";
 import type { AuthMe } from "./app.js";
 import { xySync } from "./sync.js";
+import { xyInstance } from "./instance.js";
 import { xyStore } from "./store.js";
 import { autocomplete } from "./kit/suggest.js";
 import { createBoardInvites } from "./boardinvites.js";
@@ -66,6 +67,12 @@ export function createBoardMembers(state: MembersState, boardId: number | string
   }
 
   async function load(): Promise<void> {
+    if (!xyInstance.offers("members")) {
+      // A local xy has one user, who is the board's whole roster.
+      try { state.me ??= (await fetchJSON(`/api/auth/me`)) as AuthMe; } catch (_) {}
+      if (state.me) applyMembers([{ user_id: state.me.user_id, username: state.me.username, role: "owner" }]);
+      return;
+    }
     if (!xySync.isOnline()) {
       // The mirrored roster: offline cards still get author names and @-mentions.
       try {

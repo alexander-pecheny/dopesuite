@@ -2,6 +2,7 @@
 // (interface font, card title, which kind of entry an opened card's feed
 // shows, default author, timezone and invite cities), and the two dialogs:
 // change password and board sizes (with a pseudo-board preview).
+import { type Feature, xyInstance } from "./instance.js";
 import S from "./i18nstrings.js";
 import { xyApp, xySizes } from "./app.js";
 import { type Modal, modal } from "./modal.js";
@@ -43,12 +44,24 @@ let timezone = "";
 let announceCities: Array<{ zone: string; name: string }> = [];
 let sessionTitleMode = "date-title";
 
+// A local xy has no login, no tokens and no test sessions, whose timezone and
+// announce cities are what the tz section sets.
+function hideAbsentFeatures(): void {
+  const off = (feature: Feature, ids: string[]): void => {
+    if (!xyInstance.offers(feature)) for (const id of ids) byId(id).hidden = true;
+  };
+  off("login", ["passwordBtn", "logoutBtn"]);
+  off("tokens", ["tokensLink"]);
+  off("sessions", ["tzSection"]);
+}
+
 async function boot(): Promise<void> {
   const me = await xyApp.requireLogin();
   if (!me) return;
   const m: Partial<AuthMe> & { telegram?: string | null } = "user_id" in me ? me : {};
   whoami.textContent = m.username || m.telegram || ("#" + m.user_id);
   if (!m.username) usernameSection.hidden = false;
+  hideAbsentFeatures();
   sizes = xySizes.sanitize(m.sizes);
   defaultAuthor = m.default_author || "";
   cardTitle = m.card_title || "question";
