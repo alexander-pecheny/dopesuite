@@ -159,35 +159,10 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 	p.processSingleNumberLines(opts.SingleNumberLines)
 	p.dupletBlitzHack()
 	p.markLeadingComments()
+	p.joinBareAuthors()
 
-	// ── 2. glue unlabelled lines onto the field they continue ──
-	p.mergeYToX("question", "answer")
-	p.mergeToXUntilNextField("answer")
-	p.mergeToXUntilNextField("comment")
-
-	// ── 3. make sure every answer has a question in front of it ──
-	p.ensureQuestions()
-	for _, e := range p.structure {
-		switch e.Type {
-		case "newquestion":
-			e.Type = "question"
-		case "leadcomment":
-			e.Type = "comment"
-		}
-	}
-	p.dirtyMergeToXUntilNextField("source")
-
-	// A bare author-label line means the author's name is on the next line.
-	for i := 0; i < len(p.structure); i++ {
-		if p.structure[i].Type == "author" &&
-			p.rx.authorOnly.MatchString(typo.REW(p.structure[i].str())) &&
-			i+1 < len(p.structure) {
-			p.mergeToPrevious(i + 1)
-		}
-	}
-
-	p.mergeToXUntilNextField("zachet")
-	p.mergeToXUntilNextField("nezachet")
+	// ── 2-3. glue unlabelled lines onto their fields, find every answer's question ──
+	p.structure = p.group(p.structure)
 
 	// ── 4. drop empties, strip the field labels off the content ──
 	kept := p.structure[:0]
@@ -201,8 +176,10 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 	if len(p.structure) == 0 {
 		return nil
 	}
-	if p.structure[0].Type == "" && p.rx.field("number").MatchString(typo.REW(p.structure[0].str())) {
-		p.mergeToNext(0)
+	if first := p.structure[0]; first.Type == "" && len(p.structure) > 1 &&
+		p.rx.field("number").MatchString(typo.REW(first.str())) {
+		p.structure = p.structure[1:]
+		p.structure[0].Content = first.str() + sep + p.structure[0].str()
 	}
 	p.stripLabels()
 
@@ -227,102 +204,11 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 	return final
 }
 
-// ── structure surgery (the merge_* helpers) ─────────────────────────────────
-
-// at emulates Python's negative indexing: structure[i-1] with i == 0 is the LAST
-// element, not an error. Several loops below rely on that, deliberately or not.
-func (p *parser) at(i int) *elem {
-	if i < 0 {
-		i += len(p.structure)
-	}
-	return p.structure[i]
-}
-
-func (p *parser) pop(i int) *elem {
-	e := p.structure[i]
-	p.structure = append(p.structure[:i], p.structure[i+1:]...)
-	return e
-}
-
+// insert puts e at index i of the structure.
 func (p *parser) insert(i int, e *elem) {
 	p.structure = append(p.structure, nil)
 	copy(p.structure[i+1:], p.structure[i:])
 	p.structure[i] = e
-}
-
-func (p *parser) mergeToPrevious(i int) {
-	target := p.at(i - 1)
-	popped := p.pop(i)
-	if target.str() != "" {
-		target.Content = target.str() + sep + popped.str()
-	} else {
-		target.Content = popped.Content
-	}
-}
-
-func (p *parser) mergeToNext(i int) {
-	popped := p.pop(i)
-	p.structure[i].Content = popped.str() + sep + p.structure[i].str()
-}
-
-func (p *parser) findNextFieldName(i int) string {
-	t := i + 1
-	if t >= len(p.structure) {
-		return ""
-	}
-	for t < len(p.structure)-1 && p.structure[t].Type == "" {
-		t++
-	}
-	return p.structure[t].Type
-}
-
-// hardBoundaries are the structural markers a question/answer merge must not
-// swallow (chgksuite's ChgkParser.HARD_BOUNDARIES).
-var hardBoundaries = map[string]bool{
-	"battle": true, "section": true, "tour": true, "tourrev": true,
-	"heading": true, "editor": true, "date": true,
-}
-
-func (p *parser) mergeYToX(x, y string) {
-	for i := 0; i < len(p.structure); i++ {
-		if p.structure[i].Type != x {
-			continue
-		}
-		for i+1 < len(p.structure) &&
-			p.structure[i+1].Type != y &&
-			p.structure[i+1].Type != "leadcomment" &&
-			!hardBoundaries[p.structure[i+1].Type] {
-			p.mergeToPrevious(i + 1)
-		}
-	}
-}
-
-// badNextFields: an unlabelled line must not be glued onto the previous field if
-// what follows it is a question or an answer — it belongs to that instead.
-var badNextFields = map[string]bool{"question": true, "answer": true, "leadcomment": true}
-
-func (p *parser) mergeToXUntilNextField(x string) {
-	for i := 0; i < len(p.structure); i++ {
-		if p.structure[i].Type != x {
-			continue
-		}
-		for i+1 < len(p.structure) &&
-			p.structure[i+1].Type == "" &&
-			!badNextFields[p.findNextFieldName(i)] {
-			p.mergeToPrevious(i + 1)
-		}
-	}
-}
-
-func (p *parser) dirtyMergeToXUntilNextField(x string) {
-	for i := 0; i < len(p.structure); i++ {
-		if p.structure[i].Type != x {
-			continue
-		}
-		for i+1 < len(p.structure) && p.structure[i+1].Type == "" {
-			p.mergeToPrevious(i + 1)
-		}
-	}
 }
 
 // ── step 1 helpers ──────────────────────────────────────────────────────────
@@ -537,8 +423,9 @@ var answerSide = map[string]bool{"answer": true, "zachet": true, "nezachet": tru
 
 // markLeadingComments recognises a package that puts the comment before the
 // answer: there, more comments stand right before an answer than after one.
-// Each comment that leads to an answer takes the unlabelled lines up to it and
-// becomes a "leadcomment", which the merges look past to find the question.
+// Each comment that leads to an answer becomes a "leadcomment", which takes the
+// unlabelled lines up to the answer and which group looks past to find the
+// question.
 func (p *parser) markLeadingComments() {
 	before, after := 0, 0
 	for i, e := range p.structure {
@@ -559,56 +446,31 @@ func (p *parser) markLeadingComments() {
 	if before <= after {
 		return
 	}
-	for i := 0; i < len(p.structure); i++ {
-		if p.structure[i].Type != "comment" || p.findNextFieldName(i) != "answer" {
-			continue
-		}
-		p.structure[i].Type = "leadcomment"
-		for p.structure[i+1].Type == "" {
-			p.mergeToPrevious(i + 1)
+	for i, e := range p.structure {
+		if e.Type == "comment" && nextLabelled(p.structure[i+1:]) == "answer" {
+			e.Type = "leadcomment"
 		}
 	}
 }
 
-// ── step 3 ──────────────────────────────────────────────────────────────────
-
-func (p *parser) ensureQuestions() {
-	for i := 0; i < len(p.structure); i++ {
-		if p.structure[i].Type != "answer" {
-			continue
+// nextLabelled is the type of the first typed element in s, or "" if none.
+func nextLabelled(s []*elem) string {
+	for _, e := range s {
+		if e.Type != "" {
+			return e.Type
 		}
-		j := i
-		if i > 0 && p.structure[i-1].Type == "leadcomment" {
-			j = i - 1
-		}
-		prev := p.at(j - 1).Type // j == 0 wraps to the last element, as in Python
-		if prev == "question" || prev == "newquestion" {
-			continue
-		}
-		p.insert(j, &elem{"newquestion", ""})
-		i = -1 // Python sets i = 0 and then increments
 	}
+	return ""
+}
 
-	for i := 0; i < len(p.structure)-1; i++ {
-		if p.structure[i].Type != "" || p.structure[i+1].Type != "newquestion" {
-			continue
+// joinBareAuthors gives an author label that stands alone on its line the
+// line after it, which is where the name is.
+func (p *parser) joinBareAuthors() {
+	for i := 0; i+1 < len(p.structure); i++ {
+		if e := p.structure[i]; e.Type == "author" && p.rx.authorOnly.MatchString(typo.REW(e.str())) {
+			appendLine(e, p.structure[i+1].str())
+			p.structure = append(p.structure[:i+1], p.structure[i+2:]...)
 		}
-		p.mergeToNext(i)
-		cur := typo.REW(p.structure[i].str())
-		prev := typo.REW(p.at(i - 1).str())
-		if p.rx.field("number").MatchString(cur) && !p.rx.field("number").MatchString(prev) {
-			p.structure[i].Type = "question"
-			p.structure[i].Content = p.rx.field("number").ReplaceAllString(cur, "")
-			// Python does int(num.group(0)) on a match like "12. ", which always
-			// raises ValueError and is swallowed — so no number is ever inserted.
-			// Reproduced by only inserting when the match parses as an integer.
-			if m := p.rx.field("number").FindString(typo.REW(p.structure[i].str())); m != "" {
-				if n, err := strconv.Atoi(m); err == nil {
-					p.insert(i, &elem{"number", n})
-				}
-			}
-		}
-		i = -1
 	}
 }
 
