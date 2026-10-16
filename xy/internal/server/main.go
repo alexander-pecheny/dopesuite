@@ -53,17 +53,10 @@ func Main() {
 		log.Fatal(err)
 	}
 
-	srv, err := newServer()
+	srv, err := Open(configFromEnv())
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	srv.assets, srv.pages = newAssets()
-	if err := srv.pages.Warm(pagePaths...); err != nil {
-		log.Fatal(err)
-	}
-
-	mux := routes(srv)
 
 	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
 	if port == "" {
@@ -74,20 +67,71 @@ func Main() {
 	if err != nil {
 		log.Fatalf("bind %s: %v", addr, err)
 	}
-	// Compile typst (wasm) ahead of the first handout request: cold, that is a ~15s
-	// wasm compile, which no user should sit through.
-	srv.warmTypst()
-	go srv.reapLoop()
-	srv.startBot(context.Background())
+	srv.WarmTypst()
+	srv.s.startBot(context.Background())
 
-	log.Printf("xy %s serving on %s (assets from %s)", buildinfo.Version(), addr, srv.assets.Mode)
+	log.Printf("xy %s serving on %s (assets from %s)", buildinfo.Version(), addr, srv.s.assets.Mode)
 
 	httpSrv := &http.Server{
-		Handler:           webassets.Gzip(guardOrigin(mux)),
+		Handler:           srv.Handler(),
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}
 	log.Fatal(httpSrv.Serve(listener))
+}
+
+// Server is a running xy server for a caller that serves its Handler itself:
+// Main over a TCP listener, localserver inside the desktop app.
+type Server struct {
+	s       *server
+	handler http.Handler
+	stop    context.CancelFunc
+}
+
+// Open builds a server from cfg: the database, the blobs, the compiled pages,
+// the local user in local mode, and the tombstone reaper. It starts no bot;
+// Main does that.
+func Open(cfg Config) (*Server, error) {
+	srv, err := newServer(cfg)
+	if err != nil {
+		return nil, err
+	}
+	srv.assets, srv.pages = newAssets()
+	if err := srv.pages.Warm(pagePaths...); err != nil {
+		srv.db.Close()
+		return nil, err
+	}
+	if cfg.Local {
+		if srv.localUser, err = ensureLocalUser(context.Background(), srv); err != nil {
+			srv.db.Close()
+			return nil, err
+		}
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	go srv.reapLoop(ctx)
+	return &Server{s: srv, handler: srv.handler(), stop: stop}, nil
+}
+
+// WarmTypst compiles typst (wasm) in the background, ahead of the first handout
+// request: cold, that is a ~15s compile, which no user should sit through.
+func (s *Server) WarmTypst() { s.s.warmTypst() }
+
+// Handler serves every route this server's mode offers.
+func (s *Server) Handler() http.Handler { return s.handler }
+
+// Close stops the background work and closes the database.
+func (s *Server) Close() error {
+	s.stop()
+	return s.s.db.Close()
+}
+
+// handler is the route table with what wraps it. A local server answers in the
+// same process, so there is no wire to compress and no foreign origin to guard.
+func (s *server) handler() http.Handler {
+	if s.cfg.Local {
+		return routes(s)
+	}
+	return webassets.Gzip(guardOrigin(routes(s)))
 }
 
 // handleIndex serves the board-list home page (client-side auth-gated).
@@ -105,14 +149,14 @@ func routes(srv *server) *http.ServeMux {
 
 	// ---- HTML pages ----
 	mux.HandleFunc("GET /", srv.handleIndex)
-	mux.HandleFunc("GET /login", srv.handleLogin)
-	mux.HandleFunc("GET /register", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /login", srv.serverOnly(srv.handleLogin))
+	mux.HandleFunc("GET /register", srv.serverOnly(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusMovedPermanently)
-	})
+	}))
 	mux.HandleFunc("GET /profile", srv.servePage("ui/profile.dopeui"))
-	mux.HandleFunc("GET /profile/tokens", srv.servePage("ui/tokens.dopeui"))
+	mux.HandleFunc("GET /profile/tokens", srv.serverOnly(srv.servePage("ui/tokens.dopeui")))
 	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.dopeui"))
-	mux.HandleFunc("GET /join/{code}", srv.servePage("ui/join.dopeui"))
+	mux.HandleFunc("GET /join/{code}", srv.serverOnly(srv.servePage("ui/join.dopeui")))
 	// The specimen sheet for the design system (design-review skill): every
 	// primitive a panel is built from, on one page, from fixtures. Dev only —
 	// NoCache is disk-asset mode, which is where a skin is being worked on.
@@ -122,10 +166,10 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("GET /import", srv.servePage("ui/import.dopeui"))
 
 	// ---- admin tooling (gated on the configured admin username) ----
-	mux.HandleFunc("GET /admin", srv.HandleAdminLanding)
-	mux.HandleFunc("GET /admin/create_users", srv.HandleAdminCreateUsers)
-	mux.HandleFunc("POST /admin/create_users", srv.HandleAdminCreateUsers)
-	mux.HandleFunc("GET /admin/users", srv.HandleAdminUsers)
+	mux.HandleFunc("GET /admin", srv.serverOnly(srv.HandleAdminLanding))
+	mux.HandleFunc("GET /admin/create_users", srv.serverOnly(srv.HandleAdminCreateUsers))
+	mux.HandleFunc("POST /admin/create_users", srv.serverOnly(srv.HandleAdminCreateUsers))
+	mux.HandleFunc("GET /admin/users", srv.serverOnly(srv.HandleAdminUsers))
 
 	// ---- PWA: service worker + manifest at the site root (scope '/') ----
 	mux.HandleFunc("GET /sw.js", srv.serveRootAsset(
@@ -139,15 +183,15 @@ func routes(srv *server) *http.ServeMux {
 
 	// ---- auth API ----
 	mux.HandleFunc("GET /api/auth/methods", srv.handleLoginMethods)
-	mux.HandleFunc("POST /api/auth/tg/start", srv.handleTgStart)
-	mux.HandleFunc("GET /api/auth/tg/status", srv.handleTgStatus)
-	mux.HandleFunc("POST /api/auth/tg/claim", srv.handleTgClaim)
-	mux.HandleFunc("POST /api/auth/login-password", srv.handleLoginPassword)
-	mux.HandleFunc("POST /api/auth/logout", srv.handleLogout)
+	mux.HandleFunc("POST /api/auth/tg/start", srv.serverOnly(srv.handleTgStart))
+	mux.HandleFunc("GET /api/auth/tg/status", srv.serverOnly(srv.handleTgStatus))
+	mux.HandleFunc("POST /api/auth/tg/claim", srv.serverOnly(srv.handleTgClaim))
+	mux.HandleFunc("POST /api/auth/login-password", srv.serverOnly(srv.handleLoginPassword))
+	mux.HandleFunc("POST /api/auth/logout", srv.serverOnly(srv.handleLogout))
 	mux.HandleFunc("GET /api/auth/me", srv.handleMe)
 	mux.HandleFunc("GET /api/auth/storage", srv.handleStorage)
 	mux.HandleFunc("POST /api/auth/username", srv.handleSetUsername)
-	mux.HandleFunc("POST /api/auth/password", srv.handleSetPassword)
+	mux.HandleFunc("POST /api/auth/password", srv.serverOnly(srv.handleSetPassword))
 	mux.HandleFunc("POST /api/auth/sizes", srv.handleSetSizes)
 	mux.HandleFunc("POST /api/auth/default-author", srv.handleSetDefaultAuthor)
 	mux.HandleFunc("POST /api/auth/card-title", srv.handleSetCardTitle)
@@ -157,14 +201,14 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("POST /api/auth/announce-cities", srv.handleSetAnnounceCities)
 
 	// ---- API tokens (Trello-compatible API credentials) ----
-	mux.HandleFunc("GET /api/tokens", srv.handleListTokens)
-	mux.HandleFunc("POST /api/tokens", srv.handleCreateToken)
-	mux.HandleFunc("DELETE /api/tokens/{id}", srv.handleRevokeToken)
+	mux.HandleFunc("GET /api/tokens", srv.serverOnly(srv.handleListTokens))
+	mux.HandleFunc("POST /api/tokens", srv.serverOnly(srv.handleCreateToken))
+	mux.HandleFunc("DELETE /api/tokens/{id}", srv.serverOnly(srv.handleRevokeToken))
 
 	// ---- Trello-compatible API (token-authed via key+token params) ----
-	mux.HandleFunc("GET /1/boards/{id}", srv.handleTrelloGetBoard)
-	mux.HandleFunc("GET /1/boards/{id}/lists", srv.handleTrelloGetLists)
-	mux.HandleFunc("POST /1/lists/{id}/cards", srv.handleTrelloCreateCard)
+	mux.HandleFunc("GET /1/boards/{id}", srv.serverOnly(srv.handleTrelloGetBoard))
+	mux.HandleFunc("GET /1/boards/{id}/lists", srv.serverOnly(srv.handleTrelloGetLists))
+	mux.HandleFunc("POST /1/lists/{id}/cards", srv.serverOnly(srv.handleTrelloCreateCard))
 
 	// ---- boards API ----
 	mux.HandleFunc("GET /api/boards", srv.handleListBoards)
@@ -174,22 +218,22 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("PATCH /api/boards/{id}", srv.handlePatchBoard)
 	mux.HandleFunc("DELETE /api/boards/{id}", srv.handleDeleteBoard)
 	mux.HandleFunc("GET /api/boards/{id}/meta", srv.handleGetBoardMeta)
-	mux.HandleFunc("DELETE /api/boards/{id}/membership", srv.handleLeaveBoard)
+	mux.HandleFunc("DELETE /api/boards/{id}/membership", srv.serverOnly(srv.handleLeaveBoard))
 	mux.HandleFunc("GET /api/boards/{id}/keymeta", srv.handleGetKeymeta)
-	mux.HandleFunc("PUT /api/boards/{id}/keymeta", srv.handlePutKeymeta)
-	mux.HandleFunc("GET /api/boards/{id}/members", srv.handleListMembers)
-	mux.HandleFunc("POST /api/boards/{id}/members", srv.handleAddMember)
-	mux.HandleFunc("DELETE /api/boards/{id}/members/{userId}", srv.handleRemoveMember)
-	mux.HandleFunc("GET /api/collaborators", srv.handleListCollaborators)
+	mux.HandleFunc("PUT /api/boards/{id}/keymeta", srv.serverOnly(srv.handlePutKeymeta))
+	mux.HandleFunc("GET /api/boards/{id}/members", srv.serverOnly(srv.handleListMembers))
+	mux.HandleFunc("POST /api/boards/{id}/members", srv.serverOnly(srv.handleAddMember))
+	mux.HandleFunc("DELETE /api/boards/{id}/members/{userId}", srv.serverOnly(srv.handleRemoveMember))
+	mux.HandleFunc("GET /api/collaborators", srv.serverOnly(srv.handleListCollaborators))
 
 	// ---- invite links (ADR-0017): owner-side management, invitee-side join ----
-	mux.HandleFunc("GET /api/boards/{id}/invites", srv.handleListBoardInvites)
-	mux.HandleFunc("POST /api/boards/{id}/invites", srv.handleCreateBoardInvite)
-	mux.HandleFunc("POST /api/board-invites/{id}/revoke", srv.handleRevokeBoardInvite)
-	mux.HandleFunc("DELETE /api/board-invites/{id}", srv.handleDeleteBoardInvite)
-	mux.HandleFunc("POST /api/boards/{id}/join-requests/{userId}", srv.handleDecideJoinRequest)
-	mux.HandleFunc("GET /api/board-invites/code/{code}", srv.handlePeekInvite)
-	mux.HandleFunc("POST /api/board-invites/code/{code}/join", srv.handleJoinInvite)
+	mux.HandleFunc("GET /api/boards/{id}/invites", srv.serverOnly(srv.handleListBoardInvites))
+	mux.HandleFunc("POST /api/boards/{id}/invites", srv.serverOnly(srv.handleCreateBoardInvite))
+	mux.HandleFunc("POST /api/board-invites/{id}/revoke", srv.serverOnly(srv.handleRevokeBoardInvite))
+	mux.HandleFunc("DELETE /api/board-invites/{id}", srv.serverOnly(srv.handleDeleteBoardInvite))
+	mux.HandleFunc("POST /api/boards/{id}/join-requests/{userId}", srv.serverOnly(srv.handleDecideJoinRequest))
+	mux.HandleFunc("GET /api/board-invites/code/{code}", srv.serverOnly(srv.handlePeekInvite))
+	mux.HandleFunc("POST /api/board-invites/code/{code}/join", srv.serverOnly(srv.handleJoinInvite))
 
 	// ---- lists / cards / labels / timeline ----
 	mux.HandleFunc("POST /api/boards/{id}/lists", srv.handleCreateList)
@@ -203,17 +247,17 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/cards/{id}", srv.handleDeleteCard)
 	mux.HandleFunc("GET /api/boards/{id}/labels", srv.handleListLabels)
 	mux.HandleFunc("POST /api/boards/{id}/labels", srv.handleCreateLabel)
-	mux.HandleFunc("GET /api/boards/{id}/sessions", srv.handleListSessions)
-	mux.HandleFunc("POST /api/boards/{id}/sessions", srv.handleCreateSession)
-	mux.HandleFunc("PATCH /api/sessions/{id}", srv.handlePatchSession)
-	mux.HandleFunc("DELETE /api/sessions/{id}", srv.handleDeleteSession)
-	mux.HandleFunc("GET /api/sessions/{id}/timeline", srv.handleGetSessionTimeline)
-	mux.HandleFunc("POST /api/sessions/{id}/comments", srv.handleAddSessionComment)
+	mux.HandleFunc("GET /api/boards/{id}/sessions", srv.serverOnly(srv.handleListSessions))
+	mux.HandleFunc("POST /api/boards/{id}/sessions", srv.serverOnly(srv.handleCreateSession))
+	mux.HandleFunc("PATCH /api/sessions/{id}", srv.serverOnly(srv.handlePatchSession))
+	mux.HandleFunc("DELETE /api/sessions/{id}", srv.serverOnly(srv.handleDeleteSession))
+	mux.HandleFunc("GET /api/sessions/{id}/timeline", srv.serverOnly(srv.handleGetSessionTimeline))
+	mux.HandleFunc("POST /api/sessions/{id}/comments", srv.serverOnly(srv.handleAddSessionComment))
 	mux.HandleFunc("PATCH /api/labels/{id}", srv.handlePatchLabel)
 	mux.HandleFunc("DELETE /api/labels/{id}", srv.handleDeleteLabel)
 	mux.HandleFunc("PUT /api/cards/{id}/labels", srv.handleSetCardLabels)
-	mux.HandleFunc("PUT /api/cards/{id}/sessions", srv.handleSetCardSessions)
-	mux.HandleFunc("PUT /api/boards/{id}/tour-testers", srv.handleSetTourTesters)
+	mux.HandleFunc("PUT /api/cards/{id}/sessions", srv.serverOnly(srv.handleSetCardSessions))
+	mux.HandleFunc("PUT /api/boards/{id}/tour-testers", srv.serverOnly(srv.handleSetTourTesters))
 	mux.HandleFunc("PUT /api/boards/{id}/tour-declaration", srv.handleSetTourDeclaration)
 	mux.HandleFunc("GET /api/cards/{id}/timeline", srv.handleGetTimeline)
 	mux.HandleFunc("GET /api/boards/{id}/comments", srv.handleGetBoardComments)

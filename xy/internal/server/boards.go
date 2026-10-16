@@ -177,7 +177,7 @@ func (s *server) handleCreateBoard(w http.ResponseWriter, r *http.Request) {
 	salt, err2 := unb64(req.KDFSalt)
 	wrapped, err3 := unb64(req.WrappedKey)
 	verify, err4 := unb64(req.VerifyToken)
-	if strings.TrimSpace(req.Name) == "" || err2 != nil || err3 != nil || err4 != nil || req.KDFParams == "" {
+	if strings.TrimSpace(req.Name) == "" || err2 != nil || err3 != nil || err4 != nil || !s.validKeymeta(req.KDFParams, salt, wrapped, verify) {
 		httpError(w, http.StatusBadRequest, "invalid board fields")
 		return
 	}
@@ -583,7 +583,7 @@ func (s *server) handlePutKeymeta(w http.ResponseWriter, r *http.Request) {
 	}
 	salt, err1 := unb64(req.KDFSalt)
 	wrapped, err2 := unb64(req.WrappedKey)
-	if err1 != nil || err2 != nil || req.KDFParams == "" {
+	if err1 != nil || err2 != nil || req.KDFParams == "" || isPlainKDF(req.KDFParams) || len(salt) == 0 || len(wrapped) == 0 {
 		httpError(w, http.StatusBadRequest, "invalid keymeta")
 		return
 	}

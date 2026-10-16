@@ -86,8 +86,12 @@ func isAdminUsername(name string) bool {
 // enforceQuota rejects a write of addBytes to a board that would push its OWNER
 // over quota_bytes — attachments are attributed to whoever created the board, not
 // the (possibly editor) uploader. Runs inside the upload transaction so the check
-// sees committed state. The admin owner is exempt.
-func enforceQuota(ctx context.Context, tx *sql.Tx, boardID, addBytes int64) error {
+// sees committed state. The admin owner is exempt, and so is a local server,
+// whose disk is its user's own.
+func (s *server) enforceQuota(ctx context.Context, tx *sql.Tx, boardID, addBytes int64) error {
+	if s.cfg.Local {
+		return nil
+	}
 	var (
 		ownerID  int64
 		quota    int64
@@ -126,7 +130,7 @@ func (s *server) handleStorage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := map[string]any{"used_bytes": used, "quota_bytes": quota}
-	if quotaExempt(u.Username) {
+	if quotaExempt(u.Username) || s.cfg.Local {
 		resp["unlimited"] = true
 	}
 	writeJSON(w, resp)

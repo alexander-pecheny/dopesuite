@@ -57,7 +57,7 @@ func runAddUser(args []string) {
 		}
 		password = strings.TrimRight(line, "\r\n")
 	}
-	srv, err := newServer()
+	srv, err := newServer(configFromEnv())
 	if err != nil {
 		log.Fatal(err)
 	}

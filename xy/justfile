@@ -39,6 +39,10 @@ wasm:
 dev: wasm build-web
     go run ./cmd/xy-server
 
+# Local mode (the desktop app's xy) on a port, for a browser.
+local dir="../.tmp/xy-local" addr="127.0.0.1:9674": wasm build-web
+    go run ./cmd/xy-local -dir {{dir}} -addr {{addr}}
+
 fmt:
     #!/usr/bin/env bash
     set -euo pipefail

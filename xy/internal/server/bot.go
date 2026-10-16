@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"log"
-	"os"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -41,8 +40,8 @@ var botTexts = tgbot.Texts{
 // claim on it. It never fails the boot: a server with no bot serves everything
 // else, and the login page says telegram is not on offer.
 func (s *server) startBot(ctx context.Context) {
-	token := strings.TrimSpace(os.Getenv("XY_BOT_TOKEN"))
-	if token == "" {
+	token := s.cfg.BotToken
+	if token == "" || s.cfg.Local {
 		return
 	}
 	release, err := tgbot.AcquirePollLock(token)

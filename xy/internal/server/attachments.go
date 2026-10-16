@@ -181,7 +181,7 @@ func (s *server) handleCreateAttachment(w http.ResponseWriter, r *http.Request) 
 	}
 	var id int64
 	err := s.withWriteTx(r.Context(), "create-attachment", func(ctx context.Context, tx *sql.Tx) error {
-		if err := enforceQuota(ctx, tx, bid, size); err != nil {
+		if err := s.enforceQuota(ctx, tx, bid, size); err != nil {
 			return err
 		}
 		res, err := tx.ExecContext(ctx, `
@@ -221,7 +221,7 @@ func (s *server) handleReplaceAttachment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	err := s.withWriteTx(r.Context(), "replace-attachment", func(ctx context.Context, tx *sql.Tx) error {
-		if err := enforceQuota(ctx, tx, old.boardID, size-old.size); err != nil {
+		if err := s.enforceQuota(ctx, tx, old.boardID, size-old.size); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
