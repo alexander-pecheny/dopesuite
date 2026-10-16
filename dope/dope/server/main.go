@@ -215,6 +215,8 @@ func Main() {
 	mux.HandleFunc("/profile/logout", srv.hostPageServer().HandleProfileLogout)
 	mux.HandleFunc("/profile/tokens", srv.hostPageServer().HandleProfileTokens)
 	mux.HandleFunc("/profile/tokens/", srv.hostPageServer().HandleProfileTokens)
+	mux.HandleFunc("/join/", srv.hostPageServer().HandleJoin)
+	mux.Handle("/api/join/", srv.api().Mux)
 	mux.HandleFunc("/host", srv.hostPageServer().HandleHostLanding)
 	mux.HandleFunc("/host/", srv.hostPageServer().HandleHostRouter)
 	mux.HandleFunc("/admin", srv.pageServer().HandleAdminLanding)

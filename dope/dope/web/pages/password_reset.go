@@ -100,7 +100,7 @@ func (s *Server) HandleAdminPasswordReset(w http.ResponseWriter, r *http.Request
 			return
 		} else {
 			data.Username = username
-			data.Link = publicOrigin(r) + "/reset_password?token=" + url.QueryEscape(token)
+			data.Link = PublicOrigin(r) + "/reset_password?token=" + url.QueryEscape(token)
 		}
 		RenderDoc(w, s.h.Engine().AssetETags, adminPasswordResetDoc(data))
 	default:
@@ -151,9 +151,9 @@ values(?, ?, ?, ?, ?)`, authcred.HashSessionToken(token), userID, adminID,
 	return token, stored, nil
 }
 
-// publicOrigin is the scheme and host the request came in on; behind Caddy the
+// PublicOrigin is the scheme and host the request came in on; behind Caddy the
 // scheme comes from X-Forwarded-Proto.
-func publicOrigin(r *http.Request) string {
+func PublicOrigin(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
 		scheme = "https"

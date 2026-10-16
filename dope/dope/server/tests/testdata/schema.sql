@@ -16,6 +16,9 @@ CREATE INDEX fest_team_flags_team_idx on fest_team_flags(team_id, position);
 -- index fest_teams_fest_number_idx
 CREATE UNIQUE INDEX fest_teams_fest_number_idx on fest_teams(fest_id, number) where number is not null;
 
+-- index game_invites_game_idx
+CREATE INDEX game_invites_game_idx on game_invites(game_id);
+
 -- index games_fest_slug_idx
 CREATE UNIQUE INDEX games_fest_slug_idx on games(fest_id, slug) where slug is not null;
 
@@ -160,6 +163,31 @@ CREATE TABLE game_assignments(
   number integer not null,
   participant_id integer references participants(id),
   primary key(game_id, basket, number)
+);
+
+-- table game_invite_uses
+CREATE TABLE game_invite_uses(
+  id integer primary key,
+  invite_id integer not null references game_invites(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null check (status in ('joined','pending','declined')),
+  requested_at text not null,
+  decided_at text,
+  unique(invite_id, user_id)
+);
+
+-- table game_invites
+CREATE TABLE game_invites(
+  id integer primary key,
+  game_id integer not null references games(id) on delete cascade,
+  code text not null unique,
+  label text,
+  created_by integer not null references users(id),
+  created_at text not null,
+  expires_at text,
+  max_uses integer,
+  requires_approval integer not null default 0,
+  revoked_at text
 );
 
 -- table game_participants

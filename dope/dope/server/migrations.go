@@ -944,6 +944,36 @@ create index if not exists fest_roster_snapshots_fest_idx on fest_roster_snapsho
 		return store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{{Name: "starts_at", Type: "TEXT"}})
 	}},
 	{Version: 42, Name: "a double elimination's bouts know their bracket", Up: bracketsBackfill},
+	// v43: host invite links (ADR-0030), in the columns dopecore/invitelink
+	// owns. A link names one Game and makes whoever follows it a host limited
+	// to that Game; it goes with the Game.
+	{Version: 43, Name: "game invite links", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+create table if not exists game_invites(
+  id integer primary key,
+  game_id integer not null references games(id) on delete cascade,
+  code text not null unique,
+  label text,
+  created_by integer not null references users(id),
+  created_at text not null,
+  expires_at text,
+  max_uses integer,
+  requires_approval integer not null default 0,
+  revoked_at text
+);
+create index if not exists game_invites_game_idx on game_invites(game_id);
+create table if not exists game_invite_uses(
+  id integer primary key,
+  invite_id integer not null references game_invites(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null check (status in ('joined','pending','declined')),
+  requested_at text not null,
+  decided_at text,
+  unique(invite_id, user_id)
+);
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

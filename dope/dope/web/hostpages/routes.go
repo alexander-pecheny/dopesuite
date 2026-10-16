@@ -66,6 +66,9 @@ func (s *Server) buildRoutes() *route.Table {
 		s.handleHostSaveAccess(w, r, sc.FestID, sc.User.UserID)
 		return nil
 	})
+	t.Handle("POST "+fest+"/invites", route.Manager, s.handleHostCreateInvite)
+	t.Handle("POST "+fest+"/invites/{id}/revoke", route.Manager, s.handleHostChangeInvite(false))
+	t.Handle("POST "+fest+"/invites/{id}/delete", route.Manager, s.handleHostChangeInvite(true))
 	t.Handle("POST "+fest+"/delete", route.Creator, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		s.handleHostDeleteFest(w, r, sc.FestID, sc.User.UserID)
 		return nil

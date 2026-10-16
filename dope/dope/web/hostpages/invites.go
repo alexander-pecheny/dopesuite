@@ -1,0 +1,374 @@
+package hostpages
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"dope/dope/storage/festaccess"
+	"dope/dope/web/pages"
+	"dope/dope/web/route"
+	dopeui "dope/dope/web/ui"
+	dopestrings "dope/i18nstrings"
+
+	"pecheny.me/dopecore/authcred"
+	"pecheny.me/dopecore/idstr"
+	"pecheny.me/dopecore/invitelink"
+)
+
+// Host invite links (ADR-0030): an admin mints a link for one Game, and
+// whoever follows it becomes a host limited to that Game. The link's machine
+// is dopecore/invitelink; this file is the dashboard section, the /join page
+// and the writes both they and the API make.
+
+// The expiry choices the dashboard offers, in hours; 0 is no expiry.
+const (
+	inviteTTLDay   = 24
+	inviteTTLWeek  = 7 * inviteTTLDay
+	inviteTTLMonth = 30 * inviteTTLDay
+)
+
+// festInvite is one link with the Game it opens.
+type festInvite struct {
+	invitelink.View
+	GameID    int64  `json:"game_id"`
+	GameTitle string `json:"game_title"`
+	URL       string `json:"url"`
+}
+
+// inviteError words one of invitelink's errors for a person; any other error
+// passes through as itself.
+func inviteError(err error) error {
+	if a, ok := festaccess.InviteTexts().Answer(err); ok {
+		return &route.Status{Code: a.Status, Msg: a.Msg}
+	}
+	return err
+}
+
+// loadFestInvites lists every link of the fest's Games, a Game's newest first.
+func (s *Server) loadFestInvites(ctx context.Context, festID int64, origin string) ([]festInvite, error) {
+	db := s.h.Engine().DB
+	festGames, err := LoadFestGames(ctx, db, festID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	out := []festInvite{}
+	for _, g := range festGames {
+		links, err := festaccess.GameInvites().List(ctx, db, g.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range invitelink.Views(links, now) {
+			out = append(out, festInvite{View: v, GameID: g.ID, GameTitle: g.Title, URL: origin + "/join/" + v.Code})
+		}
+	}
+	return out, nil
+}
+
+// MintGameInvite makes a link to one Game of the fest. Nobody approves a join,
+// so a request for approval is ignored.
+func (s *Server) MintGameInvite(ctx context.Context, festID, gameID, userID int64, req invitelink.MintRequest) error {
+	req.RequiresApproval = false
+	opt, err := req.Options()
+	if err != nil {
+		return inviteError(err)
+	}
+	code, err := authcred.NewInviteCode()
+	if err != nil {
+		return err
+	}
+	return s.saveAccess(ctx, festID, func(ctx context.Context, tx *sql.Tx) error {
+		if owner, err := festaccess.GameFestID(ctx, tx, gameID); err != nil || owner != festID {
+			return route.BadRequest(dopestrings.Default.Festaccess.Invite.OtherFest())
+		}
+		_, err := festaccess.GameInvites().Mint(ctx, tx, gameID, userID, code, opt, time.Now())
+		return err
+	})
+}
+
+// changeGameInvite revokes or deletes one of the fest's links.
+func (s *Server) changeGameInvite(ctx context.Context, festID, id int64, remove bool) error {
+	links := festaccess.GameInvites()
+	return s.saveAccess(ctx, festID, func(ctx context.Context, tx *sql.Tx) error {
+		lk, err := links.ByID(ctx, tx, id)
+		if err != nil {
+			return inviteError(err)
+		}
+		if owner, err := festaccess.GameFestID(ctx, tx, lk.ScopeID); err != nil || owner != festID {
+			return route.BadRequest(dopestrings.Default.Festaccess.Invite.OtherFest())
+		}
+		if remove {
+			return links.Delete(ctx, tx, id)
+		}
+		return links.Revoke(ctx, tx, id, time.Now())
+	})
+}
+
+// JoinGameInvite follows a link for this user, as one write to the link's
+// fest, and answers the Game it opens.
+func (s *Server) JoinGameInvite(ctx context.Context, code string, userID int64) (festID, gameID int64, err error) {
+	links := festaccess.GameInvites()
+	lk, err := links.ByCode(ctx, s.h.Engine().DB, code)
+	if err != nil {
+		return 0, 0, inviteError(err)
+	}
+	if festID, err = festaccess.GameFestID(ctx, s.h.Engine().DB, lk.ScopeID); err != nil {
+		return 0, 0, inviteError(err)
+	}
+	err = s.saveAccess(ctx, festID, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := links.Join(ctx, tx, code, userID, time.Now())
+		return err
+	})
+	return festID, lk.ScopeID, inviteError(err)
+}
+
+// ---- the dashboard ----
+
+func (s *Server) handleHostCreateInvite(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	gameID, _ := idstr.Parse(r.FormValue("game"))
+	maxUses, _ := strconv.ParseInt(strings.TrimSpace(r.FormValue("max_uses")), 10, 64)
+	ttl, _ := strconv.ParseInt(r.FormValue("ttl_hours"), 10, 64)
+	req := invitelink.MintRequest{Label: r.FormValue("label"), MaxUses: maxUses, TTLHours: ttl}
+	if err := s.MintGameInvite(r.Context(), sc.FestID, gameID, sc.User.UserID, req); err != nil {
+		return s.renderInviteMessage(w, r, sc.FestID, err)
+	}
+	s.renderHostFestDashboard(w, r, sc.FestID, hostDashMessages{InviteNotice: dopestrings.Default.Host.Invites.CreatedNotice()})
+	return nil
+}
+
+func (s *Server) handleHostChangeInvite(remove bool) route.Handler {
+	return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		id, _ := idstr.Parse(r.PathValue("id"))
+		if err := s.changeGameInvite(r.Context(), sc.FestID, id, remove); err != nil {
+			return s.renderInviteMessage(w, r, sc.FestID, err)
+		}
+		http.Redirect(w, r, "/host/fest/"+r.PathValue("fest")+"#invites", http.StatusSeeOther)
+		return nil
+	}
+}
+
+// renderInviteMessage shows a refusal a person can read on the dashboard and
+// hands any other error back to the dispatcher.
+func (s *Server) renderInviteMessage(w http.ResponseWriter, r *http.Request, festID int64, err error) error {
+	var status *route.Status
+	if !errors.As(err, &status) {
+		return err
+	}
+	s.renderHostFestDashboard(w, r, festID, hostDashMessages{InviteError: status.Msg})
+	return nil
+}
+
+func hostDashInvitesSection(data hostFestDashData, ref string) *dopeui.Element {
+	s := dopestrings.Default
+	sect := []dopeui.Item{dopeui.ID("invites"), dopeui.Subhead(dopeui.Text(s.Host.Invites.Subhead())), dopeui.Hint(dopeui.Text(s.Host.Invites.Lead()))}
+	if data.InviteError != "" {
+		sect = append(sect, dopeui.Empty(dopeui.Text(data.InviteError)))
+	}
+	if data.InviteNotice != "" {
+		sect = append(sect, dopeui.Note(dopeui.Text(data.InviteNotice)))
+	}
+	if len(data.Invites) == 0 {
+		sect = append(sect, dopeui.Empty(dopeui.Text(s.Host.Invites.Empty())))
+	} else {
+		rows := make([]dopeui.Item, 0, len(data.Invites))
+		for _, inv := range data.Invites {
+			rows = append(rows, inviteRow(inv, ref))
+		}
+		sect = append(sect, dopeui.Col(append([]dopeui.Item{dopeui.SpaceSM}, rows...)...))
+	}
+	gameOptions := make([]dopeui.Item, 0, len(data.Games)+1)
+	gameOptions = append(gameOptions, dopeui.Name("game"))
+	for _, g := range data.Games {
+		gameOptions = append(gameOptions, dopeui.Option(dopeui.Value(idstr.Format(g.ID)), dopeui.Text(g.Title)))
+	}
+	ttl := func(hours int, label string) *dopeui.Element {
+		return dopeui.Option(dopeui.Value(strconv.Itoa(hours)), dopeui.Text(label))
+	}
+	sect = append(sect, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/invites#invites"), dopeui.Autocomplete("off"),
+		dopeui.Field(dopeui.Label(s.Host.Invites.GameLabel()), dopeui.Selectfield(gameOptions...)),
+		dopeui.Field(dopeui.Label(s.Host.Invites.LabelLabel()),
+			dopeui.Textfield(dopeui.Name("label"), dopeui.Maxlength(strconv.Itoa(invitelink.MaxLabelRunes)), dopeui.Placeholder(s.Host.Invites.LabelPlaceholder()))),
+		dopeui.Field(dopeui.Label(s.Host.Invites.UsesLabel()), dopeui.Textfield(dopeui.Name("max_uses"), dopeui.Inputmode("numeric"))),
+		dopeui.Field(dopeui.Label(s.Host.Invites.TtlLabel()), dopeui.Selectfield(dopeui.Name("ttl_hours"),
+			ttl(0, s.Host.Invites.TtlNever()), ttl(inviteTTLDay, s.Host.Invites.TtlDay()), ttl(inviteTTLWeek, s.Host.Invites.TtlWeek()), ttl(inviteTTLMonth, s.Host.Invites.TtlMonth()))),
+		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Invites.CreateSubmit()))),
+	))
+	return dopeui.Section(sect...)
+}
+
+// inviteRow is one link: its name and facts, the URL to copy while it works,
+// who came in, and its revoke and delete buttons.
+func inviteRow(inv festInvite, ref string) *dopeui.Element {
+	s := dopestrings.Default
+	title := inv.Label
+	if title == "" {
+		title = inv.GameTitle
+	}
+	usage := s.Host.Invites.Usage(strconv.FormatInt(inv.Used, 10))
+	if inv.Left != nil {
+		usage = s.Host.Invites.UsageLeft(strconv.FormatInt(inv.Used, 10), strconv.FormatInt(*inv.Left, 10))
+	}
+	facts := []dopeui.Item{dopeui.DirCol, dopeui.SpaceSM, dopeui.Strong(dopeui.Text(title)), dopeui.Muted(dopeui.Text(s.Host.Invites.RowMeta(inv.GameTitle, inviteStateText(inv.State), usage)))}
+	active := inv.State == string(invitelink.Active)
+	if active && inv.ExpiresAt != "" {
+		facts = append(facts, dopeui.Muted(dopeui.Text(s.Host.Invites.Expires(tokenDate(inv.ExpiresAt)))))
+	}
+	if active {
+		facts = append(facts, dopeui.Textfield(dopeui.Readonly(), dopeui.Value(inv.URL), dopeui.Data("select-all", "")))
+	}
+	if len(inv.Joined) > 0 {
+		names := make([]string, len(inv.Joined))
+		for i, p := range inv.Joined {
+			names[i] = p.Name
+		}
+		facts = append(facts, dopeui.Hint(dopeui.Text(s.Host.Invites.Joined(strings.Join(names, ", ")))))
+	}
+	base := "/host/fest/" + ref + "/invites/" + idstr.Format(inv.ID)
+	var buttons []dopeui.Item
+	if active {
+		buttons = append(buttons, dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/revoke"), dopeui.Data("confirm", s.Host.Invites.RevokeConfirm()),
+			dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Invites.Revoke()))))
+	}
+	buttons = append(buttons, dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/delete"), dopeui.Data("confirm", s.Host.Invites.DeleteConfirm()),
+		dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text(s.Host.Invites.Delete()))))
+	return dopeui.Card(append(facts, dopeui.Row(append([]dopeui.Item{dopeui.SpaceSM, dopeui.Wrap()}, buttons...)...))...)
+}
+
+func inviteStateText(state string) string {
+	s := dopestrings.Default
+	switch invitelink.State(state) {
+	case invitelink.Revoked:
+		return s.Host.Invites.StateRevoked()
+	case invitelink.Expired:
+		return s.Host.Invites.StateExpired()
+	case invitelink.Exhausted:
+		return s.Host.Invites.StateExhausted()
+	}
+	return s.Host.Invites.StateActive()
+}
+
+// ---- the page a link opens ----
+
+// HandleJoin serves /join/<code>: who is not signed in signs in first and comes
+// back; then GET says what the link offers and POST follows it.
+func (s *Server) HandleJoin(w http.ResponseWriter, r *http.Request) {
+	code := strings.TrimPrefix(r.URL.Path, "/join/")
+	if code == "" || strings.Contains(code, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	user, ok := s.h.Engine().LookupSession(r)
+	if !ok {
+		http.Redirect(w, r, "/login?next="+url.QueryEscape("/join/"+code), http.StatusSeeOther)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		s.renderJoin(w, r, code, user.UserID, "")
+	case http.MethodPost:
+		if !route.SameOriginUnsafe(w, r) {
+			return
+		}
+		festID, gameID, err := s.JoinGameInvite(r.Context(), code, user.UserID)
+		var status *route.Status
+		switch {
+		case errors.As(err, &status):
+			s.renderJoin(w, r, code, user.UserID, status.Msg)
+		case err != nil:
+			route.WriteError(w, r, err)
+		default:
+			http.Redirect(w, r, s.hostGameURL(r.Context(), festID, gameID), http.StatusSeeOther)
+		}
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) hostGameURL(ctx context.Context, festID, gameID int64) string {
+	return "/host/fest/" + s.festRefOrID(ctx, festID) + "/game/" + s.gameRefOrID(ctx, gameID) + "/"
+}
+
+// renderJoin draws the join page for the link's state as this user sees it;
+// refusal, when set, is why following it just failed.
+func (s *Server) renderJoin(w http.ResponseWriter, r *http.Request, code string, userID int64, refusal string) {
+	str := dopestrings.Default
+	peek, err := festaccess.GameInvites().PeekCode(r.Context(), s.h.Engine().DB, code, userID, time.Now())
+	var status *route.Status
+	if err := inviteError(err); errors.As(err, &status) {
+		refusal = status.Msg
+	} else if err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
+	var body []dopeui.Item
+	switch {
+	case refusal != "":
+		body = []dopeui.Item{dopeui.Subhead(dopeui.Text(str.Host.Join.RefusedHeading())), dopeui.Hint(dopeui.Text(refusal))}
+	case peek.State == invitelink.Member:
+		festID, err := festaccess.GameFestID(r.Context(), s.h.Engine().DB, peek.ScopeID)
+		if err != nil {
+			route.WriteError(w, r, err)
+			return
+		}
+		body = []dopeui.Item{dopeui.Subhead(dopeui.Text(str.Host.Join.MemberHeading(peek.ScopeName))),
+			dopeui.Row(dopeui.Button(dopeui.Href(s.hostGameURL(r.Context(), festID, peek.ScopeID)), dopeui.Text(str.Host.Join.OpenGame())))}
+	case peek.State == invitelink.Active:
+		body = []dopeui.Item{dopeui.Subhead(dopeui.Text(str.Host.Join.ActiveHeading(peek.ScopeName))), dopeui.Hint(dopeui.Text(str.Host.Join.ActiveNote())),
+			dopeui.Form(dopeui.Method("post"), dopeui.Action("/join/"+code),
+				dopeui.Button(dopeui.Submit(), dopeui.Text(str.Host.Join.JoinSubmit())))}
+	default:
+		body = []dopeui.Item{dopeui.Subhead(dopeui.Text(str.Host.Join.RefusedHeading())),
+			dopeui.Hint(dopeui.Text(festaccess.InviteTexts().Refusal(peek.State)))}
+	}
+	pages.RenderDoc(w, s.h.Engine().AssetETags, &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(
+		dopeui.Title(str.Host.Join.Title()), dopeui.PagePublic,
+		dopeui.Publictopbar(pages.Trail([]dopeui.Item{pages.HomeCrumb()}, str.Host.Join.Title())),
+		dopeui.Section(body...),
+	)}})
+}
+
+// ---- the JSON twins ----
+
+func (s *Server) apiInvites(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	invites, err := s.loadFestInvites(r.Context(), sc.FestID, pages.PublicOrigin(r))
+	if err != nil {
+		return err
+	}
+	return route.JSON(w, invites)
+}
+
+func (s *Server) apiCreateInvite(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req invitelink.MintRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	if err := s.MintGameInvite(r.Context(), sc.FestID, sc.GameID, sc.User.UserID, req); err != nil {
+		return err
+	}
+	return s.apiInvites(w, r, sc)
+}
+
+func (s *Server) apiChangeInvite(remove bool) route.Handler {
+	return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		id, _ := idstr.Parse(r.PathValue("id"))
+		if err := s.changeGameInvite(r.Context(), sc.FestID, id, remove); err != nil {
+			return err
+		}
+		return s.apiInvites(w, r, sc)
+	}
+}
+
+// apiJoin follows a link as the caller: the twin of the join page's button.
+func (s *Server) apiJoin(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	festID, gameID, err := s.JoinGameInvite(r.Context(), r.PathValue("code"), sc.User.UserID)
+	if err != nil {
+		return err
+	}
+	return route.JSON(w, map[string]int64{"fest_id": festID, "game_id": gameID})
+}

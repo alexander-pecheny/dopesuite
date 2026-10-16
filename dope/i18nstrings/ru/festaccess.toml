@@ -38,3 +38,18 @@ role_invalid = "роль должна быть admin или host"
 not_host = 'у {{.name}} роль не «ведущий» — ограничить по играм можно только ведущего'
 # A Game named in games that this fest does not have (by id, code or slug).
 unknown = 'в фесте нет игры «{{.game}}»'
+
+[invite]
+# Host invite links (ADR-0030, storage/festaccess/gameinvites.go): what a
+# link is called on its join page, and why one does not work.
+scope_name = '«{{.game}}» на фесте «{{.fest}}»'
+revoked = "Ссылку отозвали. Попросите у организаторов новую."
+expired = "Срок действия ссылки истёк. Попросите у организаторов новую."
+exhausted = "По этой ссылке уже вошло столько людей, сколько было можно. Попросите у организаторов новую."
+spent = "Вы уже входили по этой ссылке, а потом вас убрали из доступа. Попросите у организаторов новую ссылку."
+broken = "Ссылка не работает."
+not_found = "Такой ссылки нет. Возможно, её удалили вместе с игрой."
+label_too_long = "Название ссылки слишком длинное."
+limits_out_of_range = "Число входов и срок не могут быть меньше нуля, а срок не может быть больше года."
+# A link named by id that belongs to another fest, or a game outside this fest.
+other_fest = "В этом фесте нет такой ссылки."

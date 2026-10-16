@@ -58,6 +58,10 @@ in the game has a number.
 | `DELETE /api/fest/<fest>` C | deletes the fest and everything in it |
 | `GET …/access` A | members and roles; a host limited to some Games carries their ids in `games` |
 | `POST …/access` A | `{changes: [{user, role: "admin"\|"host"}, {user, remove: true}]}` or `{lines: "user:role\n…"}`. A change may carry `games: [<id\|code\|slug>, …]` to limit a host to those Games (`[]` lifts it), with or without a role |
+| `GET …/invites` A | the host invite links of every Game: `id`, `game_id`, `label`, `state`, `used`, `left`, `url`, who `joined` |
+| `POST …/games/<game>/invites` A | `{label?, max_uses?, ttl_hours?}` mints a link to that Game; whoever follows it becomes a host limited to it → the list |
+| `POST …/invites/<id>/revoke` A · `DELETE …/invites/<id>` A | stop a link, or remove it with its history; who came in stays a host |
+| `POST /api/join/<code>` | follow a link as yourself → `{fest_id, game_id}` |
 
 **Games**
 

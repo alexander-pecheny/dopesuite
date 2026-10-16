@@ -609,6 +609,30 @@ var RU = Strings{
 			},
 			Unknown: func(game string) string { return fmt.Sprintf("в фесте нет игры «%s»", game) },
 		},
+		Invite: FestaccessInviteStrings{
+			Broken: func() string { return "Ссылка не работает." },
+			Exhausted: func() string {
+				return "По этой ссылке уже вошло столько людей, сколько было можно. Попросите у организаторов новую."
+			},
+			Expired: func() string {
+				return "Срок действия ссылки истёк. Попросите у организаторов новую."
+			},
+			LabelTooLong: func() string { return "Название ссылки слишком длинное." },
+			LimitsOutOfRange: func() string {
+				return "Число входов и срок не могут быть меньше нуля, а срок не может быть больше года."
+			},
+			NotFound: func() string {
+				return "Такой ссылки нет. Возможно, её удалили вместе с игрой."
+			},
+			OtherFest: func() string { return "В этом фесте нет такой ссылки." },
+			Revoked: func() string {
+				return "Ссылку отозвали. Попросите у организаторов новую."
+			},
+			ScopeName: func(game string, fest string) string { return fmt.Sprintf("«%s» на фесте «%s»", game, fest) },
+			Spent: func() string {
+				return "Вы уже входили по этой ссылке, а потом вас убрали из доступа. Попросите у организаторов новую ссылку."
+			},
+		},
 		Manage: FestaccessManageStrings{
 			Denied: func() string { return "нет прав менять доступ" },
 		},
@@ -1064,6 +1088,60 @@ var RU = Strings{
 			WholeRosterHint: func() string {
 				return "Играют все команды феста, под теми же номерами. Кто не играл, отмечается во вкладке «Отказы» на странице игры."
 			},
+		},
+		Invites: HostInvitesStrings{
+			CreateSubmit: func() string { return "Создать ссылку" },
+			CreatedNotice: func() string {
+				return "Ссылка создана. Скопируйте её из списка ниже."
+			},
+			Delete: func() string { return "Удалить" },
+			DeleteConfirm: func() string {
+				return "Удалить ссылку вместе с историей входов? Те, кто вошёл по ней, останутся ведущими."
+			},
+			Empty:            func() string { return "Ссылок пока нет." },
+			Expires:          func(date string) string { return fmt.Sprintf("действует до %s", date) },
+			GameLabel:        func() string { return "Игра" },
+			Joined:           func(names string) string { return fmt.Sprintf("Вошли: %s", names) },
+			LabelLabel:       func() string { return "Название" },
+			LabelPlaceholder: func() string { return "например, «Минск»" },
+			Lead: func() string {
+				return "Кто перейдёт по ссылке, станет ведущим одной игры. Остальные игры феста он будет видеть как зритель. Например, сделайте по ссылке на каждую городскую игру и отправьте их организаторам площадок."
+			},
+			Revoke: func() string { return "Отозвать" },
+			RevokeConfirm: func() string {
+				return "Отозвать ссылку? Те, кто уже вошёл по ней, останутся ведущими."
+			},
+			RowMeta: func(game string, state string, usage string) string {
+				return fmt.Sprintf("%s · %s · %s", game, state, usage)
+			},
+			StateActive:    func() string { return "действует" },
+			StateExhausted: func() string { return "мест не осталось" },
+			StateExpired:   func() string { return "просрочена" },
+			StateRevoked:   func() string { return "отозвана" },
+			Subhead:        func() string { return "Ссылки для ведущих" },
+			TtlDay:         func() string { return "сутки" },
+			TtlLabel:       func() string { return "Срок действия" },
+			TtlMonth:       func() string { return "месяц" },
+			TtlNever:       func() string { return "без срока" },
+			TtlWeek:        func() string { return "неделя" },
+			Usage:          func(n string) string { return fmt.Sprintf("вошли: %s", n) },
+			UsageLeft: func(n string, left string) string {
+				return fmt.Sprintf("вошли: %s, осталось мест: %s", n, left)
+			},
+			UsesLabel: func() string {
+				return "Сколько человек может войти (пусто — сколько угодно)"
+			},
+		},
+		Join: HostJoinStrings{
+			ActiveHeading: func(scope string) string { return fmt.Sprintf("Вас приглашают вести %s", scope) },
+			ActiveNote: func() string {
+				return "Вы станете ведущим этой игры и сможете вносить в неё результаты. Остальные игры феста будут видны вам как зрителю."
+			},
+			JoinSubmit:     func() string { return "Стать ведущим" },
+			MemberHeading:  func(scope string) string { return fmt.Sprintf("Вы уже ведёте %s", scope) },
+			OpenGame:       func() string { return "Открыть игру" },
+			RefusedHeading: func() string { return "Ссылка не работает" },
+			Title:          func() string { return "Приглашение" },
 		},
 		Pages: HostPagesStrings{
 			CreateFestSummary: func() string { return "Создать фест" },

@@ -155,6 +155,10 @@ A standings a team competes in. One tournament may run several зачёты at o
 A mark a fest team carries; the word is the rating site's. Examples are «Школьная команда», «Студенческая команда», and regional ones such as «Европа». It comes with the roster import or an organizer types it, and every distinct Flag among a game's teams offers a [[Зачёт (Division)]] to look at, unless the game hides it on its «Свойства» page (a зачёт that means nothing in that game). The app does not decide which Flags deserve one. It is known by its short name (Школ, Студ, Е) wherever it is shown or linked.
 _Avoid_: the country-flag emoji on the ОД Экран. That is a decoration derived from the city, not a Flag.
 
+**Ссылка для ведущего (Host invite link)**:
+A URL an admin makes for one Game and sends to someone who should run it, such as the organizers of a city's venue when a tournament is played in several cities at once. Whoever follows it and signs in becomes a host of the fest limited to that Game, or, if they were a host limited to other Games, gets this one as well. Someone who already runs the Game (an admin, the creator, a host nobody limited) is left as they were. A link may cap how many people come in and may expire; revoking or deleting it never removes anyone it let in. It is not the registration invite code (the `invites` table) (ADR-0030).
+_Avoid_: invite on its own.
+
 **Отказ**:
 A team refusing to play a Game or a мини-игра. The team keeps its row, so that the numbers of the other teams do not shift, but it has no results there by definition: it takes no place and it cannot set a normalisation scale. This is not the same as «вне зачёта» ([[Зачёт]]), where a team plays in full and appears alongside everyone else, and is only outside the medal standings.
 

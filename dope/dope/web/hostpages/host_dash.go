@@ -54,6 +54,9 @@ type hostFestDashData struct {
 	Error           string
 	AccessError     string
 	AccessNotice    string
+	Invites         []festInvite
+	InviteError     string
+	InviteNotice    string
 	ImportError     string
 	ImportNotice    string
 	RosterError     string
@@ -64,6 +67,8 @@ type hostDashMessages struct {
 	FormError    string
 	AccessError  string
 	AccessNotice string
+	InviteError  string
+	InviteNotice string
 	ImportError  string
 	ImportNotice string
 	RosterError  string
@@ -99,6 +104,9 @@ func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 	page = append(page, hostDashGamesSection(data, ref))
 	if data.CanManageAccess {
 		page = append(page, hostDashAccessSection(data, ref))
+		if len(data.Games) > 0 {
+			page = append(page, hostDashInvitesSection(data, ref))
+		}
 	}
 	if data.CanManageFest {
 		page = append(page, hostDashRosterSection(data, ref))
@@ -645,7 +653,12 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 	canManageGames := canManageFest
 	var access []festaccess.HostAccessMember
 	var hostGameIDs map[int64][]int64
+	var invites []festInvite
 	if canManageAccess {
+		if invites, err = s.loadFestInvites(r.Context(), festID, pages.PublicOrigin(r)); err != nil {
+			route.WriteError(w, r, err)
+			return
+		}
 		access, err = festaccess.LoadFestAccessMembers(s.h.Engine(), r.Context(), festID)
 		if err != nil {
 			route.WriteError(w, r, err)
@@ -685,6 +698,9 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 		Error:           msgs.FormError,
 		AccessError:     msgs.AccessError,
 		AccessNotice:    msgs.AccessNotice,
+		Invites:         invites,
+		InviteError:     msgs.InviteError,
+		InviteNotice:    msgs.InviteNotice,
 		ImportError:     msgs.ImportError,
 		ImportNotice:    msgs.ImportNotice,
 		RosterError:     msgs.RosterError,

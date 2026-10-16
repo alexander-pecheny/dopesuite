@@ -43,6 +43,11 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("DELETE "+fest, route.Creator, s.apiDeleteFest)
 	t.Handle("GET "+fest+"/access", route.Manager, s.apiAccess)
 	t.Handle("POST "+fest+"/access", route.Manager, s.apiSaveAccess)
+	t.Handle("GET "+fest+"/invites", route.Manager, s.apiInvites)
+	t.Handle("POST "+game+"/invites", route.Manager, s.apiCreateInvite)
+	t.Handle("POST "+fest+"/invites/{id}/revoke", route.Manager, s.apiChangeInvite(false))
+	t.Handle("DELETE "+fest+"/invites/{id}", route.Manager, s.apiChangeInvite(true))
+	t.Handle("POST /api/join/{code}", route.Session, s.apiJoin)
 
 	t.Handle("GET "+fest+"/entrants", route.Manager, s.apiEntrants)
 	t.Handle("POST "+fest+"/games", route.Manager, s.apiCreateGame)

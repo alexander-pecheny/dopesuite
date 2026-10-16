@@ -478,6 +478,18 @@ export type Strings = {
       notHost: (name: string) => string;
       unknown: (game: string) => string;
     };
+    invite: {
+      broken: () => string;
+      exhausted: () => string;
+      expired: () => string;
+      labelTooLong: () => string;
+      limitsOutOfRange: () => string;
+      notFound: () => string;
+      otherFest: () => string;
+      revoked: () => string;
+      scopeName: (game: string, fest: string) => string;
+      spent: () => string;
+    };
     manage: {
       denied: () => string;
     };
@@ -795,6 +807,44 @@ export type Strings = {
       typeSi: () => string;
       typeTroika: () => string;
       wholeRosterHint: () => string;
+    };
+    invites: {
+      createSubmit: () => string;
+      createdNotice: () => string;
+      delete: () => string;
+      deleteConfirm: () => string;
+      empty: () => string;
+      expires: (date: string) => string;
+      gameLabel: () => string;
+      joined: (names: string) => string;
+      labelLabel: () => string;
+      labelPlaceholder: () => string;
+      lead: () => string;
+      revoke: () => string;
+      revokeConfirm: () => string;
+      rowMeta: (game: string, state: string, usage: string) => string;
+      stateActive: () => string;
+      stateExhausted: () => string;
+      stateExpired: () => string;
+      stateRevoked: () => string;
+      subhead: () => string;
+      ttlDay: () => string;
+      ttlLabel: () => string;
+      ttlMonth: () => string;
+      ttlNever: () => string;
+      ttlWeek: () => string;
+      usage: (n: string) => string;
+      usageLeft: (n: string, left: string) => string;
+      usesLabel: () => string;
+    };
+    join: {
+      activeHeading: (scope: string) => string;
+      activeNote: () => string;
+      joinSubmit: () => string;
+      memberHeading: (scope: string) => string;
+      openGame: () => string;
+      refusedHeading: () => string;
+      title: () => string;
     };
     pages: {
       createFestSummary: () => string;

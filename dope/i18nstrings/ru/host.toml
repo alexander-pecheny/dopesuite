@@ -418,6 +418,47 @@ error_delete_creator_only = "Удалить фест может только е�
 bulk_done_notice = 'Массовое действие выполнено: {{.n}}.'
 access_saved_notice = "Доступ сохранён."
 
+[invites]
+# The dashboard's host invite links (hostDashInvitesSection, ADR-0030).
+subhead = "Ссылки для ведущих"
+lead = "Кто перейдёт по ссылке, станет ведущим одной игры. Остальные игры феста он будет видеть как зритель. Например, сделайте по ссылке на каждую городскую игру и отправьте их организаторам площадок."
+game_label = "Игра"
+label_label = "Название"
+label_placeholder = "например, «Минск»"
+uses_label = "Сколько человек может войти (пусто — сколько угодно)"
+ttl_label = "Срок действия"
+ttl_never = "без срока"
+ttl_day = "сутки"
+ttl_week = "неделя"
+ttl_month = "месяц"
+create_submit = "Создать ссылку"
+empty = "Ссылок пока нет."
+# One link row: the game it opens, its state, how many came in.
+row_meta = '{{.game}} · {{.state}} · {{.usage}}'
+state_active = "действует"
+state_revoked = "отозвана"
+state_expired = "просрочена"
+state_exhausted = "мест не осталось"
+usage = 'вошли: {{.n}}'
+usage_left = 'вошли: {{.n}}, осталось мест: {{.left}}'
+expires = 'действует до {{.date}}'
+joined = 'Вошли: {{.names}}'
+revoke = "Отозвать"
+revoke_confirm = "Отозвать ссылку? Те, кто уже вошёл по ней, останутся ведущими."
+delete = "Удалить"
+delete_confirm = "Удалить ссылку вместе с историей входов? Те, кто вошёл по ней, останутся ведущими."
+created_notice = "Ссылка создана. Скопируйте её из списка ниже."
+
+[join]
+# The page a host invite link opens, /join/<code> (ADR-0030).
+title = "Приглашение"
+active_heading = 'Вас приглашают вести {{.scope}}'
+active_note = "Вы станете ведущим этой игры и сможете вносить в неё результаты. Остальные игры феста будут видны вам как зрителю."
+join_submit = "Стать ведущим"
+member_heading = 'Вы уже ведёте {{.scope}}'
+open_game = "Открыть игру"
+refused_heading = "Ссылка не работает"
+
 [pages]
 # The host landing (/host), the profile page (/profile) and the two public
 # viewer pages (/, /fest/{ref}).
