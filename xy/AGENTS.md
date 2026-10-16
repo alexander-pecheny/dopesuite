@@ -276,8 +276,12 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
   docread/             Word 97–2003 .doc → the same plain text, minus images, list numbers
                        and formatting: OLE container, FIB, piece table. Only `chgksuite
                        credits` uses it; doctest/ writes minimal .doc files for tests
-  textparse/           parser.py's parsers: plain text → structure. Literal ports, quirks
-                       included (see the comments). parse.go is ChgkParser (chgk and brain);
+  textparse/           parser.py's parsers: plain text → structure. The chgk/brain parser
+                       runs in stages, one file each: label.go (each line typed by its
+                       marker), starts.go (questions that carry no marker), group.go (which
+                       field an unlabelled line belongs to), fields.go, pack.go. It is no
+                       longer a literal port: generated_test.go renders every canon in 30
+                       styles and holds it to legacy/, the frozen literal port.
                        si.go + troika.go are SiParser and TroikaParser, which read the
                        document's outline through the "$$HN$$" markers docxread writes for
                        them; db.go is parser_db's PLY lexer over db.chgk.info's own text

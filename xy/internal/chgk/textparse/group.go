@@ -4,14 +4,10 @@ import (
 	"xy/internal/chgk/typo"
 )
 
-// group decides where every unlabelled line belongs, and makes sure every
-// answer has a question in front of it. Its input is the labelled structure:
-// each line typed by the marker it carries, or untyped ("").
-//
-// A question runs up to its answer. A run of untyped lines that ends at an
-// answer (or at a comment written before the answer) is that answer's
-// question; see questionStart for where it begins. Any other run continues the
-// field before it, as continues says, or is left untyped and later becomes meta.
+// group joins every untyped line to a field and gives every answer a question.
+// A question runs up to its answer; a run of untyped lines that ends at an
+// answer is its question; any other run continues the field before it or
+// stays untyped, which later makes it meta.
 func (p *parser) group(in []*elem) []*elem {
 	var out []*elem
 	for i := 0; i < len(in); {
@@ -50,15 +46,11 @@ func (p *parser) group(in []*elem) []*elem {
 	return out
 }
 
-// endsQuestion are the elements a question stops absorbing at: its answer, a
-// comment written before that answer, and the package's own structure.
 var endsQuestion = map[string]bool{
 	"answer": true, "leadcomment": true,
 	"battle": true, "tour": true, "tourrev": true, "editor": true, "date": true,
 }
 
-// placeRun puts a run of untyped lines after out, given the type of the
-// labelled line that follows the run.
 func (p *parser) placeRun(out, run []*elem, next string) []*elem {
 	prev := lastOf(out)
 	if (next == "answer" || next == "leadcomment") && prev.Type != "leadcomment" {
@@ -73,8 +65,6 @@ func (p *parser) placeRun(out, run []*elem, next string) []*elem {
 	return continueOrKeep(out, run, next)
 }
 
-// continueOrKeep appends the run to the field before it if continues allows,
-// and as untyped lines otherwise.
 func continueOrKeep(out, run []*elem, next string) []*elem {
 	if len(run) == 0 {
 		return out
@@ -89,10 +79,6 @@ func continueOrKeep(out, run []*elem, next string) []*elem {
 	return out
 }
 
-// continues says whether untyped lines after a field of type prev, followed by
-// a field of type next, are more of that field. A source takes them always. The
-// answer-side fields take them unless a question comes next, which they would
-// then be the start of.
 func continues(prev, next string) bool {
 	switch prev {
 	case "source", "leadcomment":
@@ -103,11 +89,8 @@ func continues(prev, next string) bool {
 	return false
 }
 
-// questionStart is where, in a run of untyped lines ending at an answer, the
-// question begins. It is the last line that opens with a number ("12. …")
-// while the line before it does not, which makes numbered regulations above
-// the question part of the preamble; numbered says whether one was found.
-// Without one the whole run is the question.
+// questionStart is the last line of the run that opens with a number while the
+// line before it does not, so that a numbered list above the question stays out.
 func (p *parser) questionStart(run []*elem, prev *elem) (k int, numbered bool) {
 	number := p.rx.field("number")
 	for k = len(run) - 1; k >= 0; k-- {
@@ -122,8 +105,6 @@ func (p *parser) questionStart(run []*elem, prev *elem) (k int, numbered bool) {
 	return 0, false
 }
 
-// hasQuestion reports whether out ends with a question, possibly followed by
-// a comment written before its answer.
 func hasQuestion(out []*elem) bool {
 	n := len(out)
 	if n > 0 && out[n-1].Type == "leadcomment" {
@@ -132,7 +113,6 @@ func hasQuestion(out []*elem) bool {
 	return n > 0 && out[n-1].Type == "question"
 }
 
-// insertQuestion puts q at the end of out, before a trailing leading comment.
 func insertQuestion(out []*elem, q *elem) []*elem {
 	n := len(out)
 	if n > 0 && out[n-1].Type == "leadcomment" {
@@ -141,7 +121,6 @@ func insertQuestion(out []*elem, q *elem) []*elem {
 	return append(out, q)
 }
 
-// lastOf is the last element of out, or an empty untyped one.
 func lastOf(out []*elem) *elem {
 	if len(out) == 0 {
 		return &elem{}
@@ -149,7 +128,6 @@ func lastOf(out []*elem) *elem {
 	return out[len(out)-1]
 }
 
-// appendLine adds a line to an element's text.
 func appendLine(e *elem, line string) {
 	if e.str() == "" {
 		e.Content = line
