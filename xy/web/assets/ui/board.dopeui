@@ -137,9 +137,9 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
     -- Tests: which sittings this question was played at, each with its own
     -- labels. Separate from Labels above: a label there is the author's view, a
     -- label under a test is what the testers thought (ADR-0004).
-    label id="cardPlayingsLabel" @board.card.playings_label
+    label @board.card.playings_label
     mount id="cardPlayings" kind="card-playings"
-    row id="cardPlayingsRow" gap="sm" align="center" wrap
+    row gap="sm" align="center" wrap
       mount id="playingAddRow" kind="label-add-row"
         button kind="ghost" icon="plus" id="playingAddBtn" @board.card.mark_test
         button kind="ghost" icon="user-plus" id="seenAddBtn" @board.card.seen_add

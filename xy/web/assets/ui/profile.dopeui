@@ -51,7 +51,7 @@ page title=@profile.title kind="sheet" scripts="dist/profile.js"
       textfield id="authorValue" placeholder=@profile.author.placeholder autocomplete="off" maxlength="200"
     message id="authorMessage"
 
-  section id="tzSection"
+  section
     field label=@profile.tz.tz_label
       textfield id="tzValue" placeholder="Europe/Moscow" autocomplete="off" maxlength="64"
     field label=@profile.tz.cities_label

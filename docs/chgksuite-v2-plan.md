@@ -78,8 +78,8 @@ encrypted is a property of the board (its keymeta), not of the column.
 
 ### What local mode leaves out
 
-Members, invites, test sessions, tokens and Telegram login need a server or
-more than one person. The local server reports a capability set, and the
+Members, invites, tokens and Telegram login need a server or more than one
+person. Test sessions stay, because the owner records them alone. The local server reports a capability set, and the
 frontend hides whatever it does not support.
 
 ### Frontend changes

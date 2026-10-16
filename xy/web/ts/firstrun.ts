@@ -18,7 +18,7 @@ import S from "./i18nstrings.js";
 
 const { jpost, el } = xyApp;
 
-function build(zone: string, author: string, withTz: boolean): { overlay: HTMLElement; read: () => { tz: string; author: string } } {
+function build(zone: string, author: string): { overlay: HTMLElement; read: () => { tz: string; author: string } } {
   const tzInput = el("input", {
     class: "input", type: "text", value: zone, placeholder: "Europe/Moscow",
     autocomplete: "off", maxlength: "64", id: "firstRunTz",
@@ -31,12 +31,9 @@ function build(zone: string, author: string, withTz: boolean): { overlay: HTMLEl
   const card = el("div", { class: "appearance-modal", role: "dialog", "aria-modal": "true", "aria-label": S.profile.firstrun.label() },
     el("h2", { class: "appearance-modal-title", text: S.profile.firstrun.title() }),
     el("p", { class: "hint", text: S.profile.firstrun.subtitle() }),
-    // A local xy has no test sessions, which are all the timezone is for.
-    ...(withTz ? [
-      el("label", { class: "fld-label", for: "firstRunTz", text: S.profile.firstrun.tzLabel() }),
-      tzInput,
-      el("p", { class: "hint", text: S.profile.firstrun.tzHint() }),
-    ] : []),
+    el("label", { class: "fld-label", for: "firstRunTz", text: S.profile.firstrun.tzLabel() }),
+    tzInput,
+    el("p", { class: "hint", text: S.profile.firstrun.tzHint() }),
     el("label", { class: "fld-label", for: "firstRunAuthor", text: S.profile.firstrun.authorLabel() }),
     authorInput,
     el("p", { class: "hint", text: S.profile.firstrun.authorHint() }),
@@ -64,8 +61,7 @@ async function firstRun(): Promise<void> {
   }
   if (!me || !me.user_id || me.onboarded_at) return;
 
-  const withTz = !me.instance?.off.includes("sessions");
-  const { overlay, read } = build(me.timezone || guessZone(), me.default_author || "", withTz);
+  const { overlay, read } = build(me.timezone || guessZone(), me.default_author || "");
   const card = overlay.firstElementChild as HTMLElement;
 
   const save = el("button", { class: "btn", type: "button", text: S.profile.firstrun.save() });

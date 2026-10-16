@@ -4,7 +4,6 @@
 // the seen section names who saw this question beyond the people the tour already
 // names. Two pickers over one filtered popup; every write goes up as the card's
 // whole set through the board's verbs.
-import { xyInstance } from "./instance.js";
 import { xyApp } from "./app.js";
 import { sealPayload } from "./eventpayload.js";
 import { sortLabels } from "./labelsedit.js";
@@ -100,7 +99,6 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
   }
 
   function renderPlayings(card: BoardCard): void {
-    if (!xyInstance.offers("sessions")) return;
     const box = ui.playings;
     box.replaceChildren();
     const ids = board.playingsOf(card.id);
@@ -153,7 +151,6 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
 
   function renderSeen(card: BoardCard): void {
     const node = ui.seen;
-    if (!xyInstance.offers("sessions")) { node.hidden = true; return; }
     const people = seenPeople(board.seenPlayings(card.id), parseCardSeen(card.seen));
     // People who saw it at a test come first, then the ones added by hand, then
     // the absent ones. A test is the stronger record, and it is what the tour's

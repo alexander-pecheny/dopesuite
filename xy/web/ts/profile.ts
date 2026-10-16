@@ -44,15 +44,13 @@ let timezone = "";
 let announceCities: Array<{ zone: string; name: string }> = [];
 let sessionTitleMode = "date-title";
 
-// A local xy has no login, no tokens and no test sessions, whose timezone and
-// announce cities are what the tz section sets.
+// A local xy has no login and no tokens.
 function hideAbsentFeatures(): void {
   const off = (feature: Feature, ids: string[]): void => {
     if (!xyInstance.offers(feature)) for (const id of ids) byId(id).hidden = true;
   };
   off("login", ["passwordBtn", "logoutBtn"]);
   off("tokens", ["tokensLink"]);
-  off("sessions", ["tzSection"]);
 }
 
 async function boot(): Promise<void> {

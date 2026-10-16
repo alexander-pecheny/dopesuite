@@ -151,6 +151,29 @@ func TestLocalKeymeta(t *testing.T) {
 		map[string]string{"kdf_params": plainKDFParams, "kdf_salt": "", "wrapped_key": ""}), http.StatusBadRequest)
 }
 
+// TestLocalTestSessions: the owner records tests alone, so a local board keeps
+// its sessions and Playings.
+func TestLocalTestSessions(t *testing.T) {
+	c, _ := newLocalTestServer(t)
+	bid := createdID(t, c, c.do("POST", "/api/boards", plainBoard("b")))
+	lid := createdID(t, c, c.do("POST", "/api/boards/"+itoa(bid)+"/lists", map[string]string{"title": enc("Тур 1"), "rank": "m"}))
+	cid := createdID(t, c, c.do("POST", "/api/lists/"+itoa(lid)+"/cards", map[string]string{"description": enc("Вопрос"), "rank": "m"}))
+	sid := createdID(t, c, c.do("POST", "/api/boards/"+itoa(bid)+"/sessions", map[string]string{"meta": enc(`{"title":"Тест"}`)}))
+	resp := c.do("PUT", "/api/cards/"+itoa(cid)+"/sessions", map[string]any{"session_ids": []int64{sid}})
+	if resp.StatusCode >= http.StatusBadRequest {
+		t.Fatalf("set card sessions = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	resp = c.do("GET", "/api/boards/"+itoa(bid), nil)
+	mustStatus(t, resp, http.StatusOK)
+	var snap boardSnapshot
+	c.decode(resp, &snap)
+	if len(snap.Sessions) != 1 || len(snap.CardSessions) != 1 {
+		t.Fatalf("sessions = %+v, playings = %+v", snap.Sessions, snap.CardSessions)
+	}
+}
+
 func TestLocalDisabledRoutes(t *testing.T) {
 	c, _ := newLocalTestServer(t)
 	bid := createdID(t, c, c.do("POST", "/api/boards", plainBoard("b")))
@@ -176,11 +199,6 @@ func TestLocalDisabledRoutes(t *testing.T) {
 		{"GET", "/api/boards/" + b + "/invites"},
 		{"POST", "/api/boards/" + b + "/invites"},
 		{"GET", "/api/board-invites/code/abc"},
-		{"GET", "/api/boards/" + b + "/sessions"},
-		{"POST", "/api/boards/" + b + "/sessions"},
-		{"GET", "/api/sessions/1/timeline"},
-		{"PUT", "/api/cards/1/sessions"},
-		{"PUT", "/api/boards/" + b + "/tour-testers"},
 	} {
 		resp := c.do(r.method, r.path, map[string]string{})
 		resp.Body.Close()

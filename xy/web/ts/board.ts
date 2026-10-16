@@ -132,12 +132,6 @@ let listDragCommitted = false;
 const badge = xyApp.syncBadge(statusNode);
 const setStatus = badge.set;
 
-// A local xy has no testing, so the open card's Tests block goes with it.
-function hideAbsentFeatures(): void {
-  if (xyInstance.offers("sessions")) return;
-  for (const id of ["cardPlayingsLabel", "cardPlayings", "cardPlayingsRow"]) byId(id).hidden = true;
-}
-
 // ---- boot + unlock ----
 // The whole boot → unlock → snapshot-load flow lives in unlock.js; the board
 // hands it the DOM nodes, the singletons and the callbacks it owns.
@@ -154,7 +148,7 @@ const unlock = createUnlock({
   },
   crypto: xyCrypto,
   sync: xySync,
-  net: { ...xyApp, requireLogin: async () => { const me = await xyApp.requireLogin(); hideAbsentFeatures(); return me; } },
+  net: xyApp,
   status: badge,
   applySizes: xySizes.apply,
   onDK: (k, from) => {
@@ -1654,7 +1648,7 @@ registerPanel(
   listsManage.panel,
   labelsEditor.panel,
   labelFilter.panel,
-  { id: "sessions", menu: "board", needs: "sessions", icon: "flask-conical", label: S.board.sessions.name(), title: S.board.sessions.menuTitle(), open: () => sessionsPanel.open() },
+  { id: "sessions", menu: "board", icon: "flask-conical", label: S.board.sessions.name(), title: S.board.sessions.menuTitle(), open: () => sessionsPanel.open() },
 
   // Board-wide edits
   starts(mass.panel),
@@ -1696,7 +1690,7 @@ registerPanel(
   { id: "preview-group", menu: "list", icon: "eye", label: S.board.preview.group(), offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } },
 
   // What is counted within it
-  starts({ ...testerList.panel, needs: "sessions" }),
+  starts(testerList.panel),
   createAuthorCountPanel(shell, cardDetail),
 
   // What comes out of it

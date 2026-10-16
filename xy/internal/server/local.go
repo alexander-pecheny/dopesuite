@@ -15,7 +15,7 @@ import (
 
 // Local mode is xy inside the desktop app: one person on one computer. There is
 // no login, because whoever runs the app is the only user; there is no second
-// person, so members, invites, test sessions and tokens are gone; and boards are
+// person, so members, invites and tokens are gone; and boards are
 // stored as plaintext, because the disk they sit on is the user's own.
 
 // plainKDFParams is the kdf_params of a plaintext board, whose salt, wrapped key
@@ -48,7 +48,6 @@ var localOff = []string{
 	"tokens",         // API tokens and the Trello-compatible API they open
 	"members",        // members, collaborators, leaving a board
 	"invites",        // invite links and join requests
-	"sessions",       // test sessions, Playings and the session-based tester lists
 	"passphrase",     // a board's passphrase, its change and its monthly check
 	"offline",        // the outbox and the IndexedDB mirror
 	"admin",

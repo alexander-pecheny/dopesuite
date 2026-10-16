@@ -139,7 +139,7 @@ internal/server/       package server — the whole HTTP server
                        keymeta rule ({"kdf":"none"} locally, never on a server), the capability set
                        /api/auth/me carries as `instance`, and serverOnly, which 404s the routes
                        that need a server or a second person (login, tokens, members, invites,
-                       test sessions, admin, the Trello API)
+                       admin, the Trello API)
   origin.go            XY_TRUSTED_ORIGIN_HOSTS: once set, dopecore/sameorigin guards every write
   db.go                the schema as a list: `[]schema.Migration` (dopecore/schema applies them once each, in
                        order); a new step takes the next number and goes at the end;
@@ -274,7 +274,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        mutation outbox, temp-id↔real-id map (DB "xy-offline")
     instance.ts        what this xy offers: requireLogin reads /api/auth/me's `instance`, and
                        pages, panels (Entry.needs), crypto and sync ask offers(feature). A local
-                       xy turns off login, tokens, members, invites, sessions, passphrase, offline;
+                       xy turns off login, tokens, members, invites, passphrase, offline;
                        its boards get crypto.ts's PLAINTEXT_KEY and sync.ts sends writes direct
     sync.ts            offline engine: mutate()/flush() outbox replay with negative
                        temp-id remapping, snapshot apply, pending-timeline synthesis,
