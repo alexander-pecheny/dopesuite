@@ -249,7 +249,7 @@ CREATE TABLE games(
   roster_source text not null default 'fest' check (roster_source in ('fest','game')),
   revision integer not null default 1,
   created_at text not null,
-  updated_at text not null, state_json TEXT NOT NULL DEFAULT '{}', slug TEXT, random_seed TEXT NOT NULL DEFAULT '', screen_settings_json TEXT NOT NULL DEFAULT '{}', participant_kind TEXT NOT NULL DEFAULT 'team', scheme_dsl TEXT NOT NULL DEFAULT '', hidden_divisions TEXT, site_id INTEGER REFERENCES fest_sites(id) ON DELETE SET NULL,
+  updated_at text not null, state_json TEXT NOT NULL DEFAULT '{}', slug TEXT, random_seed TEXT NOT NULL DEFAULT '', screen_settings_json TEXT NOT NULL DEFAULT '{}', participant_kind TEXT NOT NULL DEFAULT 'team', scheme_dsl TEXT NOT NULL DEFAULT '', hidden_divisions TEXT, site_id INTEGER,
   unique(fest_id, code)
 );
 

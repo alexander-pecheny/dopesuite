@@ -997,14 +997,14 @@ create unique index if not exists fest_sites_venue_idx on fest_sites(fest_id, ra
 `); err != nil {
 			return err
 		}
-		for _, table := range []string{"fest_teams", "games"} {
-			if err := store.AddColumnsIfMissing(db, table, []store.ColumnSpec{
-				{Name: "site_id", Type: "INTEGER REFERENCES fest_sites(id) ON DELETE SET NULL"},
-			}); err != nil {
-				return err
-			}
+		if err := store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{
+			{Name: "site_id", Type: "INTEGER REFERENCES fest_sites(id) ON DELETE SET NULL"},
+		}); err != nil {
+			return err
 		}
-		return nil
+		// No foreign key on games: a site goes only with its fest, which takes
+		// its games along.
+		return store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{{Name: "site_id", Type: "INTEGER"}})
 	}},
 }
 
