@@ -9,7 +9,11 @@ formats are being moved onto the one model.
 ## Language
 
 **Fest**:
-One real event: a gathering on a given date, with a registry of teams, hosts, and one or more Games.
+One real event: a gathering on a given date, with a registry of teams, hosts, and one or more Games. A Fest has a type. A **regular** Fest is played in one place. A **synch** Fest is one strictly synchronous tournament played at many [[Площадка (Site)]] at once. A **multi** Fest is several in-person tournaments, one per площадка, each with its own rating id. The type changes only while the Fest has no Games (ADR-0031).
+
+**Площадка (Site)**:
+One place a synch or multi Fest is played at, as the rating site lists it: «ИгрыРазума», «Москва / Кругов Андрей». A fest team plays at one площадка, and a Game on a площадка seats that площадка's teams alone; a Game on none seats the whole roster. The rating import puts each team on its площадка. The screen calls it «Площадка», as it calls the room a бой is played in; the code calls it a site, to keep it apart from a бой's venue.
+_Avoid_: город. Two площадки can be in one town, and Moscow had three at Гёмбёц-9.
 
 **Game**:
 One competition inside a Fest, played from start to finish under a single format, such as the ЧГК game or the brain bracket. A Game is one Structure, and all of its Matches run Protocols.

@@ -718,6 +718,8 @@ export type Strings = {
       descriptionLabel: () => string;
       endDateLabel: () => string;
       errorDeleteCreatorOnly: () => string;
+      errorKindHasGames: () => string;
+      errorKindInvalid: () => string;
       errorSlugInvalid: (err: string) => string;
       errorSlugTaken: () => string;
       errorTitleRequired: () => string;
@@ -983,6 +985,15 @@ export type Strings = {
       undoDoneNotice: () => string;
       undoNote: (at: string) => string;
       undoSubmit: () => string;
+    };
+    sites: {
+      kindHint: () => string;
+      kindLabel: () => string;
+      kindMulti: () => string;
+      kindRegular: () => string;
+      kindSynch: () => string;
+      subhead: () => string;
+      teams: (n: string) => string;
     };
     troikas: {
       addSubhead: () => string;

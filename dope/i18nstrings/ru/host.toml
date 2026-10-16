@@ -417,6 +417,19 @@ error_slug_taken = "Slug уже занят."
 error_delete_creator_only = "Удалить фест может только его создатель."
 bulk_done_notice = 'Массовое действие выполнено: {{.n}}.'
 access_saved_notice = "Доступ сохранён."
+# The fest type (ADR-0031): an unknown one, and a change once Games exist.
+error_kind_invalid = "Такого типа турнира нет."
+error_kind_has_games = "Тип турнира можно поменять, только пока в нём нет игр."
+
+[sites]
+# A fest's type and its площадки (ADR-0031, web/hostpages/sites.go).
+kind_label = "Тип турнира"
+kind_regular = "Обычный"
+kind_synch = "Строгий синхрон"
+kind_multi = "Несколько очных турниров"
+kind_hint = "В строгом синхроне загрузка команд с rating.chgk.info раскладывает их по площадкам и заводит каждой площадке свою игру. Тип можно поменять, только пока в турнире нет игр."
+subhead = "Площадки"
+teams = 'команд: {{.n}}'
 
 [invites]
 # The dashboard's host invite links (hostDashInvitesSection, ADR-0030).

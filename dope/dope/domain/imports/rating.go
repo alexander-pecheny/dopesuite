@@ -14,6 +14,7 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/sites"
 	"dope/dope/domain/towns"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
@@ -60,6 +61,14 @@ type ratingFestResult struct {
 	// full name and the short name everything shows. Every one is kept — the app
 	// does not judge which Flags deserve a Division (ADR-0020).
 	Flags []ratingTeamFlag `json:"flags"`
+	// SynchRequest names the site a team played a synchronous
+	// tournament at.
+	SynchRequest *struct {
+		Venue struct {
+			ID   int64  `json:"id"`
+			Name string `json:"name"`
+		} `json:"venue"`
+	} `json:"synchRequest"`
 }
 
 type ratingTeamFlag struct {
@@ -241,6 +250,9 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 			})
 		}
 		team.Flags = roster.NormalizeFlags(team.Flags)
+		if r := result.SynchRequest; r != nil && r.Venue.ID > 0 {
+			team.Venue = sites.Venue{ID: r.Venue.ID, Title: strings.TrimSpace(r.Venue.Name)}
+		}
 		if len(team.Players) > roster.MaxSquad {
 			return nil, corei18n.User(dopestrings.Default.Imports.Rating.SquadTooBig(name))
 		}
@@ -352,7 +364,11 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		// broadcasts, so a "refresh" that changed nothing is near-instant and
 		// adds zero churn during a live tournament.
 		sortedCurrent := roster.SortedFestRosterImportTeams(stripLocal(current))
-		if festRostersEqual(sortedCurrent, stripLocal(desired)) && len(merged.Settle)+len(merged.Drop) == 0 {
+		venueOf, err := synchVenues(ctx, conn, festID, teams)
+		if err != nil {
+			return RatingRosterImportResult{}, err
+		}
+		if festRostersEqual(sortedCurrent, stripLocal(desired)) && len(merged.Settle)+len(merged.Drop)+len(venueOf) == 0 {
 			result.Unchanged = true
 			return result, nil
 		}
@@ -379,7 +395,7 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 				return RatingRosterImportResult{}, err
 			}
 		}
-		written, err := writeRosterTx(ctx, tx, festID, desired, existingByRating, choice.Merge, !teamLevelEqual(sortedCurrent, stripLocal(desired)))
+		written, err := writeRosterTx(ctx, tx, festID, desired, existingByRating, choice.Merge, venueOf, !teamLevelEqual(sortedCurrent, stripLocal(desired)))
 		if err != nil {
 			return RatingRosterImportResult{}, err
 		}
@@ -420,6 +436,22 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		eng.BroadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
 	}
 	return result, nil
+}
+
+// synchVenues is the site of each incoming rating team, by rating id, in a
+// synch fest; nil in any other.
+func synchVenues(ctx context.Context, q store.Queryer, festID int64, teams []roster.FestRosterImportTeam) (map[int64]sites.Venue, error) {
+	kind, err := sites.FestKind(ctx, q, festID)
+	if err != nil || kind != sites.Synch {
+		return nil, err
+	}
+	venueOf := map[int64]sites.Venue{}
+	for _, team := range teams {
+		if team.RatingID > 0 && team.Venue.ID > 0 {
+			venueOf[team.RatingID] = team.Venue
+		}
+	}
+	return venueOf, nil
 }
 
 type existingFestTeam struct {

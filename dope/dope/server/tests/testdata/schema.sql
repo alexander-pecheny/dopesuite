@@ -10,6 +10,9 @@ CREATE INDEX fest_roster_edits_team_idx on fest_roster_edits(team_id);
 -- index fest_roster_snapshots_fest_idx
 CREATE INDEX fest_roster_snapshots_fest_idx on fest_roster_snapshots(fest_id, id);
 
+-- index fest_sites_venue_idx
+CREATE UNIQUE INDEX fest_sites_venue_idx on fest_sites(fest_id, rating_venue_id) where rating_venue_id is not null;
+
 -- index fest_team_flags_team_idx
 CREATE INDEX fest_team_flags_team_idx on fest_team_flags(team_id, position);
 
@@ -109,6 +112,17 @@ CREATE TABLE fest_roster_snapshots(
   created_at text not null
 );
 
+-- table fest_sites
+CREATE TABLE fest_sites(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  title text not null,
+  town text not null default '',
+  rating_venue_id integer,
+  rating_id integer,
+  position integer not null default 0
+);
+
 -- table fest_team_flags
 CREATE TABLE fest_team_flags(
   id integer primary key,
@@ -138,7 +152,7 @@ CREATE TABLE fest_teams(
   position real not null,
   number integer,
   deleted integer not null default 0
-, country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0);
+, country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0, site_id INTEGER REFERENCES fest_sites(id) ON DELETE SET NULL);
 
 -- table fests
 CREATE TABLE fests(
@@ -154,7 +168,7 @@ CREATE TABLE fests(
   start_date text,
   end_date text,
   is_public integer not null default 0
-);
+, kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind in ('regular','synch','multi')));
 
 -- table game_assignments
 CREATE TABLE game_assignments(
@@ -235,7 +249,7 @@ CREATE TABLE games(
   roster_source text not null default 'fest' check (roster_source in ('fest','game')),
   revision integer not null default 1,
   created_at text not null,
-  updated_at text not null, state_json TEXT NOT NULL DEFAULT '{}', slug TEXT, random_seed TEXT NOT NULL DEFAULT '', screen_settings_json TEXT NOT NULL DEFAULT '{}', participant_kind TEXT NOT NULL DEFAULT 'team', scheme_dsl TEXT NOT NULL DEFAULT '', hidden_divisions TEXT,
+  updated_at text not null, state_json TEXT NOT NULL DEFAULT '{}', slug TEXT, random_seed TEXT NOT NULL DEFAULT '', screen_settings_json TEXT NOT NULL DEFAULT '{}', participant_kind TEXT NOT NULL DEFAULT 'team', scheme_dsl TEXT NOT NULL DEFAULT '', hidden_divisions TEXT, site_id INTEGER REFERENCES fest_sites(id) ON DELETE SET NULL,
   unique(fest_id, code)
 );
 
@@ -584,14 +598,14 @@ end;
 CREATE TRIGGER journal_games_insert after insert on games
 begin
   insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-  select (select fest_id from games where id = new.id), new.id, coalesce((select revision from fests where id = (select fest_id from games where id = new.id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 1, json_object('t', 'games', 'r', json_object('id', new."id", 'fest_id', new."fest_id", 'code', new."code", 'title', new."title", 'game_type', new."game_type", 'position', new."position", 'scheme_id', new."scheme_id", 'scheme_json', new."scheme_json", 'status', new."status", 'team_list_source', new."team_list_source", 'roster_source', new."roster_source", 'revision', new."revision", 'created_at', new."created_at", 'updated_at', new."updated_at", 'state_json', new."state_json", 'slug', new."slug", 'random_seed', new."random_seed", 'screen_settings_json', new."screen_settings_json", 'participant_kind', new."participant_kind", 'scheme_dsl', new."scheme_dsl", 'hidden_divisions', new."hidden_divisions")), strftime('%Y-%m-%dT%H:%M:%fZ','now');
+  select (select fest_id from games where id = new.id), new.id, coalesce((select revision from fests where id = (select fest_id from games where id = new.id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 1, json_object('t', 'games', 'r', json_object('id', new."id", 'fest_id', new."fest_id", 'code', new."code", 'title', new."title", 'game_type', new."game_type", 'position', new."position", 'scheme_id', new."scheme_id", 'scheme_json', new."scheme_json", 'status', new."status", 'team_list_source', new."team_list_source", 'roster_source', new."roster_source", 'revision', new."revision", 'created_at', new."created_at", 'updated_at', new."updated_at", 'state_json', new."state_json", 'slug', new."slug", 'random_seed', new."random_seed", 'screen_settings_json', new."screen_settings_json", 'participant_kind', new."participant_kind", 'scheme_dsl', new."scheme_dsl", 'hidden_divisions', new."hidden_divisions", 'site_id', new."site_id")), strftime('%Y-%m-%dT%H:%M:%fZ','now');
 end;
 
 -- trigger journal_games_update
 CREATE TRIGGER journal_games_update after update on games
 begin
   insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-  select (select fest_id from games where id = new.id), new.id, coalesce((select revision from fests where id = (select fest_id from games where id = new.id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 2, json_object('t', 'games', 'r', json_remove(json_object('id', new."id", 'fest_id', new."fest_id", 'code', new."code", 'title', new."title", 'game_type', new."game_type", 'position', new."position", 'scheme_id', new."scheme_id", 'scheme_json', new."scheme_json", 'status', new."status", 'team_list_source', new."team_list_source", 'roster_source', new."roster_source", 'revision', new."revision", 'created_at', new."created_at", 'updated_at', new."updated_at", 'state_json', new."state_json", 'slug', new."slug", 'random_seed', new."random_seed", 'screen_settings_json', new."screen_settings_json", 'participant_kind', new."participant_kind", 'scheme_dsl', new."scheme_dsl", 'hidden_divisions', new."hidden_divisions"), case when old."fest_id" is new."fest_id" then '$."fest_id"' else '$."__dope_keep__"' end, case when old."code" is new."code" then '$."code"' else '$."__dope_keep__"' end, case when old."title" is new."title" then '$."title"' else '$."__dope_keep__"' end, case when old."game_type" is new."game_type" then '$."game_type"' else '$."__dope_keep__"' end, case when old."position" is new."position" then '$."position"' else '$."__dope_keep__"' end, case when old."scheme_id" is new."scheme_id" then '$."scheme_id"' else '$."__dope_keep__"' end, case when old."scheme_json" is new."scheme_json" then '$."scheme_json"' else '$."__dope_keep__"' end, case when old."status" is new."status" then '$."status"' else '$."__dope_keep__"' end, case when old."team_list_source" is new."team_list_source" then '$."team_list_source"' else '$."__dope_keep__"' end, case when old."roster_source" is new."roster_source" then '$."roster_source"' else '$."__dope_keep__"' end, case when old."revision" is new."revision" then '$."revision"' else '$."__dope_keep__"' end, case when old."created_at" is new."created_at" then '$."created_at"' else '$."__dope_keep__"' end, case when old."updated_at" is new."updated_at" then '$."updated_at"' else '$."__dope_keep__"' end, case when old."state_json" is new."state_json" then '$."state_json"' else '$."__dope_keep__"' end, case when old."slug" is new."slug" then '$."slug"' else '$."__dope_keep__"' end, case when old."random_seed" is new."random_seed" then '$."random_seed"' else '$."__dope_keep__"' end, case when old."screen_settings_json" is new."screen_settings_json" then '$."screen_settings_json"' else '$."__dope_keep__"' end, case when old."participant_kind" is new."participant_kind" then '$."participant_kind"' else '$."__dope_keep__"' end, case when old."scheme_dsl" is new."scheme_dsl" then '$."scheme_dsl"' else '$."__dope_keep__"' end, case when old."hidden_divisions" is new."hidden_divisions" then '$."hidden_divisions"' else '$."__dope_keep__"' end)), strftime('%Y-%m-%dT%H:%M:%fZ','now');
+  select (select fest_id from games where id = new.id), new.id, coalesce((select revision from fests where id = (select fest_id from games where id = new.id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 2, json_object('t', 'games', 'r', json_remove(json_object('id', new."id", 'fest_id', new."fest_id", 'code', new."code", 'title', new."title", 'game_type', new."game_type", 'position', new."position", 'scheme_id', new."scheme_id", 'scheme_json', new."scheme_json", 'status', new."status", 'team_list_source', new."team_list_source", 'roster_source', new."roster_source", 'revision', new."revision", 'created_at', new."created_at", 'updated_at', new."updated_at", 'state_json', new."state_json", 'slug', new."slug", 'random_seed', new."random_seed", 'screen_settings_json', new."screen_settings_json", 'participant_kind', new."participant_kind", 'scheme_dsl', new."scheme_dsl", 'hidden_divisions', new."hidden_divisions", 'site_id', new."site_id"), case when old."fest_id" is new."fest_id" then '$."fest_id"' else '$."__dope_keep__"' end, case when old."code" is new."code" then '$."code"' else '$."__dope_keep__"' end, case when old."title" is new."title" then '$."title"' else '$."__dope_keep__"' end, case when old."game_type" is new."game_type" then '$."game_type"' else '$."__dope_keep__"' end, case when old."position" is new."position" then '$."position"' else '$."__dope_keep__"' end, case when old."scheme_id" is new."scheme_id" then '$."scheme_id"' else '$."__dope_keep__"' end, case when old."scheme_json" is new."scheme_json" then '$."scheme_json"' else '$."__dope_keep__"' end, case when old."status" is new."status" then '$."status"' else '$."__dope_keep__"' end, case when old."team_list_source" is new."team_list_source" then '$."team_list_source"' else '$."__dope_keep__"' end, case when old."roster_source" is new."roster_source" then '$."roster_source"' else '$."__dope_keep__"' end, case when old."revision" is new."revision" then '$."revision"' else '$."__dope_keep__"' end, case when old."created_at" is new."created_at" then '$."created_at"' else '$."__dope_keep__"' end, case when old."updated_at" is new."updated_at" then '$."updated_at"' else '$."__dope_keep__"' end, case when old."state_json" is new."state_json" then '$."state_json"' else '$."__dope_keep__"' end, case when old."slug" is new."slug" then '$."slug"' else '$."__dope_keep__"' end, case when old."random_seed" is new."random_seed" then '$."random_seed"' else '$."__dope_keep__"' end, case when old."screen_settings_json" is new."screen_settings_json" then '$."screen_settings_json"' else '$."__dope_keep__"' end, case when old."participant_kind" is new."participant_kind" then '$."participant_kind"' else '$."__dope_keep__"' end, case when old."scheme_dsl" is new."scheme_dsl" then '$."scheme_dsl"' else '$."__dope_keep__"' end, case when old."hidden_divisions" is new."hidden_divisions" then '$."hidden_divisions"' else '$."__dope_keep__"' end, case when old."site_id" is new."site_id" then '$."site_id"' else '$."__dope_keep__"' end)), strftime('%Y-%m-%dT%H:%M:%fZ','now');
 end;
 
 -- trigger journal_match_results_delete

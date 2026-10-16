@@ -856,11 +856,13 @@ func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice im
 		return imports.RatingRosterImportResult{}, err
 	}
 	result, err := entrants.ImportFestRoster(s.h.Engine(), ctx, festID, ratingID, teams, choice)
-	if err != nil || result.Revision == 0 {
+	if err != nil || choice.Preview {
 		return result, err
 	}
-	s.fanOut(festID, result.Revision, core.Broadcast{Views: result.Views})
-	return result, nil
+	if result.Revision > 0 {
+		s.fanOut(festID, result.Revision, core.Broadcast{Views: result.Views})
+	}
+	return result, s.ensureSiteGames(ctx, festID, ratingID)
 }
 
 func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Request, festID int64) {

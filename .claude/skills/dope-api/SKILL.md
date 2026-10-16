@@ -52,9 +52,9 @@ in the game has a number.
 | | |
 |---|---|
 | `GET /api/fests` | your fests |
-| `POST /api/fests` | `{title, slug?, description?, start_date?, end_date?, rating_id?, is_public?}` → the fest |
-| `GET …/settings` M | header, your `role`, `games`, roster counts |
-| `PATCH …/settings` A | any header fields; those left out keep their value |
+| `POST /api/fests` | `{title, slug?, description?, start_date?, end_date?, rating_id?, is_public?, kind?}` → the fest. `kind` is `regular` (the default), `synch` or `multi` (ADR-0031) |
+| `GET …/settings` M | header with `kind`, your `role`, `games` (each with its `site_id`), roster counts, and a synch fest's `sites` (площадки) |
+| `PATCH …/settings` A | any header fields; those left out keep their value. `kind` changes only while the fest has no games |
 | `DELETE /api/fest/<fest>` C | deletes the fest and everything in it |
 | `GET …/access` A | members and roles; a host limited to some Games carries their ids in `games` |
 | `POST …/access` A | `{changes: [{user, role: "admin"\|"host"}, {user, remove: true}]}` or `{lines: "user:role\n…"}`. A change may carry `games: [<id\|code\|slug>, …]` to limit a host to those Games (`[]` lifts it), with or without a role |
@@ -90,7 +90,7 @@ created from pasted JSON. Leaving `entrants` out seats everyone.
 
 | | |
 |---|---|
-| `POST …/rating-import` A | pulls the roster from rating.chgk.info (the fest needs `rating_id`) and merges the host's edits over it. `{preview: true}` answers the `plan` (teams added, dropped, renamed, players per team, edits kept, `conflicts`) and writes nothing: **preview first, and show the user**. A conflict is a player the site moved away from where the host put them; the host's placement stays unless its `key` is in `accept_site`. A 409 lists `dropped` and `added` teams: repeat with `{merge: {"<fest team id>": <new rating id>}, drop: [<fest team id>]}` after **asking the user** |
+| `POST …/rating-import` A | pulls the roster from rating.chgk.info (the fest needs `rating_id`). In a `synch` fest it also puts every team on its площадка and gives each площадка without a game an ОД of the tournament's tours and merges the host's edits over it. `{preview: true}` answers the `plan` (teams added, dropped, renamed, players per team, edits kept, `conflicts`) and writes nothing: **preview first, and show the user**. A conflict is a player the site moved away from where the host put them; the host's placement stays unless its `key` is in `accept_site`. A 409 lists `dropped` and `added` teams: repeat with `{merge: {"<fest team id>": <new rating id>}, drop: [<fest team id>]}` after **asking the user** |
 | `POST …/rating-import/undo` A | puts the roster back as it was before the last import; refused once the roster was edited by hand since |
 | `GET …/teams` A | teams with their `flags`, and `hand` / `edited` for teams the host made or changed |
 | `GET …/teams/{id}` · `GET …/teams/new` A | one team with its `players` and every fest person to suggest (`choices`) |

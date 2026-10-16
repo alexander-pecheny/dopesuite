@@ -18,11 +18,13 @@ type GameDoc struct {
 	State      string
 	Screen     string
 	MatchID    sql.NullInt64
+	// SiteID is the site the Game is on, 0 for none (ADR-0031).
+	SiteID int64
 }
 
 const gameDocSelect = `
 select g.id, g.game_type, g.slug, f.slug, coalesce(g.scheme_json, ''), m.id,
-       coalesce(m.state_json, coalesce(g.state_json, '')), coalesce(g.screen_settings_json, '')
+       coalesce(m.state_json, coalesce(g.state_json, '')), coalesce(g.screen_settings_json, ''), coalesce(g.site_id, 0)
 from games g join fests f on f.id = g.fest_id
 left join matches m on m.game_id = g.id and m.code = 'main'
 where g.fest_id = ? and `
@@ -48,7 +50,7 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanGameDoc(row scanner) (GameDoc, error) {
 	var d GameDoc
-	if err := row.Scan(&d.GameID, &d.GameType, &d.Slug, &d.FestSlug, &d.SchemeJSON, &d.MatchID, &d.State, &d.Screen); err != nil {
+	if err := row.Scan(&d.GameID, &d.GameType, &d.Slug, &d.FestSlug, &d.SchemeJSON, &d.MatchID, &d.State, &d.Screen, &d.SiteID); err != nil {
 		return d, err
 	}
 	if d.SchemeJSON == "" {

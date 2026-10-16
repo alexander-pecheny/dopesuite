@@ -15,6 +15,7 @@ import (
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
+	"dope/dope/domain/sites"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 )
@@ -41,6 +42,9 @@ type FestRosterImportTeam struct {
 	// (ADR-0020). Every distinct short name among a fest's teams offers a
 	// Division to look at; the app keeps them all and curates none.
 	Flags []FestRosterFlag
+	// Venue is where the rating site has the team play a synchronous
+	// tournament, which puts it on that site in a synch fest (ADR-0031).
+	Venue sites.Venue
 }
 
 // FestRosterFlag is one Flag a team carries: the rating site's id when it came
@@ -103,13 +107,17 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 	if err != nil {
 		return nil, err
 	}
-	folded := RosterTeams(teams)
+	placement, err := sites.LoadPlacement(ctx, tx, festID)
+	if err != nil {
+		return nil, err
+	}
 	var updates []GameStateBroadcast
 	for _, doc := range docs {
 		folder, ok := games.As[games.RosterFolder](doc.GameType)
 		if !ok {
 			continue
 		}
+		folded := RosterTeams(OnSite(teams, placement, doc.SiteID))
 		schemeJSON, stateJSON, err := folder.FoldRoster(doc.SchemeJSON, doc.State, folded, entryRemap)
 		if err != nil {
 			return nil, fmt.Errorf("game %d: %w", doc.GameID, err)
@@ -178,6 +186,21 @@ func gameTitles(ctx context.Context, q store.Queryer, festID int64) (map[int64]s
 		titles[id] = title
 	}
 	return titles, rows.Err()
+}
+
+// OnSite is the part of the roster a Game on this site seats: all of it
+// for a Game on none.
+func OnSite(teams []FestRosterImportTeam, placement sites.Placement, siteID int64) []FestRosterImportTeam {
+	if siteID == 0 {
+		return teams
+	}
+	out := make([]FestRosterImportTeam, 0, len(teams))
+	for _, team := range teams {
+		if placement.Of(team.LocalID, team.RatingID, team.Number) == siteID {
+			out = append(out, team)
+		}
+	}
+	return out
 }
 
 // RosterTeams is the roster as a flat Protocol folds it.

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/sites"
 	"dope/dope/domain/view"
 	"dope/dope/platform/roles"
 	"dope/dope/platform/util"
@@ -33,6 +34,8 @@ import (
 
 type hostFestDashData struct {
 	Fest        view.HostFest
+	Kind        string
+	Sites       []siteRow
 	Description string
 	Slug        string
 	RatingID    int64
@@ -101,6 +104,9 @@ func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 	if data.CanManageFest {
 		page = append(page, hostDashFestForm(data, ref))
 	}
+	if len(data.Sites) > 0 {
+		page = append(page, hostDashSitesSection(data, ref))
+	}
 	page = append(page, hostDashGamesSection(data, ref))
 	if data.CanManageAccess {
 		page = append(page, hostDashAccessSection(data, ref))
@@ -142,6 +148,7 @@ func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
 		dopeui.Field(dopeui.Label(s.Host.Dash.StartDateLabel()), dopeui.Textfield(dopeui.Name("start_date"), dopeui.Value(data.Fest.StartDate))),
 		dopeui.Field(dopeui.Label(s.Host.Dash.EndDateLabel()), dopeui.Textfield(dopeui.Name("end_date"), dopeui.Value(data.Fest.EndDate))),
 		dopeui.Field(dopeui.Label("rating.chgk.info ID"), dopeui.Textfield(dopeui.Name("rating_id"), dopeui.Value(ratingID), dopeui.Inputmode("numeric"))),
+		kindField(data.Kind),
 		pub,
 		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.SaveSubmit()))),
 	)
@@ -177,7 +184,10 @@ func hostDashGamesSection(data hostFestDashData, ref string) *dopeui.Element {
 	if len(data.Games) > 0 {
 		rows := make([]dopeui.Item, 0, len(data.Games))
 		for _, g := range data.Games {
-			rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames))
+			// A site's Game is listed under its site.
+			if g.SiteID == 0 {
+				rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames))
+			}
 		}
 		sect = append(sect, dopeui.Actionlist(rows...))
 	} else {
@@ -340,6 +350,8 @@ type FestSettings struct {
 	EndDate     string `json:"end_date"`
 	RatingID    int64  `json:"rating_id"`
 	IsPublic    bool   `json:"is_public"`
+	// Kind is the fest's type: regular, synch or multi (ADR-0031).
+	Kind string `json:"kind"`
 }
 
 func festSettingsFromForm(form url.Values) FestSettings {
@@ -352,7 +364,19 @@ func festSettingsFromForm(form url.Values) FestSettings {
 		EndDate:     strings.TrimSpace(form.Get("end_date")),
 		RatingID:    rating,
 		IsPublic:    form.Get("is_public") == "1",
+		Kind:        form.Get("kind"),
 	}
+}
+
+// kindValue is the fest's type, regular when none is given.
+func (f FestSettings) kindValue() (string, error) {
+	if f.Kind == "" {
+		return sites.Regular, nil
+	}
+	if !sites.ValidKind(f.Kind) {
+		return "", corei18n.User(dopestrings.Default.Host.Dash.ErrorKindInvalid())
+	}
+	return f.Kind, nil
 }
 
 func (f FestSettings) ratingValue() any {
@@ -370,6 +394,10 @@ func (s *Server) CreateFest(reqCtx context.Context, userID int64, f FestSettings
 	if f.Title == "" {
 		return 0, corei18n.User(dopestrings.Default.Host.Dash.ErrorTitleRequired())
 	}
+	kind, err := f.kindValue()
+	if err != nil {
+		return 0, err
+	}
 	var slugValue any
 	if slug := strings.TrimSpace(f.Slug); slug != "" {
 		if err := s.checkFestSlug(reqCtx, slug, 0); err != nil {
@@ -378,14 +406,14 @@ func (s *Server) CreateFest(reqCtx context.Context, userID int64, f FestSettings
 		slugValue = slug
 	}
 	var festID int64
-	_, err := s.commit(reqCtx, 0, "fest-create", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+	_, err = s.commit(reqCtx, 0, "fest-create", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
 		now := util.UtcNow()
 		var err error
 		festID, err = store.InsertReturningID(ctx, tx, `
-insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public)
-values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public, kind)
+values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
 			slugValue, f.Title, f.Description, f.ratingValue(), userID, now, now,
-			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic))
+			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic), kind)
 		if util.IsUniqueViolation(err) {
 			// Another fest took the slug between the check and the insert.
 			return core.FestWrite{}, corei18n.User(dopestrings.Default.Host.Dash.ErrorSlugTaken())
@@ -428,17 +456,22 @@ func (s *Server) LoadFestSettings(ctx context.Context, festID int64) (FestSettin
 		isPublic  int
 	)
 	err := s.h.Engine().DB.QueryRowContext(ctx, `
-select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public
-from fests where id = ?`, festID).Scan(&f.Title, &f.Slug, &f.Description, &startDate, &endDate, &ratingID, &isPublic)
+select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind
+from fests where id = ?`, festID).Scan(&f.Title, &f.Slug, &f.Description, &startDate, &endDate, &ratingID, &isPublic, &f.Kind)
 	f.StartDate, f.EndDate, f.RatingID, f.IsPublic = startDate.String, endDate.String, ratingID.Int64, isPublic == 1
 	return f, err
 }
 
-// UpdateFest writes a fest's whole header. An empty slug clears it.
+// UpdateFest writes a fest's whole header. An empty slug clears it. The type
+// changes only while the fest has no Games, which its sites would split.
 func (s *Server) UpdateFest(reqCtx context.Context, festID int64, f FestSettings) error {
 	f.Title = strings.TrimSpace(f.Title)
 	if f.Title == "" {
 		return corei18n.User(dopestrings.Default.Host.Dash.ErrorTitleRequired())
+	}
+	kind, err := f.kindValue()
+	if err != nil {
+		return err
 	}
 	slug := strings.TrimSpace(f.Slug)
 	var slugValue any
@@ -448,14 +481,22 @@ func (s *Server) UpdateFest(reqCtx context.Context, festID int64, f FestSettings
 		}
 		slugValue = slug
 	}
-	_, err := s.commit(reqCtx, festID, "fest-settings", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+	_, err = s.commit(reqCtx, festID, "fest-settings", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		var changed bool
+		if err := tx.QueryRowContext(ctx, `
+select kind <> ? and exists (select 1 from games where fest_id = fests.id) from fests where id = ?`, kind, festID).Scan(&changed); err != nil {
+			return core.FestWrite{}, err
+		}
+		if changed {
+			return core.FestWrite{}, corei18n.User(dopestrings.Default.Host.Dash.ErrorKindHasGames())
+		}
 		_, err := tx.ExecContext(ctx, `
 update fests
-set title = ?, slug = ?, description = ?, rating_id = ?, start_date = ?, end_date = ?, is_public = ?, updated_at = ?
+set title = ?, slug = ?, description = ?, rating_id = ?, start_date = ?, end_date = ?, is_public = ?, kind = ?, updated_at = ?
 where id = ?`,
 			f.Title, slugValue, f.Description, f.ratingValue(),
 			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic),
-			util.UtcNow(), festID)
+			kind, util.UtcNow(), festID)
 		return core.FestWrite{}, err
 	})
 	return err
@@ -588,10 +629,11 @@ func (s *Server) renderHostFestDashboard(w http.ResponseWriter, r *http.Request,
 		endDate     sql.NullString
 		ratingID    sql.NullInt64
 		isPublic    int
+		kind        string
 	)
 	if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public
-from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, &endDate, &ratingID, &isPublic); err != nil {
+select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind
+from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, &endDate, &ratingID, &isPublic, &kind); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -627,12 +669,13 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 			continue
 		}
 		hostGames = append(hostGames, PublicFestGame{
-			ID:    g.ID,
-			Slug:  g.Slug,
-			Code:  g.Code,
-			Title: g.Title,
-			Type:  games.Label(g.Type),
-			URL:   fmt.Sprintf("/host/fest/%s/game/%s/", festRef, g.Ref()),
+			ID:     g.ID,
+			Slug:   g.Slug,
+			Code:   g.Code,
+			Title:  g.Title,
+			Type:   games.Label(g.Type),
+			URL:    fmt.Sprintf("/host/fest/%s/game/%s/", festRef, g.Ref()),
+			SiteID: g.SiteID,
 		})
 	}
 	teamCount, playerCount, troikaCount, err := s.loadHostFestRosterCounts(r.Context(), festID)
@@ -669,7 +712,13 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 			return
 		}
 	}
+	siteRows, err := s.loadSiteRows(r.Context(), festID, hostGames)
+	if err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
 	data := hostFestDashData{
+		Sites: siteRows,
 		Fest: view.HostFest{
 			ID:        festID,
 			Slug:      slug,
@@ -679,6 +728,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 			Dates:     util.FormatFestDates(startDate.String, endDate.String),
 			IsPublic:  isPublic == 1,
 		},
+		Kind:            kind,
 		Description:     description,
 		Slug:            slug,
 		Games:           hostGames,

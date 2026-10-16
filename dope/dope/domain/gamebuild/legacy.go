@@ -11,6 +11,7 @@ import (
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/sites"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
@@ -33,7 +34,7 @@ func titleOr(label, fallback string) string {
 // document for the shape asked (games.PristineBuilder), the fest roster is
 // folded in when the Protocol carries one, and the one 'main' Match is
 // written and settled. Clear rebuilds a Game through the same builder.
-func createFlatGameTx(ctx context.Context, tx *sql.Tx, festID int64, def games.Definition, label string, shape games.Shape) (int64, error) {
+func createFlatGameTx(ctx context.Context, tx *sql.Tx, festID, siteID int64, def games.Definition, label string, shape games.Shape) (int64, error) {
 	identity, err := nextGameIdentityTx(ctx, tx, festID, def.Code, titleOr(label, def.Title))
 	if err != nil {
 		return 0, err
@@ -46,17 +47,26 @@ func createFlatGameTx(ctx context.Context, tx *sql.Tx, festID int64, def games.D
 	if err != nil {
 		return 0, err
 	}
-	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, def.Code, emptyScheme, emptyState)
+	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, siteID, def.Code, emptyScheme, emptyState)
 	if err != nil {
 		return 0, err
 	}
-	return insertJSONGameTx(ctx, tx, festID, identity, def.Code, schemeJSON, stateJSON)
+	gameID, err := insertJSONGameTx(ctx, tx, festID, identity, def.Code, schemeJSON, stateJSON)
+	if err != nil || siteID == 0 {
+		return gameID, err
+	}
+	_, err = tx.ExecContext(ctx, `update games set site_id = ? where id = ?`, siteID, gameID)
+	return gameID, err
 }
 
 // specShape is the flat Game the creation form's knobs describe.
 func specShape(spec Spec) games.Shape {
+	tours := spec.TourComp
+	if len(tours) == 0 {
+		tours = sameTours(spec.ODTours, spec.ODQuestions)
+	}
 	return games.Shape{
-		Tours:     sameTours(spec.ODTours, spec.ODQuestions),
+		Tours:     tours,
 		Tables:    spec.KDTables,
 		Themes:    spec.KSIThemes,
 		Stickers:  spec.KSIStickers,
@@ -77,13 +87,18 @@ func sameTours(tours, questions int) []int {
 }
 
 // pristineFlatTx is a flat game's empty scheme and state with the fest's
-// roster already folded in through its Protocol — what creation and Clear
+// roster (its site's part, for a Game on one) already folded in through its Protocol — what creation and Clear
 // write.
-func pristineFlatTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, schemeJSON, stateJSON []byte) ([]byte, []byte, error) {
+func pristineFlatTx(ctx context.Context, tx *sql.Tx, festID, siteID int64, gameType string, schemeJSON, stateJSON []byte) ([]byte, []byte, error) {
 	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
 		return nil, nil, err
 	}
+	placement, err := sites.LoadPlacement(ctx, tx, festID)
+	if err != nil {
+		return nil, nil, err
+	}
+	teams = roster.OnSite(teams, placement, siteID)
 	if len(teams) == 0 {
 		return schemeJSON, stateJSON, nil
 	}

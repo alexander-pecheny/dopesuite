@@ -228,3 +228,19 @@ func currentRatingSeason(ctx context.Context, day time.Time) (int64, error) {
 	}
 	return 0, fmt.Errorf("no rating season on %s", day.Format(time.DateOnly))
 }
+
+// FetchRatingTourComp is how many questions each tour of a tournament has, as
+// the rating site lists them.
+func FetchRatingTourComp(ctx context.Context, ratingID int64) ([]int, error) {
+	var tournament struct {
+		QuestionQty map[string]int `json:"questionQty"`
+	}
+	if err := getRatingJSON(ctx, fmt.Sprintf("/tournaments/%d.json", ratingID), &tournament); err != nil {
+		return nil, err
+	}
+	tours := make([]int, 0, len(tournament.QuestionQty))
+	for n := 1; n <= len(tournament.QuestionQty); n++ {
+		tours = append(tours, tournament.QuestionQty[fmt.Sprint(n)])
+	}
+	return tours, nil
+}

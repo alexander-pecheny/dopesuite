@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/sites"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
@@ -118,7 +119,11 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		if err != nil {
 			return "", err
 		}
-		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, gameType, emptyScheme, emptyState); err != nil {
+		siteID, err := sites.GameSite(ctx, tx, gameID)
+		if err != nil {
+			return "", err
+		}
+		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, siteID, gameType, emptyScheme, emptyState); err != nil {
 			return "", err
 		}
 		if keeps {

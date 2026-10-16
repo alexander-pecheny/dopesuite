@@ -15,6 +15,7 @@ import (
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/sites"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
@@ -196,6 +197,8 @@ type apiGame struct {
 	Code  string `json:"code"`
 	Title string `json:"title"`
 	Type  string `json:"type"`
+	// SiteID is the site the game is on (ADR-0031).
+	SiteID int64 `json:"site_id,omitempty"`
 }
 
 type apiFestSettings struct {
@@ -208,6 +211,8 @@ type apiFestSettings struct {
 	Players         int       `json:"players"`
 	Troikas         int       `json:"troikas"`
 	NumbersAssigned int       `json:"numbers_assigned"`
+	// Sites are the sites of a synch or multi fest.
+	Sites []sites.Site `json:"sites,omitempty"`
 }
 
 // apiFestSettings is the dashboard as data: the fest's header, its games and
@@ -224,7 +229,10 @@ func (s *Server) apiFestSettings(w http.ResponseWriter, r *http.Request, sc rout
 	}
 	out := apiFestSettings{ID: sc.FestID, FestSettings: f, Role: sc.Role, Games: make([]apiGame, len(rows))}
 	for i, g := range rows {
-		out.Games[i] = apiGame{ID: g.ID, Slug: g.Slug, Code: g.Code, Title: g.Title, Type: g.Type}
+		out.Games[i] = apiGame{ID: g.ID, Slug: g.Slug, Code: g.Code, Title: g.Title, Type: g.Type, SiteID: g.SiteID}
+	}
+	if out.Sites, err = sites.List(ctx, s.h.Engine().DB, sc.FestID); err != nil {
+		return err
 	}
 	if out.Teams, out.Players, out.Troikas, err = s.loadHostFestRosterCounts(ctx, sc.FestID); err != nil {
 		return err

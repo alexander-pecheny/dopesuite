@@ -11,6 +11,7 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/sites"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
@@ -62,10 +63,17 @@ type RosterWrite struct {
 // writeRosterTx writes a whole fest roster: the rows that changed, the flat
 // games when the teams changed, and the player overrides against the rows
 // that stay.
-func writeRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster.FestRosterImportTeam, existingByRating map[int64]existingFestTeam, merges map[int64]int64, teamsChanged bool) (RosterWrite, error) {
+func writeRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster.FestRosterImportTeam, existingByRating map[int64]existingFestTeam, merges map[int64]int64, venueOf map[int64]sites.Venue, teamsChanged bool) (RosterWrite, error) {
 	var out RosterWrite
 	if err := applyFestRosterDiffTx(ctx, tx, festID, teams, existingByRating, merges); err != nil {
 		return out, err
+	}
+	if len(venueOf) > 0 {
+		moved, err := sites.PlaceTeamsTx(ctx, tx, festID, venueOf)
+		if err != nil {
+			return out, err
+		}
+		teamsChanged = teamsChanged || moved
 	}
 	// OD/KSI game state is a pure function of the TEAM list, so only re-propagate
 	// when teams actually changed — a player-only change leaves it identical.
@@ -119,7 +127,7 @@ func rewriteFromHandTx(ctx context.Context, tx *sql.Tx, festID int64, before ros
 	desired := roster.SortedFestRosterImportTeams(roster.MergeHand(roster.Baseline(state), state, nil).Desired)
 	assignFestNumbersForImport(desired, byRatingID(existing), maxTeamNumber(existing))
 	current := roster.SortedFestRosterImportTeams(stripLocal(activeRoster(before)))
-	return writeRosterTx(ctx, tx, festID, desired, byRatingID(existing), nil, !teamLevelEqual(current, stripLocal(desired)))
+	return writeRosterTx(ctx, tx, festID, desired, byRatingID(existing), nil, nil, !teamLevelEqual(current, stripLocal(desired)))
 }
 
 // TeamInput is a team as the host types it: a name, a city, and its people in
@@ -447,7 +455,7 @@ where id = ? and fest_id = ?`, util.NullableInt64(t.RatingID), t.Hand, t.HandNam
 	if err != nil {
 		return RosterWrite{}, err
 	}
-	written, err := writeRosterTx(ctx, tx, festID, desired, byRatingID(existing), nil, !teamLevelEqual(current, stripLocal(desired)))
+	written, err := writeRosterTx(ctx, tx, festID, desired, byRatingID(existing), nil, nil, !teamLevelEqual(current, stripLocal(desired)))
 	if err != nil {
 		return RosterWrite{}, err
 	}

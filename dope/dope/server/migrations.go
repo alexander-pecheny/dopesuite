@@ -974,6 +974,38 @@ create table if not exists game_invite_uses(
 `)
 		return err
 	}},
+	// v44: a fest's type and its площадки (ADR-0031). A synch fest puts each
+	// team on the площадка the rating site has it play at, and a Game on a
+	// площадка seats only that площадка's teams; a regular fest has none.
+	{Version: 44, Name: "fest types and площадки", Up: func(db *sql.DB) error {
+		if err := store.AddColumnsIfMissing(db, "fests", []store.ColumnSpec{
+			{Name: "kind", Type: "TEXT NOT NULL DEFAULT 'regular' CHECK (kind in ('regular','synch','multi'))"},
+		}); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`
+create table if not exists fest_sites(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  title text not null,
+  town text not null default '',
+  rating_venue_id integer,
+  rating_id integer,
+  position integer not null default 0
+);
+create unique index if not exists fest_sites_venue_idx on fest_sites(fest_id, rating_venue_id) where rating_venue_id is not null;
+`); err != nil {
+			return err
+		}
+		for _, table := range []string{"fest_teams", "games"} {
+			if err := store.AddColumnsIfMissing(db, table, []store.ColumnSpec{
+				{Name: "site_id", Type: "INTEGER REFERENCES fest_sites(id) ON DELETE SET NULL"},
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled
