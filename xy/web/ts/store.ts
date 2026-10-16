@@ -136,7 +136,48 @@ export interface TgTarget {
 }
 
 const DB_NAME = "xy-offline";
-const DB_VERSION = 2;
+// v3: field names lost their _enc suffix (server schema v29); see LEGACY_NAMES.
+const DB_VERSION = 3;
+
+// LEGACY_NAMES maps the field names from before server schema v29 to the
+// current ones. The outbox may hold writes queued under the old names, and the
+// mirror holds snapshots and timelines read under them.
+const LEGACY_NAMES: Record<string, string> = {
+  description_enc: "description", handout_meta_enc: "handout_meta", alias_enc: "alias", seen_enc: "seen",
+  title_enc: "title", name_enc: "name", color_enc: "color", payload_enc: "payload", filename_enc: "filename",
+  meta_enc: "meta", names_enc: "names", event_payload_enc: "event_payload", desc_event_enc: "desc_event",
+};
+
+// renameLegacyFields returns a copy of v with every old field name, at any
+// depth, replaced by its new one. Where both are present the new name wins.
+export function renameLegacyFields<T>(v: T): T {
+  if (Array.isArray(v)) return v.map(renameLegacyFields) as T;
+  if (!v || typeof v !== "object" || ArrayBuffer.isView(v)) return v;
+  const out: Record<string, unknown> = {};
+  const entries = Object.entries(v as Record<string, unknown>);
+  for (const [k, x] of entries) if (!(k in LEGACY_NAMES)) out[k] = renameLegacyFields(x);
+  for (const [k, x] of entries) {
+    const name = LEGACY_NAMES[k];
+    if (name && !(name in out)) out[name] = renameLegacyFields(x);
+  }
+  return out as T;
+}
+
+// The stores whose records carry wire field names. Rewritten, not dropped:
+// a board with queued edits must still open offline from its mirror.
+const RENAMED_STORES = ["outbox", "snapshots", "timeline", "boardlist"];
+
+function renameStoredFields(t: IDBTransaction): void {
+  for (const name of RENAMED_STORES) {
+    const cursor = t.objectStore(name).openCursor();
+    cursor.onsuccess = () => {
+      const c = cursor.result;
+      if (!c) return;
+      c.update(renameLegacyFields(c.value));
+      c.continue();
+    };
+  }
+}
 
 // Object stores:
 //   snapshots  key=boardId(number)   → board snapshot (GET /api/boards/{id} shape)
@@ -154,13 +195,15 @@ function db(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (ev?: IDBVersionChangeEvent) => {
       const d = req.result;
       for (const name of STORES) {
         if (d.objectStoreNames.contains(name)) continue;
         if (name === "outbox") d.createObjectStore(name, { keyPath: "seq", autoIncrement: true });
         else d.createObjectStore(name);
       }
+      const old = ev?.oldVersion ?? 0;
+      if (old > 0 && old < 3 && req.transaction) renameStoredFields(req.transaction);
     };
     // A version bump only upgrades once every other tab has let go. Without
     // these two the app hangs on the second tab of an older build: the open
@@ -317,5 +360,5 @@ export const xyStore = {
   getAttachment, putAttachment,
   addOp, allOps, deleteOp, putOp, countOps,
   putIdMap, allIdMap, clearIdMap,
-  nextTempId,
+  nextTempId, renameLegacyFields,
 };
