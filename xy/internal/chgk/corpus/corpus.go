@@ -9,6 +9,7 @@ package corpus
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,26 +64,31 @@ func Canon(t testing.TB, file string) string {
 	return strings.ReplaceAll(string(Read(t, file+".canon")), "\r\n", "\n")
 }
 
-// Chgk are the packages chgksuite parses with ChgkParser (the chgk and brain
-// games), plain text and .docx alike.
-var Chgk = []string{
-	"2019-07-23_beln19_u.docx",
-	"Kubok_knyagini_Olgi-2015.docx",
-	"Shkolny_Chemp_Estonii-2014_(48v).docx",
-	"bkd_2021_all.txt",
-	"borromeo.txt",
-	"comment_first.txt",
-	"haifa2025.docx.encrypted",
-	"kinsbf_day_1.txt.encrypted",
-	"link_unwrap.docx",
-	"malkin_papkov_synchr.docx",
-	"octo2021_khmelkov.docx",
-	"ovsch_boronenko_3.docx",
-	"pass1.docx",
-	"single_number_line_test.docx",
-	"source_numbering_bug.docx",
-	"test_amper.docx",
-	"test_blitz.txt",
-	"tourrev_with_razmin.docx",
-	"СЧР_Шередега_Ермишкин.docx",
+// Chgk lists the packages chgksuite reads with ChgkParser: every fixture with
+// a canon except the SI and troika ones, which settings.json gives a game of
+// their own, and db.chgk.info's export, which has its own parser.
+func Chgk(t testing.TB) []string {
+	dir := Dir(t)
+	raw, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings map[string]struct{ Game string }
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		t.Fatal(err)
+	}
+	canons, err := filepath.Glob(filepath.Join(dir, "*.canon"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, c := range canons {
+		file := strings.TrimSuffix(filepath.Base(c), ".canon")
+		if game := settings[Name(file)].Game; game != "si" && game != "troika" && file != dbExport {
+			out = append(out, file)
+		}
+	}
+	return out
 }
+
+const dbExport = "balt09-1.txt"

@@ -26,8 +26,7 @@ func (p *parser) stripLabels() {
 				idx++
 			}
 			if !hasNum {
-				low := strings.ToLower(e.str())
-				if strings.Contains(low, "нулевой вопрос") || strings.Contains(low, "разминочный вопрос") {
+				if isWarmup(e.str()) {
 					p.insert(idx, &elem{"number", "0"})
 					idx++
 				}
@@ -52,8 +51,8 @@ func (p *parser) stripLabels() {
 		}
 		// The gendered feminine author label is preserved as a 4s field-label override.
 		if e.Type == "author" && beforeReplacement != "" &&
-			strings.Contains(strings.ToLower(beforeReplacement), "авторка:") {
-			e.Content = "!!Авторка" + e.str()
+			strings.Contains(strings.ToLower(beforeReplacement), femaleAuthorLabel) {
+			e.Content = femaleAuthorOverride + e.str()
 		}
 	}
 }
@@ -176,7 +175,7 @@ func (p *parser) detectInnerList(e *elem) {
 	isQuestion := e.Type == "question"
 	low := strings.ToLower(s)
 	// Python: element[0] != "question" or (element[0]=="question" and "duplet" in …) or "blitz" in …
-	if !(!isQuestion || (isQuestion && strings.Contains(low, "дуплет")) || strings.Contains(low, "блиц")) {
+	if !(!isQuestion || (isQuestion && strings.Contains(low, dupletStem)) || strings.Contains(low, blitzStem)) {
 		return
 	}
 	positions := make([]int, len(candidate))

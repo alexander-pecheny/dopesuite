@@ -6,6 +6,7 @@
 package textparse
 
 import (
+	"strings"
 	"time"
 
 	"xy/internal/chgk/fsource"
@@ -64,6 +65,32 @@ var tourWords = []string{
 
 // zeroPrefixes are the two ways a package can mark an unnumbered warm-up question.
 var zeroPrefixes = []string{"Нулевой вопрос", "Разминочный вопрос"}
+
+// The Russian words the parser looks for or writes, besides the markers in
+// i18n's regexes: questionStub is the label a number on a line of its own
+// becomes, a duplet's or blitz's heading word marks it as a question, and the
+// feminine author label is kept as a 4s label override.
+const (
+	questionStub         = "Вопрос "
+	tourSuffix           = " тур"
+	dupletWord           = "Дуплет."
+	blitzWord            = "Блиц."
+	dupletStem           = "дуплет"
+	blitzStem            = "блиц"
+	femaleAuthorLabel    = "авторка:"
+	femaleAuthorOverride = "!!Авторка"
+)
+
+// isWarmup reports whether s names a warm-up question anywhere in it.
+func isWarmup(s string) bool {
+	low := strings.ToLower(s)
+	for _, prefix := range zeroPrefixes {
+		if strings.Contains(low, strings.ToLower(prefix)) {
+			return true
+		}
+	}
+	return false
+}
 
 type parser struct {
 	structure []*elem

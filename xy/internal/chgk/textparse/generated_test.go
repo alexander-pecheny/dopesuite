@@ -65,7 +65,7 @@ type generatedCase struct {
 
 func generatedCases(t *testing.T) []generatedCase {
 	var cases []generatedCase
-	for _, file := range corpus.Chgk {
+	for _, file := range corpus.Chgk(t) {
 		doc := fsource.Parse(corpus.Canon(t, file), "chgk")
 		canon := fsource.Compose(doc, fsource.NumbersDefault)
 		for style := range styleNames {

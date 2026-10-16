@@ -58,8 +58,7 @@ func (p *parser) processSingleNumberLines(mode string) {
 	lines := p.numberLines()
 	patch := func(l numLine) {
 		p.structure[l.idx].Type = "question"
-		// question_stub for ru: "Question {}."
-		p.structure[l.idx].Content = "Вопрос " + strconv.Itoa(l.num) + "."
+		p.structure[l.idx].Content = questionStub + strconv.Itoa(l.num) + "."
 	}
 	if mode == "on" {
 		for _, l := range lines {
@@ -123,10 +122,10 @@ func (p *parser) dupletBlitzHack() {
 		words := strings.Fields(e.str())
 		hasDuplet, hasBlitz := false, false
 		for _, w := range words {
-			if w == "Дуплет." {
+			if w == dupletWord {
 				hasDuplet = true
 			}
-			if w == "Блиц." {
+			if w == blitzWord {
 				hasBlitz = true
 			}
 		}
