@@ -44,7 +44,13 @@ type regexSet struct {
 	handoutBefore *regexp.Regexp
 	// credits is creditsPatterns for this language, nil for one it lacks.
 	credits *regexp.Regexp
+	// withRussian are the fields whose marker also takes the Russian label.
+	withRussian map[string]*regexp.Regexp
 }
+
+// russianFallback are the fields a translated package may still label in
+// Russian, which every other language reads as well as its own.
+var russianFallback = []string{"handout", "answer", "zachet", "nezachet", "comment", "author", "source", "editor"}
 
 func newRegexSet(language, labelsFile string) (*regexSet, error) {
 	rx, err := i18n.LoadRegexes(language)
@@ -65,12 +71,15 @@ func newRegexSet(language, labelsFile string) (*regexSet, error) {
 		}
 		s.credits = regexp.MustCompile(`(?i)` + pattern)
 	}
+	if language != i18n.DefaultLanguage {
+		s.withRussian = withRussian(rx, i18n.MustRegexes(i18n.DefaultLanguage))
+	}
 	for _, name := range labelledOrder {
-		if re := rx.Get(name); re != nil {
+		if re := s.field(name); re != nil {
 			s.labelled = append(s.labelled, named{name, re})
 		}
 	}
-	if re := rx.Get("author"); re != nil {
+	if re := s.field("author"); re != nil {
 		s.authorOnly = regexp.MustCompile(`^(?:` + re.String() + `)$`)
 	}
 	s.handoutBefore = regexp.MustCompile(`(?s)(^|[^\[])` + regexp.QuoteMeta(s.handoutLabel) + `:([ \n]+)\[`)
@@ -78,7 +87,25 @@ func newRegexSet(language, labelsFile string) (*regexSet, error) {
 }
 
 // field is the "regexes[k]" lookup, nil when this language names no such key.
-func (s *regexSet) field(name string) *regexp.Regexp { return s.Get(name) }
+func (s *regexSet) field(name string) *regexp.Regexp {
+	if re, ok := s.withRussian[name]; ok {
+		return re
+	}
+	return s.Get(name)
+}
+
+func withRussian(own, ru *i18n.Regexes) map[string]*regexp.Regexp {
+	out := map[string]*regexp.Regexp{}
+	for _, name := range russianFallback {
+		switch a, b := own.Get(name), ru.Get(name); {
+		case a != nil && b != nil:
+			out[name] = regexp.MustCompile(`(?:` + a.String() + `)|(?:` + b.String() + `)`)
+		case b != nil:
+			out[name] = b
+		}
+	}
+	return out
+}
 
 // mustRegexSet is newRegexSet for a language the command has already checked
 // against i18n.Known; an unknown one falls back to the default set rather than
