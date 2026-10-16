@@ -42,6 +42,8 @@ type regexSet struct {
 	// rewrite looks for as text rather than as a marker.
 	handoutLabel  string
 	handoutBefore *regexp.Regexp
+	// credits is creditsPatterns for this language, nil for one it lacks.
+	credits *regexp.Regexp
 }
 
 func newRegexSet(language, labelsFile string) (*regexSet, error) {
@@ -54,6 +56,12 @@ func newRegexSet(language, labelsFile string) (*regexSet, error) {
 		return nil, err
 	}
 	s := &regexSet{Regexes: rx, handoutLabel: labels.Field("handout")}
+	if language == "" {
+		language = i18n.DefaultLanguage
+	}
+	if pattern, ok := creditsPatterns[language]; ok {
+		s.credits = regexp.MustCompile(`(?i)` + pattern)
+	}
 	for _, name := range labelledOrder {
 		if re := rx.Get(name); re != nil {
 			s.labelled = append(s.labelled, named{name, re})

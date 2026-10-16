@@ -6,7 +6,6 @@
 package textparse
 
 import (
-	"regexp"
 	"strings"
 	"time"
 
@@ -49,9 +48,20 @@ func (e *elem) str() string {
 	return ""
 }
 
-// reCredits is a line of the editors' credits that stands above a tour's
-// first question: the editor named, or someone thanked.
-var reCredits = regexp.MustCompile(`(?i)^редактор|благодар`)
+// creditsPatterns match, per language, a line of the editors' credits that
+// stands above a tour's first question: the editor named, or someone thanked.
+var creditsPatterns = map[string]string{
+	"ru":     `^редактор|благодар`,
+	"ua":     `^редактор|дяку|подяк`,
+	"by":     `^рэдактар|дзяку|падзяк`,
+	"by_tar": `^рэдактар|дзяку|падзяк`,
+	"kz_cyr": `^редактор|алғыс|рахмет`,
+	"uz_cyr": `^(тур\s+)?муҳаррир|миннатдор|раҳмат|ташаккур`,
+	"uz":     `^(tur\s+)?muharrir|minnatdor|rahmat|tashakkur`,
+	"en":     `^edit(or|ed by)|thank|grateful|gratitude`,
+	"az":     `^redaktor|təşəkkür|minnətdar`,
+	"sr":     `^urednik|zahvaljuj|zahvalnost`,
+}
 
 // questionLabels mirrors common.QUESTION_LABELS — the fields that belong to a
 // question rather than standing on their own in the structure.
