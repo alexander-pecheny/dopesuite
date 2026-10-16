@@ -55,6 +55,9 @@ func (p *parser) placeRun(out, run []*elem, next string) []*elem {
 	prev := lastOf(out)
 	if (next == "answer" || next == "leadcomment") && prev.Type != "leadcomment" {
 		k, numbered := p.questionStart(run, prev)
+		if !numbered && !questionLabels[prev.Type] {
+			k = afterCredits(run)
+		}
 		out = continueOrKeep(out, run[:k], "question")
 		q := &elem{"question", joinLines(run[k:]) + sep}
 		if numbered {
@@ -142,4 +145,18 @@ func joinLines(run []*elem) string {
 		appendLine(q, e.str())
 	}
 	return q.str()
+}
+
+// afterCredits is where a question starts in a run that opens a tour: past the
+// last line that reads like the editors' credits, if a line follows it.
+func afterCredits(run []*elem) int {
+	for k := len(run) - 1; k >= 0; k-- {
+		if reCredits.MatchString(run[k].str()) {
+			if k+1 < len(run) {
+				return k + 1
+			}
+			return 0
+		}
+	}
+	return 0
 }

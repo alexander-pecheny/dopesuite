@@ -6,6 +6,7 @@
 package textparse
 
 import (
+	"regexp"
 	"strings"
 	"time"
 
@@ -47,6 +48,10 @@ func (e *elem) str() string {
 	}
 	return ""
 }
+
+// reCredits is a line of the editors' credits that stands above a tour's
+// first question: the editor named, or someone thanked.
+var reCredits = regexp.MustCompile(`(?i)^редактор|благодар`)
 
 // questionLabels mirrors common.QUESTION_LABELS — the fields that belong to a
 // question rather than standing on their own in the structure.

@@ -167,10 +167,14 @@ malkin_papkov_synchr.docx/numbered/source_before_comment/txt
 malkin_papkov_synchr.docx/numbered/author_before_source/txt
 malkin_papkov_synchr.docx/numbered/zachet_after_comment/docx
 malkin_papkov_synchr.docx/numbered/zachet_after_comment/txt
+malkin_papkov_synchr.docx/bare/usual/docx
 malkin_papkov_synchr.docx/bare/usual/txt
+malkin_papkov_synchr.docx/bare/comment_first/docx
 malkin_papkov_synchr.docx/bare/comment_first/txt
+malkin_papkov_synchr.docx/bare/source_before_comment/docx
 malkin_papkov_synchr.docx/bare/source_before_comment/txt
 malkin_papkov_synchr.docx/bare/author_before_source/txt
+malkin_papkov_synchr.docx/bare/zachet_after_comment/docx
 malkin_papkov_synchr.docx/bare/zachet_after_comment/txt
 ovsch_boronenko_3.docx/labelled/usual/docx
 ovsch_boronenko_3.docx/labelled/usual/txt
