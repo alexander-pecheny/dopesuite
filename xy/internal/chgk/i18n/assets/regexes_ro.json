@@ -1,0 +1,23 @@
+{
+    "tour": "^(#\\s+)?([Rr][Uu][Nn][Dd][Aa]|[Tt][Uu][Rr]([Uu][Ll])?)\\s?№?\\s?([0-9IVXLCDM]*)([\\.:])?$",
+    "tourrev": "^([0-9IVXLCDM]+)\\s([Rr][Uu][Nn][Dd][Aa]|[Tt][Uu][Rr])([\\.:])?$",
+    "question": "[ÎI][Nn][Tt][Rr][Ee][Bb][Aa][Rr][Ee][Aa]?\\s?[№N]?(?P<number>[0-9\\s]*)\\s?([\\.:]|\n|\r\n|$)",
+    "handout": "^M[Aa][Tt][Ee][Rr][Ii][Aa][Ll]([Uu][Ll])?\\s+[Dd][Ii][Ss][Tt][Rr][Ii][Bb][Uu][Ii][Tt][\\.:]",
+    "answer": "R[ĂăAa][Ss][Pp][Uu][Nn][Ss]([Uu][Ll]|[Uu][Rr][Ii])?\\s?[№N]?([0-9]+)?\\s?[\\.:]",
+    "zachet": "(S[Ee]\\s+[Aa][Cc][Cc][Ee][Pp][Tt][ĂăAa](\\s+[ȘșŞşSs][Ii])?|C[Rr][Ii][Tt][Ee][Rr][Ii][Uu]([Ll])?\\s+[Dd][Ee]\\s+[Aa][Cc][Cc][Ee][Pp][Tt][Aa][Rr][Ee])\\s?[\\.:]",
+    "nezachet": "N[Uu]\\s+[Ss][Ee]\\s+[Aa][Cc][Cc][Ee][Pp][Tt][ĂăAa]\\s?[\\.:]",
+    "comment": "C[Oo][Mm][Ee][Nn][Tt][Aa][Rr][Ii]([Uu][Ll]?|[Ii])?\\s?[№N]?([0-9]+)?\\s?[\\.:]",
+    "author": "A[Uu][Tt]([Oo][Rr]([Ii]|[Uu][Ll])?|[Oo][Aa][Rr][Ee])\\s?[\\.:]",
+    "source": "S[Uu][Rr][Ss]([ĂăAa]|[Ee]([Ll][Ee])?)\\s?[\\.:]",
+    "editor": "R[Ee][Dd][Aa][Cc][Tt][Oo][Rr]([Ii]|[Uu][Ll])?(\\s?[\\.:]|\\s[\\-–—]+\\s)",
+    "date": "D[Aa][Tt][Aa]\\s?[\\.:]",
+    "date2": "(?i)(^|\\s)\\d{1,2}\\s*(ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie)(\\s|$)",
+    "number": "^[0-9]+[\\.\\)]\\s*",
+    "handout_short": "(M[Aa][Tt][Ee][Rr][Ii][Aa][Ll]|T[Ee][Xx][Tt]|I[Mm][Aa][Gg][Ii][Nn][Ee])",
+    "si_theme": "(?i)^Tema\\s+(\\d+)\\.\\s*(.*)",
+    "si_theme_comment": "(?i)^Comentariu(l)? la tem[ăa][\\.:]",
+    "si_battle": "(?i)^(?:RUNDA|Runda|MECIUL|Meciul)\\s+([IVXLCDM\\d]+)",
+    "si_battle_numbered": "^(\\d+)\\.\\s+([A-ZĂÂÎȘȚŞŢ\\s\\-–—]+)$",
+    "si_your_themes": "(?i)^Temele\\s+voastre\\s*:",
+    "si_round_name": "(?i)runda\\s+(deschis[ăa]|semi[-–]?deschis[ăa]|închis[ăa])"
+}

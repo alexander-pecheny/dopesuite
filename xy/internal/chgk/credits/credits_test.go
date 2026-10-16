@@ -362,6 +362,10 @@ func TestLanguage(t *testing.T) {
 	if got := language(ua); got != "ua" {
 		t.Fatalf("ukrainian: %q", got)
 	}
+	ro := strings.Repeat("Întrebarea 1. Această rundă este dedicată tuturor celor care au ajutat. Răspuns: pisica. Comentariu: mulțumim redactorilor pentru muncă. ", 5)
+	if got := language(ro); got != "ro" {
+		t.Fatalf("romanian: %q", got)
+	}
 	if got := language(ru); got != "" {
 		t.Fatalf("russian: %q", got)
 	}

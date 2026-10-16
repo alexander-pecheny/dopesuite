@@ -1,0 +1,22 @@
+[question_labels]
+question = "Întrebarea"
+answer = "Răspuns"
+zachet = "Se acceptă"
+nezachet = "Nu se acceptă"
+comment = "Comentariu"
+source = "Sursa"
+sources = "Surse"
+author = "Autor"
+authors = "Autori"
+handout = "Material distribuit"
+
+[general]
+section = "Runda"
+editor = "Redactor"
+date = "Data"
+questions_in_comments = "Întrebările sunt în comentarii."
+general_impressions_caption = "Impresii generale"
+handout_for_question = "Material distribuit pentru întrebarea {}"
+general_impressions_text = "Impresia generală despre pachet — în comentariile la această postare."
+right_answers_for_stats = "Răspunsuri corecte"
+cf_image = "vezi imaginea"

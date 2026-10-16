@@ -1,4 +1,4 @@
-// Package i18n carries chgksuite's ten language sets: the labels an export
+// Package i18n carries chgksuite's eleven language sets: the labels an export
 // prints ("Question", ...) and the field-marker regexes a parser reads a
 // package by. Both files are chgksuite's own, embedded verbatim, so the two
 // tools cannot drift apart on a label or a marker.
@@ -22,9 +22,9 @@ var assets embed.FS
 // DefaultLanguage is what every command falls back to.
 const DefaultLanguage = "ru"
 
-// Languages are the ten chgksuite ships, in the order it lists them.
+// Languages are the eleven chgksuite ships.
 func Languages() []string {
-	return []string{"ru", "en", "ua", "by", "by_tar", "uz", "uz_cyr", "kz_cyr", "az", "sr"}
+	return []string{"ru", "en", "ua", "by", "by_tar", "uz", "uz_cyr", "kz_cyr", "az", "sr", "ro"}
 }
 
 // Labels is one labels_*.toml: the field headings and the handful of general

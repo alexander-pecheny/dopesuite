@@ -226,7 +226,7 @@ func isSI(text string) bool {
 
 // detector is built once: a model over the languages chgksuite reads.
 var detector = lingua.NewLanguageDetectorBuilder().
-	FromLanguages(lingua.Russian, lingua.Ukrainian, lingua.Belarusian, lingua.Kazakh, lingua.English, lingua.Serbian, lingua.Azerbaijani).
+	FromLanguages(lingua.Russian, lingua.Ukrainian, lingua.Belarusian, lingua.Kazakh, lingua.English, lingua.Serbian, lingua.Azerbaijani, lingua.Romanian).
 	Build()
 
 // language names a packet's language as chgksuite's --language code ("" is
@@ -257,6 +257,8 @@ func language(text string) string {
 		return "sr"
 	case lingua.Azerbaijani:
 		return "az"
+	case lingua.Romanian:
+		return "ro"
 	}
 	return ""
 }
