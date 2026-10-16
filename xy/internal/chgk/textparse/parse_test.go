@@ -35,6 +35,7 @@ func chgksuiteTests(t *testing.T) string {
 var txtFixtures = []string{
 	"bkd_2021_all.txt",
 	"borromeo.txt",
+	"comment_first.txt",
 	"test_blitz.txt",
 }
 

@@ -158,6 +158,7 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 	}
 	p.processSingleNumberLines(opts.SingleNumberLines)
 	p.dupletBlitzHack()
+	p.markLeadingComments()
 
 	// ── 2. glue unlabelled lines onto the field they continue ──
 	p.mergeYToX("question", "answer")
@@ -167,8 +168,11 @@ func (p *parser) parse(text string, opts Options) fsource.Doc {
 	// ── 3. make sure every answer has a question in front of it ──
 	p.ensureQuestions()
 	for _, e := range p.structure {
-		if e.Type == "newquestion" {
+		switch e.Type {
+		case "newquestion":
 			e.Type = "question"
+		case "leadcomment":
+			e.Type = "comment"
 		}
 	}
 	p.dirtyMergeToXUntilNextField("source")
@@ -286,6 +290,7 @@ func (p *parser) mergeYToX(x, y string) {
 		}
 		for i+1 < len(p.structure) &&
 			p.structure[i+1].Type != y &&
+			p.structure[i+1].Type != "leadcomment" &&
 			!hardBoundaries[p.structure[i+1].Type] {
 			p.mergeToPrevious(i + 1)
 		}
@@ -294,7 +299,7 @@ func (p *parser) mergeYToX(x, y string) {
 
 // badNextFields: an unlabelled line must not be glued onto the previous field if
 // what follows it is a question or an answer — it belongs to that instead.
-var badNextFields = map[string]bool{"question": true, "answer": true}
+var badNextFields = map[string]bool{"question": true, "answer": true, "leadcomment": true}
 
 func (p *parser) mergeToXUntilNextField(x string) {
 	for i := 0; i < len(p.structure); i++ {
@@ -527,6 +532,44 @@ func (p *parser) dupletBlitzHack() {
 	}
 }
 
+// answerSide are the fields a comment follows in the usual order.
+var answerSide = map[string]bool{"answer": true, "zachet": true, "nezachet": true}
+
+// markLeadingComments recognises a package that puts the comment before the
+// answer: there, more comments stand right before an answer than after one.
+// Each comment that leads to an answer takes the unlabelled lines up to it and
+// becomes a "leadcomment", which the merges look past to find the question.
+func (p *parser) markLeadingComments() {
+	before, after := 0, 0
+	for i, e := range p.structure {
+		if e.Type != "comment" {
+			continue
+		}
+		if i+1 < len(p.structure) && p.structure[i+1].Type == "answer" {
+			before++
+		}
+		j := i - 1
+		for j >= 0 && p.structure[j].Type == "" {
+			j--
+		}
+		if j >= 0 && answerSide[p.structure[j].Type] {
+			after++
+		}
+	}
+	if before <= after {
+		return
+	}
+	for i := 0; i < len(p.structure); i++ {
+		if p.structure[i].Type != "comment" || p.findNextFieldName(i) != "answer" {
+			continue
+		}
+		p.structure[i].Type = "leadcomment"
+		for p.structure[i+1].Type == "" {
+			p.mergeToPrevious(i + 1)
+		}
+	}
+}
+
 // ── step 3 ──────────────────────────────────────────────────────────────────
 
 func (p *parser) ensureQuestions() {
@@ -534,11 +577,15 @@ func (p *parser) ensureQuestions() {
 		if p.structure[i].Type != "answer" {
 			continue
 		}
-		prev := p.at(i - 1).Type // i == 0 wraps to the last element, as in Python
+		j := i
+		if i > 0 && p.structure[i-1].Type == "leadcomment" {
+			j = i - 1
+		}
+		prev := p.at(j - 1).Type // j == 0 wraps to the last element, as in Python
 		if prev == "question" || prev == "newquestion" {
 			continue
 		}
-		p.insert(i, &elem{"newquestion", ""})
+		p.insert(j, &elem{"newquestion", ""})
 		i = -1 // Python sets i = 0 and then increments
 	}
 
