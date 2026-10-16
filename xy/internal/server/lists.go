@@ -11,11 +11,11 @@ import (
 )
 
 type listDTO struct {
-	ID       int64  `json:"id"`
-	Type     string `json:"type"`
-	TitleEnc string `json:"title_enc"`
-	Rank     string `json:"rank"`
-	GroupID  *int64 `json:"group_id,omitempty"` // nil = not part of a list group
+	ID      int64  `json:"id"`
+	Type    string `json:"type"`
+	Title   string `json:"title"`
+	Rank    string `json:"rank"`
+	GroupID *int64 `json:"group_id,omitempty"` // nil = not part of a list group
 	// CommentFirst puts a question's comment before its answer in every
 	// rendering. A grouped list follows its group's flag instead of its own.
 	CommentFirst bool `json:"comment_first"`
@@ -24,13 +24,13 @@ type listDTO struct {
 // groupDTO is a "list_of_lists": a named, ordered run of consecutive lists.
 type groupDTO struct {
 	ID           int64  `json:"id"`
-	NameEnc      string `json:"name_enc"`
+	Name         string `json:"name"`
 	CommentFirst bool   `json:"comment_first"`
 }
 
 func scanLists(ctx context.Context, q querier, boardID int64) ([]listDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, type, title_enc, rank, group_id, comment_first from lists where board_id = ? and deleted_at is null order by rank`, boardID)
+select id, type, title, rank, group_id, comment_first from lists where board_id = ? and deleted_at is null order by rank`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -38,12 +38,12 @@ select id, type, title_enc, rank, group_id, comment_first from lists where board
 	out := []listDTO{}
 	for rows.Next() {
 		var l listDTO
-		var titleEnc []byte
+		var title []byte
 		var groupID sql.NullInt64
-		if err := rows.Scan(&l.ID, &l.Type, &titleEnc, &l.Rank, &groupID, &l.CommentFirst); err != nil {
+		if err := rows.Scan(&l.ID, &l.Type, &title, &l.Rank, &groupID, &l.CommentFirst); err != nil {
 			return nil, err
 		}
-		l.TitleEnc = b64(titleEnc)
+		l.Title = b64(title)
 		if groupID.Valid {
 			l.GroupID = &groupID.Int64
 		}
@@ -55,7 +55,7 @@ select id, type, title_enc, rank, group_id, comment_first from lists where board
 // scanListGroups returns the board's non-deleted list groups.
 func scanListGroups(ctx context.Context, q querier, boardID int64) ([]groupDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, name_enc, comment_first from list_groups where board_id = ? and deleted_at is null order by id`, boardID)
+select id, name, comment_first from list_groups where board_id = ? and deleted_at is null order by id`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -63,18 +63,18 @@ select id, name_enc, comment_first from list_groups where board_id = ? and delet
 	out := []groupDTO{}
 	for rows.Next() {
 		var g groupDTO
-		var nameEnc []byte
-		if err := rows.Scan(&g.ID, &nameEnc, &g.CommentFirst); err != nil {
+		var name []byte
+		if err := rows.Scan(&g.ID, &name, &g.CommentFirst); err != nil {
 			return nil, err
 		}
-		g.NameEnc = b64(nameEnc)
+		g.Name = b64(name)
 		out = append(out, g)
 	}
 	return out, rows.Err()
 }
 
 type createListRequest struct {
-	TitleEnc     string `json:"title_enc"`
+	Title        string `json:"title"`
 	Rank         string `json:"rank"`
 	Type         string `json:"type"`
 	CommentFirst bool   `json:"comment_first"`
@@ -89,7 +89,7 @@ func (s *server) handleCreateList(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	titleEnc, err := unb64(req.TitleEnc)
+	title, err := unb64(req.Title)
 	if err != nil || req.Rank == "" {
 		httpError(w, http.StatusBadRequest, "invalid list fields")
 		return
@@ -106,8 +106,8 @@ func (s *server) handleCreateList(w http.ResponseWriter, r *http.Request) {
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-list", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-insert into lists(board_id, type, title_enc, rank, comment_first, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?)`,
-			bid, typ, titleEnc, req.Rank, req.CommentFirst, rfc3339(now), rfc3339(now))
+insert into lists(board_id, type, title, rank, comment_first, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?)`,
+			bid, typ, title, req.Rank, req.CommentFirst, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -133,7 +133,7 @@ func validListType(typ string) bool {
 }
 
 type patchListRequest struct {
-	TitleEnc     *string `json:"title_enc"`
+	Title        *string `json:"title"`
 	Rank         *string `json:"rank"`
 	Type         *string `json:"type"`
 	CommentFirst *bool   `json:"comment_first"`
@@ -150,12 +150,12 @@ func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.withWriteTx(r.Context(), "patch-list", func(ctx context.Context, tx *sql.Tx) error {
 		var p patch
-		if req.TitleEnc != nil {
-			titleEnc, err := unb64(*req.TitleEnc)
+		if req.Title != nil {
+			title, err := unb64(*req.Title)
 			if err != nil {
-				return corei18n.User("invalid title_enc")
+				return corei18n.User("invalid title")
 			}
-			p.set("title_enc", titleEnc)
+			p.set("title", title)
 		}
 		if req.Rank != nil {
 			p.set("rank", *req.Rank)
@@ -197,7 +197,7 @@ func (s *server) handleDeleteList(w http.ResponseWriter, r *http.Request) {
 // A list group (list_of_lists) folds several lists into one tour.
 
 type createListGroupRequest struct {
-	NameEnc string  `json:"name_enc"`
+	Name    string  `json:"name"`
 	ListIDs []int64 `json:"list_ids"` // lists to fold into the new group
 }
 
@@ -210,9 +210,9 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	nameEnc, err := unb64(req.NameEnc)
+	name, err := unb64(req.Name)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, "invalid name_enc")
+		httpError(w, http.StatusBadRequest, "invalid name")
 		return
 	}
 	if len(req.ListIDs) < 2 {
@@ -223,9 +223,9 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-list-group", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-insert into list_groups(board_id, name_enc, comment_first, created_at, updated_at)
+insert into list_groups(board_id, name, comment_first, created_at, updated_at)
 values(?, ?, coalesce((select comment_first from lists where id = ? and board_id = ?), 0), ?, ?)`,
-			bid, nameEnc, req.ListIDs[0], bid, rfc3339(now), rfc3339(now))
+			bid, name, req.ListIDs[0], bid, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -259,7 +259,7 @@ values(?, ?, coalesce((select comment_first from lists where id = ? and board_id
 }
 
 type patchListGroupRequest struct {
-	NameEnc      *string `json:"name_enc"`
+	Name         *string `json:"name"`
 	CommentFirst *bool   `json:"comment_first"`
 }
 
@@ -274,12 +274,12 @@ func (s *server) handlePatchListGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.withWriteTx(r.Context(), "patch-list-group", func(ctx context.Context, tx *sql.Tx) error {
 		var p patch
-		if req.NameEnc != nil {
-			nameEnc, err := unb64(*req.NameEnc)
+		if req.Name != nil {
+			name, err := unb64(*req.Name)
 			if err != nil {
-				return corei18n.User("invalid name_enc")
+				return corei18n.User("invalid name")
 			}
-			p.set("name_enc", nameEnc)
+			p.set("name", name)
 		}
 		if req.CommentFirst != nil {
 			p.set("comment_first", *req.CommentFirst)

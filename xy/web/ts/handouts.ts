@@ -327,7 +327,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
       const norm = meta && meta.trim() ? meta : null;
       if (norm === (c.handoutMeta || null)) continue;
       try {
-        const body: OpBody = { handout_meta_enc: norm ? await xyCrypto.encField(board.dk(), norm) : "" };
+        const body: OpBody = { handout_meta: norm ? await xyCrypto.encField(board.dk(), norm) : "" };
         await board.verbs.patch("patchCard", `/api/cards/${c.id}`, body);
         c.handoutMeta = norm;
       } catch (_) { /* best-effort: keep editing even if a write fails */ }
@@ -347,14 +347,14 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
         await board.verbs.del("deleteCard", `/api/cards/${card.id}`);
         board.state.cards.splice(board.state.cards.indexOf(card), 1);
       } else if (card && text && text !== card.desc.trim()) {
-        await board.verbs.patch("patchCard", `/api/cards/${card.id}`, { description_enc: await xyCrypto.encField(board.dk(), text) });
+        await board.verbs.patch("patchCard", `/api/cards/${card.id}`, { description: await xyCrypto.encField(board.dk(), text) });
         card.desc = text;
       } else if (!card && text) {
         const listId = handoutsCtx.listId;
         const first = board.cardsOf(listId)[0];
         const rank = xyRank.keyBetween(null, first ? first.rank : null);
         const kind = KIND.handoutsPreamble;
-        const res = await board.verbs.create("createCard", `/api/lists/${listId}/cards`, { description_enc: await xyCrypto.encField(board.dk(), text), rank, kind });
+        const res = await board.verbs.create("createCard", `/api/lists/${listId}/cards`, { description: await xyCrypto.encField(board.dk(), text), rank, kind });
         board.state.cards.push({ id: res.id as number, listId, kind, rank, desc: text, handoutMeta: null, alias: null, createdAt: new Date().toISOString() });
       } else return;
       board.render();

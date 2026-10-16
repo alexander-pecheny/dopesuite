@@ -12,8 +12,8 @@ const { xySync } = await import("../web/assets/static/dist/sync.js");
 const fetched = [];
 const server = {
   "/api/cards/10/attachments": [
-    { id: 1, filename_enc: "e:схема.png", mime: "image/png", size: 2048, rev: 0 },
-    { id: 2, filename_enc: "e:текст.pdf", mime: "application/pdf", size: 3 * 1024 * 1024, is_excerpt: true },
+    { id: 1, filename: "e:схема.png", mime: "image/png", size: 2048, rev: 0 },
+    { id: 2, filename: "e:текст.pdf", mime: "application/pdf", size: 3 * 1024 * 1024, is_excerpt: true },
   ],
 };
 xyApp.fetchJSON = async (url) => { fetched.push(url); return server[url]; };

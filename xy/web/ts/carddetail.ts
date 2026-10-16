@@ -372,7 +372,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     try {
       const dk = mustDK();
       const res = await verbs.create("createCard", `/api/lists/${list.id}/cards`, {
-        description_enc: await xyCrypto.encField(dk, desc), rank, kind,
+        description: await xyCrypto.encField(dk, desc), rank, kind,
       });
       const card: BoardCard = {
         id: res.id as number, listId: list.id, kind, rank, desc,
@@ -1845,13 +1845,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // changed, and the handout settings when they changed.
   async function saveBody(card: BoardCard, newDesc: string, newMeta: string | null): Promise<OpBody> {
     const dk = mustDK();
-    const body: OpBody = { description_enc: await xyCrypto.encField(dk, newDesc) };
+    const body: OpBody = { description: await xyCrypto.encField(dk, newDesc) };
     if (newDesc !== card.desc) {
-      body.desc_event_enc = await sealPayload(dk, "desc_edit", { before: card.desc, after: newDesc, author: "" });
+      body.desc_event = await sealPayload(dk, "desc_edit", { before: card.desc, after: newDesc, author: "" });
     }
     // Persist handout-gen settings (field #10) when they changed: "" clears them.
     if (newMeta !== (card.handoutMeta || null)) {
-      body.handout_meta_enc = newMeta ? await xyCrypto.encField(dk, newMeta) : "";
+      body.handout_meta = newMeta ? await xyCrypto.encField(dk, newMeta) : "";
     }
     return body;
   }
@@ -1886,7 +1886,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (!draft.aliasDirty(next)) return;
     setStatus("saving");
     try {
-      const body: OpBody = { alias_enc: next ? await xyCrypto.encField(mustDK(), next) : "" };
+      const body: OpBody = { alias: next ? await xyCrypto.encField(mustDK(), next) : "" };
       await verbs.patch("patchCard", `/api/cards/${card.id}`, body);
       card.alias = next;
       // Only while this card is still the open one: an exit flush resolves after

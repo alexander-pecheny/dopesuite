@@ -55,7 +55,7 @@ func TestAPITokenIsTheUser(t *testing.T) {
 	mustStatus(t, resp, 200)
 
 	// A write goes through too, attributed to the token's owner.
-	resp = tok.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("список"), "rank": "m"})
+	resp = tok.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title": enc("список"), "rank": "m"})
 	mustStatus(t, resp, 200)
 }
 

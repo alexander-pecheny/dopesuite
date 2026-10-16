@@ -19,8 +19,8 @@ const { keyBetween } = xyRank;
 // createList encrypts the title, creates the list (offline-capable via the sync
 // outbox) and adds it to the board's state. The caller renders.
 export async function createList(board: Board, title: string, type: string, rank: string): Promise<void> {
-  const titleEnc = await xyCrypto.encField(board.dk(), title);
-  const res = await board.verbs.create("createList", `/api/boards/${board.id}/lists`, { title_enc: titleEnc, rank, type });
+  const sealedTitle = await xyCrypto.encField(board.dk(), title);
+  const res = await board.verbs.create("createList", `/api/boards/${board.id}/lists`, { title: sealedTitle, rank, type });
   board.state.lists.push({ id: res.id as number, type, rank, groupId: null, title, commentFirst: false });
 }
 

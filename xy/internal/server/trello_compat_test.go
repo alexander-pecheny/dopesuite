@@ -28,7 +28,7 @@ func TestTrelloCompatAPI(t *testing.T) {
 	boardID := itoa(board.ID)
 
 	// list
-	resp = c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("Тур 1"), "rank": "a1"})
+	resp = c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title": enc("Тур 1"), "rank": "a1"})
 	mustStatus(t, resp, 200)
 	var list struct {
 		ID int64 `json:"id"`
@@ -37,7 +37,7 @@ func TestTrelloCompatAPI(t *testing.T) {
 	listID := itoa(list.ID)
 
 	// card
-	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("first question"), "rank": "a1"})
+	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description": enc("first question"), "rank": "a1"})
 	mustStatus(t, resp, 200)
 	var card struct {
 		ID int64 `json:"id"`
@@ -46,7 +46,7 @@ func TestTrelloCompatAPI(t *testing.T) {
 	cardID := itoa(card.ID)
 
 	// label + assign
-	resp = c.do("POST", "/api/boards/"+boardID+"/labels", map[string]string{"name_enc": enc("сложный"), "color_enc": enc("#f00")})
+	resp = c.do("POST", "/api/boards/"+boardID+"/labels", map[string]string{"name": enc("сложный"), "color": enc("#f00")})
 	mustStatus(t, resp, 200)
 	var label struct {
 		ID int64 `json:"id"`
@@ -94,7 +94,7 @@ func TestTrelloCompatAPI(t *testing.T) {
 	if tb.ID != boardID {
 		t.Fatalf("board id = %q, want %q", tb.ID, boardID)
 	}
-	// Board name is plaintext now (schema_version 2), not a ciphertext envelope.
+	// The board name is plaintext, not an Envelope.
 	if tb.Name != "Пакет" {
 		t.Fatalf("board name = %q, want plaintext %q", tb.Name, "Пакет")
 	}
@@ -148,8 +148,8 @@ func TestTrelloCompatAPI(t *testing.T) {
 	if len(snap.Cards) != 2 {
 		t.Fatalf("snapshot cards = %d, want 2", len(snap.Cards))
 	}
-	if dec(snap.Cards[1].DescEnc) != "uploaded question" {
-		t.Fatalf("uploaded card not last: %q", dec(snap.Cards[1].DescEnc))
+	if dec(snap.Cards[1].Desc) != "uploaded question" {
+		t.Fatalf("uploaded card not last: %q", dec(snap.Cards[1].Desc))
 	}
 	if !(snap.Cards[1].Rank > snap.Cards[0].Rank) {
 		t.Fatalf("rank not increasing: %q !> %q", snap.Cards[1].Rank, snap.Cards[0].Rank)

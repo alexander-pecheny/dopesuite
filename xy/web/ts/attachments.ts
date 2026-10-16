@@ -28,7 +28,7 @@ const { fetchJSON, jpatch, jdelete, el, errMsg } = xyApp;
 // serving the bytes it replaced for the rest of the page's life.
 export interface Attachment {
   id: number;
-  filename_enc: string;
+  filename: string;
   mime: string;
   size: number;
   rev?: number;
@@ -132,7 +132,7 @@ async function cardAttachments(cardId: number, refresh = false): Promise<NamedAt
   try { atts = (await fetchJSON(`/api/cards/${cardId}/attachments`)) as Attachment[]; } catch (_) { return []; }
   const out = await Promise.all(atts.map(async (att) => {
     let name = "";
-    try { name = await xyCrypto.decField(deps.mustDK(), att.filename_enc); } catch (_) {}
+    try { name = await xyCrypto.decField(deps.mustDK(), att.filename); } catch (_) {}
     return { ...att, name };
   }));
   attListCache.set(cardId, out);
@@ -288,9 +288,9 @@ function pickReplacement(att: NamedAttachment, name: string): void {
       const key = deps.mustDK();
       const fd = new FormData();
       fd.append("meta", JSON.stringify({
-        filename_enc: await xyCrypto.encField(key, name),
+        filename: await xyCrypto.encField(key, name),
         mime, lossless,
-        event_payload_enc: await sealPayload(key, "attach_replace", { file: name }),
+        event_payload: await sealPayload(key, "attach_replace", { file: name }),
       }));
       fd.append("blob", new Blob([await xyCrypto.encBytes(key, bytes)], { type: "application/octet-stream" }), "blob");
       const res = await fetch(`/api/attachments/${att.id}`, { method: "PUT", credentials: "same-origin", body: fd });
@@ -333,9 +333,9 @@ async function uploadAttachment(file: File, lossless: boolean, name: string): Pr
   const cipher = await xyCrypto.encBytes(key, bytes);
   const fd = new FormData();
   fd.append("meta", JSON.stringify({
-    filename_enc: await xyCrypto.encField(key, name),
+    filename: await xyCrypto.encField(key, name),
     mime, lossless,
-    event_payload_enc: await sealPayload(key, "attach_add", { file: name }),
+    event_payload: await sealPayload(key, "attach_add", { file: name }),
   }));
   fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
   const res = await fetch(`/api/cards/${oc}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
@@ -549,7 +549,7 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
   if (!xySync.requireOnline(S.attachments.status.offlineDelete(), ui.message)) return;
   try {
     const ev = await sealPayload(deps.mustDK(), "attach_remove", { file: name });
-    await jdelete(`/api/attachments/${att.id}?event_payload_enc=${encodeURIComponent(ev)}`);
+    await jdelete(`/api/attachments/${att.id}?event_payload=${encodeURIComponent(ev)}`);
     const oc = deps.openCardId();
     if (oc != null) {
       await loadAttachments(oc);

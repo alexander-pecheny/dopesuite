@@ -48,8 +48,8 @@ export function createRewrites(board: Board): Rewrites {
     const key = board.dk();
     for (const ch of changes) {
       await board.verbs.patch("patchCard", `/api/cards/${ch.card.id}`, {
-        description_enc: await xyCrypto.encField(key, ch.desc),
-        desc_event_enc: await sealPayload(key, "desc_edit", { before: ch.card.desc, after: ch.desc, author: "" }),
+        description: await xyCrypto.encField(key, ch.desc),
+        desc_event: await sealPayload(key, "desc_edit", { before: ch.card.desc, after: ch.desc, author: "" }),
       });
       ch.card.desc = ch.desc;
     }

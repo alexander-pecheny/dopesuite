@@ -43,8 +43,8 @@ test("a payload that will not open is unreadable, never a throw", async () => {
   assert.deepEqual(await openPayload(await testKey(8), "reaction", sealed), UNREADABLE);
   assert.deepEqual(await openPayload(null, "reaction", sealed), UNREADABLE);
   const run = await openPayloads(dk, [
-    { type: "comment", payload_enc: await sealPayload(dk, "comment", { text: "hi", images: [] }) },
-    { type: "comment", payload_enc: "" },
+    { type: "comment", payload: await sealPayload(dk, "comment", { text: "hi", images: [] }) },
+    { type: "comment", payload: "" },
     { type: "comment" },
   ]);
   assert.deepEqual(run, [{ kind: "comment", text: "hi", images: [] }, UNREADABLE, UNREADABLE]);

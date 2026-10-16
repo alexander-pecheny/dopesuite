@@ -125,12 +125,12 @@ function applyOpToSnapshot(
   const ids = pathIds(op.path);
   switch (op.kind) {
     case "createList":
-      lists.push({ id: resultId as number, type: body.type || "normal", title_enc: body.title_enc, rank: body.rank });
+      lists.push({ id: resultId as number, type: body.type || "normal", title: body.title, rank: body.rank });
       break;
     case "patchList": {
       const l = lists.find((x) => x.id === ids[0]);
       if (l) {
-        if (body.title_enc != null) l.title_enc = body.title_enc;
+        if (body.title != null) l.title = body.title;
         if (body.rank != null) l.rank = body.rank;
         if (body.type != null) l.type = body.type;
         if (body.comment_first != null) l.comment_first = body.comment_first;
@@ -151,30 +151,30 @@ function applyOpToSnapshot(
     case "createCard":
       cards.push({
         id: resultId as number, list_id: ids[0], kind: body.kind || "normal",
-        description_enc: body.description_enc, rank: body.rank,
-        ...(body.handout_meta_enc ? { handout_meta_enc: body.handout_meta_enc } : {}),
-        ...(body.alias_enc ? { alias_enc: body.alias_enc } : {}),
-        ...(body.seen_enc ? { seen_enc: body.seen_enc } : {}),
+        description: body.description, rank: body.rank,
+        ...(body.handout_meta ? { handout_meta: body.handout_meta } : {}),
+        ...(body.alias ? { alias: body.alias } : {}),
+        ...(body.seen ? { seen: body.seen } : {}),
       });
       break;
     case "patchCard": {
       const c = cards.find((x) => x.id === ids[0]);
       if (c) {
-        if (body.description_enc != null) c.description_enc = body.description_enc;
+        if (body.description != null) c.description = body.description;
         if (body.rank != null) c.rank = body.rank;
         if (body.list_id != null) c.list_id = body.list_id;
         if (body.kind != null) c.kind = body.kind;
-        if (body.handout_meta_enc != null) {
-          if (body.handout_meta_enc === "") delete c.handout_meta_enc;
-          else c.handout_meta_enc = body.handout_meta_enc;
+        if (body.handout_meta != null) {
+          if (body.handout_meta === "") delete c.handout_meta;
+          else c.handout_meta = body.handout_meta;
         }
-        if (body.alias_enc != null) {
-          if (body.alias_enc === "") delete c.alias_enc;
-          else c.alias_enc = body.alias_enc;
+        if (body.alias != null) {
+          if (body.alias === "") delete c.alias;
+          else c.alias = body.alias;
         }
-        if (body.seen_enc != null) {
-          if (body.seen_enc === "") delete c.seen_enc;
-          else c.seen_enc = body.seen_enc;
+        if (body.seen != null) {
+          if (body.seen === "") delete c.seen;
+          else c.seen = body.seen;
         }
       }
       break;
@@ -186,11 +186,11 @@ function applyOpToSnapshot(
       break;
     }
     case "createLabel":
-      labels.push({ id: resultId as number, name_enc: body.name_enc, color_enc: body.color_enc });
+      labels.push({ id: resultId as number, name: body.name, color: body.color });
       break;
     case "patchLabel": {
       const l = labels.find((x) => x.id === ids[0]);
-      if (l) { if (body.name_enc != null) l.name_enc = body.name_enc; if (body.color_enc != null) l.color_enc = body.color_enc; }
+      if (l) { if (body.name != null) l.name = body.name; if (body.color != null) l.color = body.color; }
       break;
     }
     case "deleteLabel": {
@@ -223,12 +223,11 @@ function applyOpToSnapshot(
       const listId = body.list_id ?? null, groupId = body.group_id ?? null;
       snap.tour_declarations = decls
         .filter((d) => (d.list_id ?? null) !== listId || (d.group_id ?? null) !== groupId)
-        .concat([{ list_id: listId, group_id: groupId, names_enc: body.names_enc }]);
+        .concat([{ list_id: listId, group_id: groupId, names: body.names }]);
       break;
     }
     case "patchBoard":
-      // Board names are plaintext now; a rename bumps the board to schema_version 2.
-      if (body.name != null) { snap.name = body.name; snap.schema_version = 2; }
+      if (body.name != null) snap.name = body.name;
       break;
     default:
       break; // comment / no snapshot effect
@@ -249,20 +248,20 @@ function pendingTimeline(ops: OutboxOp[], cardId: number): TimelineEvent[] {
     if (ids[0] !== cardId) continue;
     const body: OpBody = op.body || {};
     const when = op.ts || "";
-    if (op.kind === "comment" && body.payload_enc) {
+    if (op.kind === "comment" && body.payload) {
       // reply_to_id is always a REAL (synced) id — a reply can only be composed
       // from a rendered thread, and un-synced comments have no thread affordance
       // — so it needs no temp-id remapping and is carried through as-is.
       out.push({
         id: n--, type: "comment", author_user_id: null, created_at: when,
         reply_to_id: body.reply_to_id != null ? body.reply_to_id : undefined,
-        payload_enc: body.payload_enc,
+        payload: body.payload,
       });
-    } else if (op.kind === "patchCard" && body.desc_event_enc) {
-      out.push({ id: n--, type: "desc_edit", author_user_id: null, created_at: when, payload_enc: body.desc_event_enc });
+    } else if (op.kind === "patchCard" && body.desc_event) {
+      out.push({ id: n--, type: "desc_edit", author_user_id: null, created_at: when, payload: body.desc_event });
     } else if (op.kind === "setCardLabels" && Array.isArray(body.events)) {
       for (const ev of body.events) {
-        out.push({ id: n--, type: ev.type, author_user_id: null, created_at: when, payload_enc: ev.payload_enc });
+        out.push({ id: n--, type: ev.type, author_user_id: null, created_at: when, payload: ev.payload });
       }
     }
   }

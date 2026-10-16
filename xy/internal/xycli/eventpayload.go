@@ -244,8 +244,8 @@ func DecodePayload(kind, raw string) EventPayload {
 	return UnreadablePayload{}
 }
 
-// SealPayload encodes and encrypts: what goes into payload_enc, desc_event_enc
-// or event_payload_enc.
+// SealPayload encodes and encrypts: what goes into payload, desc_event
+// or event_payload.
 func SealPayload(dk xyenvelope.DataKey, kind string, p EventPayload) (string, error) {
 	plain, err := EncodePayload(kind, p)
 	if err != nil {

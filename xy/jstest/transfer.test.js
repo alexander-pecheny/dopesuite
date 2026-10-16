@@ -65,8 +65,8 @@ test("a copy on the same board repeats the labels and playings verbatim and carr
   const id = await transfer.transferCard(state.cards[0], 2, ctx, false);
   assert.equal(id, nextId);
   const post = calls.find((c) => c[0] === "POST" && c[1] === "/api/lists/2/cards");
-  assert.equal(await xyCrypto.decField(srcDk, post[2].description_enc), "Вопрос?");
-  assert.equal(await xyCrypto.decField(srcDk, post[2].alias_enc), "В1");
+  assert.equal(await xyCrypto.decField(srcDk, post[2].description), "Вопрос?");
+  assert.equal(await xyCrypto.decField(srcDk, post[2].alias), "В1");
   assert.deepEqual(calls.find((c) => c[1] === `/api/cards/${id}/sessions`)[2], { session_ids: [7] });
   assert.deepEqual(calls.find((c) => c[1] === `/api/cards/${id}/labels`)[2], { labels: [{ label_id: 3, session_id: 7 }] });
   assert.ok(state.cards.some((c) => c.id === id && c.listId === 2), "the copy joins the page's state");
@@ -79,11 +79,11 @@ test("a copy to another board re-encrypts under its key and reconciles labels by
   const ctx = { boardId: 2, dk: dstDk, lists: [{ id: 20, title: "Чужой", rank: "a0" }], cardsByList: new Map(), labels: [{ id: 33, name: "взяли", color: "#0f0" }], sessions: [], name: "Другая" };
   const id = await transfer.transferCard(state.cards[0], 20, ctx, true);
   const post = calls.find((c) => c[0] === "POST" && c[1] === "/api/lists/20/cards");
-  assert.equal(await xyCrypto.decField(dstDk, post[2].description_enc), "Вопрос?");
+  assert.equal(await xyCrypto.decField(dstDk, post[2].description), "Вопрос?");
   // The Playing's session does not exist there: it is copied, keyed on the
   // sitting's key, and the label assignment scopes to the copy.
   const sessionPost = calls.find((c) => c[0] === "POST" && c[1] === "/api/boards/2/sessions");
-  const copied = JSON.parse(await xyCrypto.decField(dstDk, sessionPost[2].meta_enc));
+  const copied = JSON.parse(await xyCrypto.decField(dstDk, sessionPost[2].meta));
   assert.equal(copied.key, "s-7");
   assert.equal(copied.origin.board, "Своя");
   assert.equal(ctx.sessions.length, 1);
@@ -102,10 +102,10 @@ test("a copy to another board points a comment's images at the copied attachment
   const { state, transfer } = board();
   calls.length = 0;
   const comment = await xyCrypto.encField(srcDk, JSON.stringify({ xy: 1, t: "картинка", img: [70, 71] }));
-  routes["/api/cards/10/timeline"] = [{ id: 1, type: "comment", payload_enc: comment, author_user_id: 3, created_at: "2026-09-01T00:00:00Z" }];
+  routes["/api/cards/10/timeline"] = [{ id: 1, type: "comment", payload: comment, author_user_id: 3, created_at: "2026-09-01T00:00:00Z" }];
   routes["/api/cards/10/attachments"] = [
-    { id: 70, filename_enc: await xyCrypto.encField(srcDk, "a.png"), mime: "image/png" },
-    { id: 71, filename_enc: await xyCrypto.encField(srcDk, "b.png"), mime: "image/png" },
+    { id: 70, filename: await xyCrypto.encField(srcDk, "a.png"), mime: "image/png" },
+    { id: 71, filename: await xyCrypto.encField(srcDk, "b.png"), mime: "image/png" },
   ];
   const blob = await xyCrypto.encBytes(srcDk, new Uint8Array([1, 2, 3]));
   const saved = globalThis.fetch;
@@ -120,7 +120,7 @@ test("a copy to another board points a comment's images at the copied attachment
     const ctx = { boardId: 2, dk: dstDk, lists: [{ id: 20, title: "Чужой", rank: "a0" }], cardsByList: new Map(), labels: [], sessions: [], name: "Другая" };
     const id = await transfer.transferCard(state.cards[0], 20, ctx, false);
     const imported = calls.find((c) => c[1] === `/api/cards/${id}/timeline/import`)[2].events;
-    assert.equal(await xyCrypto.decField(dstDk, imported[0].payload_enc), JSON.stringify({ xy: 1, t: "картинка", img: [900] }));
+    assert.equal(await xyCrypto.decField(dstDk, imported[0].payload), JSON.stringify({ xy: 1, t: "картинка", img: [900] }));
   } finally {
     globalThis.fetch = saved;
     delete routes["/api/cards/10/timeline"];

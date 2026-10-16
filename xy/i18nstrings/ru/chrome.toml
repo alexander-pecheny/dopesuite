@@ -41,9 +41,6 @@ title_empty = "(пусто)"
 
 [home]
 # The home page's board grid (index.ts).
-# Placeholder name of a legacy board whose real name is still encrypted;
-# id is the board's numeric id.
-board_locked_name = 'доска #{{.id}}'
 # The line under the name of a board somebody else created; name is their login.
 creator = 'Создатель: {{.name}}'
 # Tooltip of the unread dot on a board card, plain and mention variants.

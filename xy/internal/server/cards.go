@@ -13,14 +13,14 @@ import (
 )
 
 type cardDTO struct {
-	ID             int64   `json:"id"`
-	ListID         int64   `json:"list_id"`
-	Kind           string  `json:"kind"`
-	DescEnc        string  `json:"description_enc"`
-	Rank           string  `json:"rank"`
-	HandoutMetaEnc *string `json:"handout_meta_enc,omitempty"` // nil = no saved handout settings
-	AliasEnc       *string `json:"alias_enc,omitempty"`        // nil = no alias
-	SeenEnc        *string `json:"seen_enc,omitempty"`         // nil = Seen is exactly the Playings
+	ID          int64   `json:"id"`
+	ListID      int64   `json:"list_id"`
+	Kind        string  `json:"kind"`
+	Desc        string  `json:"description"`
+	Rank        string  `json:"rank"`
+	HandoutMeta *string `json:"handout_meta,omitempty"` // nil = no saved handout settings
+	Alias       *string `json:"alias,omitempty"`        // nil = no alias
+	Seen        *string `json:"seen,omitempty"`         // nil = Seen is exactly the Playings
 	// CreatedAt anchors the timeline: the client shows it as a "card created"
 	// line under the oldest event, so every later timestamp has something to be
 	// read against. Deliberately NOT a timeline event — the column already
@@ -49,9 +49,9 @@ type tourTesterDTO struct {
 // tourDeclarationDTO is one tour's Declaration: the people its Tester List
 // names, as an encrypted JSON list. An empty list still declares.
 type tourDeclarationDTO struct {
-	ListID   *int64 `json:"list_id,omitempty"`
-	GroupID  *int64 `json:"group_id,omitempty"`
-	NamesEnc string `json:"names_enc"`
+	ListID  *int64 `json:"list_id,omitempty"`
+	GroupID *int64 `json:"group_id,omitempty"`
+	Names   string `json:"names"`
 }
 
 // cardSessionDTO is one Playing: this question was played at that test.
@@ -62,7 +62,7 @@ type cardSessionDTO struct {
 
 func scanCards(ctx context.Context, q querier, boardID int64) ([]cardDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, list_id, kind, description_enc, rank, handout_meta_enc, alias_enc, seen_enc, created_at
+select id, list_id, kind, description, rank, handout_meta, alias, seen, created_at
 from cards where board_id = ? and deleted_at is null order by rank`, boardID)
 	if err != nil {
 		return nil, err
@@ -71,22 +71,22 @@ from cards where board_id = ? and deleted_at is null order by rank`, boardID)
 	out := []cardDTO{}
 	for rows.Next() {
 		var c cardDTO
-		var descEnc, metaEnc, aliasEnc, seenEnc []byte
-		if err := rows.Scan(&c.ID, &c.ListID, &c.Kind, &descEnc, &c.Rank, &metaEnc, &aliasEnc, &seenEnc, &c.CreatedAt); err != nil {
+		var desc, handoutMeta, alias, seen []byte
+		if err := rows.Scan(&c.ID, &c.ListID, &c.Kind, &desc, &c.Rank, &handoutMeta, &alias, &seen, &c.CreatedAt); err != nil {
 			return nil, err
 		}
-		c.DescEnc = b64(descEnc)
-		if metaEnc != nil {
-			s := b64(metaEnc)
-			c.HandoutMetaEnc = &s
+		c.Desc = b64(desc)
+		if handoutMeta != nil {
+			s := b64(handoutMeta)
+			c.HandoutMeta = &s
 		}
-		if aliasEnc != nil {
-			s := b64(aliasEnc)
-			c.AliasEnc = &s
+		if alias != nil {
+			s := b64(alias)
+			c.Alias = &s
 		}
-		if seenEnc != nil {
-			s := b64(seenEnc)
-			c.SeenEnc = &s
+		if seen != nil {
+			s := b64(seen)
+			c.Seen = &s
 		}
 		out = append(out, c)
 	}
@@ -94,12 +94,12 @@ from cards where board_id = ? and deleted_at is null order by rank`, boardID)
 }
 
 type createCardRequest struct {
-	DescEnc        string  `json:"description_enc"`
-	Rank           string  `json:"rank"`
-	Kind           string  `json:"kind"`
-	HandoutMetaEnc *string `json:"handout_meta_enc"` // optional handout-gen settings
-	AliasEnc       *string `json:"alias_enc"`        // optional short label shown instead of the card's text
-	SeenEnc        *string `json:"seen_enc"`         // optional hand corrections to who saw it
+	Desc        string  `json:"description"`
+	Rank        string  `json:"rank"`
+	Kind        string  `json:"kind"`
+	HandoutMeta *string `json:"handout_meta"` // optional handout-gen settings
+	Alias       *string `json:"alias"`        // optional short label shown instead of the card's text
+	Seen        *string `json:"seen"`         // optional hand corrections to who saw it
 }
 
 // validCardKind allowlists the card kinds the client may set: cardkind's
@@ -115,7 +115,7 @@ func (s *server) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	descEnc, err := unb64(req.DescEnc)
+	desc, err := unb64(req.Desc)
 	if err != nil || req.Rank == "" {
 		httpError(w, http.StatusBadRequest, "invalid card fields")
 		return
@@ -128,27 +128,27 @@ func (s *server) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "bad card kind")
 		return
 	}
-	metaEnc, err := optBlob(req.HandoutMetaEnc)
+	handoutMeta, err := optBlob(req.HandoutMeta)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, "invalid handout_meta_enc")
+		httpError(w, http.StatusBadRequest, "invalid handout_meta")
 		return
 	}
-	aliasEnc, err := optBlob(req.AliasEnc)
+	alias, err := optBlob(req.Alias)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, "invalid alias_enc")
+		httpError(w, http.StatusBadRequest, "invalid alias")
 		return
 	}
-	seenEnc, err := optBlob(req.SeenEnc)
+	seen, err := optBlob(req.Seen)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, "invalid seen_enc")
+		httpError(w, http.StatusBadRequest, "invalid seen")
 		return
 	}
 	now := time.Now()
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-card", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-insert into cards(board_id, list_id, kind, description_enc, rank, handout_meta_enc, alias_enc, seen_enc, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			bid, listID, kind, descEnc, req.Rank, metaEnc, aliasEnc, seenEnc, rfc3339(now), rfc3339(now))
+insert into cards(board_id, list_id, kind, description, rank, handout_meta, alias, seen, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			bid, listID, kind, desc, req.Rank, handoutMeta, alias, seen, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -162,14 +162,14 @@ insert into cards(board_id, list_id, kind, description_enc, rank, handout_meta_e
 }
 
 type patchCardRequest struct {
-	DescEnc        *string `json:"description_enc"`
-	Rank           *string `json:"rank"`
-	ListID         *int64  `json:"list_id"`
-	Kind           *string `json:"kind"`             // optional kind change (feature: change card type after creation)
-	DescEventEnc   *string `json:"desc_event_enc"`   // optional desc_edit timeline payload
-	HandoutMetaEnc *string `json:"handout_meta_enc"` // optional handout-gen settings; "" clears (sets NULL)
-	AliasEnc       *string `json:"alias_enc"`        // optional short card label; "" clears (sets NULL)
-	SeenEnc        *string `json:"seen_enc"`         // optional hand corrections to Seen; "" clears (sets NULL)
+	Desc        *string `json:"description"`
+	Rank        *string `json:"rank"`
+	ListID      *int64  `json:"list_id"`
+	Kind        *string `json:"kind"`         // optional kind change (feature: change card type after creation)
+	DescEvent   *string `json:"desc_event"`   // optional desc_edit timeline payload
+	HandoutMeta *string `json:"handout_meta"` // optional handout-gen settings; "" clears (sets NULL)
+	Alias       *string `json:"alias"`        // optional short card label; "" clears (sets NULL)
+	Seen        *string `json:"seen"`         // optional hand corrections to Seen; "" clears (sets NULL)
 }
 
 // optBlob maps an optional base64 field to nullable blob bytes: nil pointer or
@@ -192,38 +192,38 @@ func (s *server) handlePatchCard(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.withWriteTx(r.Context(), "patch-card", func(ctx context.Context, tx *sql.Tx) error {
 		var p patch
-		if req.DescEnc != nil {
-			descEnc, err := unb64(*req.DescEnc)
+		if req.Desc != nil {
+			desc, err := unb64(*req.Desc)
 			if err != nil {
-				return corei18n.User("invalid description_enc")
+				return corei18n.User("invalid description")
 			}
-			p.set("description_enc", descEnc)
-			if req.DescEventEnc != nil {
-				if err := appendEvent(ctx, tx, bid, cardID, "desc_edit", uid, *req.DescEventEnc); err != nil {
+			p.set("description", desc)
+			if req.DescEvent != nil {
+				if err := appendEvent(ctx, tx, bid, cardID, "desc_edit", uid, *req.DescEvent); err != nil {
 					return err
 				}
 			}
 		}
-		if req.HandoutMetaEnc != nil {
-			metaEnc, err := optBlob(req.HandoutMetaEnc)
+		if req.HandoutMeta != nil {
+			handoutMeta, err := optBlob(req.HandoutMeta)
 			if err != nil {
-				return corei18n.User("invalid handout_meta_enc")
+				return corei18n.User("invalid handout_meta")
 			}
-			p.set("handout_meta_enc", metaEnc)
+			p.set("handout_meta", handoutMeta)
 		}
-		if req.AliasEnc != nil {
-			aliasEnc, err := optBlob(req.AliasEnc)
+		if req.Alias != nil {
+			alias, err := optBlob(req.Alias)
 			if err != nil {
-				return corei18n.User("invalid alias_enc")
+				return corei18n.User("invalid alias")
 			}
-			p.set("alias_enc", aliasEnc)
+			p.set("alias", alias)
 		}
-		if req.SeenEnc != nil {
-			seenEnc, err := optBlob(req.SeenEnc)
+		if req.Seen != nil {
+			seen, err := optBlob(req.Seen)
 			if err != nil {
-				return corei18n.User("invalid seen_enc")
+				return corei18n.User("invalid seen")
 			}
-			p.set("seen_enc", seenEnc)
+			p.set("seen", seen)
 		}
 		if req.Rank != nil {
 			p.set("rank", *req.Rank)
@@ -274,8 +274,8 @@ type setCardLabelsRequest struct {
 }
 
 type eventInput struct {
-	Type       string `json:"type"`
-	PayloadEnc string `json:"payload_enc"`
+	Type    string `json:"type"`
+	Payload string `json:"payload"`
 }
 
 func (s *server) handleSetCardLabels(w http.ResponseWriter, r *http.Request) {
@@ -317,7 +317,7 @@ func (s *server) handleSetCardLabels(w http.ResponseWriter, r *http.Request) {
 			if ev.Type != "label_add" && ev.Type != "label_remove" {
 				return corei18n.User("bad label event type")
 			}
-			if err := appendEvent(ctx, tx, bid, cardID, ev.Type, uid, ev.PayloadEnc); err != nil {
+			if err := appendEvent(ctx, tx, bid, cardID, ev.Type, uid, ev.Payload); err != nil {
 				return err
 			}
 		}
@@ -468,9 +468,9 @@ func (s *server) handleSetTourDeclaration(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var req struct {
-		ListID   *int64 `json:"list_id"`
-		GroupID  *int64 `json:"group_id"`
-		NamesEnc string `json:"names_enc"`
+		ListID  *int64 `json:"list_id"`
+		GroupID *int64 `json:"group_id"`
+		Names   string `json:"names"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -479,9 +479,9 @@ func (s *server) handleSetTourDeclaration(w http.ResponseWriter, r *http.Request
 		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Card.ScopeExactlyOne())
 		return
 	}
-	namesEnc, err := unb64(req.NamesEnc)
-	if err != nil || len(namesEnc) == 0 {
-		httpError(w, http.StatusBadRequest, "invalid names_enc")
+	names, err := unb64(req.Names)
+	if err != nil || len(names) == 0 {
+		httpError(w, http.StatusBadRequest, "invalid names")
 		return
 	}
 	err = s.withWriteTx(r.Context(), "set-tour-declaration", func(ctx context.Context, tx *sql.Tx) error {
@@ -499,8 +499,8 @@ func (s *server) handleSetTourDeclaration(w http.ResponseWriter, r *http.Request
 			return err
 		}
 		_, err := tx.ExecContext(ctx,
-			`insert into tour_declarations(board_id, list_id, group_id, names_enc) values(?, ?, ?, ?)`,
-			bid, req.ListID, req.GroupID, namesEnc)
+			`insert into tour_declarations(board_id, list_id, group_id, names) values(?, ?, ?, ?)`,
+			bid, req.ListID, req.GroupID, names)
 		return err
 	})
 	if handleErr(w, err) {

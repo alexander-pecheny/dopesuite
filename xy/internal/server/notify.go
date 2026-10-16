@@ -68,7 +68,7 @@ func (s *server) notifyComment(bid, cardID, authorID int64, mentions []int64, re
 	}
 	str := xystrings.Default
 	where := str.Notify.Mention.BoardUnnamed()
-	// A legacy board's name is still ciphertext; the nudge just points.
+	// A board with no name gets a nudge that just points.
 	if boardName.String != "" {
 		where = str.Notify.Mention.BoardNamed(boardName.String)
 	}
@@ -121,8 +121,6 @@ select u.telegram_user_id from boards b join users u on u.id = b.owner_user_id w
 	if !ownerTg.Valid {
 		return // no telegram — the pending count alone will have to do
 	}
-	// A legacy board's name is still ciphertext, and boardDisplayName is the one
-	// place that knows it; the nudge then just points.
 	boardName, err := boardDisplayName(ctx, s.db, bid)
 	if err != nil {
 		log.Printf("notify: board name: %v", err)

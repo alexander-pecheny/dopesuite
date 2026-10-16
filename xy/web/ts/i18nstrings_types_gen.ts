@@ -887,7 +887,6 @@ export type Strings = {
       buttonTitle: () => string;
     };
     home: {
-      boardLockedName: (id: string) => string;
       createOffline: () => string;
       createSubmit: () => string;
       createTitle: () => string;

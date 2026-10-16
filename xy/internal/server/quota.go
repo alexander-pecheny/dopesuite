@@ -40,19 +40,19 @@ select
             join boards b on b.id = a.board_id and b.deleted_at is null
             join cards ac on ac.id = a.card_id and ac.deleted_at is null
             where b.owner_user_id = ? and a.deleted_at is null), 0)
-+ coalesce((select sum(length(c.description_enc) + coalesce(length(c.alias_enc), 0) + coalesce(length(c.seen_enc), 0)) from cards c
++ coalesce((select sum(length(c.description) + coalesce(length(c.alias), 0) + coalesce(length(c.seen), 0)) from cards c
             join boards b on b.id = c.board_id and b.deleted_at is null
             where b.owner_user_id = ? and c.deleted_at is null), 0)
-+ coalesce((select sum(length(l.title_enc)) from lists l
++ coalesce((select sum(length(l.title)) from lists l
             join boards b on b.id = l.board_id and b.deleted_at is null
             where b.owner_user_id = ? and l.deleted_at is null), 0)
-+ coalesce((select sum(length(lb.name_enc) + length(lb.color_enc)) from labels lb
++ coalesce((select sum(length(lb.name) + length(lb.color)) from labels lb
             join boards b on b.id = lb.board_id and b.deleted_at is null
             where b.owner_user_id = ? and lb.deleted_at is null), 0)
-+ coalesce((select sum(length(s.meta_enc)) from test_sessions s
++ coalesce((select sum(length(s.meta)) from test_sessions s
             join boards b on b.id = s.board_id and b.deleted_at is null
             where b.owner_user_id = ? and s.deleted_at is null), 0)
-+ coalesce((select sum(length(t.payload_enc)) from timeline_events t
++ coalesce((select sum(length(t.payload)) from timeline_events t
             join boards b on b.id = t.board_id and b.deleted_at is null
             left join cards tc on tc.id = t.card_id
             left join test_sessions ts on ts.id = t.session_id

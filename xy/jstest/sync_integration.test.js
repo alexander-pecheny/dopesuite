@@ -94,20 +94,20 @@ const { xySync } = await import("../web/assets/static/dist/sync.js");
 
 test("offline creates queue with temp ids, flush remaps them to real ids", async () => {
   // Seed a mirror snapshot so applyToMirror has something to update.
-  await xySync.saveSnapshot(1, { id: 1, role: "owner", name_enc: "N", lists: [], cards: [], labels: [], card_labels: [] });
+  await xySync.saveSnapshot(1, { id: 1, role: "owner", name: "N", lists: [], cards: [], labels: [], card_labels: [] });
 
   // ---- go offline ----
   navigator.onLine = false;
 
-  const list = await xySync.mutate({ kind: "createList", method: "POST", path: "/api/boards/1/lists", body: { title_enc: "L", rank: "a0", type: "normal" }, board: 1, mint: true });
+  const list = await xySync.mutate({ kind: "createList", method: "POST", path: "/api/boards/1/lists", body: { title: "L", rank: "a0", type: "normal" }, board: 1, mint: true });
   assert.ok(list.id < 0, "list got a negative temp id");
 
-  const card = await xySync.mutate({ kind: "createCard", method: "POST", path: `/api/lists/${list.id}/cards`, body: { description_enc: "D", rank: "a0", kind: "question" }, board: 1, mint: true });
+  const card = await xySync.mutate({ kind: "createCard", method: "POST", path: `/api/lists/${list.id}/cards`, body: { description: "D", rank: "a0", kind: "question" }, board: 1, mint: true });
   assert.ok(card.id < 0 && card.id !== list.id, "card got a distinct temp id");
 
-  const label = await xySync.mutate({ kind: "createLabel", method: "POST", path: "/api/boards/1/labels", body: { name_enc: "LB", color_enc: "C", kind: "normal" }, board: 1, mint: true });
+  const label = await xySync.mutate({ kind: "createLabel", method: "POST", path: "/api/boards/1/labels", body: { name: "LB", color: "C", kind: "normal" }, board: 1, mint: true });
   // assign the (temp) label to the (temp) card
-  await xySync.mutate({ kind: "setCardLabels", method: "PUT", path: `/api/cards/${card.id}/labels`, body: { labels: [{ label_id: label.id, session_id: null }], events: [{ type: "label_add", payload_enc: "P" }] }, board: 1 });
+  await xySync.mutate({ kind: "setCardLabels", method: "PUT", path: `/api/cards/${card.id}/labels`, body: { labels: [{ label_id: label.id, session_id: null }], events: [{ type: "label_add", payload: "P" }] }, board: 1 });
 
   // nothing should have been sent while offline
   assert.equal(sent.length, 0, "no network calls while offline");
@@ -144,16 +144,16 @@ test("offline creates queue with temp ids, flush remaps them to real ids", async
 test("a desc edit made offline replays and surfaces in the pending timeline", async () => {
   navigator.onLine = false;
   // edit an existing (server) card 500
-  await xySync.saveSnapshot(2, { id: 2, role: "owner", name_enc: "N", lists: [], cards: [{ id: 500, list_id: 1, kind: "question", description_enc: "old", rank: "a0" }], labels: [], card_labels: [] });
-  await xySync.mutate({ kind: "patchCard", method: "PATCH", path: "/api/cards/500", body: { description_enc: "new", desc_event_enc: "DIFF" }, board: 2 });
+  await xySync.saveSnapshot(2, { id: 2, role: "owner", name: "N", lists: [], cards: [{ id: 500, list_id: 1, kind: "question", description: "old", rank: "a0" }], labels: [], card_labels: [] });
+  await xySync.mutate({ kind: "patchCard", method: "PATCH", path: "/api/cards/500", body: { description: "new", desc_event: "DIFF" }, board: 2 });
 
   const tl = await xySync.timelineFor(500);
   assert.equal(tl.length, 1);
   assert.equal(tl[0].type, "desc_edit");
-  assert.equal(tl[0].payload_enc, "DIFF");
+  assert.equal(tl[0].payload, "DIFF");
 
   const mirror = await xySync.loadSnapshot(2);
-  assert.equal(mirror.cards[0].description_enc, "new");
+  assert.equal(mirror.cards[0].description, "new");
 
   navigator.onLine = true;
   await xySync.flush();

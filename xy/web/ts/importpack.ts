@@ -280,7 +280,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       for (const part of parts) {
         rank = keyBetween(rank, null);
         const lres = (await jpost(`/api/boards/${board.id}/lists`, {
-          title_enc: await xyCrypto.encField(key, part.title), rank, type: listType,
+          title: await xyCrypto.encField(key, part.title), rank, type: listType,
         })) as { id: number };
         listIds.push(lres.id);
         board.state.lists.push({ id: lres.id, type: listType, rank, groupId: null, title: part.title, commentFirst: false });
@@ -289,7 +289,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
         for (const c of part.cards) {
           cardRank = keyBetween(cardRank, null);
           const res = (await jpost(`/api/lists/${lres.id}/cards`, {
-            description_enc: await xyCrypto.encField(key, c.desc), rank: cardRank, kind: c.kind,
+            description: await xyCrypto.encField(key, c.desc), rank: cardRank, kind: c.kind,
           })) as { id: number };
           board.state.cards.push({ id: res.id, listId: lres.id, kind: c.kind, rank: cardRank, desc: c.desc, handoutMeta: null, alias: null, createdAt: nowStamp() });
           done++;
@@ -304,7 +304,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
         }
       }
       if (grouped) {
-        await jpost(`/api/boards/${board.id}/list-groups`, { name_enc: await xyCrypto.encField(key, title), list_ids: listIds });
+        await jpost(`/api/boards/${board.id}/list-groups`, { name: await xyCrypto.encField(key, title), list_ids: listIds });
         // Reload rather than mirror group_id/groups[] locally — import is online-only.
         await board.reload();
       } else board.render();
@@ -337,9 +337,9 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       const cipher = await xyCrypto.encBytes(key, bytes);
       const fd = new FormData();
       fd.append("meta", JSON.stringify({
-        filename_enc: await xyCrypto.encField(key, img.name),
+        filename: await xyCrypto.encField(key, img.name),
         mime: img.mime, lossless: true,
-        event_payload_enc: await sealPayload(key, "attach_add", { file: img.name }),
+        event_payload: await sealPayload(key, "attach_add", { file: img.name }),
       }));
       fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
       const res = await fetch(`/api/cards/${cardId}/attachments`, {

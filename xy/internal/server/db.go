@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/schema"
@@ -11,9 +12,14 @@ import (
 // and is recorded in schema_versions; a new step takes the next number and
 // goes at the end. The whole M1 schema is version 1.
 //
-// Content columns suffixed `_enc` hold client-side encryption envelopes (opaque
-// BLOBs, base64 over the wire). Everything else is plaintext structural metadata
-// the server needs to order, sync, and authorize (the trust model — see AGENTS.md).
+// The content columns (cards.description, lists.title, labels.name,
+// timeline_events.payload and the rest; v29 names them) each hold an Envelope:
+// an opaque BLOB that is base64 over the wire and that the server never opens.
+// Whether an Envelope is encrypted is a property of its board (its keymeta), not
+// of the column. Everything else is plaintext structural metadata the server
+// needs to order, sync and authorize (the trust model, see AGENTS.md). Steps
+// before v29 still say `_enc`, because that is what the columns were called
+// when they ran.
 var migrations = []schema.Migration{
 	{Version: 1, Name: "the M1 schema", Up: schema.Exec(`
 -- ===== auth (ported from dope) =====
@@ -753,9 +759,49 @@ pragma foreign_keys=on;`)},
 	{Version: 28, Name: "comment_first on lists and list_groups", Up: schema.Exec(`
 alter table lists add column comment_first integer not null default 0;
 alter table list_groups add column comment_first integer not null default 0;`)},
+	// v29 drops the `_enc` suffix: a local board keeps plaintext Envelopes in the
+	// same columns. RENAME COLUMN only rewrites the schema, so no table is copied.
+	// boards.name_enc and boards.schema_version go: every board has had a
+	// plaintext name since v10's backfill, and the step refuses to run otherwise.
+	{Version: 29, Name: "content columns without _enc", Up: migrateV29},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }
+
+const migrateV29Renames = `
+alter table lists rename column title_enc to title;
+alter table list_groups rename column name_enc to name;
+alter table cards rename column description_enc to description;
+alter table cards rename column handout_meta_enc to handout_meta;
+alter table cards rename column alias_enc to alias;
+alter table cards rename column seen_enc to seen;
+alter table labels rename column name_enc to name;
+alter table labels rename column color_enc to color;
+alter table timeline_events rename column payload_enc to payload;
+alter table attachments rename column filename_enc to filename;
+alter table test_sessions rename column meta_enc to meta;
+alter table tour_declarations rename column names_enc to names;
+alter table boards drop column name_enc;
+alter table boards drop column schema_version;`
+
+func migrateV29(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var legacy int
+	if err := tx.QueryRow(`select count(*) from boards where schema_version < 2 or name is null`).Scan(&legacy); err != nil {
+		return err
+	}
+	if legacy > 0 {
+		return fmt.Errorf("%d boards still keep their name in name_enc (schema_version 1); open each once with a build before v29 so the name is backfilled", legacy)
+	}
+	if _, err := tx.Exec(migrateV29Renames); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 // migrateV18Sessions is v18's data half: one session per test card, its
 // comments and its labels' Playings rebound, then the test lists demoted.

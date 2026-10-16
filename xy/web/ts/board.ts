@@ -344,7 +344,7 @@ function seenOf(cardId: number): Tester[] {
 }
 
 async function patchSessionMeta(id: number, meta: string): Promise<void> {
-  await patch("patchSession", `/api/sessions/${id}`, { meta_enc: await xyCrypto.encField(mustDK(), meta) });
+  await patch("patchSession", `/api/sessions/${id}`, { meta: await xyCrypto.encField(mustDK(), meta) });
   const s = state.sessions.find((x) => x.id === id);
   if (s) s.meta = meta;
   sessionMetaCache.delete(id);
@@ -365,7 +365,7 @@ async function writeSeen(card: BoardCard, next: CardSeen): Promise<void> {
     delete next.absent[ref];
   }
   const raw = serializeCardSeen(next);
-  await patch("patchCard", `/api/cards/${card.id}`, { seen_enc: raw ? await xyCrypto.encField(mustDK(), raw) : "" });
+  await patch("patchCard", `/api/cards/${card.id}`, { seen: raw ? await xyCrypto.encField(mustDK(), raw) : "" });
   card.seen = raw || null;
   rememberPeople();
 }
@@ -733,7 +733,7 @@ async function renameList(list: BoardList): Promise<void> {
   if (!t || t === list.title) return;
   setStatus("saving");
   try {
-    await patch("patchList", `/api/lists/${list.id}`, { title_enc: await xyCrypto.encField(mustDK(), t) });
+    await patch("patchList", `/api/lists/${list.id}`, { title: await xyCrypto.encField(mustDK(), t) });
     list.title = t;
     setStatus("saved");
     render();
@@ -1524,7 +1524,7 @@ const sessionsPanel = createSessionsPanel({
     new Set(state.cardSessions.filter((p) => p.sessionId === sessionId).map((p) => p.cardId)).size,
   createSession: async (meta) => {
     const res = await create("createSession", `/api/boards/${boardId}/sessions`, {
-      meta_enc: await xyCrypto.encField(mustDK(), meta),
+      meta: await xyCrypto.encField(mustDK(), meta),
     });
     const id = res.id as number;
     state.sessions.push({ id, meta, createdAt: nowStamp() });
@@ -1547,10 +1547,10 @@ const sessionsPanel = createSessionsPanel({
   setTestMode,
   loadNotes: async (sessionId) => {
     const raw = (await fetchJSON(`/api/sessions/${sessionId}/timeline`)) as Array<{
-      id?: number; type?: string; payload_enc: string; card_id?: number; created_at: string;
+      id?: number; type?: string; payload: string; card_id?: number; created_at: string;
       author_user_id?: number | null; author_username?: string | null;
     }>;
-    const opened = await openPayloads(mustDK(), raw.map((e) => ({ type: e.type || "comment", payload_enc: e.payload_enc })));
+    const opened = await openPayloads(mustDK(), raw.map((e) => ({ type: e.type || "comment", payload: e.payload })));
     const out: Array<{ text: string; card: number | null; when: string; author: string }> = [];
     for (const [i, e] of raw.entries()) {
       const p = opened[i];
@@ -1563,7 +1563,7 @@ const sessionsPanel = createSessionsPanel({
   },
   addNote: async (sessionId, text) => {
     await post("addSessionNote", `/api/sessions/${sessionId}/comments`, {
-      payload_enc: await sealPayload(mustDK(), "comment", { text, images: [] }),
+      payload: await sealPayload(mustDK(), "comment", { text, images: [] }),
     });
   },
   modal,

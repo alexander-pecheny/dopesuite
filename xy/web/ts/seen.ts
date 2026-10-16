@@ -1,6 +1,6 @@
 // seen.ts — who saw a question (#90, ADR-0019). By default that is everyone at
 // every Session the card has a Playing with. Two hand corrections change it, and
-// both are stored on the card, encrypted, in cards.seen_enc:
+// both are stored on the card, encrypted, in cards.seen:
 //
 //   - extra: people who saw the question outside any Session, such as the
 //     people who saw it in another pool before it moved to this board.

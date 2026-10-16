@@ -46,7 +46,7 @@ func TestReadMarkers(t *testing.T) {
 	boardID := itoa(createdBoard.ID)
 	addBoardMember(t, srv, createdBoard.ID, meB.UserID)
 
-	resp = a.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("To do"), "rank": "m"})
+	resp = a.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title": enc("To do"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var listC struct {
 		ID int64 `json:"id"`
@@ -54,7 +54,7 @@ func TestReadMarkers(t *testing.T) {
 	a.decode(resp, &listC)
 	listID := itoa(listC.ID)
 
-	resp = a.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("q1"), "rank": "m"})
+	resp = a.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description": enc("q1"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var cardC struct {
 		ID int64 `json:"id"`
@@ -68,11 +68,11 @@ func TestReadMarkers(t *testing.T) {
 	}
 
 	// B comments and edits the description.
-	resp = b.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload_enc": enc("nice question")})
+	resp = b.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload": enc("nice question")})
 	mustStatus(t, resp, 204)
 	resp = b.do("PATCH", "/api/cards/"+cardID, map[string]string{
-		"description_enc": enc("q1 edited"),
-		"desc_event_enc":  enc(`{"before":"q1","after":"q1 edited"}`),
+		"description": enc("q1 edited"),
+		"desc_event":  enc(`{"before":"q1","after":"q1 edited"}`),
 	})
 	mustStatus(t, resp, 204)
 
@@ -129,7 +129,7 @@ func TestReadMarkers(t *testing.T) {
 
 	// A new comment from B should surface as unread again (watermark, not a
 	// one-shot dismissal).
-	resp = b.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload_enc": enc("follow-up")})
+	resp = b.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload": enc("follow-up")})
 	mustStatus(t, resp, 204)
 	snap = getBoardSnapshot(a, boardID)
 	u, ok = snap.Unread[cardID]
@@ -203,19 +203,19 @@ func TestBoardListVisitOrdering(t *testing.T) {
 
 	// B (a member) comments on a card in board2 → board2 flags unread for A.
 	addBoardMember(t, srv, mustAtoi(t, board2), meB.UserID)
-	resp := a.do("POST", "/api/boards/"+board2+"/lists", map[string]string{"title_enc": enc("l"), "rank": "m"})
+	resp := a.do("POST", "/api/boards/"+board2+"/lists", map[string]string{"title": enc("l"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var lc struct {
 		ID int64 `json:"id"`
 	}
 	a.decode(resp, &lc)
-	resp = a.do("POST", "/api/lists/"+itoa(lc.ID)+"/cards", map[string]string{"description_enc": enc("q"), "rank": "m"})
+	resp = a.do("POST", "/api/lists/"+itoa(lc.ID)+"/cards", map[string]string{"description": enc("q"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var cc struct {
 		ID int64 `json:"id"`
 	}
 	a.decode(resp, &cc)
-	mustStatus(t, b.do("POST", "/api/cards/"+itoa(cc.ID)+"/comments", map[string]string{"payload_enc": enc("hi")}), 204)
+	mustStatus(t, b.do("POST", "/api/cards/"+itoa(cc.ID)+"/comments", map[string]string{"payload": enc("hi")}), 204)
 
 	unreadOf := func(board string) bool {
 		for _, bs := range list() {

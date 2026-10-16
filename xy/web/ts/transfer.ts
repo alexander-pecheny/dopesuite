@@ -22,11 +22,11 @@ import type { CardDetailState, MoveCtx, MutationVerbs } from "./carddetail.js";
 const { fetchJSON, jpost, jput, jdelete } = xyApp;
 const { keyBetween } = xyRank;
 
-interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; schema_version?: number }
+interface MoveBoardItem { id: number; name?: string }
 
 interface AttachmentDTO {
   id: number;
-  filename_enc: string;
+  filename: string;
   mime: string;
   lossless?: boolean;
   is_excerpt?: boolean;
@@ -85,15 +85,11 @@ export function createTransfer(deps: TransferDeps): Transfer {
     try { boards = (await fetchJSON("/api/boards")) as MoveBoardItem[]; } catch (_) {}
     // Always offer the current board (so the move UI works — and never prompts for
     // another board's password — even when offline and the board list is unfetched).
-    if (!boards.some((b) => b.id === boardId)) boards.unshift({ id: boardId, name_enc: null });
+    if (!boards.some((b) => b.id === boardId)) boards.unshift({ id: boardId });
     return await Promise.all(boards.map(async (b) => {
       let label = S.board.transfer.boardNumber(String(b.id));
       if (b.id === boardId) label = (st().name || label) + S.board.transfer.thisBoard();
-      else if ((b.schema_version ?? 0) >= 2) label = b.name || label; // plaintext name, no key needed
-      else {
-        try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc || ""); }
-        catch (_) {}
-      }
+      else label = b.name || label; // plaintext name, no key needed
       return { id: b.id, label };
     }));
   }
@@ -106,7 +102,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
     const tdk = await ensureDK(bid);
     const snap = (await fetchJSON(`/api/boards/${bid}`)) as Snapshot;
     const lists = await Promise.all((snap.lists || []).map(async (l) => ({
-      id: l.id, rank: l.rank, title: await xyCrypto.decField(tdk, l.title_enc),
+      id: l.id, rank: l.rank, title: await xyCrypto.decField(tdk, l.title),
     })));
     lists.sort(byRank);
     const cardsByList = new Map<number, Array<{ id: number; rank: string }>>();
@@ -115,11 +111,11 @@ export function createTransfer(deps: TransferDeps): Transfer {
     }
     const labels = await Promise.all((snap.labels || []).map(async (l) => ({
       id: l.id,
-      name: await xyCrypto.decField(tdk, l.name_enc),
-      color: await xyCrypto.decField(tdk, l.color_enc),
+      name: await xyCrypto.decField(tdk, l.name),
+      color: await xyCrypto.decField(tdk, l.color),
     })));
     const sessions = await Promise.all((snap.sessions || []).map(async (s) => ({
-      id: s.id, meta: await xyCrypto.decField(tdk, s.meta_enc),
+      id: s.id, meta: await xyCrypto.decField(tdk, s.meta),
     })));
     return {
       boardId: bid, dk: tdk, lists, cardsByList, labels, sessions,
@@ -140,16 +136,16 @@ export function createTransfer(deps: TransferDeps): Transfer {
 
   // cardCopyBody builds the create-card payload for a copy: it re-encrypts the
   // description and — when set — the handout-generation settings (field #10,
-  // handout_meta_enc), the alias and the hand corrections to Seen under `key` (the destination board's data key).
+  // handout_meta), the alias and the hand corrections to Seen under `key` (the destination board's data key).
   // kind carries over verbatim. Keeping these here (not in copyCardExtras) means
   // they copy offline too, like the description.
   async function cardCopyBody(src: BoardCard, rank: string, key: DataKey): Promise<OpBody> {
-    const body: OpBody = { description_enc: await xyCrypto.encField(key, src.desc), rank, kind: src.kind };
-    if (src.handoutMeta) body.handout_meta_enc = await xyCrypto.encField(key, src.handoutMeta);
-    if (src.alias) body.alias_enc = await xyCrypto.encField(key, src.alias);
+    const body: OpBody = { description: await xyCrypto.encField(key, src.desc), rank, kind: src.kind };
+    if (src.handoutMeta) body.handout_meta = await xyCrypto.encField(key, src.handoutMeta);
+    if (src.alias) body.alias = await xyCrypto.encField(key, src.alias);
     // Who saw it by hand travels too. Its absences name Sessions by key, and the
     // Playings are reconciled by the same key, so they still match there.
-    if (src.seen) body.seen_enc = await xyCrypto.encField(key, src.seen);
+    if (src.seen) body.seen = await xyCrypto.encField(key, src.seen);
     return body;
   }
 
@@ -175,7 +171,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
     // under the destination's — rather than a pair of round trips per comment.
     // A comment that will not open is dropped, as it was before.
     const srcComments = events.filter((ev) => ev.type === "comment");
-    const texts = await xyCrypto.decFields(dk, srcComments.map((ev) => ev.payload_enc || ""));
+    const texts = await xyCrypto.decFields(dk, srcComments.map((ev) => ev.payload || ""));
     const carried = srcComments.filter((_, i) => texts[i] !== null);
     const opened = texts.filter((t): t is string => t !== null).map((t) => remapCommentImages(t, attIds));
     const reEnc = await xyCrypto.encFields(targetDk, opened);
@@ -186,7 +182,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
       author_user_id: ev.author_user_id != null ? ev.author_user_id : null,
       created_at: ev.created_at,
       is_excerpt: !!ev.is_excerpt,
-      payload_enc: reEnc[i],
+      payload: reEnc[i],
     }));
     if (comments.length) {
       try { await jpost(`/api/cards/${newCardId}/timeline/import`, { events: comments }); } catch (_) {}
@@ -202,7 +198,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
     try { atts = (await fetchJSON(`/api/cards/${srcCardId}/attachments`)) as AttachmentDTO[]; } catch (_) { atts = []; }
     for (const att of atts) {
       let name = S.board.transfer.attachmentFallback();
-      try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) {}
+      try { name = await xyCrypto.decField(dk, att.filename); } catch (_) {}
       let plain: Uint8Array<ArrayBuffer>;
       try {
         const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
@@ -213,9 +209,9 @@ export function createTransfer(deps: TransferDeps): Transfer {
       try { recipher = await xyCrypto.encBytes(targetDk, plain); } catch (_) { continue; }
       const fd = new FormData();
       fd.append("meta", JSON.stringify({
-        filename_enc: await xyCrypto.encField(targetDk, name),
+        filename: await xyCrypto.encField(targetDk, name),
         mime: att.mime, lossless: !!att.lossless, is_excerpt: !!att.is_excerpt,
-        event_payload_enc: await sealPayload(targetDk, "attach_add", { file: name }),
+        event_payload: await sealPayload(targetDk, "attach_add", { file: name }),
       }));
       fd.append("blob", new Blob([recipher], { type: "application/octet-stream" }), "blob");
       try {
@@ -246,8 +242,8 @@ export function createTransfer(deps: TransferDeps): Transfer {
       let match = ctx.labels.find((t) => t.name === sl.name && t.color === sl.color);
       if (!match) {
         const lr = (await jpost(`/api/boards/${targetBid}/labels`, {
-          name_enc: await xyCrypto.encField(targetDk, sl.name),
-          color_enc: await xyCrypto.encField(targetDk, sl.color),
+          name: await xyCrypto.encField(targetDk, sl.name),
+          color: await xyCrypto.encField(targetDk, sl.color),
         })) as { id: number };
         match = { id: lr.id, name: sl.name, color: sl.color };
         ctx.labels.push(match);
@@ -287,7 +283,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
       origin: meta.origin || { board: st().name, at: new Date().toISOString().slice(0, ISO_DATE_LEN) },
     });
     const sr = (await jpost(`/api/boards/${targetBid}/sessions`, {
-      meta_enc: await xyCrypto.encField(targetDk, copy),
+      meta: await xyCrypto.encField(targetDk, copy),
     })) as { id: number };
     ctx.sessions.push({ id: sr.id, meta: copy });
     return sr.id;

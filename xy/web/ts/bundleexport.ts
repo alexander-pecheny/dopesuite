@@ -37,12 +37,12 @@ interface EventRow {
   edited_at?: string;
   is_excerpt: boolean;
   reply_to_id?: number;
-  payload_enc: string;
+  payload: string;
 }
 interface AttachmentRow {
   id: number;
   card_id: number;
-  filename_enc: string;
+  filename: string;
   mime: string;
   size: number;
   lossless: boolean;
@@ -92,7 +92,7 @@ export async function buildBundle(
 
   const keptEvents = rawEvents.filter((e) => mine(e.card_id) || e.card_id == null);
   log(S.import.export.decrypting(String(keptEvents.length)));
-  const payloads = await decAll(keptEvents.map((e) => e.payload_enc));
+  const payloads = await decAll(keptEvents.map((e) => e.payload));
   const timeline: BundleEvent[] = keptEvents.map((e, i) => ({
     id: e.id,
     card_id: e.card_id ?? null,
@@ -107,7 +107,7 @@ export async function buildBundle(
   }));
 
   const keptAtts = rawAtts.filter((a) => mine(a.card_id));
-  const filenames = await decAll(keptAtts.map((a) => a.filename_enc));
+  const filenames = await decAll(keptAtts.map((a) => a.filename));
   const attachments: BundleAttachment[] = keptAtts.map((a, i) => ({
     id: a.id, card_id: a.card_id, filename: filenames[i], mime: a.mime,
     size: a.size, lossless: !!a.lossless, is_excerpt: !!a.is_excerpt,

@@ -10,18 +10,18 @@ import (
 
 // Test sessions: one sitting at which a group of testers played a set of
 // questions. Board-level, not a card in a list — see docs/labels-redesign.md and
-// ADR-0003. meta_enc is the whole session (date, time, zone, cities, title,
+// ADR-0003. meta is the whole session (date, time, zone, cities, title,
 // testers, key, origin) as one envelope; the server never looks inside.
 
 type sessionDTO struct {
 	ID        int64  `json:"id"`
-	MetaEnc   string `json:"meta_enc"`
+	Meta      string `json:"meta"`
 	CreatedAt string `json:"created_at"`
 }
 
 func scanSessions(ctx context.Context, q querier, boardID int64) ([]sessionDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, meta_enc, created_at from test_sessions where board_id = ? and deleted_at is null order by id`, boardID)
+select id, meta, created_at from test_sessions where board_id = ? and deleted_at is null order by id`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -29,11 +29,11 @@ select id, meta_enc, created_at from test_sessions where board_id = ? and delete
 	out := []sessionDTO{}
 	for rows.Next() {
 		var s sessionDTO
-		var metaEnc []byte
-		if err := rows.Scan(&s.ID, &metaEnc, &s.CreatedAt); err != nil {
+		var meta []byte
+		if err := rows.Scan(&s.ID, &meta, &s.CreatedAt); err != nil {
 			return nil, err
 		}
-		s.MetaEnc = b64(metaEnc)
+		s.Meta = b64(meta)
 		out = append(out, s)
 	}
 	return out, rows.Err()
@@ -59,7 +59,7 @@ func (s *server) requireSession(w http.ResponseWriter, r *http.Request) (session
 }
 
 type sessionRequest struct {
-	MetaEnc string `json:"meta_enc"`
+	Meta string `json:"meta"`
 }
 
 func (s *server) handleListSessions(w http.ResponseWriter, r *http.Request) {
@@ -83,17 +83,17 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	metaEnc, err := unb64(req.MetaEnc)
-	if err != nil || len(metaEnc) == 0 {
-		httpError(w, http.StatusBadRequest, "invalid meta_enc")
+	meta, err := unb64(req.Meta)
+	if err != nil || len(meta) == 0 {
+		httpError(w, http.StatusBadRequest, "invalid meta")
 		return
 	}
 	now := time.Now()
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-session", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
-			`insert into test_sessions(board_id, meta_enc, created_at) values(?, ?, ?)`,
-			bid, metaEnc, rfc3339(now))
+			`insert into test_sessions(board_id, meta, created_at) values(?, ?, ?)`,
+			bid, meta, rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -115,13 +115,13 @@ func (s *server) handlePatchSession(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	metaEnc, err := unb64(req.MetaEnc)
-	if err != nil || len(metaEnc) == 0 {
-		httpError(w, http.StatusBadRequest, "invalid meta_enc")
+	meta, err := unb64(req.Meta)
+	if err != nil || len(meta) == 0 {
+		httpError(w, http.StatusBadRequest, "invalid meta")
 		return
 	}
 	err = s.withWriteTx(r.Context(), "patch-session", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update test_sessions set meta_enc = ? where id = ?`, metaEnc, sessionID)
+		_, err := tx.ExecContext(ctx, `update test_sessions set meta = ? where id = ?`, meta, sessionID)
 		return err
 	})
 	if handleErr(w, err) {
@@ -192,14 +192,14 @@ func (s *server) handleAddSessionComment(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.PayloadEnc == "" {
-		httpError(w, http.StatusBadRequest, "payload_enc required")
+	if req.Payload == "" {
+		httpError(w, http.StatusBadRequest, "payload required")
 		return
 	}
 	err := s.withWriteTx(r.Context(), "add-session-comment", func(ctx context.Context, tx *sql.Tx) error {
-		payload, err := unb64(req.PayloadEnc)
+		payload, err := unb64(req.Payload)
 		if err != nil {
-			return corei18n.User("invalid payload_enc")
+			return corei18n.User("invalid payload")
 		}
 		_, err = insertEvent(ctx, tx, timelineEvent{BoardID: bid, SessionID: &sessionID, Type: "comment", AuthorID: &u.UserID, Payload: payload})
 		return err

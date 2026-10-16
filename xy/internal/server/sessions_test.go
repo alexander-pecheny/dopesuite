@@ -24,7 +24,7 @@ func TestSessionFlow(t *testing.T) {
 	c.decode(resp, &created)
 	board := itoa(created.ID)
 
-	resp = c.do("POST", "/api/boards/"+board+"/sessions", map[string]string{"meta_enc": enc("session-meta")})
+	resp = c.do("POST", "/api/boards/"+board+"/sessions", map[string]string{"meta": enc("session-meta")})
 	mustStatus(t, resp, 200)
 	var session struct {
 		ID int64 `json:"id"`
@@ -38,7 +38,7 @@ func TestSessionFlow(t *testing.T) {
 	// A label is just a label; what makes it a test's verdict is the ASSIGNMENT
 	// carrying the session (ADR-0004).
 	resp = c.do("POST", "/api/boards/"+board+"/labels", map[string]any{
-		"name_enc": enc("взяли"), "color_enc": enc("#3aa657"),
+		"name": enc("взяли"), "color": enc("#3aa657"),
 	})
 	mustStatus(t, resp, 200)
 	var label struct {
@@ -47,7 +47,7 @@ func TestSessionFlow(t *testing.T) {
 	c.decode(resp, &label)
 
 	// A note about the test itself: no question attached.
-	resp = c.do("POST", "/api/sessions/"+sid+"/comments", map[string]string{"payload_enc": enc("шли дольше обычного")})
+	resp = c.do("POST", "/api/sessions/"+sid+"/comments", map[string]string{"payload": enc("шли дольше обычного")})
 	mustStatus(t, resp, 204)
 
 	resp = c.do("GET", "/api/sessions/"+sid+"/timeline", nil)
@@ -66,14 +66,14 @@ func TestSessionFlow(t *testing.T) {
 	mustStatus(t, resp, 200)
 	var snap boardSnapshot
 	c.decode(resp, &snap)
-	if len(snap.Sessions) != 1 || snap.Sessions[0].MetaEnc != enc("session-meta") {
+	if len(snap.Sessions) != 1 || snap.Sessions[0].Meta != enc("session-meta") {
 		t.Fatalf("snapshot sessions = %+v", snap.Sessions)
 	}
 	if len(snap.Labels) != 1 {
 		t.Fatalf("snapshot labels = %d, want 1", len(snap.Labels))
 	}
 
-	resp = c.do("PATCH", "/api/sessions/"+sid, map[string]string{"meta_enc": enc("edited")})
+	resp = c.do("PATCH", "/api/sessions/"+sid, map[string]string{"meta": enc("edited")})
 	mustStatus(t, resp, 204)
 
 	// Deleting the session takes its labels and its notes with it: a test label
@@ -142,7 +142,7 @@ func TestProfileDefaults(t *testing.T) {
 func TestCommentSessionRetag(t *testing.T) {
 	c, board, listID := boardWithList(t)
 
-	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("q"), "rank": "m"})
+	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description": enc("q"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var card struct {
 		ID int64 `json:"id"`
@@ -152,7 +152,7 @@ func TestCommentSessionRetag(t *testing.T) {
 
 	newSession := func(cl *apiClient, boardID string) int64 {
 		t.Helper()
-		r := cl.do("POST", "/api/boards/"+boardID+"/sessions", map[string]string{"meta_enc": enc("s")})
+		r := cl.do("POST", "/api/boards/"+boardID+"/sessions", map[string]string{"meta": enc("s")})
 		mustStatus(t, r, 200)
 		var s struct {
 			ID int64 `json:"id"`
@@ -162,7 +162,7 @@ func TestCommentSessionRetag(t *testing.T) {
 	}
 	first, second := newSession(c, board), newSession(c, board)
 
-	resp = c.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload_enc": enc("формулировка споткнулась")})
+	resp = c.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload": enc("формулировка споткнулась")})
 	mustStatus(t, resp, 204)
 
 	comment := func() timelineEventDTO {

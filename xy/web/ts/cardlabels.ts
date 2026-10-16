@@ -332,7 +332,7 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     try {
       const events = [{
         type: kind,
-        payload_enc: await sealPayload(deps.mustDK(), kind, { label: lbl.name, labelId: lbl.id }),
+        payload: await sealPayload(deps.mustDK(), kind, { label: lbl.name, labelId: lbl.id }),
       }];
       await board.verbs.put("setCardLabels", `/api/cards/${card.id}/labels`, {
         labels: next.filter((a) => a.cardId === card.id).map((a) => ({ label_id: a.labelId, session_id: a.sessionId })),

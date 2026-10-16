@@ -41,12 +41,12 @@ test("a reader with thirty clones gets the plain suffix back, not a thirty-first
   assert.equal(suggestCopyName("Синхрон", taken), "Синхрон (копия)");
 });
 
-test("the server answers; a legacy board with no readable name contributes none", async () => {
+test("the server answers; a board with no name contributes none", async () => {
   const real = xyApp.fetchJSON;
   xyApp.fetchJSON = async () => [
-    { name: "Синхрон", schema_version: 2 },
-    { name: "Синхрон (копия)", schema_version: 2 },
-    { name: "", schema_version: 1 }, // legacy: the name is still in name_enc
+    { name: "Синхрон" },
+    { name: "Синхрон (копия)" },
+    { name: "" },
   ];
   try {
     assert.deepEqual((await takenBoardNames()).sort(), ["Синхрон", "Синхрон (копия)"]);
@@ -59,7 +59,7 @@ test("offline falls back to the cached list rather than colliding", async () => 
   const realFetch = xyApp.fetchJSON;
   const realList = xySync.getBoardList;
   xyApp.fetchJSON = async () => { throw new Error("offline"); };
-  xySync.getBoardList = async () => [{ name: "Синхрон (копия)", schema_version: 2 }];
+  xySync.getBoardList = async () => [{ name: "Синхрон (копия)" }];
   try {
     const taken = await takenBoardNames();
     assert.deepEqual(taken, ["Синхрон (копия)"]);

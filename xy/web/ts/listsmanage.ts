@@ -272,7 +272,7 @@ export function createListsManage(board: Board): ListsManage {
     // Preserve board order (units are rank-sorted).
     const listIds = selected.sort((a, b) => units.indexOf(a) - units.indexOf(b)).flatMap((u) => u.lists.map((l) => l.id));
     try {
-      await jpost(`/api/boards/${board.id}/list-groups`, { name_enc: await xyCrypto.encField(board.dk(), name), list_ids: listIds });
+      await jpost(`/api/boards/${board.id}/list-groups`, { name: await xyCrypto.encField(board.dk(), name), list_ids: listIds });
       manageSelected = new Set();
       await board.reload();
       renderManage();
@@ -286,7 +286,7 @@ export function createListsManage(board: Board): ListsManage {
     const msg = byId("listsManageMessage");
     if (!xySync.requireOnline(S.board.listsmanage.renameOffline(), msg)) return;
     try {
-      await jpatch(`/api/list-groups/${gid}`, { name_enc: await xyCrypto.encField(board.dk(), name) });
+      await jpatch(`/api/list-groups/${gid}`, { name: await xyCrypto.encField(board.dk(), name) });
       await board.reload();
       renderManage();
     } catch (err) { msg.textContent = errMsg(err); }

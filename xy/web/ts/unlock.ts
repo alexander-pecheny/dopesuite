@@ -69,7 +69,7 @@ export interface BoardCard {
   desc: string;
   handoutMeta: string | null;
   alias: string | null;
-  // The decrypted cards.seen_enc: hand corrections to who saw it (seen.ts).
+  // The decrypted cards.seen: hand corrections to who saw it (seen.ts).
   // Absent or null means none.
   seen?: string | null;
   createdAt: string | null;
@@ -115,7 +115,7 @@ export interface TourDeclaration {
   names: Tester[];
 }
 
-// A Test Session as the board holds it: the decrypted meta_enc, parsed lazily by
+// A Test Session as the board holds it: the decrypted meta, parsed lazily by
 // whoever needs it (sessions.ts#parseSession).
 export interface BoardSession {
   id: number;
@@ -158,27 +158,25 @@ export interface BoardState {
 // ---- the ciphertext snapshot (GET /api/boards/{id} shape, as load reads it) ----
 export interface Snapshot {
   role?: string;
-  schema_version?: number;
   name?: string;
-  name_enc?: string;
   sizes?: unknown;
   default_author?: string;
   card_title?: string;
   feed_default?: string;
   card_labels?: Array<{ card_id: number; label_id: number; session_id?: number | null }>;
   unread?: Record<string, UnreadFlags>;
-  lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title_enc: string; comment_first?: boolean }>;
-  groups?: Array<{ id: number; name_enc: string; comment_first?: boolean }>;
+  lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title: string; comment_first?: boolean }>;
+  groups?: Array<{ id: number; name: string; comment_first?: boolean }>;
   cards?: Array<{
     id: number; list_id: number; kind: string; rank: string;
-    description_enc: string; handout_meta_enc?: string | null; alias_enc?: string | null; seen_enc?: string | null;
+    description: string; handout_meta?: string | null; alias?: string | null; seen?: string | null;
     created_at?: string | null;
   }>;
-  labels?: Array<{ id: number; name_enc: string; color_enc: string }>;
+  labels?: Array<{ id: number; name: string; color: string }>;
   card_sessions?: Array<{ card_id: number; session_id: number }>;
   tour_testers?: Array<{ list_id?: number | null; group_id?: number | null; session_id: number | null }>;
-  tour_declarations?: Array<{ list_id?: number | null; group_id?: number | null; names_enc: string }>;
-  sessions?: Array<{ id: number; meta_enc: string; created_at?: string | null }>;
+  tour_declarations?: Array<{ list_id?: number | null; group_id?: number | null; names: string }>;
+  sessions?: Array<{ id: number; meta: string; created_at?: string | null }>;
   timezone?: string;
   announce_cities?: unknown;
   session_title_mode?: string;
@@ -270,15 +268,13 @@ export interface Unlock {
 // under a key the caller already holds. load() below is one caller; the list
 // page's copy flow (copyfromlist.ts) reuses it to read a board this device never
 // opened — the same GET /api/boards/{id}, a held DK, and buildBundle needs no
-// board page. migrated=false marks a legacy (schema_version 1) board whose name
-// still came out of name_enc: the caller may backfill it.
+// board page.
 export async function decryptSnapshot(
   key: DataKey,
   snap: Snapshot,
   crypto: UnlockCrypto,
-): Promise<{ state: BoardState; name: string; migrated: boolean }> {
-  const migrated = (snap.schema_version ?? 0) >= 2;
-  const name = migrated ? (snap.name ?? "") : await crypto.decField(key, snap.name_enc ?? "");
+): Promise<{ state: BoardState; name: string }> {
+  const name = snap.name ?? "";
   const state: BoardState = {
     role: snap.role || "editor",
     name,
@@ -291,7 +287,7 @@ export async function decryptSnapshot(
     })),
     tourDeclarations: await Promise.all((snap.tour_declarations || []).map(async (d) => ({
       listId: d.list_id ?? null, groupId: d.group_id ?? null,
-      names: parseDeclaration(await crypto.decField(key, d.names_enc)),
+      names: parseDeclaration(await crypto.decField(key, d.names)),
     }))),
     unread: snap.unread || {},
     sizes: xySizes.sanitize(snap.sizes),
@@ -303,29 +299,29 @@ export async function decryptSnapshot(
     announceCities: snap.announce_cities ?? null,
     lists: await Promise.all((snap.lists || []).map(async (l) => ({
       id: l.id, type: l.type, rank: l.rank, groupId: l.group_id != null ? l.group_id : null,
-      title: await crypto.decField(key, l.title_enc), commentFirst: !!l.comment_first,
+      title: await crypto.decField(key, l.title), commentFirst: !!l.comment_first,
     }))),
     groups: await Promise.all((snap.groups || []).map(async (g) => ({
-      id: g.id, name: await crypto.decField(key, g.name_enc), commentFirst: !!g.comment_first,
+      id: g.id, name: await crypto.decField(key, g.name), commentFirst: !!g.comment_first,
     }))),
     cards: await Promise.all((snap.cards || []).map(async (c) => ({
       id: c.id, listId: c.list_id, kind: c.kind, rank: c.rank,
-      desc: await crypto.decField(key, c.description_enc),
-      handoutMeta: c.handout_meta_enc ? await crypto.decField(key, c.handout_meta_enc) : null,
-      alias: c.alias_enc ? await crypto.decField(key, c.alias_enc) : null,
-      seen: c.seen_enc ? await crypto.decField(key, c.seen_enc) : null,
+      desc: await crypto.decField(key, c.description),
+      handoutMeta: c.handout_meta ? await crypto.decField(key, c.handout_meta) : null,
+      alias: c.alias ? await crypto.decField(key, c.alias) : null,
+      seen: c.seen ? await crypto.decField(key, c.seen) : null,
       createdAt: c.created_at || null,
     }))),
     labels: await Promise.all((snap.labels || []).map(async (l) => ({
       id: l.id,
-      name: await crypto.decField(key, l.name_enc),
-      color: await crypto.decField(key, l.color_enc),
+      name: await crypto.decField(key, l.name),
+      color: await crypto.decField(key, l.color),
     }))),
     sessions: await Promise.all((snap.sessions || []).map(async (s) => ({
-      id: s.id, meta: await crypto.decField(key, s.meta_enc), createdAt: s.created_at || null,
+      id: s.id, meta: await crypto.decField(key, s.meta), createdAt: s.created_at || null,
     }))),
   };
-  return { state, name, migrated };
+  return { state, name };
 }
 
 export function createUnlock(deps: UnlockDeps): Unlock {
@@ -395,14 +391,6 @@ export function createUnlock(deps: UnlockDeps): Unlock {
   });
   ui.exitBtn.addEventListener("click", () => { void exitAct?.(); });
 
-  // Board names are plaintext server-side metadata now (only the board's data stays
-  // encrypted). Backfill a legacy board's name once we've decrypted it on load — best-
-  // effort, online-only; the server ignores it if the board is already migrated.
-  function migrateBoardName(name: string): void {
-    if (!name || !sync.isOnline()) return;
-    net.jpost(`/api/boards/${boardId}/migrate-name`, { name }).catch(() => {});
-  }
-
   // ---- load + decrypt snapshot ----
   // Source of truth: when online with an empty outbox, fetch the authoritative
   // snapshot and refresh the mirror. With local edits queued (or offline), render
@@ -439,13 +427,10 @@ export function createUnlock(deps: UnlockDeps): Unlock {
         return;
       }
       const key = dk as DataKey;
-      const { state, name, migrated } = await decryptSnapshot(key, snap, crypto);
+      const { state } = await decryptSnapshot(key, snap, crypto);
       // The caller's per-user display prefs (same on every board); absent (never
       // set) → defaults. Apply now so the board renders at the user's saved sizes.
       deps.applySizes(state.sizes);
-      // A legacy (schema_version 1) board still carried its name encrypted: backfill
-      // the plaintext one now that we've decrypted it. Best-effort, online-only.
-      if (!migrated) migrateBoardName(name);
       deps.onState(state, { offline: fromMirror });
       status.set("saved");
       pingVisit(); // stamp last-visit so the board list can order by it (online-only, once)

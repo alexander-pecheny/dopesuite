@@ -17,24 +17,23 @@ import S from "./i18nstrings.js";
 // itself inspects are named; anything else rides along untouched.
 export interface OpBody {
   type?: string;
-  title_enc?: string;
+  title?: string;
   rank?: string;
   kind?: string;
-  description_enc?: string;
-  handout_meta_enc?: string;
-  alias_enc?: string;
-  seen_enc?: string;
+  description?: string;
+  handout_meta?: string;
+  alias?: string;
+  seen?: string;
   list_id?: number | null;
   group_id?: number | null;
-  name_enc?: string;
-  color_enc?: string;
+  name?: string;
+  color?: string;
   labels?: Array<{ label_id: number; session_id?: number | null }>;
   session_ids?: number[];
-  name?: string;
-  payload_enc?: string;
+  payload?: string;
   reply_to_id?: number | null;
-  desc_event_enc?: string;
-  events?: Array<{ type: string; payload_enc: string }>;
+  desc_event?: string;
+  events?: Array<{ type: string; payload: string }>;
   [key: string]: unknown;
 }
 
@@ -60,7 +59,7 @@ export type StoredOp = OutboxOp & { seq: number };
 export interface SnapshotList {
   id: number;
   type?: string;
-  title_enc?: string;
+  title?: string;
   rank?: string;
   [key: string]: unknown;
 }
@@ -68,17 +67,17 @@ export interface SnapshotCard {
   id: number;
   list_id?: number;
   kind?: string;
-  description_enc?: string;
+  description?: string;
   rank?: string;
-  handout_meta_enc?: string | null;
-  alias_enc?: string | null;
-  seen_enc?: string | null;
+  handout_meta?: string | null;
+  alias?: string | null;
+  seen?: string | null;
   [key: string]: unknown;
 }
 export interface SnapshotLabel {
   id: number;
-  name_enc?: string;
-  color_enc?: string;
+  name?: string;
+  color?: string;
   [key: string]: unknown;
 }
 
@@ -97,9 +96,8 @@ export interface SnapshotPlaying {
 }
 export interface BoardSnapshot {
   name?: string;
-  schema_version?: number;
   lists?: SnapshotList[];
-  groups?: Array<{ id: number; name_enc: string; comment_first?: boolean }>;
+  groups?: Array<{ id: number; name: string; comment_first?: boolean }>;
   cards?: SnapshotCard[];
   labels?: SnapshotLabel[];
   card_labels?: SnapshotCardLabel[];
@@ -118,7 +116,7 @@ export interface TimelineEvent {
   author_username?: string | null;
   created_at: string;
   reply_to_id?: number | null;
-  payload_enc?: string;
+  payload?: string;
   [key: string]: unknown;
 }
 

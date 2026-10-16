@@ -32,7 +32,7 @@ func boardWithList(t *testing.T) (c *apiClient, boardID, listID string) {
 	}
 	c.decode(resp, &b)
 	boardID = itoa(b.ID)
-	resp = c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("L"), "rank": "m"})
+	resp = c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title": enc("L"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var l struct {
 		ID int64 `json:"id"`
@@ -47,7 +47,7 @@ func boardWithList(t *testing.T) (c *apiClient, boardID, listID string) {
 func TestListGroups(t *testing.T) {
 	c, boardID, listID1 := boardWithList(t)
 	mkList := func(rank string) int64 {
-		resp := c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("L" + rank), "rank": rank})
+		resp := c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title": enc("L" + rank), "rank": rank})
 		mustStatus(t, resp, 200)
 		var l struct {
 			ID int64 `json:"id"`
@@ -61,11 +61,11 @@ func TestListGroups(t *testing.T) {
 	id3 := mkList("o")
 
 	// Reject a single-list group.
-	resp := c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name_enc": enc("solo"), "list_ids": []int64{id1}})
+	resp := c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name": enc("solo"), "list_ids": []int64{id1}})
 	mustStatus(t, resp, 400)
 
 	// Link the three into a group.
-	resp = c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name_enc": enc("Тур 1"), "list_ids": []int64{id1, id2, id3}})
+	resp = c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name": enc("Тур 1"), "list_ids": []int64{id1, id2, id3}})
 	mustStatus(t, resp, 200)
 	var grp struct {
 		ID int64 `json:"id"`
@@ -77,7 +77,7 @@ func TestListGroups(t *testing.T) {
 
 	// Snapshot: every list carries group_id, and the group is listed by name.
 	snap := getSnap(t, c, boardID)
-	if len(snap.Groups) != 1 || dec(snap.Groups[0].NameEnc) != "Тур 1" {
+	if len(snap.Groups) != 1 || dec(snap.Groups[0].Name) != "Тур 1" {
 		t.Fatalf("groups = %+v", snap.Groups)
 	}
 	for _, l := range snap.Lists {
@@ -87,11 +87,11 @@ func TestListGroups(t *testing.T) {
 	}
 
 	// Rename.
-	resp = c.do("PATCH", "/api/list-groups/"+itoa(grp.ID), map[string]string{"name_enc": enc("Тур I")})
+	resp = c.do("PATCH", "/api/list-groups/"+itoa(grp.ID), map[string]string{"name": enc("Тур I")})
 	mustStatus(t, resp, 204)
 	snap = getSnap(t, c, boardID)
-	if dec(snap.Groups[0].NameEnc) != "Тур I" {
-		t.Fatalf("rename not applied: %q", dec(snap.Groups[0].NameEnc))
+	if dec(snap.Groups[0].Name) != "Тур I" {
+		t.Fatalf("rename not applied: %q", dec(snap.Groups[0].Name))
 	}
 
 	// Dissolve: members released, group gone.
@@ -113,7 +113,7 @@ func TestListGroups(t *testing.T) {
 // when it is dissolved.
 func TestCommentFirst(t *testing.T) {
 	c, boardID, listID1 := boardWithList(t)
-	resp := c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("L2"), "rank": "n"})
+	resp := c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title": enc("L2"), "rank": "n"})
 	mustStatus(t, resp, 200)
 	var l2 struct {
 		ID int64 `json:"id"`
@@ -122,7 +122,7 @@ func TestCommentFirst(t *testing.T) {
 	id1 := mustAtoi(t, listID1)
 
 	mustStatus(t, c.do("PATCH", "/api/lists/"+listID1, map[string]bool{"comment_first": true}), 204)
-	resp = c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name_enc": enc("Тур"), "list_ids": []int64{id1, l2.ID}})
+	resp = c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name": enc("Тур"), "list_ids": []int64{id1, l2.ID}})
 	mustStatus(t, resp, 200)
 	var grp struct {
 		ID int64 `json:"id"`
@@ -166,7 +166,7 @@ func TestPatchCardKind(t *testing.T) {
 	c, boardID, listID := boardWithList(t)
 
 	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{
-		"description_enc": enc("? q"), "rank": "m", "kind": "question",
+		"description": enc("? q"), "rank": "m", "kind": "question",
 	})
 	mustStatus(t, resp, 200)
 	var card struct {
@@ -453,13 +453,13 @@ func TestHandoutsPDFRejectsEmpty(t *testing.T) {
 }
 
 // TestHandoutMetaRoundTrip covers create-with-meta, patch-set, patch-clear and
-// snapshot exposure of cards.handout_meta_enc.
+// snapshot exposure of cards.handout_meta.
 func TestHandoutMetaRoundTrip(t *testing.T) {
 	c, boardID, listID := boardWithList(t)
 
 	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{
-		"description_enc": enc("? q"), "rank": "m", "kind": "question",
-		"handout_meta_enc": enc("columns: 2"),
+		"description": enc("? q"), "rank": "m", "kind": "question",
+		"handout_meta": enc("columns: 2"),
 	})
 	mustStatus(t, resp, 200)
 	var card struct {
@@ -469,23 +469,23 @@ func TestHandoutMetaRoundTrip(t *testing.T) {
 	cardID := itoa(card.ID)
 
 	snap := getSnapshotFor(t, c, boardID)
-	if len(snap.Cards) != 1 || snap.Cards[0].HandoutMetaEnc == nil || *snap.Cards[0].HandoutMetaEnc != enc("columns: 2") {
+	if len(snap.Cards) != 1 || snap.Cards[0].HandoutMeta == nil || *snap.Cards[0].HandoutMeta != enc("columns: 2") {
 		t.Fatalf("handout_meta not persisted on create: %+v", snap.Cards)
 	}
 
 	// patch to a new value
-	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"handout_meta_enc": enc("columns: 4\nrows: 2")})
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"handout_meta": enc("columns: 4\nrows: 2")})
 	mustStatus(t, resp, 204)
 	snap = getSnapshotFor(t, c, boardID)
-	if snap.Cards[0].HandoutMetaEnc == nil || *snap.Cards[0].HandoutMetaEnc != enc("columns: 4\nrows: 2") {
+	if snap.Cards[0].HandoutMeta == nil || *snap.Cards[0].HandoutMeta != enc("columns: 4\nrows: 2") {
 		t.Fatalf("handout_meta not updated: %+v", snap.Cards[0])
 	}
 
 	// clear with empty string
-	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"handout_meta_enc": ""})
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"handout_meta": ""})
 	mustStatus(t, resp, 204)
 	snap = getSnapshotFor(t, c, boardID)
-	if snap.Cards[0].HandoutMetaEnc != nil {
+	if snap.Cards[0].HandoutMeta != nil {
 		t.Fatalf("handout_meta not cleared: %+v", snap.Cards[0])
 	}
 }
@@ -530,7 +530,7 @@ func TestImportEventsPreservesAuthorAndTime(t *testing.T) {
 	var me meResponse
 	c.decode(resp, &me)
 
-	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("q"), "rank": "m"})
+	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description": enc("q"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var card struct {
 		ID int64 `json:"id"`
@@ -541,8 +541,8 @@ func TestImportEventsPreservesAuthorAndTime(t *testing.T) {
 	const t0, t1 = "2021-01-02T03:04:05Z", "2022-06-07T08:09:10Z"
 	resp = c.do("POST", "/api/cards/"+cardID+"/timeline/import", map[string]any{
 		"events": []map[string]any{
-			{"author_user_id": me.UserID, "created_at": t0, "payload_enc": enc("first")},
-			{"author_user_id": nil, "created_at": t1, "payload_enc": enc("second")},
+			{"author_user_id": me.UserID, "created_at": t0, "payload": enc("first")},
+			{"author_user_id": nil, "created_at": t1, "payload": enc("second")},
 		},
 	})
 	mustStatus(t, resp, 204)
@@ -554,13 +554,13 @@ func TestImportEventsPreservesAuthorAndTime(t *testing.T) {
 	if len(tl) != 2 {
 		t.Fatalf("timeline len = %d, want 2", len(tl))
 	}
-	if tl[0].Type != "comment" || tl[0].CreatedAt != t0 || dec(tl[0].PayloadEnc) != "first" {
+	if tl[0].Type != "comment" || tl[0].CreatedAt != t0 || dec(tl[0].Payload) != "first" {
 		t.Fatalf("event0 = %+v, want comment %q @ %s", tl[0], "first", t0)
 	}
 	if tl[0].AuthorID == nil || *tl[0].AuthorID != me.UserID {
 		t.Fatalf("event0 author = %v, want %d", tl[0].AuthorID, me.UserID)
 	}
-	if tl[1].CreatedAt != t1 || dec(tl[1].PayloadEnc) != "second" {
+	if tl[1].CreatedAt != t1 || dec(tl[1].Payload) != "second" {
 		t.Fatalf("event1 = %+v, want %q @ %s", tl[1], "second", t1)
 	}
 	if tl[1].AuthorID != nil {
@@ -569,18 +569,18 @@ func TestImportEventsPreservesAuthorAndTime(t *testing.T) {
 
 	// A garbled timestamp falls back to a server stamp rather than being rejected.
 	resp = c.do("POST", "/api/cards/"+cardID+"/timeline/import", map[string]any{
-		"events": []map[string]any{{"author_user_id": me.UserID, "created_at": "not-a-time", "payload_enc": enc("third")}},
+		"events": []map[string]any{{"author_user_id": me.UserID, "created_at": "not-a-time", "payload": enc("third")}},
 	})
 	mustStatus(t, resp, 204)
 
 	// Description history (the Trello import) rides the same endpoint; anything
 	// but a comment or a desc_edit is refused.
 	resp = c.do("POST", "/api/cards/"+cardID+"/timeline/import", map[string]any{
-		"events": []map[string]any{{"type": "desc_edit", "created_at": t0, "payload_enc": enc(`{"before":"a","after":"b"}`)}},
+		"events": []map[string]any{{"type": "desc_edit", "created_at": t0, "payload": enc(`{"before":"a","after":"b"}`)}},
 	})
 	mustStatus(t, resp, 204)
 	resp = c.do("POST", "/api/cards/"+cardID+"/timeline/import", map[string]any{
-		"events": []map[string]any{{"type": "label_add", "created_at": t0, "payload_enc": enc("{}")}},
+		"events": []map[string]any{{"type": "label_add", "created_at": t0, "payload": enc("{}")}},
 	})
 	mustStatus(t, resp, 400)
 
@@ -593,15 +593,15 @@ func TestImportEventsPreservesAuthorAndTime(t *testing.T) {
 	}
 }
 
-// TestCardAliasRoundTrip covers cards.alias_enc (schema v12): the optional
+// TestCardAliasRoundTrip covers cards.alias (schema v12): the optional
 // encrypted short label a card is identified by in the board list. Same
-// create/patch/clear contract as handout_meta_enc.
+// create/patch/clear contract as handout_meta.
 func TestCardAliasRoundTrip(t *testing.T) {
 	c, boardID, listID := boardWithList(t)
 
 	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{
-		"description_enc": enc("? q"), "rank": "m", "kind": "question",
-		"alias_enc": enc("Пушкин, дуэль"),
+		"description": enc("? q"), "rank": "m", "kind": "question",
+		"alias": enc("Пушкин, дуэль"),
 	})
 	mustStatus(t, resp, 200)
 	var card struct {
@@ -611,32 +611,32 @@ func TestCardAliasRoundTrip(t *testing.T) {
 	cardID := itoa(card.ID)
 
 	snap := getSnapshotFor(t, c, boardID)
-	if len(snap.Cards) != 1 || snap.Cards[0].AliasEnc == nil || *snap.Cards[0].AliasEnc != enc("Пушкин, дуэль") {
+	if len(snap.Cards) != 1 || snap.Cards[0].Alias == nil || *snap.Cards[0].Alias != enc("Пушкин, дуэль") {
 		t.Fatalf("alias not persisted on create: %+v", snap.Cards)
 	}
 
-	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"alias_enc": enc("дуэль")})
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"alias": enc("дуэль")})
 	mustStatus(t, resp, 204)
 	snap = getSnapshotFor(t, c, boardID)
-	if snap.Cards[0].AliasEnc == nil || *snap.Cards[0].AliasEnc != enc("дуэль") {
+	if snap.Cards[0].Alias == nil || *snap.Cards[0].Alias != enc("дуэль") {
 		t.Fatalf("alias not updated: %+v", snap.Cards[0])
 	}
 
-	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"alias_enc": ""})
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"alias": ""})
 	mustStatus(t, resp, 204)
 	snap = getSnapshotFor(t, c, boardID)
-	if snap.Cards[0].AliasEnc != nil {
+	if snap.Cards[0].Alias != nil {
 		t.Fatalf("alias not cleared: %+v", snap.Cards[0])
 	}
 
 	// A card created without an alias has none.
 	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{
-		"description_enc": enc("? q2"), "rank": "n", "kind": "question",
+		"description": enc("? q2"), "rank": "n", "kind": "question",
 	})
 	mustStatus(t, resp, 200)
 	snap = getSnapshotFor(t, c, boardID)
 	for _, cd := range snap.Cards {
-		if cd.AliasEnc != nil {
+		if cd.Alias != nil {
 			t.Fatalf("unexpected alias: %+v", cd)
 		}
 	}
@@ -750,7 +750,7 @@ func TestUIFontPreference(t *testing.T) {
 // text and has no business in a search index.
 func TestBoardComments(t *testing.T) {
 	c, boardID, listID := boardWithList(t)
-	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("? q"), "rank": "m"})
+	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description": enc("? q"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var card struct {
 		ID int64 `json:"id"`
@@ -758,9 +758,9 @@ func TestBoardComments(t *testing.T) {
 	c.decode(resp, &card)
 	cardID := itoa(card.ID)
 
-	mustStatus(t, c.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload_enc": enc("нужен зачёт")}), 204)
+	mustStatus(t, c.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload": enc("нужен зачёт")}), 204)
 	mustStatus(t, c.do("PATCH", "/api/cards/"+cardID, map[string]string{
-		"description_enc": enc("? q2"), "desc_event_enc": enc(`{"before":"? q","after":"? q2"}`),
+		"description": enc("? q2"), "desc_event": enc(`{"before":"? q","after":"? q2"}`),
 	}), 204)
 
 	resp = c.do("GET", "/api/boards/"+boardID+"/comments", nil)
@@ -770,7 +770,7 @@ func TestBoardComments(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("comments = %d, want 1 (the desc_edit must not be here)", len(got))
 	}
-	if got[0].CardID != card.ID || got[0].PayloadEnc != enc("нужен зачёт") {
+	if got[0].CardID != card.ID || got[0].Payload != enc("нужен зачёт") {
 		t.Fatalf("comment = %+v, want the one on card %d", got[0], card.ID)
 	}
 
@@ -784,14 +784,14 @@ func TestBoardComments(t *testing.T) {
 	}
 }
 
-// TestCardSeenRoundTrip covers cards.seen_enc (schema v26): a card's hand
-// corrections to who saw it. Same create/patch/clear contract as alias_enc.
+// TestCardSeenRoundTrip covers cards.seen (schema v26): a card's hand
+// corrections to who saw it. Same create/patch/clear contract as alias.
 func TestCardSeenRoundTrip(t *testing.T) {
 	c, boardID, listID := boardWithList(t)
 
 	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{
-		"description_enc": enc("? q"), "rank": "m", "kind": "question",
-		"seen_enc": enc(`{"extra":[{"text":"Вера","type":"player"}]}`),
+		"description": enc("? q"), "rank": "m", "kind": "question",
+		"seen": enc(`{"extra":[{"text":"Вера","type":"player"}]}`),
 	})
 	mustStatus(t, resp, 200)
 	var card struct {
@@ -801,13 +801,13 @@ func TestCardSeenRoundTrip(t *testing.T) {
 	cardID := itoa(card.ID)
 
 	snap := getSnapshotFor(t, c, boardID)
-	if snap.Cards[0].SeenEnc == nil || *snap.Cards[0].SeenEnc != enc(`{"extra":[{"text":"Вера","type":"player"}]}`) {
+	if snap.Cards[0].Seen == nil || *snap.Cards[0].Seen != enc(`{"extra":[{"text":"Вера","type":"player"}]}`) {
 		t.Fatalf("seen not persisted on create: %+v", snap.Cards[0])
 	}
-	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"seen_enc": ""})
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"seen": ""})
 	mustStatus(t, resp, 204)
 	snap = getSnapshotFor(t, c, boardID)
-	if snap.Cards[0].SeenEnc != nil {
+	if snap.Cards[0].Seen != nil {
 		t.Fatalf("seen not cleared: %+v", snap.Cards[0])
 	}
 }
@@ -818,7 +818,7 @@ func TestCardSeenRoundTrip(t *testing.T) {
 // both.
 func TestTourDeclarationReplacesTourTesters(t *testing.T) {
 	c, boardID, listID := boardWithList(t)
-	resp := c.do("POST", "/api/boards/"+boardID+"/sessions", map[string]string{"meta_enc": enc("{}")})
+	resp := c.do("POST", "/api/boards/"+boardID+"/sessions", map[string]string{"meta": enc("{}")})
 	mustStatus(t, resp, 200)
 	var sess struct {
 		ID int64 `json:"id"`
@@ -828,20 +828,20 @@ func TestTourDeclarationReplacesTourTesters(t *testing.T) {
 
 	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-testers", map[string]any{"list_id": lid, "session_ids": []int64{sess.ID}})
 	mustStatus(t, resp, 204)
-	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"list_id": lid, "names_enc": enc(`[{"text":"Аня","type":"player"}]`)})
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"list_id": lid, "names": enc(`[{"text":"Аня","type":"player"}]`)})
 	mustStatus(t, resp, 204)
 	snap := getSnapshotFor(t, c, boardID)
 	if len(snap.TourTesters) != 0 || len(snap.TourDeclarations) != 1 || *snap.TourDeclarations[0].ListID != lid {
 		t.Fatalf("names should replace sessions: testers %+v, declarations %+v", snap.TourTesters, snap.TourDeclarations)
 	}
 	// Declaring again replaces rather than adds.
-	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"list_id": lid, "names_enc": enc(`[]`)})
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"list_id": lid, "names": enc(`[]`)})
 	mustStatus(t, resp, 204)
 	snap = getSnapshotFor(t, c, boardID)
-	if len(snap.TourDeclarations) != 1 || snap.TourDeclarations[0].NamesEnc != enc(`[]`) {
+	if len(snap.TourDeclarations) != 1 || snap.TourDeclarations[0].Names != enc(`[]`) {
 		t.Fatalf("second declaration should replace the first: %+v", snap.TourDeclarations)
 	}
-	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"names_enc": enc(`[]`)})
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"names": enc(`[]`)})
 	mustStatus(t, resp, 400)
 
 	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-testers", map[string]any{"list_id": lid, "session_ids": []int64{sess.ID}})
@@ -851,15 +851,15 @@ func TestTourDeclarationReplacesTourTesters(t *testing.T) {
 		t.Fatalf("sessions should replace names: testers %+v, declarations %+v", snap.TourTesters, snap.TourDeclarations)
 	}
 
-	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"list_id": lid, "names_enc": enc(`[]`)})
+	resp = c.do("PUT", "/api/boards/"+boardID+"/tour-declaration", map[string]any{"list_id": lid, "names": enc(`[]`)})
 	mustStatus(t, resp, 204)
-	resp = c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("L2"), "rank": "n"})
+	resp = c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title": enc("L2"), "rank": "n"})
 	mustStatus(t, resp, 200)
 	var l2 struct {
 		ID int64 `json:"id"`
 	}
 	c.decode(resp, &l2)
-	resp = c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name_enc": enc("G"), "list_ids": []int64{lid, l2.ID}})
+	resp = c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name": enc("G"), "list_ids": []int64{lid, l2.ID}})
 	mustStatus(t, resp, 200)
 	snap = getSnapshotFor(t, c, boardID)
 	if len(snap.TourDeclarations) != 0 {

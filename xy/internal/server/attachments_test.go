@@ -22,13 +22,13 @@ func TestAttachments(t *testing.T) {
 		ID int64 `json:"id"`
 	}
 	c.decode(resp, &b)
-	resp = c.do("POST", "/api/boards/"+itoa(b.ID)+"/lists", map[string]string{"title_enc": enc("l"), "rank": "m"})
+	resp = c.do("POST", "/api/boards/"+itoa(b.ID)+"/lists", map[string]string{"title": enc("l"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var l struct {
 		ID int64 `json:"id"`
 	}
 	c.decode(resp, &l)
-	resp = c.do("POST", "/api/lists/"+itoa(l.ID)+"/cards", map[string]string{"description_enc": enc("d"), "rank": "m"})
+	resp = c.do("POST", "/api/lists/"+itoa(l.ID)+"/cards", map[string]string{"description": enc("d"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var card struct {
 		ID int64 `json:"id"`
@@ -39,7 +39,7 @@ func TestAttachments(t *testing.T) {
 	cipher := []byte("xy1\x01ENCRYPTED-IMAGE-BYTES")
 	body := new(bytes.Buffer)
 	mw := multipart.NewWriter(body)
-	_ = mw.WriteField("meta", `{"filename_enc":"`+enc("photo.webp")+`","mime":"image/webp","lossless":false,"event_payload_enc":"`+enc(`{"file":"photo.webp"}`)+`"}`)
+	_ = mw.WriteField("meta", `{"filename":"`+enc("photo.webp")+`","mime":"image/webp","lossless":false,"event_payload":"`+enc(`{"file":"photo.webp"}`)+`"}`)
 	fw, _ := mw.CreateFormFile("blob", "blob")
 	fw.Write(cipher)
 	mw.Close()

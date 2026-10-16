@@ -45,7 +45,7 @@ func insertEvent(ctx context.Context, tx *sql.Tx, ev timelineEvent) (int64, erro
 		ev.CreatedAt = rfc3339(time.Now())
 	}
 	res, err := tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, session_id, type, author_user_id, created_at, is_excerpt, payload_enc, reply_to_id)
+insert into timeline_events(board_id, card_id, session_id, type, author_user_id, created_at, is_excerpt, payload, reply_to_id)
 values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, ev.BoardID, cardID, sessionID, ev.Type, author, ev.CreatedAt, boolInt(ev.IsExcerpt), ev.Payload, replyTo)
 	if err != nil {
 		return 0, err
@@ -58,7 +58,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, ev.BoardID, cardID, sessionID, ev.Type, auth
 func appendEvent(ctx context.Context, tx *sql.Tx, boardID, cardID int64, typ string, authorID int64, payloadB64 string) error {
 	payload, err := unb64(payloadB64)
 	if err != nil {
-		return corei18n.User("invalid payload_enc")
+		return corei18n.User("invalid payload")
 	}
 	_, err = insertEvent(ctx, tx, timelineEvent{BoardID: boardID, CardID: cardID, Type: typ, AuthorID: &authorID, Payload: payload})
 	return err
@@ -78,7 +78,7 @@ select e.id, e.type, e.author_user_id,
        e.reply_to_id, e.deleted_at is not null,
        (select count(*) from timeline_events r
           where r.reply_to_id = e.id and r.deleted_at is null),
-       e.payload_enc, e.session_id, e.card_id
+       e.payload, e.session_id, e.card_id
 from timeline_events e`
 
 func scanTimelineEvent(rows *sql.Rows) (timelineEventDTO, error) {
@@ -111,7 +111,7 @@ func scanTimelineEvent(rows *sql.Rows) (timelineEventDTO, error) {
 	}
 	e.IsExcerpt = excerpt != 0
 	e.Deleted = deleted != 0
-	e.PayloadEnc = b64(payload)
+	e.Payload = b64(payload)
 	return e, nil
 }
 

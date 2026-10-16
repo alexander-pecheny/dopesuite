@@ -27,7 +27,7 @@ type bundleEventDTO struct {
 	EditedAt       *string `json:"edited_at,omitempty"`
 	IsExcerpt      bool    `json:"is_excerpt"`
 	ReplyToID      *int64  `json:"reply_to_id,omitempty"`
-	PayloadEnc     string  `json:"payload_enc"`
+	Payload        string  `json:"payload"`
 }
 
 // handleGetBoardTimeline returns every live timeline event on a board — all
@@ -42,7 +42,7 @@ func (s *server) handleGetBoardTimeline(w http.ResponseWriter, r *http.Request) 
 	rows, err := s.db.QueryContext(r.Context(), `
 select e.id, e.card_id, e.session_id, e.type,
        coalesce(nullif(u.username, ''), u.telegram_username),
-       e.created_at, e.edited_at, e.is_excerpt, e.reply_to_id, e.payload_enc
+       e.created_at, e.edited_at, e.is_excerpt, e.reply_to_id, e.payload
 from timeline_events e
 left join users u on u.id = e.author_user_id
 left join cards c on c.id = e.card_id
@@ -82,7 +82,7 @@ order by e.id`, bid)
 			e.ReplyToID = &replyTo.Int64
 		}
 		e.IsExcerpt = excerpt != 0
-		e.PayloadEnc = b64(payload)
+		e.Payload = b64(payload)
 		out = append(out, e)
 	}
 	if err := rows.Err(); handleErr(w, err) {
@@ -104,7 +104,7 @@ func (s *server) handleGetBoardAttachments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	rows, err := s.db.QueryContext(r.Context(), `
-select a.id, a.card_id, a.filename_enc, a.mime, a.size, a.lossless, a.is_excerpt, a.rev, a.created_at
+select a.id, a.card_id, a.filename, a.mime, a.size, a.lossless, a.is_excerpt, a.rev, a.created_at
 from attachments a join cards c on c.id = a.card_id
 where a.board_id = ? and a.deleted_at is null and c.deleted_at is null
 order by a.id`, bid)
@@ -120,7 +120,7 @@ order by a.id`, bid)
 		if err := rows.Scan(&a.ID, &a.CardID, &fn, &a.Mime, &a.Size, &lossless, &excerpt, &a.Rev, &a.CreatedAt); handleErr(w, err) {
 			return
 		}
-		a.FilenameEnc = b64(fn)
+		a.Filename = b64(fn)
 		a.Lossless = lossless != 0
 		a.IsExcerpt = excerpt != 0
 		out = append(out, a)
@@ -157,7 +157,7 @@ type bundleImportedEvent struct {
 	CreatedAt      string `json:"created_at"`
 	EditedAt       string `json:"edited_at"`
 	IsExcerpt      bool   `json:"is_excerpt"`
-	PayloadEnc     string `json:"payload_enc"`
+	Payload        string `json:"payload"`
 }
 
 type bundleImportRequest struct {
@@ -213,9 +213,9 @@ func (s *server) handleBundleImportEvents(w http.ResponseWriter, r *http.Request
 					return err
 				}
 			}
-			payload, err := unb64(e.PayloadEnc)
+			payload, err := unb64(e.Payload)
 			if err != nil {
-				return corei18n.User("invalid payload_enc")
+				return corei18n.User("invalid payload")
 			}
 			created := e.CreatedAt
 			if _, perr := time.Parse(time.RFC3339, created); perr != nil {

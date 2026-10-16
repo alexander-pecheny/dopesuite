@@ -155,7 +155,7 @@ export async function applyBundle(
       return match.id;
     }
     const res = (await jpost(`/api/boards/${boardId}/labels`, {
-      name_enc: await enc(src.name), color_enc: await enc(src.color),
+      name: await enc(src.name), color: await enc(src.color),
     })) as { id: number };
     if (append) append.labels.push({ id: res.id, name: src.name, color: src.color });
     labelMap.set(srcId, res.id);
@@ -187,7 +187,7 @@ export async function applyBundle(
         origin: parsed.origin || { board: append.sourceName, at: bundle.exported_at.slice(0, ISO_DATE_LEN) },
       });
     }
-    const res = (await jpost(`/api/boards/${boardId}/sessions`, { meta_enc: await enc(meta) })) as { id: number };
+    const res = (await jpost(`/api/boards/${boardId}/sessions`, { meta: await enc(meta) })) as { id: number };
     if (append) append.sessions.push({ id: res.id, meta });
     sessionMap.set(srcId, res.id);
     return { id: res.id, fresh: true };
@@ -217,7 +217,7 @@ export async function applyBundle(
         is_excerpt: !!e.is_excerpt,
         // A comment's images name attachments by id, so they are pointed at
         // the copies, which is why the attachments go in before the history.
-        payload_enc: await enc(e.type === "comment" ? remapCommentImages(e.payload, attachmentMap) : e.payload),
+        payload: await enc(e.type === "comment" ? remapCommentImages(e.payload, attachmentMap) : e.payload),
       };
       if (e.reply_to_id != null) {
         const mapped = eventMap.get(e.reply_to_id);
@@ -243,7 +243,7 @@ export async function applyBundle(
       const lists = byRank(bundle.lists.filter((l) => unit.listIds.includes(l.id)));
       for (const l of lists) {
         const res = (await jpost(`/api/boards/${boardId}/lists`, {
-          title_enc: await enc(l.title), rank: nextListRank(l.rank), type: l.type, comment_first: !!l.comment_first,
+          title: await enc(l.title), rank: nextListRank(l.rank), type: l.type, comment_first: !!l.comment_first,
         })) as { id: number };
         listMap.set(l.id, res.id);
         made.push(res.id);
@@ -255,7 +255,7 @@ export async function applyBundle(
       if (unit.group && made.length >= 2) {
         const g = bundle.groups.find((x) => x.id === lists[0].group_id);
         const res = (await jpost(`/api/boards/${boardId}/list-groups`, {
-          name_enc: await enc(g ? g.name : unit.title), list_ids: made,
+          name: await enc(g ? g.name : unit.title), list_ids: made,
         })) as { id: number };
         groupId = res.id;
       }
@@ -265,10 +265,10 @@ export async function applyBundle(
       const cards = bundle.cards.filter((c) => unit.listIds.includes(c.list_id));
       let done = 0;
       await pooled(cards, WRITE_POOL, async (c) => {
-        const body: Record<string, unknown> = { description_enc: await enc(c.description), rank: c.rank, kind: c.kind };
-        if (c.handout_meta) body.handout_meta_enc = await enc(c.handout_meta);
-        if (c.alias) body.alias_enc = await enc(c.alias);
-        if (c.seen) body.seen_enc = await enc(c.seen);
+        const body: Record<string, unknown> = { description: await enc(c.description), rank: c.rank, kind: c.kind };
+        if (c.handout_meta) body.handout_meta = await enc(c.handout_meta);
+        if (c.alias) body.alias = await enc(c.alias);
+        if (c.seen) body.seen = await enc(c.seen);
         const res = (await jpost(`/api/lists/${listMap.get(c.list_id)}/cards`, body)) as { id: number };
         cardMap.set(c.id, res.id);
         if (++done % PROGRESS_EVERY_CARDS === 0) log(S.import.apply.cards(unit.title, String(done), String(cards.length)));
@@ -340,7 +340,7 @@ export async function applyBundle(
         if (list_id == null && group_id == null) continue; // its group was skipped
         named.add(key);
         await jput(`/api/boards/${boardId}/tour-declaration`, {
-          list_id, group_id, names_enc: await enc(serializeDeclaration(parseDeclaration(JSON.stringify(t.names)))),
+          list_id, group_id, names: await enc(serializeDeclaration(parseDeclaration(JSON.stringify(t.names)))),
         });
       }
       for (const [key, tour] of tours) {
@@ -356,11 +356,11 @@ export async function applyBundle(
       await pooled(atts, ATTACH_POOL, async (a) => {
         const fd = new FormData();
         fd.append("meta", JSON.stringify({
-          filename_enc: await enc(a.filename),
+          filename: await enc(a.filename),
           mime: a.mime || "application/octet-stream",
           lossless: !!a.lossless,
           is_excerpt: !!a.is_excerpt,
-          // no event_payload_enc: the original attach_add already came with the timeline
+          // no event_payload: the original attach_add already came with the timeline
         }));
         const plain = await bytesOf(a);
         if (!plain) {

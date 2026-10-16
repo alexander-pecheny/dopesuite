@@ -888,7 +888,6 @@ export const RU: Strings = {
       buttonTitle: () => "Цвет метки",
     },
     home: {
-      boardLockedName: (id: string) => `доска #${id}`,
       createOffline: () => "Создание доски доступно только онлайн.",
       createSubmit: () => "Создать",
       createTitle: () => "Новая доска",

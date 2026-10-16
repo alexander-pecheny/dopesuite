@@ -108,7 +108,7 @@ func gatherImages(c *Client, b *Board, cards []Card, source string) (map[string]
 			return nil, err
 		}
 		for _, att := range atts {
-			name, err := b.DK.DecField(att.FilenameEnc)
+			name, err := b.DK.DecField(att.Filename)
 			if err != nil || !wanted[name] || images[name] != nil {
 				continue
 			}

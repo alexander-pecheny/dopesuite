@@ -24,23 +24,23 @@ test("substitutePath rewrites only negative-id segments", () => {
 
 test("applyOpToSnapshot: create list and card", () => {
   const snap = { lists: [], cards: [], labels: [], card_labels: {} };
-  _applyOpToSnapshot(snap, { kind: "createList", path: "/api/boards/1/lists", body: { title_enc: "T", rank: "a0", type: "normal" } }, -1);
-  assert.deepEqual(snap.lists, [{ id: -1, type: "normal", title_enc: "T", rank: "a0" }]);
-  _applyOpToSnapshot(snap, { kind: "createCard", path: "/api/lists/-1/cards", body: { description_enc: "D", rank: "a1", kind: "question" } }, -2);
-  assert.deepEqual(snap.cards, [{ id: -2, list_id: -1, kind: "question", description_enc: "D", rank: "a1" }]);
+  _applyOpToSnapshot(snap, { kind: "createList", path: "/api/boards/1/lists", body: { title: "T", rank: "a0", type: "normal" } }, -1);
+  assert.deepEqual(snap.lists, [{ id: -1, type: "normal", title: "T", rank: "a0" }]);
+  _applyOpToSnapshot(snap, { kind: "createCard", path: "/api/lists/-1/cards", body: { description: "D", rank: "a1", kind: "question" } }, -2);
+  assert.deepEqual(snap.cards, [{ id: -2, list_id: -1, kind: "question", description: "D", rank: "a1" }]);
 });
 
 test("applyOpToSnapshot: patch, move, delete, labels", () => {
   const snap = {
-    lists: [{ id: 1, type: "normal", title_enc: "L1", rank: "a0" }, { id: 2, type: "normal", title_enc: "L2", rank: "a1" }],
-    cards: [{ id: 5, list_id: 1, kind: "normal", description_enc: "D", rank: "a0" }],
-    labels: [{ id: 9, name_enc: "N", color_enc: "C" }],
+    lists: [{ id: 1, type: "normal", title: "L1", rank: "a0" }, { id: 2, type: "normal", title: "L2", rank: "a1" }],
+    cards: [{ id: 5, list_id: 1, kind: "normal", description: "D", rank: "a0" }],
+    labels: [{ id: 9, name: "N", color: "C" }],
     // The pre-ADR-0004 mirror shape: a device that synced before labels could be
     // scoped holds this, and the engine must fold it forward rather than throw.
     card_labels: { 5: [9] },
   };
-  _applyOpToSnapshot(snap, { kind: "patchCard", path: "/api/cards/5", body: { description_enc: "D2", list_id: 2 } });
-  assert.equal(snap.cards[0].description_enc, "D2");
+  _applyOpToSnapshot(snap, { kind: "patchCard", path: "/api/cards/5", body: { description: "D2", list_id: 2 } });
+  assert.equal(snap.cards[0].description, "D2");
   assert.equal(snap.cards[0].list_id, 2);
   _applyOpToSnapshot(snap, { kind: "setCardLabels", path: "/api/cards/5/labels", body: { labels: [] } });
   assert.deepEqual(snap.card_labels, []);
@@ -73,13 +73,13 @@ test("applyOpToSnapshot: deleteList removes its cards", () => {
 
 test("pendingTimeline synthesizes per-card events from ops", () => {
   const ops = [
-    { kind: "comment", path: "/api/cards/5/comments", body: { payload_enc: "P1" }, ts: "t1" },
-    { kind: "patchCard", path: "/api/cards/5", body: { description_enc: "x", desc_event_enc: "DE" }, ts: "t2" },
-    { kind: "setCardLabels", path: "/api/cards/5/labels", body: { labels: [{ label_id: 1 }], events: [{ type: "label_add", payload_enc: "LA" }] }, ts: "t3" },
-    { kind: "comment", path: "/api/cards/6/comments", body: { payload_enc: "OTHER" }, ts: "t4" },
+    { kind: "comment", path: "/api/cards/5/comments", body: { payload: "P1" }, ts: "t1" },
+    { kind: "patchCard", path: "/api/cards/5", body: { description: "x", desc_event: "DE" }, ts: "t2" },
+    { kind: "setCardLabels", path: "/api/cards/5/labels", body: { labels: [{ label_id: 1 }], events: [{ type: "label_add", payload: "LA" }] }, ts: "t3" },
+    { kind: "comment", path: "/api/cards/6/comments", body: { payload: "OTHER" }, ts: "t4" },
   ];
   const tl = _pendingTimeline(ops, 5);
-  assert.deepEqual(tl.map((e) => [e.type, e.payload_enc]), [
+  assert.deepEqual(tl.map((e) => [e.type, e.payload]), [
     ["comment", "P1"],
     ["desc_edit", "DE"],
     ["label_add", "LA"],
@@ -91,8 +91,8 @@ test("pendingTimeline synthesizes per-card events from ops", () => {
 
 test("pendingTimeline carries a reply's parent, so an offline reply stays threaded", () => {
   const ops = [
-    { kind: "comment", path: "/api/cards/5/comments", body: { payload_enc: "TOP" }, ts: "t1" },
-    { kind: "comment", path: "/api/cards/5/comments", body: { payload_enc: "REPLY", reply_to_id: 42 }, ts: "t2" },
+    { kind: "comment", path: "/api/cards/5/comments", body: { payload: "TOP" }, ts: "t1" },
+    { kind: "comment", path: "/api/cards/5/comments", body: { payload: "REPLY", reply_to_id: 42 }, ts: "t2" },
   ];
   const tl = _pendingTimeline(ops, 5);
   // a top-level comment carries no parent; a reply keeps the real (synced) id it
@@ -108,18 +108,18 @@ test("end-to-end: a queued card op remaps after its list create resolves", () =>
   // list create resolves to real id 10
   idmap[-1] = 10;
   idmapStr["-1"] = 10;
-  const cardOp = { method: "POST", path: "/api/lists/-1/cards", body: { description_enc: "D", rank: "a0", kind: "normal" } };
+  const cardOp = { method: "POST", path: "/api/lists/-1/cards", body: { description: "D", rank: "a0", kind: "normal" } };
   assert.equal(_substitutePath(cardOp.path, idmapStr), "/api/lists/10/cards");
-  assert.deepEqual(_substituteValue(cardOp.body, idmap), { description_enc: "D", rank: "a0", kind: "normal" });
+  assert.deepEqual(_substituteValue(cardOp.body, idmap), { description: "D", rank: "a0", kind: "normal" });
 });
 
 test("applyOpToSnapshot: a card's Seen and a tour's Declaration reach the mirror", () => {
-  const snap = { lists: [], cards: [{ id: 5, list_id: 1, kind: "question", description_enc: "D", rank: "a0" }], labels: [] };
-  _applyOpToSnapshot(snap, { kind: "patchCard", path: "/api/cards/5", body: { seen_enc: "S" } });
-  assert.equal(snap.cards[0].seen_enc, "S");
-  _applyOpToSnapshot(snap, { kind: "patchCard", path: "/api/cards/5", body: { seen_enc: "" } });
-  assert.equal("seen_enc" in snap.cards[0], false);
-  _applyOpToSnapshot(snap, { kind: "setTourDeclaration", path: "/api/boards/1/tour-declaration", body: { list_id: 1, group_id: null, names_enc: "N1" } });
-  _applyOpToSnapshot(snap, { kind: "setTourDeclaration", path: "/api/boards/1/tour-declaration", body: { list_id: 1, group_id: null, names_enc: "N2" } });
-  assert.deepEqual(snap.tour_declarations, [{ list_id: 1, group_id: null, names_enc: "N2" }]);
+  const snap = { lists: [], cards: [{ id: 5, list_id: 1, kind: "question", description: "D", rank: "a0" }], labels: [] };
+  _applyOpToSnapshot(snap, { kind: "patchCard", path: "/api/cards/5", body: { seen: "S" } });
+  assert.equal(snap.cards[0].seen, "S");
+  _applyOpToSnapshot(snap, { kind: "patchCard", path: "/api/cards/5", body: { seen: "" } });
+  assert.equal("seen" in snap.cards[0], false);
+  _applyOpToSnapshot(snap, { kind: "setTourDeclaration", path: "/api/boards/1/tour-declaration", body: { list_id: 1, group_id: null, names: "N1" } });
+  _applyOpToSnapshot(snap, { kind: "setTourDeclaration", path: "/api/boards/1/tour-declaration", body: { list_id: 1, group_id: null, names: "N2" } });
+  assert.deepEqual(snap.tour_declarations, [{ list_id: 1, group_id: null, names: "N2" }]);
 });

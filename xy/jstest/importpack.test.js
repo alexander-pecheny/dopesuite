@@ -34,7 +34,7 @@ test("a .4s imports straight into one new list, one card per block, kinds by the
   await settle();
   assert.equal(p.node("importPickOverlay").hidden, true);
   assert.deepEqual(posts.map((x) => x[0]), ["/api/boards/7/lists", "/api/lists/101/cards", "/api/lists/101/cards", "/api/lists/101/cards", "/api/lists/101/cards"]);
-  assert.equal(posts[0][1].title_enc, "e:Импорт");
+  assert.equal(posts[0][1].title, "e:Импорт");
   assert.deepEqual(posts.slice(1).map((x) => x[1].kind), ["heading", "question", "meta", "question"]);
   assert.equal(board.state.lists.length, 2);
   assert.equal(board.state.cards.length, 4);
@@ -50,10 +50,10 @@ test("split by tours makes one list per «## …» section and links them into a
   p.node("importSplitTours").checked = true;
   p.node("importPickForm").fire("submit");
   await settle();
-  const lists = posts.filter((x) => x[0] === "/api/boards/7/lists").map((x) => x[1].title_enc);
+  const lists = posts.filter((x) => x[0] === "/api/boards/7/lists").map((x) => x[1].title);
   assert.deepEqual(lists, ["e:Тур 1", "e:Тур 2"]);
   const group = posts.find((x) => x[0] === "/api/boards/7/list-groups");
-  assert.equal(group[1].name_enc, "e:Импорт");
+  assert.equal(group[1].name, "e:Импорт");
   assert.equal(board.reloads, 1);
 });
 
@@ -101,7 +101,7 @@ test("СИ import folds each #T block and its questions into one theme card", as
   assert.equal(list[0], "/api/boards/7/lists");
   assert.equal(list[1].type, "si");
   assert.deepEqual(cards.map((c) => c[1].kind), ["heading", "theme", "theme"]);
-  assert.match(cards[1][1].description_enc, /^e:#T Острова/);
-  assert.match(cards[1][1].description_enc, /№ 20/);
-  assert.match(cards[2][1].description_enc, /^e:#T Оружие/);
+  assert.match(cards[1][1].description, /^e:#T Острова/);
+  assert.match(cards[1][1].description, /№ 20/);
+  assert.match(cards[2][1].description, /^e:#T Оружие/);
 });

@@ -41,7 +41,7 @@ xyApp.jpost = async (url, body) => {
 };
 xyApp.jput = async (url, body) => { calls.push(["PUT", String(url), body]); return {}; };
 xyApp.jdelete = async (url) => { calls.push(["DELETE", String(url)]); return {}; };
-globalThis.fetch = async (url) => { calls.push(["FETCH", String(url)]); return { ok: true, json: async () => ({ id: ++nextId }) }; };
+globalThis.fetch = async (url, opts) => { calls.push(["FETCH", String(url), opts?.body]); return { ok: true, json: async () => ({ id: ++nextId }) }; };
 
 const { applyBundle } = await import("../web/assets/static/dist/bundleapply.js");
 const { xyBundle } = await import("../web/assets/static/dist/bundle.js");
@@ -97,7 +97,7 @@ test("a fresh board takes the bundle verbatim — every label and session create
   assert.deepEqual(posts("/lists").map((c) => c[2].rank), ["a0", "a1"], "the source's own ranks");
   assert.equal(posts("/labels").length, 1);
   assert.equal(posts("/sessions").length, 1);
-  const meta = JSON.parse(await xyCrypto.decField(dk, posts("/sessions")[0][2].meta_enc));
+  const meta = JSON.parse(await xyCrypto.decField(dk, posts("/sessions")[0][2].meta));
   assert.equal(meta.origin, undefined, "a replica is nobody's copy");
 });
 
@@ -107,7 +107,7 @@ test("a group is created once, from the lists this unit made", async () => {
   const groups = posts("/list-groups");
   assert.equal(groups.length, 1);
   assert.equal(groups[0][2].list_ids.length, 2);
-  assert.equal(await xyCrypto.decField(dk, groups[0][2].name_enc), "Пакет");
+  assert.equal(await xyCrypto.decField(dk, groups[0][2].name), "Пакет");
 });
 
 test("appending reuses a label of the same name and colour, and creates the rest", async () => {
@@ -141,7 +141,7 @@ test("appending reuses a session with the same key, and stamps origin on a new o
   reset();
   const other = { labels: [], sessions: [{ id: 88, meta: JSON.stringify({ key: "s-other" }) }], lastRank: null, sourceName: "Синхрон 2026" };
   await applyBundle(bundle(), { boardId: 901, dk, append: other }, noBytes, quiet);
-  const meta = JSON.parse(await xyCrypto.decField(dk, posts("/sessions")[0][2].meta_enc));
+  const meta = JSON.parse(await xyCrypto.decField(dk, posts("/sessions")[0][2].meta));
   assert.deepEqual(meta.origin, { board: "Синхрон 2026", at: "2026-08-24" });
 });
 
@@ -161,7 +161,7 @@ test("the timeline keeps its author and timestamp", async () => {
   const ev = posts("/timeline/import")[0][2].events[0];
   assert.equal(ev.author_username, "аня");
   assert.equal(ev.created_at, "2026-03-01T00:00:00Z");
-  assert.equal(await xyCrypto.decField(dk, ev.payload_enc), "хорош");
+  assert.equal(await xyCrypto.decField(dk, ev.payload), "хорош");
 });
 
 test("a unit that fails rolls back its own lists and leaves the ones before it", async () => {
@@ -217,7 +217,7 @@ test("a comment's images point at the copied attachments, and an image not copie
   const history = calls.findIndex((c) => c[0] === "POST" && c[1].endsWith("/timeline/import"));
   assert.ok(upload >= 0 && upload < history, "the attachment is uploaded before the history goes in");
   const ev = posts("/timeline/import")[0][2].events[0];
-  const copied = JSON.parse(await xyCrypto.decField(dk, ev.payload_enc));
+  const copied = JSON.parse(await xyCrypto.decField(dk, ev.payload));
   assert.equal(copied.img.length, 1);
   assert.notEqual(copied.img[0], 50, "the image names the copy, not the source");
 });
@@ -272,4 +272,42 @@ test("a failure mid-flight still rolls the unit back, after the in-flight writes
   assert.equal(cardsInFlight, 0, "the rollback waited for the writes already sent");
   assert.equal(calls.filter((c) => c[0] === "DELETE").length, 1, "the unit's list is gone");
   assert.ok(cardPosts < cards.length, "the pool stopped launching once one failed");
+});
+
+// A board.json as the release before schema v29 wrote it. The file format holds
+// plaintext under its own names and never carried an _enc name, so the same file
+// must still apply, and every write it causes must use the new field names.
+const BOARD_JSON_BEFORE_V29 = `{"format":"xy.board.v1","exported_at":"2026-10-01T09:00:00Z","board":{"name":"Старый архив"},"members":[],
+"lists":[{"id":1,"type":"normal","title":"Тур 1","rank":"a0","group_id":null,"comment_first":false}],
+"groups":[],
+"cards":[{"id":10,"list_id":1,"kind":"question","description":"? старый","rank":"a0","handout_meta":"cols: 2","alias":"псевдоним","seen":"Аня","created_at":null}],
+"labels":[{"id":20,"name":"взяли","color":"#3aa657"}],
+"sessions":[{"id":30,"meta":"{\\"key\\":\\"s-30\\",\\"date\\":\\"2026-03-12\\",\\"title\\":\\"Тест\\",\\"testers\\":[],\\"cities\\":[],\\"time\\":\\"\\",\\"tz\\":\\"\\"}","created_at":null}],
+"card_labels":[{"card_id":10,"label_id":20,"session_id":null}],"card_sessions":[{"card_id":10,"session_id":30}],
+"tour_testers":[],"tour_declarations":[{"list_id":1,"group_id":null,"names":[{"text":"Аня","type":"tester"}]}],
+"timeline":[{"id":40,"card_id":10,"session_id":null,"type":"comment","author":null,"created_at":"2026-03-01T00:00:00Z","edited_at":null,"is_excerpt":false,"reply_to_id":null,"payload":"коммент"}],
+"attachments":[{"id":50,"card_id":10,"filename":"р.png","mime":"image/png","size":3,"lossless":true,"is_excerpt":false,"path":"attachments/50-р.png"}]}`;
+
+function encNames(v) {
+  if (Array.isArray(v)) return v.flatMap((x) => encNames(x));
+  if (!v || typeof v !== "object") return [];
+  return Object.entries(v).flatMap(([k, x]) => (k.endsWith("_enc") ? [k] : []).concat(encNames(x)));
+}
+
+test("a bundle file from before v29 applies, and every write uses the new names", async () => {
+  reset();
+  const b = xyBundle.parseBundle(BOARD_JSON_BEFORE_V29);
+  assert.deepEqual(encNames(b), [], "the file format has no _enc names to rename");
+  const r = await applyBundle(b, { boardId: 902, dk, append: null }, async () => new Uint8Array([1, 2, 3]), quiet);
+  assert.equal(r.failed, false);
+  const bodies = calls.map((c) => (c[0] === "FETCH" ? JSON.parse(c[2].get("meta")) : c[2])).filter(Boolean);
+  assert.deepEqual(encNames(bodies), []);
+  const card = posts("/cards")[0][2];
+  assert.equal(await xyCrypto.decField(dk, card.description), "? старый");
+  assert.equal(await xyCrypto.decField(dk, card.alias), "псевдоним");
+  assert.equal(await xyCrypto.decField(dk, card.seen), "Аня");
+  assert.equal(await xyCrypto.decField(dk, posts("/labels")[0][2].name), "взяли");
+  assert.equal(await xyCrypto.decField(dk, posts("/lists")[0][2].title), "Тур 1");
+  const meta = JSON.parse(calls.find((c) => c[0] === "FETCH")[2].get("meta"));
+  assert.equal(await xyCrypto.decField(dk, meta.filename), "р.png");
 });

@@ -13,7 +13,7 @@ func TestChildAccessAndPatch(t *testing.T) {
 	resp := c.do("PATCH", "/api/lists/999999", map[string]string{"rank": "z"})
 	mustStatus(t, resp, http.StatusNotFound)
 
-	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("q"), "rank": "m"})
+	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description": enc("q"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var card struct {
 		ID int64 `json:"id"`
@@ -33,7 +33,7 @@ func TestChildAccessAndPatch(t *testing.T) {
 		ID int64 `json:"id"`
 	}
 	c.decode(resp, &other)
-	resp = c.do("POST", "/api/boards/"+itoa(other.ID)+"/lists", map[string]string{"title_enc": enc("t"), "rank": "a"})
+	resp = c.do("POST", "/api/boards/"+itoa(other.ID)+"/lists", map[string]string{"title": enc("t"), "rank": "a"})
 	mustStatus(t, resp, 200)
 	var foreign struct {
 		ID int64 `json:"id"`
@@ -42,7 +42,7 @@ func TestChildAccessAndPatch(t *testing.T) {
 	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]any{"list_id": foreign.ID})
 	mustStatus(t, resp, http.StatusBadRequest)
 
-	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]any{"rank": "k", "kind": "question", "alias_enc": enc("a")})
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]any{"rank": "k", "kind": "question", "alias": enc("a")})
 	mustStatus(t, resp, http.StatusNoContent)
 	resp = c.do("GET", "/api/boards/"+board, nil)
 	mustStatus(t, resp, 200)
@@ -50,7 +50,7 @@ func TestChildAccessAndPatch(t *testing.T) {
 		Cards []cardDTO `json:"cards"`
 	}
 	c.decode(resp, &snap)
-	if len(snap.Cards) != 1 || snap.Cards[0].Rank != "k" || snap.Cards[0].Kind != "question" || snap.Cards[0].AliasEnc == nil {
+	if len(snap.Cards) != 1 || snap.Cards[0].Rank != "k" || snap.Cards[0].Kind != "question" || snap.Cards[0].Alias == nil {
 		t.Fatalf("patched card = %+v", snap.Cards)
 	}
 }

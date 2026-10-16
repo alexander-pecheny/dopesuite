@@ -17,8 +17,8 @@ import (
 // (ADR-0002), because a toggled-off reaction is not content anyone could miss.
 
 type addReactionRequest struct {
-	PayloadEnc string `json:"payload_enc"`
-	TargetID   *int64 `json:"target_id"` // a comment on the same card; nil = the card
+	Payload  string `json:"payload"`
+	TargetID *int64 `json:"target_id"` // a comment on the same card; nil = the card
 }
 
 // checkReactionTarget checks that the comment a reaction answers is live and on
@@ -51,8 +51,8 @@ func (s *server) handleAddReaction(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.PayloadEnc == "" {
-		httpError(w, http.StatusBadRequest, "payload_enc required")
+	if req.Payload == "" {
+		httpError(w, http.StatusBadRequest, "payload required")
 		return
 	}
 	if req.TargetID != nil && !s.checkReactionTarget(w, r, *req.TargetID, cardID) {
@@ -60,9 +60,9 @@ func (s *server) handleAddReaction(w http.ResponseWriter, r *http.Request) {
 	}
 	var evID int64
 	err := s.withWriteTx(r.Context(), "add-reaction", func(ctx context.Context, tx *sql.Tx) error {
-		payload, err := unb64(req.PayloadEnc)
+		payload, err := unb64(req.Payload)
 		if err != nil {
-			return corei18n.User("invalid payload_enc")
+			return corei18n.User("invalid payload")
 		}
 		evID, err = insertEvent(ctx, tx, timelineEvent{BoardID: bid, CardID: cardID, Type: "reaction", AuthorID: &uid, Payload: payload, ReplyToID: req.TargetID})
 		return err

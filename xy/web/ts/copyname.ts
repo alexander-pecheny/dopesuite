@@ -20,7 +20,6 @@ const MAX_TRIES = 30;
 
 interface NamedBoard {
   name?: string;
-  schema_version?: number;
 }
 
 // suggestCopyName: the first suffixed name that `taken` does not hold. Names
@@ -42,10 +41,6 @@ export function suggestCopyName(base: string, taken: Iterable<string>): string {
 // asked first — another device may have cloned since this one last looked — and
 // the cached list answers when it cannot be reached, so an offline reader still
 // gets a sensible suggestion instead of a collision.
-//
-// A legacy (schema_version 1) board keeps its name in name_enc and this device
-// may not hold its key, so it contributes nothing: a clone of one can still
-// collide, which costs a rename and nothing else.
 export async function takenBoardNames(): Promise<string[]> {
   let rows: NamedBoard[] | null = null;
   try {
@@ -56,5 +51,5 @@ export async function takenBoardNames(): Promise<string[]> {
     } catch { /* no list anywhere — suggest the plain suffix */ }
   }
   if (!rows) return [];
-  return rows.filter((b) => (b.schema_version ?? 0) >= 2 && b.name).map((b) => b.name!);
+  return rows.filter((b) => b.name).map((b) => b.name!);
 }

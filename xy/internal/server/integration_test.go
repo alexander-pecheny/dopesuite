@@ -181,7 +181,7 @@ func TestFullFlow(t *testing.T) {
 	}
 
 	// create a list
-	resp = c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("To do"), "rank": "m"})
+	resp = c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title": enc("To do"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var listC struct {
 		ID int64 `json:"id"`
@@ -190,7 +190,7 @@ func TestFullFlow(t *testing.T) {
 	listID := itoa(listC.ID)
 
 	// create a card
-	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("first question"), "rank": "m"})
+	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description": enc("first question"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var cardC struct {
 		ID int64 `json:"id"`
@@ -200,13 +200,13 @@ func TestFullFlow(t *testing.T) {
 
 	// patch the card description + append a desc_edit event
 	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{
-		"description_enc": enc("edited question"),
-		"desc_event_enc":  enc(`{"before":"first question","after":"edited question"}`),
+		"description": enc("edited question"),
+		"desc_event":  enc(`{"before":"first question","after":"edited question"}`),
 	})
 	mustStatus(t, resp, 204)
 
 	// create a label and assign it
-	resp = c.do("POST", "/api/boards/"+boardID+"/labels", map[string]string{"name_enc": enc("hard"), "color_enc": enc("#ff0000")})
+	resp = c.do("POST", "/api/boards/"+boardID+"/labels", map[string]string{"name": enc("hard"), "color": enc("#ff0000")})
 	mustStatus(t, resp, 200)
 	var labelC struct {
 		ID int64 `json:"id"`
@@ -214,12 +214,12 @@ func TestFullFlow(t *testing.T) {
 	c.decode(resp, &labelC)
 	resp = c.do("PUT", "/api/cards/"+cardID+"/labels", map[string]any{
 		"labels": []map[string]any{{"label_id": labelC.ID}},
-		"events": []map[string]string{{"type": "label_add", "payload_enc": enc(`{"label":"hard"}`)}},
+		"events": []map[string]string{{"type": "label_add", "payload": enc(`{"label":"hard"}`)}},
 	})
 	mustStatus(t, resp, 204)
 
 	// add a comment
-	resp = c.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload_enc": enc("looks good")})
+	resp = c.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload": enc("looks good")})
 	mustStatus(t, resp, 204)
 
 	// timeline should have 3 events: desc_edit, label_add, comment
@@ -243,8 +243,8 @@ func TestFullFlow(t *testing.T) {
 		snap.CardLabels[0].LabelID != labelC.ID || snap.CardLabels[0].SessionID != nil {
 		t.Fatalf("card_labels = %+v, want one unscoped assignment of %d", snap.CardLabels, labelC.ID)
 	}
-	if dec(snap.Cards[0].DescEnc) != "edited question" {
-		t.Fatalf("desc = %q", dec(snap.Cards[0].DescEnc))
+	if dec(snap.Cards[0].Desc) != "edited question" {
+		t.Fatalf("desc = %q", dec(snap.Cards[0].Desc))
 	}
 
 	// an outsider (no membership) cannot read the board

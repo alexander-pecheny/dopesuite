@@ -1100,7 +1100,6 @@ var RU = Strings{
 			ButtonTitle: func() string { return "Цвет метки" },
 		},
 		Home: ChromeHomeStrings{
-			BoardLockedName: func(id string) string { return fmt.Sprintf("доска #%s", id) },
 			CreateOffline:   func() string { return "Создание доски доступно только онлайн." },
 			CreateSubmit:    func() string { return "Создать" },
 			CreateTitle:     func() string { return "Новая доска" },
