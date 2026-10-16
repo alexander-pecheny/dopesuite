@@ -158,11 +158,13 @@ tagged `chgksuite/vX.Y.Z` and `dopecore/vX.Y.Z`. The app is a third module,
 3. Local mode for xy's server as plain Go with no UI: `xy/localserver`, one
    local user, no login, unencrypted boards, the capability set; and on the
    frontend the plaintext key, the capability flags and the offline layer
-   switched off. Import a folder of `.4s` files as a board, export a board to a
-   folder.
+   switched off. A `cmd/xy-local` harness serves it on a port, so it can be
+   checked in a browser before the app exists.
 4. Build the Wails shell on the fork: the tab strip, the Local tab on the local
    server, and adding a server tab.
-5. Add import and the spec-driven export forms in the webview.
+5. Add import and the spec-driven export forms in the webview, with native
+   file dialogs; import a folder of `.4s` files as a board and export a board
+   to a folder.
 6. Automatic backups: on xy, the backup endpoint, the `read` token scope and
    the connect-the-app flow; in the app, the schedule, retention, and restoring
    a backup into the Local tab.
