@@ -15,6 +15,17 @@ are public so that other modules can import them. xy does that through a
 the handouts on them. This module imports dopecore and no other module of
 ours.
 
+Anyone can install the CLI with `go install
+code.pecheny.me/pecheny/dopesuite/chgksuite/cmd/chgksuite@latest`. Go refuses
+that for a module whose `go.mod` has a `replace`, so this one has none: it
+requires dopecore at a pushed pseudo-version. Inside the repo, `go.work` puts
+`../dopecore` in its place, so a change to dopecore reaches these tests at
+once. When this module starts to use such a change, push it and move the
+requirement with `go get code.pecheny.me/pecheny/dopesuite/dopecore@<commit>`,
+or `go install` builds against the old dopecore. Module releases are tags
+named `chgksuite/vX.Y.Z`; the CalVer tags `chgksuite/2026.…` publish the
+container image instead.
+
 ## What to know before you change it
 
 - **typst.wasm is not in git.** `typstwasm` embeds it, and it is 30 MB.
@@ -37,7 +48,8 @@ ours.
   `docs/adr/0006`). The rules are the ones in the root `AGENTS.md`. Some ids
   are also in xy's Catalog, because xy's TypeScript shows the same words.
 - `third_party/lingua-go` is a trimmed copy of lingua-go that `credits` uses.
-  Its README says why it is trimmed.
+  Its README says why it is trimmed. It is a package of this module rather
+  than a module of its own, because a `replace` would stop `go install`.
 
 ## Recipes
 

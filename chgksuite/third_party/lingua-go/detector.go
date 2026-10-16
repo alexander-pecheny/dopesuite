@@ -19,9 +19,9 @@ package lingua
 import (
 	"archive/zip"
 	"bytes"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/third_party/lingua-go/serialization"
 	"embed"
 	"fmt"
-	"github.com/pemistahl/lingua-go/serialization"
 	"github.com/shopspring/decimal"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"

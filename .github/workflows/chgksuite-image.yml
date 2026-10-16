@@ -7,10 +7,11 @@ name: chgksuite image
 #
 # Cut by pushing a CalVer tag, e.g. `chgksuite/2026.09.24` (`.2` for a second
 # one the same day), like xy's releases (docs/adr/0003). No GitHub release is
-# created: the image is the artifact.
+# created: the image is the artifact. Tags `chgksuite/vX.Y.Z` are Go module
+# versions and do not trigger this.
 on:
   push:
-    tags: ["chgksuite/*"]
+    tags: ["chgksuite/2*"]
   # Rebuild without moving the tag; pick the tag as the ref.
   workflow_dispatch:
 

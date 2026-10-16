@@ -19,9 +19,9 @@ package lingua
 import (
 	"archive/zip"
 	"bufio"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/third_party/lingua-go/serialization"
 	"errors"
 	"fmt"
-	"github.com/pemistahl/lingua-go/serialization"
 	"google.golang.org/protobuf/proto"
 	"os"
 	"path/filepath"

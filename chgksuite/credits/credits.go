@@ -27,7 +27,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/pemistahl/lingua-go"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/third_party/lingua-go"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/chgkimport"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/docread"
