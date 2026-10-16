@@ -1,0 +1,1116 @@
+// Package legacy is textparse's chgk parser as it was before the rewrite: a
+// literal port of chgksuite's ChgkParser, kept unchanged as the oracle the new
+// parser is checked against on generated packages (see textparse's
+// generated_test.go). Nothing outside tests imports it.
+package legacy
+
+import (
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/typo"
+)
+
+const sep = "\n"
+
+// What "smart" mode takes for a package whose question numbers stand on lines
+// of their own: between these many elements per numbered line, and numbers
+// that follow each other at most numberLineGap apart.
+const (
+	minElemsPerNumber = 4.0
+	maxElemsPerNumber = 13.0
+	numberLineGap     = 3
+)
+
+// What searchForDate accepts as a package's date.
+const (
+	day         = 24 * time.Hour
+	minDateYear = 1980
+	// dateHorizon is how far ahead a date may lie, for a package announced early.
+	dateHorizon = 365 * day
+	// dateShare is the fraction of a header line the date must fill: 1/dateShare.
+	dateShare = 10
+)
+
+// elem is one [type, content] pair of the working structure. content is a string
+// for all but a handful of elements (a source can become a list of references).
+type elem struct {
+	Type    string
+	Content any
+}
+
+func (e *elem) str() string {
+	if s, ok := e.Content.(string); ok {
+		return s
+	}
+	return ""
+}
+
+// questionLabels mirrors common.QUESTION_LABELS — the fields that belong to a
+// question rather than standing on their own in the structure.
+var questionLabels = map[string]bool{
+	"handout": true, "question": true, "answer": true, "zachet": true,
+	"nezachet": true, "comment": true, "source": true, "author": true,
+	"number": true, "setcounter": true,
+}
+
+// tourWords is ChgkParser.TOUR_NUMBERS_AS_WORDS: what --tour_numbers_as_words
+// renames the tours to, whatever the document called them.
+var tourWords = []string{
+	"Первый", "Второй", "Третий", "Четвертый", "Пятый",
+	"Шестой", "Седьмой", "Восьмой", "Девятый", "Десятый",
+}
+
+// zeroPrefixes are the two ways a package can mark an unnumbered warm-up question.
+var zeroPrefixes = []string{"Нулевой вопрос", "Разминочный вопрос"}
+
+type parser struct {
+	structure []*elem
+	opts      typo.Options
+	rx        *regexSet
+	// defaultAuthor is written into every question that names none.
+	defaultAuthor string
+	// now is "today" for the date sanity check; injectable so tests are stable.
+	now time.Time
+}
+
+// Options controls the few knobs xy actually varies.
+type Options struct {
+	// SingleNumberLines mirrors args.single_number_line_handling
+	// ("smart" | "on" | "off"). Empty means "smart", chgksuite's default.
+	SingleNumberLines string
+	// DefaultAuthor is --defaultauthor: whom a question with no author of its
+	// own is credited to.
+	DefaultAuthor string
+	// TourNumbersAsWords is --tour_numbers_as_words: "the first tour" rather
+	// than whatever the document called it.
+	TourNumbersAsWords bool
+	// Language is --language: which regexes_*.json names the field markers.
+	// Empty is Russian.
+	Language string
+	// LabelsFile is --labels_file: a labels TOML of one's own, which the
+	// handout rewrite reads its printed handout label from.
+	LabelsFile string
+	// Typo are the --typography_* switches. The zero value is every knob off,
+	// so a caller that wants chgksuite's defaults says so.
+	Typo typo.Options
+}
+
+// Parse ports ChgkParser.parse. text is the plain text of the package (from a
+// .txt file or from docxread.ToText).
+func Parse(text string, opts Options) fsource.Doc {
+	// The smart modes look at the package once, before any of it is typographed.
+	t := opts.Typo.Resolve(text)
+	if opts.Language == "en" {
+		// ChgkParser.__init__: English is typed with the quotes it wants.
+		t.Quotes = typo.Off
+	}
+	p := &parser{opts: t, now: time.Now(), rx: mustRegexSet(opts.Language, opts.LabelsFile)}
+	return p.parse(text, opts)
+}
+
+func (p *parser) parse(text string, opts Options) fsource.Doc {
+	p.defaultAuthor = opts.DefaultAuthor
+	// ── 1. split into blank-line-separated fragments and label what we can ──
+	lineSep := "\n"
+	if strings.Contains(text, "\r\n") {
+		lineSep = "\r\n"
+	}
+	for _, frag := range strings.Split(text, lineSep+lineSep) {
+		var fragment []*elem
+		for _, line := range strings.Split(frag, lineSep) {
+			if line == "" { // Python: `for xx in x.split(sep) if xx`
+				continue
+			}
+			fragment = append(fragment, &elem{"", typo.REW(line)})
+		}
+		p.applyRegexes(&fragment)
+		// A fragment containing an answer must start with the question, even if
+		// the question carried no marker of its own.
+		hasAnswer := false
+		for _, e := range fragment {
+			if e.Type == "answer" {
+				hasAnswer = true
+			}
+		}
+		if hasAnswer && len(fragment) > 0 && fragment[0].Type == "" {
+			fragment[0].Type = "question"
+		}
+		p.structure = append(p.structure, fragment...)
+	}
+
+	p.doEnumerateHack()
+	for _, e := range p.structure {
+		if e.Type == "handout" {
+			e.Type = "question"
+		}
+	}
+	p.processSingleNumberLines(opts.SingleNumberLines)
+	p.dupletBlitzHack()
+	p.markLeadingComments()
+
+	// ── 2. glue unlabelled lines onto the field they continue ──
+	p.mergeYToX("question", "answer")
+	p.mergeToXUntilNextField("answer")
+	p.mergeToXUntilNextField("comment")
+
+	// ── 3. make sure every answer has a question in front of it ──
+	p.ensureQuestions()
+	for _, e := range p.structure {
+		switch e.Type {
+		case "newquestion":
+			e.Type = "question"
+		case "leadcomment":
+			e.Type = "comment"
+		}
+	}
+	p.dirtyMergeToXUntilNextField("source")
+
+	// A bare author-label line means the author's name is on the next line.
+	for i := 0; i < len(p.structure); i++ {
+		if p.structure[i].Type == "author" &&
+			p.rx.authorOnly.MatchString(typo.REW(p.structure[i].str())) &&
+			i+1 < len(p.structure) {
+			p.mergeToPrevious(i + 1)
+		}
+	}
+
+	p.mergeToXUntilNextField("zachet")
+	p.mergeToXUntilNextField("nezachet")
+
+	// ── 4. drop empties, strip the field labels off the content ──
+	kept := p.structure[:0]
+	for _, e := range p.structure {
+		if e.Type == "" && typo.REW(e.str()) == "" {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	p.structure = kept
+	if len(p.structure) == 0 {
+		return nil
+	}
+	if p.structure[0].Type == "" && p.rx.field("number").MatchString(typo.REW(p.structure[0].str())) {
+		p.mergeToNext(0)
+	}
+	p.stripLabels()
+
+	// ── 5. prettify: pull out numbers, detect inner lists, typography ──
+	p.prettify()
+
+	// ── 6. pack fields into questions ──
+	final := p.pack()
+
+	// ── 7. header/date detection and per-question postprocessing ──
+	final = p.headerPass(final)
+	tours := 0
+	for i, pr := range final {
+		switch {
+		case pr.Type == "Question":
+			p.postprocessQuestion(pr.Content.(*fsource.Question))
+		case pr.Type == "tour" && opts.TourNumbersAsWords && tours < len(tourWords):
+			final[i].Content = tourWords[tours] + " тур"
+			tours++
+		}
+	}
+	return final
+}
+
+// ── structure surgery (the merge_* helpers) ─────────────────────────────────
+
+// at emulates Python's negative indexing: structure[i-1] with i == 0 is the LAST
+// element, not an error. Several loops below rely on that, deliberately or not.
+func (p *parser) at(i int) *elem {
+	if i < 0 {
+		i += len(p.structure)
+	}
+	return p.structure[i]
+}
+
+func (p *parser) pop(i int) *elem {
+	e := p.structure[i]
+	p.structure = append(p.structure[:i], p.structure[i+1:]...)
+	return e
+}
+
+func (p *parser) insert(i int, e *elem) {
+	p.structure = append(p.structure, nil)
+	copy(p.structure[i+1:], p.structure[i:])
+	p.structure[i] = e
+}
+
+func (p *parser) mergeToPrevious(i int) {
+	target := p.at(i - 1)
+	popped := p.pop(i)
+	if target.str() != "" {
+		target.Content = target.str() + sep + popped.str()
+	} else {
+		target.Content = popped.Content
+	}
+}
+
+func (p *parser) mergeToNext(i int) {
+	popped := p.pop(i)
+	p.structure[i].Content = popped.str() + sep + p.structure[i].str()
+}
+
+func (p *parser) findNextFieldName(i int) string {
+	t := i + 1
+	if t >= len(p.structure) {
+		return ""
+	}
+	for t < len(p.structure)-1 && p.structure[t].Type == "" {
+		t++
+	}
+	return p.structure[t].Type
+}
+
+// hardBoundaries are the structural markers a question/answer merge must not
+// swallow (chgksuite's ChgkParser.HARD_BOUNDARIES).
+var hardBoundaries = map[string]bool{
+	"battle": true, "section": true, "tour": true, "tourrev": true,
+	"heading": true, "editor": true, "date": true,
+}
+
+func (p *parser) mergeYToX(x, y string) {
+	for i := 0; i < len(p.structure); i++ {
+		if p.structure[i].Type != x {
+			continue
+		}
+		for i+1 < len(p.structure) &&
+			p.structure[i+1].Type != y &&
+			p.structure[i+1].Type != "leadcomment" &&
+			!hardBoundaries[p.structure[i+1].Type] {
+			p.mergeToPrevious(i + 1)
+		}
+	}
+}
+
+// badNextFields: an unlabelled line must not be glued onto the previous field if
+// what follows it is a question or an answer — it belongs to that instead.
+var badNextFields = map[string]bool{"question": true, "answer": true, "leadcomment": true}
+
+func (p *parser) mergeToXUntilNextField(x string) {
+	for i := 0; i < len(p.structure); i++ {
+		if p.structure[i].Type != x {
+			continue
+		}
+		for i+1 < len(p.structure) &&
+			p.structure[i+1].Type == "" &&
+			!badNextFields[p.findNextFieldName(i)] {
+			p.mergeToPrevious(i + 1)
+		}
+	}
+}
+
+func (p *parser) dirtyMergeToXUntilNextField(x string) {
+	for i := 0; i < len(p.structure); i++ {
+		if p.structure[i].Type != x {
+			continue
+		}
+		for i+1 < len(p.structure) && p.structure[i+1].Type == "" {
+			p.mergeToPrevious(i + 1)
+		}
+	}
+}
+
+// ── step 1 helpers ──────────────────────────────────────────────────────────
+
+var reUnderscore = strings.NewReplacer("_", "")
+
+// applyRegexes ports ChgkParser.apply_regexes. When several field markers match
+// one line, the line is split at their offsets and the pieces are spliced into
+// the fragment as separate elements.
+func (p *parser) applyRegexes(fragment *[]*elem) {
+	st := *fragment
+	for i := 0; i < len(st); i++ {
+		// Offsets are measured on the underscore-stripped text but used to slice
+		// the original — a chgksuite bug that only bites lines mixing italics with
+		// two field markers, faithfully reproduced.
+		probe := reUnderscore.Replace(st[i].str())
+		type hit struct {
+			name  string
+			start int
+		}
+		var hits []hit
+		for _, l := range p.rx.labelled {
+			if loc := l.re.FindStringIndex(probe); loc != nil {
+				hits = append(hits, hit{l.name, loc[0]})
+			}
+		}
+		if len(hits) == 0 {
+			continue
+		}
+		if len(hits) == 1 {
+			st[i].Type = hits[0].name
+			continue
+		}
+		// sorted(matching_regexes, key=lambda x: x[1]) — Python's set iteration
+		// order makes ties arbitrary; sort by name as a tiebreak for determinism.
+		for a := 1; a < len(hits); a++ {
+			for b := a; b > 0 && (hits[b].start < hits[b-1].start ||
+				(hits[b].start == hits[b-1].start && hits[b].name < hits[b-1].name)); b-- {
+				hits[b], hits[b-1] = hits[b-1], hits[b]
+			}
+		}
+		full := st[i].str()
+		var slices []*elem
+		for j := 1; j < len(hits); j++ {
+			end := len(full)
+			if j+1 < len(hits) {
+				end = hits[j+1].start
+			}
+			slices = append(slices, &elem{hits[j].name, sliceStr(full, hits[j].start, end)})
+		}
+		// chgksuite does `for slice_ in slices: st.insert(i + 1, slice_)`, so each
+		// insert pushes the previous one right and the tail ends up REVERSED.
+		// Reproduced verbatim — it only shows with 3+ markers on one line.
+		for _, sl := range slices {
+			st = append(st, nil)
+			copy(st[i+2:], st[i+1:])
+			st[i+1] = sl
+		}
+		st[i].Type = hits[0].name
+		st[i].Content = sliceStr(full, 0, hits[1].start)
+	}
+	*fragment = st
+}
+
+// sliceStr clamps a byte-offset slice; offsets come from the underscore-stripped
+// probe string and can therefore run past the end of the original.
+func sliceStr(s string, start, end int) string {
+	if start > len(s) {
+		start = len(s)
+	}
+	if end > len(s) {
+		end = len(s)
+	}
+	if end < start {
+		end = start
+	}
+	return s[start:end]
+}
+
+var reNumStart = regexp.MustCompile(`^([0-9]+)\.`)
+
+// doEnumerateHack ports do_enumerate_hack: an unlabelled "N. …" line right after
+// an author is only a question if an answer shows up nearby — otherwise it's a
+// numbered item of some regulation block.
+func (p *parser) doEnumerateHack() {
+	const lookahead = 12
+	blockEnd := map[string]bool{
+		"editor": true, "tour": true, "tourrev": true,
+		"date": true, "heading": true, "battle": true,
+	}
+	prevType := ""
+	for i, e := range p.structure {
+		if e.Type == "" && prevType == "author" && reNumStart.MatchString(e.str()) {
+			hasAnswerSoon := false
+			for j := i + 1; j < i+1+lookahead && j < len(p.structure); j++ {
+				nt := p.structure[j].Type
+				if nt == "answer" || nt == "handout" || nt == "question" {
+					hasAnswerSoon = true
+					break
+				}
+				if blockEnd[nt] {
+					break
+				}
+			}
+			if hasAnswerSoon {
+				e.Type = "question"
+				e.Content = strings.TrimSpace(reNumStart.ReplaceAllString(e.str(), ""))
+			}
+		}
+		if e.Type != "" {
+			prevType = e.Type
+		}
+	}
+}
+
+var reNumOnly = regexp.MustCompile(`^([0-9]+)\.?$`)
+
+// processSingleNumberLines ports process_single_number_lines: some packages put
+// the question number on a line of its own. In "smart" mode that's only assumed
+// when no question is marked at all and the numbers are spaced plausibly.
+func (p *parser) processSingleNumberLines(mode string) {
+	if mode == "" {
+		mode = "smart"
+	}
+	if mode == "off" {
+		return
+	}
+	lines := p.numberLines()
+	patch := func(l numLine) {
+		p.structure[l.idx].Type = "question"
+		// question_stub for ru: "Question {}."
+		p.structure[l.idx].Content = "Вопрос " + strconv.Itoa(l.num) + "."
+	}
+	if mode == "on" {
+		for _, l := range lines {
+			patch(l)
+		}
+		return
+	}
+	// smart
+	for _, e := range p.structure {
+		if e.Type == "question" {
+			return
+		}
+	}
+	if len(lines) == 0 {
+		return
+	}
+	frac := float64(len(p.structure)) / float64(len(lines))
+	if frac < minElemsPerNumber || frac > maxElemsPerNumber {
+		return
+	}
+	var prev *numLine
+	for i := range lines {
+		l := lines[i]
+		if prev == nil || (l.num-prev.num <= numberLineGap && l.idx-prev.idx > 1) {
+			patch(l)
+			prev = &lines[i]
+		}
+	}
+}
+
+// numLine is an untyped element that holds nothing but a number.
+type numLine struct {
+	idx, num int
+}
+
+// numberLines finds the elements that are only a number.
+func (p *parser) numberLines() []numLine {
+	var lines []numLine
+	for i, e := range p.structure {
+		if e.Type != "" {
+			continue
+		}
+		m := reNumOnly.FindStringSubmatch(strings.TrimSpace(e.str()))
+		if m == nil {
+			continue
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		lines = append(lines, numLine{i, n})
+	}
+	return lines
+}
+
+// dupletBlitzHack ports the "duplet"/"blitz" special case (chgksuite issue #23).
+// Note the Python operator precedence: a lone "duplet." forces a question
+// unconditionally, while "blitz." is also gated on the surrounding elements.
+func (p *parser) dupletBlitzHack() {
+	for i, e := range p.structure {
+		words := strings.Fields(e.str())
+		hasDuplet, hasBlitz := false, false
+		for _, w := range words {
+			if w == "Дуплет." {
+				hasDuplet = true
+			}
+			if w == "Блиц." {
+				hasBlitz = true
+			}
+		}
+		if hasDuplet || (hasBlitz && e.Type != "question" &&
+			(i == 0 || p.structure[i-1].Type != "question")) {
+			e.Type = "question"
+		}
+	}
+}
+
+// answerSide are the fields a comment follows in the usual order.
+var answerSide = map[string]bool{"answer": true, "zachet": true, "nezachet": true}
+
+// markLeadingComments recognises a package that puts the comment before the
+// answer: there, more comments stand right before an answer than after one.
+// Each comment that leads to an answer takes the unlabelled lines up to it and
+// becomes a "leadcomment", which the merges look past to find the question.
+func (p *parser) markLeadingComments() {
+	before, after := 0, 0
+	for i, e := range p.structure {
+		if e.Type != "comment" {
+			continue
+		}
+		if i+1 < len(p.structure) && p.structure[i+1].Type == "answer" {
+			before++
+		}
+		j := i - 1
+		for j >= 0 && p.structure[j].Type == "" {
+			j--
+		}
+		if j >= 0 && answerSide[p.structure[j].Type] {
+			after++
+		}
+	}
+	if before <= after {
+		return
+	}
+	for i := 0; i < len(p.structure); i++ {
+		if p.structure[i].Type != "comment" || p.findNextFieldName(i) != "answer" {
+			continue
+		}
+		p.structure[i].Type = "leadcomment"
+		for p.structure[i+1].Type == "" {
+			p.mergeToPrevious(i + 1)
+		}
+	}
+}
+
+// ── step 3 ──────────────────────────────────────────────────────────────────
+
+func (p *parser) ensureQuestions() {
+	for i := 0; i < len(p.structure); i++ {
+		if p.structure[i].Type != "answer" {
+			continue
+		}
+		j := i
+		if i > 0 && p.structure[i-1].Type == "leadcomment" {
+			j = i - 1
+		}
+		prev := p.at(j - 1).Type // j == 0 wraps to the last element, as in Python
+		if prev == "question" || prev == "newquestion" {
+			continue
+		}
+		p.insert(j, &elem{"newquestion", ""})
+		i = -1 // Python sets i = 0 and then increments
+	}
+
+	for i := 0; i < len(p.structure)-1; i++ {
+		if p.structure[i].Type != "" || p.structure[i+1].Type != "newquestion" {
+			continue
+		}
+		p.mergeToNext(i)
+		cur := typo.REW(p.structure[i].str())
+		prev := typo.REW(p.at(i - 1).str())
+		if p.rx.field("number").MatchString(cur) && !p.rx.field("number").MatchString(prev) {
+			p.structure[i].Type = "question"
+			p.structure[i].Content = p.rx.field("number").ReplaceAllString(cur, "")
+			// Python does int(num.group(0)) on a match like "12. ", which always
+			// raises ValueError and is swallowed — so no number is ever inserted.
+			// Reproduced by only inserting when the match parses as an integer.
+			if m := p.rx.field("number").FindString(typo.REW(p.structure[i].str())); m != "" {
+				if n, err := strconv.Atoi(m); err == nil {
+					p.insert(i, &elem{"number", n})
+				}
+			}
+		}
+		i = -1
+	}
+}
+
+// ── step 4: strip the label text off each labelled element ──────────────────
+
+func (p *parser) stripLabels() {
+	for idx := 0; idx < len(p.structure); idx++ {
+		e := p.structure[idx]
+		if e.Type == "" {
+			e.Type = "meta"
+		}
+		re := p.rx.field(e.Type)
+		known := re != nil
+		if !known || e.Type == "tour" || e.Type == "tourrev" || e.Type == "editor" || e.Type == "battle" {
+			continue
+		}
+		beforeReplacement := ""
+		if e.Type == "question" {
+			num, hasNum := p.questionNumber(e.str())
+			if hasNum {
+				p.insert(idx, &elem{"number", num})
+				idx++
+			}
+			if !hasNum {
+				low := strings.ToLower(e.str())
+				if strings.Contains(low, "нулевой вопрос") || strings.Contains(low, "разминочный вопрос") {
+					p.insert(idx, &elem{"number", "0"})
+					idx++
+				}
+			}
+			lines := strings.Split(e.str(), sep)
+			var out []string
+			for _, line := range lines {
+				if p.rx.field("question").MatchString(line) {
+					line = replaceFirst(p.rx.field("question"), line, "")
+				}
+				if s := strings.TrimSpace(line); s != "" {
+					out = append(out, s)
+				}
+			}
+			e.Content = strings.Join(out, sep)
+		} else {
+			beforeReplacement = e.str()
+			e.Content = replaceFirst(re, e.str(), "")
+		}
+		if strings.HasPrefix(e.str(), sep) {
+			e.Content = strings.TrimPrefix(e.str(), sep)
+		}
+		// The gendered feminine author label is preserved as a 4s field-label override.
+		if e.Type == "author" && beforeReplacement != "" &&
+			strings.Contains(strings.ToLower(beforeReplacement), "авторка:") {
+			e.Content = "!!Авторка" + e.str()
+		}
+	}
+}
+
+// questionNumber returns the (?P<number>…) group of the question regex, and
+// whether it matched and was non-empty.
+func (p *parser) questionNumber(s string) (string, bool) {
+	m := p.rx.field("question").FindStringSubmatch(s)
+	if m == nil {
+		return "", false
+	}
+	n := m[p.rx.field("question").SubexpIndex("number")]
+	return n, n != ""
+}
+
+func replaceFirst(re *regexp.Regexp, s, with string) string {
+	loc := re.FindStringIndex(s)
+	if loc == nil {
+		return s
+	}
+	return s[:loc[0]] + with + s[loc[1]:]
+}
+
+// ── step 5: numbers, inner lists, typography ────────────────────────────────
+
+func (p *parser) prettify() {
+	for id := 0; id < len(p.structure); id++ {
+		e := p.structure[id]
+
+		if e.Type == "question" {
+			if m := p.rx.field("question").FindStringSubmatch(e.str()); m != nil {
+				p.insert(id, &elem{"number", m[p.rx.field("question").SubexpIndex("number")]})
+				id++
+			}
+			e.Content = p.rx.field("question").ReplaceAllString(e.str(), "")
+		}
+
+		p.detectInnerList(e)
+
+		if e.Type == "source" {
+			if s, ok := e.Content.(string); ok && len(splitLines(s)) > 1 {
+				var items []any
+				for _, x := range splitLines(s) {
+					items = append(items, replaceFirst(p.rx.field("number"), typo.REW(x), ""))
+				}
+				e.Content = items
+			}
+		}
+
+		if e.Type != "date" {
+			e.Content = recursiveTypography(e.Content, p.opts)
+		}
+	}
+}
+
+var reCRLF = regexp.MustCompile(`\r?\n`)
+
+func splitLines(s string) []string { return reCRLF.Split(s, -1) }
+
+// reListItem is the inner-list marker "N. " / "N) ". The original also has a
+// trailing `\s*(?!\d)`, which RE2 can't express; listItemEnd below does that part.
+var reListItem = regexp.MustCompile(`([\s\x{00a0}]+|^)(\d+)[\.\)]`)
+
+// listItemEnd resolves the `\s*(?!\d)` tail. Because \s* is greedy and backtracks,
+// the lookahead only actually rejects a marker when NO whitespace follows it and
+// the next character is a digit ("1.2" is not a list item, "1. 2" is — with the
+// match then ending before the digit). It returns the end offset, or -1 to reject.
+func listItemEnd(s string, end int) int {
+	maxWS := end
+	for maxWS < len(s) && isPySpace(rune(s[maxWS])) {
+		maxWS++
+	}
+	for e := maxWS; e >= end; e-- {
+		if e >= len(s) || s[e] < '0' || s[e] > '9' {
+			return e
+		}
+	}
+	return -1
+}
+
+// detectInnerList ports the "detect inner lists" block: a run of 1., 2., 3. …
+// markers turns the element's content into a [preamble, items] list. For a
+// question this only applies to duplets and blitzes (whose parts really are a list);
+// elsewhere (sources, comments) any ascending run counts.
+func (p *parser) detectInnerList(e *elem) {
+	s, ok := e.Content.(string)
+	if !ok {
+		return
+	}
+	type match struct {
+		text     string
+		num      int
+		start    int
+		endAfter int
+	}
+	var all []match
+	for _, loc := range reListItem.FindAllStringSubmatchIndex(s, -1) {
+		numStr := s[loc[4]:loc[5]]
+		n, err := strconv.Atoi(numStr)
+		if err != nil {
+			continue
+		}
+		wsEnd := listItemEnd(s, loc[1])
+		if wsEnd < 0 {
+			continue
+		}
+		all = append(all, match{s[loc[0]:wsEnd], n, loc[0], wsEnd})
+	}
+	if len(all) <= 1 {
+		return
+	}
+	sorted := append([]match(nil), all...)
+	for i := 1; i < len(sorted); i++ {
+		for j := i; j > 0 && sorted[j].num < sorted[j-1].num; j-- {
+			sorted[j], sorted[j-1] = sorted[j-1], sorted[j]
+		}
+	}
+	var candidate []match
+	for j := 0; j < len(sorted) && j == sorted[j].num-1; j++ {
+		candidate = append(candidate, sorted[j])
+	}
+	if len(candidate) <= 1 {
+		return
+	}
+	for i := 1; i < len(candidate); i++ {
+		if candidate[i].start <= candidate[i-1].start {
+			return // false positive: a duplicate number matched at the wrong place
+		}
+	}
+	isQuestion := e.Type == "question"
+	low := strings.ToLower(s)
+	// Python: element[0] != "question" or (element[0]=="question" and "duplet" in …) or "blitz" in …
+	if !(!isQuestion || (isQuestion && strings.Contains(low, "дуплет")) || strings.Contains(low, "блиц")) {
+		return
+	}
+	positions := make([]int, len(candidate))
+	for i, c := range candidate {
+		positions[i] = c.start
+	}
+	parts := partition(s, positions)
+	for i, c := range candidate {
+		parts[i+1] = strings.Replace(parts[i+1], c.text, "", 1)
+	}
+	items := make([]any, 0, len(parts)-1)
+	for _, x := range parts[1:] {
+		items = append(items, x)
+	}
+	if parts[0] != "" {
+		e.Content = []any{parts[0], items}
+	} else {
+		e.Content = items
+	}
+}
+
+// isPySpace matches Python's \s (Unicode-aware, so NBSP counts).
+func isPySpace(r rune) bool {
+	switch r {
+	case ' ', '\t', '\n', '\r', '\v', '\f', ' ':
+		return true
+	}
+	return false
+}
+
+func partition(s string, indices []int) []string {
+	out := make([]string, 0, len(indices)+1)
+	prev := 0
+	for _, i := range indices {
+		out = append(out, s[prev:i])
+		prev = i
+	}
+	return append(out, s[prev:])
+}
+
+func recursiveTypography(v any, o typo.Options) any {
+	switch t := v.(type) {
+	case string:
+		return typo.Typography(t, o)
+	case []any:
+		out := make([]any, len(t))
+		for i, x := range t {
+			out[i] = recursiveTypography(x, o)
+		}
+		return out
+	}
+	return v
+}
+
+// ── step 6: pack fields into questions ──────────────────────────────────────
+
+// flushOn are the element types that end the question being accumulated.
+var flushOn = map[string]bool{
+	"number": true, "tour": true, "tourrev": true,
+	"question": true, "meta": true, "editor": true,
+}
+
+func (p *parser) pack() fsource.Doc {
+	var final fsource.Doc
+	cur := fsource.NewQuestion()
+
+	for _, e := range p.structure {
+		if flushOn[e.Type] && cur.Has("question") {
+			p.creditAuthor(cur)
+			final = append(final, fsource.Pair{Type: "Question", Content: cur})
+			cur = fsource.NewQuestion()
+		}
+		if !questionLabels[e.Type] {
+			final = append(final, fsource.Pair{Type: e.Type, Content: e.Content})
+			continue
+		}
+		if !cur.Has(e.Type) {
+			cur.Set(e.Type, e.Content)
+			continue
+		}
+		// duplicate field: chgksuite warns and merges
+		old := cur.Get(e.Type)
+		oldList, oldIsList := old.([]any)
+		newList, newIsList := e.Content.([]any)
+		oldStr, oldIsStr := old.(string)
+		newStr, newIsStr := e.Content.(string)
+		switch {
+		case newIsList && oldIsStr:
+			cur.Set(e.Type, append([]any{oldStr}, newList...))
+		case newIsStr && oldIsList:
+			cur.Set(e.Type, append(oldList, newStr))
+		case newIsList && oldIsList:
+			cur.Set(e.Type, append(oldList, newList...))
+		case newIsStr && oldIsStr:
+			cur.Set(e.Type, oldStr+sep+newStr)
+		}
+	}
+	if !cur.Empty() {
+		p.creditAuthor(cur)
+		final = append(final, fsource.Pair{Type: "Question", Content: cur})
+	}
+	return final
+}
+
+// creditAuthor is --defaultauthor: a question that names no author gets the
+// one the whole file was parsed with.
+func (p *parser) creditAuthor(q *fsource.Question) {
+	if p.defaultAuthor != "" && !q.Has("author") {
+		q.Set("author", p.defaultAuthor)
+	}
+}
+
+// ── step 7: header, date, per-question cleanup ──────────────────────────────
+
+var (
+	reDateDMY = regexp.MustCompile(`[0-9]{2}\.[0-9]{2}\.[0-9]{4}`)
+	reDateYMD = regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}`)
+)
+
+// searchForDate ports search_for_date + check_date: a date-shaped string only
+// counts if it's plausible (not before 1980, not more than a year in the future).
+func (p *parser) searchForDate(s string) string {
+	try := func(re *regexp.Regexp, layout string) string {
+		for _, m := range re.FindAllString(s, -1) {
+			d, err := time.Parse(layout, m)
+			if err != nil {
+				continue
+			}
+			today := p.now.Truncate(day)
+			if d.Year() >= minDateYear && (d.Before(today) || d.Sub(today) <= dateHorizon) {
+				return m
+			}
+		}
+		return ""
+	}
+	if m := try(reDateDMY, "02.01.2006"); m != "" {
+		return m
+	}
+	return try(reDateYMD, "2006-01-02")
+}
+
+// headerPass ports step 7: promote the leading meta line to the package heading
+// and find the date among the header lines.
+func (p *parser) headerPass(final fsource.Doc) fsource.Doc {
+	fq := -1
+	for i, pr := range final {
+		if pr.Type == "Question" {
+			fq = i
+			break
+		}
+	}
+	if fq < 0 {
+		return final
+	}
+	dateDefined, headingDefined := false, false
+	for _, pr := range final[:fq] {
+		switch pr.Type {
+		case "date":
+			dateDefined = true
+		case "heading", "ljheading":
+			headingDefined = true
+		}
+	}
+	if !headingDefined && len(final) > 0 && final[0].Type == "meta" {
+		final[0].Type = "heading"
+	}
+	// a heading stays a heading; the date it contains becomes its own element
+	// (pre-existing behaviour, previously via the ljheading copy that used to
+	// absorb this conversion)
+	makeDate := func(i int) {
+		if final[i].Type == "heading" {
+			final = append(final[:i], append(fsource.Doc{{Type: "date", Content: final[i].Content}}, final[i:]...)...)
+		} else {
+			final[i].Type = "date"
+		}
+	}
+	for i := 0; !dateDefined && i < fq && i < len(final); i++ {
+		content, ok := final[i].Content.(string)
+		if !ok {
+			continue
+		}
+		n := float64(utf8.RuneCountInString(content)) / dateShare
+
+		if m := p.rx.field("date2").FindString(content); m != "" && float64(utf8.RuneCountInString(m)) >= n {
+			makeDate(i)
+			dateDefined = true
+			break
+		}
+		if m := p.searchForDate(content); m != "" && float64(utf8.RuneCountInString(m)) >= n {
+			makeDate(i)
+			dateDefined = true
+			break
+		}
+	}
+	return final
+}
+
+func (p *parser) postprocessQuestion(q *fsource.Question) {
+	if n, ok := q.Get("number").(string); ok && strings.TrimSpace(n) == "" {
+		q.Delete("number")
+	}
+	if !q.Has("question") {
+		return
+	}
+	qs := joinStrings(q.Get("question"))
+	for _, prefix := range zeroPrefixes {
+		if strings.HasPrefix(qs, prefix) {
+			q.Set("question", replaceDeep(q.Get("question"), prefix, ""))
+			q.Set("number", 0)
+			qs = joinStrings(q.Get("question"))
+		}
+	}
+	for _, k := range []string{"zachet", "nezachet", "source", "comment", "author"} {
+		if !q.Has(k) {
+			p.tryExtractField(q, k)
+		}
+	}
+	qs = joinStrings(q.Get("question"))
+	// "Handout:\n[…" → "[Handout:\n…" so the handout ends up inside the
+	// bracketed block the composer looks for. A label that is already in a
+	// bracket is a handout whose text happens to open with one ("[СЛОВО
+	// ПРОПУЩЕНО] …"), and is left alone.
+	if m := p.rx.handoutBefore.FindStringSubmatch(qs); m != nil {
+		q.Set("question", replaceDeep(q.Get("question"), m[0], m[1]+"["+p.rx.handoutLabel+":"+m[2]))
+	}
+	liftLeadingImages(q)
+}
+
+// reLeadingImages matches the (img …) lines a question opens with, and the text
+// that has to follow them.
+var reLeadingImages = regexp.MustCompile(`(?s)\A((?:[ \t]*\(img [^)\n]*\)[ \t]*\n)+)(.*\S.*)\z`)
+
+// liftLeadingImages makes the handout out of the pictures a question opens with.
+// A picture on its own line above the question text is what the teams are given
+// to look at, and in a Word document nobody had to type «Handout:» above it for
+// that to be true — so an imported question kept the (img …) at the head of its
+// text and its handout field stayed empty (#80). A question that is nothing but
+// a picture is left alone: it would be left with no text at all.
+func liftLeadingImages(q *fsource.Question) {
+	if q.Has("handout") {
+		return
+	}
+	text, ok := q.Get("question").(string)
+	if !ok {
+		return
+	}
+	m := reLeadingImages.FindStringSubmatch(text)
+	if m == nil {
+		return
+	}
+	q.Set("handout", strings.TrimSpace(m[1]))
+	q.Set("question", strings.TrimSpace(m[2]))
+}
+
+// tryExtractField ports _try_extract_field: a field that never got its own line
+// (e.g. a "zachet:" label buried at the end of the answer) is pulled out of whichever
+// field currently holds it.
+func (p *parser) tryExtractField(q *fsource.Question, k string) {
+	re := p.rx.field(k)
+	if re == nil {
+		return
+	}
+	keys := append([]string(nil), q.Keys()...)
+	// Python iterates sorted(question.keys())
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
+		}
+	}
+	for _, k1 := range keys {
+		var strs []string
+		collectStrings(q.Get(k1), &strs)
+		for _, s := range strs {
+			lines := strings.Split(s, "\n")
+			for i, line := range lines {
+				loc := re.FindStringIndex(line)
+				if loc == nil {
+					continue
+				}
+				matched := line[loc[0]:loc[1]]
+				val := strings.Join(append([]string{strings.Replace(line, matched, "", 1)}, lines[i+1:]...), "\n")
+				toErase := []string{matched, val}
+				val = strings.TrimSpace(val)
+				if val == "" {
+					return // Python: `if val:` — an empty extraction is dropped
+				}
+				q.Set(k, val)
+				for _, v := range toErase {
+					q.Set(k1, replaceDeep(q.Get(k1), v, ""))
+				}
+				return
+			}
+		}
+	}
+}
+
+func collectStrings(v any, out *[]string) {
+	switch t := v.(type) {
+	case string:
+		*out = append(*out, t)
+	case []any:
+		for _, x := range t {
+			collectStrings(x, out)
+		}
+	}
+}
+
+func joinStrings(v any) string {
+	var strs []string
+	collectStrings(v, &strs)
+	return strings.Join(strs, "\n")
+}
+
+// replaceDeep ports ChgkParser._replace: replace and strip, recursing into lists.
+func replaceDeep(v any, from, to string) any {
+	switch t := v.(type) {
+	case string:
+		return strings.TrimSpace(strings.ReplaceAll(t, from, to))
+	case []any:
+		out := make([]any, len(t))
+		for i, x := range t {
+			out[i] = replaceDeep(x, from, to)
+		}
+		return out
+	}
+	return v
+}

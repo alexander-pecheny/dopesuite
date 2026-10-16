@@ -62,3 +62,27 @@ func Canon(t testing.TB, file string) string {
 	t.Helper()
 	return strings.ReplaceAll(string(Read(t, file+".canon")), "\r\n", "\n")
 }
+
+// Chgk are the packages chgksuite parses with ChgkParser (the chgk and brain
+// games), plain text and .docx alike.
+var Chgk = []string{
+	"2019-07-23_beln19_u.docx",
+	"Kubok_knyagini_Olgi-2015.docx",
+	"Shkolny_Chemp_Estonii-2014_(48v).docx",
+	"bkd_2021_all.txt",
+	"borromeo.txt",
+	"comment_first.txt",
+	"haifa2025.docx.encrypted",
+	"kinsbf_day_1.txt.encrypted",
+	"link_unwrap.docx",
+	"malkin_papkov_synchr.docx",
+	"octo2021_khmelkov.docx",
+	"ovsch_boronenko_3.docx",
+	"pass1.docx",
+	"single_number_line_test.docx",
+	"source_numbering_bug.docx",
+	"test_amper.docx",
+	"test_blitz.txt",
+	"tourrev_with_razmin.docx",
+	"СЧР_Шередега_Ермишкин.docx",
+}
