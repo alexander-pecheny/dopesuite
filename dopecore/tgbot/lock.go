@@ -29,16 +29,16 @@ import (
 // systemd's PrivateTmp, so units that see different /tmp still contend here.
 // A unit under ProtectSystem=strict needs ReadWritePaths=/run/lock.
 //
-// Windows has no such directory; the per-user temp is the closest thing, and
-// nothing there runs two servers on one token anyway — the CLI links this in
-// for `compose telegram` and never polls.
+// /run/lock is Linux's. Windows and macOS have no such directory; the per-user
+// temp is the closest thing, and nothing there runs two servers on one token
+// anyway, only the CLI's or the desktop app's `compose telegram`.
 var lockDir = defaultLockDir()
 
 func defaultLockDir() string {
-	if runtime.GOOS == "windows" {
-		return os.TempDir()
+	if runtime.GOOS == "linux" {
+		return "/run/lock"
 	}
-	return "/run/lock"
+	return os.TempDir()
 }
 
 // TokenHash names a bot token without printing it: the first 12 hex digits of
