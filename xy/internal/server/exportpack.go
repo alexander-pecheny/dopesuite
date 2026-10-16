@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"strings"
 
-	"xy/internal/chgk/docx"
-	"xy/internal/chgk/fsource"
-	"xy/internal/chgk/handout"
-	"xy/internal/chgk/imghost"
-	"xy/internal/chgk/openquiz"
-	"xy/internal/chgk/pptx"
-	"xy/internal/chgk/typstdoc"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/docx"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/imghost"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/openquiz"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/pptx"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/typstdoc"
 
 	xystrings "xy/i18nstrings"
 )

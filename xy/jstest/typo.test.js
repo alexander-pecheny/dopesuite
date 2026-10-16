@@ -1,5 +1,5 @@
 // The browser's typography pass, checked against the SAME fixtures the Go
-// implementation is checked against (internal/chgk/typoedit/testdata). The Go
+// implementation is checked against (chgksuite/typoedit/testdata). The Go
 // package is the oracle — the port was made from it — but the browser is where
 // the pass actually runs, because question text must never be posted to a server
 // that is not allowed to see it. If the two ever disagree, one of these two
@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyTypo } from "../web/assets/static/dist/typo.js";
-import cases from "../internal/chgk/typoedit/testdata/pass_cases.json" with { type: "json" };
+import cases from "../../chgksuite/typoedit/testdata/pass_cases.json" with { type: "json" };
 
 for (const c of cases.pass) {
   test(`pass: ${c.name}`, () => {

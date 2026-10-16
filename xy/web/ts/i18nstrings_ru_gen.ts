@@ -652,23 +652,6 @@ export const RU: Strings = {
       mention: () => "Вас упомянули",
     },
   },
-  boardsync: {
-    config: {
-      emptyUrl: () => "пустая ссылка на доску",
-      unrecognized: (url: string) => `не понял, какая доска: ${url}`,
-    },
-    fetch: {
-      card: (id: string, err: string) => `карточка ${id}: ${err}`,
-      list: (id: string, err: string) => `список ${id}: ${err}`,
-    },
-    upload: {
-      defaultCaption: () => "вопрос",
-      listMissing: (name: string, known: string) => `список «${name}» не найден; есть: ${known}`,
-      noLists: () => "на доске нет списков",
-      posted: (caption: string) => `отправлено: ${caption}`,
-      uploading: (name: string) => `загружаю в список «${name}»`,
-    },
-  },
   bot: {
     login: {
       hint: (url: string) => `Пришлите код со страницы входа. Если его нет — откройте ${url}/login и нажмите «Войти через телеграм».`,
@@ -887,64 +870,6 @@ export const RU: Strings = {
       notZip: () => "это не zip-архив",
       tooLarge: () => "архив больше 4 ГБ",
       zip64Unsupported: () => "zip64 не поддерживается",
-    },
-  },
-  chgkcli: {
-    addStats: {
-      customCsvFlag: () => "a csv/xlsx результаты table in rating.chgk.info's format, comma-separated",
-    },
-    board: {
-      boardUrlPrompt: () => "Вставьте ссылку на доску: ",
-      emptyToken: () => "пустой токен",
-      initialPassphrasePrompt: () => "Введите пароль доски xy (он будет сохранён в board_metadata.toml): ",
-      needBoardUrl: () => "Чтобы работать с доской, нужна ссылка на неё. Примеры:",
-      noAnswersFlag: () => "СИ .docx: drop the answer lines",
-      noToken: (host: string, url: string) => `нет сохранённого токена для ${host}. Сначала выполните:
-  chgksuite board token ${url}`,
-      nothingToUpload: () => "нечего загружать",
-      onlyAnswersFlag: () => "СИ .docx: keep only the answer lines",
-      openBrowser: () => "Откройте в браузере:",
-      openBrowserTokens: (url: string) => `Откройте в браузере ${url}/profile/tokens,
-создайте токен и вставьте его сюда.
-`,
-      passphrasePrompt: () => "Пароль доски xy: ",
-      tokenPrompt: () => "Токен: ",
-    },
-    docx: {
-      noParagraphFlag: () => "no line break after \"Вопрос N.\"",
-      onlyQuestionNumberFlag: () => "label questions \"N.\" instead of \"Вопрос N.\"",
-    },
-    handouts: {
-      alreadyExists: (file: string) => `${file} уже есть: удалите его или возьмите другое имя`,
-      colourSuffix: () => ", цветных",
-      dimensionsNote: (width: string, height: string) => `${width} × ${height} мм`,
-      htmlGeometryNote: (width: string, share: string) => `ширина ${width} мм — ${share} листа A4`,
-      pagesNote: (file: string, pages: string, colour: string) => `${file}: ${pages} страниц${colour}`,
-      scaleNote: (scale: string) => `масштаб ×${scale}`,
-      skipWarning: (file: string, err: string) => `${file}: ${err} — пропускаем`,
-      warnQuestion: (number: string, text: string) => `вопрос ${number}: ${text}`,
-      watchNote: (file: string) => `слежу за ${file} — Ctrl-C, чтобы закончить`,
-    },
-    lj: {
-      genimpFlag: () => "add the «Общие впечатления» post",
-    },
-    parse: {
-      tourNumbersAsWordsFlag: () => "rename the tours «Первый тур», «Второй тур»…: on|off",
-    },
-    shared: {
-      replaceNoBreakHyphensFlag: () => "make the hyphen of а short word non-breaking: on|off",
-    },
-    telegram: {
-      done: (duration: string) => `готово за ${duration}`,
-      posting: (channel: string, chat: string) => `публикую в ${channel}, комментарии в ${chat}`,
-      stopIfNoStatsFlag: () => "refuse to publish a package whose questions carry no «Взятия:»",
-    },
-  },
-  chgkimport: {
-    error: {
-      no4s: () => "в архиве нет файла .4s",
-      noQuestions: () => "в файле не найдено вопросов",
-      tooBig: () => "архив слишком велик в распакованном виде",
     },
   },
   chrome: {
@@ -1292,60 +1217,6 @@ ${usage}
       passphrasePrompt: (name: string) => `Пароль доски «${name}»: `,
       summary: () => "ввести пароль доски и запомнить её ключ",
       usage: () => "xy-cli unlock <id|имя>\nСпрашивает пароль доски и запоминает её ключ.",
-      wrongPassphrase: () => "неверный пароль доски",
-    },
-  },
-  docs: {
-    docx: {
-      hostVersion: () => "Версия для ведущего",
-      screenVersion: () => "Версия для экрана",
-    },
-    handout: {
-      badMarkup: () => "раздатка, похоже, размечена неправильно",
-      imageMissing: () => "файл картинки не найден, добавьте раздатку вручную",
-      languageMissing: (language: string) => `язык "${language}": нет выражения handout_short`,
-      packMultiple: () => "больше одной раздатки: pack берёт только файлы после split_fit",
-      packNoGrid: () => "нет columns или rows: pack берёт только файлы после split_fit",
-      packNone: () => "в файле нет раздаток",
-      preambleSetting: (line: string) => `в преамбуле может быть только настройка, кроме for_question, image, columns и rows: "${line}"`,
-      rotateImageMissing: (name: string) => `rotate: нет картинки "${name}"`,
-    },
-    handoutList: {
-      byNumberLead: () => "Сквозная нумерация:\n",
-      byTourLead: () => "По турам:\n",
-      heading: () => "ВОПРОСЫ С РАЗДАТОЧНЫМ МАТЕРИАЛОМ:\n\n",
-      tourNone: (n: string) => `Тур ${n}: нет раздаток
-`,
-      tourNumbers: (n: string, numbers: string) => `Тур ${n}: ${numbers}
-`,
-    },
-    image: {
-      missing: (name: string) => `[нет изображения: ${name}]`,
-    },
-    markdown: {
-      answer: () => "Ответ",
-      author: () => "Автор",
-      comment: () => "Комментарий",
-      imageLink: () => "картинка",
-      nezachet: () => "Незачёт",
-      question: (n: string) => `Вопрос ${n}`,
-      source: () => "Источник",
-      zachet: () => "Зачёт",
-    },
-    pptx: {
-      questionCaps: (n: string) => `ВОПРОС ${n}`,
-    },
-    print: {
-      measure: (err: string) => `измерение: ${err}`,
-      measureNoSize: () => "измерение: браузер не вернул размеры страницы",
-      measureZeroHeight: () => "измерение: нулевая высота",
-      pdf: (err: string) => `печать PDF: ${err}`,
-      png: (err: string) => `снимок PNG: ${err}`,
-      widthMissing: () => "не нашёл \"width: <N>mm\" — ширина тела должна быть задана в миллиметрах",
-    },
-    typst: {
-      lineError: (n: string, err: string) => `строка ${n}: ${err}`,
-      lineNotPair: (n: string) => `строка ${n}: не пара ключ = значение`,
     },
   },
   export: {
@@ -1630,31 +1501,6 @@ ${usage}
       question: (n: string, question: string) => `Версия ${n}: ${question}`,
     },
   },
-  install: {
-    archiveEscape: (name: string) => `архив пытается писать за пределы каталога: ${name}`,
-    browser: {
-      archiveNoShell: () => "в архиве нет chrome-headless-shell",
-      downloading: (version: string, platform: string) => `качаю chromium ${version} для ${platform}…`,
-      noBuild: (platform: string) => `для ${platform} готовой сборки chromium нет — поставьте браузер системой (apt install chromium / brew install chromium) и укажите его через --browser или $CHGKSUITE_BROWSER`,
-      noSandbox: () => "система запрещает песочницу chromium, запускаю с --no-sandbox",
-      notFound: () => "не нашёл браузер: поставьте chromium, укажите его через --browser или $CHGKSUITE_BROWSER",
-      notInstalled: () => "браузера на этой машине нет",
-      platformMissing: (platform: string) => `для ${platform} сборки нет`,
-      releasesFailed: (status: string) => `список сборок chromium: ${status}`,
-      releasesNoStable: () => "список сборок chromium: нет стабильного канала",
-      symlinkEscape: (name: string, dest: string) => `архив ссылается за пределы каталога: ${name} → ${dest}`,
-    },
-    installed: (path: string) => `установлен: ${path}`,
-    typst: {
-      archiveNoBinary: (binary: string) => `в архиве нет ${binary}`,
-      downloading: (version: string) => `качаю typst ${version}…`,
-      notFound: () => "typst на этой машине нет",
-      platformMissing: (platform: string) => `для ${platform} сборки typst нет`,
-      releaseNoBuild: (build: string) => `в релизе typst нет сборки ${build}`,
-      releasesFailed: (status: string) => `список сборок typst: ${status}`,
-      unknownArchive: (archive: string) => `непонятный архив: ${archive}`,
-    },
-  },
   invite: {
     facts: {
       approval: () => "с одобрением",
@@ -1726,15 +1572,6 @@ ${usage}
     usage: {
       left: (n: string, left: string) => `использований: ${n}, осталось: ${left}`,
       used: (n: string) => `использований: ${n}`,
-    },
-  },
-  lj: {
-    error: {
-      fault: (message: string, code: string) => `livejournal: ${message} (код ${code})`,
-      malformed: (err: string) => `ответ livejournal: ${err}`,
-      noChallenge: () => "livejournal не выдал challenge",
-      nothing: () => "нечего публиковать",
-      status: (status: string) => `livejournal ответил ${status}`,
     },
   },
   notify: {
@@ -2023,56 +1860,12 @@ ${usage}
       stopTitle: () => "Завершить тест-режим",
     },
   },
-  stats: {
-    options: {
-      label: () => "Взятия",
-    },
-    question: {
-      line: (label: string, taken: string, total: string, percent: string) => `${label}: ${taken}/${total} (${percent}%)`,
-      takers: (names: string) => ` (${names})`,
-    },
-    range: {
-      bad: (value: string) => `--question_range "${value}": нужен диапазон вида 25-36`,
-    },
-    rating: {
-      decode: (id: string, err: string) => `турнир ${id}: ${err}`,
-      status: (id: string, status: string) => `турнир ${id}: рейтинг ответил ${status}`,
-    },
-    results: {
-      empty: () => "в результатах нет ни одной команды с расплюсовкой",
-    },
-    table: {
-      disputed: (n: string, value: string, team: string) => `В расплюсовке найдены нерассмотренные спорные или неожиданные значения (${n} шт.), они засчитаны как неверные. Например: значение="${value}", команда="${team}".`,
-      headerMissing: () => "Не удалось найти заголовок вопросной таблицы (строку со столбцом «Название»).",
-    },
-    xlsx: {
-      noSheets: () => "в книге нет листов",
-      partMissing: (name: string) => `${name}: нет в книге`,
-      sheetMissing: (id: string) => `лист "${id}" не найден`,
-    },
-  },
   tg: {
     export: {
       connecting: () => "Подключаемся к боту…",
       failed: () => "Не удалось опубликовать в телеграм.",
       missingFields: () => "Нужны токен бота, канал и группа обсуждения.",
       posting: (channel: string, chat: string) => `Публикуем в ${channel}, обсуждение ${chat}…`,
-    },
-    resolve: {
-      done: () => "✅ Готово, продолжаем.",
-      forward: (name: string) => `Перешлите боту любое сообщение из канала «${name}».`,
-      groupCode: (name: string, code: string) => `Напишите в группе обсуждения «${name}» сообщение: ${code}`,
-      groupCodeHint: () => "Бот должен быть в группе и быть администратором, иначе он не увидит.",
-      privateCode: (code: string) => `Отправьте боту в личном чате код: ${code}`,
-      sameChannel: () => "Это тот же канал, а нужна группа обсуждения — напишите в неё, не в канал.",
-    },
-    verify: {
-      notAdmin: (what: string) => `бот не администратор ${what}`,
-      notMember: (what: string, err: string) => `бот не добавлен к ${what}: ${err}`,
-      ofChannel: () => "канала",
-      ofChat: () => "группы обсуждения",
-      whatChannel: () => "каналу",
-      whatChat: () => "группе обсуждения",
     },
   },
   timeline: {

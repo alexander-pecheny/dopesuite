@@ -20,7 +20,7 @@ func TestXYCLIEndToEnd(t *testing.T) {
 	c := registerUser(t, srv, ts, 555200, "cliuser")
 	token := mintToken(t, c, "xy-cli")
 
-	raw, err := os.ReadFile("../xycli/testdata/envelope.json")
+	raw, err := os.ReadFile("../../../chgksuite/xyenvelope/testdata/envelope.json")
 	if err != nil {
 		t.Fatal(err)
 	}

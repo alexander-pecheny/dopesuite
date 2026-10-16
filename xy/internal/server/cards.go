@@ -9,7 +9,7 @@ import (
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 
-	"xy/internal/cardkind"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
 )
 
 type cardDTO struct {

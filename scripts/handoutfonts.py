@@ -35,7 +35,7 @@ import io
 from fontsource import ROOT, fetch, fixing, load, member, models
 from symbolfonts import donor_subset, fetch_donor, merge
 
-OUT = ROOT / "xy/internal/chgk/handout/assets"
+OUT = ROOT / "chgksuite/handout/assets"
 STYLES = ("Regular", "Bold", "Italic", "BoldItalic")
 
 UPSTREAM = (

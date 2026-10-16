@@ -86,6 +86,10 @@ BRANCH_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$")
 #   module        subdir holding the go.mod         (build + `go test` run here)
 #   package       Go package, relative to module
 #   binary        installed name — systemd's ExecStart points at it, do not rename
+# The sibling modules whose tests a deploy of this module also runs, because the
+# binary is built from them.
+TESTED_WITH: dict[str, tuple[Path, ...]] = {"xy": (ROOT / "chgksuite",)}
+
 TARGETS: dict[str, dict] = {
     "dope-server": {
         "host": "vps2day-ee",
@@ -795,7 +799,8 @@ def main() -> int:
     targets = [Target(name, args) for name in args.targets]
 
     if not args.skip_tests:
-        for module in dict.fromkeys(t.module for t in targets):
+        modules = [m for t in targets for m in (t.module, *TESTED_WITH.get(t.module.name, ()))]
+        for module in dict.fromkeys(modules):
             run(["go", "test", "./..."], cwd=module)
 
     arch_by_host: dict[str, str] = {}

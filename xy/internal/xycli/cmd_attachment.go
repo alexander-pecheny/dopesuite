@@ -152,7 +152,7 @@ func attachmentAdd(a *app, args []string) error {
 		return err
 	}
 	// The timeline entry that says an attachment arrived, in the browser's shape.
-	eventEnc, err := b.DK.SealPayload(KindAttachAdd, AttachPayload{File: filename})
+	eventEnc, err := SealPayload(b.DK, KindAttachAdd, AttachPayload{File: filename})
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-// The browser's Card Kind rules against the same table internal/cardkind's
+// The browser's Card Kind rules against the same table chgksuite/cardkind's
 // TestKindTable spells out: every kind against every question cardkind.ts
 // answers.
 import { test } from "node:test";

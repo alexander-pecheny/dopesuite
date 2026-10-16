@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"xy/internal/chgk/handout"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
 
 	xystrings "xy/i18nstrings"
 )
@@ -19,7 +19,7 @@ import (
 // The server renders it to a PDF in-process via the Go handout package (which
 // emits the same Typst document chgksuite would and compiles it with the typst
 // binary) — no Python. typst runs in-process as a wasm module with its filesystem
-// served from memory (internal/chgk/typstwasm), so the decrypted questions and
+// served from memory (chgksuite/typstwasm), so the decrypted questions and
 // their images never touch a disk at all.
 
 const handoutTimeout = 180 * time.Second

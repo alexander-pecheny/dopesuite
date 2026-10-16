@@ -8,11 +8,11 @@ import (
 	"runtime"
 	"time"
 
-	"xy/internal/chgk/handout"
-	"xy/internal/chgk/typstwasm"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/typstwasm"
 )
 
-// typst runs in-process as a wasm module (internal/chgk/typstwasm), so handout
+// typst runs in-process as a wasm module (chgksuite/typstwasm), so handout
 // rendering never hands the user's decrypted questions to a filesystem — the last
 // place in xy where that was unavoidable, since the typst CLI is a separate process
 // that can only read files.

@@ -66,7 +66,7 @@ func commentList(a *app, args []string) error {
 		if e.Deleted {
 			row.Text = s.Cli.Comment.Deleted()
 		} else {
-			row.Text = EventText(b.DK.OpenPayload(e.Type, e.PayloadEnc))
+			row.Text = EventText(OpenPayload(b.DK, e.Type, e.PayloadEnc))
 		}
 		rows = append(rows, row)
 	}
@@ -114,7 +114,7 @@ func commentAdd(a *app, args []string) error {
 	if strings.TrimSpace(body) == "" {
 		return corei18n.User(s.Cli.Comment.Empty())
 	}
-	payloadEnc, err := b.DK.SealPayload(KindComment, CommentPayload{Text: body})
+	payloadEnc, err := SealPayload(b.DK, KindComment, CommentPayload{Text: body})
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func commentEdit(a *app, args []string) error {
 	if strings.TrimSpace(body) == "" {
 		return corei18n.User(s.Cli.Comment.Empty())
 	}
-	payloadEnc, err := b.DK.SealPayload(KindComment, CommentPayload{Text: body})
+	payloadEnc, err := SealPayload(b.DK, KindComment, CommentPayload{Text: body})
 	if err != nil {
 		return err
 	}

@@ -274,7 +274,7 @@ alter table users add column default_author text;`)},
 	// question — 1–3 keywords that identify it in a list faster than the opening
 	// words of its text. Deliberately NOT a 4s marker: the alias is xy card
 	// metadata, and the 4s markers mirror chgksuite's table byte-for-byte (see
-	// internal/chgk/fsource), so a marker of our own would either break import /
+	// chgksuite/fsource), so a marker of our own would either break import /
 	// export parity or leak the alias into exported documents. NULL means no alias.
 	{Version: 12, Name: "cards.alias_enc", Up: schema.Exec(`
 alter table cards add column alias_enc blob;`)},

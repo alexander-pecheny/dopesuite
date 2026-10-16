@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"xy/internal/chgk/fsource"
-	"xy/internal/chgk/tg"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/tg"
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"

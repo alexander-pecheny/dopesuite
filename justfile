@@ -1,22 +1,25 @@
-# Monorepo fan-out. xy/, dope/ and spliff/ keep their own justfiles (run those
-# directly when working inside one); dopeuikit/ and dopecore/ have none, so
-# their recipes live here.
+# Monorepo fan-out. xy/, dope/, spliff/ and chgksuite/ keep their own justfiles
+# (run those directly when working inside one); dopeuikit/ and dopecore/ have
+# none, so their recipes live here.
 
 default:
     @just --list
 
-# Go tests + frontend (bun) tests, all five modules.
+# Go tests + frontend (bun) tests, all six modules.
 test: test-core test-uikit
+    cd chgksuite && just test
     cd xy && just test
     cd dope && just test
     cd spliff && just test
 
 fmt: fmt-core fmt-uikit fmt-scripts
+    cd chgksuite && just fmt
     cd xy && just fmt
     cd dope && just fmt
     cd spliff && just fmt
 
 vet: vet-core vet-uikit
+    cd chgksuite && just vet
     cd xy && just vet
     cd dope && just vet
     cd spliff && just vet
@@ -26,6 +29,7 @@ vet: vet-core vet-uikit
 #
 # The gate, wherever you are. A module's own faster one is `just check`.
 pre-commit: pre-commit-core pre-commit-uikit class-check cyrillic-check strings-check slop-check
+    cd chgksuite && just check
     cd xy && just check
     cd dope && just check
     cd spliff && just check
@@ -48,6 +52,7 @@ icons-add name:
 # Regenerate every module's Catalog from its TOML (root docs/adr/0006).
 generate-strings:
     cd dopeuikit && go generate ./i18nstrings
+    cd chgksuite && go generate ./i18nstrings
     cd xy && go generate ./i18nstrings
     cd dope && go generate ./i18nstrings
     cd spliff && go generate ./i18nstrings
@@ -209,13 +214,14 @@ generate-check: build-web
     # (./palette emits into two stylesheets, a Go file and a TypeScript one), and
     # checking only the first would let the others go stale silently.
     for target in "dopeuikit ./kit kit/tags_gen.go" \
+                  "chgksuite ./i18nstrings i18nstrings/types_gen.go i18nstrings/ru_gen.go" \
                   "xy ./i18nstrings i18nstrings/types_gen.go i18nstrings/ru_gen.go web/ts/i18nstrings_plural_gen.ts web/ts/i18nstrings_types_gen.ts web/ts/i18nstrings_ru_gen.ts" \
                   "dope ./i18nstrings i18nstrings/types_gen.go i18nstrings/ru_gen.go dope/web/ts/i18nstrings_plural_gen.ts dope/web/ts/i18nstrings_types_gen.ts dope/web/ts/i18nstrings_ru_gen.ts" \
                   "dopeuikit ./palette assets/core.css palette/sets_gen.go ../dope/dope/web/assets/static/styles.css ../xy/web/ts/palette_gen.ts" \
                   "dope ./dope/web/ui dope/web/ui/tags_gen.go" \
                   "xy ./internal/ui internal/ui/tags_gen.go" \
-                  "xy ./internal/chgk/fsource web/ts/markers_gen.ts" \
-                  "xy ./internal/cardkind web/ts/cardkind_gen.ts"; do
+                  "chgksuite ./fsource ../xy/web/ts/markers_gen.ts" \
+                  "chgksuite ./cardkind ../xy/web/ts/cardkind_gen.ts"; do
       set -- $target
       module=$1 gentarget=$2
       shift 2

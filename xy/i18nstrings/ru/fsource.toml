@@ -1,5 +1,6 @@
-# xy — the package model's parser (internal/chgk/fsource/parse.go): the theme
-# label numberThemes writes into the parsed structure (SI/troika inline games).
+# The package model's theme labels as the browser draws them (preview.ts,
+# carddetail.ts, themes.ts). chgksuite's fsource.toml has the same default label
+# for its parser (fsource/parse.go).
 
 [theme]
 # The label a theme gets when its own line carries no "тема N." prefix.

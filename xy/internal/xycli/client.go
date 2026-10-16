@@ -14,7 +14,8 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	"xy/internal/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
 )
 
 const (
@@ -283,8 +284,8 @@ func (c *Client) Boards() ([]BoardSummary, error) {
 	return out, c.get("/api/boards", &out)
 }
 
-func (c *Client) Keymeta(boardID int64) (Keymeta, error) {
-	var km Keymeta
+func (c *Client) Keymeta(boardID int64) (xyenvelope.Keymeta, error) {
+	var km xyenvelope.Keymeta
 	return km, c.get(fmt.Sprintf("/api/boards/%d/keymeta", boardID), &km)
 }
 

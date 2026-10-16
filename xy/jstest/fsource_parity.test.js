@@ -1,4 +1,4 @@
-// The Go/TS 4s parity corpus (internal/chgk/fsource/testdata/parity.json, Go
+// The Go/TS 4s parity corpus (chgksuite/fsource/testdata/parity.json, Go
 // the oracle): the marker split of every fixture line, the (img …) references,
 // and the .hndt document the browser writes and the server parses.
 import { test } from "node:test";
@@ -7,7 +7,7 @@ import { xyChgk } from "../web/assets/static/dist/chgk.js";
 import { xyHndt } from "../web/assets/static/dist/hndt.js";
 import { xyListExport } from "../web/assets/static/dist/listexport.js";
 import { MARKERS } from "../web/assets/static/dist/markers_gen.js";
-import corpus from "../internal/chgk/fsource/testdata/parity.json" with { type: "json" };
+import corpus from "../../chgksuite/fsource/testdata/parity.json" with { type: "json" };
 
 test("splitMarker agrees with fsource.SplitMarker on every fixture line", () => {
   assert.ok(corpus.lines.length > 50, "the corpus is seeded from the fixtures");

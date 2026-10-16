@@ -3,10 +3,10 @@
 // Cards. The export modal, the handouts panel and the board's handout badge all
 // read it here.
 //
-// The reference is Go's internal/listexport, which xy-cli exports through. This
+// The reference is Go's chgksuite/listexport, which xy-cli exports through. This
 // copy stays in the browser because a bare .4s is written offline and the badge
-// is drawn on every render. Its corpus, internal/listexport/testdata/cases.json,
-// is written by the Go side (`go test ./internal/listexport -update`), and
+// is drawn on every render. Its corpus, chgksuite/listexport/testdata/cases.json,
+// is written by the Go side (`go test ./listexport -update` in chgksuite/), and
 // jstest/listexport_parity.test.js holds this file to it. A rule changed here
 // is changed there first.
 
@@ -138,7 +138,7 @@ function handoutForCard(desc: string | null | undefined): Handout | null {
 // chgksuite's own 4s2hndt is looser: any mention of a handout in the text counts,
 // with a warning printed for whoever runs it. Here the answer lights the
 // board's badge and offers the handouts panel with nobody to warn, so the label
-// has to open the text (internal/listexport/hndt.go says the same).
+// has to open the text (chgksuite/listexport/hndt.go says the same).
 const HANDOUT_LABEL = new RegExp(`^${S.chgk.label.handout()}[.:]?\\s*`, "i");
 function unbracketedHandout(q: string): Handout | null {
   const name = imgInText(q);

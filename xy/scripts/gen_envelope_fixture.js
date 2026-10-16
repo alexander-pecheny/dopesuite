@@ -1,12 +1,13 @@
-// Regenerates internal/xycli/testdata/envelope.json — the TS half of the
+// Regenerates chgksuite/xyenvelope/testdata/envelope.json — the TS half of the
 // Envelope parity corpus: what crypto.ts sealed, which the Go port must open
-// (internal/xycli/envelope_test.go). The Go half of the same file is written by
-// `go test ./internal/xycli -run TestEnvelopeParity -update`, and jstest/
+// (chgksuite/xyenvelope/envelope_test.go). The Go half of the same file is
+// written by `go test ./xyenvelope -run TestEnvelopeParity -update` in
+// chgksuite/, and jstest/
 // envelope_parity.test.js opens that. Run from xy/:
 //   bun scripts/gen_envelope_fixture.js
 import { xyCrypto } from "../web/assets/static/dist/crypto.js";
 
-const OUT = new URL("../internal/xycli/testdata/envelope.json", import.meta.url);
+const OUT = new URL("../../chgksuite/xyenvelope/testdata/envelope.json", import.meta.url);
 const passphrase = "correct horse battery staple";
 const { keymeta, dk } = await xyCrypto.createBoardKeys(passphrase);
 const plain = [

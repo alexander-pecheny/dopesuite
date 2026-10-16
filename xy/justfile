@@ -2,12 +2,12 @@ set dotenv-load := true
 
 default: dev
 
-# typst is linked in as a wasm module, which the Go build embeds. The 30 MB
-# artifact is NOT in git — build it once with `just build-wasm` (the only step
-# that needs Rust), then again only when bumping typst. Every Go recipe below
-# depends on `wasm` so a fresh clone fails with an instruction, not a cryptic
-# //go:embed error.
-wasm_path := "internal/chgk/typstwasm/typst.wasm"
+# typst is linked in as a wasm module, which chgksuite's typstwasm embeds. The
+# 30 MB artifact is NOT in git — build it once with `just build-wasm` (the only
+# step that needs Rust), then again only when bumping typst. Every Go recipe
+# below depends on `wasm` so a fresh clone fails with an instruction, not a
+# cryptic //go:embed error.
+wasm_path := "../chgksuite/typstwasm/typst.wasm"
 
 # Build the app. Assumes the typst wasm is already built (see `just build-wasm`).
 build: wasm build-web
@@ -19,44 +19,21 @@ cli:
     go build -o ~/.local/bin/xy-cli ./cmd/xy-cli
     @echo "собрано: ~/.local/bin/xy-cli"
 
-# It renders PDFs and раздатки with the typst BINARY — one it is pointed at,
-# else `typst` on PATH — so it needs neither the wasm nor Rust.
-# The Python tool's CLI in Go (../chgksuite_go_rewrite.md), ~14 MB
-chgksuite:
-    go build -ldflags="-s -w" -o ~/.local/bin/chgksuite ./cmd/chgksuite
-    @echo "собрано: ~/.local/bin/chgksuite ($(du -h ~/.local/bin/chgksuite | cut -f1), typst не встроен)"
-
-# Needs the wasm built first, and comes out ~35 MB heavier (14 → 48 stripped).
-# The same, with typst carried along, for a machine that has none
-chgksuite-wasm: wasm
-    go build -tags wasmtypst -ldflags="-s -w" -o ~/.local/bin/chgksuite ./cmd/chgksuite
-    @echo "собрано: ~/.local/bin/chgksuite ($(du -h ~/.local/bin/chgksuite | cut -f1), typst внутри)"
-
 # The shared toolchain (root ADR-0001) builds the gitignored dist trees the Go
 # build embeds (xy's own + the kit's) — so every compiling recipe depends on it.
 build-web:
     cd .. && just build-web xy uikit
 
-# Compile typst to wasm32-wasip1 and drop the artifact where //go:embed wants it.
-# Needs Rust: rustup target add wasm32-wasip1
-# One-time per clone, and once per typst bump (typst-wasm/Cargo.toml).
-# Links with thin LTO (typst-wasm/Cargo.toml) and takes ~4 min. Fat LTO peaks at
-# 4.9 GB RSS and gets OOM-killed (bare SIGKILL) on an 8 GB box; it would buy ~9%
-# on pool startup and nothing per render. If you ever want it on a big machine:
-#   CARGO_PROFILE_RELEASE_LTO=fat just build-wasm
+# typst.wasm and its Rust source live in chgksuite, so it is built there.
 build-wasm:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cargo build --release --target wasm32-wasip1 --manifest-path typst-wasm/Cargo.toml
-    cp typst-wasm/target/wasm32-wasip1/release/typst_wasm.wasm {{wasm_path}}
-    ls -lh {{wasm_path}}
+    cd ../chgksuite && just build-wasm
 
 # Guard: the embedded artifact must exist before anything compiles the Go tree.
 [private]
 wasm:
     #!/usr/bin/env bash
     [ -f {{wasm_path}} ] && exit 0
-    echo "missing {{wasm_path}} — run 'just build-wasm' once (needs Rust + the wasm32-wasip1 target)" >&2
+    echo "missing chgksuite/typstwasm/typst.wasm — run 'just build-wasm' once (needs Rust + the wasm32-wasip1 target)" >&2
     exit 1
 
 dev: wasm build-web
@@ -85,32 +62,25 @@ test-js: build-web
     bun test --parallel ./jstest/
 
 # The kit's guard (root justfile) covers only kit/tags_gen.go; the overlay's
-# tags_gen.go goes just as stale when vocab.json (ours or the kit's) changes,
-# web/ts/markers_gen.ts when fsource's marker table does, and
-# web/ts/cardkind_gen.ts when cardkind's table does.
+# tags_gen.go goes just as stale when vocab.json (ours or the kit's) changes.
+# web/ts/markers_gen.ts and web/ts/cardkind_gen.ts are written from chgksuite,
+# so its generate-check guards them.
 generate-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    # Compare each regenerated file against what was on disk, NOT against HEAD:
+    # Compare the regenerated file against what was on disk, NOT against HEAD:
     # a git diff also fires when vocab.json and tags_gen.go are both edited
     # correctly but not yet committed, which makes pre-commit unusable mid-change.
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
-    rc=0
-    for target in "./internal/ui internal/ui/tags_gen.go" \
-                  "./internal/chgk/fsource web/ts/markers_gen.ts" \
-                  "./internal/cardkind web/ts/cardkind_gen.ts"; do
-      set -- $target
-      gentarget=$1 file=$2
-      cp "$file" "$tmp/before"
-      go generate "$gentarget"
-      if ! diff -q "$tmp/before" "$file" >/dev/null; then
-        echo "$file is stale w.r.t. its source: run 'go generate $gentarget'" >&2
-        diff "$tmp/before" "$file" >&2 || true
-        rc=1
-      fi
-    done
-    exit $rc
+    file=internal/ui/tags_gen.go
+    cp "$file" "$tmp/before"
+    go generate ./internal/ui
+    if ! diff -q "$tmp/before" "$file" >/dev/null; then
+      echo "$file is stale w.r.t. its source: run 'go generate ./internal/ui'" >&2
+      diff "$tmp/before" "$file" >&2 || true
+      exit 1
+    fi
 
 # check cannot see what only the monorepo can: the kit's and dopecore's gates,
 # and class-check, which needs both apps' TypeScript and the shared core.css at

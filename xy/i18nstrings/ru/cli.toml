@@ -72,9 +72,6 @@ usage = "xy-cli unlock <id|имя>\nСпрашивает пароль доски
 need_ref = "нужен id или имя доски: xy-cli unlock 12"
 # The no-echo passphrase prompt, with the board's name.
 passphrase_prompt = 'Пароль доски «{{.name}}»: '
-# The wrong-passphrase message (envelope.go's ErrWrongPassphrase): a failed unwrap
-# and a failed verify say the same, and `xy-cli unlock` prints it.
-wrong_passphrase = "неверный пароль доски"
 done = "доска {{.id}} «{{.name}}» разблокирована\n"
 
 [lock]

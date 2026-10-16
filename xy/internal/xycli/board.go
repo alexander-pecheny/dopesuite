@@ -6,7 +6,8 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	"xy/internal/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
@@ -18,7 +19,7 @@ type Board struct {
 	ID         int64
 	Name       string
 	Role       string
-	DK         DataKey
+	DK         xyenvelope.DataKey
 	Lists      []List
 	Groups     map[int64]string
 	Cards      []Card
@@ -61,7 +62,7 @@ type Label struct {
 }
 
 // LoadBoard fetches a board's snapshot and decrypts every field of it.
-func LoadBoard(c *Client, dk DataKey, boardID int64) (*Board, error) {
+func LoadBoard(c *Client, dk xyenvelope.DataKey, boardID int64) (*Board, error) {
 	snap, err := c.Snapshot(boardID)
 	if err != nil {
 		return nil, err

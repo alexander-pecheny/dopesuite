@@ -1,13 +1,14 @@
 package server
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
-	"xy/internal/cardkind"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
 )
 
 // The cards.kind CHECK constraint and the server's allow-list both say which
@@ -45,5 +46,31 @@ func TestCardKindCheckMatchesTable(t *testing.T) {
 	}
 	if validCardKind("tema") {
 		t.Error("validCardKind accepts a kind the table does not have")
+	}
+}
+
+// The card editor's kind menu is static markup in board.dopeui; it has to
+// offer the pickable kinds, in table order, and no others.
+func TestKindMenuMatchesTable(t *testing.T) {
+	raw, err := os.ReadFile("../../web/assets/ui/board.dopeui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	menu := regexp.MustCompile(`(?s)selectfield id="cardKind"[^\n]*\n((?:\s+option [^\n]*\n)+)`).FindSubmatch(raw)
+	if menu == nil {
+		t.Fatal("board.dopeui: no cardKind selectfield")
+	}
+	var offered []string
+	for _, m := range regexp.MustCompile(`option value="([^"]+)"`).FindAllSubmatch(menu[1], -1) {
+		offered = append(offered, string(m[1]))
+	}
+	var pickable []string
+	for _, k := range cardkind.All {
+		if k.Pickable {
+			pickable = append(pickable, k.Name)
+		}
+	}
+	if !slices.Equal(offered, pickable) {
+		t.Errorf("board.dopeui offers %v, the table's pickable kinds are %v", offered, pickable)
 	}
 }

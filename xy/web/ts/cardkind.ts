@@ -3,9 +3,9 @@
 // asked here, so a new kind is one row in the table and not an edit in every
 // file that used to spell the answer out.
 //
-// The table is Go's internal/cardkind, which the server's allow-list and xy-cli
-// read too. cardkind_gen.ts is generated from it (`go generate
-// ./internal/cardkind`), so a rule changes there, never here.
+// The table is Go's chgksuite/cardkind, which the server's allow-list and xy-cli
+// read too. cardkind_gen.ts is generated from it (`go generate ./cardkind` in
+// chgksuite/), so a rule changes there, never here.
 
 import S from "./i18nstrings.js";
 import { KINDS, type KindName } from "./cardkind_gen.js";

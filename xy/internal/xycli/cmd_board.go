@@ -9,8 +9,9 @@ import (
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
-	"xy/internal/cardkind"
 	"xy/internal/rank"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
 )
 
 // ---- board show ----
@@ -274,7 +275,7 @@ func cardSet(a *app, args []string) error {
 			// real change only, as the browser's rewrites do. The server writes the
 			// row, but only from a payload the client seals: before/after are
 			// plaintext it never sees.
-			eventEnc, err := b.DK.SealPayload(KindDescEdit, DescEditPayload{Before: card.Desc, After: desc})
+			eventEnc, err := SealPayload(b.DK, KindDescEdit, DescEditPayload{Before: card.Desc, After: desc})
 			if err != nil {
 				return err
 			}

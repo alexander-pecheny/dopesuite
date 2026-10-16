@@ -19,7 +19,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
-	"xy/internal/chgk/handout"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
 )
 
 const dbFile = "xy.db"

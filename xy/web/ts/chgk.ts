@@ -411,7 +411,7 @@ function* iterHttpUrlSpans(s: string): Generator<[number, number]> {
   }
 }
 
-// RE_URL is chgksuite's re_url (typotools), as internal/chgk/typo spells it: a
+// RE_URL is chgksuite's re_url (typotools), as chgksuite/typo spells it: a
 // scheme, a www host, or a bare domain with a path — what a link looks like
 // when nobody typed the "https://". A source pasted out of somebody else's
 // document is full of those.

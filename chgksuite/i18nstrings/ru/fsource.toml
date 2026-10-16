@@ -1,0 +1,7 @@
+# The package model's parser (fsource/parse.go): the theme label
+# numberThemes writes into the parsed structure (SI/troika inline games). xy's
+# fsource.toml has the same id for the browser's preview.
+
+[theme]
+# The label a theme gets when its own line carries no "тема N." prefix.
+default_label = 'Тема {{.n}}. {{.name}}'

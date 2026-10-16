@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"xy/internal/chgk/docx"
-	"xy/internal/chgk/fsource"
-	"xy/internal/chgk/typstdoc"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/docx"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/typstdoc"
 
 	xystrings "xy/i18nstrings"
 )
@@ -202,7 +202,7 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleExportPDF is the same export in the other format: the same 4s source and
-// the same images, laid out by typst (internal/chgk/typstdoc) to look like the
+// the same images, laid out by typst (chgksuite/typstdoc) to look like the
 // docx. It runs on the shared in-process typst (wasm) pool, so — like handouts —
 // the plaintext stays in memory.
 func (s *server) handleExportPDF(w http.ResponseWriter, r *http.Request) {

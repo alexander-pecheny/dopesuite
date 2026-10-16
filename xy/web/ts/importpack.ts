@@ -5,7 +5,7 @@
 //
 // A package (.4s / .zip / .docx) becomes a new list. The
 // server parses the upload with the Go port of chgksuite's parser
-// (internal/chgk/chgkimport) and hands back 4s source plus the images it
+// (chgksuite/chgkimport) and hands back 4s source plus the images it
 // references. Everything below happens client-side under the board key: the
 // list, its cards and the image attachments are all encrypted before they go
 // back up.

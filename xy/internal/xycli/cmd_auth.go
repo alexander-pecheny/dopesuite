@@ -8,6 +8,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
 	"golang.org/x/term"
@@ -158,7 +159,7 @@ func cmdUnlock(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	dk, err := Unlock(pass, km)
+	dk, err := xyenvelope.Unlock(pass, km)
 	if err != nil {
 		return err
 	}

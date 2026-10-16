@@ -166,7 +166,7 @@ func labelAssign(a *app, args []string) error {
 		eventType = KindLabelRemove
 	}
 	labelID := target.ID
-	payloadEnc, err := b.DK.SealPayload(eventType, LabelPayload{Label: target.Name, LabelID: &labelID})
+	payloadEnc, err := SealPayload(b.DK, eventType, LabelPayload{Label: target.Name, LabelID: &labelID})
 	if err != nil {
 		return err
 	}
