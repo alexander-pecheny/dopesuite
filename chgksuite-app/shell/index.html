@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>chgksuite</title>
+<script>
+  // menu.js would also draw xy's menu, so only its theme boot is copied. The
+  // Local tab shares this origin's storage, so its theme choice applies here.
+  const theme = () => {
+    const root = document.documentElement;
+    const pref = localStorage.getItem("dope-theme") ?? "system";
+    root.dataset.theme = pref === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : pref;
+    root.dataset.contrast = localStorage.getItem("dope-contrast") ?? "regular";
+  };
+  theme();
+  addEventListener("storage", theme);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", theme);
+</script>
+<link rel="stylesheet" href="/static/styles.css">
+<style>
+  html, body { height: 100%; }
+  body { background: var(--page); }
+  .strip { height: 40px; flex: none; padding: 4px var(--space-2) 0; background: var(--structure); border-bottom: 1px solid var(--border); --wails-draggable: drag; }
+  .strip .seg { padding: 0; border: 0; --wails-draggable: no-drag; }
+  .strip .btn { --wails-draggable: no-drag; }
+  .strip .seg-btn { padding: 3px var(--space-3); }
+  /* The traffic lights sit over the strip's left end. */
+  .mac .strip { padding-left: 80px; }
+  .room { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .servers { max-width: 32rem; margin: 0 auto; padding: var(--space-6) var(--space-4); }
+</style>
+</head>
+<body class="u-col">
+<script>if (navigator.platform.startsWith("Mac")) document.body.classList.add("mac");</script>
+<nav class="strip u-row u-align-center u-justify-between">
+  <div class="seg" id="tabs"></div>
+  <button class="btn btn-primary btn-xs" id="open" type="button">Открыть папку/файл</button>
+</nav>
+<main class="room" id="room">
+  <section class="servers u-col u-gap-lg" id="servers" hidden>
+    <form class="u-col u-gap-sm" id="add">
+      <label class="field">xy server address
+        <input id="address" placeholder="xy.example.org" autocomplete="off" required>
+      </label>
+      <p class="hint hint-danger" id="error" hidden></p>
+      <div class="u-row u-justify-end"><button class="btn btn-primary" type="submit">Add server</button></div>
+    </form>
+    <div class="u-col u-gap-sm" id="list"></div>
+  </section>
+</main>
+<script type="module" src="shell.js"></script>
+</body>
+</html>

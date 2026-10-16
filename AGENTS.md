@@ -1,8 +1,8 @@
 # dopesuite — monorepo
 
-This repo holds seven Go modules: three apps (xy, dope, spliff), two shared
+This repo holds eight Go modules: three apps (xy, dope, spliff), two shared
 layers they are built on (dopeuikit, dopecore), the chgksuite module that xy
-builds its exports on, and one desktop GUI. Each app and chgksuite has its own
+builds its exports on, and two desktop programs. Each app and chgksuite has its own
 `AGENTS.md`, so start there.
 
 ```
@@ -26,6 +26,9 @@ spliff/      shared expenses: who paid for whom, in any currency, and who owes
 chgksuite-gui/
              a Fyne window over the chgksuite CLI, generated from the flags
              that CLI declares (`chgksuite spec`)
+chgksuite-app/
+             chgksuite v2 (docs/chgksuite-v2-plan.md): a Wails window of tabs,
+             the first a local xy served in-process, the others xy servers
 ```
 
 - xy, dope and spliff use the shared layers through `replace
@@ -35,10 +38,10 @@ chgksuite-gui/
   keeps the modules as siblings, which is the layout those paths expect, so a
   build needs no extra setup. The kit and chgksuite import dopecore the same
   way. dopecore imports no other module of ours (`docs/adr/0004`).
-- `chgksuite-gui` is deliberately left out of the cross-module recipes below. It
-  needs cgo and a desktop toolchain, and neither server depends on it. Build and
-  test it with its own `just check`, which also checks that it still matches the
-  CLI it wraps.
+- `chgksuite-gui` and `chgksuite-app` are deliberately left out of the
+  cross-module recipes below. They need cgo and a desktop toolchain, and
+  neither server depends on them. Build and test each with its own `just
+  check`; `chgksuite-gui`'s also checks that it still matches the CLI it wraps.
 - xy, dope and spliff each have a `justfile` with `just dev`, `just test` and
   `just check`, and chgksuite has one with `just test` and `just check`.
   dopeuikit and dopecore have none: their recipes live in the root `justfile`,
