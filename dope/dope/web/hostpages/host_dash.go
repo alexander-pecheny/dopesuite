@@ -155,13 +155,17 @@ func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
 }
 
 // hostDashGameRow links to one game and, for a host who manages games, offers
-// its settings, clear and delete.
-func hostDashGameRow(g PublicFestGame, ref string, canManage bool) *dopeui.Element {
+// its settings, clear and delete. The note under the title is the game's slug
+// unless the caller gives another.
+func hostDashGameRow(g PublicFestGame, ref string, canManage bool, note string) *dopeui.Element {
 	s := dopestrings.Default
 	base := "/host/fest/" + ref + "/game/" + g.Ref()
 	link := []dopeui.Item{dopeui.Href(base + "/"), dopeui.Listtitle(dopeui.Text(g.Title))}
-	if g.Slug != "" {
-		link = append(link, dopeui.Muted(dopeui.Text(g.Slug)))
+	if note == "" {
+		note = g.Slug
+	}
+	if note != "" {
+		link = append(link, dopeui.Muted(dopeui.Text(note)))
 	}
 	row := []dopeui.Item{dopeui.Rowlink(link...)}
 	if canManage {
@@ -186,7 +190,7 @@ func hostDashGamesSection(data hostFestDashData, ref string) *dopeui.Element {
 		for _, g := range data.Games {
 			// A site's Game is listed under its site.
 			if g.SiteID == 0 {
-				rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames))
+				rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames, ""))
 			}
 		}
 		sect = append(sect, dopeui.Actionlist(rows...))

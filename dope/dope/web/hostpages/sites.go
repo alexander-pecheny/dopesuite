@@ -123,13 +123,12 @@ func hostDashSitesSection(data hostFestDashData, ref string) *dopeui.Element {
 		if site.Town != "" {
 			facts = site.Town + " · " + facts
 		}
-		head := dopeui.Col(dopeui.Listtitle(dopeui.Text(site.Title)), dopeui.Muted(dopeui.Text(facts)))
 		if len(site.Games) == 0 {
-			rows = append(rows, dopeui.Listrow(head))
+			rows = append(rows, dopeui.Listrow(dopeui.Col(dopeui.Listtitle(dopeui.Text(site.Title)), dopeui.Muted(dopeui.Text(facts)))))
 			continue
 		}
 		for _, g := range site.Games {
-			rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames))
+			rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames, facts))
 		}
 	}
 	return dopeui.Section(dopeui.ID("sites"), dopeui.Subhead(dopeui.Text(s.Host.Sites.Subhead())), dopeui.Actionlist(rows...))
