@@ -23,11 +23,11 @@ window below the tab strip, which the main webview draws. Switching tabs shows
 one panel and hides the others.
 
 - **Local.** The user opens folders here, and the tab lists them the way xy's
-  home page lists boards. A folder is a board, each `.4s` file
-  in it is a list, and each question is a card. The panel loads xy's frontend
-  from the app's binary, and a Go handler on the asset server answers its
-  `/api` calls from the files. Wails' asset server takes an `http.Handler`, so
-  this opens no port. There is no encryption, no login and no outbox.
+  home page lists boards. A folder is a board, kept in one SQLite database in
+  that folder. The panel loads xy's frontend from the app's binary, and xy's
+  own server code, running in local mode on that database, answers its `/api`
+  calls through the asset server. Wails' asset server takes an `http.Handler`,
+  so this opens no port. There is no encryption, no login and no outbox.
 - **A server tab.** The panel loads the xy server's own URL. The frontend is
   the server's, so it always matches the API, and the login cookie is an
   ordinary first-party cookie. Two tabs of one server share the login.
@@ -52,47 +52,40 @@ login survives a restart. When the PR is merged upstream, we switch back.
 
 ## Folder mode in detail
 
-### Files are the source of truth
+### The database is the source of truth
 
-A card's description in xy is already raw 4s, and a list exports as the
-concatenation of its cards (`chgksuite/listexport`). That makes the mapping
-direct. Reading a file splits it into cards at question boundaries, and writing
-puts the cards back together.
+Each folder holds `.chgksuite.sqlite`, unencrypted, with everything about the
+board: lists and their order, cards, labels, comments, the timeline, read marks,
+attachments and settings. Its schema is xy's. xy's server package runs in local
+mode over it: one board per database, one local user, no login, no Telegram,
+and the `*_enc` columns hold plaintext because the frontend uses its plaintext
+key (below). Reusing the server means the Local tab gets every feature xy has
+that does not need a second person, without a second implementation of the API.
+xy exposes this as a public package (`xy/localserver`), because the app cannot
+import `xy/internal/...`.
 
-The hard requirement is that the app never rewrites text the user did not
-touch. Each card keeps the exact bytes of its span in the file. Saving replaces
-only the spans of edited cards and moves spans when cards are reordered. A test
-over the whole fixture corpus checks that split followed by join gives back the
-file byte for byte.
+### The .4s files are kept in step
 
-Writes are atomic (temp file and rename) and happen on every change, the way xy
-saves. The app watches the folder. When a file changes on disk, the app reloads
-that list. If the user also has unsaved edits in a card of that list, the app
-shows a conflict instead of choosing a winner.
+The `.4s` files exist so that the folder stays useful without the app: to send
+to someone, to open in the Python chgksuite, to keep in git. After every write
+that changes a list (a card edited, added, moved or deleted, a list renamed),
+the server writes that list's `.4s` with `listexport`, atomically (temp file and
+rename), with its pictures next to it as files that its `(img …)` lines name.
+A renamed list renames its file; a deleted list's file is deleted.
 
-### Where the meta goes
+Opening a folder that has `.4s` files but no database imports every one of them
+as a list, the same way xy imports a `.4s` today, and creates the database.
 
-- **Per card**: one hidden comment at the end of the card's first field holds
-  the card's id and its meta as JSON, for example
-  `(hidden-comment xy {"id":"k3f9","labels":["Проверить"]})`. Parentheses in
-  values are written as `\u0028` and `\u0029`, so the comment always ends at
-  the first `)`. Every exporter already drops hidden comments, so the output
-  does not change. The id is what ties a card to its comments, so it survives
-  edits made outside the app and reordering.
-- **Per folder**: `chgksuite.toml` holds the order of the lists, list groups,
-  the label definitions (name and colour), board settings, and the export
-  presets (the flag values last used for each format). A `.4s` file that the
-  meta file does not mention is added at the end of the board.
-- **Comments, the timeline and read marks** live in `.chgksuite.sqlite` in the
-  same folder, keyed by card id, so they travel with the folder.
-- **Pictures** stay files in the folder, referenced by `(img …)` relative to
-  the `.4s`, which is what chgksuite already reads. An attachment added in the
-  UI is copied into the folder.
+The database remembers a hash of each file as it last wrote it. If a file has
+changed since, someone edited it outside the app. On open, the app then asks
+whether to re-import that file, which replaces the list, or to keep the
+database's version, which rewrites the file. A new `.4s` that appears in the
+folder is offered for import the same way. Nothing is overwritten silently.
 
 ### What folder mode leaves out
 
 Members, invites, test sessions, tokens and Telegram login need a server or
-more than one person. The local handler reports a capability set, and the
+more than one person. The local server reports a capability set, and the
 frontend hides whatever it does not support.
 
 ### Frontend changes
@@ -108,13 +101,13 @@ These are small, because the seams already exist.
 
 ## Imports and exports in the UI
 
-- **Import** creates a new `.4s` in the open folder from a docx, txt, db.chgk.info
-  file or zip, through `chgkimport`.
+- **Import** creates a new list in the open folder from a docx, txt,
+  db.chgk.info file or zip, through `chgkimport`, and with it a new `.4s`.
 - **Export** works on one list, or on several lists merged, in every format.
   The forms are generated from the same flag spec the CLI prints, as in
   `chgksuite-gui`, but they are drawn in the webview and call the exporters in
   process instead of running a subprocess. The last used values are saved as
-  presets in `chgksuite.toml`.
+  presets in the folder's database.
 - typst is embedded as wasm (`-tags wasmtypst`), so the app needs nothing
   installed next to it. html2img still needs a Chromium, as the CLI does.
 
@@ -137,12 +130,12 @@ tagged `chgksuite/vX.Y.Z` and `dopecore/vX.Y.Z`. The app is a third module,
 
 1. Rename dopecore's module path, move the chgk code into the chgksuite module
    with its own catalog, and make `go get` work. This step only moves code.
-2. Build the folder store as plain Go with no UI: open a folder, split and join
-   with the byte-identity ratchet, the per-card hidden comment, the meta file
-   and the watcher.
-3. Write the local API handler over the store, covering the requests the board
-   page sends, and add the plaintext key and the capability flags to the
-   frontend.
+2. Local mode for xy's server, as plain Go with no UI: `xy/localserver` opens a
+   folder's database (importing the `.4s` files on first open), runs without
+   login, writes each changed list back to its `.4s`, and detects files edited
+   outside the app. Tested with the same request shapes the board page sends.
+3. The frontend side: the plaintext key, the capability flags, and the offline
+   layer switched off.
 4. Build the Wails shell on the fork: the tab strip, the Local tab with recent
    folders, and adding a server tab.
 5. Add import and the spec-driven export forms in the webview.
