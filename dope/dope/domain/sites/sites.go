@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 
 	"dope/dope/storage/store"
 )
@@ -69,8 +70,14 @@ func GameSite(ctx context.Context, q store.Queryer, gameID int64) (int64, error)
 // making the sites it has not seen yet, and reports whether any team moved.
 // A team the host made by hand keeps its site.
 func PlaceTeamsTx(ctx context.Context, tx *sql.Tx, festID int64, venueOf map[int64]Venue) (bool, error) {
-	siteOf := map[int64]int64{}
+	venues := make([]Venue, 0, len(venueOf))
 	for _, venue := range venueOf {
+		venues = append(venues, venue)
+	}
+	// New sites take their places in the order of their names.
+	sort.Slice(venues, func(i, j int) bool { return venues[i].Title < venues[j].Title })
+	siteOf := map[int64]int64{}
+	for _, venue := range venues {
 		if _, done := siteOf[venue.ID]; done {
 			continue
 		}
