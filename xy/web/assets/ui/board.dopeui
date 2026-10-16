@@ -271,8 +271,6 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       password id="tgExportToken" placeholder=@board.tgexport.token_placeholder autocomplete="off" required
       label for="tgExportChannel" @board.tgexport.channel_label
       textfield id="tgExportChannel" placeholder=@board.tgexport.channel_placeholder autocomplete="off" spellcheck="false" required
-      label for="tgExportChat" @board.tgexport.chat_label
-      textfield id="tgExportChat" placeholder=@board.tgexport.chat_placeholder autocomplete="off" spellcheck="false" required
       hint @board.tgexport.admin_hint
       row gap="sm" align="center" wrap
         button submit id="tgExportRun" @board.tgexport.run

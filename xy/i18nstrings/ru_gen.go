@@ -765,8 +765,6 @@ var RU = Strings{
 			},
 			ChannelLabel:       func() string { return "Канал" },
 			ChannelPlaceholder: func() string { return "@channel, ссылка или id" },
-			ChatLabel:          func() string { return "Группа обсуждения" },
-			ChatPlaceholder:    func() string { return "@group, ссылка или id" },
 			Done:               func() string { return "Опубликовано." },
 			Hint: func() string {
 				return "Бот публикует вопросы в канал, а обсуждение — в связанную группу. Токен уходит на сервер xy: публикует он."
@@ -2377,11 +2375,9 @@ var RU = Strings{
 	},
 	Tg: TgStrings{
 		Export: TgExportStrings{
-			Connecting: func() string { return "Подключаемся к боту…" },
-			Failed:     func() string { return "Не удалось опубликовать в телеграм." },
-			MissingFields: func() string {
-				return "Нужны токен бота, канал и группа обсуждения."
-			},
+			Connecting:    func() string { return "Подключаемся к боту…" },
+			Failed:        func() string { return "Не удалось опубликовать в телеграм." },
+			MissingFields: func() string { return "Нужны токен бота и канал." },
 			Posting: func(channel string, chat string) string {
 				return fmt.Sprintf("Публикуем в %s, обсуждение %s…", channel, chat)
 			},

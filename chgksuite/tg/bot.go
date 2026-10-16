@@ -180,20 +180,6 @@ func (b *Bot) WaitForForwardedChannel(ctx context.Context, timeout time.Duration
 	return u.Message.ForwardFromChat.ID, nil
 }
 
-// WaitForChatMessage waits for the code to be written in a group and returns
-// that group's id — the only way a bot learns the id of a group nobody has
-// named to it.
-func (b *Bot) WaitForChatMessage(ctx context.Context, code string, timeout time.Duration) (int64, error) {
-	u, err := b.Wait(ctx, timeout, func(u tgbot.Update) bool {
-		return u.Message.Chat != nil && u.Message.Chat.Type != "private" &&
-			strings.Contains(u.Message.Text, code)
-	})
-	if err != nil {
-		return 0, err
-	}
-	return u.Message.Chat.ID, nil
-}
-
 // WaitForDiscussionCopy waits for Telegram to copy a channel post into the
 // linked discussion group, and returns the copy's id there.
 func (b *Bot) WaitForDiscussionCopy(ctx context.Context, channelID int64, chatID int64, messageID int64, timeout time.Duration) (int64, error) {

@@ -322,21 +322,19 @@ type TgStrings struct {
 }
 
 type TgResolveStrings struct {
-	Done          func() string
-	Forward       func(name string) string
-	GroupCode     func(name string, code string) string
-	GroupCodeHint func() string
-	PrivateCode   func(code string) string
-	SameChannel   func() string
+	Done        func() string
+	Forward     func(name string) string
+	PrivateCode func(code string) string
 }
 
 type TgVerifyStrings struct {
-	NotAdmin    func(what string) string
-	NotMember   func(what string, err string) string
-	OfChannel   func() string
-	OfChat      func() string
-	WhatChannel func() string
-	WhatChat    func() string
+	NoDiscussion func() string
+	NotAdmin     func(what string) string
+	NotMember    func(what string, err string) string
+	OfChannel    func() string
+	OfChat       func() string
+	WhatChannel  func() string
+	WhatChat     func() string
 }
 
 // XyenvelopeStrings is the xyenvelope Surface.
@@ -476,10 +474,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Stats.Xlsx.NoSheets(), true
 	case "tg.resolve.done":
 		return s.Tg.Resolve.Done(), true
-	case "tg.resolve.group_code_hint":
-		return s.Tg.Resolve.GroupCodeHint(), true
-	case "tg.resolve.same_channel":
-		return s.Tg.Resolve.SameChannel(), true
+	case "tg.verify.no_discussion":
+		return s.Tg.Verify.NoDiscussion(), true
 	case "tg.verify.of_channel":
 		return s.Tg.Verify.OfChannel(), true
 	case "tg.verify.of_chat":
@@ -497,7 +493,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "boardsync.config.empty_url", "boardsync.config.unrecognized", "boardsync.fetch.card", "boardsync.fetch.list", "boardsync.upload.default_caption", "boardsync.upload.list_missing", "boardsync.upload.no_lists", "boardsync.upload.posted", "boardsync.upload.uploading", "chgk.author.default", "chgk.author.feminine", "chgk.author.feminine_plural", "chgk.author.plural", "chgk.label.handout", "chgkcli.add_stats.custom_csv_flag", "chgkcli.board.board_url_prompt", "chgkcli.board.empty_token", "chgkcli.board.initial_passphrase_prompt", "chgkcli.board.need_board_url", "chgkcli.board.no_answers_flag", "chgkcli.board.no_token", "chgkcli.board.nothing_to_upload", "chgkcli.board.only_answers_flag", "chgkcli.board.open_browser", "chgkcli.board.open_browser_tokens", "chgkcli.board.passphrase_prompt", "chgkcli.board.token_prompt", "chgkcli.docx.no_paragraph_flag", "chgkcli.docx.only_question_number_flag", "chgkcli.handouts.already_exists", "chgkcli.handouts.colour_suffix", "chgkcli.handouts.dimensions_note", "chgkcli.handouts.html_geometry_note", "chgkcli.handouts.pages_note", "chgkcli.handouts.scale_note", "chgkcli.handouts.skip_warning", "chgkcli.handouts.warn_question", "chgkcli.handouts.watch_note", "chgkcli.lj.genimp_flag", "chgkcli.parse.tour_numbers_as_words_flag", "chgkcli.shared.replace_no_break_hyphens_flag", "chgkcli.telegram.done", "chgkcli.telegram.posting", "chgkcli.telegram.stop_if_no_stats_flag", "chgkimport.error.no_4s", "chgkimport.error.no_questions", "chgkimport.error.too_big", "docs.docx.host_version", "docs.docx.screen_version", "docs.handout.bad_markup", "docs.handout.image_missing", "docs.handout.language_missing", "docs.handout.pack_multiple", "docs.handout.pack_no_grid", "docs.handout.pack_none", "docs.handout.preamble_setting", "docs.handout.rotate_image_missing", "docs.handout_list.by_number_lead", "docs.handout_list.by_tour_lead", "docs.handout_list.heading", "docs.handout_list.tour_none", "docs.handout_list.tour_numbers", "docs.image.missing", "docs.markdown.answer", "docs.markdown.author", "docs.markdown.comment", "docs.markdown.image_link", "docs.markdown.nezachet", "docs.markdown.question", "docs.markdown.source", "docs.markdown.zachet", "docs.pptx.question_caps", "docs.print.measure", "docs.print.measure_no_size", "docs.print.measure_zero_height", "docs.print.pdf", "docs.print.png", "docs.print.width_missing", "docs.typst.line_error", "docs.typst.line_not_pair", "fsource.theme.default_label", "import.versions.head", "import.versions.label", "import.versions.question", "install.archive_escape", "install.browser.archive_no_shell", "install.browser.downloading", "install.browser.no_build", "install.browser.no_sandbox", "install.browser.not_found", "install.browser.not_installed", "install.browser.platform_missing", "install.browser.releases_failed", "install.browser.releases_no_stable", "install.browser.symlink_escape", "install.installed", "install.typst.archive_no_binary", "install.typst.downloading", "install.typst.not_found", "install.typst.platform_missing", "install.typst.release_no_build", "install.typst.releases_failed", "install.typst.unknown_archive", "lj.error.fault", "lj.error.malformed", "lj.error.no_challenge", "lj.error.nothing", "lj.error.status", "stats.options.label", "stats.question.line", "stats.question.takers", "stats.range.bad", "stats.rating.decode", "stats.rating.status", "stats.results.empty", "stats.table.disputed", "stats.table.header_missing", "stats.xlsx.no_sheets", "stats.xlsx.part_missing", "stats.xlsx.sheet_missing", "tg.resolve.done", "tg.resolve.forward", "tg.resolve.group_code", "tg.resolve.group_code_hint", "tg.resolve.private_code", "tg.resolve.same_channel", "tg.verify.not_admin", "tg.verify.not_member", "tg.verify.of_channel", "tg.verify.of_chat", "tg.verify.what_channel", "tg.verify.what_chat", "xyenvelope.unlock.wrong_passphrase":
+	case "boardsync.config.empty_url", "boardsync.config.unrecognized", "boardsync.fetch.card", "boardsync.fetch.list", "boardsync.upload.default_caption", "boardsync.upload.list_missing", "boardsync.upload.no_lists", "boardsync.upload.posted", "boardsync.upload.uploading", "chgk.author.default", "chgk.author.feminine", "chgk.author.feminine_plural", "chgk.author.plural", "chgk.label.handout", "chgkcli.add_stats.custom_csv_flag", "chgkcli.board.board_url_prompt", "chgkcli.board.empty_token", "chgkcli.board.initial_passphrase_prompt", "chgkcli.board.need_board_url", "chgkcli.board.no_answers_flag", "chgkcli.board.no_token", "chgkcli.board.nothing_to_upload", "chgkcli.board.only_answers_flag", "chgkcli.board.open_browser", "chgkcli.board.open_browser_tokens", "chgkcli.board.passphrase_prompt", "chgkcli.board.token_prompt", "chgkcli.docx.no_paragraph_flag", "chgkcli.docx.only_question_number_flag", "chgkcli.handouts.already_exists", "chgkcli.handouts.colour_suffix", "chgkcli.handouts.dimensions_note", "chgkcli.handouts.html_geometry_note", "chgkcli.handouts.pages_note", "chgkcli.handouts.scale_note", "chgkcli.handouts.skip_warning", "chgkcli.handouts.warn_question", "chgkcli.handouts.watch_note", "chgkcli.lj.genimp_flag", "chgkcli.parse.tour_numbers_as_words_flag", "chgkcli.shared.replace_no_break_hyphens_flag", "chgkcli.telegram.done", "chgkcli.telegram.posting", "chgkcli.telegram.stop_if_no_stats_flag", "chgkimport.error.no_4s", "chgkimport.error.no_questions", "chgkimport.error.too_big", "docs.docx.host_version", "docs.docx.screen_version", "docs.handout.bad_markup", "docs.handout.image_missing", "docs.handout.language_missing", "docs.handout.pack_multiple", "docs.handout.pack_no_grid", "docs.handout.pack_none", "docs.handout.preamble_setting", "docs.handout.rotate_image_missing", "docs.handout_list.by_number_lead", "docs.handout_list.by_tour_lead", "docs.handout_list.heading", "docs.handout_list.tour_none", "docs.handout_list.tour_numbers", "docs.image.missing", "docs.markdown.answer", "docs.markdown.author", "docs.markdown.comment", "docs.markdown.image_link", "docs.markdown.nezachet", "docs.markdown.question", "docs.markdown.source", "docs.markdown.zachet", "docs.pptx.question_caps", "docs.print.measure", "docs.print.measure_no_size", "docs.print.measure_zero_height", "docs.print.pdf", "docs.print.png", "docs.print.width_missing", "docs.typst.line_error", "docs.typst.line_not_pair", "fsource.theme.default_label", "import.versions.head", "import.versions.label", "import.versions.question", "install.archive_escape", "install.browser.archive_no_shell", "install.browser.downloading", "install.browser.no_build", "install.browser.no_sandbox", "install.browser.not_found", "install.browser.not_installed", "install.browser.platform_missing", "install.browser.releases_failed", "install.browser.releases_no_stable", "install.browser.symlink_escape", "install.installed", "install.typst.archive_no_binary", "install.typst.downloading", "install.typst.not_found", "install.typst.platform_missing", "install.typst.release_no_build", "install.typst.releases_failed", "install.typst.unknown_archive", "lj.error.fault", "lj.error.malformed", "lj.error.no_challenge", "lj.error.nothing", "lj.error.status", "stats.options.label", "stats.question.line", "stats.question.takers", "stats.range.bad", "stats.rating.decode", "stats.rating.status", "stats.results.empty", "stats.table.disputed", "stats.table.header_missing", "stats.xlsx.no_sheets", "stats.xlsx.part_missing", "stats.xlsx.sheet_missing", "tg.resolve.done", "tg.resolve.forward", "tg.resolve.private_code", "tg.verify.no_discussion", "tg.verify.not_admin", "tg.verify.not_member", "tg.verify.of_channel", "tg.verify.of_chat", "tg.verify.what_channel", "tg.verify.what_chat", "xyenvelope.unlock.wrong_passphrase":
 		return true
 	}
 	return false

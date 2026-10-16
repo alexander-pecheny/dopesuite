@@ -4,7 +4,7 @@ import { fakeBoard, installDOM } from "./dom.js";
 
 const ids = ["exportOverlay", "exportForm", "exportModeOne", "exportModeMany", "exportOneFormat", "exportFormats", "exportFmt4s", "exportFmtDocx", "exportFmtDocxScreen", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtPptx", "exportFmtOpenquiz", "exportFmtHandouts", "exportToggleAll", "exportRun", "exportCancel", "exportMessage",
   // the telegram dialog the panel hands over to (tgexport.test.js drives it)
-  "tgExportOverlay", "tgExportForm", "tgExportToken", "tgExportChannel", "tgExportChat", "tgExportRun", "tgExportCancel", "tgExportMessage"];
+  "tgExportOverlay", "tgExportForm", "tgExportToken", "tgExportChannel", "tgExportRun", "tgExportCancel", "tgExportMessage"];
 const p = installDOM(ids);
 p.node("exportOverlay").hidden = true;
 p.node("exportFmt4s").checked = true;

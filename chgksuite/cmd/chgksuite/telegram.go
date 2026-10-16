@@ -20,7 +20,6 @@ func composeTelegram(args []string) error {
 	fs := newFlagSet("compose telegram")
 	s := chgkstrings.Default
 	channel := fs.String("tgchannel", "", "channel to post to: an id, a t.me link or @username")
-	chat := fs.String("tgchat", "", "the discussion group linked to that channel")
 	dryRun := fs.Bool("dry_run", false, "print what would be posted, post nothing")
 	noSpoilers := fs.Bool("nospoilers", false, "print the answers openly")
 	disableAsterisks := fs.Bool("disable_asterisks_processing", false, "leave * alone")
@@ -89,9 +88,9 @@ func composeTelegram(args []string) error {
 	ctx := context.Background()
 	req := tg.Request{Doc: doc, Images: images, Options: opts, Polls: polls}
 	if *dryRun {
-		// Whatever ids were given, so the links in the navigation post look like
-		// the ones a real run would write; placeholders when they were names.
-		req.Target = tg.DryRunTarget(*channel, *chat)
+		// The id given, so the links in the navigation post look like the ones a
+		// real run would write; placeholders otherwise.
+		req.Target = tg.DryRunTarget(*channel)
 		return tg.Export(ctx, tg.NewDryRunPoster(), req)
 	}
 
@@ -110,7 +109,7 @@ func composeTelegram(args []string) error {
 	defer stop()
 
 	say := func(format string, a ...any) { fmt.Fprintf(os.Stderr, "\n"+format+"\n", a...) }
-	target, err := tg.ResolveTarget(ctx, bot, *channel, *chat, say)
+	target, err := tg.ResolveTarget(ctx, bot, *channel, say)
 	if err != nil {
 		return err
 	}
