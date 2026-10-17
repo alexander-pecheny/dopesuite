@@ -1,0 +1,12 @@
+# The labels of a question card.
+label = 'Вопрос {{.number}}.'
+unnumbered = "Вопрос."
+show_answer = "Показать ответ"
+answer = "Ответ:"
+zachet = "Зачёт:"
+nezachet = "Незачёт:"
+comment = "Комментарий:"
+source = "Источник(и):"
+author = "Автор(ы):"
+tournament = "Турнир:"
+factcheck = "Фактчек"

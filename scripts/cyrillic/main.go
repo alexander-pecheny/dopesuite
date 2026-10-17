@@ -23,7 +23,7 @@ const (
 	maxLineBytes   = 4 << 20
 )
 
-var roots = []string{"dopecore", "dopeuikit", "chgksuite", "xy", "dope", "spliff", "scripts"}
+var roots = []string{"dopecore", "dopeuikit", "chgksuite", "xy", "dope", "spliff", "qy", "scripts"}
 
 // Skipped wholesale: generated files carry what a Catalog put there, tests
 // name a string to assert on it, the chgksuite parity labels mirror upstream,

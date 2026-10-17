@@ -249,6 +249,23 @@ func targets() []target {
 				},
 			}
 		}},
+		// qy's pages are built on the server; one small bundle carries what
+		// their forms do in the browser.
+		{"qy", func() []api.BuildOptions {
+			return []api.BuildOptions{
+				{
+					EntryPointsAdvanced: entries("qy/qy/web/ts/pages/", "forms"),
+					Bundle:              true,
+					Format:              api.FormatIIFE,
+					Outdir:              "qy/qy/web/assets/static/dist",
+				},
+				{
+					EntryPointsAdvanced: entries("qy/qy/web/ts/", "forms-model"),
+					Format:              api.FormatESModule,
+					Outdir:              "qy/qy/web/jstest/dist",
+				},
+			}
+		}},
 		{"xy", func() []api.BuildOptions {
 			return []api.BuildOptions{
 				{

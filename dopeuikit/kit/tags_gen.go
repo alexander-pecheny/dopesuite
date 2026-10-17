@@ -329,6 +329,10 @@ func Action(v string) Attr {
 	return Attr{Name: "action", Value: v}
 }
 
+func Enctype(v string) Attr {
+	return Attr{Name: "enctype", Value: v}
+}
+
 func Name(v string) Attr {
 	return Attr{Name: "name", Value: v}
 }

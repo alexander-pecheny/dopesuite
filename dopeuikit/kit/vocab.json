@@ -450,6 +450,9 @@
         },
         {
           "name": "action"
+        },
+        {
+          "name": "enctype"
         }
       ],
       "children": "any"
@@ -615,6 +618,9 @@
     {
       "name": "filefield",
       "props": [
+        {
+          "name": "name"
+        },
         {
           "name": "accept"
         },

@@ -1,0 +1,4 @@
+# The public pages of a finished year.
+shortlist = "Шорт-лист"
+title = "Результаты"
+places = 'Место у жюри: {{.jury}}, место у зрителей: {{.popular}}, сумма рангов у жюри: {{.rank_sum}}, баллы у зрителей: {{.points}}'
