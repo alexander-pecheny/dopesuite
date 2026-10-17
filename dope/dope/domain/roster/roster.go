@@ -15,7 +15,7 @@ import (
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
-	"dope/dope/domain/sites"
+	"dope/dope/domain/multifest"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 )
@@ -43,8 +43,8 @@ type FestRosterImportTeam struct {
 	// Division to look at; the app keeps them all and curates none.
 	Flags []FestRosterFlag
 	// Venue is where the rating site has the team play a synchronous
-	// tournament, which puts it on that site in a synch fest (ADR-0031).
-	Venue sites.Venue
+	// tournament, which puts it on that venue in a synch fest (ADR-0031).
+	Venue multifest.RatingVenue
 }
 
 // FestRosterFlag is one Flag a team carries: the rating site's id when it came
@@ -97,24 +97,24 @@ func SortedFestRosterImportTeams(teams []FestRosterImportTeam) []FestRosterImpor
 	return out
 }
 
-// Remap is a renumbering of one site's teams (old Number → new), or of the
-// fest's for Site 0.
+// Remap is a renumbering of one venue's teams (old Number → new), or of the
+// fest's for Venue 0.
 type Remap struct {
-	Site    int64
+	Venue   int64
 	Numbers map[int]int
 }
 
 // PropagateRosterTx folds the fest roster into every Game whose Protocol
 // carries it (games.RosterFolder) — OD's teams and entries, KSI's
 // participants and answer rows — and reports the documents it rewrote.
-// remap renumbers the cells keyed on a Number in the Games on its site; zero
+// remap renumbers the cells keyed on a Number in the Games on its venue; zero
 // on a plain re-import.
 func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []FestRosterImportTeam, remap Remap) ([]GameStateBroadcast, error) {
 	docs, err := store.LoadGameDocs(ctx, tx, festID)
 	if err != nil {
 		return nil, err
 	}
-	placement, err := sites.LoadPlacement(ctx, tx, festID)
+	placement, err := multifest.LoadPlacement(ctx, tx, festID)
 	if err != nil {
 		return nil, err
 	}
@@ -124,9 +124,9 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 		if !ok {
 			continue
 		}
-		folded := RosterTeams(OnSite(teams, placement, doc.SiteID))
+		folded := RosterTeams(OnVenue(teams, placement, doc.MultiFestVenueID))
 		var entryRemap map[int]int
-		if doc.SiteID == remap.Site {
+		if doc.MultiFestVenueID == remap.Venue {
 			entryRemap = remap.Numbers
 		}
 		schemeJSON, stateJSON, err := folder.FoldRoster(doc.SchemeJSON, doc.State, folded, entryRemap)
@@ -170,7 +170,7 @@ func ScoredNumbers(ctx context.Context, q store.Queryer, festID int64) (map[int6
 		if !ok {
 			continue
 		}
-		festNumber, err := sites.FestNumbers(ctx, q, festID, doc.SiteID)
+		festNumber, err := multifest.FestNumbers(ctx, q, festID, doc.MultiFestVenueID)
 		if err != nil {
 			return nil, err
 		}
@@ -203,15 +203,15 @@ func gameTitles(ctx context.Context, q store.Queryer, festID int64) (map[int64]s
 	return titles, rows.Err()
 }
 
-// OnSite is the part of the roster a Game on this site seats, under the
-// site's own numbers: all of it, under the fest's, for a Game on none.
-func OnSite(teams []FestRosterImportTeam, placement sites.Placement, siteID int64) []FestRosterImportTeam {
-	if siteID == 0 {
+// OnVenue is the part of the roster a Game on this venue seats, under the
+// venue's own numbers: all of it, under the fest's, for a Game on none.
+func OnVenue(teams []FestRosterImportTeam, placement multifest.Placement, multiFestVenueID int64) []FestRosterImportTeam {
+	if multiFestVenueID == 0 {
 		return teams
 	}
 	out := make([]FestRosterImportTeam, 0, len(teams))
 	for _, team := range teams {
-		if place := placement.Of(team.LocalID, team.RatingID, team.Number); place.Site == siteID {
+		if place := placement.Of(team.LocalID, team.RatingID, team.Number); place.Venue == multiFestVenueID {
 			team.Number = place.Number
 			out = append(out, team)
 		}
@@ -256,19 +256,19 @@ type FestRosterTeamView struct {
 	Flags []string `json:"flags,omitempty"`
 }
 
-// LoadFestRosterView loads every active team of a fest, or of one site under
-// the site's numbers, with its ordered players, for the public roster view.
+// LoadFestRosterView loads every active team of a fest, or of one venue under
+// the venue's numbers, with its ordered players, for the public roster view.
 // Teams keep their roster position order; players keep their roster_order
 // within each team.
-func LoadFestRosterView(ctx context.Context, q store.Queryer, festID, siteID int64) ([]FestRosterTeamView, error) {
+func LoadFestRosterView(ctx context.Context, q store.Queryer, festID, multiFestVenueID int64) ([]FestRosterTeamView, error) {
 	rows, err := q.QueryContext(ctx, `
-select tt.id, coalesce(case when ? > 0 then tt.site_number else tt.number end, 0), tt.name, tt.city, coalesce(tt.rating_id, 0),
+select tt.id, coalesce(case when ? > 0 then tt.venue_number else tt.number end, 0), tt.name, tt.city, coalesce(tt.rating_id, 0),
        coalesce(p.first_name, ''), coalesce(p.last_name, ''), coalesce(p.rating_id, 0)
 from fest_teams tt
 left join fest_team_players ttp on ttp.team_id = tt.id
 left join fest_players p on p.id = ttp.player_id
-where tt.fest_id = ? and tt.deleted = 0 and (? = 0 or tt.site_id = ?)
-order by tt.position, tt.id, ttp.roster_order, p.id`, siteID, festID, siteID, siteID)
+where tt.fest_id = ? and tt.deleted = 0 and (? = 0 or tt.multifest_venue_id = ?)
+order by tt.position, tt.id, ttp.roster_order, p.id`, multiFestVenueID, festID, multiFestVenueID, multiFestVenueID)
 	if err != nil {
 		return nil, err
 	}

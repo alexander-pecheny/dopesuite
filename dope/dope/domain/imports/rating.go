@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/roster"
-	"dope/dope/domain/sites"
 	"dope/dope/domain/towns"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
@@ -61,7 +61,7 @@ type ratingFestResult struct {
 	// full name and the short name everything shows. Every one is kept — the app
 	// does not judge which Flags deserve a Division (ADR-0020).
 	Flags []ratingTeamFlag `json:"flags"`
-	// SynchRequest names the site a team played a synchronous
+	// SynchRequest names the venue a team played a synchronous
 	// tournament at.
 	SynchRequest *struct {
 		Venue struct {
@@ -251,7 +251,7 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 		}
 		team.Flags = roster.NormalizeFlags(team.Flags)
 		if r := result.SynchRequest; r != nil && r.Venue.ID > 0 {
-			team.Venue = sites.Venue{ID: r.Venue.ID, Title: strings.TrimSpace(r.Venue.Name)}
+			team.Venue = multifest.RatingVenue{ID: r.Venue.ID, Title: strings.TrimSpace(r.Venue.Name)}
 		}
 		if len(team.Players) > roster.MaxSquad {
 			return nil, corei18n.User(dopestrings.Default.Imports.Rating.SquadTooBig(name))
@@ -438,14 +438,14 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 	return result, nil
 }
 
-// synchVenues is the site of each incoming rating team, by rating id, in a
+// synchVenues is the venue of each incoming rating team, by rating id, in a
 // synch fest; nil in any other.
-func synchVenues(ctx context.Context, q store.Queryer, festID int64, teams []roster.FestRosterImportTeam) (map[int64]sites.Venue, error) {
-	kind, err := sites.FestKind(ctx, q, festID)
-	if err != nil || kind != sites.Synch {
+func synchVenues(ctx context.Context, q store.Queryer, festID int64, teams []roster.FestRosterImportTeam) (map[int64]multifest.RatingVenue, error) {
+	kind, err := multifest.FestKind(ctx, q, festID)
+	if err != nil || kind != multifest.Synch {
 		return nil, err
 	}
-	venueOf := map[int64]sites.Venue{}
+	venueOf := map[int64]multifest.RatingVenue{}
 	for _, team := range teams {
 		if team.RatingID > 0 && team.Venue.ID > 0 {
 			venueOf[team.RatingID] = team.Venue

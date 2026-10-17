@@ -97,9 +97,9 @@ type Spec struct {
 	// TourComp is OD's tours when they differ in length, over ODTours and
 	// ODQuestions; a synch fest's Games take the rating site's.
 	TourComp []int
-	// SiteID puts a flat Game on a site, which then seats that
-	// site's teams alone (ADR-0031).
-	SiteID int64
+	// MultiFestVenueID puts a flat Game on a venue, which then seats that
+	// venue's teams alone (ADR-0031).
+	MultiFestVenueID int64
 }
 
 // Create makes the Game the Spec describes and returns its id. A fest's Games
@@ -126,7 +126,7 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 		if len(spec.Entrants) > 0 {
 			return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.WholeRoster(games.Label(spec.Type)))
 		}
-		return createFlatGameTx(ctx, tx, spec.FestID, spec.SiteID, def, spec.Label, specShape(spec))
+		return createFlatGameTx(ctx, tx, spec.FestID, spec.MultiFestVenueID, def, spec.Label, specShape(spec))
 	}
 	return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
 }

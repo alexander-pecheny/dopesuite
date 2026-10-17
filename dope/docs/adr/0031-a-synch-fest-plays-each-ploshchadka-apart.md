@@ -19,10 +19,11 @@ before), **synch** (one rating tournament, many площадки) or **multi**
 (several in-person tournaments, each площадка with its own rating id, as with
 Nevermore's variations). The type changes only while the fest has no Games.
 
-A площадка (`fest_sites`, called `site` in code to keep it apart from a бой's
-`venues`, though both are «Площадка» on screen) belongs to a fest. A fest team
-is on at most one площадка (`fest_teams.site_id`), and so is a Game
-(`games.site_id`). A flat Game on a площадка folds in that площадка's teams
+A площадка (`multifest_venues`) belongs to a fest. Everybody calls both it and
+the room a бой is played in a venue, «Площадка» on screen, so the code calls
+this one a multifest venue (`multifest.Venue`) and leaves `Venue` to a бой's.
+A fest team is on at most one площадка (`fest_teams.multifest_venue_id`), and
+so is a Game (`games.multifest_venue_id`). A flat Game on a площадка folds in that площадка's teams
 alone; a Game on none folds in the whole roster, as every Game did before.
 That is one filter in the two places that fold the roster
 (`roster.PropagateRosterTx` and gamebuild's `pristineFlatTx`), so the
@@ -46,7 +47,7 @@ roster stays one list that every Game cuts the same way.
 
 ## Consequences
 
-- Each площадка numbers its own teams 1…n (`fest_teams.site_number`), as
+- Each площадка numbers its own teams 1…n (`fest_teams.venue_number`), as
   the площадки do on the day. The import numbers a площадка's new teams after
   its last number, in the order of their names, and a team that moves takes
   the next number at its new площадка. A Game on a площадка shows and stores
@@ -54,7 +55,7 @@ roster stays one list that every Game cuts the same way.
   Participants, which are the fest's, so the few places that join a Game's
   document to the fest (seating, the scored check, the ОД export, seeding
   from an ОД) turn a площадка's number into the fest's through
-  `sites.FestNumbers` and `sites.ByNumber`. The numbers page and its API
+  `multifest.FestNumbers` and `multifest.ByNumber`. The numbers page and its API
   number one площадка at a time.
 - Who may run a площадка's Games and edit its roster is still the fest's
   access list, limited by Game (ADR-0030). Scoping a host to a площадка,

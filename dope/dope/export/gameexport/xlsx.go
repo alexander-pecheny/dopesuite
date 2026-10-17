@@ -11,7 +11,7 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"dope/dope/domain/games"
-	"dope/dope/domain/sites"
+	"dope/dope/domain/multifest"
 	"dope/dope/export/xlsxexport"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
@@ -135,11 +135,11 @@ func ContentDispositionAttachment(name string) string {
 // their rating.chgk.info ids. Teams without one are left out, and the sheet
 // falls back to the number.
 func loadTeamRatingIDsByNumber(ctx context.Context, db *sql.DB, festID, gameID int64) (map[int64]int64, error) {
-	siteID, err := sites.GameSite(ctx, db, gameID)
+	multiFestVenueID, err := multifest.GameVenue(ctx, db, gameID)
 	if err != nil {
 		return nil, err
 	}
-	teams, err := sites.ByNumber(ctx, db, festID, siteID)
+	teams, err := multifest.ByNumber(ctx, db, festID, multiFestVenueID)
 	if err != nil {
 		return nil, err
 	}

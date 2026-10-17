@@ -53,7 +53,7 @@ in the game has a number.
 |---|---|
 | `GET /api/fests` | your fests |
 | `POST /api/fests` | `{title, slug?, description?, start_date?, end_date?, rating_id?, is_public?, kind?}` → the fest. `kind` is `regular` (the default), `synch` or `multi` (ADR-0031) |
-| `GET …/settings` M | header with `kind`, your `role`, `games` (each with its `site_id`), roster counts, and a synch fest's `sites` (площадки) |
+| `GET …/settings` M | header with `kind`, your `role`, `games` (each with its `multifest_venue_id`), roster counts, and a synch fest's `multifest_venues` (площадки) |
 | `PATCH …/settings` A | any header fields; those left out keep their value. `kind` changes only while the fest has no games |
 | `DELETE /api/fest/<fest>` C | deletes the fest and everything in it |
 | `GET …/access` A | members and roles; a host limited to some Games carries their ids in `games` |
@@ -106,7 +106,7 @@ created from pasted JSON. Leaving `entrants` out seats everyone.
 | `DELETE …/players/overrides?player_id=&source_team_id=&team_id=` A | |
 | `GET\|POST …/troikas` A | list / add `{lines: "Имя: Игрок, Игрок, Игрок\n…"}` |
 | `PUT\|DELETE …/troikas/<id>` A | `{name, players: [...], applied?}`; `applied` moves the troika to that place in the order of applications (the list's `applied`), which a troikas list follows and `seed: players` breaks its last tie by |
-| `GET …/numbers` A | teams with numbers. In a fest with площадки each numbers its own teams, and every numbers call there needs `?site=<id>` (the ids are in `…/settings` → `sites`) |
+| `GET …/numbers` A | teams with numbers. In a fest with площадки each numbers its own teams, and every numbers call there needs `?venue=<id>` (the ids are in `…/settings` → `multifest_venues`) |
 | `POST …/numbers/assign` A | `{assignments: [{team_id, number}]}`; others keep theirs, a moved number leaves its old holder, `number: 0` takes a team's number away |
 | `POST …/numbers/match` A | `{text: "<n>\t<team>\n…"}` proposes pairs, saves nothing |
 | `POST …/numbers/auto` · `…/numbers/clear` A | 1…n alphabetically / none |

@@ -16,8 +16,8 @@ type PublicFestGame struct {
 	Title string
 	Type  string
 	URL   string
-	// SiteID is the site the game is on, 0 for none.
-	SiteID int64
+	// MultiFestVenueID is the venue the game is on, 0 for none.
+	MultiFestVenueID int64
 }
 
 // Ref returns the game's slug if set, otherwise the stringified id.
@@ -31,12 +31,12 @@ func (g PublicFestGame) Ref() string {
 // FestGameRow is a raw game row (id/code/title/type/slug) loaded for a fest,
 // before it is shaped into a PublicFestGame with a URL.
 type FestGameRow struct {
-	ID     int64
-	Code   string
-	Title  string
-	Type   string
-	Slug   string
-	SiteID int64
+	ID               int64
+	Code             string
+	Title            string
+	Type             string
+	Slug             string
+	MultiFestVenueID int64
 }
 
 // Ref returns the game's slug if set, otherwise the stringified id. Use for
@@ -51,7 +51,7 @@ func (g FestGameRow) Ref() string {
 // LoadFestGames returns every game of a fest in display order.
 func LoadFestGames(ctx context.Context, q store.Queryer, festID int64) ([]FestGameRow, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, code, title, game_type, coalesce(slug, ''), coalesce(site_id, 0)
+select id, code, title, game_type, coalesce(slug, ''), coalesce(multifest_venue_id, 0)
 from games where fest_id = ?
 order by position, id`, festID)
 	if err != nil {
@@ -61,7 +61,7 @@ order by position, id`, festID)
 	var out []FestGameRow
 	for rows.Next() {
 		var g FestGameRow
-		if err := rows.Scan(&g.ID, &g.Code, &g.Title, &g.Type, &g.Slug, &g.SiteID); err != nil {
+		if err := rows.Scan(&g.ID, &g.Code, &g.Title, &g.Type, &g.Slug, &g.MultiFestVenueID); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

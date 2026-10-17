@@ -12,7 +12,7 @@ empty = "Сначала загрузите команды на странице 
 # The handler error when an action runs against a fest with no teams.
 no_teams = "Сначала загрузите команды."
 # The picker of a fest with площадки: each numbers its own teams.
-site = "Площадка"
+venue = "Площадка"
 
 [action]
 # The actions cluster and the save/cancel row beneath the number list.
@@ -42,7 +42,7 @@ row_range = 'Строка {{.n}}: номер должен быть целым о
 # The same number given on two rows.
 number_two_rows = 'Номер {{.number}} указан сразу в строках {{.first}} и {{.second}}.'
 # An API call about numbers in a fest with площадки that names none of them.
-site_required = "У каждой площадки свои номера. Укажите площадку: ?site=<id>."
+venue_required = "У каждой площадки свои номера. Укажите площадку: ?venue=<id>."
 
 [notice]
 # The save/auto/clear outcomes shown as the page note.

@@ -848,6 +848,15 @@ export type Strings = {
       refusedHeading: () => string;
       title: () => string;
     };
+    multifest: {
+      kindHint: () => string;
+      kindLabel: () => string;
+      kindMulti: () => string;
+      kindRegular: () => string;
+      kindSynch: () => string;
+      subhead: () => string;
+      teams: (n: string) => string;
+    };
     pages: {
       createFestSummary: () => string;
       createSubmit: () => string;
@@ -985,15 +994,6 @@ export type Strings = {
       undoDoneNotice: () => string;
       undoNote: (at: string) => string;
       undoSubmit: () => string;
-    };
-    sites: {
-      kindHint: () => string;
-      kindLabel: () => string;
-      kindMulti: () => string;
-      kindRegular: () => string;
-      kindSynch: () => string;
-      subhead: () => string;
-      teams: (n: string) => string;
     };
     troikas: {
       addSubhead: () => string;
@@ -1282,8 +1282,8 @@ export type Strings = {
       rowForeignTeam: (n: string) => string;
       rowNoTeam: (n: string) => string;
       rowRange: (n: string, max: string) => string;
-      siteRequired: () => string;
       teamTwoRows: (first: string, second: string) => string;
+      venueRequired: () => string;
     };
     help: {
       edit: () => string;
@@ -1311,8 +1311,8 @@ export type Strings = {
       crumb: () => string;
       empty: () => string;
       noTeams: () => string;
-      site: () => string;
       title: (fest: string) => string;
+      venue: () => string;
     };
   };
   octobearfest: {

@@ -9,10 +9,10 @@ formats are being moved onto the one model.
 ## Language
 
 **Fest**:
-One real event: a gathering on a given date, with a registry of teams, hosts, and one or more Games. A Fest has a type. A **regular** Fest is played in one place. A **synch** Fest is one strictly synchronous tournament played at many [[Площадка (Site)]] at once. A **multi** Fest is several in-person tournaments, one per площадка, each with its own rating id. The type changes only while the Fest has no Games (ADR-0031).
+One real event: a gathering on a given date, with a registry of teams, hosts, and one or more Games. A Fest has a type. A **regular** Fest is played in one place. A **synch** Fest is one strictly synchronous tournament played at many [[Площадка (MultiFestVenue)]] at once. A **multi** Fest is several in-person tournaments, one per площадка, each with its own rating id. The type changes only while the Fest has no Games (ADR-0031).
 
-**Площадка (Site)**:
-One place a synch or multi Fest is played at, as the rating site lists it: «ИгрыРазума», «Москва / Кругов Андрей». A fest team plays at one площадка, and a Game on a площадка seats that площадка's teams alone; a Game on none seats the whole roster. The rating import puts each team on its площадка. Each площадка numbers its own teams from 1, and its Games show those numbers; the fest's own Number stays as the team's identity behind them. The screen calls it «Площадка», as it calls the room a бой is played in; the code calls it a site, to keep it apart from a бой's venue.
+**Площадка (MultiFestVenue)**:
+One place a synch or multi Fest is played at, as the rating site lists it: «ИгрыРазума», «Москва / Кругов Андрей». A fest team plays at one площадка, and a Game on a площадка seats that площадка's teams alone; a Game on none seats the whole roster. The rating import puts each team on its площадка. Each площадка numbers its own teams from 1, and its Games show those numbers; the fest's own Number stays as the team's identity behind them. The screen calls it «Площадка», as it calls the room a бой is played in; both are venues, and the code calls this one a multifest venue (`multifest.Venue`) to keep it apart from a бой's `Venue`.
 _Avoid_: город. Two площадки can be in one town, and Moscow had three at Гёмбёц-9.
 
 **Game**:

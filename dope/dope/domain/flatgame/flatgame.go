@@ -14,9 +14,9 @@ import (
 	"fmt"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
-	"dope/dope/domain/sites"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
@@ -118,11 +118,11 @@ select g.game_type, m.state_json from matches m join games g on g.id = m.game_id
 // entrant list follows when every seat is numbered, and is dropped otherwise
 // so the numbering guard falls back to the fest's registry.
 func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seats []games.Seat) error {
-	siteID, err := sites.GameSite(ctx, tx, gameID)
+	multiFestVenueID, err := multifest.GameVenue(ctx, tx, gameID)
 	if err != nil {
 		return err
 	}
-	festNumber, err := sites.FestNumbers(ctx, tx, festID, siteID)
+	festNumber, err := multifest.FestNumbers(ctx, tx, festID, multiFestVenueID)
 	if err != nil {
 		return err
 	}

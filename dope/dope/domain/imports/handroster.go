@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
-	"dope/dope/domain/sites"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
@@ -63,13 +63,13 @@ type RosterWrite struct {
 // writeRosterTx writes a whole fest roster: the rows that changed, the flat
 // games when the teams changed, and the player overrides against the rows
 // that stay.
-func writeRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster.FestRosterImportTeam, existingByRating map[int64]existingFestTeam, merges map[int64]int64, venueOf map[int64]sites.Venue, teamsChanged bool) (RosterWrite, error) {
+func writeRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster.FestRosterImportTeam, existingByRating map[int64]existingFestTeam, merges map[int64]int64, venueOf map[int64]multifest.RatingVenue, teamsChanged bool) (RosterWrite, error) {
 	var out RosterWrite
 	if err := applyFestRosterDiffTx(ctx, tx, festID, teams, existingByRating, merges); err != nil {
 		return out, err
 	}
 	if len(venueOf) > 0 {
-		moved, err := sites.PlaceTeamsTx(ctx, tx, festID, venueOf)
+		moved, err := multifest.PlaceTeamsTx(ctx, tx, festID, venueOf)
 		if err != nil {
 			return out, err
 		}

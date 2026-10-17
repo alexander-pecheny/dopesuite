@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
-	"dope/dope/domain/sites"
 	"dope/dope/domain/view"
 	"dope/dope/platform/roles"
 	"dope/dope/platform/util"
@@ -34,14 +34,14 @@ import (
 )
 
 type hostFestDashData struct {
-	Fest        view.HostFest
-	Kind        string
-	Sites       []siteRow
-	Description string
-	Slug        string
-	RatingID    int64
-	Games       []PublicFestGame
-	Access      []festaccess.HostAccessMember
+	Fest            view.HostFest
+	Kind            string
+	MultiFestVenues []venueRow
+	Description     string
+	Slug            string
+	RatingID        int64
+	Games           []PublicFestGame
+	Access          []festaccess.HostAccessMember
 	// HostGames lists, per limited host, the Games they may run.
 	HostGames       map[int64][]int64
 	TeamCount       int
@@ -105,8 +105,8 @@ func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 	if data.CanManageFest {
 		page = append(page, hostDashFestForm(data, ref))
 	}
-	if len(data.Sites) > 0 {
-		page = append(page, hostDashSitesSection(data, ref))
+	if len(data.MultiFestVenues) > 0 {
+		page = append(page, hostDashVenuesSection(data, ref))
 	}
 	page = append(page, hostDashGamesSection(data, ref))
 	if data.CanManageAccess {
@@ -189,8 +189,8 @@ func hostDashGamesSection(data hostFestDashData, ref string) *dopeui.Element {
 	if len(data.Games) > 0 {
 		rows := make([]dopeui.Item, 0, len(data.Games))
 		for _, g := range data.Games {
-			// A site's Game is listed under its site.
-			if g.SiteID == 0 {
+			// A venue's Game is listed under its venue.
+			if g.MultiFestVenueID == 0 {
 				rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames, ""))
 			}
 		}
@@ -376,9 +376,9 @@ func festSettingsFromForm(form url.Values) FestSettings {
 // kindValue is the fest's type, regular when none is given.
 func (f FestSettings) kindValue() (string, error) {
 	if f.Kind == "" {
-		return sites.Regular, nil
+		return multifest.Regular, nil
 	}
-	if !sites.ValidKind(f.Kind) {
+	if !multifest.ValidKind(f.Kind) {
 		return "", corei18n.User(dopestrings.Default.Host.Dash.ErrorKindInvalid())
 	}
 	return f.Kind, nil
@@ -468,7 +468,7 @@ from fests where id = ?`, festID).Scan(&f.Title, &f.Slug, &f.Description, &start
 }
 
 // UpdateFest writes a fest's whole header. An empty slug clears it. The type
-// changes only while the fest has no Games, which its sites would split.
+// changes only while the fest has no Games, which its venues would split.
 func (s *Server) UpdateFest(reqCtx context.Context, festID int64, f FestSettings) error {
 	f.Title = strings.TrimSpace(f.Title)
 	if f.Title == "" {
@@ -674,13 +674,13 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 			continue
 		}
 		hostGames = append(hostGames, PublicFestGame{
-			ID:     g.ID,
-			Slug:   g.Slug,
-			Code:   g.Code,
-			Title:  g.Title,
-			Type:   games.Label(g.Type),
-			URL:    fmt.Sprintf("/host/fest/%s/game/%s/", festRef, g.Ref()),
-			SiteID: g.SiteID,
+			ID:               g.ID,
+			Slug:             g.Slug,
+			Code:             g.Code,
+			Title:            g.Title,
+			Type:             games.Label(g.Type),
+			URL:              fmt.Sprintf("/host/fest/%s/game/%s/", festRef, g.Ref()),
+			MultiFestVenueID: g.MultiFestVenueID,
 		})
 	}
 	teamCount, playerCount, troikaCount, err := s.loadHostFestRosterCounts(r.Context(), festID)
@@ -717,13 +717,13 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 			return
 		}
 	}
-	siteRows, err := s.loadSiteRows(r.Context(), festID, hostGames)
+	venueRows, err := s.loadVenueRows(r.Context(), festID, hostGames)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
 	}
 	data := hostFestDashData{
-		Sites: siteRows,
+		MultiFestVenues: venueRows,
 		Fest: view.HostFest{
 			ID:        festID,
 			Slug:      slug,

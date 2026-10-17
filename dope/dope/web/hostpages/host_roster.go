@@ -862,7 +862,7 @@ func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice im
 	if result.Revision > 0 {
 		s.fanOut(festID, result.Revision, core.Broadcast{Views: result.Views})
 	}
-	return result, s.ensureSiteGames(ctx, festID, ratingID)
+	return result, s.ensureVenueGames(ctx, festID, ratingID)
 }
 
 func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Request, festID int64) {

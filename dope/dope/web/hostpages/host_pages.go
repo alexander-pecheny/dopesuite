@@ -3,7 +3,7 @@ package hostpages
 import (
 	"database/sql"
 	"dope/dope/domain/core"
-	"dope/dope/domain/sites"
+	"dope/dope/domain/multifest"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
 	ui "dope/dope/web/ui"
@@ -79,7 +79,7 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 			ui.Field(ui.Label(s.Host.Pages.StartDateLabel()), ui.Textfield(ui.Name("start_date"), ui.Placeholder("2026-05-15"))),
 			ui.Field(ui.Label(s.Host.Pages.EndDateLabel()), ui.Textfield(ui.Name("end_date"), ui.Placeholder("2026-05-17"))),
 			ui.Field(ui.Label(s.Host.Pages.RatingIdLabel()), ui.Textfield(ui.Name("rating_id"), ui.Inputmode("numeric"))),
-			kindField(sites.Regular),
+			kindField(multifest.Regular),
 			ui.Checkbox(ui.Name("is_public"), ui.Value("1"), ui.Text(s.Host.Pages.PublicLabel())),
 			ui.Row(ui.Button(ui.Submit(), ui.Text(s.Host.Pages.CreateSubmit()))),
 		),

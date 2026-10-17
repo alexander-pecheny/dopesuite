@@ -421,8 +421,8 @@ access_saved_notice = "Доступ сохранён."
 error_kind_invalid = "Такого типа турнира нет."
 error_kind_has_games = "Тип турнира можно поменять, только пока в нём нет игр."
 
-[sites]
-# A fest's type and its площадки (ADR-0031, web/hostpages/sites.go).
+[multifest]
+# A fest's type and its площадки (ADR-0031, web/hostpages/multifest.go).
 kind_label = "Тип турнира"
 kind_regular = "Обычный"
 kind_synch = "Строгий синхрон"

@@ -14,7 +14,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/expr"
 	"dope/dope/domain/games"
-	"dope/dope/domain/sites"
+	"dope/dope/domain/multifest"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
@@ -435,7 +435,7 @@ func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code
 	if err != nil {
 		return nil, err
 	}
-	teamOf, err := sites.ByNumber(ctx, q, festID, doc.SiteID)
+	teamOf, err := multifest.ByNumber(ctx, q, festID, doc.MultiFestVenueID)
 	if err != nil {
 		return nil, err
 	}

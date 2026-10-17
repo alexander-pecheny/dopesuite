@@ -1147,6 +1147,17 @@ var RU = Strings{
 			RefusedHeading: func() string { return "Ссылка не работает" },
 			Title:          func() string { return "Приглашение" },
 		},
+		Multifest: HostMultifestStrings{
+			KindHint: func() string {
+				return "В строгом синхроне загрузка команд с rating.chgk.info раскладывает их по площадкам и заводит каждой площадке свою игру. Тип можно поменять, только пока в турнире нет игр."
+			},
+			KindLabel:   func() string { return "Тип турнира" },
+			KindMulti:   func() string { return "Несколько очных турниров" },
+			KindRegular: func() string { return "Обычный" },
+			KindSynch:   func() string { return "Строгий синхрон" },
+			Subhead:     func() string { return "Площадки" },
+			Teams:       func(n string) string { return fmt.Sprintf("команд: %s", n) },
+		},
 		Pages: HostPagesStrings{
 			CreateFestSummary: func() string { return "Создать фест" },
 			CreateSubmit:      func() string { return "Создать" },
@@ -1332,17 +1343,6 @@ var RU = Strings{
 				return fmt.Sprintf("Последний импорт можно отменить, пока составы не правили вручную. Сохранено: %s.", at)
 			},
 			UndoSubmit: func() string { return "Отменить последний импорт" },
-		},
-		Sites: HostSitesStrings{
-			KindHint: func() string {
-				return "В строгом синхроне загрузка команд с rating.chgk.info раскладывает их по площадкам и заводит каждой площадке свою игру. Тип можно поменять, только пока в турнире нет игр."
-			},
-			KindLabel:   func() string { return "Тип турнира" },
-			KindMulti:   func() string { return "Несколько очных турниров" },
-			KindRegular: func() string { return "Обычный" },
-			KindSynch:   func() string { return "Строгий синхрон" },
-			Subhead:     func() string { return "Площадки" },
-			Teams:       func(n string) string { return fmt.Sprintf("команд: %s", n) },
 		},
 		Troikas: HostTroikasStrings{
 			AddSubhead: func() string { return "Добавить тройки" },
@@ -1765,11 +1765,11 @@ var RU = Strings{
 			RowRange: func(n string, max string) string {
 				return fmt.Sprintf("Строка %s: номер должен быть целым от 1 до %s.", n, max)
 			},
-			SiteRequired: func() string {
-				return "У каждой площадки свои номера. Укажите площадку: ?site=<id>."
-			},
 			TeamTwoRows: func(first string, second string) string {
 				return fmt.Sprintf("Команда выбрана сразу в строках %s и %s.", first, second)
+			},
+			VenueRequired: func() string {
+				return "У каждой площадки свои номера. Укажите площадку: ?venue=<id>."
 			},
 		},
 		Help: NumbersHelpStrings{
@@ -1814,8 +1814,8 @@ var RU = Strings{
 				return "Сначала загрузите команды на странице феста."
 			},
 			NoTeams: func() string { return "Сначала загрузите команды." },
-			Site:    func() string { return "Площадка" },
 			Title:   func(fest string) string { return fmt.Sprintf("%s · номера команд", fest) },
+			Venue:   func() string { return "Площадка" },
 		},
 	},
 	Octobearfest: OctobearfestStrings{

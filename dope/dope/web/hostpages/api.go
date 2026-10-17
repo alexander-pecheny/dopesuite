@@ -12,10 +12,10 @@ import (
 
 	"dope/dope/domain/festops"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
-	"dope/dope/domain/sites"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
@@ -120,31 +120,31 @@ func (s *Server) APIRoutes(t *route.Table) {
 		for i, a := range req.Assignments {
 			assignments[i] = pages.NumberAssignment{TeamID: a.TeamID, Number: a.Number}
 		}
-		site, err := s.apiNumbersSite(r, sc.FestID)
+		venue, err := s.apiNumbersVenue(r, sc.FestID)
 		if err != nil {
 			return err
 		}
-		if err := p.AssignFestNumbers(r.Context(), sc.FestID, site, assignments); err != nil {
+		if err := p.AssignFestNumbers(r.Context(), sc.FestID, venue, assignments); err != nil {
 			return err
 		}
 		return s.apiNumbers(w, r, sc)
 	})
 	t.Handle("POST "+fest+"/numbers/auto", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-		site, err := s.apiNumbersSite(r, sc.FestID)
+		venue, err := s.apiNumbersVenue(r, sc.FestID)
 		if err != nil {
 			return err
 		}
-		if err := p.AutoFestNumbers(r.Context(), sc.FestID, site); err != nil {
+		if err := p.AutoFestNumbers(r.Context(), sc.FestID, venue); err != nil {
 			return err
 		}
 		return s.apiNumbers(w, r, sc)
 	})
 	t.Handle("POST "+fest+"/numbers/clear", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-		site, err := s.apiNumbersSite(r, sc.FestID)
+		venue, err := s.apiNumbersVenue(r, sc.FestID)
 		if err != nil {
 			return err
 		}
-		if err := p.ClearFestNumbers(r.Context(), sc.FestID, site); err != nil {
+		if err := p.ClearFestNumbers(r.Context(), sc.FestID, venue); err != nil {
 			return err
 		}
 		return s.apiNumbers(w, r, sc)
@@ -156,11 +156,11 @@ func (s *Server) APIRoutes(t *route.Table) {
 		if err := route.DecodeJSON(r, &req); err != nil {
 			return err
 		}
-		site, err := s.apiNumbersSite(r, sc.FestID)
+		venue, err := s.apiNumbersVenue(r, sc.FestID)
 		if err != nil {
 			return err
 		}
-		match, err := p.MatchFestNumbers(r.Context(), sc.FestID, site, req.Text)
+		match, err := p.MatchFestNumbers(r.Context(), sc.FestID, venue, req.Text)
 		if err != nil {
 			return err
 		}
@@ -213,8 +213,8 @@ type apiGame struct {
 	Code  string `json:"code"`
 	Title string `json:"title"`
 	Type  string `json:"type"`
-	// SiteID is the site the game is on (ADR-0031).
-	SiteID int64 `json:"site_id,omitempty"`
+	// MultiFestVenueID is the venue the game is on (ADR-0031).
+	MultiFestVenueID int64 `json:"multifest_venue_id,omitempty"`
 }
 
 type apiFestSettings struct {
@@ -227,8 +227,8 @@ type apiFestSettings struct {
 	Players         int       `json:"players"`
 	Troikas         int       `json:"troikas"`
 	NumbersAssigned int       `json:"numbers_assigned"`
-	// Sites are the sites of a synch or multi fest.
-	Sites []sites.Site `json:"sites,omitempty"`
+	// MultiFestVenues are the venues of a synch or multi fest.
+	MultiFestVenues []multifest.Venue `json:"multifest_venues,omitempty"`
 }
 
 // apiFestSettings is the dashboard as data: the fest's header, its games and
@@ -245,9 +245,9 @@ func (s *Server) apiFestSettings(w http.ResponseWriter, r *http.Request, sc rout
 	}
 	out := apiFestSettings{ID: sc.FestID, FestSettings: f, Role: sc.Role, Games: make([]apiGame, len(rows))}
 	for i, g := range rows {
-		out.Games[i] = apiGame{ID: g.ID, Slug: g.Slug, Code: g.Code, Title: g.Title, Type: g.Type, SiteID: g.SiteID}
+		out.Games[i] = apiGame{ID: g.ID, Slug: g.Slug, Code: g.Code, Title: g.Title, Type: g.Type, MultiFestVenueID: g.MultiFestVenueID}
 	}
-	if out.Sites, err = sites.List(ctx, s.h.Engine().DB, sc.FestID); err != nil {
+	if out.MultiFestVenues, err = multifest.List(ctx, s.h.Engine().DB, sc.FestID); err != nil {
 		return err
 	}
 	if out.Teams, out.Players, out.Troikas, err = s.loadHostFestRosterCounts(ctx, sc.FestID); err != nil {
@@ -831,11 +831,11 @@ type apiNumberedTeam struct {
 }
 
 func (s *Server) apiNumbers(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	site, err := s.apiNumbersSite(r, sc.FestID)
+	venue, err := s.apiNumbersVenue(r, sc.FestID)
 	if err != nil {
 		return err
 	}
-	teams, err := numbering.LoadTeams(r.Context(), s.h.Engine().DB, sc.FestID, site)
+	teams, err := numbering.LoadTeams(r.Context(), s.h.Engine().DB, sc.FestID, venue)
 	if err != nil {
 		return err
 	}
@@ -846,18 +846,18 @@ func (s *Server) apiNumbers(w http.ResponseWriter, r *http.Request, sc route.Sco
 	return route.JSON(w, out)
 }
 
-// apiNumbersSite is the site ?site= names. In a fest with sites each numbers
+// apiNumbersVenue is the venue ?venue= names. In a fest with venues each numbers
 // its own teams, so a call there must name one.
-func (s *Server) apiNumbersSite(r *http.Request, festID int64) (int64, error) {
-	list, err := sites.List(r.Context(), s.h.Engine().DB, festID)
+func (s *Server) apiNumbersVenue(r *http.Request, festID int64) (int64, error) {
+	list, err := multifest.List(r.Context(), s.h.Engine().DB, festID)
 	if err != nil || len(list) == 0 {
 		return 0, err
 	}
-	asked, _ := idstr.Parse(r.URL.Query().Get("site"))
-	for _, site := range list {
-		if site.ID == asked {
+	asked, _ := idstr.Parse(r.URL.Query().Get("venue"))
+	for _, venue := range list {
+		if venue.ID == asked {
 			return asked, nil
 		}
 	}
-	return 0, corei18n.User(dopestrings.Default.Numbers.Error.SiteRequired())
+	return 0, corei18n.User(dopestrings.Default.Numbers.Error.VenueRequired())
 }

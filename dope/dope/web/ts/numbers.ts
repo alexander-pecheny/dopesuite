@@ -80,8 +80,8 @@ interface ImportApplyResponse {
   }
 
   const importBtn = document.getElementById("numbers-import-btn");
-  const [basePath, siteQuery] = (form.getAttribute("action") ?? "").split("?");
-  const endpoint = (path: string) => `${basePath}${path}${siteQuery ? `?${siteQuery}` : ""}`;
+  const [basePath, venueQuery] = (form.getAttribute("action") ?? "").split("?");
+  const endpoint = (path: string) => `${basePath}${path}${venueQuery ? `?${venueQuery}` : ""}`;
 
   const closeDialog = (dialog: HTMLDialogElement) => {
     if (dialog && dialog.parentNode) dialog.close();

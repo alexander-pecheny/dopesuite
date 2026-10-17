@@ -47,8 +47,8 @@ export interface FestPlayerChoice {
 }
 
 // Roster — the fest-level team→players list, shared by every game
-// page (EK/OD/KSI, host and viewer). A game on a site gets its site's
-// part under that site's numbers, so a game names itself when it asks.
+// page (EK/OD/KSI, host and viewer). A game on a venue gets its venue's
+// part under that venue's numbers, so a game names itself when it asks.
 // Each answer is cached for the page's lifetime.
 const rosterCache = new Map<string, Promise<RosterTeam[]>>();
 

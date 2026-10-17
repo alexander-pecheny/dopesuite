@@ -14,8 +14,8 @@ import (
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/roster"
-	"dope/dope/domain/sites"
 	"dope/dope/storage/store"
 )
 
@@ -24,21 +24,21 @@ import (
 // площадка seats that площадка's teams alone under those numbers, a Game on
 // none seats everyone under the fest's, and a team the site moves to another
 // площадка moves between the Games with it and takes the next number there.
-func TestASynchFestSeatsEachSiteApart(t *testing.T) {
+func TestASynchFestSeatsEachVenueApart(t *testing.T) {
 	t.Parallel()
 	srv := newAuthTestServer(t)
 	db := srv.Eng().DB
-	res, err := db.Exec(`insert into fests(title, revision, created_at, updated_at, kind) values('Синхрон', 1, '2026-10-16', '2026-10-16', ?)`, sites.Synch)
+	res, err := db.Exec(`insert into fests(title, revision, created_at, updated_at, kind) values('Синхрон', 1, '2026-10-16', '2026-10-16', ?)`, multifest.Synch)
 	if err != nil {
 		t.Fatal(err)
 	}
 	festID, _ := res.LastInsertId()
-	minsk, brest := sites.Venue{ID: 10, Title: "Минск"}, sites.Venue{ID: 20, Title: "Брест"}
-	team := func(id int64, name string, venue sites.Venue) roster.FestRosterImportTeam {
+	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
 		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
 			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
 	}
-	load := func(alfa sites.Venue) {
+	load := func(alfa multifest.RatingVenue) {
 		t.Helper()
 		teams := []roster.FestRosterImportTeam{team(1, "Альфа", alfa), team(2, "Бета", minsk), team(3, "Гамма", brest)}
 		if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, teams, imports.RosterChoice{}); err != nil {
@@ -47,17 +47,17 @@ func TestASynchFestSeatsEachSiteApart(t *testing.T) {
 	}
 	load(minsk)
 
-	siteOf := func(venue sites.Venue) int64 {
+	venueOf := func(venue multifest.RatingVenue) int64 {
 		var id int64
-		if err := db.QueryRow(`select id from fest_sites where fest_id = ? and rating_venue_id = ?`, festID, venue.ID).Scan(&id); err != nil {
+		if err := db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = ?`, festID, venue.ID).Scan(&id); err != nil {
 			t.Fatalf("площадка %s: %v", venue.Title, err)
 		}
 		return id
 	}
-	create := func(siteID int64) int64 {
+	create := func(multiFestVenueID int64) int64 {
 		var gameID int64
 		withTx(t, db, func(ctx context.Context, tx *sql.Tx) (err error) {
-			gameID, _, err = festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, Label: "ОД", TourComp: []int{3}, SiteID: siteID})
+			gameID, _, err = festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, Label: "ОД", TourComp: []int{3}, MultiFestVenueID: multiFestVenueID})
 			return err
 		})
 		return gameID
@@ -79,7 +79,7 @@ func TestASynchFestSeatsEachSiteApart(t *testing.T) {
 		slices.Sort(names)
 		return names
 	}
-	minskGame, brestGame, everyone := create(siteOf(minsk)), create(siteOf(brest)), create(0)
+	minskGame, brestGame, everyone := create(venueOf(minsk)), create(venueOf(brest)), create(0)
 	if got := seated(minskGame); !slices.Equal(got, []string{"1 Альфа", "2 Бета"}) {
 		t.Fatalf("Минск seats %v", got)
 	}
@@ -118,7 +118,7 @@ where gp.game_id in (?, ?) order by 1`, minskGame, brestGame)
 		t.Fatalf("after the move Брест seats %v", got)
 	}
 
-	if err := srv.PageServer().AutoFestNumbers(t.Context(), festID, siteOf(minsk)); err != nil {
+	if err := srv.PageServer().AutoFestNumbers(t.Context(), festID, venueOf(minsk)); err != nil {
 		t.Fatal(err)
 	}
 	if got := seated(minskGame); !slices.Equal(got, []string{"1 Бета"}) {

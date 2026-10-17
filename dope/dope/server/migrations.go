@@ -984,7 +984,7 @@ create table if not exists game_invite_uses(
 			return err
 		}
 		if _, err := db.Exec(`
-create table if not exists fest_sites(
+create table if not exists multifest_venues(
   id integer primary key,
   fest_id integer not null references fests(id) on delete cascade,
   title text not null,
@@ -993,24 +993,24 @@ create table if not exists fest_sites(
   rating_id integer,
   position integer not null default 0
 );
-create unique index if not exists fest_sites_venue_idx on fest_sites(fest_id, rating_venue_id) where rating_venue_id is not null;
+create unique index if not exists multifest_venues_rating_idx on multifest_venues(fest_id, rating_venue_id) where rating_venue_id is not null;
 `); err != nil {
 			return err
 		}
 		if err := store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{
-			{Name: "site_id", Type: "INTEGER REFERENCES fest_sites(id) ON DELETE SET NULL"},
+			{Name: "multifest_venue_id", Type: "INTEGER REFERENCES multifest_venues(id) ON DELETE SET NULL"},
 		}); err != nil {
 			return err
 		}
-		// No foreign key on games: a site goes only with its fest, which takes
+		// No foreign key on games: a venue goes only with its fest, which takes
 		// its games along.
-		return store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{{Name: "site_id", Type: "INTEGER"}})
+		return store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{{Name: "multifest_venue_id", Type: "INTEGER"}})
 	}},
-	{Version: 45, Name: "fest_teams.site_number", Up: func(db *sql.DB) error {
-		if err := store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{{Name: "site_number", Type: "INTEGER"}}); err != nil {
+	{Version: 45, Name: "fest_teams.venue_number", Up: func(db *sql.DB) error {
+		if err := store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{{Name: "venue_number", Type: "INTEGER"}}); err != nil {
 			return err
 		}
-		_, err := db.Exec(`create unique index if not exists fest_teams_site_number_idx on fest_teams(site_id, site_number) where site_number is not null`)
+		_, err := db.Exec(`create unique index if not exists fest_teams_venue_number_idx on fest_teams(multifest_venue_id, venue_number) where venue_number is not null`)
 		return err
 	}},
 }

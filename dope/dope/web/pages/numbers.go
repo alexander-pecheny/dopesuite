@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/roster"
-	"dope/dope/domain/sites"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
 	ui "dope/dope/web/ui"
@@ -32,13 +32,13 @@ type hostFestNumberRow struct {
 }
 
 type hostFestNumbersData struct {
-	Fest       view.HostFest
-	Sites      []sites.Site
-	Site       int64
-	Rows       []hostFestNumberRow
-	Error      string
-	Notice     string
-	HasNumbers bool
+	Fest            view.HostFest
+	MultiFestVenues []multifest.Venue
+	Venue           int64
+	Rows            []hostFestNumberRow
+	Error           string
+	Notice          string
+	HasNumbers      bool
 }
 
 // hostNumbersDoc builds the fest team-numbers editor: the read-only number list
@@ -54,9 +54,9 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	}
 	base := "/host/fest/" + ref + "/numbers"
 	query := ""
-	if data.Site > 0 {
-		query = "?site=" + idstr.Format(data.Site)
-		page = append(page, sitePicker(base, data.Sites, data.Site))
+	if data.Venue > 0 {
+		query = "?venue=" + idstr.Format(data.Venue)
+		page = append(page, venuePicker(base, data.MultiFestVenues, data.Venue))
 	}
 	if data.Error != "" {
 		page = append(page, ui.Empty(ui.Text(data.Error)))
@@ -122,13 +122,13 @@ func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, f
 		route.WriteError(w, r, err)
 		return
 	}
-	site, list, err := s.numbersSite(r, festID)
+	venue, list, err := s.numbersVenue(r, festID)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
 	}
-	data, err := s.buildHostFestNumbersData(r.Context(), festID, site, errMsg, notice, override)
-	data.Sites, data.Site = list, site
+	data, err := s.buildHostFestNumbersData(r.Context(), festID, venue, errMsg, notice, override)
+	data.MultiFestVenues, data.Venue = list, venue
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -137,8 +137,8 @@ func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, f
 	RenderDoc(w, s.h.Engine().AssetETags, hostNumbersDoc(data))
 }
 
-func (s *Server) buildHostFestNumbersData(ctx context.Context, festID, siteID int64, errMsg, notice string, override []hostFestNumberRow) (hostFestNumbersData, error) {
-	teams, err := numbering.LoadTeams(ctx, s.h.Engine().DB, festID, siteID)
+func (s *Server) buildHostFestNumbersData(ctx context.Context, festID, multiFestVenueID int64, errMsg, notice string, override []hostFestNumberRow) (hostFestNumbersData, error) {
+	teams, err := numbering.LoadTeams(ctx, s.h.Engine().DB, festID, multiFestVenueID)
 	if err != nil {
 		return hostFestNumbersData{}, err
 	}
@@ -249,12 +249,12 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	site, _, err := s.numbersSite(r, festID)
+	venue, _, err := s.numbersVenue(r, festID)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
 	}
-	teams, err := numbering.LoadTeams(r.Context(), s.h.Engine().DB, festID, site)
+	teams, err := numbering.LoadTeams(r.Context(), s.h.Engine().DB, festID, venue)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -311,7 +311,7 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		assignments[row.TeamID] = n
 	}
 
-	if err := s.SaveFestNumbers(r.Context(), festID, site, assignments); err != nil {
+	if err := s.SaveFestNumbers(r.Context(), festID, venue, assignments); err != nil {
 		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", override)
 		return
 	}
@@ -322,14 +322,14 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 	s.RenderHostFestNumbers(w, r, festID, "", notice, nil)
 }
 
-// AutoFestNumbers numbers every team of the fest, or of one site, 1…n in
+// AutoFestNumbers numbers every team of the fest, or of one venue, 1…n in
 // alphabetical order, after dropping the teams that left the roster, whose
 // archived numbers would otherwise block reuse.
-func (s *Server) AutoFestNumbers(ctx context.Context, festID, siteID int64) error {
+func (s *Server) AutoFestNumbers(ctx context.Context, festID, multiFestVenueID int64) error {
 	if err := s.purgeFestSoftDeletedTeams(ctx, festID); err != nil {
 		return err
 	}
-	teams, err := numbering.LoadTeams(ctx, s.h.Engine().DB, festID, siteID)
+	teams, err := numbering.LoadTeams(ctx, s.h.Engine().DB, festID, multiFestVenueID)
 	if err != nil {
 		return err
 	}
@@ -350,21 +350,21 @@ func (s *Server) AutoFestNumbers(ctx context.Context, festID, siteID int64) erro
 	for i, team := range sorted {
 		assignments[team.ID] = i + 1
 	}
-	return s.SaveFestNumbers(ctx, festID, siteID, assignments)
+	return s.SaveFestNumbers(ctx, festID, multiFestVenueID, assignments)
 }
 
-// ClearFestNumbers takes every team's number away, in the fest or one site.
-func (s *Server) ClearFestNumbers(ctx context.Context, festID, siteID int64) error {
+// ClearFestNumbers takes every team's number away, in the fest or one venue.
+func (s *Server) ClearFestNumbers(ctx context.Context, festID, multiFestVenueID int64) error {
 	if err := s.purgeFestSoftDeletedTeams(ctx, festID); err != nil {
 		return err
 	}
-	return s.SaveFestNumbers(ctx, festID, siteID, nil)
+	return s.SaveFestNumbers(ctx, festID, multiFestVenueID, nil)
 }
 
 func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
-	site, _, err := s.numbersSite(r, festID)
+	venue, _, err := s.numbersVenue(r, festID)
 	if err == nil {
-		err = s.AutoFestNumbers(r.Context(), festID, site)
+		err = s.AutoFestNumbers(r.Context(), festID, venue)
 	}
 	if err != nil {
 		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
@@ -374,9 +374,9 @@ func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) HandleHostClearFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
-	site, _, err := s.numbersSite(r, festID)
+	venue, _, err := s.numbersVenue(r, festID)
 	if err == nil {
-		err = s.ClearFestNumbers(r.Context(), festID, site)
+		err = s.ClearFestNumbers(r.Context(), festID, venue)
 	}
 	if err != nil {
 		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
@@ -396,15 +396,15 @@ func (s *Server) purgeFestSoftDeletedTeams(reqCtx context.Context, festID int64)
 	})
 }
 
-// SaveFestNumbers numbers the fest's teams, or one site's under the site's
+// SaveFestNumbers numbers the fest's teams, or one venue's under the venue's
 // own numbers, as assignments says; a team left out has none.
-func (s *Server) SaveFestNumbers(reqCtx context.Context, festID, siteID int64, assignments map[int64]int) error {
+func (s *Server) SaveFestNumbers(reqCtx context.Context, festID, multiFestVenueID int64, assignments map[int64]int) error {
 	column, scope, args := "number", "fest_id = ?", []any{festID}
-	if siteID > 0 {
-		column, scope, args = "site_number", "fest_id = ? and site_id = ?", []any{festID, siteID}
+	if multiFestVenueID > 0 {
+		column, scope, args = "venue_number", "fest_id = ? and multifest_venue_id = ?", []any{festID, multiFestVenueID}
 	}
 	_, err := s.Commit(reqCtx, festID, "fest-numbers", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
-		oldTeams, err := numbering.LoadTeams(ctx, tx, festID, siteID)
+		oldTeams, err := numbering.LoadTeams(ctx, tx, festID, multiFestVenueID)
 		if err != nil {
 			return core.FestWrite{}, err
 		}
@@ -437,7 +437,7 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID, siteID int64, a
 		}
 		// Every flat Protocol carries the universal Number, so a reassignment
 		// flows into each one's document; KSI's answers follow their team.
-		updates, err := roster.PropagateRosterTx(ctx, tx, festID, teams, roster.Remap{Site: siteID, Numbers: entryRemap})
+		updates, err := roster.PropagateRosterTx(ctx, tx, festID, teams, roster.Remap{Venue: multiFestVenueID, Numbers: entryRemap})
 		if err != nil {
 			return core.FestWrite{}, err
 		}
@@ -453,34 +453,34 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID, siteID int64, a
 	return err
 }
 
-// numbersSite is the site a numbers request is about: the one ?site= names,
-// else the fest's first, or 0 in a fest without sites. A site numbers its own
+// numbersVenue is the venue a numbers request is about: the one ?venue= names,
+// else the fest's first, or 0 in a fest without multifest. A venue numbers its own
 // teams.
-func (s *Server) numbersSite(r *http.Request, festID int64) (int64, []sites.Site, error) {
-	list, err := sites.List(r.Context(), s.h.Engine().DB, festID)
+func (s *Server) numbersVenue(r *http.Request, festID int64) (int64, []multifest.Venue, error) {
+	list, err := multifest.List(r.Context(), s.h.Engine().DB, festID)
 	if err != nil || len(list) == 0 {
 		return 0, nil, err
 	}
-	asked, _ := idstr.Parse(r.URL.Query().Get("site"))
-	for _, site := range list {
-		if site.ID == asked {
+	asked, _ := idstr.Parse(r.URL.Query().Get("venue"))
+	for _, venue := range list {
+		if venue.ID == asked {
 			return asked, list, nil
 		}
 	}
 	return list[0].ID, list, nil
 }
 
-// sitePicker switches the page between the fest's sites.
-func sitePicker(base string, list []sites.Site, current int64) *ui.Element {
+// venuePicker switches the page between the fest's multifest.
+func venuePicker(base string, list []multifest.Venue, current int64) *ui.Element {
 	options := make([]ui.Item, 0, len(list)+1)
-	options = append(options, ui.Name("site"), ui.Data("autosubmit", ""))
-	for _, site := range list {
-		items := []ui.Item{ui.Value(idstr.Format(site.ID)), ui.Text(site.Title)}
-		if site.ID == current {
+	options = append(options, ui.Name("venue"), ui.Data("autosubmit", ""))
+	for _, venue := range list {
+		items := []ui.Item{ui.Value(idstr.Format(venue.ID)), ui.Text(venue.Title)}
+		if venue.ID == current {
 			items = append(items, ui.Selected())
 		}
 		options = append(options, ui.Option(items...))
 	}
 	return ui.Form(ui.Method("get"), ui.Action(base),
-		ui.Field(ui.Label(dopestrings.Default.Numbers.Page.Site()), ui.Selectfield(options...)))
+		ui.Field(ui.Label(dopestrings.Default.Numbers.Page.Venue()), ui.Selectfield(options...)))
 }
