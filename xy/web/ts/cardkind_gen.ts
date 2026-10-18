@@ -11,6 +11,7 @@ export const KINDS = [
   {"name":"normal","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","pickable":false},
   {"name":"test","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","pickable":false},
   {"name":"handouts_preamble","counter":"","exported":false,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","pickable":false},
+  {"name":"appeal","counter":"","exported":false,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","pickable":false},
 ] as const;
 
 export type KindName = (typeof KINDS)[number]["name"];

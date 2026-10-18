@@ -19,6 +19,9 @@ type listDTO struct {
 	// CommentFirst puts a question's comment before its answer in every
 	// rendering. A grouped list follows its group's flag instead of its own.
 	CommentFirst bool `json:"comment_first"`
+	// Meta is a List Type's own settings, an Envelope; only an appeals list has
+	// any (ADR-0021).
+	Meta *string `json:"meta,omitempty"`
 }
 
 // groupDTO is a "list_of_lists": a named, ordered run of consecutive lists.
@@ -30,7 +33,7 @@ type groupDTO struct {
 
 func scanLists(ctx context.Context, q querier, boardID int64) ([]listDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, type, title, rank, group_id, comment_first from lists where board_id = ? and deleted_at is null order by rank`, boardID)
+select id, type, title, rank, group_id, comment_first, meta from lists where board_id = ? and deleted_at is null order by rank`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -38,12 +41,16 @@ select id, type, title, rank, group_id, comment_first from lists where board_id 
 	out := []listDTO{}
 	for rows.Next() {
 		var l listDTO
-		var title []byte
+		var title, meta []byte
 		var groupID sql.NullInt64
-		if err := rows.Scan(&l.ID, &l.Type, &title, &l.Rank, &groupID, &l.CommentFirst); err != nil {
+		if err := rows.Scan(&l.ID, &l.Type, &title, &l.Rank, &groupID, &l.CommentFirst, &meta); err != nil {
 			return nil, err
 		}
 		l.Title = b64(title)
+		if meta != nil {
+			m := b64(meta)
+			l.Meta = &m
+		}
 		if groupID.Valid {
 			l.GroupID = &groupID.Int64
 		}
@@ -74,10 +81,11 @@ select id, name, comment_first from list_groups where board_id = ? and deleted_a
 }
 
 type createListRequest struct {
-	Title        string `json:"title"`
-	Rank         string `json:"rank"`
-	Type         string `json:"type"`
-	CommentFirst bool   `json:"comment_first"`
+	Title        string  `json:"title"`
+	Rank         string  `json:"rank"`
+	Type         string  `json:"type"`
+	CommentFirst bool    `json:"comment_first"`
+	Meta         *string `json:"meta"`
 }
 
 func (s *server) handleCreateList(w http.ResponseWriter, r *http.Request) {
@@ -102,12 +110,17 @@ func (s *server) handleCreateList(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "bad list type")
 		return
 	}
+	meta, err := optBlob(req.Meta)
+	if err != nil {
+		httpError(w, http.StatusBadRequest, "invalid meta")
+		return
+	}
 	now := time.Now()
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-list", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-insert into lists(board_id, type, title, rank, comment_first, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?)`,
-			bid, typ, title, req.Rank, req.CommentFirst, rfc3339(now), rfc3339(now))
+insert into lists(board_id, type, title, rank, comment_first, meta, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?, ?)`,
+			bid, typ, title, req.Rank, req.CommentFirst, meta, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -122,11 +135,11 @@ insert into lists(board_id, type, title, rank, comment_first, created_at, update
 
 // validListType allowlists the list types the client may set (mirrors the
 // lists.type CHECK constraint). 'si' is a list of SI theme's, 'normal' one of OD
-// questions; the type decides what kind of card the add-card button makes, and
-// nothing else.
+// questions, 'appeals' the appeals of one tournament (ADR-0021); the type decides
+// what kind of card the add-card button makes, and nothing else.
 func validListType(typ string) bool {
 	switch typ {
-	case "normal", "test", "si":
+	case "normal", "test", "si", "appeals":
 		return true
 	}
 	return false
@@ -137,6 +150,7 @@ type patchListRequest struct {
 	Rank         *string `json:"rank"`
 	Type         *string `json:"type"`
 	CommentFirst *bool   `json:"comment_first"`
+	Meta         *string `json:"meta"` // "" clears
 }
 
 func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
@@ -168,6 +182,13 @@ func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.CommentFirst != nil {
 			p.set("comment_first", *req.CommentFirst)
+		}
+		if req.Meta != nil {
+			meta, err := optBlob(req.Meta)
+			if err != nil {
+				return corei18n.User("invalid meta")
+			}
+			p.set("meta", meta)
 		}
 		return p.apply(ctx, tx, "lists", listID)
 	})

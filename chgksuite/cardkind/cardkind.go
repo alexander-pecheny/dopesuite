@@ -32,6 +32,9 @@ const (
 	// HandoutsPreamble is a tour's ///preamble block for the .hndt. It is not
 	// 4s and never goes into the package.
 	HandoutsPreamble = "handouts_preamble"
+	// Appeal is one appeal from the rating site, in an appeals List
+	// (xy ADR-0021). It is JSON, not 4s, and never goes into the package.
+	Appeal = "appeal"
 )
 
 // The number sequences a numbered Card counts in. Questions count 1, 2, 3…
@@ -92,6 +95,7 @@ var All = []Kind{
 	{Name: Normal, Exported: true},
 	{Name: Test, Exported: true},
 	{Name: HandoutsPreamble},
+	{Name: Appeal},
 }
 
 var byName = func() map[string]Kind {
@@ -130,14 +134,21 @@ func Exported(name string) bool { return Of(name).Exported }
 // names one: what the board's add-card button makes there (cardkind.ts's
 // forListType), a Theme in an SI List and a Question anywhere else.
 func ForListType(listType string) string {
-	if listType == ListTypeSI {
+	switch listType {
+	case ListTypeSI:
 		return Theme
+	case ListTypeAppeals:
+		return Appeal
 	}
 	return Question
 }
 
-// ListTypeSI is the List Type of a List of SI themes (lists.type).
-const ListTypeSI = "si"
+// The List Types that make a Card of their own (lists.type): SI themes, and
+// the appeals of one tournament.
+const (
+	ListTypeSI      = "si"
+	ListTypeAppeals = "appeals"
+)
 
 // GameOf is the game a scope of Cards with these kinds exports as: the game of
 // the first kind that has a say, GameChgk when none does.

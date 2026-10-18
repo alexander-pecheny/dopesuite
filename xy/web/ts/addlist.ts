@@ -18,10 +18,13 @@ const { keyBetween } = xyRank;
 
 // createList encrypts the title, creates the list (offline-capable via the sync
 // outbox) and adds it to the board's state. The caller renders.
-export async function createList(board: Board, title: string, type: string, rank: string): Promise<void> {
+export async function createList(board: Board, title: string, type: string, rank: string, meta?: string): Promise<BoardList> {
   const sealedTitle = await xyCrypto.encField(board.dk(), title);
-  const res = await board.verbs.create("createList", `/api/boards/${board.id}/lists`, { title: sealedTitle, rank, type });
-  board.state.lists.push({ id: res.id as number, type, rank, groupId: null, title, commentFirst: false });
+  const body = { title: sealedTitle, rank, type, ...(meta ? { meta: await xyCrypto.encField(board.dk(), meta) } : {}) };
+  const res = await board.verbs.create("createList", `/api/boards/${board.id}/lists`, body);
+  const list: BoardList = { id: res.id as number, type, rank, groupId: null, title, commentFirst: false, meta: meta ?? null };
+  board.state.lists.push(list);
+  return list;
 }
 
 // rankNextTo is the rank of a new ungrouped list beside `anchor`. A list in a
@@ -40,7 +43,9 @@ function rankNextTo(lists: readonly BoardList[], anchor: BoardList, before: bool
   try { return keyBetween(prev, next); } catch { return keyBetween(prev, null); }
 }
 
-export function createAddListPanel(board: Board): ListPanel {
+// An appeals list is not made here: its settings come first (appealspanel.ts),
+// so `appeals` takes the name and the rank over.
+export function createAddListPanel(board: Board, appeals: (title: string, rank: string) => void): ListPanel {
   const addListModal = modal("addList");
   const form = byId<HTMLFormElement>("addListForm");
   const nameInput = byId<HTMLInputElement>("addListName");
@@ -77,6 +82,7 @@ export function createAddListPanel(board: Board): ListPanel {
     if (!list || !title || form.inert) return;
     const rank = rankNextTo(board.state.lists, list, byId<HTMLInputElement>("addListBefore").checked);
     if (rank == null) { addListModal.close(); return; }
+    if (typeSelect.value === "appeals") { addListModal.close(); appeals(title, rank); return; }
     await save(title, rank);
   });
 

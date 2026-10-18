@@ -24,6 +24,7 @@ function kindOf(name: string | null | undefined): Kind | undefined {
 export const KIND = {
   normal: "normal", question: "question", test: "test", meta: "meta",
   heading: "heading", other: "other", theme: "theme", handoutsPreamble: "handouts_preamble",
+  appeal: "appeal",
 } as const satisfies Record<string, KindName>;
 
 // counter is the number sequence a kind is numbered in: "question" (1, 2, 3…
@@ -95,7 +96,9 @@ export function gameOf(cards: ReadonlyArray<{ kind?: string | null }>): string {
 // forListType is the kind the add-card button makes in a List of this
 // type. The type decides that and nothing else.
 export function forListType(type: string | null | undefined): KindName {
-  return type === "si" ? KIND.theme : KIND.question;
+  if (type === "si") return KIND.theme;
+  if (type === "appeals") return KIND.appeal;
+  return KIND.question;
 }
 
 // pickable is the kinds the card editor's kind menu offers, in its order.

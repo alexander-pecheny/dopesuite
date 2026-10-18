@@ -251,6 +251,10 @@ type boardSnapshot struct {
 	// SessionTitleMode is how the reader wants a session's derived name written
 	// (issue #8): "date-title" (the default), "title" or "date".
 	SessionTitleMode string `json:"session_title_mode,omitempty"`
+	// RatingToken is the board's rating site API token, an Envelope (ADR-0021).
+	RatingToken *string `json:"rating_token,omitempty"`
+	// Votes is every vote on the board's appeal cards.
+	Votes []voteDTO `json:"votes"`
 }
 
 // unreadDTO flags, per card, whether the caller has unread events in either
@@ -273,10 +277,20 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, TourTesters: []tourTesterDTO{}, TourDeclarations: []tourDeclarationDTO{}, Unread: map[string]unreadDTO{}}
 
 	var name sql.NullString
-	if err := s.db.QueryRowContext(ctx, `select name from boards where id = ?`, bid).Scan(&name); handleErr(w, err) {
+	var token []byte
+	if err := s.db.QueryRowContext(ctx, `select name, rating_token from boards where id = ?`, bid).Scan(&name, &token); handleErr(w, err) {
 		return
 	}
 	snap.Name = name.String
+	if token != nil {
+		t := b64(token)
+		snap.RatingToken = &t
+	}
+	votes, err := scanVotes(ctx, s.db, bid)
+	if handleErr(w, err) {
+		return
+	}
+	snap.Votes = votes
 
 	// The caller's per-user display prefs (see boardSnapshot.Sizes /
 	// .DefaultAuthor), shared across all their boards — keyed on the user, not
@@ -445,7 +459,8 @@ group by e.card_id`, uid, uid, uid, uid, bid)
 }
 
 type patchBoardRequest struct {
-	Name *string `json:"name"` // plaintext new name
+	Name        *string `json:"name"`         // plaintext new name
+	RatingToken *string `json:"rating_token"` // an Envelope; "" clears
 }
 
 func (s *server) handlePatchBoard(w http.ResponseWriter, r *http.Request) {
@@ -457,19 +472,25 @@ func (s *server) handlePatchBoard(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.Name == nil {
-		w.WriteHeader(http.StatusNoContent)
-		return
+	var p patch
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			httpError(w, http.StatusBadRequest, "empty name")
+			return
+		}
+		p.set("name", name)
 	}
-	name := strings.TrimSpace(*req.Name)
-	if name == "" {
-		httpError(w, http.StatusBadRequest, "empty name")
-		return
+	if req.RatingToken != nil {
+		token, err := optBlob(req.RatingToken)
+		if err != nil {
+			httpError(w, http.StatusBadRequest, "invalid rating_token")
+			return
+		}
+		p.set("rating_token", token)
 	}
 	err := s.withWriteTx(r.Context(), "patch-board", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update boards set name = ?, updated_at = ? where id = ?`,
-			name, rfc3339(time.Now()), bid)
-		return err
+		return p.apply(ctx, tx, "boards", bid)
 	})
 	if handleErr(w, err) {
 		return

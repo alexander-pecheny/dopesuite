@@ -400,6 +400,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         selectfield id="addListType"
           option value="normal" @board.list.type_chgk
           option value="si" @board.list.type_si
+          option value="appeals" @appeals.list.type
       field label=@board.list.add_where
         radio id="addListAfter" name="addListWhere" value="after" checked @board.list.add_after
         radio id="addListBefore" name="addListWhere" value="before" @board.list.add_before

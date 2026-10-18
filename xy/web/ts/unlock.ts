@@ -44,11 +44,14 @@ export interface BoardList {
   groupId: number | null;
   title: string;
   commentFirst: boolean;
+  // The decrypted lists.meta: an appeals list's settings (appeals.ts).
+  meta?: string | null;
 }
 // listType is what a list holds as the type pickers spell it: "si" for SI
-// themes, "normal" for anything else (an older or unknown type included).
-export function listType(list: BoardList): "si" | "normal" {
-  return list.type === "si" ? "si" : "normal";
+// themes, "appeals" for a tournament's appeals, "normal" for anything else (an
+// older or unknown type included).
+export function listType(list: Pick<BoardList, "type">): "si" | "appeals" | "normal" {
+  return list.type === "si" || list.type === "appeals" ? list.type : "normal";
 }
 // tourCommentFirst is a list's field order, which belongs to its tour: a
 // grouped list follows its group.
@@ -153,6 +156,16 @@ export interface BoardState {
   // Which form a session's derived name takes — the reader's own choice, per
   // issue #8. "date-title" | "title" | "date"; "" is the default.
   sessionTitleMode: string;
+  // Every vote on the board's appeal cards, decrypted (ADR-0021).
+  votes: Vote[];
+  // The board's rating site API token, decrypted; "" for none.
+  ratingToken: string;
+}
+// One member's vote on one appeal card: "for" or "against".
+export interface Vote {
+  cardId: number;
+  userId: number;
+  value: string;
 }
 
 // ---- the ciphertext snapshot (GET /api/boards/{id} shape, as load reads it) ----
@@ -165,7 +178,7 @@ export interface Snapshot {
   feed_default?: string;
   card_labels?: Array<{ card_id: number; label_id: number; session_id?: number | null }>;
   unread?: Record<string, UnreadFlags>;
-  lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title: string; comment_first?: boolean }>;
+  lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title: string; comment_first?: boolean; meta?: string | null }>;
   groups?: Array<{ id: number; name: string; comment_first?: boolean }>;
   cards?: Array<{
     id: number; list_id: number; kind: string; rank: string;
@@ -180,6 +193,8 @@ export interface Snapshot {
   timezone?: string;
   announce_cities?: unknown;
   session_title_mode?: string;
+  votes?: Array<{ card_id: number; user_id: number; value: string }>;
+  rating_token?: string | null;
   [key: string]: unknown;
 }
 
@@ -300,6 +315,7 @@ export async function decryptSnapshot(
     lists: await Promise.all((snap.lists || []).map(async (l) => ({
       id: l.id, type: l.type, rank: l.rank, groupId: l.group_id != null ? l.group_id : null,
       title: await crypto.decField(key, l.title), commentFirst: !!l.comment_first,
+      meta: l.meta ? await crypto.decField(key, l.meta) : null,
     }))),
     groups: await Promise.all((snap.groups || []).map(async (g) => ({
       id: g.id, name: await crypto.decField(key, g.name), commentFirst: !!g.comment_first,
@@ -320,6 +336,10 @@ export async function decryptSnapshot(
     sessions: await Promise.all((snap.sessions || []).map(async (s) => ({
       id: s.id, meta: await crypto.decField(key, s.meta), createdAt: s.created_at || null,
     }))),
+    votes: await Promise.all((snap.votes || []).map(async (v) => ({
+      cardId: v.card_id, userId: v.user_id, value: await crypto.decField(key, v.value),
+    }))),
+    ratingToken: snap.rating_token ? await crypto.decField(key, snap.rating_token) : "",
   };
   return { state, name };
 }

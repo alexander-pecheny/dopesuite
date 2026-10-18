@@ -53,6 +53,9 @@ type server struct {
 	// tgAPIBase is where the telegram export's own bot reaches the Bot API;
 	// empty is Telegram's. Tests point it at a stub.
 	tgAPIBase string
+	// ratingAPIBase is where the rating relay reaches the site (rating.go);
+	// empty is api.rating.chgk.info. Tests point it at a stub.
+	ratingAPIBase string
 
 	cfg Config
 	// localUser is the one account a local server has, created on first open;

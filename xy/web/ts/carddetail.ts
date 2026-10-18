@@ -23,6 +23,8 @@ import { normalizeAlias, xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
 import { forListType, KIND, label as kindLabel, numbered, versioned } from "./cardkind.js";
 import { byRank, rankForSlot } from "./dragrank.js";
+import { parseAppeal } from "./appeals.js";
+import { appealHeading, verdictLines, type AppealCard } from "./appealcard.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { CardFields, CopyTarget, Handout } from "./chgk.js";
 import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags } from "./unlock.js";
@@ -214,6 +216,8 @@ export interface CardDetailDeps {
   // Fires whenever the open card changes — a card id on open, null on close.
   // The test-mode dwell watcher (testmode.ts) is the one listener.
   onOpenCard?(cardId: number | null): void;
+  // How an appeal Card is drawn and edited (appealcard.ts).
+  appeal: AppealCard;
 }
 
 // cardReturn's shape: where the open card was launched from (a list preview's
@@ -338,6 +342,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // The «+ question» button beside Save appends a rung through this, since only
   // renderThemeFields can read the ladder back first.
   let themeAddSlot: (() => void) | null = null;
+  // An appeal's fields view reads back as its whole JSON, the way a theme's does.
+  let appealReader: (() => string) | null = null;
   // Blocks the fields editor doesn't render but must not eat: the pre-question
   // markup (№/№№ and friends) and anything else unmodelled. Both are captured at
   // render time and re-emitted verbatim on recompose; the text view edits them.
@@ -419,9 +425,11 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function isTheme(): boolean { return draftKind() === KIND.theme; }
   // Both card kinds that hold question fields get the Fields tab; a theme fills it
   // with a ladder of them instead of one.
-  function fieldsAvailable(): boolean { return numbered(draftKind()); }
+  function fieldsAvailable(): boolean { return numbered(draftKind()) || isAppeal(); }
   // A handouts preamble is .hndt, not 4s: it has only its text, and no preview.
   function isPreamble(): boolean { return draftKind() === KIND.handoutsPreamble; }
+  // An appeal is JSON, not 4s: preview and fields only, and none of the text tools.
+  function isAppeal(): boolean { return draftKind() === KIND.appeal; }
 
   // boardAuthors / boardSources collect the author names and source lines already
   // used across the board's question cards (deduped, sorted) — the autocomplete
@@ -510,6 +518,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function captureDraft(): void {
     if (cardView === "text") writeVersionDesc(cardDescEl.value);
     else if (cardView === "fields" && themeReader) writeVersionDesc(unlessUntouched(themeReader()));
+    else if (cardView === "fields" && appealReader) draft.desc = unlessUntouched(appealReader());
     else if (cardView === "fields" && cardFieldReaders) {
       const r = readCardFields(cardFieldReaders);
       writeVersionDesc(unlessUntouched(r.desc));
@@ -551,6 +560,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // A non-question card has no fields view, so it falls back to the text view.
     if (view === "fields" && !fieldsAvailable()) view = "text";
     if (view === "preview" && isPreamble()) view = "text";
+    if (view === "text" && isAppeal()) view = "fields";
     cardView = view;
     if (view !== "preview") lastEditView = view;
     ui.viewPreview.hidden = view !== "preview";
@@ -558,6 +568,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     ui.viewText.hidden = view !== "text";
     for (const t of CARD_TABS) tabBtn(t).classList.toggle("active", t === view);
     tabBtn("text").textContent = S.card.view.tabText();
+    tabBtn("text").hidden = isAppeal();
+    (ui.previewScreen.closest("label") || ui.previewScreen).hidden = isAppeal();
     tabBtn("fields").hidden = !fieldsAvailable();
     // Nothing to preview until the card has content; the tab appears as soon as
     // it does, so the flag needs no clearing.
@@ -567,7 +579,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // this function — because it depends on more than the view)
     // The tools edit text, so they follow the two edit views. →.4s additionally
     // needs the raw 4s editor it types into.
-    ui.editTools.hidden = view === "preview" || isPreamble();
+    ui.editTools.hidden = view === "preview" || isPreamble() || isAppeal();
     ui.addVersion.hidden = !versioned(draftKind());
     ui.addSlot.hidden = view !== "fields" || !isTheme();
     renderVersionTabs();
@@ -889,7 +901,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // renderCardFields rebuilds the fields editor from the current draft (and handout
   // settings). The last field (handout-gen markup) binds to draft.meta, not the 4s.
   function renderCardFields(): void {
+    appealReader = null;
     if (isTheme()) { renderThemeFields(); return; }
+    if (isAppeal()) { renderAppealFields(); return; }
     const source = versionDesc();
     const f = xyChgk.splitFields(source);
     // A brand-new card pre-fills the user's default author (a /profile setting)
@@ -954,6 +968,20 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       authorLabel: authors.label,
       extra,
     };
+  }
+
+  // renderAppealFields draws the verdict editor; the appeal itself is the
+  // site's and is only read.
+  function renderAppealFields(): void {
+    const c = openCardCard();
+    const a = parseAppeal(draft.desc);
+    cardFieldReaders = null;
+    themeReader = null;
+    if (!c || !a) { cardFieldsEl.replaceChildren(el("p", { class: "pv-empty", text: S.card.preview.empty() })); return; }
+    const ed = deps.appeal.editor(c.id, a, refreshSaveState);
+    cardFieldsEl.replaceChildren(ed.node);
+    appealReader = ed.read;
+    markFieldsBaseline(draft.desc, ed.read);
   }
 
   // ---- SI themes ----
@@ -1067,6 +1095,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     versionIdx = i;
     cardFieldReaders = null;
     themeReader = null;
+    appealReader = null;
     cardDescEl.value = versionDesc();
     setCardView(cardView || "fields");
     refreshSaveState();
@@ -1134,6 +1163,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const body = ui.previewBody;
     if (!draft.desc.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: S.card.preview.empty() })); return; }
     const c = openCardCard();
+    const appeal = isAppeal() ? parseAppeal(draft.desc) : null;
+    body.classList.toggle("card-preview-appeal", !!appeal);
+    if (c && appeal) { body.replaceChildren(deps.appeal.view(c.id, c.listId, appeal)); return; }
     const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: versionDesc(), listId: c ? c.listId : 0 };
     const number = numbered(card.kind) ? deps.questionNumberFor(card) : null;
     const reqId = openCardId;
@@ -1317,9 +1349,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardDescEl.value = xyVersions.versionBody(card.desc, 0);
     cardMessageEl.textContent = "";
     cardKindEl.value = card.kind || KIND.question;
-    cardKindEl.hidden = isPreamble();
-    ui.title.hidden = !isPreamble();
-    ui.title.textContent = isPreamble() ? kindLabel(card.kind) ?? "" : "";
+    cardKindEl.hidden = isPreamble() || isAppeal();
+    const appeal = isAppeal() ? parseAppeal(card.desc) : null;
+    ui.title.hidden = !isPreamble() && !appeal;
+    ui.title.textContent = appeal ? appealHeading(appeal) : isPreamble() ? kindLabel(card.kind) ?? "" : "";
     // The "copy for testing" action only makes sense for question cards (it shares
     // the numbered, screen-mode question text); hide it otherwise.
     ui.copy.hidden = !numbered(card.kind);
@@ -1847,7 +1880,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const dk = mustDK();
     const body: OpBody = { description: await xyCrypto.encField(dk, newDesc) };
     if (newDesc !== card.desc) {
-      body.desc_event = await sealPayload(dk, "desc_edit", { before: card.desc, after: newDesc, author: "" });
+      // An appeal's timeline diffs its verdict, which is all the jury edits.
+      const shown = (d: string): string => { const a = isAppeal() ? parseAppeal(d) : null; return a ? verdictLines(a) : d; };
+      body.desc_event = await sealPayload(dk, "desc_edit", { before: shown(card.desc), after: shown(newDesc), author: "" });
     }
     // Persist handout-gen settings (field #10) when they changed: "" clears them.
     if (newMeta !== (card.handoutMeta || null)) {

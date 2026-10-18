@@ -764,6 +764,63 @@ alter table list_groups add column comment_first integer not null default 0;`)},
 	// boards.name_enc and boards.schema_version go: every board has had a
 	// plaintext name since v10's backfill, and the step refuses to run otherwise.
 	{Version: 29, Name: "content columns without _enc", Up: migrateV29},
+	// v30 admits appeals (ADR-0021): a List typed 'appeals' with its settings in
+	// lists.meta, Cards of kind 'appeal', the board's rating token, and one vote
+	// per member per card, its value an Envelope. Both CHECKs are rebuilt the way
+	// v24 and v27 rebuilt them.
+	{Version: 30, Name: "appeals", Up: schema.Exec(`
+pragma foreign_keys=off;
+create table lists_v30(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  type text not null check (type in ('normal','test','si','appeals')) default 'normal',
+  title blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  group_id integer references list_groups(id),
+  comment_first integer not null default 0,
+  meta blob
+);
+insert into lists_v30(id, board_id, type, title, rank, created_at, updated_at, deleted_at, group_id, comment_first)
+  select id, board_id, type, title, rank, created_at, updated_at, deleted_at, group_id, comment_first from lists;
+drop table lists;
+alter table lists_v30 rename to lists;
+create index if not exists idx_lists_board on lists(board_id);
+create index if not exists idx_lists_group on lists(group_id);
+
+create table cards_v30(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer not null references lists(id) on delete cascade,
+  kind text not null check (kind in ('normal','question','test','meta','heading','other','theme','handouts_preamble','appeal')) default 'normal',
+  description blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  handout_meta blob,
+  alias blob,
+  seen blob
+);
+insert into cards_v30(id, board_id, list_id, kind, description, rank, created_at, updated_at, deleted_at, handout_meta, alias, seen)
+  select id, board_id, list_id, kind, description, rank, created_at, updated_at, deleted_at, handout_meta, alias, seen from cards;
+drop table cards;
+alter table cards_v30 rename to cards;
+create index if not exists idx_cards_list on cards(list_id);
+create index if not exists idx_cards_board on cards(board_id);
+
+alter table boards add column rating_token blob;
+
+create table if not exists card_votes(
+  card_id integer not null references cards(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  value blob not null,
+  updated_at text not null,
+  primary key (card_id, user_id)
+);
+pragma foreign_keys=on;`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }

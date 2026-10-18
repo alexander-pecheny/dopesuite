@@ -21,6 +21,102 @@ export type Strings = {
       title: () => string;
     };
   };
+  appeals: {
+    card: {
+      appealed: () => string;
+      controversials: (n: string) => string;
+      heading: (n: string, what: string) => string;
+      noControversials: () => string;
+      noPacket: () => string;
+      noQuestion: (packet: string, n: string) => string;
+      question: () => string;
+      text: () => string;
+      textChanged: (at: string) => string;
+    };
+    controversial: {
+      accepted: () => string;
+      declined: () => string;
+      open: () => string;
+    };
+    export: {
+      done: (n: string) => string;
+      failedOne: (id: string, reason: string) => string;
+      hint: () => string;
+      label: () => string;
+      loading: () => string;
+      needToken: () => string;
+      nothing: () => string;
+      send: (n: string) => string;
+      sending: (n: string) => string;
+      siteNow: (status: string) => string;
+      title: () => string;
+    };
+    kind: {
+      accept: (answer: string) => string;
+      hostError: () => string;
+      remove: () => string;
+    };
+    list: {
+      count: (total: string, decided: string) => string;
+      sent: () => string;
+      type: () => string;
+    };
+    offline: () => string;
+    refresh: {
+      done: (added: string, updated: string, total: string) => string;
+      label: () => string;
+      loading: (id: string) => string;
+      noControversials: (reason: string) => string;
+      textChanged: (n: number) => string;
+      title: () => string;
+    };
+    settings: {
+      create: () => string;
+      createTitle: () => string;
+      groupOption: (name: string) => string;
+      label: () => string;
+      needPacket: () => string;
+      needTitle: () => string;
+      needTournament: () => string;
+      packet: () => string;
+      packetHint: () => string;
+      packetNone: () => string;
+      save: () => string;
+      title: () => string;
+      titleFor: (list: string) => string;
+      token: () => string;
+      tokenHint: () => string;
+      tournament: () => string;
+      tournamentHint: () => string;
+    };
+    site: {
+      overridden: (id: string) => string;
+      status: (status: string) => string;
+    };
+    status: {
+      accepted: () => string;
+      declined: () => string;
+      open: () => string;
+    };
+    verdict: {
+      byHand: () => string;
+      byVotes: (pro: string, contra: string) => string;
+      followVotes: () => string;
+      label: () => string;
+      noText: () => string;
+      placeholder: () => string;
+      statusLabel: () => string;
+      undecided: () => string;
+    };
+    vote: {
+      against: () => string;
+      againstWho: (names: string) => string;
+      for: () => string;
+      forWho: (names: string) => string;
+      label: () => string;
+      title: (pro: string, contra: string) => string;
+    };
+  };
   attachments: {
     confirm: {
       remove: (name: string) => string;
@@ -1669,6 +1765,9 @@ export type Strings = {
     blank: () => string;
   };
   server: {
+    appeal: {
+      voteNotAppeal: () => string;
+    };
     attachment: {
       notFound: () => string;
     };
@@ -1739,6 +1838,16 @@ export type Strings = {
     quota: {
       exceeded: (mb: string) => string;
       humanMb: (mb: string) => string;
+    };
+    rating: {
+      busy: () => string;
+      failed: (status: string) => string;
+      forbidden: () => string;
+      noToken: () => string;
+      noTournament: () => string;
+      notFound: () => string;
+      unauthorized: () => string;
+      unreachable: () => string;
     };
     reaction: {
       deleteOwnerOnly: () => string;

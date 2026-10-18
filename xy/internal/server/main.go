@@ -274,6 +274,10 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/comments/{id}", srv.handleDeleteComment)
 	mux.HandleFunc("POST /api/cards/{id}/reactions", srv.handleAddReaction)
 	mux.HandleFunc("DELETE /api/reactions/{id}", srv.handleDeleteReaction)
+	mux.HandleFunc("PUT /api/cards/{id}/vote", srv.handlePutVote)
+	mux.HandleFunc("DELETE /api/cards/{id}/vote", srv.handleDeleteVote)
+	mux.HandleFunc("POST /api/rating/appeals", srv.handleRatingAppeals)
+	mux.HandleFunc("POST /api/rating/verdict", srv.handleRatingVerdict)
 
 	// ---- read markers / activity (blue dots + 🔔 bell) ----
 	mux.HandleFunc("POST /api/cards/{id}/read", srv.handleMarkRead)

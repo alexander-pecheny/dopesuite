@@ -13,6 +13,7 @@ import { type CardSeen, nameOf, parseCardSeen, type SeenPerson, seenPeople, sess
 import { autocomplete } from "./kit/suggest.js";
 import * as people from "./people.js";
 import { icon } from "./icons_gen.js";
+import { KIND } from "./cardkind.js";
 import S from "./i18nstrings.js";
 import { type Board, sessionsNewestFirst } from "./panels.js";
 import type { BoardCard, BoardLabel, BoardList } from "./unlock.js";
@@ -92,6 +93,11 @@ export function createCardLabels(board: Board, ui: CardLabelsUI, deps: CardLabel
     }
     if (!own.length) picker.append(el("span", { class: "label-empty", text: S.card.labels.empty() }));
 
+    // An appeal is never played at a test, so its card shows no Playings.
+    const played = card.kind !== KIND.appeal;
+    for (const n of [ui.playings, ui.playings.previousElementSibling, ui.playingAddRow.parentElement]) {
+      if (n) (n as HTMLElement).hidden = !played;
+    }
     renderPlayings(card);
     renderSeen(card);
     closeLabelAddPopup();

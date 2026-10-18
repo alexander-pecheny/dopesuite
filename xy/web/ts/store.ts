@@ -34,6 +34,9 @@ export interface OpBody {
   reply_to_id?: number | null;
   desc_event?: string;
   events?: Array<{ type: string; payload: string }>;
+  meta?: string;
+  rating_token?: string;
+  value?: string;
   [key: string]: unknown;
 }
 

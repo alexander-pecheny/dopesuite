@@ -174,7 +174,7 @@ export function fakeBoard(state = {}) {
   const st = {
     role: "owner", name: "Доска", lists: [], groups: [], cards: [], labels: [], sessions: [],
     cardLabels: [], cardSessions: [], tourTesters: [], tourDeclarations: [], unread: {}, sizes: {}, defaultAuthor: "",
-    cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "",
+    cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "", votes: [], ratingToken: "",
     ...state,
   };
   const writes = [];

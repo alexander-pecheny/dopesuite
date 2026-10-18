@@ -640,7 +640,7 @@
   background: var(--muted);
 }
 .kcard-handout .ico { --ico-size: 15px; stroke-width: 1.5; }
-.kcard-versions .ico { --ico-size: 14px; stroke-width: 1.5; }
+.kcard-versions .ico, .kcard-votes .ico { --ico-size: 14px; stroke-width: 1.5; }
 
 /* card detail overlay — occupies the whole lower section (below the fixed
    header), fully obscuring the kanban; the panel itself scrolls internally so
@@ -1192,7 +1192,7 @@
 }
 .pv-edit:hover, .pv-edit:focus-visible { background: var(--action-hover-bg); }
 /* preserve authored line breaks inside multi-line question/answer/meta text */
-.pv-q-text, .pv-field, .pv-meta, .pv-list-body { white-space: pre-wrap; }
+.pv-q-text, .pv-field, .pv-meta, .pv-list-body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .pv-q-text { margin-bottom: var(--space-2); }
 .pv-field { margin-bottom: 0; }
 .pv-label { font-weight: var(--fw-bold); }
@@ -1405,6 +1405,10 @@
   cursor: text;
 }
 .card-preview-body > * { max-width: none; }
+/* An appeal reads as a column of blocks, like its Поля, with only the packet's
+   question set the docx way: unbounded, so the whole appeal scrolls with the card. */
+.card-preview-body.card-preview-appeal { padding: 0; background: transparent; max-height: none; overflow: visible; cursor: auto; }
+.card-preview-appeal .pv-q { padding: var(--space-3) var(--space-4); background: var(--page); border-radius: var(--radius-md); }
 /* The copy tab: a small folder tab on a text field's top right edge, in the
    field's fill with no bottom border, and the field gives up that corner's
    rounding so the two read as one shape. It stays lower than the label beside
@@ -1730,7 +1734,7 @@ textarea.fld-src {
 @media (max-width: 760px) {
   .handouts-body { flex-direction: column; }
   .handouts-src { border-right: none; border-bottom: 1px solid var(--grid); }
-  .card-preview-body { max-height: 40vh; }
+  .card-preview-body:not(.card-preview-appeal) { max-height: 40vh; }
 }
 
 /* ── import verification modal ─────────────────────────────────────────────────
@@ -1931,7 +1935,8 @@ body {
 .board-qcount { margin-left: var(--space-2); color: var(--muted); font-size: var(--text-sm); font-weight: var(--fw-regular); }
 
 .kcard-handout,
-.kcard-versions {
+.kcard-versions,
+.kcard-votes {
   display: inline-flex;
   align-items: center;
   height: var(--chip-h);
@@ -1941,12 +1946,14 @@ body {
 /* The count belongs to the icon, not to the label that follows it: tighter
    inside than the row's own gap, or it reads as a label of its own. The kit's
    0.4em lead is meant for WORDS after a glyph, and here it is the whole gap. */
-.kcard-versions {
+.kcard-versions,
+.kcard-votes {
   gap: 1px;
   margin-right: var(--space-2);
   font-size: var(--text-sm);
 }
-.kcard-versions .ico-lead { margin-right: 0; }
+.kcard-versions .ico-lead,
+.kcard-votes .ico-lead { margin-right: 0; }
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere.
    A head row of controls over a column of names — one person per line, which is

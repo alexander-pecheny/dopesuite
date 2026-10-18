@@ -120,7 +120,7 @@ export async function buildBundle(
     exported_at: new Date().toISOString(),
     board: { name: state.name },
     members: members.filter((m) => m.username).map((m) => ({ username: m.username!, role: m.role })),
-    lists: state.lists.map((l) => ({ id: l.id, type: l.type, title: l.title, rank: l.rank, group_id: l.groupId, comment_first: tourCommentFirst(state, l) })),
+    lists: state.lists.map((l) => ({ id: l.id, type: l.type, title: l.title, rank: l.rank, group_id: l.groupId, comment_first: tourCommentFirst(state, l), ...(l.meta ? { meta: l.meta } : {}) })),
     groups: state.groups.map((g) => ({ id: g.id, name: g.name })),
     cards: state.cards.map((c) => ({
       id: c.id, list_id: c.listId, kind: c.kind, description: c.desc, rank: c.rank,

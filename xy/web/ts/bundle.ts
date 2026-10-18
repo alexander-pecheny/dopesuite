@@ -17,6 +17,8 @@ export interface BundleList {
   // The tour's field order, written on every list of a group. Absent in
   // bundles made before it existed.
   comment_first?: boolean;
+  // An appeals list's settings (appeals.ts), as plaintext JSON.
+  meta?: string | null;
 }
 export interface BundleGroup {
   id: number;

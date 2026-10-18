@@ -18,6 +18,7 @@ const TABLE = [
   ["normal", false, true, false, false, "", false, false, "chgk", false],
   ["test", false, true, false, false, "", false, false, "chgk", false],
   ["handouts_preamble", false, false, false, false, "", false, false, "chgk", false],
+  ["appeal", false, false, false, false, "", false, false, "chgk", false],
   ["no-such-kind", false, false, false, false, "", false, false, "chgk", false],
 ];
 
@@ -49,6 +50,7 @@ test("cardkind: counters", () => {
 
 test("cardkind: a List Type picks the new card's kind", () => {
   assert.equal(K.forListType("si"), "theme");
+  assert.equal(K.forListType("appeals"), "appeal");
   assert.equal(K.forListType("normal"), "question");
   assert.equal(K.forListType("test"), "question");
 });

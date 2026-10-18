@@ -21,6 +21,7 @@ import { parseDeclaration, serializeDeclaration } from "./seen.js";
 import { bundleUnits } from "./bundle.js";
 import type { Bundle, BundleAttachment, BundleEvent, BundleUnit } from "./bundle.js";
 import { remapCommentImages } from "./eventpayload.js";
+import { relinkPacket } from "./appeals.js";
 import type { DataKey } from "./crypto.js";
 import S from "./i18nstrings.js";
 
@@ -242,8 +243,9 @@ export async function applyBundle(
     try {
       const lists = byRank(bundle.lists.filter((l) => unit.listIds.includes(l.id)));
       for (const l of lists) {
+        const meta = l.meta ? await enc(relinkPacket(l.meta, listMap)) : undefined;
         const res = (await jpost(`/api/boards/${boardId}/lists`, {
-          title: await enc(l.title), rank: nextListRank(l.rank), type: l.type, comment_first: !!l.comment_first,
+          title: await enc(l.title), rank: nextListRank(l.rank), type: l.type, comment_first: !!l.comment_first, ...(meta ? { meta } : {}),
         })) as { id: number };
         listMap.set(l.id, res.id);
         made.push(res.id);

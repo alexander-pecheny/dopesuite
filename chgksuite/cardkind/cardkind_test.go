@@ -25,6 +25,7 @@ func TestKindTable(t *testing.T) {
 		{Normal, false, true, false, false, "", false, false, "", false},
 		{Test, false, true, false, false, "", false, false, "", false},
 		{HandoutsPreamble, false, false, false, false, "", false, false, "", false},
+		{Appeal, false, false, false, false, "", false, false, "", false},
 		{"no-such-kind", false, false, false, false, "", false, false, "", false},
 	}
 	for _, w := range want {
@@ -80,7 +81,7 @@ func TestGameOf(t *testing.T) {
 // ForListType is what the board's add-card button makes (cardkind.ts's
 // forListType, held to the same answers in xy/jstest/cardkind.test.js).
 func TestForListType(t *testing.T) {
-	for listType, want := range map[string]string{"si": Theme, "normal": Question, "test": Question, "": Question} {
+	for listType, want := range map[string]string{"si": Theme, "appeals": Appeal, "normal": Question, "test": Question, "": Question} {
 		if got := ForListType(listType); got != want {
 			t.Errorf("ForListType(%q) = %q, want %q", listType, got, want)
 		}

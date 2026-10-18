@@ -126,7 +126,7 @@ function applyOpToSnapshot(
   const ids = pathIds(op.path);
   switch (op.kind) {
     case "createList":
-      lists.push({ id: resultId as number, type: body.type || "normal", title: body.title, rank: body.rank });
+      lists.push({ id: resultId as number, type: body.type || "normal", title: body.title, rank: body.rank, ...(body.meta ? { meta: body.meta } : {}) });
       break;
     case "patchList": {
       const l = lists.find((x) => x.id === ids[0]);
@@ -135,6 +135,7 @@ function applyOpToSnapshot(
         if (body.rank != null) l.rank = body.rank;
         if (body.type != null) l.type = body.type;
         if (body.comment_first != null) l.comment_first = body.comment_first;
+        if (body.meta != null) l.meta = body.meta || null;
       }
       break;
     }
@@ -229,6 +230,7 @@ function applyOpToSnapshot(
     }
     case "patchBoard":
       if (body.name != null) snap.name = body.name;
+      if (body.rating_token != null) snap.rating_token = body.rating_token || null;
       break;
     default:
       break; // comment / no snapshot effect

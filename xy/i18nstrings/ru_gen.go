@@ -28,6 +28,134 @@ var RU = Strings{
 			Title:       func() string { return "Пользователи · Админка" },
 		},
 	},
+	Appeals: AppealsStrings{
+		Card: AppealsCardStrings{
+			Appealed:       func() string { return "апелляция" },
+			Controversials: func(n string) string { return fmt.Sprintf("Спорные ответы на вопрос %s", n) },
+			Heading:        func(n string, what string) string { return fmt.Sprintf("Вопрос %s · %s", n, what) },
+			NoControversials: func() string {
+				return "Сайт не прислал спорных ответов на этот вопрос."
+			},
+			NoPacket: func() string {
+				return "Пакет не привязан. Его можно выбрать в настройках апелляций."
+			},
+			NoQuestion: func(packet string, n string) string {
+				return fmt.Sprintf("В пакете «%s» нет вопроса %s.", packet, n)
+			},
+			Question: func() string { return "Вопрос из пакета" },
+			Text:     func() string { return "Текст апелляции" },
+			TextChanged: func(at string) string {
+				return fmt.Sprintf("Текст апелляции изменился на сайте (%s).", at)
+			},
+		},
+		Controversial: AppealsControversialStrings{
+			Accepted: func() string { return "зачтён" },
+			Declined: func() string { return "не зачтён" },
+			Open:     func() string { return "не рассмотрен" },
+		},
+		Export: AppealsExportStrings{
+			Done:      func(n string) string { return fmt.Sprintf("Отправлено: %s.", n) },
+			FailedOne: func(id string, reason string) string { return fmt.Sprintf("Апелляция %s: %s", id, reason) },
+			Hint: func() string {
+				return "Здесь решённые апелляции, у которых на сайте другой статус или другой текст вердикта. Снимите галочку с тех, что отправлять пока не нужно."
+			},
+			Label:   func() string { return "Выгрузить вердикты" },
+			Loading: func() string { return "Сверяю вердикты с сайтом…" },
+			NeedToken: func() string {
+				return "Чтобы выгрузить вердикты, задайте токен рейтинга в настройках апелляций."
+			},
+			Nothing: func() string {
+				return "Все решённые апелляции уже на сайте в том же виде."
+			},
+			Send:    func(n string) string { return fmt.Sprintf("Отправить (%s)", n) },
+			Sending: func(n string) string { return fmt.Sprintf("Отправляю вердикты: %s…", n) },
+			SiteNow: func(status string) string { return fmt.Sprintf("Сейчас на сайте: %s", status) },
+			Title:   func() string { return "Выгрузка вердиктов" },
+		},
+		Kind: AppealsKindStrings{
+			Accept:    func(answer string) string { return fmt.Sprintf("зачёт «%s»", answer) },
+			HostError: func() string { return "снятие из-за ошибки ведущего" },
+			Remove:    func() string { return "снятие" },
+		},
+		List: AppealsListStrings{
+			Count: func(total string, decided string) string { return fmt.Sprintf("%s · решено %s", total, decided) },
+			Sent:  func() string { return "Вердикт уже на сайте рейтинга" },
+			Type:  func() string { return "Апелляции" },
+		},
+		Offline: func() string { return "Сайт рейтинга недоступен без сети." },
+		Refresh: AppealsRefreshStrings{
+			Done: func(added string, updated string, total string) string {
+				return fmt.Sprintf("Добавлено: %s, обновлено: %s. Всего на сайте: %s.", added, updated, total)
+			},
+			Label: func() string { return "Обновить апелляции" },
+			Loading: func(id string) string {
+				return fmt.Sprintf("Загружаю апелляции турнира %s…", id)
+			},
+			NoControversials: func(reason string) string {
+				return fmt.Sprintf("Спорные ответы не загрузились: %s", reason)
+			},
+			TextChanged: func(n int) string {
+				return fmt.Sprintf("Текст изменился на сайте у %d %s. Эти карточки отмечены.", n, core.Plural("ru", n, "апелляции", "апелляций", "апелляций"))
+			},
+			Title: func() string { return "Обновление апелляций" },
+		},
+		Settings: AppealsSettingsStrings{
+			Create:         func() string { return "Создать и загрузить" },
+			CreateTitle:    func() string { return "Новый список апелляций" },
+			GroupOption:    func(name string) string { return fmt.Sprintf("%s (группа)", name) },
+			Label:          func() string { return "Настройки апелляций…" },
+			NeedPacket:     func() string { return "Выберите пакет." },
+			NeedTitle:      func() string { return "Укажите название списка." },
+			NeedTournament: func() string { return "Укажите номер турнира." },
+			Packet:         func() string { return "Пакет" },
+			PacketHint: func() string {
+				return "Список или группа списков с вопросами турнира. Карточки апелляций показывают вопрос из пакета по номеру."
+			},
+			PacketNone: func() string { return "— выберите список —" },
+			Save:       func() string { return "Сохранить" },
+			Title:      func() string { return "Название списка" },
+			TitleFor:   func(list string) string { return fmt.Sprintf("Апелляции: %s", list) },
+			Token:      func() string { return "Токен рейтинга" },
+			TokenHint: func() string {
+				return "Личный токен со страницы пользователя на rating.chgk.info, одинаковый для всей доски. Без него апелляции видны только после публикации результатов, и вердикты нельзя выгрузить. Токен хранится в доске зашифрованным."
+			},
+			Tournament:     func() string { return "Турнир на сайте рейтинга" },
+			TournamentHint: func() string { return "Номер турнира или ссылка на его страницу." },
+		},
+		Site: AppealsSiteStrings{
+			Overridden: func(id string) string {
+				return fmt.Sprintf("На сайте не рассматривалась: принята апелляция %s", id)
+			},
+			Status: func(status string) string { return fmt.Sprintf("На сайте: %s", status) },
+		},
+		Status: AppealsStatusStrings{
+			Accepted: func() string { return "Принять" },
+			Declined: func() string { return "Отклонить" },
+			Open:     func() string { return "Не рассмотрена" },
+		},
+		Verdict: AppealsVerdictStrings{
+			ByHand:      func() string { return "выставлено вручную" },
+			ByVotes:     func(pro string, contra string) string { return fmt.Sprintf("по голосам %s:%s", pro, contra) },
+			FollowVotes: func() string { return "По голосам" },
+			Label:       func() string { return "Вердикт" },
+			NoText:      func() string { return "Текст вердикта ещё не написан." },
+			Placeholder: func() string {
+				return "Обоснование вердикта. Оно уйдёт на сайт рейтинга."
+			},
+			StatusLabel: func() string { return "Решение" },
+			Undecided:   func() string { return "Не решено" },
+		},
+		Vote: AppealsVoteStrings{
+			Against:    func() string { return "Против" },
+			AgainstWho: func(names string) string { return fmt.Sprintf("Против: %s", names) },
+			For:        func() string { return "За" },
+			ForWho:     func(names string) string { return fmt.Sprintf("За: %s", names) },
+			Label:      func() string { return "Голосование" },
+			Title: func(pro string, contra string) string {
+				return fmt.Sprintf("Голосов за: %s, против: %s", pro, contra)
+			},
+		},
+	},
 	Attachments: AttachmentsStrings{
 		Confirm: AttachmentsConfirmStrings{
 			Remove: func(name string) string { return fmt.Sprintf("Удалить вложение «%s»?", name) },
@@ -2194,6 +2322,9 @@ var RU = Strings{
 		Blank: func() string { return "(пусто)" },
 	},
 	Server: ServerStrings{
+		Appeal: ServerAppealStrings{
+			VoteNotAppeal: func() string { return "голосовать можно только за апелляцию" },
+		},
 		Attachment: ServerAttachmentStrings{
 			NotFound: func() string { return "вложение не найдено" },
 		},
@@ -2272,6 +2403,24 @@ var RU = Strings{
 				return fmt.Sprintf("превышен лимит хранилища (%s МБ)", mb)
 			},
 			HumanMb: func(mb string) string { return fmt.Sprintf("%s МБ", mb) },
+		},
+		Rating: ServerRatingStrings{
+			Busy: func() string {
+				return "Турнир сейчас меняет кто-то другой, повторите через минуту"
+			},
+			Failed: func(status string) string {
+				return fmt.Sprintf("Сайт рейтинга ответил ошибкой %s", status)
+			},
+			Forbidden:    func() string { return "У этого токена нет прав на турнир" },
+			NoToken:      func() string { return "Не задан токен рейтинга" },
+			NoTournament: func() string { return "Не указан номер турнира" },
+			NotFound: func() string {
+				return "Сайт рейтинга не нашёл турнир или апелляцию"
+			},
+			Unauthorized: func() string { return "Сайт рейтинга не принял токен" },
+			Unreachable: func() string {
+				return "Сайт рейтинга не отвечает. Попробуйте ещё раз позже."
+			},
 		},
 		Reaction: ServerReactionStrings{
 			DeleteOwnerOnly: func() string { return "убрать может только автор" },

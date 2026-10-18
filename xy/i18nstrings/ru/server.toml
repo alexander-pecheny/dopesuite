@@ -122,3 +122,19 @@ file_no_questions = "в файле не найдено вопросов"
 exceeded = 'превышен лимит хранилища ({{.mb}} МБ)'
 # humanMB: MiB number with unit for user-facing storage display.
 human_mb = '{{.mb}} МБ'
+
+[appeal]
+# votes.go: a vote is cast only on an appeal card (ADR-0021).
+vote_not_appeal = "голосовать можно только за апелляцию"
+
+[rating]
+# rating.go, the relay to api.rating.chgk.info. Each refusal may be followed
+# by the site's own words after a colon.
+unreachable = "Сайт рейтинга не отвечает. Попробуйте ещё раз позже."
+unauthorized = "Сайт рейтинга не принял токен"
+forbidden = "У этого токена нет прав на турнир"
+not_found = "Сайт рейтинга не нашёл турнир или апелляцию"
+busy = "Турнир сейчас меняет кто-то другой, повторите через минуту"
+failed = 'Сайт рейтинга ответил ошибкой {{.status}}'
+no_tournament = "Не указан номер турнира"
+no_token = "Не задан токен рейтинга"
