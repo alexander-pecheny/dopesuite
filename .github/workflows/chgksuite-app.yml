@@ -22,6 +22,15 @@ jobs:
         with:
           go-version-file: chgksuite-app/go.mod
 
+      # The version the app carries and compares with newer releases. A manual
+      # run outside a tag builds a "dev" app, which never updates itself.
+      - name: Version
+        run: |
+          case "$GITHUB_REF_NAME" in
+            chgksuite-app/*) echo "CHGKSUITE_VERSION=${GITHUB_REF_NAME#chgksuite-app/}" >> "$GITHUB_ENV" ;;
+          esac
+
+
       - name: Install just
         run: curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
@@ -49,6 +58,15 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: chgksuite-app/go.mod
+
+      # The version the app carries and compares with newer releases. A manual
+      # run outside a tag builds a "dev" app, which never updates itself.
+      - name: Version
+        run: |
+          case "$GITHUB_REF_NAME" in
+            chgksuite-app/*) echo "CHGKSUITE_VERSION=${GITHUB_REF_NAME#chgksuite-app/}" >> "$GITHUB_ENV" ;;
+          esac
+
 
       - name: Install just
         run: brew install just

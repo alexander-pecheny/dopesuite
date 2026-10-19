@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,9 +34,10 @@ var localTab = Tab{ID: localID, Title: "Локальный режим", URL: "/"
 // Shell is the service the tab strip calls. It owns the panels, so the strip
 // names a tab and never hands a URL to a panel itself.
 type Shell struct {
-	path   string
-	local  *localserver.Server
-	window *application.WebviewWindow
+	path    string
+	local   *localserver.Server
+	window  *application.WebviewWindow
+	updates *updates
 
 	mu      sync.Mutex
 	servers []Tab
@@ -107,6 +109,20 @@ func (s *Shell) show(id, url string) error {
 	}
 	p.Show()
 	return nil
+}
+
+// installTimeout bounds downloading and checking a release.
+const installTimeout = 10 * time.Minute
+
+// AvailableUpdate is the version the strip offers to update to, or "" for
+// none. It returns once the day's look at the releases is over.
+func (s *Shell) AvailableUpdate() string { return s.updates.available() }
+
+// Update installs that version and restarts into it.
+func (s *Shell) Update() error {
+	ctx, cancel := context.WithTimeout(context.Background(), installTimeout)
+	defer cancel()
+	return s.updates.install(ctx)
 }
 
 // pickFile is the native dialog behind the board's «Импорт из файла…» in the

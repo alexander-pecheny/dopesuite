@@ -30,6 +30,11 @@ check: fmt vet test
 # The typst the release ships beside the app, checked against typst.sha256.
 typst_version := "0.15.1"
 
+# The release this build is (the tag without its chgksuite-app/ prefix). The
+# app updates itself to newer releases, and a "dev" build never does.
+version := env("CHGKSUITE_VERSION", "dev")
+ldflags := "-s -w -X main.version=" + version
+
 # A double-clickable chgksuite.app for one Apple architecture (arm64 or
 # amd64), unsigned.
 app arch=arch():
@@ -44,7 +49,7 @@ app arch=arch():
     app=build/$goarch/chgksuite.app
     rm -rf "$app" build/icon.iconset
     mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" build/icon.iconset
-    CGO_ENABLED=1 GOARCH=$goarch go build -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/chgksuite" .
+    CGO_ENABLED=1 GOARCH=$goarch go build -trimpath -ldflags "{{ldflags}}" -o "$app/Contents/MacOS/chgksuite" .
     cp build/typst-$target/typst "$app/Contents/MacOS/"
     for s in 16 32 128 256 512; do
         sips -z $s $s icon-mac.png --out "build/icon.iconset/icon_${s}x${s}.png" >/dev/null
@@ -53,6 +58,10 @@ app arch=arch():
     iconutil -c icns build/icon.iconset -o "$app/Contents/Resources/icon.icns"
     rm -rf build/icon.iconset
     cp Info.plist "$app/Contents/Info.plist"
+    if [ "{{version}}" != dev ]; then
+        plutil -replace CFBundleShortVersionString -string "{{version}}" "$app/Contents/Info.plist"
+        plutil -replace CFBundleVersion -string "{{version}}" "$app/Contents/Info.plist"
+    fi
     cp ../LICENSE ../NOTICE "$app/Contents/Resources/"
     cp build/typst-$target/LICENSE "$app/Contents/Resources/typst-LICENSE"
     cp build/typst-$target/NOTICE "$app/Contents/Resources/typst-NOTICE"
@@ -66,7 +75,7 @@ exe:
     just typst x86_64-pc-windows-msvc
     rm -rf build/windows
     go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64
-    GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui" -o build/windows/chgksuite.exe .
+    GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "{{ldflags}} -H windowsgui" -o build/windows/chgksuite.exe .
     rm rsrc_windows_amd64.syso
     cp build/typst-x86_64-pc-windows-msvc/typst.exe ../LICENSE ../NOTICE build/windows/
     cp build/typst-x86_64-pc-windows-msvc/LICENSE build/windows/typst-LICENSE

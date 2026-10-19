@@ -41,6 +41,7 @@ require (
 	github.com/ulikunitz/xz v0.5.16 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/image v0.43.0 // indirect
+	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
@@ -51,4 +52,4 @@ require (
 	pecheny.me/dopeuikit v0.0.0 // indirect
 )
 
-replace github.com/wailsapp/wails/v3 => code.pecheny.me/pecheny/wails/v3 v3.0.0-20261016171322-8028d9de54a7
+replace github.com/wailsapp/wails/v3 => code.pecheny.me/pecheny/wails/v3 v3.0.0-20261019153355-d73831f9cca1

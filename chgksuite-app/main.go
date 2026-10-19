@@ -60,6 +60,7 @@ func main() {
 		// The tab strip is the title bar, beside the traffic lights.
 		Mac: application.MacWindow{TitleBar: application.MacTitleBarHidden},
 	})
+	shell.updates = newUpdates(app, filepath.Join(dir, "update.json"))
 	centreTrafficLights(shell.window)
 	if err := app.Run(); err != nil {
 		log.Fatal(err)

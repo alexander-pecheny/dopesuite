@@ -40,6 +40,27 @@ async function select(id) {
   render();
 }
 
+// A newer release, when the app found one, is a button that installs it and
+// restarts into it.
+call("AvailableUpdate").then((v) => {
+  if (!v) return;
+  const b = $("update");
+  const label = `Обновиться до версии ${v}`;
+  b.textContent = label;
+  b.hidden = false;
+  b.onclick = async () => {
+    b.disabled = true;
+    b.textContent = "Обновляю…";
+    try {
+      await call("Update");
+    } catch (err) {
+      b.disabled = false;
+      b.textContent = label;
+      b.title = `Не получилось: ${err.message ?? err}`;
+    }
+  };
+});
+
 $("add").onsubmit = async (e) => {
   e.preventDefault();
   try {

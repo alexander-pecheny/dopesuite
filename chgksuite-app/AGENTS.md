@@ -39,6 +39,13 @@ tab is a native `WebviewPanel` under the strip: the first tab is the Local xy
   that xy's server renders with is left out. A checkout without a bundled
   typst uses the one on PATH or in `~/.pecheny_utils`. The fonts are the
   Noto Sans that chgksuite embeds, plus whatever the computer has.
+- The app updates itself (`update.go`, on Wails' updater with the tag prefix,
+  CalVer and multi-file installs our fork added). When it opens it looks at
+  the GitHub releases tagged `chgksuite-app/`, at most once a day
+  (`update.json` beside `servers.json`), and a newer one becomes a button in
+  the strip that downloads it, checks it against `SHA256SUMS` and restarts
+  into it. The version is stamped from `CHGKSUITE_VERSION`; a "dev" build
+  never updates. A second release on one day is tagged `<date>.2`.
 - A tag `chgksuite-app/<date>` makes `.github/workflows/chgksuite-app.yml`
   publish a GitHub pre-release. The icon is `icon.png`, from the Python
   chgksuite. The Mac app uses `icon-mac.png`, the same picture on Apple's
