@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/corpus"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
 )
 
 // docxFixtures are every chgk-game .docx in chgksuite's corpus. The si/troika
@@ -72,7 +73,7 @@ func TestDocxCanonParity(t *testing.T) {
 			// to an extracted image — otherwise the import silently drops a
 			// handout. This is checked with the same rule the frontend uses.
 			res.SafeImageNames()
-			refs := imageRefs(res.Source)
+			refs := listexport.ImageRefs(res.Source)
 			for _, ref := range refs {
 				if !hasImage(res.Images, ref) {
 					t.Errorf("source references %q but it was not extracted", ref)
@@ -94,11 +95,11 @@ func TestSafeImageNamesFixesUnreadableDirectives(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := imageRefs(res.Source); len(got) == 0 || hasImage(res.Images, got[0]) {
-		t.Fatalf("expected the raw name to be truncated by the (img …) rule, got %q", got)
+	if !strings.Contains(res.Source, "(img Shkolny_Chemp_Estonii-2014_(48v)_") {
+		t.Fatal("expected the raw image names to carry the fixture's parens")
 	}
 	res.SafeImageNames()
-	for _, ref := range imageRefs(res.Source) {
+	for _, ref := range listexport.ImageRefs(res.Source) {
 		if !hasImage(res.Images, ref) {
 			t.Errorf("after SafeImageNames, %q still does not resolve", ref)
 		}
@@ -229,7 +230,7 @@ func TestZipRelativeImageRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := imageRefs(res.Source); len(got) != 1 || got[0] != "q3.png" {
+	if got := listexport.ImageRefs(res.Source); len(got) != 1 || got[0] != "q3.png" {
 		t.Fatalf("directive should be rewritten to the stored name, got %q", got)
 	}
 	if !hasImage(res.Images, "q3.png") {
@@ -253,7 +254,7 @@ func TestZipDuplicateBasenames(t *testing.T) {
 	if len(res.Images) != 1 {
 		t.Fatalf("want a single pic.png, got %d images: %+v", len(res.Images), res.Images)
 	}
-	if got := imageRefs(res.Source); len(got) != 1 || got[0] != "pic.png" {
+	if got := listexport.ImageRefs(res.Source); len(got) != 1 || got[0] != "pic.png" {
 		t.Fatalf("the directive must be left alone, got %q", got)
 	}
 }
@@ -296,7 +297,7 @@ func TestAddImages(t *testing.T) {
 		t.Fatal(err)
 	}
 	res.AddImages([]Image{{Name: "q3.png", Data: []byte{1}}, {Name: "q4.jpg", Data: []byte{2}}, {Name: "notes.txt", Data: []byte{3}}})
-	if got := imageRefs(res.Source); len(got) != 2 || got[0] != "q3.png" || got[1] != "q4.jpg" {
+	if got := listexport.ImageRefs(res.Source); len(got) != 2 || got[0] != "q3.png" || got[1] != "q4.jpg" {
 		t.Fatalf("directives = %q", got)
 	}
 	if len(res.Images) != 2 || res.Images[0].MIME != "image/png" || res.Images[1].MIME != "image/jpeg" {

@@ -21,21 +21,24 @@ func Open(path string) (*Result, error) {
 		return nil, err
 	}
 	if strings.EqualFold(filepath.Ext(path), ".4s") {
-		if res.Images, err = imagesBeside(filepath.Dir(path), res.Source); err != nil {
+		images, err := imagesBeside(filepath.Dir(path), res.Source)
+		if err != nil {
 			return nil, err
 		}
+		res.AddImages(images)
 	}
 	res.SafeImageNames()
 	return res, nil
 }
 
-// imagesBeside reads the pictures source names from dir. A missing one is
-// left out, as a zip without it would be: the card keeps its directive.
+// imagesBeside reads the pictures source names from dir, each by its base name,
+// as a zip would hold them. A missing one is left out: the card keeps its
+// directive, and the import reports it.
 func imagesBeside(dir, source string) ([]Image, error) {
 	var images []Image
-	for _, name := range listexport.ImageRefs(source) {
-		mime, ok := imageExts[strings.ToLower(filepath.Ext(name))]
-		if !ok || name != filepath.Base(name) {
+	for _, ref := range listexport.ImageRefs(source) {
+		name := filepath.Base(ref)
+		if _, ok := imageExts[strings.ToLower(filepath.Ext(name))]; !ok {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, name))
@@ -45,7 +48,7 @@ func imagesBeside(dir, source string) ([]Image, error) {
 		if err != nil {
 			return nil, err
 		}
-		images = append(images, Image{Name: name, MIME: mime, Data: data})
+		images = append(images, Image{Name: name, Data: data})
 	}
 	return images, nil
 }

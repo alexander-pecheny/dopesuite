@@ -24,6 +24,7 @@ import (
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/docxread"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/textparse"
 )
 
@@ -264,22 +265,11 @@ func (r *Result) AddImages(images []Image) {
 		img.MIME = mimeType
 		r.Images = append(r.Images, img)
 	}
-	for _, ref := range imageRefs(r.Source) {
+	for _, ref := range listexport.ImageRefs(r.Source) {
 		if base := path.Base(ref); base != ref && have[base] {
 			r.Source = replaceImageRef(r.Source, ref, base)
 		}
 	}
-}
-
-// imageRefs lists the file names the (img …) directives of a source point at.
-func imageRefs(source string) []string {
-	var out []string
-	for _, d := range reImgDirective.FindAllString(source, -1) {
-		if fields := strings.Fields(strings.TrimSuffix(strings.TrimPrefix(d, "(img"), ")")); len(fields) > 0 {
-			out = append(out, fields[len(fields)-1])
-		}
-	}
-	return out
 }
 
 // SafeImageNames renames images so xy can actually resolve them, rewriting the
