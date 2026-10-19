@@ -41,6 +41,9 @@ title: Вопрос года — 2025. Регламент
 Конкурс «Вопрос года — 2025» проводится с 10 ноября до 26 января 2025 года. Номинация идёт с 10 по 24 ноября. В жюри входят Анна Свирина и Надежда Чеботкова.
 `)
 	writeFile(t, filepath.Join(root, "site", "static", "img", "merchik.jpg"), "\xff\xd8\xff")
+	// What macOS tar leaves beside every file it packs.
+	writeFile(t, filepath.Join(content, "2025", "._results.html"), "\x00\x05")
+	writeFile(t, filepath.Join(root, "site", "static", "img", "._merchik.jpg"), "\x00\x05")
 	return root
 }
 

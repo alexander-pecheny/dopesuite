@@ -105,7 +105,9 @@ func readArchivePages(dir string) ([]page, []page, error) {
 			return err
 		}
 		ext := filepath.Ext(p)
-		if ext != ".md" && ext != ".html" {
+		// A dot-file is an editor's or macOS's (._name next to every file a
+		// mac archived), never a page.
+		if (ext != ".md" && ext != ".html") || strings.HasPrefix(d.Name(), ".") {
 			return nil
 		}
 		raw, err := os.ReadFile(p)
@@ -194,7 +196,7 @@ func readArchiveFiles(dir string) (map[string][]byte, error) {
 		return nil, err
 	}
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
