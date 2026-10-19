@@ -118,6 +118,10 @@ func ReadCSV(path string, delimiter rune) ([]Result, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	return readCSV(data, delimiter)
+}
+
+func readCSV(data []byte, delimiter rune) ([]Result, []string, error) {
 	r := csv.NewReader(strings.NewReader(strings.TrimPrefix(string(data), "\ufeff")))
 	r.Comma = delimiter
 	r.FieldsPerRecord = -1
@@ -137,6 +141,21 @@ func ReadFile(path string, delimiter rune) ([]Result, []string, error) {
 		return ReadXLSX(path)
 	}
 	return ReadCSV(path, delimiter)
+}
+
+// ReadUpload is ReadFile for a table that arrived as bytes. A csv's delimiter
+// is whichever of ";" and "," its first line has more of, since a Russian
+// Excel writes the one and everything else the other.
+func ReadUpload(name string, data []byte) ([]Result, []string, error) {
+	if strings.EqualFold(pathExt(name), ".xlsx") {
+		return readXLSX(data)
+	}
+	first, _, _ := strings.Cut(string(data), "\n")
+	delimiter := ','
+	if strings.Count(first, ";") > strings.Count(first, ",") {
+		delimiter = ';'
+	}
+	return readCSV(data, delimiter)
 }
 
 func allBlank(row []string) bool {

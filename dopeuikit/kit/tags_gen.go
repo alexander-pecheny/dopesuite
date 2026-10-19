@@ -562,6 +562,7 @@ var IconPackage = Attr{Name: "icon", Value: "package"}
 var IconPalette = Attr{Name: "icon", Value: "palette"}
 var IconPaperclip = Attr{Name: "icon", Value: "paperclip"}
 var IconPencil = Attr{Name: "icon", Value: "pencil"}
+var IconPercent = Attr{Name: "icon", Value: "percent"}
 var IconPlay = Attr{Name: "icon", Value: "play"}
 var IconPlus = Attr{Name: "icon", Value: "plus"}
 var IconRefreshCw = Attr{Name: "icon", Value: "refresh-cw"}

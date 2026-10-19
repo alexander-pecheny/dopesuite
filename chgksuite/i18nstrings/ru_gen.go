@@ -258,7 +258,7 @@ var RU = Strings{
 		Rating: StatsRatingStrings{
 			Decode: func(id string, err string) string { return fmt.Sprintf("турнир %s: %s", id, err) },
 			Status: func(id string, status string) string {
-				return fmt.Sprintf("турнир %s: рейтинг ответил %s", id, status)
+				return fmt.Sprintf("турнир %s: турнирный сайт ответил %s", id, status)
 			},
 		},
 		Results: StatsResultsStrings{

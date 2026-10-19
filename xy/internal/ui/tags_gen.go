@@ -210,6 +210,7 @@ var IconPackage = base.IconPackage
 var IconPalette = base.IconPalette
 var IconPaperclip = base.IconPaperclip
 var IconPencil = base.IconPencil
+var IconPercent = base.IconPercent
 var IconPlay = base.IconPlay
 var IconPlus = base.IconPlus
 var IconRefreshCw = base.IconRefreshCw

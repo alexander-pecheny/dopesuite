@@ -19,13 +19,19 @@ const RatingAPI = "https://api.rating.chgk.info"
 // Fetch reads the results of every tournament in a comma-separated list of
 // rating.chgk.info ids — two of them when a synchronous package also ran async.
 func Fetch(ctx context.Context, ids string) ([]Result, error) {
+	return FetchFrom(ctx, RatingAPI, ids)
+}
+
+// FetchFrom is Fetch from another copy of the site's API, which is how a test
+// stands one in.
+func FetchFrom(ctx context.Context, base, ids string) ([]Result, error) {
 	var out []Result
 	for _, id := range strings.Split(ids, ",") {
 		id = strings.TrimSpace(id)
 		if id == "" {
 			continue
 		}
-		results, err := fetchTournament(ctx, id)
+		results, err := fetchTournament(ctx, base, id)
 		if err != nil {
 			return nil, err
 		}
@@ -34,8 +40,8 @@ func Fetch(ctx context.Context, ids string) ([]Result, error) {
 	return out, nil
 }
 
-func fetchTournament(ctx context.Context, id string) ([]Result, error) {
-	url := fmt.Sprintf("%s/tournaments/%s/results.json?includeMasksAndControversials=1", RatingAPI, id)
+func fetchTournament(ctx context.Context, base, id string) ([]Result, error) {
+	url := fmt.Sprintf("%s/tournaments/%s/results.json?includeMasksAndControversials=1", base, id)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err

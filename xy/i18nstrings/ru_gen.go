@@ -942,6 +942,32 @@ var RU = Strings{
 			},
 			Name: func() string { return "Тесты" },
 		},
+		Stats: BoardStatsStrings{
+			CopyTitle:    func(title string) string { return fmt.Sprintf("%s (взятия)", title) },
+			Done:         func() string { return "Копия создана." },
+			FileLabel:    func() string { return "Или файл с результатами (.csv, .xlsx)" },
+			Label:        func() string { return "Добавить взятия…" },
+			LabelGrouped: func() string { return "Добавить взятия в группу…" },
+			Lead: func() string {
+				return "Получится копия тура, в которой к комментарию каждого вопроса добавлена строка «Взятия: N/M». Сам тур не изменится."
+			},
+			MenuTitle: func() string {
+				return "Копия тура со строкой «Взятия» в комментарии к каждому вопросу"
+			},
+			Offline: func() string { return "Взятия добавляются только онлайн." },
+			RangeHint: func() string {
+				return "Номера вопросов этого тура в таблице результатов. Если в ней только этот тур, номера начинаются с 1."
+			},
+			RangeLabel: func() string { return "Вопросы в результатах" },
+			RatingHint: func() string {
+				return "У синхрона, который играли и асинхронно, два номера через запятую."
+			},
+			RatingLabel:    func() string { return "Номер турнира на турнирном сайте" },
+			Reading:        func() string { return "Читаю результаты…" },
+			Run:            func() string { return "Создать копию" },
+			ThresholdLabel: func() string { return "Называть команды, если взяли не больше" },
+			Title:          func() string { return "Добавить взятия" },
+		},
 		Testerlist: BoardTesterlistStrings{
 			Empty: func() string { return "Вопросы этого тура никто не тестировал." },
 			Hint: func() string {
@@ -2526,6 +2552,19 @@ var RU = Strings{
 			Revoked:   func() string { return "ссылка отозвана" },
 			Spent: func() string {
 				return "по этой ссылке вы уже проходили — попросите новую"
+			},
+		},
+		Stats: ServerStatsStrings{
+			BadFile: func() string { return "файл с результатами не открывается" },
+			BadIds: func() string {
+				return "номер турнира — это число, а у синхрона с асинхроном два числа через запятую"
+			},
+			BadThreshold: func() string { return "число команд должно быть от 0 до 99" },
+			FetchFailed: func(reason string) string {
+				return fmt.Sprintf("не удалось получить результаты с турнирного сайта: %s", reason)
+			},
+			NoSource: func() string {
+				return "укажите номер турнира или выберите файл с результатами"
 			},
 		},
 	},

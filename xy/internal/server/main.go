@@ -278,6 +278,7 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/cards/{id}/vote", srv.handleDeleteVote)
 	mux.HandleFunc("POST /api/rating/appeals", srv.handleRatingAppeals)
 	mux.HandleFunc("POST /api/rating/verdict", srv.handleRatingVerdict)
+	mux.HandleFunc("POST /api/stats/lines", srv.handleStatsLines)
 
 	// ---- read markers / activity (blue dots + 🔔 bell) ----
 	mux.HandleFunc("POST /api/cards/{id}/read", srv.handleMarkRead)

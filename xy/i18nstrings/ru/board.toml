@@ -312,6 +312,27 @@ keep_accents = "Оставить ударения"
 template = "Свой шаблон .pptx"
 config = "Свой pptx_config.toml"
 
+[stats]
+# «Добавить взятия» (statspanel.ts): chgksuite's add_stats, which writes the
+# stats line into a copy of the tour.
+label = "Добавить взятия…"
+label_grouped = "Добавить взятия в группу…"
+menu_title = "Копия тура со строкой «Взятия» в комментарии к каждому вопросу"
+title = "Добавить взятия"
+lead = "Получится копия тура, в которой к комментарию каждого вопроса добавлена строка «Взятия: N/M». Сам тур не изменится."
+rating_label = "Номер турнира на турнирном сайте"
+rating_hint = "У синхрона, который играли и асинхронно, два номера через запятую."
+file_label = "Или файл с результатами (.csv, .xlsx)"
+range_label = "Вопросы в результатах"
+range_hint = "Номера вопросов этого тура в таблице результатов. Если в ней только этот тур, номера начинаются с 1."
+threshold_label = "Называть команды, если взяли не больше"
+run = "Создать копию"
+reading = "Читаю результаты…"
+done = "Копия создана."
+offline = "Взятия добавляются только онлайн."
+# The copy's list (and group) title.
+copy_title = '{{.title}} (взятия)'
+
 [tgexport]
 # The dialog that opens when the export is «телеграм-канал»: where to post,
 # and the bot that will do it.

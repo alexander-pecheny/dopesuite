@@ -11,6 +11,7 @@ import { createAddListPanel, createList } from "./addlist.js";
 import { progress } from "./themes.js";
 import { createImportPanel } from "./importpack.js";
 import { createExportPanel } from "./export.js";
+import { createStatsPanel } from "./statspanel.js";
 import { createHandoutsPanel } from "./handouts.js";
 import { createMassPanel } from "./masspanel.js";
 import { createLabelFilter, shownCards } from "./labelfilter.js";
@@ -1801,6 +1802,7 @@ registerPanel(
   // What comes out of it
   starts(questions(exportPanel)),
   questions(handoutsPanel),
+  questions(createStatsPanel(board, transfer)),
 
   // The list itself
   starts(createAddListPanel(board, appealsPanels.create)),

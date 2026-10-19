@@ -2,8 +2,10 @@ package stats
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/xml"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -21,20 +23,27 @@ const columnLetters = 26
 
 // ReadXLSX reads the workbook's first sheet as rows of cell text.
 func ReadXLSX(path string) ([]Result, []string, error) {
-	z, err := zip.OpenReader(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer z.Close()
-	shared, err := sharedStrings(&z.Reader)
+	return readXLSX(data)
+}
+
+func readXLSX(data []byte) ([]Result, []string, error) {
+	z, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, nil, err
 	}
-	name, err := firstSheetPart(&z.Reader)
+	shared, err := sharedStrings(z)
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, err := sheetRows(&z.Reader, name, shared)
+	name, err := firstSheetPart(z)
+	if err != nil {
+		return nil, nil, err
+	}
+	rows, err := sheetRows(z, name, shared)
 	if err != nil {
 		return nil, nil, err
 	}

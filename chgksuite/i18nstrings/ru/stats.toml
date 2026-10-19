@@ -29,7 +29,7 @@ bad = '--question_range "{{.value}}": нужен диапазон вида 25-36
 
 [rating]
 # The rating.chgk.info reader, when the API answers with a non-200 status.
-status = 'турнир {{.id}}: рейтинг ответил {{.status}}'
+status = 'турнир {{.id}}: турнирный сайт ответил {{.status}}'
 # The rating.chgk.info reader, when the response body fails to decode.
 decode = 'турнир {{.id}}: {{.err}}'
 

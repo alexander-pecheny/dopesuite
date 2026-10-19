@@ -53,10 +53,31 @@ func DefaultOptions() Options {
 // order: the results' masks are positional, so question N of the structure is
 // bit N of the mask.
 func Add(doc fsource.Doc, results []Result, o Options) error {
+	var questions []*fsource.Question
+	for _, p := range doc {
+		q, ok := p.Content.(*fsource.Question)
+		if p.Type != "Question" || !ok || strings.HasPrefix(fmt.Sprintf("%v", q.Get("number")), "0") {
+			continue
+		}
+		questions = append(questions, q)
+	}
+	lines, err := Lines(results, o, len(questions))
+	if err != nil {
+		return err
+	}
+	for i, q := range questions {
+		patchQuestion(q, lines[i])
+	}
+	return nil
+}
+
+// Lines is the stats line of each of the first n questions, for a caller that
+// keeps its questions apart and appends the lines itself.
+func Lines(results []Result, o Options, n int) ([]string, error) {
 	s := chgkstrings.Default
 	start, end, err := parseRange(o.QuestionRange)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	taken := map[int]int{}
 	byQuestion := map[int]map[string]bool{}
@@ -82,20 +103,16 @@ func Add(doc fsource.Doc, results []Result, o Options) error {
 		}
 	}
 	if total == 0 {
-		return corei18n.User(s.Stats.Results.Empty())
+		return nil, corei18n.User(s.Stats.Results.Empty())
 	}
-
-	qnumber := 1
-	for _, p := range doc {
-		q, ok := p.Content.(*fsource.Question)
-		if p.Type != "Question" || !ok || strings.HasPrefix(fmt.Sprintf("%v", q.Get("number")), "0") {
-			continue
-		}
+	lines := make([]string, n)
+	for i := range lines {
+		qnumber := i + 1
 		scored := taken[qnumber]
 		// Python's round() is half-to-even, and a package where exactly an
 		// eighth of the field took a question would round the other way here.
 		percent := int(math.RoundToEven(float64(scored) / float64(total) * percent))
-		message := s.Stats.Question.Line(o.Label, strconv.Itoa(scored), strconv.Itoa(total),
+		lines[i] = s.Stats.Question.Line(o.Label, strconv.Itoa(scored), strconv.Itoa(total),
 			strconv.Itoa(percent))
 		if scored > 0 && scored <= o.TeamNamingThreshold {
 			names := make([]string, 0, len(byQuestion[qnumber]))
@@ -103,12 +120,10 @@ func Add(doc fsource.Doc, results []Result, o Options) error {
 				names = append(names, name)
 			}
 			sort.Strings(names)
-			message += s.Stats.Question.Takers(strings.Join(names, ", "))
+			lines[i] += s.Stats.Question.Takers(strings.Join(names, ", "))
 		}
-		patchQuestion(q, message)
-		qnumber++
 	}
-	return nil
+	return lines, nil
 }
 
 // HasStats is telegram.py's structure_has_stats, which `stop_if_no_stats` uses

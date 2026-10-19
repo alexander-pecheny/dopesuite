@@ -1,9 +1,12 @@
 package stats
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -155,4 +158,60 @@ func firstDiff(got, want string) string {
 		}
 	}
 	return ""
+}
+
+// TestReadUploadMatchesReadFile: a table that arrives as bytes reads as the
+// same file does from disk, a semicolon csv included.
+func TestReadUploadMatchesReadFile(t *testing.T) {
+	for _, name := range []string{"stats_tour.csv", "stats_tour.xlsx"} {
+		want, _, err := ReadFile(filepath.Join("testdata", name), ',')
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _, err := ReadUpload(name, data)
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %v, %d rows, want %d", name, err, len(got), len(want))
+		}
+		if strings.HasSuffix(name, ".csv") {
+			r := csv.NewReader(bytes.NewReader(bytes.TrimPrefix(data, []byte("\ufeff"))))
+			r.FieldsPerRecord = -1
+			rows, err := r.ReadAll()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var semi bytes.Buffer
+			w := csv.NewWriter(&semi)
+			w.Comma = ';'
+			if err := w.WriteAll(rows); err != nil {
+				t.Fatal(err)
+			}
+			if got, _, err := ReadUpload(name, semi.Bytes()); err != nil || !reflect.DeepEqual(got, want) {
+				t.Errorf("%s with semicolons: %v, %d rows", name, err, len(got))
+			}
+		}
+	}
+}
+
+// TestLinesAreAddsLines: the lines handed out one by one are the ones Add
+// writes into the package.
+func TestLinesAreAddsLines(t *testing.T) {
+	results := []Result{{Name: "Т1", Mask: "110"}, {Name: "Т2", Mask: "100"}}
+	lines, err := Lines(results, DefaultOptions(), 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := fsource.Parse("? Раз\n! А\n\n? Два\n! Б\n\n? Три\n! В\n", "chgk")
+	if err := Add(doc, results, DefaultOptions()); err != nil {
+		t.Fatal(err)
+	}
+	for i, line := range lines {
+		q := doc[i].Content.(*fsource.Question)
+		if q.Get("comment") != line {
+			t.Errorf("question %d: Add wrote %q, Lines says %q", i+1, q.Get("comment"), line)
+		}
+	}
 }

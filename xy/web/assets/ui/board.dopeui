@@ -305,6 +305,25 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         button kind="ghost" id="exportCancel" @board.actions.cancel
     message id="exportMessage"
 
+  -- add stats: chgksuite's add_stats, made into a copy of the tour
+  modal id="statsOverlay" label=@board.stats.title title=@board.stats.title
+    form id="statsForm" dir="col"
+      hint @board.stats.lead
+      label for="statsRatingIds" @board.stats.rating_label
+      textfield id="statsRatingIds" placeholder="12345" autocomplete="off" spellcheck="false"
+      hint @board.stats.rating_hint
+      label for="statsFile" @board.stats.file_label
+      filefield id="statsFile" accept=".csv,.xlsx"
+      label for="statsRange" @board.stats.range_label
+      textfield id="statsRange" placeholder="1-12" autocomplete="off" spellcheck="false"
+      hint @board.stats.range_hint
+      label for="statsThreshold" @board.stats.threshold_label
+      textfield id="statsThreshold" value="2" autocomplete="off"
+      row gap="sm" align="center" wrap
+        button submit id="statsRun" @board.stats.run
+        button kind="ghost" id="statsCancel" @board.actions.cancel
+    message id="statsMessage"
+
   -- publishing to telegram: the one export that posts rather than downloads,
   -- so it asks where to post and then reports what the bot is waiting for.
   modal id="tgExportOverlay" label=@board.tgexport.title title=@board.tgexport.title

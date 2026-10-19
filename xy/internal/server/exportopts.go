@@ -104,19 +104,25 @@ func templateFile(form *memForm, key, refusal string) ([]byte, error) {
 	if len(files) == 0 {
 		return nil, nil
 	}
-	data := files[0].Data
+	if !zipWithin(files[0].Data, maxTemplateInflated) {
+		return nil, corei18n.User(refusal)
+	}
+	return files[0].Data, nil
+}
+
+// zipWithin reports whether data is a zip that unpacks to at most max bytes,
+// read off its directory. archive/zip refuses an entry that inflates past the
+// size the directory gives it, so that size can be trusted.
+func zipWithin(data []byte, max uint64) bool {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, corei18n.User(refusal)
+		return false
 	}
 	var total uint64
 	for _, f := range zr.File {
 		total += f.UncompressedSize64
 	}
-	if total > maxTemplateInflated {
-		return nil, corei18n.User(refusal)
-	}
-	return data, nil
+	return total <= max
 }
 
 // screenCopy is o for the copy the screen shows, which the export modal offers

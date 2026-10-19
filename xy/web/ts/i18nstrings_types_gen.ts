@@ -739,6 +739,24 @@ export type Strings = {
       menuTitle: () => string;
       name: () => string;
     };
+    stats: {
+      copyTitle: (title: string) => string;
+      done: () => string;
+      fileLabel: () => string;
+      label: () => string;
+      labelGrouped: () => string;
+      lead: () => string;
+      menuTitle: () => string;
+      offline: () => string;
+      rangeHint: () => string;
+      rangeLabel: () => string;
+      ratingHint: () => string;
+      ratingLabel: () => string;
+      reading: () => string;
+      run: () => string;
+      thresholdLabel: () => string;
+      title: () => string;
+    };
     testerlist: {
       empty: () => string;
       hint: () => string;
@@ -1932,6 +1950,13 @@ export type Strings = {
       expired: () => string;
       revoked: () => string;
       spent: () => string;
+    };
+    stats: {
+      badFile: () => string;
+      badIds: () => string;
+      badThreshold: () => string;
+      fetchFailed: (reason: string) => string;
+      noSource: () => string;
     };
   };
   sessions: {

@@ -127,6 +127,15 @@ bad_docx_template = "шаблон .docx не открывается"
 bad_pptx_template = "шаблон .pptx не открывается"
 bad_pptx_config = 'не удалось прочитать настройки .pptx: {{.reason}}'
 
+[stats]
+# «Добавить взятия» (stats.go): reading a tournament's results for a copy of
+# a tour with the stats line on every question.
+bad_ids = "номер турнира — это число, а у синхрона с асинхроном два числа через запятую"
+no_source = "укажите номер турнира или выберите файл с результатами"
+bad_file = "файл с результатами не открывается"
+bad_threshold = "число команд должно быть от 0 до 99"
+fetch_failed = 'не удалось получить результаты с турнирного сайта: {{.reason}}'
+
 [quota]
 # enforceQuota: an upload that would outgrow the owner's storage remainder.
 exceeded = 'превышен лимит хранилища ({{.mb}} МБ)'
