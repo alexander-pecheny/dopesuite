@@ -25,6 +25,7 @@ export type Strings = {
     card: {
       appealed: () => string;
       controversials: (n: string) => string;
+      fold: () => string;
       heading: (n: string, what: string) => string;
       noControversials: () => string;
       noPacket: () => string;
@@ -32,6 +33,7 @@ export type Strings = {
       question: () => string;
       text: () => string;
       textChanged: (at: string) => string;
+      unfold: () => string;
     };
     controversial: {
       accepted: () => string;

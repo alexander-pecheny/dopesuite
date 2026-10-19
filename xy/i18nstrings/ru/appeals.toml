@@ -31,6 +31,9 @@ controversials = 'Спорные ответы на вопрос {{.n}}'
 no_controversials = "Сайт не прислал спорных ответов на этот вопрос."
 # Beside the controversial answer this appeal is about.
 appealed = "апелляция"
+# The toggle on a long question or appeal, which shows its first lines only.
+unfold = "Показать целиком"
+fold = "Свернуть"
 
 [controversial]
 # The game jury's verdict on a controversial answer.

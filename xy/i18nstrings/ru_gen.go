@@ -32,6 +32,7 @@ var RU = Strings{
 		Card: AppealsCardStrings{
 			Appealed:       func() string { return "апелляция" },
 			Controversials: func(n string) string { return fmt.Sprintf("Спорные ответы на вопрос %s", n) },
+			Fold:           func() string { return "Свернуть" },
 			Heading:        func(n string, what string) string { return fmt.Sprintf("Вопрос %s · %s", n, what) },
 			NoControversials: func() string {
 				return "Сайт не прислал спорных ответов на этот вопрос."
@@ -47,6 +48,7 @@ var RU = Strings{
 			TextChanged: func(at string) string {
 				return fmt.Sprintf("Текст апелляции изменился на сайте (%s).", at)
 			},
+			Unfold: func() string { return "Показать целиком" },
 		},
 		Controversial: AppealsControversialStrings{
 			Accepted: func() string { return "зачтён" },

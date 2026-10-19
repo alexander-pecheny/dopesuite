@@ -309,7 +309,7 @@ export function readBucketsOf(filter: FeedFilter): { content: boolean; comments:
 // linkSegments splits a comment's text into plain runs and URLs so the timeline can
 // make links clickable without ever treating user text as markup. Trailing
 // sentence punctuation stays outside the link; a ")" is cut only when the URL
-// itself opened no "(" (wikipedia-style paths keep theirs).
+// has more of them than "(" (wikipedia-style paths keep theirs).
 export function linkSegments(text: string): { text: string; href?: string }[] {
   const out: { text: string; href?: string }[] = [];
   let last = 0;
@@ -318,7 +318,7 @@ export function linkSegments(text: string): { text: string; href?: string }[] {
     for (;;) {
       const c = url.charAt(url.length - 1);
       if (".,;:!?…'\"".includes(c)) { url = url.slice(0, -1); continue; }
-      if (c === ")" && !url.includes("(")) { url = url.slice(0, -1); continue; }
+      if (c === ")" && url.split(")").length > url.split("(").length) { url = url.slice(0, -1); continue; }
       break;
     }
     if (url.endsWith("//")) continue; // a bare "https://" is not a link

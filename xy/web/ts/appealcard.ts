@@ -8,6 +8,7 @@
 import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { iconed } from "./icons_gen.js";
+import { linkSegments } from "./timeline.js";
 import { composeAppeal, tally, verdictStatus, type Appeal, type Status, type Vote, type VoteValue } from "./appeals.js";
 
 const { el } = xyApp;
@@ -62,7 +63,30 @@ function block(label: string, ...body: Node[]): HTMLElement {
     el("div", { class: "fld-body u-col u-gap-sm" }, ...body));
 }
 
-const prose = (text: string): HTMLElement => el("div", { class: "pv-field", text });
+// prose is text from the site as written, with its URLs made clickable.
+const prose = (text: string): HTMLElement => el("div", { class: "pv-field" },
+  linkSegments(text).map((s) => (s.href ? el("a", { href: s.href, target: "_blank", rel: "noopener noreferrer", text: s.text }) : s.text)));
+
+// foldedBlock is a block cut to its first lines, with a toggle in its head
+// that shows only when there is more to see.
+function foldedBlock(label: string, ...body: Node[]): HTMLElement {
+  const fold = el("div", { class: "appeal-fold is-folded u-col u-gap-sm" }, ...body);
+  const toggle = el("button", { class: "btn btn-ghost btn-xs", type: "button", hidden: true });
+  const paint = (): void => {
+    const folded = fold.classList.contains("is-folded");
+    toggle.setAttribute("aria-expanded", String(!folded));
+    toggle.replaceChildren(...iconed(folded ? "chevron-down" : "chevron-up", folded ? S.appeals.card.unfold() : S.appeals.card.fold()));
+  };
+  toggle.addEventListener("click", () => { fold.classList.toggle("is-folded"); paint(); });
+  const measure = new ResizeObserver(() => {
+    if (fold.classList.contains("is-folded")) toggle.hidden = fold.scrollHeight <= fold.clientHeight;
+  });
+  for (const n of [fold, ...fold.children]) measure.observe(n);
+  paint();
+  return el("div", { class: "fld fld-wide" },
+    el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: label }), el("span", { class: "u-spacer" }), toggle),
+    el("div", { class: "fld-body" }, fold));
+}
 
 export function createAppealCard(deps: AppealCardDeps): AppealCard {
   function controversials(a: Appeal): HTMLElement {
@@ -123,8 +147,8 @@ export function createAppealCard(deps: AppealCardDeps): AppealCard {
       if (a.textChangedAt) text.unshift(el("p", { class: "hint hint-danger", text: S.appeals.card.textChanged(new Date(a.textChangedAt).toLocaleString("ru")) }));
       const verdict: Node[] = [decided(cardId, a), a.verdict.text ? prose(a.verdict.text) : el("p", { class: "hint", text: S.appeals.verdict.noText() }), site(a)];
       box.replaceChildren(
-        block(S.appeals.card.question(), deps.question(listId, a.question)),
-        block(S.appeals.card.text(), ...text),
+        foldedBlock(S.appeals.card.question(), deps.question(listId, a.question)),
+        foldedBlock(S.appeals.card.text(), ...text),
         controversials(a),
         votes(cardId, draw),
         block(S.appeals.verdict.label(), ...verdict));

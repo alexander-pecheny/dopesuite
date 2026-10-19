@@ -26,6 +26,7 @@ export const RU: Strings = {
     card: {
       appealed: () => "апелляция",
       controversials: (n: string) => `Спорные ответы на вопрос ${n}`,
+      fold: () => "Свернуть",
       heading: (n: string, what: string) => `Вопрос ${n} · ${what}`,
       noControversials: () => "Сайт не прислал спорных ответов на этот вопрос.",
       noPacket: () => "Пакет не привязан. Его можно выбрать в настройках апелляций.",
@@ -33,6 +34,7 @@ export const RU: Strings = {
       question: () => "Вопрос из пакета",
       text: () => "Текст апелляции",
       textChanged: (at: string) => `Текст апелляции изменился на сайте (${at}).`,
+      unfold: () => "Показать целиком",
     },
     controversial: {
       accepted: () => "зачтён",
