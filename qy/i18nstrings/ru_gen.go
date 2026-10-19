@@ -444,8 +444,10 @@ var RU = Strings{
 		},
 	},
 	Forms: FormsStrings{
-		Failed: func() string { return "Не сохранилось. Нажмите «Сохранить»." },
-		Saving: func() string { return "Сохраняю…" },
+		Failed:      func() string { return "Не сохранилось. Нажмите «Сохранить»." },
+		HideAnswers: func() string { return "Скрыть все ответы" },
+		Saving:      func() string { return "Сохраняю…" },
+		ShowAnswers: func() string { return "Показать все ответы" },
 	},
 	Nominate: NominateStrings{
 		Page: NominatePageStrings{

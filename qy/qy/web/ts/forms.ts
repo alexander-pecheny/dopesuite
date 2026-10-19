@@ -5,6 +5,9 @@
 //     leaving the page. The jury's likes and marks are saved this way, so a
 //     long portion is never lost to a closed tab. The submit button stays, and
 //     a browser without this script still saves with it.
+//   - #toggle-all-details, the archive's button that opens every answer on a
+//     results page. The old site wired it with an inline script, which the CMS
+//     strips.
 import S from "./i18nstrings.js";
 import { formBody, statusText } from "./forms-model.js";
 
@@ -38,3 +41,14 @@ document.addEventListener("change", (event) => {
   const form = el.form;
   if (form && form.hasAttribute("data-autosave")) void save(form);
 });
+
+const toggleAll = document.getElementById("toggle-all-details");
+if (toggleAll) {
+  toggleAll.classList.add("btn");
+  toggleAll.addEventListener("click", () => {
+    const all = [...document.querySelectorAll("details")];
+    const open = all.some((d) => !d.open);
+    for (const d of all) d.open = open;
+    toggleAll.textContent = open ? S.forms.hideAnswers() : S.forms.showAnswers();
+  });
+}

@@ -337,7 +337,9 @@ export const RU: Strings = {
   },
   forms: {
     failed: () => "Не сохранилось. Нажмите «Сохранить».",
+    hideAnswers: () => "Скрыть все ответы",
     saving: () => "Сохраняю…",
+    showAnswers: () => "Показать все ответы",
   },
   nominate: {
     page: {
