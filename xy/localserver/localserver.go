@@ -36,6 +36,10 @@ func Open(dir string) (*Server, error) {
 	return &Server{s: s}, nil
 }
 
+// SetFilePicker gives the board's import the app's native file dialog, which
+// returns the chosen path or "" when cancelled. Call it before serving.
+func (s *Server) SetFilePicker(pick func() (string, error)) { s.s.SetFilePicker(pick) }
+
 // Handler serves xy's pages and API.
 func (s *Server) Handler() http.Handler { return s.s.Handler() }
 

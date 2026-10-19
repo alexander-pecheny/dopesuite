@@ -22,6 +22,12 @@ tab is a native `WebviewPanel` under the strip: the first tab is the Local xy
   cannot reach the runtime and so cannot open a native dialog. `Shell.Open`
   hands the path to `localserver.Import` and sends the Local panel to the
   new board.
+- The board's «Импорт из файла…» is in xy's page, so it cannot open a
+  dialog either. Instead it asks the Local xy (`POST /api/import/pick`), and
+  the app installs `Shell.pickFile` with `local.SetFilePicker`. The server
+  sends back the picked file and, for a `.4s`, the pictures it names from its
+  folder, so the page imports them as if they had been uploaded together.
+  `xy-local -pick <file>` stands in for the dialog in a browser.
 - The strip borrows xy's stylesheet from the Local xy, and copies only the
   theme boot of `menu.js`, whose ☰ menu has no place here. It shares the
   Local tab's storage, so it follows the theme chosen there.

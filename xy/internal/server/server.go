@@ -58,6 +58,9 @@ type server struct {
 	ratingAPIBase string
 
 	cfg Config
+	// pickFile is the desktop app's native file dialog (importpick.go); nil
+	// everywhere else.
+	pickFile func() (string, error)
 	// localUser is the one account a local server has, created on first open;
 	// every request is it (see local.go).
 	localUser session.User

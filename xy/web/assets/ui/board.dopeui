@@ -317,7 +317,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
   -- continuous numbering and combined export
   modal id="importPickOverlay" label=@board.importpick.title title=@board.importpick.title
     form id="importPickForm" dir="col"
-      hint @board.importpick.hint
+      hint id="importPickHint" @board.importpick.hint
       filefield id="importFile" accept=".4s,.si4s,.zip,.docx,image/*" multiple required
       hint id="importPickWhat"
       selectfield id="importGame" title=@board.list.type_label

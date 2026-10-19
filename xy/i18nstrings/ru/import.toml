@@ -152,8 +152,14 @@ done_single = 'Импортировано: {{.cards}} карточек, {{.image
 no_tours_note = "\nТуры («## …») в файле не найдены — создан один список."
 # Note appended when the server refused some of the package's images.
 images_failed = "\n\nНе удалось загрузить изображения ({{.n}}): "
-# Appended when cards name images that were neither in the package nor picked with it.
-images_missing = "\n\nНе хватает картинок ({{.n}}), выберите их вместе с .4s: "
+# Appended when cards name images that were neither in the package nor given with it.
+images_missing = "\n\nНе нашлось картинок ({{.n}}): "
+# Picker lines in the desktop app, whose own dialog picked the file: its name,
+# and for a .4s how many of the pictures it names were found beside it.
+picked_file = 'Файл «{{.name}}».'
+picked_images = 'Файл «{{.name}}», картинок рядом с ним: {{.n}}.'
+# Alert when the desktop app could not open its file dialog or read the file.
+pick_failed = 'Не удалось открыть файл: {{.reason}}'
 # Picker line and alert when the selection holds no package, or more than one.
 one_package = "Выберите один пакет вопросов. Картинки к .4s можно выбрать вместе с ним."
 # Alert when the import died part-way; the partial list stays on the board.

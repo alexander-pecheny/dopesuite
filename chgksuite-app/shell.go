@@ -135,6 +135,15 @@ func (s *Shell) Open() bool {
 	return true
 }
 
+// pickFile is the native dialog behind the board's «Импорт из файла…» in the
+// Local tab. It is unexported so the strip cannot call it.
+func (s *Shell) pickFile() (string, error) {
+	return application.Get().Dialog.OpenFile().
+		CanChooseFiles(true).
+		AddFilter("Пакеты", "*.4s;*.si4s;*.docx;*.zip").
+		AttachToWindow(s.window).PromptForSingleSelection()
+}
+
 // Place sets where the panels go: the strip measures the room below itself.
 func (s *Shell) Place(x, y, width, height int) {
 	s.mu.Lock()

@@ -58,13 +58,15 @@ var localOff = []string{
 type instanceCaps struct {
 	Mode string   `json:"mode"`
 	Off  []string `json:"off"`
+	// Pick says the app can open a native file dialog for the page.
+	Pick bool `json:"pick,omitempty"`
 }
 
 func (s *server) instance() *instanceCaps {
 	if !s.cfg.Local {
 		return nil
 	}
-	return &instanceCaps{Mode: "local", Off: localOff}
+	return &instanceCaps{Mode: "local", Off: localOff, Pick: s.pickFile != nil}
 }
 
 // serverOnly is a route that needs a server or a second person: a local server

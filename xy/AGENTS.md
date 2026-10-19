@@ -218,6 +218,9 @@ internal/server/       package server — the whole HTTP server
                        and which is the thing people most often forget. The bot token is passed through the
                        server, because the posting is done in Go and the CSP does not let the page
                        reach api.telegram.org. It is never stored
+  importpick.go        POST /api/import/pick, local mode only: the desktop app's native file dialog
+                       (localserver.SetFilePicker) picks a package, and the reply is it plus, for a
+                       .4s, the pictures it names from its folder, as files for the board's import
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgksuite/chgkimport),
                        parsed in memory, nothing persisted; the client encrypts the result into a new list.
                        POST /api/import/text — the same pipeline without the file: one card's plain text

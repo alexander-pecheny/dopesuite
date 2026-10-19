@@ -2,14 +2,21 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeBoard, fakeNode, installDOM } from "./dom.js";
 
-const p = installDOM(["importPickOverlay", "importPickForm", "importFile", "importPickWhat", "importGame", "importSplitTours", "importPickCancel", "importOverlay", "importTitle", "importSource", "importPreview", "importCount", "importCommit", "importClose"]);
+const p = installDOM(["importPickOverlay", "importPickForm", "importFile", "importPickHint", "importPickWhat", "importGame", "importSplitTours", "importPickCancel", "importOverlay", "importTitle", "importSource", "importPreview", "importCount", "importCommit", "importClose"]);
 for (const id of ["importPickOverlay", "importOverlay"]) p.node(id).hidden = true;
 p.node("importPickForm").reset = () => {};
 // The server's parse of the upload, then the lists and cards the client posts.
 const posts = [];
 let parsed = { name: "Пакет", source: "", images: [] };
+// What the desktop app's dialog hands back, and the upload the page then sends.
+let pickedFiles = [];
+let parseBody = null;
 globalThis.fetch = async (url, init) => {
-  if (String(url).endsWith("/api/import/parse")) return { ok: true, status: 200, json: async () => parsed, text: async () => "" };
+  if (String(url).endsWith("/api/import/pick")) return { ok: true, status: 200, json: async () => ({ files: pickedFiles }), text: async () => "" };
+  if (String(url).endsWith("/api/import/parse")) {
+    parseBody = init.body;
+    return { ok: true, status: 200, json: async () => parsed, text: async () => "" };
+  }
   posts.push([String(url), init && init.body ? JSON.parse(init.body) : null]);
   return { ok: true, status: 200, json: async () => ({ id: 100 + posts.length }), text: async () => "" };
 };
@@ -104,4 +111,27 @@ test("СИ import folds each #T block and its questions into one theme card", as
   assert.match(cards[1][1].description, /^e:#T Острова/);
   assert.match(cards[1][1].description, /№ 20/);
   assert.match(cards[2][1].description, /^e:#T Оружие/);
+});
+
+test("in the desktop app the native pick stands in for the file field, and its pictures go up with it", async () => {
+  posts.length = 0;
+  const { xyInstance } = await import("../web/assets/static/dist/instance.js");
+  xyInstance.setInstance({ mode: "local", off: [], pick: true });
+  pickedFiles = [
+    { name: "тур.4s", mime: "application/octet-stream", data: btoa("x") },
+    { name: "a.png", mime: "image/png", data: btoa("png") },
+  ];
+  parsed = { name: "тур", source: "? Раз (img a.png) (img b.png)\n! А\n", images: [] };
+  panel.open();
+  await settle();
+  assert.equal(p.node("importPickOverlay").hidden, false);
+  assert.equal(p.node("importFile").hidden, true);
+  assert.match(p.node("importPickWhat").textContent, /«тур\.4s», картинок рядом с ним: 1/);
+  p.node("importSplitTours").checked = false;
+  p.node("importGame").value = "normal";
+  p.node("importPickForm").fire("submit");
+  await settle();
+  assert.deepEqual(parseBody.getAll("image").map((f) => f.name), ["a.png"]);
+  assert.match(globalThis.__alerts.at(-1), /Не нашлось картинок \(2\): a\.png, b\.png$/);
+  xyInstance.setInstance(null);
 });

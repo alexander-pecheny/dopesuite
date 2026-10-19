@@ -24,6 +24,7 @@ import { byRank } from "./dragrank.js";
 import { nowStamp } from "./carddetail.js";
 import { modal } from "./modal.js";
 import { sniffBundle } from "./bundleimport.js";
+import { xyInstance } from "./instance.js";
 import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board } from "./panels.js";
 import S from "./i18nstrings.js";
@@ -31,6 +32,8 @@ import { numbered } from "./cardkind.js";
 
 // Quiet time after the last option change before the preview is redrawn.
 const PREVIEW_DEBOUNCE_MS = 200;
+// The app's file dialog was cancelled.
+const HTTP_NO_CONTENT = 204;
 
 const { jpost, byId, errMsg } = xyApp;
 const { keyBetween } = xyRank;
@@ -53,12 +56,39 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // what will happen before pressing anything — and "split by tours", which
   // means nothing to an archive, goes away when one is picked.
   let sniffed: Awaited<ReturnType<typeof sniffBundle>> = null;
+  // What the desktop app's own dialog picked, standing in for the file field.
+  let native: File[] | null = null;
+  const fileField = byId<HTMLInputElement>("importFile");
 
-  function openImportPick(): void {
+  async function openImportPick(): Promise<void> {
     byId<HTMLFormElement>("importPickForm").reset();
     sniffed = null;
+    native = null;
     showKind("");
+    if (xyInstance.picksFiles()) {
+      try {
+        native = await pickNative();
+      } catch (err) {
+        alert(S.import.pack.pickFailed(errMsg(err)));
+        return;
+      }
+      if (!native) return;
+    }
+    fileField.hidden = native != null;
+    byId("importPickHint").hidden = native != null;
+    fileField.required = native == null;
     importPickModal.open();
+    if (native) filesChanged();
+  }
+
+  // pickNative asks the app for a package; it comes back with the pictures
+  // beside it that it names. null is a cancelled dialog.
+  async function pickNative(): Promise<File[] | null> {
+    const res = await fetch("/api/import/pick", { method: "POST", credentials: "same-origin" });
+    if (res.status === HTTP_NO_CONTENT) return null;
+    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+    const { files } = (await res.json()) as { files: ImportImage[] };
+    return files.map((f) => new File([Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0))], f.name, { type: f.mime }));
   }
 
   function showKind(what: string): void {
@@ -70,13 +100,13 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // picked splits the selection into the one package and the images that came
   // with it, since a browser hands over a .4s without the pictures beside it.
   function picked(): { file: File | null; images: File[] } {
-    const files = [...(byId<HTMLInputElement>("importFile").files ?? [])];
+    const files = native ?? [...(fileField.files ?? [])];
     const images = files.filter((f) => f.type.startsWith("image/"));
     const rest = files.filter((f) => !images.includes(f));
     return { file: rest.length === 1 ? rest[0] : null, images };
   }
 
-  byId("importFile").addEventListener("change", () => {
+  function filesChanged(): void {
     const { file, images } = picked();
     sniffed = null;
     showKind("");
@@ -84,14 +114,17 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       if (images.length) showKind(S.import.pack.onePackage());
       return;
     }
-    showKind(S.import.pack.readingFile());
+    // A native pick shows no file field, so the line says what was picked.
+    const lead = !native ? "" : (images.length ? S.import.pack.pickedImages(file.name, String(images.length)) : S.import.pack.pickedFile(file.name)) + " ";
+    showKind(lead + S.import.pack.readingFile());
     void sniffBundle(file).then((b) => {
       sniffed = b;
-      showKind(b
+      showKind(lead + (b
         ? S.import.pack.sniffedArchive(b.bundle.board.name, b.bundle.exported_at.slice(0, ISO_DATE_LEN))
-        : S.import.pack.sniffedPackage());
+        : S.import.pack.sniffedPackage()));
     });
-  });
+  }
+  fileField.addEventListener("change", filesChanged);
 
   byId("importPickForm").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -364,5 +397,5 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   }
 
 
-  return { open: openImportPick };
+  return { open: () => { void openImportPick(); } };
 }

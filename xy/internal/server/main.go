@@ -293,6 +293,7 @@ func routes(srv *server) *http.ServeMux {
 
 	// ---- import (.4s / .zip / .docx → 4s source + images; plain text → 4s) ----
 	mux.HandleFunc("POST /api/import/parse", srv.handleImportParse)
+	mux.HandleFunc("POST /api/import/pick", srv.handleImportPick)
 	mux.HandleFunc("POST /api/import/text", srv.handleImportText)
 
 	// ---- Trello import proxy (read-only passthrough to the Trello API) ----

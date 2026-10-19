@@ -33,6 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	local.SetFilePicker(shell.pickFile)
 
 	// The tab strip and the Wails runtime have paths of their own; everything
 	// else is the Local tab's xy. The fork refuses a panel's request for

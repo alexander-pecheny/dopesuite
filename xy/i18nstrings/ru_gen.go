@@ -2026,10 +2026,8 @@ var RU = Strings{
 			ImagesFailed: func(n string) string {
 				return fmt.Sprintf("\n\nНе удалось загрузить изображения (%s): ", n)
 			},
-			ImagesMissing: func(n string) string {
-				return fmt.Sprintf("\n\nНе хватает картинок (%s), выберите их вместе с .4s: ", n)
-			},
-			Label: func() string { return "Импорт из файла…" },
+			ImagesMissing: func(n string) string { return fmt.Sprintf("\n\nНе нашлось картинок (%s): ", n) },
+			Label:         func() string { return "Импорт из файла…" },
 			MenuTitle: func() string {
 				return "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)"
 			},
@@ -2043,6 +2041,13 @@ var RU = Strings{
 			},
 			ParseFailed: func(error string) string {
 				return fmt.Sprintf("Не удалось разобрать файл: %s", error)
+			},
+			PickFailed: func(reason string) string {
+				return fmt.Sprintf("Не удалось открыть файл: %s", reason)
+			},
+			PickedFile: func(name string) string { return fmt.Sprintf("Файл «%s».", name) },
+			PickedImages: func(name string, n string) string {
+				return fmt.Sprintf("Файл «%s», картинок рядом с ним: %s.", name, n)
 			},
 			Preamble:    func() string { return "Преамбула" },
 			PromptGroup: func() string { return "Название группы списков:" },

@@ -21,7 +21,7 @@ func Open(path string) (*Result, error) {
 		return nil, err
 	}
 	if strings.EqualFold(filepath.Ext(path), ".4s") {
-		images, err := imagesBeside(filepath.Dir(path), res.Source)
+		images, err := ImagesBeside(filepath.Dir(path), res.Source)
 		if err != nil {
 			return nil, err
 		}
@@ -31,14 +31,15 @@ func Open(path string) (*Result, error) {
 	return res, nil
 }
 
-// imagesBeside reads the pictures source names from dir, each by its base name,
+// ImagesBeside reads the pictures source names from dir, each by its base name,
 // as a zip would hold them. A missing one is left out: the card keeps its
 // directive, and the import reports it.
-func imagesBeside(dir, source string) ([]Image, error) {
+func ImagesBeside(dir, source string) ([]Image, error) {
 	var images []Image
 	for _, ref := range listexport.ImageRefs(source) {
 		name := filepath.Base(ref)
-		if _, ok := imageExts[strings.ToLower(filepath.Ext(name))]; !ok {
+		mimeType, ok := imageExts[strings.ToLower(filepath.Ext(name))]
+		if !ok {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, name))
@@ -48,7 +49,7 @@ func imagesBeside(dir, source string) ([]Image, error) {
 		if err != nil {
 			return nil, err
 		}
-		images = append(images, Image{Name: name, Data: data})
+		images = append(images, Image{Name: name, MIME: mimeType, Data: data})
 	}
 	return images, nil
 }
