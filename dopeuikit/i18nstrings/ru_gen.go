@@ -72,7 +72,7 @@ var RU = Strings{
 		Title: func() string { return "Вход" },
 		Username: LoginUsernameStrings{
 			Hint: func() string {
-				return "Придумайте никнейм. Изменить его потом нельзя."
+				return "Придумайте логин из латинских букв и цифр, например ivanov. Можно ещё точку, дефис и подчёркивание. Изменить логин потом нельзя."
 			},
 			Submit: func() string { return "Продолжить" },
 		},

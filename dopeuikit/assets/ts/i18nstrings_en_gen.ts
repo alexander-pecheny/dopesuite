@@ -66,7 +66,7 @@ export const EN: Strings = {
     },
     title: () => "Log in",
     username: {
-      hint: () => "Choose a username. It cannot be changed later.",
+      hint: () => "Choose a username of Latin letters and digits, such as ivanov. A dot, a hyphen and an underscore are allowed too. It cannot be changed later.",
       submit: () => "Continue",
     },
   },

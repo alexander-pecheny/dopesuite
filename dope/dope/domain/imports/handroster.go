@@ -28,6 +28,8 @@ import (
 // and removes per team, the host's edits it keeps, and the conflicts it
 // settles.
 type ImportPlan struct {
+	// AddedVenues is the venues of a synch fest the import makes.
+	AddedVenues  []string
 	AddedTeams   []string
 	DroppedTeams []string
 	Renamed      []TeamRename
@@ -49,7 +51,7 @@ type TeamPlayers struct {
 
 // Empty reports whether the plan changes nothing and asks nothing.
 func (p ImportPlan) Empty() bool {
-	return len(p.AddedTeams)+len(p.DroppedTeams)+len(p.Renamed)+len(p.Players)+len(p.Conflicts) == 0
+	return len(p.AddedVenues)+len(p.AddedTeams)+len(p.DroppedTeams)+len(p.Renamed)+len(p.Players)+len(p.Conflicts) == 0
 }
 
 // RosterWrite is what writing a roster changed, for the caller to broadcast.

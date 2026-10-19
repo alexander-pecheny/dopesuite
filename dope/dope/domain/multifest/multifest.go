@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"sort"
 
 	"dope/dope/platform/util"
@@ -91,18 +92,9 @@ func PlaceTeamsTx(ctx context.Context, tx *sql.Tx, festID int64, venueOf map[int
 	for _, venue := range venueOf {
 		venues = append(venues, venue)
 	}
-	// New venues take their places in the order of their names.
-	sort.Slice(venues, func(i, j int) bool { return venues[i].Title < venues[j].Title })
-	festVenue := map[int64]int64{}
-	for _, venue := range venues {
-		if _, done := festVenue[venue.ID]; done {
-			continue
-		}
-		id, err := ratingVenueTx(ctx, tx, festID, venue)
-		if err != nil {
-			return false, err
-		}
-		festVenue[venue.ID] = id
+	festVenue, err := AddVenuesTx(ctx, tx, festID, venues)
+	if err != nil {
+		return false, err
 	}
 	moved := false
 	for ratingID, venue := range venueOf {
@@ -162,9 +154,50 @@ select coalesce(max(venue_number), 0) from fest_teams where multifest_venue_id =
 	return true, nil
 }
 
+// AddVenuesTx makes the fest venues of the rating venues it has not seen yet,
+// in the order of their names, and answers the fest venue of each.
+func AddVenuesTx(ctx context.Context, tx *sql.Tx, festID int64, venues []RatingVenue) (map[int64]int64, error) {
+	sorted := slices.Clone(venues)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Title < sorted[j].Title })
+	festVenue := map[int64]int64{}
+	for _, venue := range sorted {
+		if _, done := festVenue[venue.ID]; done {
+			continue
+		}
+		id, err := ratingVenueTx(ctx, tx, festID, venue)
+		if err != nil {
+			return nil, err
+		}
+		festVenue[venue.ID] = id
+	}
+	return festVenue, nil
+}
+
+// NewVenues is the rating venues the fest does not have yet.
+func NewVenues(ctx context.Context, q store.Queryer, festID int64, venues []RatingVenue) ([]RatingVenue, error) {
+	have, err := List(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
+	known := map[int64]bool{}
+	for _, v := range have {
+		known[v.RatingVenueID] = true
+	}
+	var fresh []RatingVenue
+	for _, v := range venues {
+		if !known[v.ID] {
+			fresh = append(fresh, v)
+		}
+	}
+	return fresh, nil
+}
+
 func ratingVenueTx(ctx context.Context, tx *sql.Tx, festID int64, venue RatingVenue) (int64, error) {
 	var id int64
 	err := tx.QueryRowContext(ctx, `select id from multifest_venues where fest_id = ? and rating_venue_id = ?`, festID, venue.ID).Scan(&id)
+	if err == nil && venue.Town != "" {
+		_, err = tx.ExecContext(ctx, `update multifest_venues set town = ? where id = ? and town = ''`, venue.Town, id)
+	}
 	if err == nil || !errors.Is(err, sql.ErrNoRows) {
 		return id, err
 	}

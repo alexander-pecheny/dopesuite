@@ -150,6 +150,8 @@ col_city = "Город"
 col_players = "Игроков"
 # Empty state of the teams table.
 teams_empty = "Команд пока нет. Загрузите их из rating.chgk.info или добавьте вручную."
+# The same for a host limited to площадки, who cannot import.
+teams_empty_venue = "Команд пока нет. Добавьте их кнопкой «Добавить команду»."
 # The teams page's add button, and a row's edit pencil (ADR-0024).
 add_team_btn = "Добавить команду"
 # The roster as a spreadsheet: download it, and load one back.
@@ -160,6 +162,8 @@ edit_team_label = 'Изменить команду «{{.team}}»'
 badge_hand = "вручную"
 badge_edited = "изменена"
 # Above the teams table: what the host's edits do to an import.
+# The hint a host limited to площадки reads instead of the import and зачёты notes.
+teams_edit_hint_venue = "Здесь команды вашей площадки. Чтобы поменять название или состав, нажмите на карандаш в строке команды. Номер команда получает сама, по порядку добавления. Посмотреть и поменять номера можно на странице «Номера команд»."
 teams_edit_hint = "Команду можно добавить, переименовать и поменять её состав прямо здесь. Повторный импорт из rating.chgk.info эти правки сохранит и перед записью покажет, что изменится."
 # The зачёты column of the teams table: its header, the hint above the form and
 # the notice after a save.
@@ -216,6 +220,7 @@ import_submit = "Показать, что изменится"
 # The preview of an import (ADR-0024): what it would change, before it writes.
 preview_title = "Что изменит импорт"
 preview_nothing = "Импорт ничего не изменит: составы уже совпадают с рейтингом и вашими правками."
+plan_added_venues = 'Новые площадки: {{.venues}}'
 plan_added_teams = 'Новые команды: {{.teams}}'
 plan_dropped_teams = 'Уйдут из составов: {{.teams}}'
 plan_renamed = 'Переименуется: «{{.from}}» → «{{.to}}»'
@@ -265,6 +270,10 @@ conflict_cancel = "Отменить импорт"
 # Notice after an import that merged teams; {{.n}} is how many.
 import_merged_notice = 'Сохранены под новым ID, вместе с номером и результатами: {{.n}}.'
 import_unchanged_notice = 'Списки уже совпадают с рейтингом — изменений нет. Команд: {{.teams}}, игроков: {{.players}}.'
+# After an import into a synch fest: the площадки it made, and whether the
+# site lists any team yet.
+import_venues_notice = 'Новых площадок: {{.n}}.'
+import_no_teams_notice = "На турнирном сайте пока нет команд. Их можно внести вручную на странице команд."
 import_done_counts = 'Загружено команд: {{.teams}}, игроков: {{.players}}. Обновлено игр ЧГК: {{.od}}, КСИ: {{.ksi}}.'
 # Object words the override-id validation errors name ("Выберите … из
 # подсказки."): player, team, source team.

@@ -60,7 +60,9 @@ var RU = Strings{
 			TgNotConfigured: func() string {
 				return "вход через Telegram на этом сервере не настроен"
 			},
-			UsernameInvalid: func() string { return "недопустимое имя пользователя" },
+			UsernameInvalid: func() string {
+				return "Логин можно набрать только латинскими буквами и цифрами, ещё допустимы точка, дефис и подчёркивание. Длина от 2 до 32 знаков."
+			},
 		},
 		Password: AuthPasswordStrings{
 			CurrentWrong: func() string { return "текущий пароль неверен" },
@@ -1302,13 +1304,17 @@ var RU = Strings{
 			ImportMergedNotice: func(n string) string {
 				return fmt.Sprintf("Сохранены под новым ID, вместе с номером и результатами: %s.", n)
 			},
+			ImportNoTeamsNotice: func() string {
+				return "На турнирном сайте пока нет команд. Их можно внести вручную на странице команд."
+			},
 			ImportSubmit: func() string { return "Показать, что изменится" },
 			ImportUnchangedNotice: func(teams string, players string) string {
 				return fmt.Sprintf("Списки уже совпадают с рейтингом — изменений нет. Команд: %s, игроков: %s.", teams, players)
 			},
-			ImportXlsxBtn: func() string { return "Загрузить из xlsx" },
-			KeptAdded:     func(n string) string { return fmt.Sprintf("добавленных игроков: %s", n) },
-			KeptFlags:     func(n string) string { return fmt.Sprintf("команд со своими зачётами: %s", n) },
+			ImportVenuesNotice: func(n string) string { return fmt.Sprintf("Новых площадок: %s.", n) },
+			ImportXlsxBtn:      func() string { return "Загрузить из xlsx" },
+			KeptAdded:          func(n string) string { return fmt.Sprintf("добавленных игроков: %s", n) },
+			KeptFlags:          func(n string) string { return fmt.Sprintf("команд со своими зачётами: %s", n) },
 			KeptHandTeams: func(n int) string {
 				return fmt.Sprintf("%s вручную: %d", core.Plural("ru", n, "команда добавлена", "команды добавлены", "команд добавлено"), n)
 			},
@@ -1326,6 +1332,7 @@ var RU = Strings{
 			OverrideTitle:      func() string { return "Оверрайд игрока" },
 			OverridesSubhead:   func() string { return "Оверрайды" },
 			PlanAddedTeams:     func(teams string) string { return fmt.Sprintf("Новые команды: %s", teams) },
+			PlanAddedVenues:    func(venues string) string { return fmt.Sprintf("Новые площадки: %s", venues) },
 			PlanDroppedTeams:   func(teams string) string { return fmt.Sprintf("Уйдут из составов: %s", teams) },
 			PlanKeptTitle:      func() string { return "Ваши правки, которые импорт сохранит" },
 			PlanPlayers:        func(team string) string { return fmt.Sprintf("%s", team) },
@@ -1354,8 +1361,14 @@ var RU = Strings{
 			TeamsEditHint: func() string {
 				return "Команду можно добавить, переименовать и поменять её состав прямо здесь. Повторный импорт из rating.chgk.info эти правки сохранит и перед записью покажет, что изменится."
 			},
+			TeamsEditHintVenue: func() string {
+				return "Здесь команды вашей площадки. Чтобы поменять название или состав, нажмите на карандаш в строке команды. Номер команда получает сама, по порядку добавления. Посмотреть и поменять номера можно на странице «Номера команд»."
+			},
 			TeamsEmpty: func() string {
 				return "Команд пока нет. Загрузите их из rating.chgk.info или добавьте вручную."
+			},
+			TeamsEmptyVenue: func() string {
+				return "Команд пока нет. Добавьте их кнопкой «Добавить команду»."
 			},
 			TeamsTitle: func(title string) string { return fmt.Sprintf("%s · команды", title) },
 			UndoDoneNotice: func() string {

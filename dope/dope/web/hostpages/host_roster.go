@@ -124,7 +124,9 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 			dopeui.Button(dopeui.Data("team-xlsx", ""), dopeui.Text(s.Host.Roster.ImportXlsxBtn())))
 	}
 	page = append(page, dopeui.Row(buttons...))
-	if len(data.Teams) > 0 {
+	if len(data.Teams) > 0 && !data.AllVenues {
+		page = append(page, hostVenueTeamsTable(data.Teams))
+	} else if len(data.Teams) > 0 {
 		rows := []dopeui.Item{dopeui.Trow(
 			dopeui.Hcell(dopeui.Text("ID")), dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())),
 			dopeui.Hcell(dopeui.Text(s.Host.Roster.ColCity())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColPlayers())),
@@ -157,10 +159,32 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
 			dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.SaveSubmit()))),
 		))
-	} else {
+	} else if data.AllVenues {
 		page = append(page, dopeui.Empty(dopeui.Text(s.Host.Roster.TeamsEmpty())))
+	} else {
+		page = append(page, dopeui.Empty(dopeui.Text(s.Host.Roster.TeamsEmptyVenue())))
 	}
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
+
+// hostVenueTeamsTable is the teams of a host limited to venues: no import to
+// explain and no Flags to set, so the pencil stays on a phone's screen.
+func hostVenueTeamsTable(teams []hostFestTeam) *dopeui.Element {
+	s := dopestrings.Default
+	rows := []dopeui.Item{dopeui.Trow(
+		dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColCity())),
+		dopeui.Hcell(dopeui.Text(s.Host.Roster.ColPlayers())), dopeui.Hcell(),
+	)}
+	for _, t := range teams {
+		rows = append(rows, dopeui.Trow(
+			dopeui.Cell(dopeui.Text(t.Name)),
+			dopeui.Cell(dopeui.Text(t.City)),
+			dopeui.Cell(dopeui.Text(strconv.Itoa(t.Players))),
+			dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditTeamLabel(t.Name)),
+				dopeui.Data("team-edit", idstr.Format(t.ID)))),
+		))
+	}
+	return dopeui.Col(dopeui.Note(dopeui.Text(s.Host.Roster.TeamsEditHintVenue())), dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...))
 }
 
 // teamFlagsField names one team's Flags input; the save handler reads the id
@@ -374,6 +398,9 @@ func hostImportPlanSection(plan imports.ImportPlan, choice imports.RosterChoice,
 	var items []dopeui.Item
 	if plan.Empty() {
 		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PreviewNothing())))
+	}
+	if len(plan.AddedVenues) > 0 {
+		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PlanAddedVenues(strings.Join(plan.AddedVenues, ", ")))))
 	}
 	if len(plan.AddedTeams) > 0 {
 		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PlanAddedTeams(strings.Join(plan.AddedTeams, ", ")))))
@@ -919,11 +946,22 @@ func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice im
 	if ratingID <= 0 {
 		return imports.RatingRosterImportResult{}, corei18n.User(dopestrings.Default.Host.Roster.NeedRatingNote())
 	}
+	venues, err := s.importRatingVenues(ctx, festID, ratingID, choice.Preview)
+	if err != nil {
+		return imports.RatingRosterImportResult{}, err
+	}
 	teams, err := imports.FetchRatingRoster(s.h.Engine(), ctx, ratingID)
 	if err != nil {
 		return imports.RatingRosterImportResult{}, err
 	}
-	result, err := entrants.ImportFestRoster(s.h.Engine(), ctx, festID, ratingID, teams, choice)
+	// A synch fest learns its venues days before any team is on the site.
+	result := imports.RatingRosterImportResult{Plan: &imports.ImportPlan{}, Unchanged: len(venues) == 0}
+	if len(teams) > 0 || venues == nil {
+		result, err = entrants.ImportFestRoster(s.h.Engine(), ctx, festID, ratingID, teams, choice)
+	}
+	if result.Plan != nil {
+		result.Plan.AddedVenues = venues
+	}
 	if err != nil || choice.Preview {
 		return result, err
 	}
@@ -931,6 +969,36 @@ func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice im
 		s.fanOut(festID, result.Revision, core.Broadcast{Views: result.Views})
 	}
 	return result, s.ensureVenueGames(ctx, festID, ratingID)
+}
+
+// importRatingVenues makes the venues a synch fest's tournament has accepted
+// on the site, unless this is a preview, and answers the names of the new ones;
+// nil in any other fest.
+func (s *Server) importRatingVenues(ctx context.Context, festID, ratingID int64, preview bool) ([]string, error) {
+	db := s.h.Engine().DB
+	if kind, err := multifest.FestKind(ctx, db, festID); err != nil || kind != multifest.Synch {
+		return nil, err
+	}
+	accepted, err := imports.FetchRatingVenues(ctx, ratingID)
+	if err != nil {
+		return nil, corei18n.User(dopestrings.Default.Imports.Rating.FetchFailed(err.Error()))
+	}
+	fresh, err := multifest.NewVenues(ctx, db, festID, accepted)
+	if err != nil {
+		return nil, err
+	}
+	names := []string{}
+	for _, v := range fresh {
+		names = append(names, v.Title)
+	}
+	if preview {
+		return names, nil
+	}
+	_, err = s.commit(ctx, festID, "rating-venues", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		_, err := multifest.AddVenuesTx(ctx, tx, festID, accepted)
+		return core.FestWrite{Event: "rating:venues", Payload: map[string]any{"venues": len(fresh)}}, err
+	})
+	return names, err
 }
 
 func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -970,10 +1038,16 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var msg string
-	if result.Unchanged {
+	switch {
+	case result.TeamCount == 0 && result.Plan != nil && result.Plan.AddedVenues != nil:
+		msg = dopestrings.Default.Host.Roster.ImportNoTeamsNotice()
+	case result.Unchanged:
 		msg = dopestrings.Default.Host.Roster.ImportUnchangedNotice(strconv.Itoa(result.TeamCount), strconv.Itoa(result.PlayerCount))
-	} else {
+	default:
 		msg = dopestrings.Default.Host.Roster.ImportDoneCounts(strconv.Itoa(result.TeamCount), strconv.Itoa(result.PlayerCount), strconv.Itoa(result.ODGameCount), strconv.Itoa(result.KSIGameCount))
+	}
+	if result.Plan != nil && len(result.Plan.AddedVenues) > 0 {
+		msg = dopestrings.Default.Host.Roster.ImportVenuesNotice(strconv.Itoa(len(result.Plan.AddedVenues))) + " " + msg
 	}
 	if len(choice.Merge) > 0 {
 		msg += " " + dopestrings.Default.Host.Roster.ImportMergedNotice(strconv.Itoa(len(choice.Merge)))

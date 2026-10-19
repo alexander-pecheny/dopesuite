@@ -9,7 +9,7 @@ code_missing = "нет кода"
 # The instance runs no login bot, so there is no way in by Telegram here.
 tg_not_configured = "вход через Telegram на этом сервере не настроен"
 # The claim's username fails the username rules.
-username_invalid = "недопустимое имя пользователя"
+username_invalid = "Логин можно набрать только латинскими буквами и цифрами, ещё допустимы точка, дефис и подчёркивание. Длина от 2 до 32 знаков."
 # The code is unknown or has already been used.
 code_not_found = "код не найден"
 # The password does not match the one the code was minted with.

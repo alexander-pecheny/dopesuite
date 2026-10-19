@@ -349,6 +349,7 @@ func (s *Server) apiUndoRatingImport(w http.ResponseWriter, r *http.Request, sc 
 
 // apiImportPlan is an ImportPlan as the API answers it.
 type apiImportPlan struct {
+	AddedVenues  []string         `json:"added_venues"`
 	AddedTeams   []string         `json:"added_teams"`
 	DroppedTeams []string         `json:"dropped_teams"`
 	Renamed      []apiRename      `json:"renamed"`
@@ -388,7 +389,7 @@ func planJSON(p *imports.ImportPlan) *apiImportPlan {
 	if p == nil {
 		return nil
 	}
-	out := &apiImportPlan{AddedTeams: nonNil(p.AddedTeams), DroppedTeams: nonNil(p.DroppedTeams),
+	out := &apiImportPlan{AddedVenues: nonNil(p.AddedVenues), AddedTeams: nonNil(p.AddedTeams), DroppedTeams: nonNil(p.DroppedTeams),
 		Renamed: []apiRename{}, Players: []apiTeamPlayers{}, Conflicts: []apiConflict{},
 		Kept: apiKept{p.Kept.HandTeams, p.Kept.Renamed, p.Kept.Flags, p.Kept.RemovedTeams, p.Kept.Added, p.Kept.Removed}}
 	for _, r := range p.Renamed {

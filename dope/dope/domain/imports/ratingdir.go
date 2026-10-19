@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"dope/dope/domain/multifest"
 	"dope/dope/storage/buffdb"
 )
 
@@ -243,4 +244,33 @@ func FetchRatingTourComp(ctx context.Context, ratingID int64) ([]int, error) {
 		tours = append(tours, tournament.QuestionQty[fmt.Sprint(n)])
 	}
 	return tours, nil
+}
+
+// ratingRequestsPage is more than any tournament has venues.
+const ratingRequestsPage = 1000
+
+// requestAccepted is the status of a request the site has accepted.
+const requestAccepted = "A"
+
+// FetchRatingVenues is the venues whose requests to play a synch tournament
+// the site has accepted. They are known well before the teams are.
+func FetchRatingVenues(ctx context.Context, ratingID int64) ([]multifest.RatingVenue, error) {
+	var requests []struct {
+		Status string `json:"status"`
+		Venue  struct {
+			ID   int64       `json:"id"`
+			Name string      `json:"name"`
+			Town *ratingTown `json:"town"`
+		} `json:"venue"`
+	}
+	if err := getRatingJSON(ctx, fmt.Sprintf("/tournaments/%d/requests?itemsPerPage=%d", ratingID, ratingRequestsPage), &requests); err != nil {
+		return nil, err
+	}
+	var venues []multifest.RatingVenue
+	for _, r := range requests {
+		if r.Status == requestAccepted && r.Venue.ID > 0 {
+			venues = append(venues, multifest.RatingVenue{ID: r.Venue.ID, Title: strings.TrimSpace(r.Venue.Name), Town: ratingTownName(r.Venue.Town)})
+		}
+	}
+	return venues, nil
 }

@@ -125,6 +125,7 @@ func TestHostTeamsDocRendersFlagEditor(t *testing.T) {
 			{ID: 7, RatingID: 3, Name: "Альфа", City: "Ереван", Players: 6, Flags: "Школ, Е"},
 			{ID: 8, Name: "Бета", City: "Тбилиси", Players: 5},
 		},
+		AllVenues: true,
 	}
 	html, err := dopeui.Render(hostTeamsDoc(data))
 	if err != nil {
@@ -187,7 +188,7 @@ func TestHostRatingImportPreviewRenders(t *testing.T) {
 func TestHostTeamsDocShowsBadgedNames(t *testing.T) {
 	data := hostFestRosterData{Fest: view.HostFest{ID: 5, Title: "Кубок"}, Teams: []hostFestTeam{
 		{ID: 1, Name: "Сборная", Hand: true}, {ID: 2, RatingID: 9, Name: "Бобры", Edited: true},
-	}}
+	}, AllVenues: true}
 	html, err := dopeui.Render(hostTeamsDoc(data))
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -195,6 +196,23 @@ func TestHostTeamsDocShowsBadgedNames(t *testing.T) {
 	for _, want := range []string{">Сборная<", ">Бобры<", "вручную", "изменена", `data-team-edit="2"`, `data-team-add="/api/fest/5"`} {
 		if !strings.Contains(string(html), want) {
 			t.Errorf("teams page is missing %s", want)
+		}
+	}
+}
+
+func TestAVenueHostsTeamsPageHasNoImportOrFlags(t *testing.T) {
+	data := hostFestRosterData{Fest: view.HostFest{ID: 5, Title: "Кубок"}, Teams: []hostFestTeam{{ID: 7, Name: "Альфа", Players: 6}}}
+	html, err := dopeui.Render(hostTeamsDoc(data))
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := string(html)
+	if !strings.Contains(body, `data-team-edit="7"`) {
+		t.Error("a venue host cannot edit their team")
+	}
+	for _, unwanted := range []string{`name="flags_7"`, "rating.chgk.info", "export.xlsx"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("a venue host's teams page shows %s", unwanted)
 		}
 	}
 }

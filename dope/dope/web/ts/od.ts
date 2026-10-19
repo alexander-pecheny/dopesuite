@@ -2904,6 +2904,22 @@ function setHeading(text: string): void {
 
 
 
+// repaintEntrySheet writes a remote update into the input sheet in place, for
+// when rebuilding it would take the cursor from under the operator: another
+// host's numbers, ticks and column heads, all but the cell being typed into.
+function repaintEntrySheet(): void {
+  const editing = activeEntryEditor?.cell;
+  odRoot.querySelectorAll<HTMLElement>(".entry-cell").forEach((cell) => {
+    const pos = entryCellPosition(cell);
+    if (pos && cell !== editing) applyEntryCellDisplay(cell, pos.q, pos.row);
+  });
+  odRoot.querySelectorAll<HTMLInputElement>(".entry-lock-checkbox").forEach((box) => {
+    if (box.dataset.entryKind !== "shootout") box.checked = Boolean(state.completed[Number(box.dataset.q)]);
+  });
+  for (let q = 0; q < totalQuestions; q++) refreshEntryQuestionHead(q);
+  updateInputValidity();
+}
+
 function applyRemoteState(nextState: unknown): void {
   const active = document.activeElement as HTMLElement | null;
   const editingInput = active && active.classList.contains("entry-input");
@@ -2929,6 +2945,7 @@ function applyRemoteState(nextState: unknown): void {
     // The players tab draws from the state too, and its buttons read the
     // document through a getter, so it is drawn again when next shown.
     invalidateTabCache("detailed", "results", "screen", "personal", "players");
+    repaintEntrySheet();
     refreshPendingMarkers();
     return;
   }

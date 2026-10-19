@@ -71,7 +71,9 @@ var EN = Strings{
 		},
 		Title: func() string { return "Log in" },
 		Username: LoginUsernameStrings{
-			Hint:   func() string { return "Choose a username. It cannot be changed later." },
+			Hint: func() string {
+				return "Choose a username of Latin letters and digits, such as ivanov. A dot, a hyphen and an underscore are allowed too. It cannot be changed later."
+			},
 			Submit: func() string { return "Continue" },
 		},
 	},
