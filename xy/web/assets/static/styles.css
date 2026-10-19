@@ -967,6 +967,7 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  background: var(--uchu-yang);
   cursor: zoom-in;
   will-change: transform;
   user-select: none;
@@ -1239,6 +1240,7 @@
   height: auto;
   margin: var(--space-2) 0;
   border-radius: var(--radius-sm);
+  background: var(--uchu-yang); /* a transparent handout is printed on white paper */
   cursor: zoom-in; /* click opens the lightbox */
 }
 /* block, like the image it stands in for — renderRich swallows the source
