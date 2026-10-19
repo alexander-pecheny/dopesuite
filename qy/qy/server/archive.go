@@ -95,9 +95,8 @@ var (
 )
 
 // readArchivePages reads every page of the old site, and the next year's
-// rules made from the last year's. Inline scripts are
-// dropped: the CSP would refuse them, and what they did (shuffling a portion,
-// opening every answer) the answers' own disclosures still do by hand.
+// rules made from the last year's. Inline scripts are dropped because the CSP
+// would refuse them; web/ts/forms.ts wires the one button they drove.
 func readArchivePages(dir string) ([]page, []page, error) {
 	var out, next []page
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
