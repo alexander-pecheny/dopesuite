@@ -108,16 +108,24 @@ event_without_target = "событие ни на карточке, ни на т�
 
 [import]
 # The server side of question-package import (import4s.go): the parse-text
-# endpoint and the .4s/.zip/.docx upload parser.
+# endpoint and the .4s/.zip/.docx/.txt upload parser.
 text_no_questions = "в тексте не найдено вопросов"
 read_failed = "не удалось прочитать файл"
 no_file = "файл не выбран"
-unsupported = "поддерживаются только .4s, .zip и .docx"
+unsupported = "поддерживаются только .4s, .zip, .docx и .txt"
 # The parser's own error detail rides along after the colon.
 parse_failed = 'не удалось разобрать файл: {{.reason}}'
 file_no_questions = "в файле не найдено вопросов"
 # Images were picked together with a package that is not a .4s.
 images_need_4s = "картинки можно добавить только к файлу .4s"
+
+[export]
+# The export modal's .docx and .pptx settings (exportopts.go), when one of them
+# cannot be used.
+bad_font = "в названии шрифта могут быть только буквы, цифры, пробелы и дефисы"
+bad_docx_template = "шаблон .docx не открывается"
+bad_pptx_template = "шаблон .pptx не открывается"
+bad_pptx_config = 'не удалось прочитать настройки .pptx: {{.reason}}'
 
 [quota]
 # enforceQuota: an upload that would outgrow the owner's storage remainder.

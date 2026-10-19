@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { fakeBoard, installDOM } from "./dom.js";
 
 const ids = ["exportOverlay", "exportForm", "exportModeOne", "exportModeMany", "exportOneFormat", "exportFormats", "exportFmt4s", "exportFmtDocx", "exportFmtDocxScreen", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtPptx", "exportFmtOpenquiz", "exportFmtHandouts", "exportToggleAll", "exportRun", "exportCancel", "exportMessage",
+  // the .docx and .pptx settings
+  "exportDocxOpts", "exportDocxAnswers", "exportDocxScreen", "exportDocxNoParagraph", "exportDocxOnlyNumber", "exportDocxSameSize", "exportDocxOptimize", "exportDocxFont", "exportDocxTemplate",
+  "exportPptxOpts", "exportPptxDisableNumbers", "exportPptxKeepAccents", "exportPptxOptimize", "exportPptxFont", "exportPptxTemplate", "exportPptxConfig",
   // the telegram dialog the panel hands over to (tgexport.test.js drives it)
   "tgExportOverlay", "tgExportForm", "tgExportToken", "tgExportChannel", "tgExportRun", "tgExportCancel", "tgExportMessage"];
 const p = installDOM(ids);
@@ -13,6 +16,7 @@ p.node("exportModeOne").checked = true;
 const one = p.node("exportOneFormat");
 one.options = ["4s", "docx", "docx_screen", "docx_spoilers", "pdf", "pdf_mobile", "pptx", "openquiz", "handouts"].map((value) => ({ value, disabled: false }));
 one.value = "docx";
+for (const id of ["exportDocxNoParagraph", "exportDocxOnlyNumber", "exportDocxSameSize", "exportDocxOptimize", "exportPptxDisableNumbers", "exportPptxKeepAccents", "exportPptxOptimize"]) p.node(id).type = "checkbox";
 // The panel binds these at import, so they are swapped before it loads.
 const { xyApp } = await import("../web/assets/static/dist/app.js");
 const { xySync } = await import("../web/assets/static/dist/sync.js");
@@ -75,4 +79,17 @@ test("the export label says «группы» for a grouped list, and an empty li
   assert.equal(panel.label({ ...scope, grouped: true, group: { id: 5, name: "Пакет" } }), "Экспорт группы");
   assert.equal(panel.offered({ ...scope, cards: [] }), false, "nothing to export, so no row to press");
   assert.equal(panel.offered(scope), true);
+});
+
+test("each format's settings show only while that format is chosen", () => {
+  const panel = createExportPanel(fakeBoard(), { appendImages: async () => new Set() });
+  one.value = "docx_screen";
+  panel.open(scope);
+  assert.equal(p.node("exportDocxOpts").hidden, false);
+  assert.equal(p.node("exportPptxOpts").hidden, true);
+  one.value = "pptx";
+  one.fire("change");
+  assert.equal(p.node("exportDocxOpts").hidden, true);
+  assert.equal(p.node("exportPptxOpts").hidden, false);
+  one.value = "docx";
 });

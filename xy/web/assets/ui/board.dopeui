@@ -257,6 +257,49 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         checkbox id="exportFmtHandouts" title=@board.export.handouts_title @board.export.handouts_label
         row
           button small kind="ghost" id="exportToggleAll" @board.export.select_all
+      -- chgksuite's compose switches for the formats that have them; each
+      -- section shows only while its format is chosen
+      details id="exportDocxOpts" hidden
+        summary @board.export_docx.title
+        col gap="sm"
+          label for="exportDocxAnswers" @board.export_docx.answers
+          selectfield id="exportDocxAnswers"
+            option value="off" selected @board.export_docx.answers_off
+            option value="whiten" @board.export_docx.answers_whiten
+            option value="pagebreak" @board.export_docx.answers_pagebreak
+            option value="dots" @board.export_docx.answers_dots
+            option value="none" @board.export_docx.answers_none
+          label for="exportDocxScreen" @board.export_docx.screen
+          selectfield id="exportDocxScreen"
+            option value="off" selected @board.export_docx.screen_off
+            option value="replace_all" @board.export_docx.screen_replace_all
+            option value="add_versions" @board.export_docx.screen_add_versions
+            option value="add_versions_columns" @board.export_docx.screen_add_versions_columns
+          hint @board.export_docx.variants_hint
+          label @board.export_opts.layout
+          col gap="xs"
+            checkbox id="exportDocxNoParagraph" @board.export_docx.noparagraph
+            checkbox id="exportDocxOnlyNumber" @board.export_docx.only_question_number
+            checkbox id="exportDocxSameSize" @board.export_docx.same_source_size
+            checkbox id="exportDocxOptimize" checked @board.export_opts.optimize
+          label for="exportDocxFont" @board.export_opts.font
+          textfield id="exportDocxFont" placeholder="Noto Sans" autocomplete="off" spellcheck="false"
+          label for="exportDocxTemplate" @board.export_docx.template
+          filefield id="exportDocxTemplate" accept=".docx"
+      details id="exportPptxOpts" hidden
+        summary @board.export_pptx.title
+        col gap="sm"
+          label @board.export_opts.layout
+          col gap="xs"
+            checkbox id="exportPptxDisableNumbers" @board.export_pptx.disable_numbers
+            checkbox id="exportPptxKeepAccents" @board.export_pptx.keep_accents
+            checkbox id="exportPptxOptimize" checked @board.export_opts.optimize
+          label for="exportPptxFont" @board.export_opts.font
+          textfield id="exportPptxFont" placeholder="Arial" autocomplete="off" spellcheck="false"
+          label for="exportPptxTemplate" @board.export_pptx.template
+          filefield id="exportPptxTemplate" accept=".pptx"
+          label for="exportPptxConfig" @board.export_pptx.config
+          filefield id="exportPptxConfig" accept=".toml"
       row gap="sm" align="center" wrap
         button submit id="exportRun" @board.export.run
         button kind="ghost" id="exportCancel" @board.actions.cancel

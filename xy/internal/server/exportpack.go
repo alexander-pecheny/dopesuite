@@ -109,7 +109,12 @@ func (s *server) handleExportPack(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
-	files, err := s.renderPack(ctx, req, formats, normalizeNewlines(form.Value("hndt")), ts)
+	settings, err := readExportSettings(form, req.game, req.commentFirst)
+	if err != nil {
+		handleUser(w, err)
+		return
+	}
+	files, err := s.renderPack(ctx, req, formats, settings, normalizeNewlines(form.Value("hndt")), ts)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "export timed out")
@@ -138,7 +143,7 @@ func (s *server) handleExportPack(w http.ResponseWriter, r *http.Request) {
 
 // renderPack renders every selected format. The parsed 4s is shared: all three
 // document exports read the same structure.
-func (s *server) renderPack(ctx context.Context, req exportRequest, formats packFormats, hndt string, ts handout.Typesetter) ([]packFile, error) {
+func (s *server) renderPack(ctx context.Context, req exportRequest, formats packFormats, settings exportSettings, hndt string, ts handout.Typesetter) ([]packFile, error) {
 	var files []packFile
 	var parsed fsource.Doc
 	var parsedOK bool
@@ -167,14 +172,13 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		opts   docx.Options
 		suffix string
 	}{
-		{formats.docx, docx.Options{Game: req.game}, ".docx"},
-		{formats.docxScreen, docx.Options{Game: req.game, ScreenMode: docx.ScreenReplaceAll}, "_screen.docx"},
-		{formats.docxSpoilers, docx.Options{Game: req.game, ScreenMode: docx.ScreenReplaceAll, Spoilers: docx.SpoilersDots}, "_screen_spoilers.docx"},
+		{formats.docx, settings.docx, ".docx"},
+		{formats.docxScreen, screenCopy(settings.docx, docx.SpoilersOff), "_screen.docx"},
+		{formats.docxSpoilers, screenCopy(settings.docx, docx.SpoilersDots), "_screen_spoilers.docx"},
 	} {
 		if !v.want {
 			continue
 		}
-		v.opts.CommentFirst = req.commentFirst
 		b, err := docx.Export(structure(), req.images, v.opts)
 		if err != nil {
 			return nil, err
@@ -199,7 +203,7 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		files = append(files, packFile{req.name + v.suffix, b})
 	}
 	if formats.pptx {
-		b, err := pptx.Export(structure(), req.images, pptx.Options{OptimizeSize: true, CommentFirst: req.commentFirst})
+		b, err := pptx.Export(structure(), req.images, settings.pptx)
 		if err != nil {
 			return nil, err
 		}

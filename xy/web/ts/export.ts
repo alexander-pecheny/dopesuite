@@ -43,6 +43,67 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     { key: "telegram", box: "", server: true, si: false },
   ] as const;
 
+  // The .docx and .pptx settings: chgksuite's compose switches, each sent as the
+  // form field the server reads (exportopts.go). A checkbox sends "1" or "0",
+  // since some of them are on by default. The last values are this reader's own
+  // preference, so they live in localStorage; the uploaded files do not.
+  const SETTINGS = [
+    { id: "exportDocxAnswers", field: "docx_answers" },
+    { id: "exportDocxScreen", field: "docx_screen_mode" },
+    { id: "exportDocxNoParagraph", field: "docx_noparagraph" },
+    { id: "exportDocxOnlyNumber", field: "docx_only_question_number" },
+    { id: "exportDocxSameSize", field: "docx_same_source_size" },
+    { id: "exportDocxOptimize", field: "docx_optimize" },
+    { id: "exportDocxFont", field: "docx_font" },
+    { id: "exportPptxDisableNumbers", field: "pptx_disable_numbers" },
+    { id: "exportPptxKeepAccents", field: "pptx_keep_accents" },
+    { id: "exportPptxOptimize", field: "pptx_optimize" },
+    { id: "exportPptxFont", field: "pptx_font" },
+  ] as const;
+  const SETTING_FILES = [
+    { id: "exportDocxTemplate", field: "docx_template" },
+    { id: "exportPptxTemplate", field: "pptx_template" },
+    { id: "exportPptxConfig", field: "pptx_config" },
+  ] as const;
+  const SETTINGS_KEY = "xy.export.settings";
+  const DOCX_FORMATS = ["docx", "docx_screen", "docx_spoilers"];
+
+  function settingValue(id: string): string {
+    const el = byId<HTMLInputElement>(id);
+    if (el.type === "checkbox") return el.checked ? "1" : "0";
+    return el.value.trim();
+  }
+
+  function setSetting(id: string, v: string): void {
+    const el = byId<HTMLInputElement>(id);
+    if (el.type === "checkbox") el.checked = v === "1";
+    else el.value = v;
+  }
+
+  function saveSettings(): void {
+    const saved: Record<string, string> = {};
+    for (const st of SETTINGS) saved[st.id] = settingValue(st.id);
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(saved)); } catch (_) { /* the dialog's defaults come back next time */ }
+  }
+
+  function restoreSettings(): void {
+    let saved: Record<string, string> = {};
+    try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") as Record<string, string>; } catch (_) { return; }
+    for (const st of SETTINGS) if (typeof saved[st.id] === "string") setSetting(st.id, saved[st.id]);
+  }
+
+  function appendSettings(fd: FormData, formats: string[]): void {
+    const docx = formats.some((f) => DOCX_FORMATS.includes(f));
+    const pptx = formats.includes("pptx");
+    for (const st of SETTINGS) {
+      if ((st.field.startsWith("docx_") && docx) || (st.field.startsWith("pptx_") && pptx)) fd.append(st.field, settingValue(st.id));
+    }
+    for (const f of SETTING_FILES) {
+      const file = byId<HTMLInputElement>(f.id).files?.[0];
+      if (file && ((f.field.startsWith("docx_") && docx) || (f.field.startsWith("pptx_") && pptx))) fd.append(f.field, file, file.name);
+    }
+  }
+
   const exportModal = modal("export");
   let exportCtx: { cards: BoardCard[]; title: string; hndt: string; game: string; commentFirst: boolean } | null = null;
 
@@ -72,6 +133,8 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     const available = EXPORT_FORMATS.filter((f) => f.box && !unavailable.has(f.key));
     const allOn = available.length > 0 && chosen.length === available.length;
     byId("exportToggleAll").textContent = allOn ? S.export.form.deselectAll() : S.export.form.selectAll();
+    byId("exportDocxOpts").hidden = !chosen.some((f) => DOCX_FORMATS.includes(f));
+    byId("exportPptxOpts").hidden = !chosen.includes("pptx");
   }
 
   function openExport(scope: ListScope): void {
@@ -168,6 +231,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
         return;
       }
       fd.append("formats", formats.join(","));
+      appendSettings(fd, formats);
       if (formats.includes("handouts")) fd.append("hndt", hndt);
       const res = await fetch("/api/export/pack", { method: "POST", credentials: "same-origin", body: fd });
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
@@ -203,6 +267,8 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   });
   for (const f of EXPORT_FORMATS) if (f.box) exportBox(f.box).addEventListener("change", syncExportForm);
   for (const id of ["exportModeOne", "exportModeMany", "exportOneFormat"]) byId(id).addEventListener("change", syncExportForm);
+  restoreSettings();
+  for (const st of SETTINGS) byId(st.id).addEventListener("change", saveSettings);
 
 
   return {

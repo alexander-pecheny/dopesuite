@@ -481,6 +481,41 @@ var RU = Strings{
 			TelegramLabel:  func() string { return "телеграм-канал" },
 			Title:          func() string { return "Экспорт" },
 		},
+		ExportDocx: BoardExportDocxStrings{
+			Answers:            func() string { return "Ответы" },
+			AnswersDots:        func() string { return "Под строками точек" },
+			AnswersNone:        func() string { return "Без ответов" },
+			AnswersOff:         func() string { return "Как есть" },
+			AnswersPagebreak:   func() string { return "С новой страницы" },
+			AnswersWhiten:      func() string { return "Белым шрифтом" },
+			Noparagraph:        func() string { return "Текст вопроса в одной строке с «Вопрос N.»" },
+			OnlyQuestionNumber: func() string { return "«N.» вместо «Вопрос N.»" },
+			SameSourceSize: func() string {
+				return "Источник и автор того же размера, что и текст"
+			},
+			Screen:                   func() string { return "Текст вопросов" },
+			ScreenAddVersions:        func() string { return "Для ведущего и для экрана, друг за другом" },
+			ScreenAddVersionsColumns: func() string { return "Для ведущего и для экрана, в две колонки" },
+			ScreenOff:                func() string { return "Для ведущего" },
+			ScreenReplaceAll:         func() string { return "Для экрана" },
+			Template:                 func() string { return "Свой шаблон .docx" },
+			Title:                    func() string { return "Настройки .docx" },
+			VariantsHint: func() string {
+				return "Эти два пункта задают только обычный .docx. Варианты для экрана и со спойлерами берут отсюда остальные настройки."
+			},
+		},
+		ExportOpts: BoardExportOptsStrings{
+			Font:     func() string { return "Шрифт" },
+			Layout:   func() string { return "Оформление" },
+			Optimize: func() string { return "Сжать картинки" },
+		},
+		ExportPptx: BoardExportPptxStrings{
+			Config:         func() string { return "Свой pptx_config.toml" },
+			DisableNumbers: func() string { return "Без номера вопроса в углу слайда" },
+			KeepAccents:    func() string { return "Оставить ударения" },
+			Template:       func() string { return "Свой шаблон .pptx" },
+			Title:          func() string { return "Настройки .pptx" },
+		},
 		Feed: BoardFeedStrings{
 			CommentPlaceholder: func() string { return "Комментарий…" },
 			DiffView:           func() string { return "Вид правок" },
@@ -2413,6 +2448,16 @@ var RU = Strings{
 		Error: ServerErrorStrings{
 			BadRequest: func() string { return "Некорректный запрос." },
 		},
+		Export: ServerExportStrings{
+			BadDocxTemplate: func() string { return "шаблон .docx не открывается" },
+			BadFont: func() string {
+				return "в названии шрифта могут быть только буквы, цифры, пробелы и дефисы"
+			},
+			BadPptxConfig: func(reason string) string {
+				return fmt.Sprintf("не удалось прочитать настройки .pptx: %s", reason)
+			},
+			BadPptxTemplate: func() string { return "шаблон .pptx не открывается" },
+		},
 		Import: ServerImportStrings{
 			FileNoQuestions: func() string { return "в файле не найдено вопросов" },
 			ImagesNeed4s:    func() string { return "картинки можно добавить только к файлу .4s" },
@@ -2422,7 +2467,7 @@ var RU = Strings{
 			},
 			ReadFailed:      func() string { return "не удалось прочитать файл" },
 			TextNoQuestions: func() string { return "в тексте не найдено вопросов" },
-			Unsupported:     func() string { return "поддерживаются только .4s, .zip и .docx" },
+			Unsupported:     func() string { return "поддерживаются только .4s, .zip, .docx и .txt" },
 		},
 		Internal: func() string { return "ошибка сервера" },
 		Invite: ServerInviteStrings{

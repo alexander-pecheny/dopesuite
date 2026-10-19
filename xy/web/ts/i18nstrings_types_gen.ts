@@ -384,6 +384,37 @@ export type Strings = {
       telegramLabel: () => string;
       title: () => string;
     };
+    exportDocx: {
+      answers: () => string;
+      answersDots: () => string;
+      answersNone: () => string;
+      answersOff: () => string;
+      answersPagebreak: () => string;
+      answersWhiten: () => string;
+      noparagraph: () => string;
+      onlyQuestionNumber: () => string;
+      sameSourceSize: () => string;
+      screen: () => string;
+      screenAddVersions: () => string;
+      screenAddVersionsColumns: () => string;
+      screenOff: () => string;
+      screenReplaceAll: () => string;
+      template: () => string;
+      title: () => string;
+      variantsHint: () => string;
+    };
+    exportOpts: {
+      font: () => string;
+      layout: () => string;
+      optimize: () => string;
+    };
+    exportPptx: {
+      config: () => string;
+      disableNumbers: () => string;
+      keepAccents: () => string;
+      template: () => string;
+      title: () => string;
+    };
     feed: {
       commentPlaceholder: () => string;
       diffView: () => string;
@@ -1841,6 +1872,12 @@ export type Strings = {
     };
     error: {
       badRequest: () => string;
+    };
+    export: {
+      badDocxTemplate: () => string;
+      badFont: () => string;
+      badPptxConfig: (reason: string) => string;
+      badPptxTemplate: () => string;
     };
     import: {
       fileNoQuestions: () => string;

@@ -275,6 +275,43 @@ select_all = "Выбрать все"
 # Submit button.
 run = "Экспорт"
 
+[export_opts]
+# Settings the .docx and .pptx sections share.
+optimize = "Сжать картинки"
+font = "Шрифт"
+# The label over each section's tick boxes.
+layout = "Оформление"
+
+[export_docx]
+# The .docx section of the export dialog: chgksuite's `compose docx` switches.
+title = "Настройки .docx"
+answers = "Ответы"
+answers_off = "Как есть"
+answers_whiten = "Белым шрифтом"
+answers_pagebreak = "С новой страницы"
+answers_dots = "Под строками точек"
+answers_none = "Без ответов"
+screen = "Текст вопросов"
+screen_off = "Для ведущего"
+screen_replace_all = "Для экрана"
+screen_add_versions = "Для ведущего и для экрана, друг за другом"
+screen_add_versions_columns = "Для ведущего и для экрана, в две колонки"
+# The two settings above shape the plain .docx only: the screen and spoiler
+# copies are defined by them.
+variants_hint = "Эти два пункта задают только обычный .docx. Варианты для экрана и со спойлерами берут отсюда остальные настройки."
+noparagraph = "Текст вопроса в одной строке с «Вопрос N.»"
+only_question_number = "«N.» вместо «Вопрос N.»"
+same_source_size = "Источник и автор того же размера, что и текст"
+template = "Свой шаблон .docx"
+
+[export_pptx]
+# The .pptx section of the export dialog: chgksuite's `compose pptx` switches.
+title = "Настройки .pptx"
+disable_numbers = "Без номера вопроса в углу слайда"
+keep_accents = "Оставить ударения"
+template = "Свой шаблон .pptx"
+config = "Свой pptx_config.toml"
+
 [tgexport]
 # The dialog that opens when the export is «телеграм-канал»: where to post,
 # and the bot that will do it.
