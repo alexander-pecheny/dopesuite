@@ -50,6 +50,7 @@ var localOff = []string{
 	"invites",        // invite links and join requests
 	"passphrase",     // a board's passphrase, its change and its monthly check
 	"offline",        // the outbox and the IndexedDB mirror
+	"activity",       // the 🔔: nobody else writes here
 	"admin",
 }
 

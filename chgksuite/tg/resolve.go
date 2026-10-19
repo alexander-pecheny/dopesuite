@@ -16,11 +16,11 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
-// Where a package goes is given as a numeric id, a t.me link or an @username.
-// The first two are arithmetic; a username is not — a bot cannot look one up, so
-// the person driving the export has to show the bot the channel and the group
-// from the inside. That conversation is what this file holds, plus the cache
-// that means it only happens once per target.
+// A channel is given as a numeric id, a t.me link or an @username. The first
+// two are arithmetic; a username is not — a bot cannot look one up, so the
+// person driving the export forwards the bot a post from the channel, once per
+// channel thanks to the cache. The discussion group is never asked for: the
+// channel names it.
 
 const (
 	// promptTimeout is how long the bot waits for the person to do what it asked.
@@ -79,47 +79,36 @@ func prefixed(id int64) string {
 // asks them to do something in Telegram, and they do it.
 type Prompter func(format string, args ...any)
 
-// ResolveTarget turns the two references into the ids the export posts to,
-// asking for help only for a username it has not seen before.
-func ResolveTarget(ctx context.Context, bot *Bot, channelRef, chatRef string, say Prompter) (Target, error) {
+// ResolveTarget turns the channel reference into the ids the export posts to:
+// the channel's and its discussion group's. The bot must administer both.
+func ResolveTarget(ctx context.Context, bot *Bot, channelRef string, say Prompter) (Target, error) {
 	var t Target
 	channelID, channelName, err := parseTargetRef(channelRef)
 	if err != nil {
 		return t, fmt.Errorf("channel: %w", err)
 	}
-	chatID, chatName, err := parseTargetRef(chatRef)
-	if err != nil {
-		return t, fmt.Errorf("chat: %w", err)
-	}
-	cache := loadResolveCache()
-
 	if channelID == 0 {
-		channelID = cache[channelName]
-	}
-	if chatID == 0 {
-		chatID = cache[chatName]
-	}
-	if channelID == 0 || chatID == 0 {
-		if err := introduce(ctx, bot, say); err != nil {
-			return t, err
+		cache := loadResolveCache()
+		if channelID = cache[channelName]; channelID == 0 {
+			if err := introduce(ctx, bot, say); err != nil {
+				return t, err
+			}
+			if channelID, err = askForChannel(ctx, bot, channelName, say); err != nil {
+				return t, err
+			}
+			cache[channelName] = channelID
+			saveResolveCache(cache)
 		}
 	}
-	if channelID == 0 {
-		if channelID, err = askForChannel(ctx, bot, channelName, say); err != nil {
-			return t, err
-		}
-		cache[channelName] = channelID
-	}
-	if chatID, err = askForChat(ctx, bot, chatID, channelID, chatName, say); err != nil {
+	s := chgkstrings.Default
+	t.ChannelID = prefixed(channelID)
+	if err := verifyAccess(ctx, bot, t.ChannelID, s.Tg.Verify.WhatChannel(), s.Tg.Verify.OfChannel()); err != nil {
 		return t, err
 	}
-	if chatName != "" {
-		cache[chatName] = chatID
+	if t.ChatID, err = discussionGroup(ctx, bot, t.ChannelID); err != nil {
+		return t, err
 	}
-	saveResolveCache(cache)
-
-	t = Target{ChannelID: prefixed(channelID), ChatID: prefixed(chatID)}
-	return t, verifyTarget(ctx, bot, t)
+	return t, verifyAccess(ctx, bot, t.ChatID, s.Tg.Verify.WhatChat(), s.Tg.Verify.OfChat())
 }
 
 // askForChannel has the person forward a post from the channel to the bot.
@@ -132,33 +121,22 @@ func askForChannel(ctx context.Context, bot *Bot, name string, say Prompter) (in
 	return id, nil
 }
 
-// askForChat has the person post a code in the group until the bot sees it
-// there and the group is not the channel itself. A chatID already known and
-// distinct from the channel is returned as it is.
-func askForChat(ctx context.Context, bot *Bot, chatID, channelID int64, name string, say Prompter) (int64, error) {
-	s := chgkstrings.Default
-	for chatID == 0 || chatID == channelID {
-		if chatID == channelID {
-			say("%s", s.Tg.Resolve.SameChannel())
-		}
-		code := shortCode()
-		say("%s", s.Tg.Resolve.GroupCode(name, code))
-		say("%s", s.Tg.Resolve.GroupCodeHint())
-		var err error
-		if chatID, err = bot.WaitForChatMessage(ctx, code, promptTimeout); err != nil {
-			return 0, fmt.Errorf("chat %s: %w", name, err)
-		}
+// discussionGroup is the group linked to the channel, as getChat reports it.
+func discussionGroup(ctx context.Context, bot *Bot, channelID string) (string, error) {
+	res, err := bot.Client().Call(ctx, "getChat", map[string]any{"chat_id": channelID})
+	if err != nil {
+		return "", err
 	}
-	return chatID, nil
-}
-
-// verifyTarget checks the bot may post to both the channel and the chat.
-func verifyTarget(ctx context.Context, bot *Bot, t Target) error {
-	s := chgkstrings.Default
-	if err := verifyAccess(ctx, bot, t.ChannelID, s.Tg.Verify.WhatChannel(), s.Tg.Verify.OfChannel()); err != nil {
-		return err
+	var chat struct {
+		LinkedChatID int64 `json:"linked_chat_id"`
 	}
-	return verifyAccess(ctx, bot, t.ChatID, s.Tg.Verify.WhatChat(), s.Tg.Verify.OfChat())
+	if err := json.Unmarshal(res, &chat); err != nil {
+		return "", err
+	}
+	if chat.LinkedChatID == 0 {
+		return "", corei18n.User(chgkstrings.Default.Tg.Verify.NoDiscussion())
+	}
+	return prefixed(chat.LinkedChatID), nil
 }
 
 // introduce is chgksuite's authenticate_user: before asking the person to do
@@ -248,15 +226,13 @@ func saveResolveCache(cache map[string]int64) {
 	_ = os.WriteFile(path, data, cacheFileMode)
 }
 
-// DryRunTarget is where a dry run pretends to post: the ids it was given, or
-// stand-ins when it was given names, since nothing is resolved without a bot.
-func DryRunTarget(channelRef, chatRef string) Target {
-	id := func(ref string, fallback int64) string {
-		if n, _, err := parseTargetRef(ref); err == nil && n != 0 {
-			return prefixed(n)
-		}
-		return prefixed(fallback)
+// DryRunTarget is where a dry run pretends to post: the channel id it was
+// given, or a stand-in for a name, and a stand-in group, since nothing is
+// resolved without a bot.
+func DryRunTarget(channelRef string) Target {
+	channel := prefixed(dryRunChannelID)
+	if n, _, err := parseTargetRef(channelRef); err == nil && n != 0 {
+		channel = prefixed(n)
 	}
-	return Target{ChannelID: id(channelRef, dryRunChannelID), ChatID: id(chatRef, dryRunChatID)}
-
+	return Target{ChannelID: channel, ChatID: prefixed(dryRunChatID)}
 }

@@ -110,7 +110,9 @@ cmd/xy-cli/            thin main() → xycli.Run(); `just cli` builds it to ~/.l
 cmd/xy-local/          serves localserver on a port (-dir, -addr), so local mode can be tried in a
                        browser before the desktop app exists; `just local`
 localserver/           the public face of local mode for the desktop app: Open(dir) → Handler(),
-                       Close(). xy.db and blobs/ live under dir; no port, no login, one user
+                       Close(). xy.db and blobs/ live under dir; no port, no login, one user.
+                       Import(path) makes a board of a package file or a folder of .4s files,
+                       writing through the server's own handlers as the browser's import does
 ../chgksuite/          a module of its own (../chgksuite/AGENTS.md): the Go port of chgksuite
                        (4s, docx, pdf, pptx, handouts, import, telegram and the rest), listexport,
                        cardkind, xyenvelope and the chgksuite CLI. xy imports it through a
@@ -207,12 +209,13 @@ internal/server/       package server — the whole HTTP server
   exporttg.go          POST /api/export/telegram, the export that publishes instead of downloading
                        (chgksuite/tg). It is the only export that is a conversation. A bot
                        cannot look up a channel by its @username, so the person running the export
-                       has to show the bot the channel and the group from the inside while the bot
-                       polls. The response is therefore a stream of NDJSON lines: progress notes,
-                       and then a final line with the resolved ids, which the browser remembers so
-                       that the next export can skip the dialogue. ResolveTarget also checks that
-                       the bot is an administrator of both, which Telegram requires and which is
-                       the thing people most often forget. The bot token is passed through the
+                       has to show the bot the channel from the inside while the bot polls. The
+                       response is therefore a stream of NDJSON lines: progress notes, and then a
+                       final line with the channel's id, which the browser remembers so that the
+                       next export can skip the dialogue. Nobody names the discussion group:
+                       ResolveTarget reads it off the channel (getChat's linked_chat_id) and
+                       checks that the bot is an administrator of both, which Telegram requires
+                       and which is the thing people most often forget. The bot token is passed through the
                        server, because the posting is done in Go and the CSP does not let the page
                        reach api.telegram.org. It is never stored
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgksuite/chgkimport),
@@ -424,10 +427,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        with no images is written in the browser, the one export that
                        works offline
     tgexport.ts        «Публикация в телеграм»: the dialog the export hands over to when the
-                       chosen format is the channel — the bot, the channel and its discussion
-                       group, then the NDJSON stream rendered as a log. What was typed is kept
-                       in IndexedDB (store.ts «meta»): the bot per device, the target per board,
-                       and beside it the ids Telegram resolved
+                       chosen format is the channel — the bot and the channel, then the NDJSON
+                       stream rendered as a log. What was typed is kept in IndexedDB (store.ts
+                       «meta»): the bot per device, the channel per board, and beside it the id
+                       Telegram resolved
     handouts.ts        «Вёрстка раздаток»: hndtOf (listexport.ts) → editable .hndt, as Поля (a
                        form per handout: question, внутри, columns/rows, text or picture,
                        alignment — parseHndtForm/composeHndtForm, written straight back

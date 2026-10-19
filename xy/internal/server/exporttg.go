@@ -19,10 +19,10 @@ import (
 // The telegram export: the one export that publishes instead of downloading.
 // It is unlike every other because it is a conversation — a channel named by
 // @username cannot be looked up by a bot, so the person driving it has to show
-// the bot the channel and the group from the inside, and the bot has to be
-// polling while they do. That takes minutes, so the response is a stream of
+// the bot the channel from the inside, and the bot has to be polling while they
+// do. That takes minutes, so the response is a stream of
 // NDJSON lines rather than one answer: notes for the reader, and a last line
-// carrying the resolved ids so the browser can remember them and skip the
+// carrying the channel's id so the browser can remember it and skip the
 // conversation next time.
 //
 // The bot token passes through this server, which is otherwise the one thing it
@@ -42,13 +42,12 @@ const tgExportTimeout = 30 * time.Minute
 const tgKeepalive = 20 * time.Second
 
 // tgLine is one line of the stream: a note to show, the failure that ended it,
-// or the last line with the ids the browser should remember.
+// or the last line with the channel id the browser should remember.
 type tgLine struct {
 	Note    string `json:"note,omitempty"`
 	Error   string `json:"error,omitempty"`
 	Done    bool   `json:"done,omitempty"`
 	Channel string `json:"channel,omitempty"`
-	Chat    string `json:"chat,omitempty"`
 }
 
 // tgStream serializes the writes, since the keepalive ticker and the export
@@ -80,8 +79,7 @@ func (s *server) handleExportTelegram(w http.ResponseWriter, r *http.Request) {
 	}
 	token := strings.TrimSpace(form.Value("token"))
 	channel := strings.TrimSpace(form.Value("channel"))
-	chat := strings.TrimSpace(form.Value("chat"))
-	if token == "" || channel == "" || chat == "" {
+	if token == "" || channel == "" {
 		httpError(w, http.StatusBadRequest, xystrings.Default.Tg.Export.MissingFields())
 		return
 	}
@@ -110,18 +108,19 @@ func (s *server) handleExportTelegram(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	target, err := s.postToTelegram(ctx, stream, req, token, channel, chat)
+	target, err := s.postToTelegram(ctx, stream, req, token, channel)
 	if err != nil {
 		msg, _ := corei18n.Reveal(err, xystrings.Default.Tg.Export.Failed())
 		stream.send(tgLine{Error: msg})
 		return
 	}
-	stream.send(tgLine{Done: true, Channel: target.ChannelID, Chat: target.ChatID})
+	stream.send(tgLine{Done: true, Channel: target.ChannelID})
 }
 
-// postToTelegram runs the whole conversation: poll, resolve the two targets
-// (which is also where the bot's admin rights are checked), post the package.
-func (s *server) postToTelegram(ctx context.Context, stream *tgStream, req exportRequest, token, channel, chat string) (tg.Target, error) {
+// postToTelegram runs the whole conversation: poll, resolve the channel and its
+// discussion group (which is also where the bot's admin rights are checked),
+// post the package.
+func (s *server) postToTelegram(ctx context.Context, stream *tgStream, req exportRequest, token, channel string) (tg.Target, error) {
 	bot := tg.NewBotAt(token, s.tgAPIBase)
 	stop, err := bot.Start(ctx)
 	if err != nil {
@@ -130,7 +129,7 @@ func (s *server) postToTelegram(ctx context.Context, stream *tgStream, req expor
 	defer stop()
 
 	say := func(format string, args ...any) { stream.send(tgLine{Note: fmt.Sprintf(format, args...)}) }
-	target, err := tg.ResolveTarget(ctx, bot, channel, chat, say)
+	target, err := tg.ResolveTarget(ctx, bot, channel, say)
 	if err != nil {
 		return target, err
 	}

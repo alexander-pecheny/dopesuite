@@ -5,7 +5,7 @@
 [export]
 # The export endpoint's own lines, streamed to the modal that watches it.
 # Nothing to post to.
-missing_fields = "Нужны токен бота, канал и группа обсуждения."
+missing_fields = "Нужны токен бота и канал."
 # The first line, before the bot has said anything.
 connecting = "Подключаемся к боту…"
 # Resolution is over and the questions start going out.

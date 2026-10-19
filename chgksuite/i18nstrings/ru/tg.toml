@@ -1,23 +1,19 @@
 # The telegram publisher's target resolution (tg/resolve.go), which walks a
-# person through introducing the bot to the channel and its discussion group,
-# and the access-check errors. xy's tg.toml holds the board export that drives
+# person through introducing the bot to the channel, and the access-check
+# errors. xy's tg.toml holds the board export that drives
 # both.
 
 [resolve]
 # The prompt to forward the bot any message from the channel.
 forward = 'Перешлите боту любое сообщение из канала «{{.name}}».'
-# The forwarded chat turned out to be the channel itself.
-same_channel = "Это тот же канал, а нужна группа обсуждения — напишите в неё, не в канал."
-# The one-time code prompt for the discussion group.
-group_code = 'Напишите в группе обсуждения «{{.name}}» сообщение: {{.code}}'
-# The hint under the group code prompt.
-group_code_hint = "Бот должен быть в группе и быть администратором, иначе он не увидит."
 # The one-time code prompt for the bot's private chat.
 private_code = 'Отправьте боту в личном чате код: {{.code}}'
 # The ack sent once the code arrives.
 done = "✅ Готово, продолжаем."
 
 [verify]
+# getChat found no discussion group linked to the channel.
+no_discussion = "у канала нет группы обсуждения: привяжите её в настройках канала"
 # verifyAccess, when the bot is not in the chat at all.
 not_member = 'бот не добавлен к {{.what}}: {{.err}}'
 # verifyAccess, when the bot is in the chat but lacks administrator rights.

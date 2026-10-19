@@ -286,20 +286,14 @@ var RU = Strings{
 			Forward: func(name string) string {
 				return fmt.Sprintf("Перешлите боту любое сообщение из канала «%s».", name)
 			},
-			GroupCode: func(name string, code string) string {
-				return fmt.Sprintf("Напишите в группе обсуждения «%s» сообщение: %s", name, code)
-			},
-			GroupCodeHint: func() string {
-				return "Бот должен быть в группе и быть администратором, иначе он не увидит."
-			},
 			PrivateCode: func(code string) string {
 				return fmt.Sprintf("Отправьте боту в личном чате код: %s", code)
 			},
-			SameChannel: func() string {
-				return "Это тот же канал, а нужна группа обсуждения — напишите в неё, не в канал."
-			},
 		},
 		Verify: TgVerifyStrings{
+			NoDiscussion: func() string {
+				return "у канала нет группы обсуждения: привяжите её в настройках канала"
+			},
 			NotAdmin: func(what string) string { return fmt.Sprintf("бот не администратор %s", what) },
 			NotMember: func(what string, err string) string {
 				return fmt.Sprintf("бот не добавлен к %s: %s", what, err)

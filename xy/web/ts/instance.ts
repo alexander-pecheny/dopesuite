@@ -3,7 +3,7 @@
 // (internal/server/local.go). Pages learn it from requireLogin, before they
 // draw anything that depends on it.
 
-export type Feature = "login" | "telegram_login" | "tokens" | "members" | "invites" | "passphrase" | "offline" | "admin";
+export type Feature = "login" | "telegram_login" | "tokens" | "members" | "invites" | "passphrase" | "offline" | "activity" | "admin";
 
 export interface InstanceCaps {
   mode: string;

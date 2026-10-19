@@ -129,13 +129,11 @@ export interface AttachmentRecord {
   bytes: Uint8Array<ArrayBuffer>;
 }
 
-// TgTarget is where a board was last published: what the person typed, and what
-// Telegram turned it into.
+// TgTarget is where a board was last published: the channel the person typed,
+// and the id Telegram turned it into.
 export interface TgTarget {
   channel: string;
-  chat: string;
   channelId?: string;
-  chatId?: string;
 }
 
 const DB_NAME = "xy-offline";

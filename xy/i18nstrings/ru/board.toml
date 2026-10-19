@@ -282,13 +282,11 @@ title = "Публикация в телеграм"
 # The lead paragraph. The token reaches the server because the posting is
 # done there; say so rather than let a reader assume otherwise.
 hint = "Бот публикует вопросы в канал, а обсуждение — в связанную группу. Токен уходит на сервер xy: публикует он."
-# The three fields.
+# The two fields.
 token_label = "Токен бота"
 token_placeholder = "123456:AA…"
 channel_label = "Канал"
 channel_placeholder = "@channel, ссылка или id"
-chat_label = "Группа обсуждения"
-chat_placeholder = "@group, ссылка или id"
 # The bot has to be an administrator in both, which is the commonest thing
 # to have missed.
 admin_hint = "Бот должен быть администратором и в канале, и в группе."
