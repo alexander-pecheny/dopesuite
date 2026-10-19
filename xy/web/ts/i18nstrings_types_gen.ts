@@ -1496,11 +1496,13 @@ export type Strings = {
       doneGrouped: (lists: string, cards: string, images: string) => string;
       doneSingle: (cards: string, images: string) => string;
       imagesFailed: (n: string) => string;
+      imagesMissing: (n: string) => string;
       label: () => string;
       menuTitle: () => string;
       noQuestions: () => string;
       noToursNote: () => string;
       offline: () => string;
+      onePackage: () => string;
       parseFailed: (error: string) => string;
       preamble: () => string;
       promptGroup: () => string;
@@ -1812,6 +1814,7 @@ export type Strings = {
     };
     import: {
       fileNoQuestions: () => string;
+      imagesNeed4s: () => string;
       noFile: () => string;
       parseFailed: (reason: string) => string;
       readFailed: () => string;

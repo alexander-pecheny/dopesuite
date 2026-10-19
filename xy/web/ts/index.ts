@@ -8,7 +8,7 @@ import { xySearchIndex } from "./searchindex.js";
 import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
 import { stampPassCheck } from "./passcheck.js";
-import { iconed } from "./icons_gen.js";
+import { icon, iconed } from "./icons_gen.js";
 import { createNameOverflow } from "./nameoverflow.js";
 import S from "./i18nstrings.js";
 
@@ -38,6 +38,11 @@ const commentNote = byId("commentNote");
 const moreQuestions = byId("moreQuestions");
 const moreComments = byId("moreComments");
 const message = byId("message");
+
+const importIcon = icon("file-up");
+importIcon.setAttribute("class", "ico ico-lead");
+byId("homeTitle").after(el("a", { class: "btn btn-ghost btn-small crumb-action", href: "/import", title: S.chrome.home.importLabel(), "aria-label": S.chrome.home.importLabel() },
+  importIcon, el("span", { class: "crumb-action-label", text: S.chrome.home.importLabel() })));
 const createModal = modal("create");
 const createForm = byId<HTMLFormElement>("createForm");
 const createMessage = byId("createMessage");

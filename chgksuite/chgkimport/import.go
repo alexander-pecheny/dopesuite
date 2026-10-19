@@ -246,6 +246,42 @@ func replaceImageRef(source, from, to string) string {
 	})
 }
 
+// AddImages adds images that were picked alongside a .4s rather than packed with
+// it. A directive that names one by a path, "(img pics/q3.png)", is pointed at it
+// the way parseZip does for an archive, and a file that is not an image is skipped.
+func (r *Result) AddImages(images []Image) {
+	have := make(map[string]bool, len(r.Images)+len(images))
+	for _, img := range r.Images {
+		have[img.Name] = true
+	}
+	for _, img := range images {
+		img.Name = path.Base(img.Name)
+		mimeType, isImage := imageExts[strings.ToLower(path.Ext(img.Name))]
+		if !isImage || have[img.Name] {
+			continue
+		}
+		have[img.Name] = true
+		img.MIME = mimeType
+		r.Images = append(r.Images, img)
+	}
+	for _, ref := range imageRefs(r.Source) {
+		if base := path.Base(ref); base != ref && have[base] {
+			r.Source = replaceImageRef(r.Source, ref, base)
+		}
+	}
+}
+
+// imageRefs lists the file names the (img …) directives of a source point at.
+func imageRefs(source string) []string {
+	var out []string
+	for _, d := range reImgDirective.FindAllString(source, -1) {
+		if fields := strings.Fields(strings.TrimSuffix(strings.TrimPrefix(d, "(img"), ")")); len(fields) > 0 {
+			out = append(out, fields[len(fields)-1])
+		}
+	}
+	return out
+}
+
 // SafeImageNames renames images so xy can actually resolve them, rewriting the
 // `(img …)` directives to match.
 //

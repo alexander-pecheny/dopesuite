@@ -1954,6 +1954,14 @@ body {
    takes the row's own height. */
 /* how many questions the board holds, beside its name in the crumb trail */
 .board-qcount { margin-left: var(--space-2); color: var(--muted); font-size: var(--text-sm); font-weight: var(--fw-regular); }
+/* an import button right after the page's crumb; the crumb must not grow and push it to the far end */
+.crumb-current:has(+ .crumb-action) { flex-grow: 0; }
+.crumb-action { flex: 0 0 auto; align-self: center; font-size: var(--text-sm); }
+@media (max-width: 640px) {
+  .crumb-action { padding: 0 var(--space-2); }
+  .crumb-action-label { display: none; }
+  .crumb-action .ico-lead { margin-right: 0; }
+}
 
 .kcard-handout,
 .kcard-versions,

@@ -566,7 +566,7 @@ var RU = Strings{
 		},
 		Importpick: BoardImportpickStrings{
 			Hint: func() string {
-				return "Пакет вопросов (.4s, .docx) или архив xy (.zip) — что именно, разберёмся сами."
+				return "Пакет вопросов (.4s, .docx, .zip) или архив xy (.zip). Что именно, разберёмся сами. Картинки к .4s выберите вместе с ним."
 			},
 			SplitLabel: func() string { return " разбить по турам" },
 			SplitTitle: func() string {
@@ -1236,7 +1236,7 @@ var RU = Strings{
 			Creator:         func(name string) string { return fmt.Sprintf("Создатель: %s", name) },
 			EmptyAll:        func() string { return "Пока нет досок. Нажмите + чтобы создать." },
 			EmptyNamed:      func() string { return "Досок с таким названием нет." },
-			ImportLabel:     func() string { return "Импорт из Trello" },
+			ImportLabel:     func() string { return "Импорт из Trello или другой доски xy" },
 			More:            func() string { return "Показать ещё" },
 			NamePlaceholder: func() string { return "Название доски" },
 			NewBoard:        func() string { return "Новая доска" },
@@ -1993,7 +1993,10 @@ var RU = Strings{
 			ImagesFailed: func(n string) string {
 				return fmt.Sprintf("\n\nНе удалось загрузить изображения (%s): ", n)
 			},
-			Label: func() string { return "Импорт…" },
+			ImagesMissing: func(n string) string {
+				return fmt.Sprintf("\n\nНе хватает картинок (%s), выберите их вместе с .4s: ", n)
+			},
+			Label: func() string { return "Импорт из файла…" },
 			MenuTitle: func() string {
 				return "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)"
 			},
@@ -2002,6 +2005,9 @@ var RU = Strings{
 				return "\nТуры («## …») в файле не найдены — создан один список."
 			},
 			Offline: func() string { return "Импорт доступен только онлайн." },
+			OnePackage: func() string {
+				return "Выберите один пакет вопросов. Картинки к .4s можно выбрать вместе с ним."
+			},
 			ParseFailed: func(error string) string {
 				return fmt.Sprintf("Не удалось разобрать файл: %s", error)
 			},
@@ -2371,6 +2377,7 @@ var RU = Strings{
 		},
 		Import: ServerImportStrings{
 			FileNoQuestions: func() string { return "в файле не найдено вопросов" },
+			ImagesNeed4s:    func() string { return "картинки можно добавить только к файлу .4s" },
 			NoFile:          func() string { return "файл не выбран" },
 			ParseFailed: func(reason string) string {
 				return fmt.Sprintf("не удалось разобрать файл: %s", reason)

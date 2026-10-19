@@ -123,6 +123,7 @@ var Readonly = base.Readonly
 var Disabled = base.Disabled
 var Caps = base.Caps
 var Accept = base.Accept
+var Multiple = base.Multiple
 var Min = base.Min
 var Max = base.Max
 var Step = base.Step

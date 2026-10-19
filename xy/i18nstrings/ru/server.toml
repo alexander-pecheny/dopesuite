@@ -116,6 +116,8 @@ unsupported = "поддерживаются только .4s, .zip и .docx"
 # The parser's own error detail rides along after the colon.
 parse_failed = 'не удалось разобрать файл: {{.reason}}'
 file_no_questions = "в файле не найдено вопросов"
+# Images were picked together with a package that is not a .4s.
+images_need_4s = "картинки можно добавить только к файлу .4s"
 
 [quota]
 # enforceQuota: an upload that would outgrow the owner's storage remainder.

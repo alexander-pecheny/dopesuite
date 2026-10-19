@@ -619,6 +619,10 @@
           "name": "accept"
         },
         {
+          "name": "multiple",
+          "kind": "bare"
+        },
+        {
           "name": "required",
           "kind": "bare"
         }

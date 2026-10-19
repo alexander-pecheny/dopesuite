@@ -2,8 +2,7 @@ page title=@chrome.page.index_title kind="full" scripts="dist/index.js"
   topbar title=@chrome.home.title
     crumbs
       crumb home icon="house" label=@board.page.home
-      crumb @chrome.home.title
-    iconlink href="/import" icon="file-up" label=@chrome.home.import_label
+      crumb id="homeTitle" @chrome.home.title
     iconbtn id="newBoardBtn" icon="plus" label=@chrome.home.new_board
 
   -- one box over three grids: boards it can name, then the questions it can

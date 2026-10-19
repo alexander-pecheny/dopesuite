@@ -397,6 +397,10 @@ func Accept(v string) Attr {
 	return Attr{Name: "accept", Value: v}
 }
 
+func Multiple() Attr {
+	return Attr{Name: "multiple", Bare: true}
+}
+
 func Min(v string) Attr {
 	return Attr{Name: "min", Value: v}
 }

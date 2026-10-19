@@ -106,6 +106,9 @@ function refreshBoardMenu(): void {
 const statusNode = byId("status");
 const kanban = byId("kanban");
 const titleNode = byId("boardTitle");
+const importButton = el("button", { class: "btn btn-ghost btn-small crumb-action", type: "button", title: S.import.pack.menuTitle(), "aria-label": S.import.pack.label(), hidden: true },
+  leadIcon(icon("file-up")), el("span", { class: "crumb-action-label", text: S.import.pack.label() }));
+titleNode.after(importButton);
 
 // The board's live state: the decrypted snapshot (unlock.js BoardState) plus the
 // members roster boardmembers.js merges onto it.
@@ -524,6 +527,7 @@ function renderBoardTitle(): void {
   const themes = state.cards.filter((c) => counter(c.kind) === "theme").length;
   titleNode.replaceChildren(state.name);
   if (n || themes) titleNode.append(el("span", { class: "board-qcount", text: countLabel(n, themes) }));
+  importButton.hidden = false;
 }
 
 // The Search Index is written by whoever holds the key (ADR-0008), and on this
@@ -1733,6 +1737,8 @@ const handoutsPanel = createHandoutsPanel(board, attachments);
 const appealsPanels = createAppealsPanels(board, shell);
 // questions marks a panel that works on a packet, which an appeals list is not.
 const questions = <P extends Panel & { menu: "list" }>(p: P): P => ({ ...p, offered: (s: ListScope) => !isAppeals(s.list) && (p.offered?.(s) ?? true) });
+const importPanel = createImportPanel(board, renderPreviewCard, createBundleImport(board, shell));
+importButton.addEventListener("click", () => importPanel.open());
 registerPanel(
   // What is on the board
   listsManage.panel,
@@ -1745,9 +1751,8 @@ registerPanel(
   createReplacePanel(board, rewrites),
   rewrites.typograph,
 
-  // Files: the same content there and back
-  starts(createImportPanel(board, renderPreviewCard, createBundleImport(board, shell))),
-  createBundleExportPanel(board, shell),
+  // Files: the same content there and back. Import is on the topbar instead.
+  starts(createBundleExportPanel(board, shell)),
 
   // The board itself
   starts({ id: "rename-board", menu: "board", icon: "pencil", label: S.board.rename.boardLabel(), title: S.board.rename.boardTitle(), open: () => { void renameBoard(); } }),

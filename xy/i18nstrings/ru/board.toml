@@ -347,7 +347,7 @@ run = "Типографить"
 # Title of the in-board package-import picker.
 title = "Импорт"
 # Hint above the file field.
-hint = "Пакет вопросов (.4s, .docx) или архив xy (.zip) — что именно, разберёмся сами."
+hint = "Пакет вопросов (.4s, .docx, .zip) или архив xy (.zip). Что именно, разберёмся сами. Картинки к .4s выберите вместе с ним."
 # Split-by-tours checkbox: tooltip and visible label (leading space).
 split_title = "Каждый тур станет отдельным списком; списки будут связаны в группу со сквозной нумерацией и общим экспортом"
 split_label = " разбить по турам"

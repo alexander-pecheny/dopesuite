@@ -159,23 +159,6 @@ func hasImage(imgs []Image, name string) bool {
 	return false
 }
 
-// imageRefs pulls the filename out of each (img …) directive; like chgksuite's
-// parseimg, the name is the last whitespace-separated token.
-func imageRefs(source string) []string {
-	var out []string
-	for _, part := range strings.Split(source, "(img")[1:] {
-		end := strings.IndexByte(part, ')')
-		if end < 0 {
-			continue
-		}
-		fields := strings.Fields(part[:end])
-		if len(fields) > 0 {
-			out = append(out, fields[len(fields)-1])
-		}
-	}
-	return out
-}
-
 func firstDiff(want, got string) string {
 	w, g := strings.Split(want, "\n"), strings.Split(got, "\n")
 	for i := 0; i < len(w) || i < len(g); i++ {
@@ -302,5 +285,21 @@ func TestParseText(t *testing.T) {
 	// Nothing parseable → nothing composed, so the handler can 400 on "".
 	if got := ParseText("   \n\n  "); got != "" {
 		t.Errorf("blank text: got %q, want empty", got)
+	}
+}
+
+// TestAddImages: images picked beside a .4s land under their base names, a
+// directive that names one by a path is pointed at it, and a non-image is dropped.
+func TestAddImages(t *testing.T) {
+	res, err := Parse("q.4s", []byte("? Вопрос (img pics/q3.png)\n! Ответ\n\n? Второй (img w=8 q4.jpg)\n! Ответ\n"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.AddImages([]Image{{Name: "q3.png", Data: []byte{1}}, {Name: "q4.jpg", Data: []byte{2}}, {Name: "notes.txt", Data: []byte{3}}})
+	if got := imageRefs(res.Source); len(got) != 2 || got[0] != "q3.png" || got[1] != "q4.jpg" {
+		t.Fatalf("directives = %q", got)
+	}
+	if len(res.Images) != 2 || res.Images[0].MIME != "image/png" || res.Images[1].MIME != "image/jpeg" {
+		t.Fatalf("images = %+v", res.Images)
 	}
 }

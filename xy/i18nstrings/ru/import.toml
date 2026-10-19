@@ -114,9 +114,9 @@ report_summary = "Импортировано досок: {{.done}} из {{.total
 report_failed = '«{{.name}}» — НЕ ИМПОРТИРОВАНА: {{.error}}'
 
 [pack]
-# Board-menu item that opens the in-board import picker (importpack.ts).
-label = "Импорт…"
-# Tooltip of that menu item.
+# Topbar button after the question count that opens the in-board import picker (importpack.ts).
+label = "Импорт из файла…"
+# Tooltip of that button.
 menu_title = "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)"
 # Picker line while the chosen file is being sniffed.
 reading_file = "Читаю файл…"
@@ -152,6 +152,10 @@ done_single = 'Импортировано: {{.cards}} карточек, {{.image
 no_tours_note = "\nТуры («## …») в файле не найдены — создан один список."
 # Note appended when the server refused some of the package's images.
 images_failed = "\n\nНе удалось загрузить изображения ({{.n}}): "
+# Appended when cards name images that were neither in the package nor picked with it.
+images_missing = "\n\nНе хватает картинок ({{.n}}), выберите их вместе с .4s: "
+# Picker line and alert when the selection holds no package, or more than one.
+one_package = "Выберите один пакет вопросов. Картинки к .4s можно выбрать вместе с ним."
 # Alert when the import died part-way; the partial list stays on the board.
 aborted = "Импорт прерван после {{.done}} карточек: {{.error}}\n\nЧастично импортированный список остался на доске — удалите его перед повторным импортом."
 

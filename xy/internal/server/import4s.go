@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"path"
 	"strings"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/chgkimport"
@@ -94,6 +95,17 @@ func (s *server) handleImportParse(w http.ResponseWriter, r *http.Request) {
 		}
 		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.ParseFailed(err.Error()))
 		return
+	}
+	if images := form.Files("image"); len(images) > 0 {
+		if ext := strings.ToLower(path.Ext(files[0].Filename)); ext != ".4s" && ext != ".si4s" {
+			httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.ImagesNeed4s())
+			return
+		}
+		picked := make([]chgkimport.Image, 0, len(images))
+		for _, f := range images {
+			picked = append(picked, chgkimport.Image{Name: f.Filename, Data: f.Data})
+		}
+		res.AddImages(picked)
 	}
 	// Give the images names the (img …) directives can actually reference.
 	res.SafeImageNames()

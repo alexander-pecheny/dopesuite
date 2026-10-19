@@ -25,7 +25,7 @@ import { nowStamp } from "./carddetail.js";
 import { modal } from "./modal.js";
 import { sniffBundle } from "./bundleimport.js";
 import type { BundleImport } from "./bundleimportpanel.js";
-import type { Board, BoardPanel } from "./panels.js";
+import type { Board } from "./panels.js";
 import S from "./i18nstrings.js";
 import { numbered } from "./cardkind.js";
 
@@ -39,7 +39,7 @@ const { keyBetween } = xyRank;
 // does; the renderer is the board's.
 export type PreviewRenderer = (card: { id: number; kind: string; desc: string }, number: string | null, imgMap: Map<string, string>, screen: boolean) => HTMLElement;
 
-export function createImportPanel(board: Board, renderPreviewCard: PreviewRenderer, bundles: BundleImport): BoardPanel {
+export function createImportPanel(board: Board, renderPreviewCard: PreviewRenderer, bundles: BundleImport): { open(): void } {
   interface ImportImage { name: string; data: string; mime: string }
   interface ImportCard { id: number; kind: string; desc: string }
   interface ImportPkg { name: string; source: string; images?: ImportImage[] }
@@ -67,11 +67,23 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     if (tours) (tours as HTMLElement).hidden = sniffed != null;
   }
 
+  // picked splits the selection into the one package and the images that came
+  // with it, since a browser hands over a .4s without the pictures beside it.
+  function picked(): { file: File | null; images: File[] } {
+    const files = [...(byId<HTMLInputElement>("importFile").files ?? [])];
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    const rest = files.filter((f) => !images.includes(f));
+    return { file: rest.length === 1 ? rest[0] : null, images };
+  }
+
   byId("importFile").addEventListener("change", () => {
-    const file = byId<HTMLInputElement>("importFile").files?.[0];
+    const { file, images } = picked();
     sniffed = null;
     showKind("");
-    if (!file) return;
+    if (!file) {
+      if (images.length) showKind(S.import.pack.onePackage());
+      return;
+    }
     showKind(S.import.pack.readingFile());
     void sniffBundle(file).then((b) => {
       sniffed = b;
@@ -83,9 +95,8 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
 
   byId("importPickForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const files = byId<HTMLInputElement>("importFile").files;
-    const file = files && files[0];
-    if (!file) return;
+    const { file, images } = picked();
+    if (!file) { alert(S.import.pack.onePackage()); return; }
     const splitTours = byId<HTMLInputElement>("importSplitTours").checked;
     const game = byId<HTMLSelectElement>("importGame").value;
     importPickModal.close();
@@ -94,15 +105,16 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       bundles.openWith(file, bundle.bundle, bundle.bytesOf);
       return;
     }
-    await importFile(file, splitTours, game);
+    await importFile(file, images, splitTours, game);
   });
 
-  async function importFile(file: File, splitTours: boolean, game: string): Promise<void> {
+  async function importFile(file: File, images: File[], splitTours: boolean, game: string): Promise<void> {
     if (!xySync.requireOnline(S.import.pack.offline())) return;
     board.setStatus("saving");
     try {
       const fd = new FormData();
       fd.append("file", file, file.name);
+      for (const img of images) fd.append("image", img, img.name);
       // SI themes are read by a different parser off the document's own outline,
       // so the choice is the reader's rather than a guess about the file.
       fd.append("game", game === "si" ? "si" : "chgk");
@@ -272,6 +284,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     const byName = new Map((images || []).map((i): [string, ImportImage] => [i.name, i]));
     let done = 0, attached = 0;
     const failed: string[] = []; // images the server refused — the card would keep a dead (img …)
+    const missing = new Set<string>(); // images the cards name but the import never had
     try {
       const key = board.dk();
       const ranks = [...board.state.lists].sort(byRank);
@@ -297,7 +310,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
           // on the question that uses it (which is where the preview/export look).
           for (const ref of xyChgk.imageRefs([c])) {
             const img = byName.get(ref);
-            if (!img) continue;
+            if (!img) { missing.add(ref); continue; }
             if (await attachImported(res.id, img)) attached++;
             else failed.push(ref);
           }
@@ -316,6 +329,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       // A dropped image is invisible otherwise: the card keeps its (img …) directive
       // but the picture is gone, and the parse response is not kept to retry from.
       if (failed.length) msg += S.import.pack.imagesFailed(String(failed.length)) + failed.join(", ");
+      if (missing.size) msg += S.import.pack.imagesMissing(String(missing.size)) + [...missing].join(", ");
       alert(msg);
     } catch (err) {
       // The lists and the cards created so far are already on the server — show them
@@ -350,10 +364,5 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   }
 
 
-  return {
-    id: "import", menu: "board", icon: "file-up",
-    label: S.import.pack.label(),
-    title: S.import.pack.menuTitle(),
-    open: openImportPick,
-  };
+  return { open: openImportPick };
 }
