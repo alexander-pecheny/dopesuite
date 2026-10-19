@@ -19,6 +19,9 @@ type listDTO struct {
 	// CommentFirst puts a question's comment before its answer in every
 	// rendering. A grouped list follows its group's flag instead of its own.
 	CommentFirst bool `json:"comment_first"`
+	// HandoutPage is the tour's handout page setup (handoutpage.go), JSON; a
+	// grouped list follows its group's, as with CommentFirst.
+	HandoutPage *string `json:"handout_page,omitempty"`
 	// Meta is a List Type's own settings, an Envelope; only an appeals list has
 	// any (ADR-0021).
 	Meta *string `json:"meta,omitempty"`
@@ -26,14 +29,15 @@ type listDTO struct {
 
 // groupDTO is a "list_of_lists": a named, ordered run of consecutive lists.
 type groupDTO struct {
-	ID           int64  `json:"id"`
-	Name         string `json:"name"`
-	CommentFirst bool   `json:"comment_first"`
+	ID           int64   `json:"id"`
+	Name         string  `json:"name"`
+	CommentFirst bool    `json:"comment_first"`
+	HandoutPage  *string `json:"handout_page,omitempty"`
 }
 
 func scanLists(ctx context.Context, q querier, boardID int64) ([]listDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, type, title, rank, group_id, comment_first, meta from lists where board_id = ? and deleted_at is null order by rank`, boardID)
+select id, type, title, rank, group_id, comment_first, handout_page, meta from lists where board_id = ? and deleted_at is null order by rank`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +47,7 @@ select id, type, title, rank, group_id, comment_first, meta from lists where boa
 		var l listDTO
 		var title, meta []byte
 		var groupID sql.NullInt64
-		if err := rows.Scan(&l.ID, &l.Type, &title, &l.Rank, &groupID, &l.CommentFirst, &meta); err != nil {
+		if err := rows.Scan(&l.ID, &l.Type, &title, &l.Rank, &groupID, &l.CommentFirst, &l.HandoutPage, &meta); err != nil {
 			return nil, err
 		}
 		l.Title = b64(title)
@@ -62,7 +66,7 @@ select id, type, title, rank, group_id, comment_first, meta from lists where boa
 // scanListGroups returns the board's non-deleted list groups.
 func scanListGroups(ctx context.Context, q querier, boardID int64) ([]groupDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, name, comment_first from list_groups where board_id = ? and deleted_at is null order by id`, boardID)
+select id, name, comment_first, handout_page from list_groups where board_id = ? and deleted_at is null order by id`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +75,7 @@ select id, name, comment_first from list_groups where board_id = ? and deleted_a
 	for rows.Next() {
 		var g groupDTO
 		var name []byte
-		if err := rows.Scan(&g.ID, &name, &g.CommentFirst); err != nil {
+		if err := rows.Scan(&g.ID, &name, &g.CommentFirst, &g.HandoutPage); err != nil {
 			return nil, err
 		}
 		g.Name = b64(name)
@@ -85,6 +89,7 @@ type createListRequest struct {
 	Rank         string  `json:"rank"`
 	Type         string  `json:"type"`
 	CommentFirst bool    `json:"comment_first"`
+	HandoutPage  string  `json:"handout_page"`
 	Meta         *string `json:"meta"`
 }
 
@@ -115,12 +120,17 @@ func (s *server) handleCreateList(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "invalid meta")
 		return
 	}
+	page, err := storedHandoutPage(req.HandoutPage)
+	if err != nil {
+		handleUser(w, err)
+		return
+	}
 	now := time.Now()
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-list", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-insert into lists(board_id, type, title, rank, comment_first, meta, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?, ?)`,
-			bid, typ, title, req.Rank, req.CommentFirst, meta, rfc3339(now), rfc3339(now))
+insert into lists(board_id, type, title, rank, comment_first, handout_page, meta, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			bid, typ, title, req.Rank, req.CommentFirst, page, meta, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -150,7 +160,8 @@ type patchListRequest struct {
 	Rank         *string `json:"rank"`
 	Type         *string `json:"type"`
 	CommentFirst *bool   `json:"comment_first"`
-	Meta         *string `json:"meta"` // "" clears
+	HandoutPage  *string `json:"handout_page"` // "" clears
+	Meta         *string `json:"meta"`         // "" clears
 }
 
 func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +193,9 @@ func (s *server) handlePatchList(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.CommentFirst != nil {
 			p.set("comment_first", *req.CommentFirst)
+		}
+		if err := setHandoutPage(&p, req.HandoutPage); err != nil {
+			return err
 		}
 		if req.Meta != nil {
 			meta, err := optBlob(req.Meta)
@@ -244,9 +258,9 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-list-group", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-insert into list_groups(board_id, name, comment_first, created_at, updated_at)
-values(?, ?, coalesce((select comment_first from lists where id = ? and board_id = ?), 0), ?, ?)`,
-			bid, name, req.ListIDs[0], bid, rfc3339(now), rfc3339(now))
+insert into list_groups(board_id, name, comment_first, handout_page, created_at, updated_at)
+select ?, ?, coalesce(max(comment_first), 0), max(handout_page), ?, ? from lists where id = ? and board_id = ?`,
+			bid, name, rfc3339(now), rfc3339(now), req.ListIDs[0], bid)
 		if err != nil {
 			return err
 		}
@@ -282,6 +296,7 @@ values(?, ?, coalesce((select comment_first from lists where id = ? and board_id
 type patchListGroupRequest struct {
 	Name         *string `json:"name"`
 	CommentFirst *bool   `json:"comment_first"`
+	HandoutPage  *string `json:"handout_page"` // "" clears
 }
 
 func (s *server) handlePatchListGroup(w http.ResponseWriter, r *http.Request) {
@@ -305,6 +320,9 @@ func (s *server) handlePatchListGroup(w http.ResponseWriter, r *http.Request) {
 		if req.CommentFirst != nil {
 			p.set("comment_first", *req.CommentFirst)
 		}
+		if err := setHandoutPage(&p, req.HandoutPage); err != nil {
+			return err
+		}
 		return p.apply(ctx, tx, "list_groups", groupID)
 	})
 	if handleErr(w, err) {
@@ -323,8 +341,9 @@ func (s *server) handleDeleteListGroup(w http.ResponseWriter, r *http.Request) {
 	err := s.withWriteTx(r.Context(), "delete-list-group", func(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `
 update lists set group_id = null, updated_at = ?,
-  comment_first = (select comment_first from list_groups where id = ?)
-where group_id = ?`, rfc3339(time.Now()), groupID, groupID); err != nil {
+  comment_first = (select comment_first from list_groups where id = ?),
+  handout_page = (select handout_page from list_groups where id = ?)
+where group_id = ?`, rfc3339(time.Now()), groupID, groupID, groupID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `delete from tour_testers where group_id = ?`, groupID); err != nil {

@@ -504,6 +504,13 @@ var RU = Strings{
 				return "Эти два пункта задают только обычный .docx. Варианты для экрана и со спойлерами берут отсюда остальные настройки."
 			},
 		},
+		ExportHandouts: BoardExportHandoutsStrings{
+			Teams: func() string { return "Команд" },
+			TeamsHint: func() string {
+				return "Если указать, в архив добавится PDF для печати: каждая раздатка столько раз, сколько нужно командам. Страница — из настроек раздаток тура."
+			},
+			Title: func() string { return "Печать раздаток" },
+		},
 		ExportOpts: BoardExportOptsStrings{
 			Font:     func() string { return "Шрифт" },
 			Layout:   func() string { return "Оформление" },
@@ -570,6 +577,32 @@ var RU = Strings{
 			Label: func() string { return "Забыть пароль доски" },
 			Title: func() string { return "Забыть пароль доски на этом устройстве" },
 		},
+		HandoutPage: BoardHandoutPageStrings{
+			AutoResize: func() string {
+				return "Уменьшать картинку, если так поместится ещё один ряд"
+			},
+			BottomSpace: func() string { return "Пустое место внизу, рядов" },
+			Boxwidth:    func() string { return "Ширина ячейки, мм" },
+			Font:        func() string { return "Шрифт" },
+			FontSize:    func() string { return "Размер, пт" },
+			Height:      func() string { return "Высота, мм" },
+			Lead: func() string {
+				return "Действует на все раздатки тура: просмотр, PDF, split-fit и печать. Пустое поле — значение по умолчанию."
+			},
+			MarginBottom:  func() string { return "Снизу, мм" },
+			MarginLeft:    func() string { return "Слева, мм" },
+			MarginRight:   func() string { return "Справа, мм" },
+			MarginTop:     func() string { return "Поле сверху, мм" },
+			MinResize:     func() string { return "Не меньше, доля" },
+			Paper:         func() string { return "Формат" },
+			PaperCustom:   func() string { return "Свой размер" },
+			ResizeTitle:   func() string { return "Картинки в split-fit" },
+			Saved:         func() string { return "Сохранено." },
+			ShrinkPercent: func() string { return "Шаг, %" },
+			TikzMm:        func() string { return "Промежуток между ячейками, мм" },
+			Title:         func() string { return "Страница раздаток" },
+			Width:         func() string { return "Ширина, мм" },
+		},
 		Handouts: BoardHandoutsStrings{
 			AlignCenter:        func() string { return "по центру" },
 			AlignLeft:          func() string { return "по левому краю" },
@@ -608,8 +641,22 @@ var RU = Strings{
 			LabelInside:        func() string { return "на каждой раздатке" },
 			MenuGroup:          func() string { return "Вёрстка раздаток (вся группа)" },
 			MoreTitle:          func() string { return "Ещё настройки" },
-			PdfOffline:         func() string { return "Генерация PDF доступна только онлайн." },
-			PreambleAdd:        func() string { return "+ Общие настройки" },
+			Pack:               func() string { return "Для печати…" },
+			PackDone:           func() string { return "Готово." },
+			PackFailed: func(error string) string {
+				return fmt.Sprintf("Не получилось подготовить печать: %s", error)
+			},
+			PackTeams: func() string { return "Сколько команд играет?" },
+			PackTitle: func() string {
+				return "Split-fit, затем столько копий каждой раздатки, сколько нужно командам: один PDF для цветного принтера и один для обычного"
+			},
+			Packing: func() string { return "Готовлю печать…" },
+			Page:    func() string { return "Страница…" },
+			PageTitle: func() string {
+				return "Размер страницы, поля и шрифт раздаток этого тура"
+			},
+			PdfOffline:  func() string { return "Генерация PDF доступна только онлайн." },
+			PreambleAdd: func() string { return "+ Общие настройки" },
 			PreambleAddTitle: func() string {
 				return "Настройки по умолчанию для всех раздаток тура"
 			},
@@ -2483,6 +2530,12 @@ var RU = Strings{
 				return fmt.Sprintf("не удалось прочитать настройки .pptx: %s", reason)
 			},
 			BadPptxTemplate: func() string { return "шаблон .pptx не открывается" },
+		},
+		Handouts: ServerHandoutsStrings{
+			BadPage: func() string {
+				return "настройки страницы раздаток не подходят: проверьте размеры и поля"
+			},
+			BadTeams: func() string { return "число команд должно быть от 1 до 9999" },
 		},
 		Import: ServerImportStrings{
 			FileNoQuestions: func() string { return "в файле не найдено вопросов" },

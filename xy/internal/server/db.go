@@ -821,6 +821,11 @@ create table if not exists card_votes(
   primary key (card_id, user_id)
 );
 pragma foreign_keys=on;`)},
+	// v31 gives a tour its handout page setup (handoutpage.go): chgksuite's
+	// handout flags as JSON, on the list or on its group, like comment_first.
+	{Version: 31, Name: "handout_page on lists and list_groups", Up: schema.Exec(`
+alter table lists add column handout_page text;
+alter table list_groups add column handout_page text;`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }

@@ -5,6 +5,7 @@ import { fakeBoard, installDOM } from "./dom.js";
 const ids = ["exportOverlay", "exportForm", "exportModeOne", "exportModeMany", "exportOneFormat", "exportFormats", "exportFmt4s", "exportFmtDocx", "exportFmtDocxScreen", "exportFmtDocxSpoilers", "exportFmtPdf", "exportFmtPdfMobile", "exportFmtPptx", "exportFmtOpenquiz", "exportFmtHandouts", "exportToggleAll", "exportRun", "exportCancel", "exportMessage",
   // the .docx and .pptx settings
   "exportDocxOpts", "exportDocxAnswers", "exportDocxScreen", "exportDocxNoParagraph", "exportDocxOnlyNumber", "exportDocxSameSize", "exportDocxOptimize", "exportDocxFont", "exportDocxTemplate",
+  "exportHandoutsOpts", "exportHandoutsTeams",
   "exportPptxOpts", "exportPptxDisableNumbers", "exportPptxKeepAccents", "exportPptxOptimize", "exportPptxFont", "exportPptxTemplate", "exportPptxConfig",
   // the telegram dialog the panel hands over to (tgexport.test.js drives it)
   "tgExportOverlay", "tgExportForm", "tgExportToken", "tgExportChannel", "tgExportRun", "tgExportCancel", "tgExportMessage"];

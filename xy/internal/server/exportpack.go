@@ -217,7 +217,7 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		files = append(files, packFile{req.name + ".json", b})
 	}
 	if formats.handouts && strings.TrimSpace(hndt) != "" {
-		zipped, err := handout.SplitFit(ctx, hndt, req.images, handout.DefaultArgs(), ts)
+		zipped, err := handout.SplitFit(ctx, hndt, req.images, settings.handouts, ts)
 		if err != nil {
 			return nil, err
 		}
@@ -226,6 +226,14 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 			return nil, err
 		}
 		files = append(files, inner...)
+		if settings.teams > 0 {
+			hr := handoutRequest{source: hndt, name: handoutsDir + req.name, images: req.images, args: settings.handouts}
+			packed, err := packFiles(ctx, hr, ts, settings.teams)
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, packed...)
+		}
 	}
 	return files, nil
 }

@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeBoard, installDOM } from "./dom.js";
 
-const p = installDOM(["handoutsOverlay", "handoutsSource", "handoutsFields", "handoutsTabFields", "handoutsTabText", "handoutsMessage", "handoutsSplitFit", "handoutsPdf", "handoutsDownload", "handoutsClose"]);
+const p = installDOM(["handoutsOverlay", "handoutsSource", "handoutsFields", "handoutsTabFields", "handoutsTabText", "handoutsMessage", "handoutsSplitFit", "handoutsPage", "handoutsPack",
+  "handoutPageOverlay", "handoutPageForm", "handoutPagePaper", "handoutPageSize", "handoutPageMessage", "handoutPageCancel", "handoutsPdf", "handoutsDownload", "handoutsClose"]);
 p.node("handoutsOverlay").hidden = true;
 p.node("handoutsSource").tag = "textarea";
 const requests = [];

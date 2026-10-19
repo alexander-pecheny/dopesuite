@@ -64,6 +64,9 @@ export interface ListScope {
   game: string;
   // Whether this tour shows a question's comment before its answer.
   commentFirst: boolean;
+  // The tour's handout page setup as JSON, "" for chgksuite's defaults: every
+  // handout render sends it.
+  handoutPage: string;
 }
 
 // sessionsNewestFirst is the order every test picker offers: a new question is
@@ -85,7 +88,7 @@ export function listScope(board: Board, list: BoardList): ListScope {
   // what the add-card button makes, and a list typed ChGK may well hold themes.
   // One theme makes the whole scope SI (cardkind.ts says why).
   const game = gameOf(cards);
-  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game, commentFirst: group ? group.commentFirst : list.commentFirst };
+  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game, commentFirst: group ? group.commentFirst : list.commentFirst, handoutPage: (group ? group.handoutPage : list.handoutPage) ?? "" };
 }
 
 // listNumbers is one list's slice of its scope's numbering, parallel to

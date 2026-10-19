@@ -44,6 +44,9 @@ export interface BoardList {
   groupId: number | null;
   title: string;
   commentFirst: boolean;
+  // The tour's handout page setup as JSON (handoutpage.ts), or null for
+  // chgksuite's defaults. A grouped list follows its group's.
+  handoutPage?: string | null;
   // The decrypted lists.meta: an appeals list's settings (appeals.ts).
   meta?: string | null;
 }
@@ -59,10 +62,17 @@ export function tourCommentFirst(state: Pick<BoardState, "groups">, list: BoardL
   const g = list.groupId != null ? state.groups.find((x) => x.id === list.groupId) : undefined;
   return g ? g.commentFirst : list.commentFirst;
 }
+// tourHandoutPage is a list's handout page setup, which belongs to its tour as
+// the field order does.
+export function tourHandoutPage(state: Pick<BoardState, "groups">, list: BoardList): string | null {
+  const g = list.groupId != null ? state.groups.find((x) => x.id === list.groupId) : undefined;
+  return (g ? g.handoutPage : list.handoutPage) ?? null;
+}
 export interface BoardGroup {
   id: number;
   name: string;
   commentFirst: boolean;
+  handoutPage?: string | null;
 }
 export interface BoardCard {
   id: number;
@@ -178,8 +188,8 @@ export interface Snapshot {
   feed_default?: string;
   card_labels?: Array<{ card_id: number; label_id: number; session_id?: number | null }>;
   unread?: Record<string, UnreadFlags>;
-  lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title: string; comment_first?: boolean; meta?: string | null }>;
-  groups?: Array<{ id: number; name: string; comment_first?: boolean }>;
+  lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title: string; comment_first?: boolean; handout_page?: string | null; meta?: string | null }>;
+  groups?: Array<{ id: number; name: string; comment_first?: boolean; handout_page?: string | null }>;
   cards?: Array<{
     id: number; list_id: number; kind: string; rank: string;
     description: string; handout_meta?: string | null; alias?: string | null; seen?: string | null;
@@ -314,11 +324,11 @@ export async function decryptSnapshot(
     announceCities: snap.announce_cities ?? null,
     lists: await Promise.all((snap.lists || []).map(async (l) => ({
       id: l.id, type: l.type, rank: l.rank, groupId: l.group_id != null ? l.group_id : null,
-      title: await crypto.decField(key, l.title), commentFirst: !!l.comment_first,
+      title: await crypto.decField(key, l.title), commentFirst: !!l.comment_first, handoutPage: l.handout_page ?? null,
       meta: l.meta ? await crypto.decField(key, l.meta) : null,
     }))),
     groups: await Promise.all((snap.groups || []).map(async (g) => ({
-      id: g.id, name: await crypto.decField(key, g.name), commentFirst: !!g.comment_first,
+      id: g.id, name: await crypto.decField(key, g.name), commentFirst: !!g.comment_first, handoutPage: g.handout_page ?? null,
     }))),
     cards: await Promise.all((snap.cards || []).map(async (c) => ({
       id: c.id, listId: c.list_id, kind: c.kind, rank: c.rank,

@@ -245,7 +245,7 @@ export async function applyBundle(
       for (const l of lists) {
         const meta = l.meta ? await enc(relinkPacket(l.meta, listMap)) : undefined;
         const res = (await jpost(`/api/boards/${boardId}/lists`, {
-          title: await enc(l.title), rank: nextListRank(l.rank), type: l.type, comment_first: !!l.comment_first, ...(meta ? { meta } : {}),
+          title: await enc(l.title), rank: nextListRank(l.rank), type: l.type, comment_first: !!l.comment_first, handout_page: l.handout_page ?? "", ...(meta ? { meta } : {}),
         })) as { id: number };
         listMap.set(l.id, res.id);
         made.push(res.id);

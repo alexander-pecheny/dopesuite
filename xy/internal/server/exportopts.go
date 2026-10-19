@@ -4,8 +4,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/docx"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/pptx"
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
@@ -30,6 +33,9 @@ const maxTemplateInflated = 64 << 20
 type exportSettings struct {
 	docx docx.Options
 	pptx pptx.Options
+	// handouts is the tour's page setup; teams, when set, adds the print run.
+	handouts handout.Args
+	teams    int
 }
 
 func readExportSettings(form *memForm, game string, commentFirst bool) (exportSettings, error) {
@@ -41,7 +47,17 @@ func readExportSettings(form *memForm, game string, commentFirst bool) (exportSe
 	if err != nil {
 		return exportSettings{}, err
 	}
-	return exportSettings{docx: d, pptx: p}, nil
+	h, err := pageArgs(form)
+	if err != nil {
+		return exportSettings{}, err
+	}
+	teams := 0
+	if v := strings.TrimSpace(form.Value("teams")); v != "" {
+		if teams, err = strconv.Atoi(v); err != nil || teams < 1 || teams > maxPackTeams {
+			return exportSettings{}, corei18n.User(xystrings.Default.Server.Handouts.BadTeams())
+		}
+	}
+	return exportSettings{docx: d, pptx: p, handouts: h, teams: teams}, nil
 }
 
 func readDocxSettings(form *memForm, game string, commentFirst bool) (docx.Options, error) {

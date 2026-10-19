@@ -105,7 +105,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   }
 
   const exportModal = modal("export");
-  let exportCtx: { cards: BoardCard[]; title: string; hndt: string; game: string; commentFirst: boolean } | null = null;
+  let exportCtx: { cards: BoardCard[]; title: string; hndt: string; game: string; commentFirst: boolean; handoutPage: string } | null = null;
 
   function exportBox(box: string): HTMLInputElement { return byId<HTMLInputElement>(box); }
   function oneFormat(): HTMLSelectElement { return byId<HTMLSelectElement>("exportOneFormat"); }
@@ -135,11 +135,12 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     byId("exportToggleAll").textContent = allOn ? S.export.form.deselectAll() : S.export.form.selectAll();
     byId("exportDocxOpts").hidden = !chosen.some((f) => DOCX_FORMATS.includes(f));
     byId("exportPptxOpts").hidden = !chosen.includes("pptx");
+    byId("exportHandoutsOpts").hidden = !chosen.includes("handouts");
   }
 
   function openExport(scope: ListScope): void {
     const hndt = xyListExport.hndtOf(scope.cards).source;
-    exportCtx = { cards: scope.cards, title: scope.title, hndt, game: scope.game, commentFirst: scope.commentFirst };
+    exportCtx = { cards: scope.cards, title: scope.title, hndt, game: scope.game, commentFirst: scope.commentFirst, handoutPage: scope.handoutPage };
 
     // Offline everything but the .4s is unreachable: the other formats render
     // server-side, and even the .4s ships without its images (they are fetched).
@@ -192,7 +193,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   // the network — it is the one export that works offline.
   async function runExport(): Promise<void> {
     if (!exportCtx) return;
-    const { cards, title, hndt, game } = exportCtx;
+    const { cards, title, hndt, game, handoutPage } = exportCtx;
     const formats = exportChosen();
     if (!formats.length) return;
     const source = xyListExport.exportSource(cards);
@@ -232,7 +233,12 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
       }
       fd.append("formats", formats.join(","));
       appendSettings(fd, formats);
-      if (formats.includes("handouts")) fd.append("hndt", hndt);
+      if (formats.includes("handouts")) {
+        fd.append("hndt", hndt);
+        if (handoutPage) fd.append("page", handoutPage);
+        const teams = byId<HTMLInputElement>("exportHandoutsTeams").value.trim();
+        if (teams) fd.append("teams", teams);
+      }
       const res = await fetch("/api/export/pack", { method: "POST", credentials: "same-origin", body: fd });
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       downloadBlob(await res.blob(), filenameFromResponse(res) || `${title}.zip`);

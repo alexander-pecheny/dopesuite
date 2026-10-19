@@ -80,51 +80,112 @@ func FitRows(ctx context.Context, hndt string, images map[string][]byte, a Args,
 }
 
 func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) ([]byte, error) {
-	hndt, err := ApplyPreamble(hndt, a)
+	r, fitted, err := fitAll(ctx, hndt, images, a, ts)
 	if err != nil {
 		return nil, err
 	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	var allParts []string
+	for _, f := range fitted {
+		if err := zipFile(zw, fmt.Sprintf("q%s.pdf", f.block.qnum()), f.pdf); err != nil {
+			return nil, err
+		}
+		allParts = append(allParts, strings.TrimRight(f.block.allQ(f.resize), "\n"))
+	}
+	// all-questions, one team each
+	allPDF, err := r.renderPDF(ctx, strings.Join(allParts, "\n---\n")+"\n")
+	if err != nil {
+		return nil, fmt.Errorf("all-q render: %w", err)
+	}
+	if err := zipFile(zw, "all_q.pdf", allPDF); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func zipFile(zw *zip.Writer, name string, data []byte) error {
+	w, err := zw.Create(name)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
+}
+
+// Pack is split_fit followed by pack: every block fitted to its page, and each
+// page printed as many times as teams need, merged into one PDF for the colour
+// printer and one for the other. Either is nil when nothing goes to it.
+func Pack(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter, teams int) (colour, bw []byte, err error) {
+	_, fitted, err := fitAll(ctx, hndt, images, a, ts)
+	if err != nil {
+		return nil, nil, err
+	}
+	var colourPages, bwPages [][]byte
+	for _, f := range fitted {
+		pages, isColour, err := PackPages(f.hndt, teams)
+		if err != nil {
+			return nil, nil, fmt.Errorf("q%s: %w", f.block.qnum(), err)
+		}
+		for range pages {
+			if isColour {
+				colourPages = append(colourPages, f.pdf)
+			} else {
+				bwPages = append(bwPages, f.pdf)
+			}
+		}
+	}
+	if len(colourPages) > 0 {
+		if colour, err = MergePDFs(colourPages, true); err != nil {
+			return nil, nil, err
+		}
+	}
+	if len(bwPages) > 0 {
+		if bw, err = MergePDFs(bwPages, true); err != nil {
+			return nil, nil, err
+		}
+	}
+	return colour, bw, nil
+}
+
+// fittedBlock is one handout block fitted to its page: the source it was
+// rendered from and the PDF.
+type fittedBlock struct {
+	block  sfBlock
+	resize map[string]*string
+	hndt   string
+	pdf    []byte
+}
+
+// fitAll fits and renders every block, concurrently (bounded by CPU count),
+// keeping them in block order.
+func fitAll(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) (*sfRun, []fittedBlock, error) {
+	hndt, err := ApplyPreamble(hndt, a)
+	if err != nil {
+		return nil, nil, err
+	}
 	hndt, images, err = ApplyRotation(hndt, images)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	hndt, images = flattenImagePaths(hndt, images)
 	r, err := newSFRun(ctx, images, a, ts)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
 	blocks := parseSFBlocks(hndt)
 	if len(blocks) == 0 {
-		return nil, errors.New("no handout blocks")
+		return nil, nil, errors.New("no handout blocks")
 	}
-
-	type output struct {
-		name string
-		pdf  []byte
-	}
-	// Fit + render each block concurrently (bounded by CPU count), then the
-	// all-questions PDF. Outputs kept in block order.
-	outputs := make([]output, len(blocks)+1)
-	resizes := make([]map[string]*string, len(blocks))
-	workers := runtime.NumCPU()
-	if workers > len(blocks) {
-		workers = len(blocks)
-	}
-	if workers < 1 {
-		workers = 1
-	}
-	sem := make(chan struct{}, workers)
+	fitted := make([]fittedBlock, len(blocks))
+	sem := make(chan struct{}, max(1, min(runtime.NumCPU(), len(blocks))))
 	var wg sync.WaitGroup
-	var mu sync.Mutex
+	var once sync.Once
 	var firstErr error
-	fail := func(err error) {
-		mu.Lock()
-		if firstErr == nil {
-			firstErr = err
-		}
-		mu.Unlock()
-	}
+	fail := func(err error) { once.Do(func() { firstErr = err }) }
 	for i, b := range blocks {
 		wg.Add(1)
 		go func(i int, b sfBlock) {
@@ -136,46 +197,17 @@ func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args
 				fail(fmt.Errorf("q%s: %w", b.qnum(), err))
 				return
 			}
-			pdf, err := r.renderPDF(ctx, b.with(withRows(resize, best)))
+			src := b.with(withRows(resize, best))
+			pdf, err := r.renderPDF(ctx, src)
 			if err != nil {
 				fail(fmt.Errorf("q%s render: %w", b.qnum(), err))
 				return
 			}
-			outputs[i] = output{fmt.Sprintf("q%s.pdf", b.qnum()), pdf}
-			resizes[i] = resize
+			fitted[i] = fittedBlock{block: b, resize: resize, hndt: src, pdf: pdf}
 		}(i, b)
 	}
 	wg.Wait()
-	if firstErr != nil {
-		return nil, firstErr
-	}
-
-	// all-questions, one team each
-	var allParts []string
-	for i, b := range blocks {
-		allParts = append(allParts, strings.TrimRight(b.allQ(resizes[i]), "\n"))
-	}
-	allPDF, err := r.renderPDF(ctx, strings.Join(allParts, "\n---\n")+"\n")
-	if err != nil {
-		return nil, fmt.Errorf("all-q render: %w", err)
-	}
-	outputs[len(blocks)] = output{"all_q.pdf", allPDF}
-
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	for _, o := range outputs {
-		w, err := zw.Create(o.name)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := w.Write(o.pdf); err != nil {
-			return nil, err
-		}
-	}
-	if err := zw.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return r, fitted, firstErr
 }
 
 // sfRun carries the per-invocation render context.
@@ -454,7 +486,7 @@ func (r *sfRun) fitBlock(ctx context.Context, b sfBlock) (int, map[string]*strin
 	}
 	cfg := r.a.Resize
 	ms, canMeasure := r.ts.(Measurer)
-	if !canMeasure || b.meta["image"] == "" {
+	if cfg.Off || !canMeasure || b.meta["image"] == "" {
 		return rows, b.resizeUpdate(resize), nil
 	}
 

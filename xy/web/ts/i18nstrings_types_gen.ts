@@ -403,6 +403,11 @@ export type Strings = {
       title: () => string;
       variantsHint: () => string;
     };
+    exportHandouts: {
+      teams: () => string;
+      teamsHint: () => string;
+      title: () => string;
+    };
     exportOpts: {
       font: () => string;
       layout: () => string;
@@ -465,6 +470,28 @@ export type Strings = {
       label: () => string;
       title: () => string;
     };
+    handoutPage: {
+      autoResize: () => string;
+      bottomSpace: () => string;
+      boxwidth: () => string;
+      font: () => string;
+      fontSize: () => string;
+      height: () => string;
+      lead: () => string;
+      marginBottom: () => string;
+      marginLeft: () => string;
+      marginRight: () => string;
+      marginTop: () => string;
+      minResize: () => string;
+      paper: () => string;
+      paperCustom: () => string;
+      resizeTitle: () => string;
+      saved: () => string;
+      shrinkPercent: () => string;
+      tikzMm: () => string;
+      title: () => string;
+      width: () => string;
+    };
     handouts: {
       alignCenter: () => string;
       alignLeft: () => string;
@@ -497,6 +524,14 @@ export type Strings = {
       labelInside: () => string;
       menuGroup: () => string;
       moreTitle: () => string;
+      pack: () => string;
+      packDone: () => string;
+      packFailed: (error: string) => string;
+      packTeams: () => string;
+      packTitle: () => string;
+      packing: () => string;
+      page: () => string;
+      pageTitle: () => string;
       pdfOffline: () => string;
       preambleAdd: () => string;
       preambleAddTitle: () => string;
@@ -1896,6 +1931,10 @@ export type Strings = {
       badFont: () => string;
       badPptxConfig: (reason: string) => string;
       badPptxTemplate: () => string;
+    };
+    handouts: {
+      badPage: () => string;
+      badTeams: () => string;
     };
     import: {
       fileNoQuestions: () => string;

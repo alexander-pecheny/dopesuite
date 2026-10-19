@@ -365,6 +365,12 @@ func splitFitOutput(in, dir string) string {
 func handoutsSplitFit(args []string) error {
 	fs := newFlagSet("handouts split_fit")
 	read := handoutArgs(fs)
+	resize := handout.DefaultArgs().Resize
+	noResize := fs.Bool("no_auto_resize_images", false, "keep each image at the size its block gives it")
+	shrink := fs.Float64("image_shrink_percent", resize.ShrinkPercent, "how much an image shrinks per step, %")
+	minResize := fs.Float64("min_resize_image", resize.MinResizeImage, "the smallest an image may shrink to, as a share of its size")
+	bottomSpace := fs.Float64("image_bottom_space_row_ratio", resize.BottomSpaceRowRatio,
+		"shrink when the blank space below the last row is more than this many rows")
 	outputDir := fs.String("output_dir", "", "where to write the zip; empty is beside the input")
 	config := configFlag(fs)
 	if err := parseConfigured(fs, args, *config); err != nil {
@@ -377,6 +383,7 @@ func handoutsSplitFit(args []string) error {
 	if err != nil {
 		return err
 	}
+	a.Resize.Off, a.Resize.ShrinkPercent, a.Resize.MinResizeImage, a.Resize.BottomSpaceRowRatio = *noResize, *shrink, *minResize, *bottomSpace
 	in := fs.Arg(0)
 	zipped, err := splitFitZip(in, a, typstBin)
 	if err != nil {

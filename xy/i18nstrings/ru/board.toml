@@ -312,6 +312,30 @@ keep_accents = "Оставить ударения"
 template = "Свой шаблон .pptx"
 config = "Свой pptx_config.toml"
 
+[handout_page]
+# The handout page setup dialog (handoutpage.ts): chgksuite's handout flags
+# for one tour.
+title = "Страница раздаток"
+lead = "Действует на все раздатки тура: просмотр, PDF, split-fit и печать. Пустое поле — значение по умолчанию."
+paper = "Формат"
+paper_custom = "Свой размер"
+width = "Ширина, мм"
+height = "Высота, мм"
+margin_top = "Поле сверху, мм"
+margin_bottom = "Снизу, мм"
+margin_left = "Слева, мм"
+margin_right = "Справа, мм"
+font = "Шрифт"
+font_size = "Размер, пт"
+boxwidth = "Ширина ячейки, мм"
+tikz_mm = "Промежуток между ячейками, мм"
+resize_title = "Картинки в split-fit"
+auto_resize = "Уменьшать картинку, если так поместится ещё один ряд"
+shrink_percent = "Шаг, %"
+min_resize = "Не меньше, доля"
+bottom_space = "Пустое место внизу, рядов"
+saved = "Сохранено."
+
 [stats]
 # «Добавить взятия» (statspanel.ts): chgksuite's add_stats, which writes the
 # stats line into a copy of the tour.
@@ -332,6 +356,13 @@ done = "Копия создана."
 offline = "Взятия добавляются только онлайн."
 # The copy's list (and group) title.
 copy_title = '{{.title}} (взятия)'
+
+[export_handouts]
+# The handouts section of the export dialog: the print run, which needs the
+# number of teams.
+title = "Печать раздаток"
+teams = "Команд"
+teams_hint = "Если указать, в архив добавится PDF для печати: каждая раздатка столько раз, сколько нужно командам. Страница — из настроек раздаток тура."
 
 [tgexport]
 # The dialog that opens when the export is «телеграм-канал»: where to post,
@@ -420,6 +451,16 @@ src_label = "Исходник 4s"
 # Title of the handouts-generation overlay, the list preview's button into it,
 # and the ⋯ row that opens it — a grouped list generates the whole group's.
 title = "Вёрстка раздаток"
+# The editor's page setup button (handoutpage.ts) and its tooltip.
+page = "Страница…"
+page_title = "Размер страницы, поля и шрифт раздаток этого тура"
+# The print run: the button that makes the PDFs, and its question.
+pack = "Для печати…"
+pack_teams = "Сколько команд играет?"
+pack_title = "Split-fit, затем столько копий каждой раздатки, сколько нужно командам: один PDF для цветного принтера и один для обычного"
+packing = "Готовлю печать…"
+pack_done = "Готово."
+pack_failed = 'Не получилось подготовить печать: {{.error}}'
 menu_group = "Вёрстка раздаток (вся группа)"
 # aria-label of the .hndt source editor.
 src_label = "Источник (.hndt)"

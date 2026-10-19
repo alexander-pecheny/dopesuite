@@ -18,6 +18,7 @@ import { xyListExport } from "./listexport.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { modal } from "./modal.js";
+import { createHandoutPage } from "./handoutpage.js";
 import { icon } from "./icons_gen.js";
 import { anchorPopup } from "./popup.js";
 import { xyRank } from "./rank.js";
@@ -36,7 +37,9 @@ const { el, byId, errMsg, downloadBlob, onCmdEnter } = xyApp;
 
 export function createHandoutsPanel(board: Board, attachments: Pick<Attachments, "appendImages" | "cardAttachments">): ListPanel {
   const handoutsModal = modal("handouts");
-  let handoutsCtx: { cards: BoardCard[]; numbers: Array<string | null>; title: string; listId: number } | null = null;
+  // page is the tour's handout page setup (handoutpage.ts), sent with every render.
+  let handoutsCtx: { cards: BoardCard[]; numbers: Array<string | null>; title: string; listId: number; scope: ListScope; page: string } | null = null;
+  const handoutPage = createHandoutPage(board);
   let handoutsPdfUrl: string | null = null;
   let handoutsDlUrl: string | null = null;
 
@@ -46,7 +49,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     // concatenated cards), matching the board + docx export.
     const cards = scope.cards;
     const { numbers, source } = xyListExport.hndtOf(cards);
-    handoutsCtx = { cards, numbers, title: scope.title, listId: scope.lists[0].id };
+    handoutsCtx = { cards, numbers, title: scope.title, listId: scope.lists[0].id, scope, page: scope.handoutPage };
     byId<HTMLTextAreaElement>("handoutsSource").value = source;
     clearHandoutsPdf();
     handoutsModal.open({ onClose: hideHandouts });
@@ -490,6 +493,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     const fd = new FormData();
     fd.append("source", source);
     fd.append("filename", handoutsCtx?.title || "handouts");
+    if (handoutsCtx?.page) fd.append("page", handoutsCtx.page);
     const sid = await handoutSession.ensure(source);
     if (sid) fd.append("session", sid);
     return fd;
@@ -528,11 +532,47 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     }
   }
 
+  // generatePack is split_fit followed by chgksuite's pack: each handout as many
+  // times as the teams need, one PDF for the colour printer and one for the
+  // other (a zip when there are both).
+  let lastTeams = "";
+  async function generatePack(): Promise<void> {
+    if (!handoutsCtx) return;
+    const msg = byId("handoutsMessage");
+    if (!xySync.requireOnline(S.board.handouts.splitfitOffline(), msg)) return;
+    const source = byId<HTMLTextAreaElement>("handoutsSource").value;
+    if (!source.trim()) { msg.textContent = S.board.handouts.sourceEmpty(); return; }
+    const teams = (prompt(S.board.handouts.packTeams(), lastTeams) || "").trim();
+    if (!teams) return;
+    lastTeams = teams;
+    const btn = byId<HTMLButtonElement>("handoutsPack");
+    btn.disabled = true;
+    msg.textContent = S.board.handouts.packing();
+    try {
+      const fd = await handoutsBody(source);
+      fd.append("teams", teams);
+      const res = await fetch("/api/handouts/pack", { method: "POST", credentials: "same-origin", body: fd });
+      if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+      const zipped = (res.headers.get("Content-Type") || "").includes("zip");
+      downloadBlob(await res.blob(), handoutFileBase() + (zipped ? "_print.zip" : "_print.pdf"));
+      msg.textContent = S.board.handouts.packDone();
+    } catch (err) {
+      msg.textContent = S.board.handouts.packFailed(errMsg(err));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   sourceEl.addEventListener("input", schedulePreview);
   // Cmd/Ctrl-Enter skips the wait.
   onCmdEnter(sourceEl, () => { void refreshPreview(); });
   onCmdEnter(fieldsEl, () => { void refreshPreview(); });
   byId("handoutsSplitFit").addEventListener("click", () => { void generateSplitFitZip(); });
+  byId("handoutsPack").addEventListener("click", () => { void generatePack(); });
+  byId("handoutsPage").addEventListener("click", () => {
+    const ctx = handoutsCtx;
+    if (ctx) handoutPage.open(ctx.scope, (json) => { ctx.page = json; void refreshPreview(); });
+  });
 
 
   return {

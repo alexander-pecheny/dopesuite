@@ -300,6 +300,12 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
           filefield id="exportPptxTemplate" accept=".pptx"
           label for="exportPptxConfig" @board.export_pptx.config
           filefield id="exportPptxConfig" accept=".toml"
+      details id="exportHandoutsOpts" hidden
+        summary @board.export_handouts.title
+        col gap="sm"
+          field label=@board.export_handouts.teams
+            numfield id="exportHandoutsTeams" min="1" max="9999" narrow
+          hint @board.export_handouts.teams_hint
       row gap="sm" align="center" wrap
         button submit id="exportRun" @board.export.run
         button kind="ghost" id="exportCancel" @board.actions.cancel
@@ -318,7 +324,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       textfield id="statsRange" placeholder="1-12" autocomplete="off" spellcheck="false"
       hint @board.stats.range_hint
       label for="statsThreshold" @board.stats.threshold_label
-      textfield id="statsThreshold" value="2" autocomplete="off"
+      numfield id="statsThreshold" min="0" max="99" placeholder="2" narrow
       row gap="sm" align="center" wrap
         button submit id="statsRun" @board.stats.run
         button kind="ghost" id="statsCancel" @board.actions.cancel
@@ -425,13 +431,67 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         editor id="handoutsSource" kind="handouts" spellcheck="false" aria-label=@board.handouts.src_label
         -- pinned to the pane's bottom edge: a long form must not scroll them away
         row id="handoutsActions" gap="sm" align="center" wrap
+          button small kind="ghost" id="handoutsPage" title=@board.handouts.page_title @board.handouts.page
           button small kind="ghost" id="handoutsSplitFit" title=@board.handouts.splitfit_title "Split-fit"
+          button small kind="ghost" id="handoutsPack" title=@board.handouts.pack_title @board.handouts.pack
           message id="handoutsMessage"
       pane kind="preview"
         row gap="sm" align="center" justify="between"
           label "PDF"
           button small download id="handoutsDownload" hidden @board.handouts.download
         mount id="handoutsPdf" kind="handouts-pdf"
+
+  -- a tour's handout page setup: chgksuite's handout flags, kept on the list
+  -- or its group and sent with every render
+  modal id="handoutPageOverlay" label=@board.handout_page.title title=@board.handout_page.title
+    form id="handoutPageForm" dir="col"
+      hint @board.handout_page.lead
+      field label=@board.handout_page.paper
+        selectfield id="handoutPagePaper"
+          option value="" selected "A4"
+          option value="a5" "A5"
+          option value="a3" "A3"
+          option value="letter" "Letter"
+          option value="custom" @board.handout_page.paper_custom
+      row id="handoutPageSize" gap="sm" wrap hidden
+        field label=@board.handout_page.width
+          numfield id="handoutPageWidth" min="50" max="1000" placeholder="210" narrow
+        field label=@board.handout_page.height
+          numfield id="handoutPageHeight" min="50" max="1000" placeholder="297" narrow
+      row gap="sm" wrap
+        field label=@board.handout_page.margin_top
+          numfield id="handoutPageMarginTop" min="0" max="200" placeholder="5" narrow
+        field label=@board.handout_page.margin_bottom
+          numfield id="handoutPageMarginBottom" min="0" max="200" placeholder="5" narrow
+        field label=@board.handout_page.margin_left
+          numfield id="handoutPageMarginLeft" min="0" max="200" placeholder="5" narrow
+        field label=@board.handout_page.margin_right
+          numfield id="handoutPageMarginRight" min="0" max="200" placeholder="5" narrow
+      row gap="sm" wrap
+        field label=@board.handout_page.font
+          textfield id="handoutPageFont" placeholder="Noto Sans" autocomplete="off" spellcheck="false"
+        field label=@board.handout_page.font_size
+          numfield id="handoutPageFontSize" min="4" max="96" placeholder="14" narrow
+      row gap="sm" wrap
+        field label=@board.handout_page.boxwidth
+          numfield id="handoutPageBoxWidth" min="1" max="1000" step="0.1" narrow
+        field label=@board.handout_page.tikz_mm
+          numfield id="handoutPageTikz" min="0" max="50" step="0.1" placeholder="2" narrow
+      details
+        summary @board.handout_page.resize_title
+        col gap="sm"
+          checkbox id="handoutPageAutoResize" checked @board.handout_page.auto_resize
+          row gap="sm" wrap
+            field label=@board.handout_page.shrink_percent
+              numfield id="handoutPageShrink" min="0.1" max="90" step="0.1" placeholder="2" narrow
+            field label=@board.handout_page.min_resize
+              numfield id="handoutPageMinResize" min="0.05" max="1" step="0.05" placeholder="0.6" narrow
+            field label=@board.handout_page.bottom_space
+              numfield id="handoutPageBottomSpace" min="0.1" max="10" step="0.1" placeholder="0.6" narrow
+      message id="handoutPageMessage"
+      row gap="sm" wrap
+        button submit @board.actions.save
+        button kind="ghost" id="handoutPageCancel" @board.actions.cancel
 
   -- the ⋯ list-settings entry: what the list holds, and where its tour puts the comment
   modal id="listSettingsOverlay" label=@board.list.settings_title title=@board.list.settings_title

@@ -107,3 +107,38 @@ func TestAllQCarriesTheFittedImageSize(t *testing.T) {
 		t.Errorf("allQ = %q, want %q", got, want)
 	}
 }
+
+// TestPackReal: every fitted handout is printed as many times as PackPages
+// says the field needs, and a colour one goes to the colour run.
+func TestPackReal(t *testing.T) {
+	bin := os.Getenv("XY_TYPST_TEST_BIN")
+	if bin == "" {
+		t.Skip("set XY_TYPST_TEST_BIN to run the real pack")
+	}
+	src := "for_question: 1\ncolumns: 3\n\nКороткий\n" +
+		"---\nfor_question: 2\ncolumns: 2\ncolor: 1\n\nЦветной\n"
+	ts, err := NewCLITypesetter(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	const teams = 40
+	colour, bw, err := Pack(context.Background(), src, nil, DefaultArgs(), ts, teams)
+	if err != nil {
+		t.Fatalf("Pack: %v", err)
+	}
+	_, fitted, err := fitAll(context.Background(), src, nil, DefaultArgs(), ts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, out := range [][]byte{bw, colour} {
+		want, _, err := PackPages(fitted[i].hndt, teams)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := api.PageCount(bytes.NewReader(out), model.NewDefaultConfiguration())
+		if err != nil || got != want {
+			t.Errorf("run %d: %d pages (%v), want %d", i, got, err, want)
+		}
+	}
+}

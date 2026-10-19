@@ -127,6 +127,11 @@ bad_docx_template = "шаблон .docx не открывается"
 bad_pptx_template = "шаблон .pptx не открывается"
 bad_pptx_config = 'не удалось прочитать настройки .pptx: {{.reason}}'
 
+[handouts]
+# A tour's handout page setup (handoutpage.go) and the print run (pack).
+bad_page = "настройки страницы раздаток не подходят: проверьте размеры и поля"
+bad_teams = "число команд должно быть от 1 до 9999"
+
 [stats]
 # «Добавить взятия» (stats.go): reading a tournament's results for a copy of
 # a tour with the stats line on every question.
