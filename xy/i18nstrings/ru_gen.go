@@ -84,6 +84,22 @@ var RU = Strings{
 			Sent:  func() string { return "Вердикт уже на сайте рейтинга" },
 			Type:  func() string { return "Апелляции" },
 		},
+		Manual: AppealsManualStrings{
+			Added: func(appeal string) string {
+				return fmt.Sprintf("Добавлено: %s. Можно ввести следующую.", appeal)
+			},
+			Answer:        func() string { return "Ответ, который просят зачесть" },
+			Label:         func() string { return "Добавить апелляцию" },
+			NeedAnswer:    func() string { return "Укажите ответ, который просят зачесть." },
+			NeedQuestion:  func() string { return "Укажите номер вопроса." },
+			Question:      func() string { return "Номер вопроса" },
+			Save:          func() string { return "Добавить" },
+			Title:         func(list string) string { return fmt.Sprintf("Новая апелляция: %s", list) },
+			Type:          func() string { return "Что просят" },
+			TypeAccept:    func() string { return "Зачесть ответ" },
+			TypeHostError: func() string { return "Снять вопрос из-за ошибки ведущего" },
+			TypeRemove:    func() string { return "Снять вопрос" },
+		},
 		Offline: func() string { return "Сайт рейтинга недоступен без сети." },
 		Refresh: AppealsRefreshStrings{
 			Done: func(added string, updated string, total string) string {
@@ -102,10 +118,20 @@ var RU = Strings{
 			Title: func() string { return "Обновление апелляций" },
 		},
 		Settings: AppealsSettingsStrings{
-			Create:         func() string { return "Создать и загрузить" },
-			CreateTitle:    func() string { return "Новый список апелляций" },
-			GroupOption:    func(name string) string { return fmt.Sprintf("%s (группа)", name) },
-			Label:          func() string { return "Настройки апелляций…" },
+			Create:       func() string { return "Создать и загрузить" },
+			CreateManual: func() string { return "Создать" },
+			CreateTitle:  func() string { return "Новый список апелляций" },
+			GroupOption:  func(name string) string { return fmt.Sprintf("%s (группа)", name) },
+			Label:        func() string { return "Настройки апелляций…" },
+			Mode:         func() string { return "Откуда апелляции" },
+			ModeHint: func() string {
+				return "Выберите «Вводятся вручную», если апелляции турнира подаются не через rating.chgk.info. Тогда каждую апелляцию добавляют кнопкой «+» у списка."
+			},
+			ModeLocked: func() string {
+				return "В списке уже есть апелляции, поэтому способ заполнения поменять нельзя."
+			},
+			ModeManual:     func() string { return "Вводятся вручную" },
+			ModeSite:       func() string { return "С сайта рейтинга" },
 			NeedPacket:     func() string { return "Выберите пакет." },
 			NeedTitle:      func() string { return "Укажите название списка." },
 			NeedTournament: func() string { return "Укажите номер турнира." },

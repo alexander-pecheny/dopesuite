@@ -1,8 +1,10 @@
 // appealspanel.ts — an appeals List's entries in its ⋯ menu (ADR-0021): its
-// settings (the tournament, the packet and the board's rating token), a
-// refresh from the rating site, the export of verdicts back to it, and the
-// same verdicts as an .xlsx for a jury whose token cannot write. The rating
-// site is reached through the server's relay; only the .xlsx works offline.
+// settings (where its appeals come from, the tournament, the packet and the
+// board's rating token), a refresh from the rating site, the export of
+// verdicts back to it, and the same verdicts as an .xlsx for a jury whose
+// token cannot write. A manual List has none of the site's entries and adds
+// its appeals by hand instead. The rating site is reached through the
+// server's relay.
 
 import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
@@ -13,9 +15,9 @@ import { iconed } from "./icons_gen.js";
 import { KIND } from "./cardkind.js";
 import { createList } from "./addlist.js";
 import { xlsxSheet } from "./xlsx.js";
-import { appealHeading, statusText } from "./appealcard.js";
+import { appealFields, appealHeading, statusText } from "./appealcard.js";
 import {
-  composeAppeal, composeMeta, parseAppeal, parseMeta, planExport, planRefresh, verdictRows,
+  addManual, composeAppeal, composeMeta, parseAppeal, parseMeta, planExport, planRefresh, verdictRows, NO_META,
   type Appeal, type AppealsMeta, type Held, type Outgoing, type SiteAppeal, type SiteControversial,
 } from "./appeals.js";
 import type { Board, ListPanel, PanelShell } from "./panels.js";
@@ -30,6 +32,7 @@ export interface AppealsPanels {
   refresh: ListPanel;
   export: ListPanel;
   xlsx: ListPanel;
+  add: ListPanel;
   // Opens the settings for a List that does not exist yet: it is created when
   // they are saved, so an appeals List never exists without its packet.
   create(title: string, rank: string): void;
@@ -42,6 +45,12 @@ interface SiteAnswer {
 }
 
 export const isAppeals = (list: BoardList): boolean => list.type === "appeals";
+export const isManual = (list: BoardList): boolean => isAppeals(list) && parseMeta(list.meta).manual;
+const isFromSite = (list: BoardList): boolean => isAppeals(list) && !parseMeta(list.meta).manual;
+
+// A password manager takes a text field followed by a password field for a
+// login form and fills both in. These attributes ask every common one not to.
+const NOT_A_LOGIN = { autocomplete: "off", "data-1p-ignore": "true", "data-lpignore": "true", "data-bwignore": "true", "data-form-type": "other" };
 
 // tournamentId reads a number typed by hand or pasted as a link to the
 // tournament's page on the site.
@@ -89,15 +98,25 @@ export function createAppealsPanels(board: Board, shell: PanelShell): AppealsPan
   // openSettings draws the form for an existing List, or for one about to be
   // made when `create` is given.
   function openSettings(list: BoardList | null, create?: { title: string; rank: string }): void {
-    const meta = list ? parseMeta(list.meta) : { tournamentId: null, packetListId: null };
+    const meta = list ? parseMeta(list.meta) : NO_META;
     const nodes: HTMLElement[] = [];
     let titleInp: HTMLInputElement | null = null;
     if (create) {
-      titleInp = el("input", { class: "input", type: "text", value: create.title }) as HTMLInputElement;
+      titleInp = el("input", { class: "input", type: "text", value: create.title, ...NOT_A_LOGIN }) as HTMLInputElement;
       nodes.push(field(S.appeals.settings.title(), titleInp));
     }
-    const tInp = el("input", { class: "input", type: "text", inputmode: "numeric", value: meta.tournamentId ? String(meta.tournamentId) : "" }) as HTMLInputElement;
-    nodes.push(field(S.appeals.settings.tournament(), tInp, S.appeals.settings.tournamentHint()));
+    const modeSel = el("select", { class: "input" },
+      el("option", { value: "site", text: S.appeals.settings.modeSite() }),
+      el("option", { value: "manual", text: S.appeals.settings.modeManual() })) as HTMLSelectElement;
+    modeSel.value = meta.manual ? "manual" : "site";
+    // A hand-made appeal's id means nothing to the site, so a List that holds
+    // appeals keeps the way it was filled.
+    const filled = list != null && held(list).length > 0;
+    modeSel.disabled = filled;
+    nodes.push(field(S.appeals.settings.mode(), modeSel, filled ? S.appeals.settings.modeLocked() : S.appeals.settings.modeHint()));
+    const tInp = el("input", { class: "input", type: "text", inputmode: "numeric", value: meta.tournamentId ? String(meta.tournamentId) : "", ...NOT_A_LOGIN }) as HTMLInputElement;
+    const tField = field(S.appeals.settings.tournament(), tInp, S.appeals.settings.tournamentHint());
+    nodes.push(tField);
     const choices = packetChoices();
     const pSel = el("select", { class: "input" },
       el("option", { value: "", text: S.appeals.settings.packetNone() }),
@@ -107,23 +126,34 @@ export function createAppealsPanels(board: Board, shell: PanelShell): AppealsPan
     const pick = choices.find((c) => c.id === meta.packetListId || (linkedGroup != null && groupOf(c.id) === linkedGroup));
     pSel.value = pick ? String(pick.id) : "";
     nodes.push(field(S.appeals.settings.packet(), pSel, S.appeals.settings.packetHint()));
-    const tokInp = el("input", { class: "input", type: "password", autocomplete: "off", value: board.state.ratingToken, placeholder: "rt_…" }) as HTMLInputElement;
-    nodes.push(field(S.appeals.settings.token(), tokInp, S.appeals.settings.tokenHint()));
+    // The token is a text field drawn as dots: a password field is what makes
+    // a password manager offer the user's own login here.
+    const tokInp = el("input", { class: "input input-secret", type: "text", spellcheck: "false", value: board.state.ratingToken, placeholder: "rt_…", ...NOT_A_LOGIN }) as HTMLInputElement;
+    const tokField = field(S.appeals.settings.token(), tokInp, S.appeals.settings.tokenHint());
+    nodes.push(tokField);
     const msg = el("p", { class: "hint hint-danger", hidden: true });
-    const save = el("button", { class: "btn btn-primary", type: "submit" }, create ? S.appeals.settings.create() : S.appeals.settings.save()) as HTMLButtonElement;
-    const form = el("form", { class: "u-col u-gap-md" }, ...nodes, msg, el("div", { class: "u-row u-gap-sm" }, save));
+    const save = el("button", { class: "btn btn-primary", type: "submit" }) as HTMLButtonElement;
+    const manual = (): boolean => modeSel.value === "manual";
+    const sync = (): void => {
+      tField.hidden = manual();
+      tokField.hidden = manual();
+      save.textContent = !create ? S.appeals.settings.save() : manual() ? S.appeals.settings.createManual() : S.appeals.settings.create();
+    };
+    modeSel.addEventListener("change", sync);
+    sync();
+    const form = el("form", { class: "u-col u-gap-md", ...NOT_A_LOGIN }, ...nodes, msg, el("div", { class: "u-row u-gap-sm" }, save));
     form.addEventListener("submit", (e) => {
       e.preventDefault();
-      const next: AppealsMeta = { tournamentId: tournamentId(tInp.value), packetListId: pSel.value ? Number(pSel.value) : null };
+      const next: AppealsMeta = { tournamentId: tournamentId(tInp.value), packetListId: pSel.value ? Number(pSel.value) : null, manual: manual() };
       const fail = (text: string): void => { msg.textContent = text; msg.hidden = false; };
-      if (!next.tournamentId) { fail(S.appeals.settings.needTournament()); return; }
-      if (!next.packetListId) { fail(S.appeals.settings.needPacket()); return; }
+      if (!next.manual && !next.tournamentId) { fail(S.appeals.settings.needTournament()); return; }
+      if (!next.manual && !next.packetListId) { fail(S.appeals.settings.needPacket()); return; }
       if (create && !(titleInp?.value.trim())) { fail(S.appeals.settings.needTitle()); return; }
       save.disabled = true;
       void (async () => {
         board.setStatus("saving");
         try {
-          await saveToken(tokInp.value.trim());
+          if (!next.manual) await saveToken(tokInp.value.trim());
           let target = list;
           if (!target && create) {
             target = await createList(board, (titleInp as HTMLInputElement).value.trim(), "appeals", create.rank, composeMeta(next));
@@ -134,7 +164,8 @@ export function createAppealsPanels(board: Board, shell: PanelShell): AppealsPan
           }
           board.setStatus("saved");
           board.render();
-          if (target && (create || !held(target).length)) await runRefresh(target);
+          if (!next.manual && target && (create || !held(target).length)) await runRefresh(target);
+          else if (next.manual && target && create) openAdd(target);
           else shell.message("");
         } catch (err) {
           board.setStatus("error");
@@ -143,7 +174,42 @@ export function createAppealsPanels(board: Board, shell: PanelShell): AppealsPan
       })();
     });
     shell.open({ icon: "gavel", title: create ? S.appeals.settings.createTitle() : S.appeals.settings.titleFor(list?.title || ""), body: form });
-    (titleInp || tInp).focus();
+    (titleInp || modeSel).focus();
+  }
+
+  // openAdd is the form for one appeal typed in by hand. Saving it keeps the
+  // form open and empty, for the next one.
+  function openAdd(list: BoardList, lastType = "A"): void {
+    const msg = el("p", { class: "hint", hidden: true });
+    const fail = (text: string): void => { msg.className = "hint hint-danger"; msg.textContent = text; msg.hidden = false; };
+    const f = appealFields({ type: lastType, question: 0, answer: "", text: "" }, () => { msg.hidden = true; }, fail);
+    const save = el("button", { class: "btn btn-primary", type: "submit", text: S.appeals.manual.save() }) as HTMLButtonElement;
+    const form = el("form", { class: "u-col u-gap-md", ...NOT_A_LOGIN }, ...f.nodes, msg, el("div", { class: "u-row u-gap-sm" }, save));
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const fields = f.read();
+      if (!fields) return;
+      save.disabled = true;
+      void (async () => {
+        board.setStatus("saving");
+        try {
+          const { appeal, rank } = addManual(held(list), fields, new Date().toISOString());
+          const desc = composeAppeal(appeal);
+          const res = await board.verbs.create("createCard", `/api/lists/${list.id}/cards`, { description: await xyCrypto.encField(board.dk(), desc), rank, kind: KIND.appeal });
+          board.state.cards.push({ id: res.id as number, listId: list.id, kind: KIND.appeal, rank, desc, handoutMeta: null, alias: null, createdAt: appeal.issuedAt });
+          board.setStatus("saved");
+          board.render();
+          openAdd(list, fields.type);
+          shell.message(S.appeals.manual.added(appealHeading(appeal)));
+        } catch (err) {
+          board.setStatus("error");
+          fail(errMsg(err));
+          save.disabled = false;
+        }
+      })();
+    });
+    shell.open({ icon: "plus", title: S.appeals.manual.title(list.title), body: form });
+    form.querySelector("input")?.focus();
   }
 
   async function fetchSite(meta: AppealsMeta): Promise<SiteAnswer> {
@@ -255,9 +321,10 @@ export function createAppealsPanels(board: Board, shell: PanelShell): AppealsPan
 
   return {
     settings: { id: "appeals-settings", menu: "list", icon: "gavel", label: S.appeals.settings.label(), offered: (s) => isAppeals(s.list), open: (s) => openSettings(s.list) },
-    refresh: { id: "appeals-refresh", menu: "list", icon: "refresh-cw", label: S.appeals.refresh.label(), offered: (s) => isAppeals(s.list), open: (s) => { void runRefresh(s.list); } },
-    export: { id: "appeals-export", menu: "list", icon: "cloud-upload", label: S.appeals.export.label(), offered: (s) => isAppeals(s.list), open: (s) => { void openExport(s.list); } },
-    xlsx: { id: "appeals-xlsx", menu: "list", icon: "file-down", label: S.appeals.xlsx.label(), offered: (s) => isAppeals(s.list), open: (s) => { void downloadXlsx(s.list).catch((err) => alert(errMsg(err))); } },
+    add: { id: "appeals-add", menu: "list", icon: "plus", label: S.appeals.manual.label(), offered: (s) => isManual(s.list), open: (s) => openAdd(s.list) },
+    refresh: { id: "appeals-refresh", menu: "list", icon: "refresh-cw", label: S.appeals.refresh.label(), offered: (s) => isFromSite(s.list), open: (s) => { void runRefresh(s.list); } },
+    export: { id: "appeals-export", menu: "list", icon: "cloud-upload", label: S.appeals.export.label(), offered: (s) => isFromSite(s.list), open: (s) => { void openExport(s.list); } },
+    xlsx: { id: "appeals-xlsx", menu: "list", icon: "file-down", label: S.appeals.xlsx.label(), offered: (s) => isFromSite(s.list), open: (s) => { void downloadXlsx(s.list).catch((err) => alert(errMsg(err))); } },
     create: (title, rank) => openSettings(null, { title, rank }),
   };
 }

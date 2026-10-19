@@ -9,7 +9,7 @@ import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
 import { iconed } from "./icons_gen.js";
 import { linkSegments } from "./timeline.js";
-import { composeAppeal, tally, verdictStatus, type Appeal, type Status, type Vote, type VoteValue } from "./appeals.js";
+import { composeAppeal, tally, verdictStatus, type Appeal, type AppealFields, type Status, type Vote, type VoteValue } from "./appeals.js";
 
 const { el } = xyApp;
 
@@ -21,11 +21,14 @@ export interface AppealCardDeps {
   // The packet's question N, rendered, or a line saying why there is none.
   question(cardListId: number, n: number): HTMLElement;
   vote(cardId: number, value: VoteValue | null): Promise<void>;
+  // Whether the List is filled by hand: then there is no site to report on,
+  // and the appeal itself stays editable.
+  manual(listId: number): boolean;
 }
 
 export interface AppealCard {
   view(cardId: number, listId: number, a: Appeal): HTMLElement;
-  editor(cardId: number, a: Appeal, onInput: () => void): { node: HTMLElement; read(): string };
+  editor(cardId: number, listId: number, a: Appeal, onInput: () => void): { node: HTMLElement; read(): string };
 }
 
 // heading is the appeal's one-line name: the board card and the editor's
@@ -58,6 +61,36 @@ function block(label: string, ...body: Node[]): HTMLElement {
 }
 
 // prose is text from the site as written, with its URLs made clickable.
+// appealFields is the form for what an appeal says, on a manual List: the
+// panel that adds one and the card editor both use it. read is null while the
+// question number or the answer to accept is missing, after showing why.
+export function appealFields(f: AppealFields, onInput: () => void, fail: (text: string) => void): { nodes: HTMLElement[]; read(): AppealFields | null } {
+  const q = el("input", { class: "input", type: "text", inputmode: "numeric", autocomplete: "off", value: f.question ? String(f.question) : "" }) as HTMLInputElement;
+  const type = el("select", { class: "input" },
+    el("option", { value: "A", text: S.appeals.manual.typeAccept() }),
+    el("option", { value: "R", text: S.appeals.manual.typeRemove() }),
+    el("option", { value: "N", text: S.appeals.manual.typeHostError() })) as HTMLSelectElement;
+  type.value = f.type || "A";
+  const answer = el("input", { class: "input", type: "text", autocomplete: "off", value: f.answer }) as HTMLInputElement;
+  const text = el("textarea", { class: "input fld-input", rows: "6" }) as HTMLTextAreaElement;
+  text.value = f.text;
+  const answerBlock = block(S.appeals.manual.answer(), answer);
+  const sync = (): void => { answerBlock.hidden = type.value !== "A"; };
+  type.addEventListener("change", () => { sync(); onInput(); });
+  for (const n of [q, answer, text]) n.addEventListener("input", onInput);
+  sync();
+  const read = (): AppealFields | null => {
+    const question = Number(q.value.trim());
+    if (!Number.isInteger(question) || question < 1) { fail(S.appeals.manual.needQuestion()); return null; }
+    if (type.value === "A" && !answer.value.trim()) { fail(S.appeals.manual.needAnswer()); return null; }
+    return { type: type.value, question, answer: answer.value, text: text.value };
+  };
+  return {
+    nodes: [block(S.appeals.manual.question(), q), block(S.appeals.manual.type(), type), answerBlock, block(S.appeals.card.text(), text)],
+    read,
+  };
+}
+
 const prose = (text: string): HTMLElement => el("div", { class: "pv-field" },
   linkSegments(text).map((s) => (s.href ? el("a", { class: "pv-link", href: s.href, target: "_blank", rel: "noopener noreferrer", text: s.text }) : s.text)));
 
@@ -152,19 +185,20 @@ export function createAppealCard(deps: AppealCardDeps): AppealCard {
     const draw = (): void => {
       const text: Node[] = [prose(a.text)];
       if (a.textChangedAt) text.unshift(el("p", { class: "hint hint-danger", text: S.appeals.card.textChanged(new Date(a.textChangedAt).toLocaleString("ru")) }));
-      const verdict: Node[] = [decided(cardId, a), a.verdict.text ? prose(a.verdict.text) : el("p", { class: "hint", text: S.appeals.verdict.noText() }), site(a)];
+      const manual = deps.manual(listId);
+      const verdict: Node[] = [decided(cardId, a), a.verdict.text ? prose(a.verdict.text) : el("p", { class: "hint", text: S.appeals.verdict.noText() })];
+      if (!manual) verdict.push(site(a));
       box.replaceChildren(
         foldedBlock(S.appeals.card.question(), deps.question(listId, a.question)),
-        foldedBlock(S.appeals.card.text(), ...text),
-        controversials(a),
-        votes(cardId, draw),
-        block(S.appeals.verdict.label(), ...verdict));
+        foldedBlock(S.appeals.card.text(), ...text));
+      if (!manual || a.controversials.length) box.append(controversials(a));
+      box.append(votes(cardId, draw), block(S.appeals.verdict.label(), ...verdict));
     };
     draw();
     return box;
   }
 
-  function editor(cardId: number, a: Appeal, onInput: () => void): { node: HTMLElement; read(): string } {
+  function editor(cardId: number, listId: number, a: Appeal, onInput: () => void): { node: HTMLElement; read(): string } {
     const sel = el("select", { class: "input" },
       el("option", { value: "", text: S.appeals.verdict.followVotes() }),
       el("option", { value: "A", text: S.appeals.status.accepted() }),
@@ -172,7 +206,17 @@ export function createAppealCard(deps: AppealCardDeps): AppealCard {
     sel.value = a.verdict.status;
     const text = el("textarea", { class: "input fld-input", rows: "10", placeholder: S.appeals.verdict.placeholder() }) as HTMLTextAreaElement;
     text.value = a.verdict.text;
-    const read = (): Appeal => ({ ...a, verdict: { status: sel.value as Status, text: text.value } });
+    const manual = deps.manual(listId);
+    const msg = el("p", { class: "hint hint-danger", hidden: true });
+    const own = manual ? appealFields(a, onInput, (t) => { msg.textContent = t; msg.hidden = false; }) : null;
+    // A half-typed question number keeps what the card had, so the draft stays
+    // valid JSON while the jury types.
+    const said = (): Partial<Appeal> => {
+      msg.hidden = true;
+      const f = own?.read();
+      return f ? { ...f, answer: f.type === "A" ? f.answer.trim() : "", text: f.text.trim() } : {};
+    };
+    const read = (): Appeal => ({ ...a, ...said(), verdict: { status: sel.value as Status, text: text.value } });
     const status = el("div");
     const drawStatus = (): void => { status.replaceChildren(decided(cardId, read())); };
     sel.addEventListener("change", () => { drawStatus(); onInput(); });
@@ -182,6 +226,7 @@ export function createAppealCard(deps: AppealCardDeps): AppealCard {
     drawVotes();
     drawStatus();
     const node = el("div", { class: "card-fields" },
+      ...(own ? [...own.nodes, msg] : []),
       votesBox,
       block(S.appeals.verdict.statusLabel(), sel, status),
       block(S.appeals.verdict.label(), text, site(a)));

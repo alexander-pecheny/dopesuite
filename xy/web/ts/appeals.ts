@@ -67,7 +67,12 @@ export interface AppealsMeta {
   // The List holding the packet. When it is in a List Group, the whole group
   // is the packet.
   packetListId: number | null;
+  // A manual List is filled by hand, for a tournament the rating site does
+  // not hold appeals for. It never talks to the site.
+  manual: boolean;
 }
+
+export const NO_META: AppealsMeta = { tournamentId: null, packetListId: null, manual: false };
 
 export type VoteValue = "for" | "against";
 export interface Vote { cardId: number; userId: number; value: string }
@@ -79,12 +84,12 @@ const status = (v: unknown): Status => (v === "A" || v === "D" ? v : "");
 export function parseMeta(raw: string | null | undefined): AppealsMeta {
   try {
     const o = JSON.parse(raw || "{}") as Record<string, unknown>;
-    return { tournamentId: num(o.tournament_id), packetListId: num(o.packet_list_id) };
-  } catch { return { tournamentId: null, packetListId: null }; }
+    return { tournamentId: num(o.tournament_id), packetListId: num(o.packet_list_id), manual: o.manual === true };
+  } catch { return NO_META; }
 }
 
 export function composeMeta(m: AppealsMeta): string {
-  return JSON.stringify({ tournament_id: m.tournamentId, packet_list_id: m.packetListId });
+  return JSON.stringify({ tournament_id: m.tournamentId, packet_list_id: m.packetListId, manual: m.manual });
 }
 
 // relinkPacket is the settings of an appeals list arriving on another board:
@@ -202,22 +207,42 @@ export function planRefresh(held: ReadonlyArray<Held>, site: ReadonlyArray<SiteA
     if (text !== h.appeal.text) { next.text = text; next.textChangedAt = now; }
     if (composeAppeal(next) !== composeAppeal(h.appeal)) plan.update.push({ cardId: h.cardId, appeal: next });
   }
-  // A new appeal goes before the first held card that sorts after it, so a
-  // list the jury has already moved around keeps its order.
-  const sorted: Array<{ rank: string; appeal: Appeal }> = [...held].sort((x, y) => (x.rank < y.rank ? -1 : x.rank > y.rank ? 1 : 0));
+  const sorted = byRankOf(held);
   const fresh = site.filter((s) => !byId.has(s.id)).map((s) => fromSite(s, controversials)).sort(compareAppeals);
-  for (const a of fresh) {
-    let i = sorted.findIndex((h) => compareAppeals(h.appeal, a) > 0);
-    if (i < 0) i = sorted.length;
-    const lo = i > 0 ? sorted[i - 1].rank : null;
-    const hi = i < sorted.length ? sorted[i].rank : null;
-    // Two cards may share a rank, and then there is no key between them.
-    let rank: string;
-    try { rank = xyRank.keyBetween(lo, hi); } catch { rank = xyRank.keyBetween(lo, null); }
-    sorted.splice(i, 0, { rank, appeal: a });
-    plan.create.push({ appeal: a, rank });
-  }
+  for (const a of fresh) plan.create.push({ appeal: a, rank: place(sorted, a) });
   return plan;
+}
+
+type Placed = { rank: string; appeal: Appeal };
+const byRankOf = (held: ReadonlyArray<Held>): Placed[] => [...held].sort((x, y) => (x.rank < y.rank ? -1 : x.rank > y.rank ? 1 : 0));
+
+// place gives a new appeal the rank before the first card that sorts after it,
+// so a list the jury has already moved around keeps its order.
+function place(sorted: Placed[], a: Appeal): string {
+  let i = sorted.findIndex((h) => compareAppeals(h.appeal, a) > 0);
+  if (i < 0) i = sorted.length;
+  const lo = i > 0 ? sorted[i - 1].rank : null;
+  const hi = i < sorted.length ? sorted[i].rank : null;
+  // Two cards may share a rank, and then there is no key between them.
+  let rank: string;
+  try { rank = xyRank.keyBetween(lo, hi); } catch { rank = xyRank.keyBetween(lo, null); }
+  sorted.splice(i, 0, { rank, appeal: a });
+  return rank;
+}
+
+// What a jury types in for an appeal on a manual List.
+export interface AppealFields { type: string; question: number; answer: string; text: string }
+
+// addManual is a new appeal on a manual List and its rank there. Its id only
+// has to be unique in the List, so it is the next number after the largest.
+export function addManual(held: ReadonlyArray<Held>, f: AppealFields, now: string): { appeal: Appeal; rank: string } {
+  const id = held.reduce((m, h) => Math.max(m, h.appeal.id), 0) + 1;
+  const appeal: Appeal = {
+    id, type: f.type, question: f.question, answer: f.type === "A" ? f.answer.trim() : "", controversial: null,
+    text: f.text.trim(), issuedAt: now, textChangedAt: null,
+    site: { status: "", comment: "", overriddenBy: null }, controversials: [], verdict: { status: "", text: "" },
+  };
+  return { appeal, rank: place(byRankOf(held), appeal) };
 }
 
 export interface Outgoing {
@@ -263,5 +288,5 @@ export function questionCard<C>(cards: ReadonlyArray<C>, numbers: ReadonlyArray<
 
 export const xyAppeals = {
   parseMeta, composeMeta, relinkPacket, parseAppeal, composeAppeal, tally, verdictStatus, compareAppeals,
-  fromSite, planRefresh, planExport, verdictRows, questionCard,
+  fromSite, planRefresh, addManual, planExport, verdictRows, questionCard,
 };
