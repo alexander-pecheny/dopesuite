@@ -168,20 +168,20 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 }
 
 // hostVenueTeamsTable is the teams of a host limited to venues: no import to
-// explain and no Flags to set, so the pencil stays on a phone's screen.
+// explain and no Flags to set, and the pencil comes first so a phone shows it.
 func hostVenueTeamsTable(teams []hostFestTeam) *dopeui.Element {
 	s := dopestrings.Default
 	rows := []dopeui.Item{dopeui.Trow(
-		dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColCity())),
-		dopeui.Hcell(dopeui.Text(s.Host.Roster.ColPlayers())), dopeui.Hcell(),
+		dopeui.Hcell(), dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())),
+		dopeui.Hcell(dopeui.Text(s.Host.Roster.ColCity())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColPlayers())),
 	)}
 	for _, t := range teams {
 		rows = append(rows, dopeui.Trow(
+			dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditTeamLabel(t.Name)),
+				dopeui.Data("team-edit", idstr.Format(t.ID)))),
 			dopeui.Cell(dopeui.Text(t.Name)),
 			dopeui.Cell(dopeui.Text(t.City)),
 			dopeui.Cell(dopeui.Text(strconv.Itoa(t.Players))),
-			dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditTeamLabel(t.Name)),
-				dopeui.Data("team-edit", idstr.Format(t.ID)))),
 		))
 	}
 	return dopeui.Col(dopeui.Note(dopeui.Text(s.Host.Roster.TeamsEditHintVenue())), dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...))
