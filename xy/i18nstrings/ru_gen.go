@@ -64,7 +64,7 @@ var RU = Strings{
 			Label:   func() string { return "Выгрузить вердикты" },
 			Loading: func() string { return "Сверяю вердикты с сайтом…" },
 			NeedToken: func() string {
-				return "Чтобы выгрузить вердикты, задайте токен рейтинга в настройках апелляций."
+				return "Чтобы выгрузить вердикты, задайте токен рейтинга в настройках апелляций. Если у вашего токена нет прав на запись, скачайте вердикты в .xlsx и загрузите этот файл на сайте рейтинга."
 			},
 			Nothing: func() string {
 				return "Все решённые апелляции уже на сайте в том же виде."
@@ -156,6 +156,15 @@ var RU = Strings{
 			Title: func(pro string, contra string) string {
 				return fmt.Sprintf("Голосов за: %s, против: %s", pro, contra)
 			},
+		},
+		Xlsx: AppealsXlsxStrings{
+			HeadAnswer:   func() string { return "Ответ" },
+			HeadComment:  func() string { return "Комментарий" },
+			HeadId:       func() string { return " ID" },
+			HeadQuestion: func() string { return "№" },
+			HeadStatus:   func() string { return "Статус" },
+			HeadType:     func() string { return "Тип" },
+			Label:        func() string { return "Скачать вердикты (.xlsx)" },
 		},
 	},
 	Attachments: AttachmentsStrings{

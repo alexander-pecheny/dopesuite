@@ -1,8 +1,8 @@
-// appealspanel.ts — an appeals List's three entries in its ⋯ menu (ADR-0021):
-// its settings (the tournament, the packet and the board's rating token),
-// a refresh from the rating site, and the export of verdicts back to it. All
-// three draw in the panel shell. The rating site is reached through the
-// server's relay, so all three need a connection.
+// appealspanel.ts — an appeals List's entries in its ⋯ menu (ADR-0021): its
+// settings (the tournament, the packet and the board's rating token), a
+// refresh from the rating site, the export of verdicts back to it, and the
+// same verdicts as an .xlsx for a jury whose token cannot write. The rating
+// site is reached through the server's relay; only the .xlsx works offline.
 
 import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
@@ -12,20 +12,24 @@ import { byRank } from "./dragrank.js";
 import { iconed } from "./icons_gen.js";
 import { KIND } from "./cardkind.js";
 import { createList } from "./addlist.js";
+import { xlsxSheet } from "./xlsx.js";
 import { appealHeading, statusText } from "./appealcard.js";
 import {
-  composeAppeal, composeMeta, parseAppeal, parseMeta, planExport, planRefresh,
+  composeAppeal, composeMeta, parseAppeal, parseMeta, planExport, planRefresh, verdictRows,
   type Appeal, type AppealsMeta, type Held, type Outgoing, type SiteAppeal, type SiteControversial,
 } from "./appeals.js";
 import type { Board, ListPanel, PanelShell } from "./panels.js";
 import type { BoardList } from "./unlock.js";
 
-const { el, jpost, errMsg } = xyApp;
+const { el, jpost, errMsg, downloadBlob } = xyApp;
+
+const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 export interface AppealsPanels {
   settings: ListPanel;
   refresh: ListPanel;
   export: ListPanel;
+  xlsx: ListPanel;
   // Opens the settings for a List that does not exist yet: it is created when
   // they are saved, so an appeals List never exists without its packet.
   create(title: string, rank: string): void;
@@ -243,10 +247,17 @@ export function createAppealsPanels(board: Board, shell: PanelShell): AppealsPan
     report("cloud-upload", title, [S.appeals.export.done(String(sent))], failed);
   }
 
+  async function downloadXlsx(list: BoardList): Promise<void> {
+    const bytes = await xlsxSheet(verdictRows(held(list), board.state.votes));
+    const id = parseMeta(list.meta).tournamentId;
+    downloadBlob(new Blob([bytes], { type: XLSX_TYPE }), `tournament-appeals-${id ?? list.id}.xlsx`);
+  }
+
   return {
     settings: { id: "appeals-settings", menu: "list", icon: "gavel", label: S.appeals.settings.label(), offered: (s) => isAppeals(s.list), open: (s) => openSettings(s.list) },
     refresh: { id: "appeals-refresh", menu: "list", icon: "refresh-cw", label: S.appeals.refresh.label(), offered: (s) => isAppeals(s.list), open: (s) => { void runRefresh(s.list); } },
     export: { id: "appeals-export", menu: "list", icon: "cloud-upload", label: S.appeals.export.label(), offered: (s) => isAppeals(s.list), open: (s) => { void openExport(s.list); } },
+    xlsx: { id: "appeals-xlsx", menu: "list", icon: "file-down", label: S.appeals.xlsx.label(), offered: (s) => isAppeals(s.list), open: (s) => { void downloadXlsx(s.list).catch((err) => alert(errMsg(err))); } },
     create: (title, rank) => openSettings(null, { title, rank }),
   };
 }

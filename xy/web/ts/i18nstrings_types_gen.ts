@@ -118,6 +118,15 @@ export type Strings = {
       label: () => string;
       title: (pro: string, contra: string) => string;
     };
+    xlsx: {
+      headAnswer: () => string;
+      headComment: () => string;
+      headId: () => string;
+      headQuestion: () => string;
+      headStatus: () => string;
+      headType: () => string;
+      label: () => string;
+    };
   };
   attachments: {
     confirm: {

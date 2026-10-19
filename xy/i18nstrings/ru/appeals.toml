@@ -105,7 +105,7 @@ text_changed = 'Текст изменился на сайте у {{.n}} {{plural
 label = "Выгрузить вердикты"
 title = "Выгрузка вердиктов"
 loading = "Сверяю вердикты с сайтом…"
-need_token = "Чтобы выгрузить вердикты, задайте токен рейтинга в настройках апелляций."
+need_token = "Чтобы выгрузить вердикты, задайте токен рейтинга в настройках апелляций. Если у вашего токена нет прав на запись, скачайте вердикты в .xlsx и загрузите этот файл на сайте рейтинга."
 nothing = "Все решённые апелляции уже на сайте в том же виде."
 hint = "Здесь решённые апелляции, у которых на сайте другой статус или другой текст вердикта. Снимите галочку с тех, что отправлять пока не нужно."
 site_now = 'Сейчас на сайте: {{.status}}'
@@ -113,3 +113,16 @@ send = 'Отправить ({{.n}})'
 sending = 'Отправляю вердикты: {{.n}}…'
 done = 'Отправлено: {{.n}}.'
 failed_one = 'Апелляция {{.id}}: {{.reason}}'
+
+[xlsx]
+# The ⋯ entry that downloads the verdicts as the rating site's .xlsx table.
+label = "Скачать вердикты (.xlsx)"
+
+# The head row of the verdict table. It copies the rating site's own export,
+# leading space in " ID" included, so the site can read the file back.
+head_id = " ID"
+head_type = "Тип"
+head_question = "№"
+head_answer = "Ответ"
+head_status = "Статус"
+head_comment = "Комментарий"

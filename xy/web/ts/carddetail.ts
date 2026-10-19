@@ -980,6 +980,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (!c || !a) { cardFieldsEl.replaceChildren(el("p", { class: "pv-empty", text: S.card.preview.empty() })); return; }
     const ed = deps.appeal.editor(c.id, a, refreshSaveState);
     cardFieldsEl.replaceChildren(ed.node);
+    for (const ta of ed.node.querySelectorAll("textarea")) { autoGrow(ta); fitTextarea(ta); }
     appealReader = ed.read;
     markFieldsBaseline(draft.desc, ed.read);
   }

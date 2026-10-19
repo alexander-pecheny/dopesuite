@@ -1780,6 +1780,7 @@ registerPanel(
   questions({ id: "preview-group", menu: "list", icon: "eye", label: S.board.preview.group(), offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } }),
   appealsPanels.refresh,
   appealsPanels.export,
+  appealsPanels.xlsx,
 
   // What is counted within it
   starts(questions(testerList.panel)),

@@ -62,3 +62,7 @@ into Cards, the same way an import encrypts what `/api/import/parse` returns.
   touched by a refresh.
 - The export sends only the verdicts that differ from what the site has, after
   the jury ticks them in a preview.
+- Not every jury can get a token that writes. For them the list also downloads
+  its verdicts as an .xlsx in the layout of the rating site's own verdict table,
+  which they upload on the site by hand. The file is built in the browser, so it
+  works offline and the server never sees the verdicts.

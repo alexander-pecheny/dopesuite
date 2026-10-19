@@ -105,3 +105,15 @@ test("appeals: a travelling list keeps its packet only if the packet came too", 
   assert.deepEqual(A.parseMeta(A.relinkPacket(meta, new Map([[4, 40]]))), { tournamentId: 7, packetListId: 40 });
   assert.deepEqual(A.parseMeta(A.relinkPacket(meta, new Map())), { tournamentId: 7, packetListId: null });
 });
+
+test("appeals: the verdict table has a row per appeal, an undecided one with no status", () => {
+  const voted = A.fromSite(site({ id: 1 }), []);
+  voted.verdict.text = "Вердикт: принять\n";
+  const open = A.fromSite(site({ id: 2, type: "R", questionNumber: 3, answer: "" }), []);
+  const held = [{ cardId: 10, rank: "a", appeal: voted }, { cardId: 20, rank: "b", appeal: open }];
+  assert.deepEqual(A.verdictRows(held, [{ cardId: 10, userId: 1, value: "for" }]), [
+    [" ID", "Тип", "№", "Ответ", "Статус", "Комментарий"],
+    [1, "A", 28, "аутсайдер", "A", "Вердикт: принять"],
+    [2, "R", 3, "", "", ""],
+  ]);
+});

@@ -170,7 +170,7 @@ export function createAppealCard(deps: AppealCardDeps): AppealCard {
       el("option", { value: "A", text: S.appeals.status.accepted() }),
       el("option", { value: "D", text: S.appeals.status.declined() })) as HTMLSelectElement;
     sel.value = a.verdict.status;
-    const text = el("textarea", { class: "input fld-input", rows: "6", placeholder: S.appeals.verdict.placeholder() }) as HTMLTextAreaElement;
+    const text = el("textarea", { class: "input fld-input", rows: "10", placeholder: S.appeals.verdict.placeholder() }) as HTMLTextAreaElement;
     text.value = a.verdict.text;
     const read = (): Appeal => ({ ...a, verdict: { status: sel.value as Status, text: text.value } });
     const status = el("div");

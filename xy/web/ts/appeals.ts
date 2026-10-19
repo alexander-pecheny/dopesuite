@@ -3,6 +3,7 @@
 // gives, what a refresh from the rating site adds and changes, and what an
 // export would send back. appealspanel.ts and the card editor draw it.
 
+import S from "./i18nstrings.js";
 import { xyRank } from "./rank.js";
 
 // One appeal as api.rating.chgk.info returns it.
@@ -244,6 +245,16 @@ export function planExport(held: ReadonlyArray<Held>, votes: ReadonlyArray<Vote>
   return out.sort((x, y) => x.appealId - y.appealId);
 }
 
+// verdictRows is the verdict table the rating site takes as a file upload: one
+// row per appeal, an undecided one with an empty status. It is for juries
+// whose token cannot write.
+export function verdictRows(held: ReadonlyArray<Held>, votes: ReadonlyArray<Vote>): (string | number)[][] {
+  const rows = held.map(({ cardId, appeal: a }) =>
+    [a.id, a.type, a.question, a.answer, verdictStatus(a, tally(votes, cardId)).status, a.verdict.text.trim()]);
+  const head = [S.appeals.xlsx.headId(), S.appeals.xlsx.headType(), S.appeals.xlsx.headQuestion(), S.appeals.xlsx.headAnswer(), S.appeals.xlsx.headStatus(), S.appeals.xlsx.headComment()];
+  return [head, ...rows];
+}
+
 // questionCard finds question N of the packet among its numbered Cards.
 export function questionCard<C>(cards: ReadonlyArray<C>, numbers: ReadonlyArray<string | null>, question: number): C | null {
   const i = numbers.findIndex((n) => n === String(question));
@@ -252,5 +263,5 @@ export function questionCard<C>(cards: ReadonlyArray<C>, numbers: ReadonlyArray<
 
 export const xyAppeals = {
   parseMeta, composeMeta, relinkPacket, parseAppeal, composeAppeal, tally, verdictStatus, compareAppeals,
-  fromSite, planRefresh, planExport, questionCard,
+  fromSite, planRefresh, planExport, verdictRows, questionCard,
 };
