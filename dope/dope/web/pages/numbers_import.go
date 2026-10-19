@@ -244,12 +244,13 @@ func (s *Server) MatchFestNumbers(ctx context.Context, festID, multiFestVenueID 
 	return NumbersMatch{Teams: options, Matches: matches, Errors: errs}, nil
 }
 
-func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http.Request, festID int64) {
+func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http.Request, sc route.Scope) {
+	festID := sc.FestID
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	venue, _, err := s.numbersVenue(r, festID)
+	venue, _, err := s.numbersVenue(r, sc)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -326,7 +327,8 @@ func (s *Server) AssignFestNumbers(ctx context.Context, festID, multiFestVenueID
 	return s.SaveFestNumbers(ctx, festID, multiFestVenueID, final)
 }
 
-func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http.Request, festID int64) {
+func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http.Request, sc route.Scope) {
+	festID := sc.FestID
 	var req importApplyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		if err := route.JSON(w, importApplyResponse{Error: dopestrings.Default.Numbers.Apply.ReadFailed()}); err != nil {
@@ -334,7 +336,7 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 		}
 		return
 	}
-	venue, _, err := s.numbersVenue(r, festID)
+	venue, _, err := s.numbersVenue(r, sc)
 	if err == nil {
 		err = s.AssignFestNumbers(r.Context(), festID, venue, req.Assignments)
 	}

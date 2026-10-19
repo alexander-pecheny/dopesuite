@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
@@ -43,6 +44,8 @@ type hostFestTeam struct {
 	// (ADR-0024).
 	Hand   bool
 	Edited bool
+	// Venue is the venue the team plays at, 0 for none (ADR-0032).
+	Venue int64
 }
 
 type hostFestPlayer struct {
@@ -52,8 +55,14 @@ type hostFestPlayer struct {
 }
 
 type hostFestRosterData struct {
-	Fest            view.HostFest
-	Teams           []hostFestTeam
+	Fest  view.HostFest
+	Teams []hostFestTeam
+	// Venues are the venues whose teams the caller edits, Venue the one the
+	// page shows (0 for all of them), and AllVenues says the caller edits
+	// every team: the sheet export and upload are the whole fest's.
+	Venues          []multifest.Venue
+	Venue           int64
+	AllVenues       bool
 	Players         []hostFestPlayer
 	OverridePlayers []overrides.HostPlayerOverrideOption
 	OverrideTeams   []overrides.HostTeamOverrideOption
@@ -97,13 +106,24 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 	if data.Notice != "" {
 		page = append(page, dopeui.Note(dopeui.Text(data.Notice)))
 	}
+	base, query := "/host/fest/"+ref+"/teams", ""
+	if data.Venue > 0 {
+		query = "?venue=" + idstr.Format(data.Venue)
+	}
+	if len(data.Venues) > 1 {
+		page = append(page, pages.VenuePicker(base, data.Venues, data.Venue, s.Host.Roster.AllVenues()))
+	}
 	// The editor (fest-teams.ts) reads the fest's API off the add button, and
-	// each row's team off its pencil (ADR-0024).
-	page = append(page, dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
-		dopeui.Button(dopeui.Data("team-add", "/api/fest/"+ref), dopeui.Text(s.Host.Roster.AddTeamBtn())),
-		dopeui.Button(dopeui.Href("/api/fest/"+ref+"/teams/export.xlsx"), dopeui.Download(), dopeui.Text(s.Host.Roster.ExportXlsxBtn())),
-		dopeui.Button(dopeui.Data("team-xlsx", ""), dopeui.Text(s.Host.Roster.ImportXlsxBtn())),
-	))
+	// each row's team off its pencil (ADR-0024); a new team goes on the venue
+	// the page shows.
+	buttons := []dopeui.Item{dopeui.SpaceSM, dopeui.Wrap(),
+		dopeui.Button(dopeui.Data("team-add", "/api/fest/"+ref), dopeui.Data("team-venue", optionalID(data.Venue)), dopeui.Text(s.Host.Roster.AddTeamBtn()))}
+	if data.AllVenues {
+		buttons = append(buttons,
+			dopeui.Button(dopeui.Href("/api/fest/"+ref+"/teams/export.xlsx"), dopeui.Download(), dopeui.Text(s.Host.Roster.ExportXlsxBtn())),
+			dopeui.Button(dopeui.Data("team-xlsx", ""), dopeui.Text(s.Host.Roster.ImportXlsxBtn())))
+	}
+	page = append(page, dopeui.Row(buttons...))
 	if len(data.Teams) > 0 {
 		rows := []dopeui.Item{dopeui.Trow(
 			dopeui.Hcell(dopeui.Text("ID")), dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())),
@@ -131,7 +151,7 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 					dopeui.Data("team-edit", idstr.Format(t.ID)))),
 			))
 		}
-		page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/teams"), dopeui.Autocomplete("off"),
+		page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(base+query), dopeui.Autocomplete("off"),
 			dopeui.Note(dopeui.Text(s.Host.Roster.TeamsEditHint())),
 			dopeui.Note(dopeui.Text(s.Host.Roster.FlagsHint())),
 			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
@@ -544,43 +564,85 @@ func importMessages(errMsg, notice string) []dopeui.Item {
 	return out
 }
 
-func (s *Server) renderHostFestTeams(w http.ResponseWriter, r *http.Request, festID int64) {
-	s.renderHostFestTeamsWithMessage(w, r, festID, "", "")
+func (s *Server) renderHostFestTeams(w http.ResponseWriter, r *http.Request, sc route.Scope) {
+	s.renderHostFestTeamsWithMessage(w, r, sc, "", "")
 }
 
-func (s *Server) renderHostFestTeamsWithMessage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
-	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
-		teams, err := s.loadHostFestTeams(r.Context(), festID)
-		if err != nil {
+func (s *Server) renderHostFestTeamsWithMessage(w http.ResponseWriter, r *http.Request, sc route.Scope, errMsg, notice string) {
+	s.festPage(w, r, sc.FestID, func(fest view.HostFest) (*dopeui.Doc, error) {
+		data := hostFestRosterData{Fest: fest, Error: errMsg, Notice: notice, AllVenues: sc.AllVenues}
+		var err error
+		if data.Teams, data.Venues, data.Venue, err = s.loadShownTeams(r, sc); err != nil {
 			return nil, err
 		}
-		return hostTeamsDoc(hostFestRosterData{Fest: fest, Teams: teams, Error: errMsg, Notice: notice}), nil
+		return hostTeamsDoc(data), nil
 	})
+}
+
+// loadShownTeams is the teams the page shows: those the caller may edit, of
+// the venue ?venue= names when it names one of theirs, or of the caller's one
+// venue. It also answers the caller's venues and the one shown.
+func (s *Server) loadShownTeams(r *http.Request, sc route.Scope) ([]hostFestTeam, []multifest.Venue, int64, error) {
+	teams, err := s.loadHostFestTeams(r.Context(), sc)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	all, err := multifest.List(r.Context(), s.h.Engine().DB, sc.FestID)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	var venues []multifest.Venue
+	asked, _ := idstr.Parse(r.URL.Query().Get("venue"))
+	shown := int64(0)
+	for _, v := range all {
+		if sc.MayEditVenue(v.ID) {
+			venues = append(venues, v)
+			if v.ID == asked {
+				shown = asked
+			}
+		}
+	}
+	if len(venues) == 1 && !sc.AllVenues {
+		shown = venues[0].ID
+	}
+	if shown == 0 {
+		return teams, venues, 0, nil
+	}
+	kept := teams[:0]
+	for _, t := range teams {
+		if t.Venue == shown {
+			kept = append(kept, t)
+		}
+	}
+	return kept, venues, shown, nil
 }
 
 // handleHostSaveFestTeamFlags saves the Flags typed on the teams page. It goes
 // down the same road a rating import does — rewrite the fest's Flags, fold the
 // roster into every flat Protocol's document, bump the revision, broadcast —
 // so a Division appears on the game pages without a reload.
-func (s *Server) handleHostSaveFestTeamFlags(w http.ResponseWriter, r *http.Request, festID int64) {
+func (s *Server) handleHostSaveFestTeamFlags(w http.ResponseWriter, r *http.Request, sc route.Scope) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	teams, err := s.loadHostFestTeams(r.Context(), festID)
+	teams, err := s.loadHostFestTeams(r.Context(), sc)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
 	}
+	// The form holds the teams the page showed; the rest keep their Flags.
 	typed := make(map[int64][]roster.FestRosterFlag, len(teams))
 	for _, team := range teams {
-		typed[team.ID] = parseTypedFlags(r.Form.Get(teamFlagsField(team.ID)))
+		if values, ok := r.PostForm[teamFlagsField(team.ID)]; ok {
+			typed[team.ID] = parseTypedFlags(values[0])
+		}
 	}
-	if err := s.saveFestTeamFlags(r.Context(), festID, typed); err != nil {
-		s.renderHostFestTeamsWithMessage(w, r, festID, err.Error(), "")
+	if err := s.saveFestTeamFlags(r.Context(), sc.FestID, typed); err != nil {
+		s.renderHostFestTeamsWithMessage(w, r, sc, err.Error(), "")
 		return
 	}
-	s.renderHostFestTeamsWithMessage(w, r, festID, "", dopestrings.Default.Host.Roster.FlagsSavedNotice())
+	s.renderHostFestTeamsWithMessage(w, r, sc, "", dopestrings.Default.Host.Roster.FlagsSavedNotice())
 }
 
 // parseTypedFlags reads one team's Flags as an organizer types them: short
@@ -596,8 +658,9 @@ func parseTypedFlags(value string) []roster.FestRosterFlag {
 
 // SaveTeamFlags sets the Flags of the named teams, each typed as the teams
 // page takes them: short names separated by commas. Teams left out keep theirs.
-func (s *Server) SaveTeamFlags(ctx context.Context, festID int64, typed map[int64]string) error {
-	teams, err := s.loadHostFestTeams(ctx, festID)
+func (s *Server) SaveTeamFlags(ctx context.Context, sc route.Scope, typed map[int64]string) error {
+	festID := sc.FestID
+	teams, err := s.loadHostFestTeams(ctx, sc)
 	if err != nil {
 		return err
 	}
@@ -753,22 +816,27 @@ func (s *Server) renderHostRatingImport(w http.ResponseWriter, r *http.Request, 
 	})
 }
 
-func (s *Server) loadHostFestTeams(ctx context.Context, festID int64) ([]hostFestTeam, error) {
-	teams, err := store.CollectRows(ctx, s.h.Engine().DB, `
-select tt.id, coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id)
+// loadHostFestTeams is the fest's teams the caller may edit.
+func (s *Server) loadHostFestTeams(ctx context.Context, sc route.Scope) ([]hostFestTeam, error) {
+	festID := sc.FestID
+	all, err := store.CollectRows(ctx, s.h.Engine().DB, `
+select tt.id, coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id), coalesce(tt.multifest_venue_id, 0)
 from fest_teams tt
 left join fest_team_players ttp on ttp.team_id = tt.id
 where tt.fest_id = ? and tt.deleted = 0
 group by tt.id
 order by tt.position, tt.id`, []any{festID}, func(rows *sql.Rows) (hostFestTeam, error) {
 		var team hostFestTeam
-		if err := rows.Scan(&team.ID, &team.RatingID, &team.Name, &team.City, &team.Players); err != nil {
-			return team, err
-		}
-		return team, nil
+		return team, rows.Scan(&team.ID, &team.RatingID, &team.Name, &team.City, &team.Players, &team.Venue)
 	})
 	if err != nil {
 		return nil, err
+	}
+	var teams []hostFestTeam
+	for _, team := range all {
+		if sc.MayEditVenue(team.Venue) {
+			teams = append(teams, team)
+		}
 	}
 	flags, err := roster.LoadFestTeamFlags(ctx, s.h.Engine().DB, festID)
 	if err != nil {

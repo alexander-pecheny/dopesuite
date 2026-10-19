@@ -41,6 +41,9 @@ func (s *Server) buildRoutes() *route.Table {
 	page := func(f func(http.ResponseWriter, *http.Request, int64)) route.Handler {
 		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error { f(w, r, sc.FestID); return nil }
 	}
+	scoped := func(f func(http.ResponseWriter, *http.Request, route.Scope)) route.Handler {
+		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error { f(w, r, sc); return nil }
+	}
 	gamePage := func(f func(http.ResponseWriter, *http.Request, int64, int64)) route.Handler {
 		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 			f(w, r, sc.FestID, sc.GameID)
@@ -56,8 +59,8 @@ func (s *Server) buildRoutes() *route.Table {
 		return nil
 	})
 	t.Handle("POST "+fest, route.Manager, page(s.handleHostUpdateFest))
-	t.Handle("GET "+fest+"/teams", route.Manager, page(s.renderHostFestTeams))
-	t.Handle("POST "+fest+"/teams", route.Manager, page(s.handleHostSaveFestTeamFlags))
+	t.Handle("GET "+fest+"/teams", route.Roster, scoped(s.renderHostFestTeams))
+	t.Handle("POST "+fest+"/teams", route.Roster, scoped(s.handleHostSaveFestTeamFlags))
 	t.Handle("GET "+fest+"/players", route.Manager, page(s.renderHostFestPlayers))
 	t.Handle("GET "+fest+"/troikas", route.Manager, page(s.renderHostFestTroikas))
 	t.Handle("POST "+fest+"/troikas", route.Manager, page(s.handleHostSaveTroikas))
@@ -67,8 +70,10 @@ func (s *Server) buildRoutes() *route.Table {
 		return nil
 	})
 	t.Handle("POST "+fest+"/invites", route.Manager, s.handleHostCreateInvite)
-	t.Handle("POST "+fest+"/invites/{id}/revoke", route.Manager, s.handleHostChangeInvite(false))
-	t.Handle("POST "+fest+"/invites/{id}/delete", route.Manager, s.handleHostChangeInvite(true))
+	for _, kind := range []inviteKind{gameInvites, venueInvites} {
+		t.Handle("POST "+fest+"/"+kind.path+"/{id}/revoke", route.Manager, s.handleHostChangeInvite(kind, false))
+		t.Handle("POST "+fest+"/"+kind.path+"/{id}/delete", route.Manager, s.handleHostChangeInvite(kind, true))
+	}
 	t.Handle("POST "+fest+"/delete", route.Creator, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		s.handleHostDeleteFest(w, r, sc.FestID, sc.User.UserID)
 		return nil
@@ -81,14 +86,14 @@ func (s *Server) buildRoutes() *route.Table {
 		s.renderHostGameSettings(w, r, id, gid, "")
 	}))
 	t.Handle("POST "+game+"/settings", route.Manager, gamePage(s.handleHostUpdateGameSettings))
-	t.Handle("GET "+fest+"/numbers", route.Manager, page(func(w http.ResponseWriter, r *http.Request, id int64) {
-		s.pages().RenderHostFestNumbers(w, r, id, "", "", nil)
+	t.Handle("GET "+fest+"/numbers", route.Roster, scoped(func(w http.ResponseWriter, r *http.Request, sc route.Scope) {
+		s.pages().RenderHostFestNumbers(w, r, sc, "", "", nil)
 	}))
-	t.Handle("POST "+fest+"/numbers", route.Manager, page(s.pages().HandleHostSaveFestNumbers))
-	t.Handle("POST "+fest+"/numbers/auto", route.Manager, page(s.pages().HandleHostAutoFestNumbers))
-	t.Handle("POST "+fest+"/numbers/clear", route.Manager, page(s.pages().HandleHostClearFestNumbers))
-	t.Handle("POST "+fest+"/numbers/import/match", route.Manager, page(s.pages().HandleHostFestNumbersImportMatch))
-	t.Handle("POST "+fest+"/numbers/import/apply", route.Manager, page(s.pages().HandleHostFestNumbersImportApply))
+	t.Handle("POST "+fest+"/numbers", route.Roster, scoped(s.pages().HandleHostSaveFestNumbers))
+	t.Handle("POST "+fest+"/numbers/auto", route.Roster, scoped(s.pages().HandleHostAutoFestNumbers))
+	t.Handle("POST "+fest+"/numbers/clear", route.Roster, scoped(s.pages().HandleHostClearFestNumbers))
+	t.Handle("POST "+fest+"/numbers/import/match", route.Roster, scoped(s.pages().HandleHostFestNumbersImportMatch))
+	t.Handle("POST "+fest+"/numbers/import/apply", route.Roster, scoped(s.pages().HandleHostFestNumbersImportApply))
 	t.Handle("GET "+fest+"/rating/import", route.Manager, page(func(w http.ResponseWriter, r *http.Request, id int64) { s.renderHostRatingImportPage(w, r, id, "", "") }))
 	t.Handle("POST "+fest+"/rating/import", route.Manager, page(s.handleHostImportRatingRoster))
 	t.Handle("POST "+fest+"/rating/undo", route.Manager, page(s.handleHostUndoRatingImport))

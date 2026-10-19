@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"testing"
 
@@ -16,6 +18,7 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/roster"
+	"dope/dope/platform/roles"
 	"dope/dope/storage/store"
 )
 
@@ -126,5 +129,132 @@ where gp.game_id in (?, ?) order by 1`, minskGame, brestGame)
 	}
 	if got := seated(brestGame); !slices.Equal(got, []string{"1 Гамма", "2 Альфа"}) {
 		t.Fatalf("numbering Минск anew changed Брест to %v", got)
+	}
+}
+
+// A host who follows a link to a venue runs that venue's Game alone, and edits
+// the teams and numbers of that venue alone: a team they add plays there, and
+// a team or a player of another venue is not theirs to touch.
+func TestAVenueHostRunsAndEditsTheirVenueAlone(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, revision, created_at, updated_at, kind) values('Синхрон', 1, '2026-10-19', '2026-10-19', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
+		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
+			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
+	}
+	teams := []roster.FestRosterImportTeam{team(1, "Альфа", minsk), team(2, "Бета", minsk), team(3, "Гамма", brest)}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	venueOf := func(venue multifest.RatingVenue) int64 {
+		var id int64
+		db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = ?`, festID, venue.ID).Scan(&id)
+		return id
+	}
+	minskID, brestID := venueOf(minsk), venueOf(brest)
+	create := func(venueID int64) int64 {
+		var gameID int64
+		withTx(t, db, func(ctx context.Context, tx *sql.Tx) (err error) {
+			gameID, _, err = festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, Label: "ОД", TourComp: []int{3}, MultiFestVenueID: venueID})
+			return err
+		})
+		return gameID
+	}
+	minskGame, brestGame := create(minskID), create(brestID)
+	adminID, adminToken := createAPITestSession(t, srv, "boss")
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	_, hostToken := createAPITestSession(t, srv, "minsk")
+	api := fmt.Sprintf("/api/fest/%d", festID)
+	call := func(method, path string, body any, token string) *httptest.ResponseRecorder {
+		t.Helper()
+		return scopedAPIRequest(t, srv, method, api+path, body, token)
+	}
+
+	resp := call(http.MethodPost, fmt.Sprintf("/multifest-venues/%d/invites", minskID), map[string]any{"label": "Минск"}, adminToken)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("mint: %d %s", resp.Code, resp.Body.String())
+	}
+	links := decodeInto[[]struct {
+		Code  string `json:"code"`
+		Venue int64  `json:"multifest_venue_id"`
+	}](t, resp)
+	if len(links) != 1 || links[0].Venue != minskID {
+		t.Fatalf("links: %+v", links)
+	}
+	if resp := scopedAPIRequest(t, srv, http.MethodPost, "/api/join/"+links[0].Code, nil, hostToken); resp.Code != http.StatusOK {
+		t.Fatalf("join: %d %s", resp.Code, resp.Body.String())
+	}
+
+	write := func(gameID int64) int {
+		return call(http.MethodPatch, fmt.Sprintf("/games/%d/state", gameID),
+			map[string]any{"ops": []map[string]any{{"path": []any{"completed"}, "value": []bool{true}}}}, hostToken).Code
+	}
+	if a, b := write(minskGame), write(brestGame); a != http.StatusOK || b != http.StatusForbidden {
+		t.Fatalf("the venue host writes %d to their Game and %d to the other; want 200, 403", a, b)
+	}
+
+	type apiTeam struct {
+		ID    int64  `json:"id"`
+		Name  string `json:"name"`
+		Venue int64  `json:"multifest_venue_id"`
+	}
+	names := func() []string {
+		t.Helper()
+		var out []string
+		for _, team := range decodeInto[[]apiTeam](t, call(http.MethodGet, "/teams", nil, hostToken)) {
+			out = append(out, team.Name)
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := names(); !slices.Equal(got, []string{"Альфа", "Бета"}) {
+		t.Fatalf("the venue host sees the teams %v", got)
+	}
+	var gamma int64
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Гамма'`, festID).Scan(&gamma)
+	if resp := call(http.MethodPut, fmt.Sprintf("/teams/%d", gamma), map[string]any{"name": "Гамма"}, hostToken); resp.Code != http.StatusForbidden {
+		t.Fatalf("the venue host edited another venue's team: %d", resp.Code)
+	}
+	if resp := call(http.MethodPost, "/teams", map[string]any{"name": "Дельта"}, hostToken); resp.Code != http.StatusOK {
+		t.Fatalf("add: %d %s", resp.Code, resp.Body.String())
+	}
+	var venue, number int64
+	db.QueryRow(`select multifest_venue_id, venue_number from fest_teams where fest_id = ? and name = 'Дельта'`, festID).Scan(&venue, &number)
+	if venue != minskID || number != 3 {
+		t.Fatalf("the new team is on venue %d under %d; want %d, 3", venue, number, minskID)
+	}
+	gammaPlayer := map[string]any{"rating_id": 30, "first_name": "Гамма", "last_name": "Капитан"}
+	if resp := call(http.MethodPost, "/teams", map[string]any{"name": "Эпсилон", "players": []any{gammaPlayer}}, hostToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("the venue host took a player from another venue: %d", resp.Code)
+	}
+
+	if resp := call(http.MethodGet, fmt.Sprintf("/numbers?venue=%d", brestID), nil, hostToken); resp.Code != http.StatusForbidden {
+		t.Fatalf("the venue host read another venue's numbers: %d", resp.Code)
+	}
+	numbered := decodeInto[[]struct {
+		Number int `json:"number"`
+	}](t, call(http.MethodGet, fmt.Sprintf("/numbers?venue=%d", minskID), nil, hostToken))
+	if len(numbered) != 3 {
+		t.Fatalf("the venue host's numbers: %+v", numbered)
+	}
+	if resp := call(http.MethodGet, "/teams/export.xlsx", nil, hostToken); resp.Code != http.StatusForbidden {
+		t.Fatalf("the venue host exported the whole roster: %d", resp.Code)
+	}
+
+	members := decodeInto[[]struct {
+		Nickname string  `json:"nickname"`
+		Venues   []int64 `json:"multifest_venues"`
+	}](t, call(http.MethodGet, "/access", nil, adminToken))
+	for _, m := range members {
+		if m.Nickname == "minsk" && !slices.Equal(m.Venues, []int64{minskID}) {
+			t.Fatalf("the access list limits the venue host to %v", m.Venues)
+		}
 	}
 }

@@ -46,8 +46,11 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("POST "+fest+"/access", route.Manager, s.apiSaveAccess)
 	t.Handle("GET "+fest+"/invites", route.Manager, s.apiInvites)
 	t.Handle("POST "+game+"/invites", route.Manager, s.apiCreateInvite)
-	t.Handle("POST "+fest+"/invites/{id}/revoke", route.Manager, s.apiChangeInvite(false))
-	t.Handle("DELETE "+fest+"/invites/{id}", route.Manager, s.apiChangeInvite(true))
+	t.Handle("POST "+fest+"/multifest-venues/{venue}/invites", route.Manager, s.apiCreateVenueInvite)
+	for _, kind := range []inviteKind{gameInvites, venueInvites} {
+		t.Handle("POST "+fest+"/"+kind.path+"/{id}/revoke", route.Manager, s.apiChangeInvite(kind, false))
+		t.Handle("DELETE "+fest+"/"+kind.path+"/{id}", route.Manager, s.apiChangeInvite(kind, true))
+	}
 	t.Handle("POST /api/join/{code}", route.Session, s.apiJoin)
 
 	t.Handle("GET "+fest+"/entrants", route.Manager, s.apiEntrants)
@@ -82,18 +85,18 @@ func (s *Server) APIRoutes(t *route.Table) {
 		return writeOK(w)
 	})
 
-	t.Handle("GET "+fest+"/teams", route.Manager, s.apiTeams)
-	t.Handle("PATCH "+fest+"/teams/flags", route.Manager, s.apiTeamFlags)
-	t.Handle("POST "+fest+"/teams", route.Manager, s.apiCreateTeam)
-	t.Handle("GET "+fest+"/teams/new", route.Manager, s.apiNewTeam)
+	t.Handle("GET "+fest+"/teams", route.Roster, s.apiTeams)
+	t.Handle("PATCH "+fest+"/teams/flags", route.Roster, s.apiTeamFlags)
+	t.Handle("POST "+fest+"/teams", route.Roster, s.apiCreateTeam)
+	t.Handle("GET "+fest+"/teams/new", route.Roster, s.apiNewTeam)
 	t.Handle("GET "+fest+"/teams/export.xlsx", route.Manager, s.apiTeamsXLSX)
 	t.Handle("POST "+fest+"/teams/xlsx", route.Manager, s.apiImportTeamsXLSX)
-	t.Handle("GET "+fest+"/rating/players", route.Manager, s.apiRatingPlayers)
-	t.Handle("GET "+fest+"/rating/teams", route.Manager, s.apiRatingTeams)
-	t.Handle("GET "+fest+"/rating/teams/{id}/base", route.Manager, s.apiRatingBaseRoster)
-	t.Handle("GET "+fest+"/teams/{id}", route.Manager, s.apiTeam)
-	t.Handle("PUT "+fest+"/teams/{id}", route.Manager, s.apiSaveTeam)
-	t.Handle("DELETE "+fest+"/teams/{id}", route.Manager, s.apiRemoveTeam)
+	t.Handle("GET "+fest+"/rating/players", route.Roster, s.apiRatingPlayers)
+	t.Handle("GET "+fest+"/rating/teams", route.Roster, s.apiRatingTeams)
+	t.Handle("GET "+fest+"/rating/teams/{id}/base", route.Roster, s.apiRatingBaseRoster)
+	t.Handle("GET "+fest+"/teams/{id}", route.Roster, s.apiTeam)
+	t.Handle("PUT "+fest+"/teams/{id}", route.Roster, s.apiSaveTeam)
+	t.Handle("DELETE "+fest+"/teams/{id}", route.Roster, s.apiRemoveTeam)
 	t.Handle("GET "+fest+"/players", route.Manager, s.apiPlayers)
 	t.Handle("POST "+fest+"/players/overrides", route.Manager, s.apiAddOverride)
 	t.Handle("PUT "+fest+"/players/overrides", route.Manager, s.apiReplaceOverride)
@@ -105,8 +108,8 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("POST "+fest+"/rating-import", route.Manager, s.apiRatingImport)
 	t.Handle("POST "+fest+"/rating-import/undo", route.Manager, s.apiUndoRatingImport)
 
-	t.Handle("GET "+fest+"/numbers", route.Manager, s.apiNumbers)
-	t.Handle("POST "+fest+"/numbers/assign", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	t.Handle("GET "+fest+"/numbers", route.Roster, s.apiNumbers)
+	t.Handle("POST "+fest+"/numbers/assign", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		var req struct {
 			Assignments []struct {
 				TeamID int64 `json:"team_id"`
@@ -120,7 +123,7 @@ func (s *Server) APIRoutes(t *route.Table) {
 		for i, a := range req.Assignments {
 			assignments[i] = pages.NumberAssignment{TeamID: a.TeamID, Number: a.Number}
 		}
-		venue, err := s.apiNumbersVenue(r, sc.FestID)
+		venue, err := s.apiNumbersVenue(r, sc)
 		if err != nil {
 			return err
 		}
@@ -129,8 +132,8 @@ func (s *Server) APIRoutes(t *route.Table) {
 		}
 		return s.apiNumbers(w, r, sc)
 	})
-	t.Handle("POST "+fest+"/numbers/auto", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-		venue, err := s.apiNumbersVenue(r, sc.FestID)
+	t.Handle("POST "+fest+"/numbers/auto", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		venue, err := s.apiNumbersVenue(r, sc)
 		if err != nil {
 			return err
 		}
@@ -139,8 +142,8 @@ func (s *Server) APIRoutes(t *route.Table) {
 		}
 		return s.apiNumbers(w, r, sc)
 	})
-	t.Handle("POST "+fest+"/numbers/clear", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-		venue, err := s.apiNumbersVenue(r, sc.FestID)
+	t.Handle("POST "+fest+"/numbers/clear", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		venue, err := s.apiNumbersVenue(r, sc)
 		if err != nil {
 			return err
 		}
@@ -149,14 +152,14 @@ func (s *Server) APIRoutes(t *route.Table) {
 		}
 		return s.apiNumbers(w, r, sc)
 	})
-	t.Handle("POST "+fest+"/numbers/match", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	t.Handle("POST "+fest+"/numbers/match", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		var req struct {
 			Text string `json:"text"`
 		}
 		if err := route.DecodeJSON(r, &req); err != nil {
 			return err
 		}
-		venue, err := s.apiNumbersVenue(r, sc.FestID)
+		venue, err := s.apiNumbersVenue(r, sc)
 		if err != nil {
 			return err
 		}
@@ -290,6 +293,9 @@ type apiMember struct {
 	// Games are the ids of the Games a host is limited to; absent, the host
 	// runs every Game.
 	Games []int64 `json:"games,omitempty"`
+	// MultiFestVenues are the ids of the venues a host is limited to
+	// (ADR-0032): their Games, and their teams and numbers to edit.
+	MultiFestVenues []int64 `json:"multifest_venues,omitempty"`
 }
 
 func (s *Server) apiAccess(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -301,11 +307,15 @@ func (s *Server) apiAccess(w http.ResponseWriter, r *http.Request, sc route.Scop
 	if err != nil {
 		return err
 	}
+	venues, err := festaccess.HostVenuesByUser(r.Context(), s.h.Engine().DB, sc.FestID)
+	if err != nil {
+		return err
+	}
 	out := make([]apiMember, len(members))
 	for i, m := range members {
 		out[i] = apiMember{UserID: m.UserID, Nickname: m.Nickname, Role: m.Role}
 		if m.Role == "host" {
-			out[i].Games = limits[m.UserID]
+			out[i].Games, out[i].MultiFestVenues = limits[m.UserID], venues[m.UserID]
 		}
 	}
 	return route.JSON(w, out)
@@ -324,16 +334,17 @@ func (s *Server) apiSaveAccess(w http.ResponseWriter, r *http.Request, sc route.
 			Role   string    `json:"role"`
 			Remove bool      `json:"remove"`
 			Games  *[]string `json:"games"`
+			Venues *[]string `json:"multifest_venues"`
 		} `json:"changes"`
 	}
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
 	lines := req.Lines
-	games := map[string][]string{}
+	limits := map[string]festaccess.HostLimits{}
 	for _, c := range req.Changes {
-		if c.Games != nil {
-			games[c.User] = *c.Games
+		if c.Games != nil || c.Venues != nil {
+			limits[c.User] = festaccess.HostLimits{Games: c.Games, Venues: c.Venues}
 		}
 		role := c.Role
 		if c.Remove {
@@ -344,13 +355,13 @@ func (s *Server) apiSaveAccess(w http.ResponseWriter, r *http.Request, sc route.
 		}
 	}
 	err := s.saveAccess(r.Context(), sc.FestID, func(ctx context.Context, tx *sql.Tx) error {
-		if strings.TrimSpace(lines) != "" || len(games) == 0 {
+		if strings.TrimSpace(lines) != "" || len(limits) == 0 {
 			if _, err := festaccess.SaveFestAccessBulkTx(ctx, tx, sc.FestID, sc.User.UserID, lines); err != nil {
 				return err
 			}
 		}
-		if len(games) > 0 {
-			return festaccess.SetHostGamesTx(ctx, tx, sc.FestID, sc.User.UserID, games)
+		if len(limits) > 0 {
+			return festaccess.SetHostLimitsTx(ctx, tx, sc.FestID, sc.User.UserID, limits)
 		}
 		return nil
 	})
@@ -492,16 +503,18 @@ type apiTeam struct {
 	// any way (ADR-0024), which an import keeps.
 	Hand   bool `json:"hand"`
 	Edited bool `json:"edited"`
+	// MultiFestVenueID is the venue the team plays at (ADR-0032).
+	MultiFestVenueID int64 `json:"multifest_venue_id,omitempty"`
 }
 
 func (s *Server) apiTeams(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	teams, err := s.loadHostFestTeams(r.Context(), sc.FestID)
+	teams, err := s.loadHostFestTeams(r.Context(), sc)
 	if err != nil {
 		return err
 	}
 	out := make([]apiTeam, len(teams))
 	for i, t := range teams {
-		out[i] = apiTeam{ID: t.ID, RatingID: t.RatingID, Name: t.Name, City: t.City, Players: t.Players, Flags: t.Flags, Hand: t.Hand, Edited: t.Edited}
+		out[i] = apiTeam{ID: t.ID, RatingID: t.RatingID, Name: t.Name, City: t.City, Players: t.Players, Flags: t.Flags, Hand: t.Hand, Edited: t.Edited, MultiFestVenueID: t.Venue}
 	}
 	return route.JSON(w, out)
 }
@@ -523,7 +536,7 @@ func (s *Server) apiTeamFlags(w http.ResponseWriter, r *http.Request, sc route.S
 		}
 		typed[id] = value
 	}
-	if err := s.SaveTeamFlags(r.Context(), sc.FestID, typed); err != nil {
+	if err := s.SaveTeamFlags(r.Context(), sc, typed); err != nil {
 		return err
 	}
 	return s.apiTeams(w, r, sc)
@@ -831,7 +844,7 @@ type apiNumberedTeam struct {
 }
 
 func (s *Server) apiNumbers(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	venue, err := s.apiNumbersVenue(r, sc.FestID)
+	venue, err := s.apiNumbersVenue(r, sc)
 	if err != nil {
 		return err
 	}
@@ -848,16 +861,20 @@ func (s *Server) apiNumbers(w http.ResponseWriter, r *http.Request, sc route.Sco
 
 // apiNumbersVenue is the venue ?venue= names. In a fest with venues each numbers
 // its own teams, so a call there must name one.
-func (s *Server) apiNumbersVenue(r *http.Request, festID int64) (int64, error) {
-	list, err := multifest.List(r.Context(), s.h.Engine().DB, festID)
+func (s *Server) apiNumbersVenue(r *http.Request, sc route.Scope) (int64, error) {
+	list, err := multifest.List(r.Context(), s.h.Engine().DB, sc.FestID)
 	if err != nil || len(list) == 0 {
 		return 0, err
 	}
 	asked, _ := idstr.Parse(r.URL.Query().Get("venue"))
 	for _, venue := range list {
-		if venue.ID == asked {
-			return asked, nil
+		if venue.ID != asked {
+			continue
 		}
+		if !sc.MayEditVenue(asked) {
+			return 0, route.ErrOtherVenue
+		}
+		return asked, nil
 	}
 	return 0, corei18n.User(dopestrings.Default.Numbers.Error.VenueRequired())
 }

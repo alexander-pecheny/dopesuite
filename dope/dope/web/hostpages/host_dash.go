@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,29 +43,32 @@ type hostFestDashData struct {
 	RatingID        int64
 	Games           []PublicFestGame
 	Access          []festaccess.HostAccessMember
-	// HostGames lists, per limited host, the Games they may run.
-	HostGames       map[int64][]int64
-	TeamCount       int
-	PlayerCount     int
-	TroikaCount     int
-	NumbersAssigned int
-	NumbersAllSet   bool
-	CurrentRole     string
-	CanManageFest   bool
-	CanManageGames  bool
-	CanManageAccess bool
-	CanDeleteFest   bool
-	IsCreator       bool
-	Error           string
-	AccessError     string
-	AccessNotice    string
-	Invites         []festInvite
-	InviteError     string
-	InviteNotice    string
-	ImportError     string
-	ImportNotice    string
-	RosterError     string
-	RosterNotice    string
+	// RosterVenues are the venues whose teams a host limited to venues edits.
+	RosterVenues []int64
+	// HostGames lists, per limited host, the Games they may run, and
+	// HostVenues the venues.
+	HostGames, HostVenues map[int64][]int64
+	TeamCount             int
+	PlayerCount           int
+	TroikaCount           int
+	NumbersAssigned       int
+	NumbersAllSet         bool
+	CurrentRole           string
+	CanManageFest         bool
+	CanManageGames        bool
+	CanManageAccess       bool
+	CanDeleteFest         bool
+	IsCreator             bool
+	Error                 string
+	AccessError           string
+	AccessNotice          string
+	Invites               []festInvite
+	InviteError           string
+	InviteNotice          string
+	ImportError           string
+	ImportNotice          string
+	RosterError           string
+	RosterNotice          string
 }
 
 type hostDashMessages struct {
@@ -108,15 +112,19 @@ func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 	if len(data.MultiFestVenues) > 0 {
 		page = append(page, hostDashVenuesSection(data, ref))
 	}
-	page = append(page, hostDashGamesSection(data, ref))
+	if data.CanManageGames || slices.ContainsFunc(data.Games, func(g PublicFestGame) bool { return g.MultiFestVenueID == 0 }) {
+		page = append(page, hostDashGamesSection(data, ref))
+	}
 	if data.CanManageAccess {
 		page = append(page, hostDashAccessSection(data, ref))
-		if len(data.Games) > 0 {
+		if len(data.Games)+len(data.MultiFestVenues) > 0 {
 			page = append(page, hostDashInvitesSection(data, ref))
 		}
 	}
 	if data.CanManageFest {
 		page = append(page, hostDashRosterSection(data, ref))
+	} else if len(data.RosterVenues) > 0 {
+		page = append(page, hostDashVenueRosterSection(data, ref))
 	}
 	if data.CanDeleteFest {
 		page = append(page, dopeui.Section(
@@ -264,40 +272,57 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 	return dopeui.Section(sect...)
 }
 
-// hostGames is a member's Games: an admin or the creator runs all of them;
-// a host gets a box per Game — ticking some limits them to those, ticking none
-// leaves them every Game.
+// hostGames is a member's Games and venues: an admin or the creator runs all
+// of them; a host gets a box per venue and per Game. Ticking some limits them
+// to those, ticking none leaves them every Game.
 func hostGames(data hostFestDashData, m festaccess.HostAccessMember) *dopeui.Element {
 	s := dopestrings.Default
-	if m.Role != roles.Host || len(data.Games) == 0 {
+	if m.Role != roles.Host || len(data.Games)+len(data.MultiFestVenues) == 0 {
 		return dopeui.Col()
 	}
 	uid := idstr.Format(m.UserID)
-	limited := map[int64]bool{}
-	for _, id := range data.HostGames[m.UserID] {
-		limited[id] = true
-	}
 	boxes := []dopeui.Item{dopeui.Hiddenfield(dopeui.Name("games_present_"+uid), dopeui.Value("1"))}
-	var chosen []string
-	for _, game := range data.Games {
-		items := []dopeui.Item{dopeui.Name("games_" + uid), dopeui.Value(idstr.Format(game.ID)), dopeui.Text(game.Title)}
-		if limited[game.ID] {
-			items = append(items, dopeui.Checked())
-			chosen = append(chosen, game.Title)
+	var summary []string
+	group := func(field, label string, chosen []int64, ids []int64, titles []string) {
+		ticked := map[int64]bool{}
+		for _, id := range chosen {
+			ticked[id] = true
 		}
-		boxes = append(boxes, dopeui.Checkbox(items...))
+		var names []string
+		for i, id := range ids {
+			items := []dopeui.Item{dopeui.Name(field + uid), dopeui.Value(idstr.Format(id)), dopeui.Text(titles[i])}
+			if ticked[id] {
+				items = append(items, dopeui.Checked())
+				names = append(names, titles[i])
+			}
+			boxes = append(boxes, dopeui.Checkbox(items...))
+		}
+		if len(names) > 0 {
+			summary = append(summary, label+": "+strings.Join(names, ", "))
+		}
 	}
-	summary := s.Host.Dash.ColGames() + ": " + s.Host.Dash.GamesEvery()
-	if len(chosen) > 0 {
-		summary = s.Host.Dash.ColGames() + ": " + strings.Join(chosen, ", ")
-	} else {
+	if len(data.MultiFestVenues) > 0 {
+		ids, titles := make([]int64, len(data.MultiFestVenues)), make([]string, len(data.MultiFestVenues))
+		for i, v := range data.MultiFestVenues {
+			ids[i], titles[i] = v.ID, v.Title
+		}
+		boxes = append(boxes, dopeui.Hint(dopeui.Text(s.Host.Dash.VenuesHint())))
+		group("venues_", s.Host.Dash.ColVenues(), data.HostVenues[m.UserID], ids, titles)
+	}
+	ids, titles := make([]int64, len(data.Games)), make([]string, len(data.Games))
+	for i, g := range data.Games {
+		ids[i], titles[i] = g.ID, g.Title
+	}
+	group("games_", s.Host.Dash.ColGames(), data.HostGames[m.UserID], ids, titles)
+	if len(summary) == 0 {
+		summary = []string{s.Host.Dash.ColGames() + ": " + s.Host.Dash.GamesEvery()}
 		boxes = append(boxes, dopeui.Hint(dopeui.Text(s.Host.Dash.GamesNoneHint())))
 	}
 	// Folded to what the host runs, so the boxes do not squeeze the role
-	// beside them on a phone; opened, a box per Game and one save for all
-	// the boxes ticked.
+	// beside them on a phone; opened, a box per venue and Game and one save
+	// for all the boxes ticked.
 	boxes = append(boxes, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.SaveSubmit()))))
-	return dopeui.Details(dopeui.Summary(dopeui.Text(summary)), dopeui.Col(boxes...))
+	return dopeui.Details(dopeui.Summary(dopeui.Text(strings.Join(summary, "; "))), dopeui.Col(boxes...))
 }
 
 func roleOption(value, current string) *dopeui.Element {
@@ -700,7 +725,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 	canDeleteFest := roles.CanDeleteFest(currentRole)
 	canManageGames := canManageFest
 	var access []festaccess.HostAccessMember
-	var hostGameIDs map[int64][]int64
+	var hostGameIDs, hostVenueIDs map[int64][]int64
 	var invites []festInvite
 	if canManageAccess {
 		if invites, err = s.loadFestInvites(r.Context(), festID, pages.PublicOrigin(r)); err != nil {
@@ -716,14 +741,27 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 			route.WriteError(w, r, err)
 			return
 		}
+		if hostVenueIDs, err = festaccess.HostVenuesByUser(r.Context(), s.h.Engine().DB, festID); err != nil {
+			route.WriteError(w, r, err)
+			return
+		}
 	}
 	venueRows, err := s.loadVenueRows(r.Context(), festID, hostGames)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
 	}
+	rosterVenues, _, err := festaccess.RosterVenues(r.Context(), s.h.Engine().DB, festID, userID, currentRole)
+	if err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
+	if !canManageFest {
+		venueRows = ownVenueRows(venueRows, rosterVenues)
+	}
 	data := hostFestDashData{
 		MultiFestVenues: venueRows,
+		RosterVenues:    rosterVenues,
 		Fest: view.HostFest{
 			ID:        festID,
 			Slug:      slug,
@@ -739,6 +777,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 		Games:           hostGames,
 		Access:          access,
 		HostGames:       hostGameIDs,
+		HostVenues:      hostVenueIDs,
 		TeamCount:       teamCount,
 		PlayerCount:     playerCount,
 		TroikaCount:     troikaCount,

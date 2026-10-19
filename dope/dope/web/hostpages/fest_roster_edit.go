@@ -11,6 +11,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/entrants"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -38,9 +39,13 @@ func (s *Server) editFestRoster(ctx context.Context, festID int64, label string,
 }
 
 // CreateFestTeam adds a team the host made and returns its id.
-func (s *Server) CreateFestTeam(ctx context.Context, festID int64, in imports.TeamInput) (int64, error) {
+func (s *Server) CreateFestTeam(ctx context.Context, sc route.Scope, in imports.TeamInput) (int64, error) {
 	var teamID int64
+	festID := sc.FestID
 	err := s.editFestRoster(ctx, festID, "fest:team-create", func(ctx context.Context, tx *sql.Tx) (imports.RosterWrite, error) {
+		if err := checkPeopleTx(ctx, tx, sc, 0, in.Players); err != nil {
+			return imports.RosterWrite{}, err
+		}
 		id, written, err := imports.CreateHandTeamTx(ctx, tx, festID, in)
 		teamID = id
 		return written, err
@@ -49,17 +54,77 @@ func (s *Server) CreateFestTeam(ctx context.Context, festID int64, in imports.Te
 }
 
 // SaveFestTeam sets a team's name, city and people as the host typed them.
-func (s *Server) SaveFestTeam(ctx context.Context, festID, teamID int64, in imports.TeamInput) error {
+func (s *Server) SaveFestTeam(ctx context.Context, sc route.Scope, teamID int64, in imports.TeamInput) error {
+	festID := sc.FestID
 	return s.editFestRoster(ctx, festID, "fest:team-edit", func(ctx context.Context, tx *sql.Tx) (imports.RosterWrite, error) {
+		current, err := teamVenueTx(ctx, tx, sc, teamID)
+		if err != nil {
+			return imports.RosterWrite{}, err
+		}
+		if err := checkVenueChoice(sc, in.Venue, current); err != nil {
+			return imports.RosterWrite{}, err
+		}
+		if err := checkPeopleTx(ctx, tx, sc, teamID, in.Players); err != nil {
+			return imports.RosterWrite{}, err
+		}
 		return imports.SaveHandTeamTx(ctx, tx, festID, teamID, in)
 	})
 }
 
 // RemoveFestTeam takes a team without results off the fest roster.
-func (s *Server) RemoveFestTeam(ctx context.Context, festID, teamID int64) error {
+func (s *Server) RemoveFestTeam(ctx context.Context, sc route.Scope, teamID int64) error {
+	festID := sc.FestID
 	return s.editFestRoster(ctx, festID, "fest:team-remove", func(ctx context.Context, tx *sql.Tx) (imports.RosterWrite, error) {
+		if _, err := teamVenueTx(ctx, tx, sc, teamID); err != nil {
+			return imports.RosterWrite{}, err
+		}
 		return imports.RemoveTeamTx(ctx, tx, festID, teamID)
 	})
+}
+
+// teamVenueTx is the venue a team of the fest plays at, refused when the
+// caller may not edit that venue's teams.
+func teamVenueTx(ctx context.Context, tx *sql.Tx, sc route.Scope, teamID int64) (int64, error) {
+	var venue int64
+	err := tx.QueryRowContext(ctx, `select coalesce(multifest_venue_id, 0) from fest_teams where id = ? and fest_id = ?`, teamID, sc.FestID).Scan(&venue)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, corei18n.User(dopestrings.Default.Imports.HandRoster.TeamUnknown())
+	}
+	if err == nil && !sc.MayEditVenue(venue) {
+		return 0, route.ErrOtherVenue
+	}
+	return venue, err
+}
+
+// checkPeopleTx refuses to take a person from a team of a venue the caller
+// may not edit: adding someone who plays for another team moves them.
+func checkPeopleTx(ctx context.Context, tx *sql.Tx, sc route.Scope, teamID int64, people []roster.FestRosterImportPlayer) error {
+	if sc.AllVenues {
+		return nil
+	}
+	state, err := roster.LoadHandState(ctx, tx, sc.FestID)
+	if err != nil {
+		return err
+	}
+	placement, err := multifest.LoadPlacement(ctx, tx, sc.FestID)
+	if err != nil {
+		return err
+	}
+	wanted := map[string]bool{}
+	for _, p := range people {
+		wanted[roster.PlayerKey(p)] = true
+	}
+	for _, team := range state.Teams {
+		if team.Deleted || team.ID == teamID || sc.MayEditVenue(placement.Of(team.ID, 0, 0).Venue) {
+			continue
+		}
+		for _, p := range team.Players {
+			if wanted[roster.PlayerKey(p)] {
+				return corei18n.User(dopestrings.Default.Host.Multifest.PlayerElsewhere(store.JoinPlayerName(p.FirstName, p.LastName), team.Name))
+			}
+		}
+	}
+	return nil
 }
 
 // UndoRosterImport puts the fest roster back as it was before the last import.
@@ -80,6 +145,10 @@ type festTeamDetail struct {
 	Edited   bool             `json:"edited"`
 	Players  []festTeamPlayer `json:"players"`
 	Choices  []festTeamPlayer `json:"choices"`
+	// MultiFestVenueID is the venue the team plays at (ADR-0032), and
+	// MultiFestVenues the venues the editor may put a team the host made on.
+	MultiFestVenueID int64             `json:"multifest_venue_id"`
+	MultiFestVenues  []multifest.Venue `json:"multifest_venues,omitempty"`
 }
 
 // festTeamPlayer is a person as the editor sends and shows them. Team is the
@@ -91,16 +160,33 @@ type festTeamPlayer struct {
 	Team      string `json:"team,omitempty"`
 }
 
-func (s *Server) loadFestTeamDetail(ctx context.Context, festID, teamID int64) (festTeamDetail, error) {
-	state, err := roster.LoadHandState(ctx, s.h.Engine().DB, festID)
+// loadFestTeamDetail is one team as the caller may edit it; the suggestions
+// are the people of the teams the caller may edit.
+func (s *Server) loadFestTeamDetail(ctx context.Context, sc route.Scope, teamID int64) (festTeamDetail, error) {
+	festID, db := sc.FestID, s.h.Engine().DB
+	state, err := roster.LoadHandState(ctx, db, festID)
+	if err != nil {
+		return festTeamDetail{}, err
+	}
+	placement, err := multifest.LoadPlacement(ctx, db, festID)
+	if err != nil {
+		return festTeamDetail{}, err
+	}
+	venues, err := multifest.List(ctx, db, festID)
 	if err != nil {
 		return festTeamDetail{}, err
 	}
 	edited := editedTeams(state)
 	out := festTeamDetail{Players: []festTeamPlayer{}, Choices: []festTeamPlayer{}}
+	for _, v := range venues {
+		if sc.MayEditVenue(v.ID) {
+			out.MultiFestVenues = append(out.MultiFestVenues, v)
+		}
+	}
 	found := false
 	for _, team := range state.Teams {
-		if team.Deleted {
+		venue := placement.Of(team.ID, 0, 0).Venue
+		if team.Deleted || !sc.MayEditVenue(venue) {
 			continue
 		}
 		for _, p := range team.Players {
@@ -110,6 +196,7 @@ func (s *Server) loadFestTeamDetail(ctx context.Context, festID, teamID int64) (
 			continue
 		}
 		found = true
+		out.MultiFestVenueID = venue
 		out.ID, out.RatingID, out.Name, out.City, out.Hand, out.Edited = team.ID, team.RatingID, team.Name, team.City, team.Hand, edited[team.ID]
 		for _, p := range team.Players {
 			out.Players = append(out.Players, festTeamPlayer{RatingID: p.RatingID, FirstName: p.FirstName, LastName: p.LastName})
@@ -151,10 +238,13 @@ type teamRequest struct {
 	Name     string           `json:"name"`
 	City     string           `json:"city"`
 	Players  []festTeamPlayer `json:"players"`
+	// Venue puts a team the host made on a venue; left out, a new team goes
+	// on the caller's one venue, or none, and a team keeps its own.
+	Venue *int64 `json:"multifest_venue_id"`
 }
 
 func (req teamRequest) input() imports.TeamInput {
-	in := imports.TeamInput{RatingID: req.RatingID, Name: req.Name, City: req.City}
+	in := imports.TeamInput{RatingID: req.RatingID, Name: req.Name, City: req.City, Venue: req.Venue}
 	for _, p := range req.Players {
 		in.Players = append(in.Players, roster.FestRosterImportPlayer{RatingID: p.RatingID, FirstName: p.FirstName, LastName: p.LastName})
 	}
@@ -168,7 +258,7 @@ func (s *Server) apiTeam(w http.ResponseWriter, r *http.Request, sc route.Scope)
 	if err != nil {
 		return err
 	}
-	detail, err := s.loadFestTeamDetail(r.Context(), sc.FestID, id)
+	detail, err := s.loadFestTeamDetail(r.Context(), sc, id)
 	if err != nil {
 		return err
 	}
@@ -178,7 +268,7 @@ func (s *Server) apiTeam(w http.ResponseWriter, r *http.Request, sc route.Scope)
 // apiNewTeam is what the editor opens a new team with: the fest's people to
 // suggest.
 func (s *Server) apiNewTeam(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	detail, err := s.loadFestTeamDetail(r.Context(), sc.FestID, 0)
+	detail, err := s.loadFestTeamDetail(r.Context(), sc, 0)
 	if err != nil {
 		return err
 	}
@@ -190,11 +280,17 @@ func (s *Server) apiCreateTeam(w http.ResponseWriter, r *http.Request, sc route.
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	id, err := s.CreateFestTeam(r.Context(), sc.FestID, req.input())
+	if req.Venue == nil && len(sc.Venues) == 1 {
+		req.Venue = &sc.Venues[0]
+	}
+	if err := checkVenueChoice(sc, req.Venue, 0); err != nil {
+		return err
+	}
+	id, err := s.CreateFestTeam(r.Context(), sc, req.input())
 	if err != nil {
 		return err
 	}
-	detail, err := s.loadFestTeamDetail(r.Context(), sc.FestID, id)
+	detail, err := s.loadFestTeamDetail(r.Context(), sc, id)
 	if err != nil {
 		return err
 	}
@@ -210,10 +306,10 @@ func (s *Server) apiSaveTeam(w http.ResponseWriter, r *http.Request, sc route.Sc
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	if err := s.SaveFestTeam(r.Context(), sc.FestID, id, req.input()); err != nil {
+	if err := s.SaveFestTeam(r.Context(), sc, id, req.input()); err != nil {
 		return err
 	}
-	detail, err := s.loadFestTeamDetail(r.Context(), sc.FestID, id)
+	detail, err := s.loadFestTeamDetail(r.Context(), sc, id)
 	if err != nil {
 		return err
 	}
@@ -225,10 +321,23 @@ func (s *Server) apiRemoveTeam(w http.ResponseWriter, r *http.Request, sc route.
 	if err != nil {
 		return err
 	}
-	if err := s.RemoveFestTeam(r.Context(), sc.FestID, id); err != nil {
+	if err := s.RemoveFestTeam(r.Context(), sc, id); err != nil {
 		return err
 	}
 	return writeOK(w)
+}
+
+// checkVenueChoice refuses a venue the caller may not put a team on. A caller
+// limited to venues must name one of theirs; a team that keeps its venue
+// (nil, on a team that has one) needs nothing more.
+func checkVenueChoice(sc route.Scope, venue *int64, current int64) error {
+	switch {
+	case venue != nil && !sc.MayEditVenue(*venue):
+		return route.ErrOtherVenue
+	case venue == nil && current == 0 && !sc.AllVenues:
+		return route.ErrOtherVenue
+	}
+	return nil
 }
 
 func (s *Server) apiUndoRatingImport(w http.ResponseWriter, r *http.Request, sc route.Scope) error {

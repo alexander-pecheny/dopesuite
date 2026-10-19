@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	"dope/dope/domain/core"
@@ -48,6 +49,7 @@ const (
 	levelRead
 	levelMember
 	levelEditor
+	levelRoster
 	levelManager
 	levelCreator
 )
@@ -60,7 +62,11 @@ var (
 	Member     = Access{level: levelMember}
 	Editor     = Access{level: levelEditor}
 	Manager    = Access{level: levelManager}
-	Creator    = Access{level: levelCreator}
+	// Roster is the fest's teams and numbers: an admin's, or a host's limited
+	// to venues, for those venues' teams (ADR-0032). The handler keeps to
+	// Scope.Venues.
+	Roster  = Access{level: levelRoster}
+	Creator = Access{level: levelCreator}
 )
 
 // Numbered adds the numbering guard (CONTEXT.md): the route's Game must have
@@ -74,6 +80,19 @@ type Scope struct {
 	User           session.User
 	HasUser        bool
 	Role           string
+	// Venues are the venues whose teams a Roster route may touch, unless
+	// AllVenues: every team of the fest.
+	Venues    []int64
+	AllVenues bool
+}
+
+// ErrOtherVenue refuses a Roster route a team or venue outside Scope.Venues.
+var ErrOtherVenue = Forbid(dopestrings.Default.Route.Guard.OtherVenue())
+
+// MayEditVenue says whether a Roster route may touch the teams of this venue;
+// venue 0 is the teams on none, which only an admin edits.
+func (sc Scope) MayEditVenue(venueID int64) bool {
+	return sc.AllVenues || venueID > 0 && slices.Contains(sc.Venues, venueID)
 }
 
 // Fest is the Scope as the rest of the server names it.
@@ -234,6 +253,12 @@ func (t *Table) admit(r *http.Request, access Access, sc *Scope) (Denial, error)
 			return 0, err
 		}
 		allow := allowed(access.level, sc.Role)
+		if access.level == levelRoster {
+			if sc.Venues, sc.AllVenues, err = festaccess.RosterVenues(ctx, t.Eng.DB, sc.FestID, sc.User.UserID, sc.Role); err != nil {
+				return 0, err
+			}
+			allow = sc.AllVenues || len(sc.Venues) > 0
+		}
 		// A Game's tables are its hosts': a host an admin limited to other
 		// Games may look at this one but not write to it.
 		if allow && access.level == levelEditor && sc.GameID > 0 {

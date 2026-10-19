@@ -14,6 +14,9 @@ import (
 
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
+
+	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // The fest types.
@@ -56,6 +59,18 @@ where fest_id = ? order by position, id`, []any{festID}, func(rows *sql.Rows) (V
 		var s Venue
 		return s, rows.Scan(&s.ID, &s.Title, &s.Town, &s.RatingVenueID)
 	})
+}
+
+// VenueOf is one venue of the fest; a venue of another fest is an error a
+// person can read.
+func VenueOf(ctx context.Context, q store.Queryer, festID, venueID int64) (Venue, error) {
+	var v Venue
+	err := q.QueryRowContext(ctx, `
+select id, title, town, coalesce(rating_venue_id, 0) from multifest_venues where id = ? and fest_id = ?`, venueID, festID).Scan(&v.ID, &v.Title, &v.Town, &v.RatingVenueID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return v, corei18n.User(dopestrings.Default.Host.Multifest.VenueUnknown())
+	}
+	return v, err
 }
 
 // GameVenue is the venue a Game is on, 0 for none.
@@ -101,14 +116,14 @@ where fest_id = ? and rating_id = ? and hand = 0 and multifest_venue_id is not ?
 			moved = true
 		}
 	}
-	numbered, err := numberVenuesTx(ctx, tx, festID)
+	numbered, err := NumberVenuesTx(ctx, tx, festID)
 	return moved || numbered, err
 }
 
-// numberVenuesTx gives each team on a venue without a number there the next
+// NumberVenuesTx gives each team on a venue without a number there the next
 // numbers of that venue, in the order of the teams' names: a venue numbers its
 // own teams 1…n.
-func numberVenuesTx(ctx context.Context, tx *sql.Tx, festID int64) (bool, error) {
+func NumberVenuesTx(ctx context.Context, tx *sql.Tx, festID int64) (bool, error) {
 	type unnumbered struct {
 		id, venue  int64
 		name, city string

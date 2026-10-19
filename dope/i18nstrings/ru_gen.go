@@ -585,6 +585,7 @@ var RU = Strings{
 			Save:                  func() string { return "Сохранить" },
 			Title:                 func(team string) string { return fmt.Sprintf("Команда «%s»", team) },
 			TitleNew:              func() string { return "Новая команда" },
+			Venue:                 func() string { return "Площадка" },
 		},
 	},
 	Festaccess: FestaccessStrings{
@@ -605,9 +606,10 @@ var RU = Strings{
 		},
 		Games: FestaccessGamesStrings{
 			NotHost: func(name string) string {
-				return fmt.Sprintf("у %s роль не «ведущий» — ограничить по играм можно только ведущего", name)
+				return fmt.Sprintf("у %s роль не «ведущий», а ограничить по играм и площадкам можно только ведущего", name)
 			},
-			Unknown: func(game string) string { return fmt.Sprintf("в фесте нет игры «%s»", game) },
+			Unknown:      func(game string) string { return fmt.Sprintf("в фесте нет игры «%s»", game) },
+			UnknownVenue: func(venue string) string { return fmt.Sprintf("в фесте нет площадки «%s»", venue) },
 		},
 		Invite: FestaccessInviteStrings{
 			Broken: func() string { return "Ссылка не работает." },
@@ -631,6 +633,9 @@ var RU = Strings{
 			ScopeName: func(game string, fest string) string { return fmt.Sprintf("«%s» на фесте «%s»", game, fest) },
 			Spent: func() string {
 				return "Вы уже входили по этой ссылке, а потом вас убрали из доступа. Попросите у организаторов новую ссылку."
+			},
+			VenueScopeName: func(venue string, fest string) string {
+				return fmt.Sprintf("площадку «%s» на фесте «%s»", venue, fest)
 			},
 		},
 		Manage: FestaccessManageStrings{
@@ -939,6 +944,7 @@ var RU = Strings{
 			ColGames:            func() string { return "Игры" },
 			ColNickname:         func() string { return "Никнейм" },
 			ColRole:             func() string { return "Роль" },
+			ColVenues:           func() string { return "Площадки" },
 			DeleteAccessConfirm: func(name string) string { return fmt.Sprintf("Удалить доступ для %s?", name) },
 			DeleteBtn:           func() string { return "Удалить" },
 			DeleteConfirm: func() string {
@@ -987,6 +993,9 @@ var RU = Strings{
 			},
 			StartDateLabel: func() string { return "Дата начала" },
 			TitleLabel:     func() string { return "Название" },
+			VenuesHint: func() string {
+				return "Ведущий площадки ведёт её игры и правит её команды и номера."
+			},
 		},
 		Games: HostGamesStrings{
 			BrainHint: func() string {
@@ -1111,6 +1120,9 @@ var RU = Strings{
 			Lead: func() string {
 				return "Кто перейдёт по ссылке, станет ведущим одной игры. Остальные игры феста он будет видеть как зритель. Например, сделайте по ссылке на каждую городскую игру и отправьте их организаторам площадок."
 			},
+			LeadVenues: func() string {
+				return "Кто перейдёт по ссылке на площадку, станет её ведущим: будет вести её игры и править её команды и номера. По ссылке на игру можно вести только эту игру. Остальное ведущий видит как зритель. Сделайте ссылку для каждой площадки и отправьте её организаторам этой площадки."
+			},
 			Revoke: func() string { return "Отозвать" },
 			RevokeConfirm: func() string {
 				return "Отозвать ссылку? Те, кто уже вошёл по ней, останутся ведущими."
@@ -1135,14 +1147,19 @@ var RU = Strings{
 			UsesLabel: func() string {
 				return "Сколько человек может войти (пусто — сколько угодно)"
 			},
+			VenueOrGameLabel: func() string { return "Площадка или игра" },
 		},
 		Join: HostJoinStrings{
 			ActiveHeading: func(scope string) string { return fmt.Sprintf("Вас приглашают вести %s", scope) },
 			ActiveNote: func() string {
 				return "Вы станете ведущим этой игры и сможете вносить в неё результаты. Остальные игры феста будут видны вам как зрителю."
 			},
+			ActiveNoteVenue: func() string {
+				return "Вы станете ведущим игр этой площадки, сможете вносить в них результаты и править команды площадки и их номера. Остальные игры феста будут видны вам как зрителю."
+			},
 			JoinSubmit:     func() string { return "Стать ведущим" },
 			MemberHeading:  func(scope string) string { return fmt.Sprintf("Вы уже ведёте %s", scope) },
+			OpenFest:       func() string { return "Открыть фест" },
 			OpenGame:       func() string { return "Открыть игру" },
 			RefusedHeading: func() string { return "Ссылка не работает" },
 			Title:          func() string { return "Приглашение" },
@@ -1155,8 +1172,12 @@ var RU = Strings{
 			KindMulti:   func() string { return "Несколько очных турниров" },
 			KindRegular: func() string { return "Обычный" },
 			KindSynch:   func() string { return "Строгий синхрон" },
-			Subhead:     func() string { return "Площадки" },
-			Teams:       func(n string) string { return fmt.Sprintf("команд: %s", n) },
+			PlayerElsewhere: func(player string, team string) string {
+				return fmt.Sprintf("%s играет за команду «%s» другой площадки. Перевести игрока могут организаторы феста.", player, team)
+			},
+			Subhead:      func() string { return "Площадки" },
+			Teams:        func(n string) string { return fmt.Sprintf("команд: %s", n) },
+			VenueUnknown: func() string { return "В фесте нет такой площадки." },
 		},
 		Pages: HostPagesStrings{
 			CreateFestSummary: func() string { return "Создать фест" },
@@ -1226,6 +1247,7 @@ var RU = Strings{
 		Roster: HostRosterStrings{
 			AddOverrideBtn:      func() string { return "Добавить оверрайд для игры" },
 			AddTeamBtn:          func() string { return "Добавить команду" },
+			AllVenues:           func() string { return "Все площадки" },
 			BadgeEdited:         func() string { return "изменена" },
 			BadgeHand:           func() string { return "вручную" },
 			CancelBtn:           func() string { return "Отмена" },
@@ -2265,6 +2287,9 @@ var RU = Strings{
 	},
 	Route: RouteStrings{
 		Guard: RouteGuardStrings{
+			OtherVenue: func() string {
+				return "Это команда другой площадки. Её правят ведущие той площадки и организаторы феста."
+			},
 			Unnumbered: func() string {
 				return "сначала присвойте номера всем командам — без номеров результаты нельзя редактировать"
 			},

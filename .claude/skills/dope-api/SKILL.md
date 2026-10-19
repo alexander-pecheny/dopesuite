@@ -44,7 +44,8 @@ act on it: it names the row, the team or the rule.
 ## Endpoints
 
 Roles: **R** anyone who can see the fest, **M** any role on it (host, admin,
-creator), **A** admin or creator (building the fest), **C** the creator only. The live-editing writes marked ⓝ refuse with 409 until every team
+creator), **A** admin or creator (building the fest), **V** an admin, or a host
+limited to площадки for those площадки's teams alone (ADR-0032), **C** the creator only. The live-editing writes marked ⓝ refuse with 409 until every team
 in the game has a number.
 
 **Fests and access**
@@ -56,11 +57,12 @@ in the game has a number.
 | `GET …/settings` M | header with `kind`, your `role`, `games` (each with its `multifest_venue_id`), roster counts, and a synch fest's `multifest_venues` (площадки) |
 | `PATCH …/settings` A | any header fields; those left out keep their value. `kind` changes only while the fest has no games |
 | `DELETE /api/fest/<fest>` C | deletes the fest and everything in it |
-| `GET …/access` A | members and roles; a host limited to some Games carries their ids in `games` |
-| `POST …/access` A | `{changes: [{user, role: "admin"\|"host"}, {user, remove: true}]}` or `{lines: "user:role\n…"}`. A change may carry `games: [<id\|code\|slug>, …]` to limit a host to those Games (`[]` lifts it), with or without a role |
-| `GET …/invites` A | the host invite links of every Game: `id`, `game_id`, `label`, `state`, `used`, `left`, `url`, who `joined` |
+| `GET …/access` A | members and roles; a host limited to some Games carries their ids in `games`, and one limited to площадки theirs in `multifest_venues` |
+| `POST …/access` A | `{changes: [{user, role: "admin"\|"host"}, {user, remove: true}]}` or `{lines: "user:role\n…"}`. A change may carry `games: [<id\|code\|slug>, …]` to limit a host to those Games (`[]` lifts it), and `multifest_venues: [<id\|title>, …]` to limit them to those площадки: their Games, and their teams and numbers to edit; with or without a role |
+| `GET …/invites` A | the host invite links of every площадка and Game: `id`, `multifest_venue_id` or `game_id`, `opens` (its title), `label`, `state`, `used`, `left`, `url`, who `joined` |
 | `POST …/games/<game>/invites` A | `{label?, max_uses?, ttl_hours?}` mints a link to that Game; whoever follows it becomes a host limited to it → the list |
-| `POST …/invites/<id>/revoke` A · `DELETE …/invites/<id>` A | stop a link, or remove it with its history; who came in stays a host |
+| `POST …/multifest-venues/<id>/invites` A | the same for a площадка: whoever follows it becomes a host limited to that площадка |
+| `POST …/invites/<id>/revoke` A · `DELETE …/invites/<id>` A | stop a Game's link, or remove it with its history; who came in stays a host. A площадка's link is under `…/venue-invites/<id>` |
 | `POST /api/join/<code>` | follow a link as yourself → `{fest_id, game_id}` |
 
 **Games**
@@ -92,12 +94,12 @@ created from pasted JSON. Leaving `entrants` out seats everyone.
 |---|---|
 | `POST …/rating-import` A | pulls the roster from rating.chgk.info (the fest needs `rating_id`). In a `synch` fest it also puts every team on its площадка and gives each площадка without a game an ОД of the tournament's tours and merges the host's edits over it. `{preview: true}` answers the `plan` (teams added, dropped, renamed, players per team, edits kept, `conflicts`) and writes nothing: **preview first, and show the user**. A conflict is a player the site moved away from where the host put them; the host's placement stays unless its `key` is in `accept_site`. A 409 lists `dropped` and `added` teams: repeat with `{merge: {"<fest team id>": <new rating id>}, drop: [<fest team id>]}` after **asking the user** |
 | `POST …/rating-import/undo` A | puts the roster back as it was before the last import; refused once the roster was edited by hand since |
-| `GET …/teams` A | teams with their `flags`, and `hand` / `edited` for teams the host made or changed |
-| `GET …/teams/{id}` · `GET …/teams/new` A | one team with its `players` and every fest person to suggest (`choices`) |
-| `POST …/teams` · `PUT …/teams/{id}` A | `{name, city, players: [{rating_id, first_name, last_name}]}`: make a team by hand, or set a team's name, city and people. A rating id of 0 is a person the site does not know. Adding someone who plays for another team moves them. A re-import keeps these edits (ADR-0024) |
-| `DELETE …/teams/{id}` A | takes a team without results off the roster; a rating team stays off through imports |
-| `GET …/rating/players?q=` · `GET …/rating/teams?q=` A | the rating site's people and teams for a name's start (buff's mirror, else the site's API). `POST …/teams` takes a `rating_id` to add a site team, under a one-off `name` if wanted |
-| `GET …/rating/teams/{id}/base` A | a site team's current base roster: `{team, players}` |
+| `GET …/teams` V | teams with their `flags`, and `hand` / `edited` for teams the host made or changed |
+| `GET …/teams/{id}` · `GET …/teams/new` V | one team with its `players` and every fest person to suggest (`choices`) |
+| `POST …/teams` · `PUT …/teams/{id}` V | `{name, city, players: [{rating_id, first_name, last_name}], multifest_venue_id?}`: make a team by hand, or set a team's name, city and people. In a fest with площадки a team made by hand plays at `multifest_venue_id` (a площадка host's own one when left out). A rating id of 0 is a person the site does not know. Adding someone who plays for another team moves them. A re-import keeps these edits (ADR-0024) |
+| `DELETE …/teams/{id}` V | takes a team without results off the roster; a rating team stays off through imports |
+| `GET …/rating/players?q=` · `GET …/rating/teams?q=` V | the rating site's people and teams for a name's start (buff's mirror, else the site's API). `POST …/teams` takes a `rating_id` to add a site team, under a one-off `name` if wanted |
+| `GET …/rating/teams/{id}/base` V | a site team's current base roster: `{team, players}` |
 | `GET …/teams/export.xlsx` · `POST …/teams/xlsx` A | the roster as a sheet, a row per person; a sheet loads back (multipart `file`, `?preview=1` first) and sets every team it names, leaving the rest |
 | `PATCH …/teams/flags` A | `{flags: {"<team id>": "МЮ, Студ"}}`; teams left out keep theirs |
 | `GET …/players` A | players, overrides, and the ids an override takes |
@@ -106,10 +108,10 @@ created from pasted JSON. Leaving `entrants` out seats everyone.
 | `DELETE …/players/overrides?player_id=&source_team_id=&team_id=` A | |
 | `GET\|POST …/troikas` A | list / add `{lines: "Имя: Игрок, Игрок, Игрок\n…"}` |
 | `PUT\|DELETE …/troikas/<id>` A | `{name, players: [...], applied?}`; `applied` moves the troika to that place in the order of applications (the list's `applied`), which a troikas list follows and `seed: players` breaks its last tie by |
-| `GET …/numbers` A | teams with numbers. In a fest with площадки each numbers its own teams, and every numbers call there needs `?venue=<id>` (the ids are in `…/settings` → `multifest_venues`) |
-| `POST …/numbers/assign` A | `{assignments: [{team_id, number}]}`; others keep theirs, a moved number leaves its old holder, `number: 0` takes a team's number away |
-| `POST …/numbers/match` A | `{text: "<n>\t<team>\n…"}` proposes pairs, saves nothing |
-| `POST …/numbers/auto` · `…/numbers/clear` A | 1…n alphabetically / none |
+| `GET …/numbers` V | teams with numbers. In a fest with площадки each numbers its own teams, and every numbers call there needs `?venue=<id>` (the ids are in `…/settings` → `multifest_venues`) |
+| `POST …/numbers/assign` V | `{assignments: [{team_id, number}]}`; others keep theirs, a moved number leaves its old holder, `number: 0` takes a team's number away |
+| `POST …/numbers/match` V | `{text: "<n>\t<team>\n…"}` proposes pairs, saves nothing |
+| `POST …/numbers/auto` · `…/numbers/clear` V | 1…n alphabetically / none |
 
 **Results (live editing, what the game pages send)**
 

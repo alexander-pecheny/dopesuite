@@ -34,6 +34,9 @@ interface TeamDetail {
   hand: boolean;
   players: TeamPlayer[];
   choices: TeamPlayer[];
+  multifest_venue_id: number;
+  // The venues the host may put a team they made on (ADR-0032).
+  multifest_venues?: Array<{id: number; title: string}>;
 }
 
 interface RatingTeam {
@@ -123,7 +126,7 @@ function hintLine(text: string): HTMLElement {
   return hint;
 }
 
-function openTeamDialog(api: string, team: TeamDetail): void {
+function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void {
   const isNew = !(team.id > 0);
   const draft: TeamPlayer[] = team.players.slice();
   let ratingTeam: RatingTeam | null = team.rating_id > 0 ? {rating_id: team.rating_id, name: team.name, city: team.city} : null;
@@ -141,6 +144,26 @@ function openTeamDialog(api: string, team: TeamDetail): void {
   nameInput.required = true;
   nameField.appendChild(hintLine(S.fest.teamEdit.nameHint()));
   const [cityField, cityInput] = field(S.fest.teamEdit.city(), team.city);
+
+  // A team the host made plays at the venue picked here; a new one starts on
+  // the venue the page shows. A rating team plays where the site says, and a
+  // host with one venue has nothing to pick.
+  const venues = team.multifest_venues || [];
+  let venueSelect: HTMLSelectElement | null = null;
+  const venueField = document.createElement("label");
+  venueField.className = "field";
+  if (venues.length > 1 && (isNew || team.hand)) {
+    venueSelect = document.createElement("select");
+    venueSelect.className = "input";
+    const current = isNew ? pageVenue : team.multifest_venue_id;
+    for (const venue of venues) {
+      const option = new Option(venue.title, String(venue.id), false, venue.id === current);
+      venueSelect.appendChild(option);
+    }
+    const caption = document.createElement("span");
+    caption.textContent = S.fest.teamEdit.venue();
+    venueField.append(caption, venueSelect);
+  }
 
   const error = document.createElement("p");
   error.className = "hint hint-danger";
@@ -373,6 +396,7 @@ function openTeamDialog(api: string, team: TeamDetail): void {
       rating_id: isNew && ratingTeam ? ratingTeam.rating_id : 0,
       name: nameInput.value, city: cityInput.value,
       players: draft.map((p) => ({rating_id: p.rating_id, first_name: p.first_name, last_name: p.last_name})),
+      multifest_venue_id: venueSelect ? Number(venueSelect.value) : undefined,
     };
     const sent = isNew ? request(`${api}/teams`, "POST", body) : request(`${api}/teams/${team.id}`, "PUT", body);
     void sent.then((answer) => {
@@ -382,7 +406,9 @@ function openTeamDialog(api: string, team: TeamDetail): void {
     });
   });
 
-  form.append(title, hint, ratingBlock, nameField, cityField, list, addRow, baseRow, error);
+  form.append(title, hint, ratingBlock, nameField, cityField);
+  if (venueSelect) form.appendChild(venueField);
+  form.append(list, addRow, baseRow, error);
   if (deleteRow) form.appendChild(deleteRow);
   form.appendChild(actions);
   dialog.appendChild(form);
@@ -419,9 +445,10 @@ function playerRow(player: TeamPlayer, remove: () => void): HTMLElement {
   const addButton = document.querySelector<HTMLElement>("[data-team-add]");
   const api = addButton?.dataset.teamAdd || "";
   if (!addButton || !api) return;
+  const pageVenue = Number(addButton.dataset.teamVenue || 0);
   const open = async (id: string) => {
     const answer = await request(`${api}/teams/${id}`, "GET");
-    if (answer.ok) openTeamDialog(api, answer.data as TeamDetail);
+    if (answer.ok) openTeamDialog(api, answer.data as TeamDetail, pageVenue);
   };
   addButton.addEventListener("click", () => void open("new"));
   for (const pencil of document.querySelectorAll<HTMLElement>("[data-team-edit]")) {

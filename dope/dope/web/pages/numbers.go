@@ -56,7 +56,9 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	query := ""
 	if data.Venue > 0 {
 		query = "?venue=" + idstr.Format(data.Venue)
-		page = append(page, venuePicker(base, data.MultiFestVenues, data.Venue))
+		if len(data.MultiFestVenues) > 1 {
+			page = append(page, VenuePicker(base, data.MultiFestVenues, data.Venue, ""))
+		}
 	}
 	if data.Error != "" {
 		page = append(page, ui.Empty(ui.Text(data.Error)))
@@ -112,7 +114,8 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }
 
-func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string, override []hostFestNumberRow) {
+func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, sc route.Scope, errMsg, notice string, override []hostFestNumberRow) {
+	festID := sc.FestID
 	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
@@ -122,7 +125,7 @@ func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, f
 		route.WriteError(w, r, err)
 		return
 	}
-	venue, list, err := s.numbersVenue(r, festID)
+	venue, list, err := s.numbersVenue(r, sc)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -244,12 +247,13 @@ func (rows parsedNumberRowSlice) override() []hostFestNumberRow {
 
 type parsedNumberRowSlice []parsedNumberRow
 
-func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
+func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Request, sc route.Scope) {
+	festID := sc.FestID
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	venue, _, err := s.numbersVenue(r, festID)
+	venue, _, err := s.numbersVenue(r, sc)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -260,7 +264,7 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if len(teams) == 0 {
-		s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Page.NoTeams(), "", nil)
+		s.RenderHostFestNumbers(w, r, sc, dopestrings.Default.Numbers.Page.NoTeams(), "", nil)
 		return
 	}
 	validIDs := make(map[int64]bool, len(teams))
@@ -280,17 +284,17 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		hasTeam := row.TeamID != 0
 		if !hasTeam {
 			if hasNum {
-				s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.RowNoTeam(strconv.Itoa(row.Index)), "", override)
+				s.RenderHostFestNumbers(w, r, sc, dopestrings.Default.Numbers.Error.RowNoTeam(strconv.Itoa(row.Index)), "", override)
 				return
 			}
 			continue
 		}
 		if !validIDs[row.TeamID] {
-			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.RowForeignTeam(strconv.Itoa(row.Index)), "", override)
+			s.RenderHostFestNumbers(w, r, sc, dopestrings.Default.Numbers.Error.RowForeignTeam(strconv.Itoa(row.Index)), "", override)
 			return
 		}
 		if prev, ok := teamToRow[row.TeamID]; ok {
-			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.TeamTwoRows(strconv.Itoa(prev), strconv.Itoa(row.Index)), "", override)
+			s.RenderHostFestNumbers(w, r, sc, dopestrings.Default.Numbers.Error.TeamTwoRows(strconv.Itoa(prev), strconv.Itoa(row.Index)), "", override)
 			return
 		}
 		teamToRow[row.TeamID] = row.Index
@@ -300,11 +304,11 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		}
 		n, err := strconv.Atoi(numTxt)
 		if err != nil || n <= 0 || n > numbering.MaxNumber {
-			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.RowRange(strconv.Itoa(row.Index), strconv.Itoa(numbering.MaxNumber)), "", override)
+			s.RenderHostFestNumbers(w, r, sc, dopestrings.Default.Numbers.Error.RowRange(strconv.Itoa(row.Index), strconv.Itoa(numbering.MaxNumber)), "", override)
 			return
 		}
 		if prev, ok := numberToRow[n]; ok {
-			s.RenderHostFestNumbers(w, r, festID, dopestrings.Default.Numbers.Error.NumberTwoRows(strconv.Itoa(n), strconv.Itoa(prev), strconv.Itoa(row.Index)), "", override)
+			s.RenderHostFestNumbers(w, r, sc, dopestrings.Default.Numbers.Error.NumberTwoRows(strconv.Itoa(n), strconv.Itoa(prev), strconv.Itoa(row.Index)), "", override)
 			return
 		}
 		numberToRow[n] = row.Index
@@ -312,14 +316,14 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := s.SaveFestNumbers(r.Context(), festID, venue, assignments); err != nil {
-		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", override)
+		s.RenderHostFestNumbers(w, r, sc, err.Error(), "", override)
 		return
 	}
 	notice := dopestrings.Default.Numbers.Notice.Saved()
 	if len(assignments) < len(teams) {
 		notice = dopestrings.Default.Numbers.Notice.SavedPartial(strconv.Itoa(len(teams) - len(assignments)))
 	}
-	s.RenderHostFestNumbers(w, r, festID, "", notice, nil)
+	s.RenderHostFestNumbers(w, r, sc, "", notice, nil)
 }
 
 // AutoFestNumbers numbers every team of the fest, or of one venue, 1…n in
@@ -361,28 +365,30 @@ func (s *Server) ClearFestNumbers(ctx context.Context, festID, multiFestVenueID 
 	return s.SaveFestNumbers(ctx, festID, multiFestVenueID, nil)
 }
 
-func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
-	venue, _, err := s.numbersVenue(r, festID)
+func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Request, sc route.Scope) {
+	festID := sc.FestID
+	venue, _, err := s.numbersVenue(r, sc)
 	if err == nil {
 		err = s.AutoFestNumbers(r.Context(), festID, venue)
 	}
 	if err != nil {
-		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
+		s.RenderHostFestNumbers(w, r, sc, err.Error(), "", nil)
 		return
 	}
-	s.RenderHostFestNumbers(w, r, festID, "", dopestrings.Default.Numbers.Notice.Auto(), nil)
+	s.RenderHostFestNumbers(w, r, sc, "", dopestrings.Default.Numbers.Notice.Auto(), nil)
 }
 
-func (s *Server) HandleHostClearFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
-	venue, _, err := s.numbersVenue(r, festID)
+func (s *Server) HandleHostClearFestNumbers(w http.ResponseWriter, r *http.Request, sc route.Scope) {
+	festID := sc.FestID
+	venue, _, err := s.numbersVenue(r, sc)
 	if err == nil {
 		err = s.ClearFestNumbers(r.Context(), festID, venue)
 	}
 	if err != nil {
-		s.RenderHostFestNumbers(w, r, festID, err.Error(), "", nil)
+		s.RenderHostFestNumbers(w, r, sc, err.Error(), "", nil)
 		return
 	}
-	s.RenderHostFestNumbers(w, r, festID, "", dopestrings.Default.Numbers.Notice.Cleared(), nil)
+	s.RenderHostFestNumbers(w, r, sc, "", dopestrings.Default.Numbers.Notice.Cleared(), nil)
 }
 
 // purgeFestSoftDeletedTeams hard-deletes any soft-deleted fest_teams rows for
@@ -454,12 +460,21 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID, multiFestVenueI
 }
 
 // numbersVenue is the venue a numbers request is about: the one ?venue= names,
-// else the fest's first, or 0 in a fest without multifest. A venue numbers its own
-// teams.
-func (s *Server) numbersVenue(r *http.Request, festID int64) (int64, []multifest.Venue, error) {
-	list, err := multifest.List(r.Context(), s.h.Engine().DB, festID)
-	if err != nil || len(list) == 0 {
+// else the first the caller may edit, or 0 in a fest without venues. A venue
+// numbers its own teams. The list is the venues the caller may edit.
+func (s *Server) numbersVenue(r *http.Request, sc route.Scope) (int64, []multifest.Venue, error) {
+	all, err := multifest.List(r.Context(), s.h.Engine().DB, sc.FestID)
+	if err != nil || len(all) == 0 {
 		return 0, nil, err
+	}
+	var list []multifest.Venue
+	for _, venue := range all {
+		if sc.MayEditVenue(venue.ID) {
+			list = append(list, venue)
+		}
+	}
+	if len(list) == 0 {
+		return 0, nil, route.ErrOtherVenue
 	}
 	asked, _ := idstr.Parse(r.URL.Query().Get("venue"))
 	for _, venue := range list {
@@ -470,10 +485,14 @@ func (s *Server) numbersVenue(r *http.Request, festID int64) (int64, []multifest
 	return list[0].ID, list, nil
 }
 
-// venuePicker switches the page between the fest's multifest.
-func venuePicker(base string, list []multifest.Venue, current int64) *ui.Element {
-	options := make([]ui.Item, 0, len(list)+1)
+// VenuePicker switches a page between the venues the caller may edit, and,
+// when allLabel is set, all of them together under that label.
+func VenuePicker(base string, list []multifest.Venue, current int64, allLabel string) *ui.Element {
+	options := make([]ui.Item, 0, len(list)+3)
 	options = append(options, ui.Name("venue"), ui.Data("autosubmit", ""))
+	if allLabel != "" {
+		options = append(options, ui.Option(ui.Value(""), ui.Text(allLabel)))
+	}
 	for _, venue := range list {
 		items := []ui.Item{ui.Value(idstr.Format(venue.ID)), ui.Text(venue.Title)}
 		if venue.ID == current {

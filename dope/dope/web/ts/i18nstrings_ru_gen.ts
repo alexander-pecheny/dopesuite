@@ -461,6 +461,7 @@ export const RU: Strings = {
       save: () => "Сохранить",
       title: (team: string) => `Команда «${team}»`,
       titleNew: () => "Новая команда",
+      venue: () => "Площадка",
     },
   },
   festaccess: {
@@ -476,8 +477,9 @@ export const RU: Strings = {
       userNotFound: (n: string, name: string) => `строка ${n}: пользователь "${name}" не найден`,
     },
     games: {
-      notHost: (name: string) => `у ${name} роль не «ведущий» — ограничить по играм можно только ведущего`,
+      notHost: (name: string) => `у ${name} роль не «ведущий», а ограничить по играм и площадкам можно только ведущего`,
       unknown: (game: string) => `в фесте нет игры «${game}»`,
+      unknownVenue: (venue: string) => `в фесте нет площадки «${venue}»`,
     },
     invite: {
       broken: () => "Ссылка не работает.",
@@ -490,6 +492,7 @@ export const RU: Strings = {
       revoked: () => "Ссылку отозвали. Попросите у организаторов новую.",
       scopeName: (game: string, fest: string) => `«${game}» на фесте «${fest}»`,
       spent: () => "Вы уже входили по этой ссылке, а потом вас убрали из доступа. Попросите у организаторов новую ссылку.",
+      venueScopeName: (venue: string, fest: string) => `площадку «${venue}» на фесте «${fest}»`,
     },
     manage: {
       denied: () => "нет прав менять доступ",
@@ -709,6 +712,7 @@ export const RU: Strings = {
       colGames: () => "Игры",
       colNickname: () => "Никнейм",
       colRole: () => "Роль",
+      colVenues: () => "Площадки",
       deleteAccessConfirm: (name: string) => `Удалить доступ для ${name}?`,
       deleteBtn: () => "Удалить",
       deleteConfirm: () => "Удалить турнир? Все игры, команды и результаты будут удалены.",
@@ -747,6 +751,7 @@ export const RU: Strings = {
       slugLabel: () => "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})",
       startDateLabel: () => "Дата начала",
       titleLabel: () => "Название",
+      venuesHint: () => "Ведущий площадки ведёт её игры и правит её команды и номера.",
     },
     games: {
       brainHint: () => "Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, kind: roundrobin / single_elimination / double_elimination.",
@@ -844,6 +849,7 @@ shootout: true
       labelLabel: () => "Название",
       labelPlaceholder: () => "например, «Минск»",
       lead: () => "Кто перейдёт по ссылке, станет ведущим одной игры. Остальные игры феста он будет видеть как зритель. Например, сделайте по ссылке на каждую городскую игру и отправьте их организаторам площадок.",
+      leadVenues: () => "Кто перейдёт по ссылке на площадку, станет её ведущим: будет вести её игры и править её команды и номера. По ссылке на игру можно вести только эту игру. Остальное ведущий видит как зритель. Сделайте ссылку для каждой площадки и отправьте её организаторам этой площадки.",
       revoke: () => "Отозвать",
       revokeConfirm: () => "Отозвать ссылку? Те, кто уже вошёл по ней, останутся ведущими.",
       rowMeta: (game: string, state: string, usage: string) => `${game} · ${state} · ${usage}`,
@@ -860,12 +866,15 @@ shootout: true
       usage: (n: string) => `вошли: ${n}`,
       usageLeft: (n: string, left: string) => `вошли: ${n}, осталось мест: ${left}`,
       usesLabel: () => "Сколько человек может войти (пусто — сколько угодно)",
+      venueOrGameLabel: () => "Площадка или игра",
     },
     join: {
       activeHeading: (scope: string) => `Вас приглашают вести ${scope}`,
       activeNote: () => "Вы станете ведущим этой игры и сможете вносить в неё результаты. Остальные игры феста будут видны вам как зрителю.",
+      activeNoteVenue: () => "Вы станете ведущим игр этой площадки, сможете вносить в них результаты и править команды площадки и их номера. Остальные игры феста будут видны вам как зрителю.",
       joinSubmit: () => "Стать ведущим",
       memberHeading: (scope: string) => `Вы уже ведёте ${scope}`,
+      openFest: () => "Открыть фест",
       openGame: () => "Открыть игру",
       refusedHeading: () => "Ссылка не работает",
       title: () => "Приглашение",
@@ -876,8 +885,10 @@ shootout: true
       kindMulti: () => "Несколько очных турниров",
       kindRegular: () => "Обычный",
       kindSynch: () => "Строгий синхрон",
+      playerElsewhere: (player: string, team: string) => `${player} играет за команду «${team}» другой площадки. Перевести игрока могут организаторы феста.`,
       subhead: () => "Площадки",
       teams: (n: string) => `команд: ${n}`,
+      venueUnknown: () => "В фесте нет такой площадки.",
     },
     pages: {
       createFestSummary: () => "Создать фест",
@@ -937,6 +948,7 @@ shootout: true
     roster: {
       addOverrideBtn: () => "Добавить оверрайд для игры",
       addTeamBtn: () => "Добавить команду",
+      allVenues: () => "Все площадки",
       badgeEdited: () => "изменена",
       badgeHand: () => "вручную",
       cancelBtn: () => "Отмена",
@@ -1620,6 +1632,7 @@ shootout: true
   },
   route: {
     guard: {
+      otherVenue: () => "Это команда другой площадки. Её правят ведущие той площадки и организаторы феста.",
       unnumbered: () => "сначала присвойте номера всем командам — без номеров результаты нельзя редактировать",
     },
   },

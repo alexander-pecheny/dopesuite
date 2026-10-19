@@ -4,3 +4,6 @@
 [guard]
 # Editing results while some teams of the game still have no entrant numbers.
 unnumbered = "сначала присвойте номера всем командам — без номеров результаты нельзя редактировать"
+# A host limited to venues (ADR-0032) reaching for a team or the numbers of a
+# venue that is not theirs, or of no venue.
+other_venue = "Это команда другой площадки. Её правят ведущие той площадки и организаторы феста."

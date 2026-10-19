@@ -460,6 +460,7 @@ export type Strings = {
       save: () => string;
       title: (team: string) => string;
       titleNew: () => string;
+      venue: () => string;
     };
   };
   festaccess: {
@@ -477,6 +478,7 @@ export type Strings = {
     games: {
       notHost: (name: string) => string;
       unknown: (game: string) => string;
+      unknownVenue: (venue: string) => string;
     };
     invite: {
       broken: () => string;
@@ -489,6 +491,7 @@ export type Strings = {
       revoked: () => string;
       scopeName: (game: string, fest: string) => string;
       spent: () => string;
+      venueScopeName: (venue: string, fest: string) => string;
     };
     manage: {
       denied: () => string;
@@ -708,6 +711,7 @@ export type Strings = {
       colGames: () => string;
       colNickname: () => string;
       colRole: () => string;
+      colVenues: () => string;
       deleteAccessConfirm: (name: string) => string;
       deleteBtn: () => string;
       deleteConfirm: () => string;
@@ -746,6 +750,7 @@ export type Strings = {
       slugLabel: () => string;
       startDateLabel: () => string;
       titleLabel: () => string;
+      venuesHint: () => string;
     };
     games: {
       brainHint: () => string;
@@ -822,6 +827,7 @@ export type Strings = {
       labelLabel: () => string;
       labelPlaceholder: () => string;
       lead: () => string;
+      leadVenues: () => string;
       revoke: () => string;
       revokeConfirm: () => string;
       rowMeta: (game: string, state: string, usage: string) => string;
@@ -838,12 +844,15 @@ export type Strings = {
       usage: (n: string) => string;
       usageLeft: (n: string, left: string) => string;
       usesLabel: () => string;
+      venueOrGameLabel: () => string;
     };
     join: {
       activeHeading: (scope: string) => string;
       activeNote: () => string;
+      activeNoteVenue: () => string;
       joinSubmit: () => string;
       memberHeading: (scope: string) => string;
+      openFest: () => string;
       openGame: () => string;
       refusedHeading: () => string;
       title: () => string;
@@ -854,8 +863,10 @@ export type Strings = {
       kindMulti: () => string;
       kindRegular: () => string;
       kindSynch: () => string;
+      playerElsewhere: (player: string, team: string) => string;
       subhead: () => string;
       teams: (n: string) => string;
+      venueUnknown: () => string;
     };
     pages: {
       createFestSummary: () => string;
@@ -915,6 +926,7 @@ export type Strings = {
     roster: {
       addOverrideBtn: () => string;
       addTeamBtn: () => string;
+      allVenues: () => string;
       badgeEdited: () => string;
       badgeHand: () => string;
       cancelBtn: () => string;
@@ -1598,6 +1610,7 @@ export type Strings = {
   };
   route: {
     guard: {
+      otherVenue: () => string;
       unnumbered: () => string;
     };
   };

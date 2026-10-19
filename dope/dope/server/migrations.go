@@ -1013,6 +1013,43 @@ create unique index if not exists multifest_venues_rating_idx on multifest_venue
 		_, err := db.Exec(`create unique index if not exists fest_teams_venue_number_idx on fest_teams(multifest_venue_id, venue_number) where venue_number is not null`)
 		return err
 	}},
+	// v46: a host limited to venues of a synch or multi fest, and the invite
+	// links that make one (ADR-0032), the twins of fest_game_hosts and
+	// game_invites.
+	{Version: 46, Name: "venue hosts and venue invite links", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+create table if not exists fest_venue_hosts(
+  fest_id integer not null references fests(id) on delete cascade,
+  multifest_venue_id integer not null references multifest_venues(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  primary key(multifest_venue_id, user_id)
+);
+create index if not exists fest_venue_hosts_user_idx on fest_venue_hosts(fest_id, user_id);
+create table if not exists venue_invites(
+  id integer primary key,
+  multifest_venue_id integer not null references multifest_venues(id) on delete cascade,
+  code text not null unique,
+  label text,
+  created_by integer not null references users(id),
+  created_at text not null,
+  expires_at text,
+  max_uses integer,
+  requires_approval integer not null default 0,
+  revoked_at text
+);
+create index if not exists venue_invites_venue_idx on venue_invites(multifest_venue_id);
+create table if not exists venue_invite_uses(
+  id integer primary key,
+  invite_id integer not null references venue_invites(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null check (status in ('joined','pending','declined')),
+  requested_at text not null,
+  decided_at text,
+  unique(invite_id, user_id)
+);
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

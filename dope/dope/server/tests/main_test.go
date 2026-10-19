@@ -12,6 +12,7 @@ import (
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
+	"dope/dope/web/route"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1607,7 +1608,7 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 	// slots.
 	autoResp := httptest.NewRecorder()
 	autoReq := httptest.NewRequest(http.MethodPost, "/host/fest/"+itoa(festID)+"/numbers/auto", nil)
-	srv.PageServer().HandleHostAutoFestNumbers(autoResp, autoReq, festID)
+	srv.PageServer().HandleHostAutoFestNumbers(autoResp, autoReq, route.Scope{FestID: festID, AllVenues: true})
 	if autoResp.Code != http.StatusOK {
 		t.Fatalf("auto status %d", autoResp.Code)
 	}

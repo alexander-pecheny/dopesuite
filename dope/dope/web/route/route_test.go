@@ -34,6 +34,8 @@ create table sessions(id integer primary key, user_id integer, token_hash text u
 create table fests(id integer primary key, slug text unique, is_public integer default 0, created_by integer);
 create table fest_organizers(fest_id integer, user_id integer, role text, added_at text);
 create table fest_game_hosts(fest_id integer, game_id integer, user_id integer);
+create table fest_venue_hosts(fest_id integer, multifest_venue_id integer, user_id integer);
+create table multifest_venues(id integer primary key, fest_id integer, position integer);
 create table games(id integer primary key, fest_id integer, slug text, game_type text default 'od', multifest_venue_id integer);
 create table fest_teams(id integer primary key, fest_id integer, name text, city text default '', position real, number integer, deleted integer default 0, multifest_venue_id integer, venue_number integer);
 create table game_participants(game_id integer, participant_id integer, position integer, number integer default 0);
@@ -59,7 +61,7 @@ insert into fest_teams(fest_id, name, position, number) values (10,'A',1,1),(20,
 func TestAccessMatrix(t *testing.T) {
 	tbl, tokens := newTable(t)
 	ok := func(w http.ResponseWriter, r *http.Request, sc Scope) error { return JSON(w, sc.Role) }
-	levels := map[string]Access{"public": Public, "session": Session, "publicfest": PublicFest, "read": Read, "member": Member, "editor": Editor, "manager": Manager, "creator": Creator}
+	levels := map[string]Access{"public": Public, "session": Session, "publicfest": PublicFest, "read": Read, "member": Member, "editor": Editor, "roster": Roster, "manager": Manager, "creator": Creator}
 	for name, a := range levels {
 		tbl.Handle("POST /"+name+"/{fest}/games/{game}", a, ok)
 	}
@@ -81,6 +83,7 @@ func TestAccessMatrix(t *testing.T) {
 		{"member", "open", 401, 403, o, o, o},
 		{"member", "closed", 401, 403, o, o, o},
 		{"editor", "closed", 401, 403, o, o, o},
+		{"roster", "closed", 401, 403, 403, o, o},
 		{"manager", "closed", 401, 403, 403, o, o},
 		{"creator", "closed", 401, 403, 403, 403, o},
 		{"numbered", "open", 401, 403, o, o, o},

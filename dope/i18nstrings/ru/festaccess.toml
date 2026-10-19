@@ -35,14 +35,17 @@ role_invalid = "роль должна быть admin или host"
 [games]
 # The API's per-host Game limits (POST …/access with games).
 # A user named in games who is not a host of the fest: only a host is limited.
-not_host = 'у {{.name}} роль не «ведущий» — ограничить по играм можно только ведущего'
+not_host = 'у {{.name}} роль не «ведущий», а ограничить по играм и площадкам можно только ведущего'
 # A Game named in games that this fest does not have (by id, code or slug).
 unknown = 'в фесте нет игры «{{.game}}»'
+# A venue named in venues that this fest does not have (by id or title).
+unknown_venue = 'в фесте нет площадки «{{.venue}}»'
 
 [invite]
 # Host invite links (ADR-0030, storage/festaccess/gameinvites.go): what a
 # link is called on its join page, and why one does not work.
 scope_name = '«{{.game}}» на фесте «{{.fest}}»'
+venue_scope_name = 'площадку «{{.venue}}» на фесте «{{.fest}}»'
 revoked = "Ссылку отозвали. Попросите у организаторов новую."
 expired = "Срок действия ссылки истёк. Попросите у организаторов новую."
 exhausted = "По этой ссылке уже вошло столько людей, сколько было можно. Попросите у организаторов новую."

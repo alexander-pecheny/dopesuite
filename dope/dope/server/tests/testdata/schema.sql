@@ -19,6 +19,9 @@ CREATE UNIQUE INDEX fest_teams_fest_number_idx on fest_teams(fest_id, number) wh
 -- index fest_teams_venue_number_idx
 CREATE UNIQUE INDEX fest_teams_venue_number_idx on fest_teams(multifest_venue_id, venue_number) where venue_number is not null;
 
+-- index fest_venue_hosts_user_idx
+CREATE INDEX fest_venue_hosts_user_idx on fest_venue_hosts(fest_id, user_id);
+
 -- index game_invites_game_idx
 CREATE INDEX game_invites_game_idx on game_invites(game_id);
 
@@ -46,6 +49,9 @@ CREATE INDEX password_resets_user_idx on password_resets(user_id);
 
 -- index users_username_nocase
 CREATE UNIQUE INDEX users_username_nocase on users(username collate nocase);
+
+-- index venue_invites_venue_idx
+CREATE INDEX venue_invites_venue_idx on venue_invites(multifest_venue_id);
 
 -- table api_tokens
 CREATE TABLE api_tokens(
@@ -145,6 +151,14 @@ CREATE TABLE fest_teams(
   number integer,
   deleted integer not null default 0
 , country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0, multifest_venue_id INTEGER REFERENCES multifest_venues(id) ON DELETE SET NULL, venue_number INTEGER);
+
+-- table fest_venue_hosts
+CREATE TABLE fest_venue_hosts(
+  fest_id integer not null references fests(id) on delete cascade,
+  multifest_venue_id integer not null references multifest_venues(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  primary key(multifest_venue_id, user_id)
+);
 
 -- table fests
 CREATE TABLE fests(
@@ -470,6 +484,31 @@ CREATE TABLE users(
   created_at text not null,
   updated_at text not null
 , password_hash TEXT, password_salt TEXT, telegram_name TEXT);
+
+-- table venue_invite_uses
+CREATE TABLE venue_invite_uses(
+  id integer primary key,
+  invite_id integer not null references venue_invites(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null check (status in ('joined','pending','declined')),
+  requested_at text not null,
+  decided_at text,
+  unique(invite_id, user_id)
+);
+
+-- table venue_invites
+CREATE TABLE venue_invites(
+  id integer primary key,
+  multifest_venue_id integer not null references multifest_venues(id) on delete cascade,
+  code text not null unique,
+  label text,
+  created_by integer not null references users(id),
+  created_at text not null,
+  expires_at text,
+  max_uses integer,
+  requires_approval integer not null default 0,
+  revoked_at text
+);
 
 -- table venues
 CREATE TABLE venues(

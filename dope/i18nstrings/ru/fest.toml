@@ -168,6 +168,9 @@ failed = "Не удалось сохранить состав."
 # The team editor on the teams page (dope/dope/web/ts/fest-teams.ts), ADR-0024.
 # The dialog's heading for a new team and for an existing one.
 title_new = "Новая команда"
+# The venue of a synch or multi fest a team the host made plays at
+# (ADR-0032).
+venue = "Площадка"
 title = 'Команда «{{.team}}»'
 # What the dialog says about a rating team's edits and an import.
 hint_rating = "Правки сохранятся при повторном импорте из rating.chgk.info."

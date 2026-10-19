@@ -3,6 +3,7 @@ package hostpages
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"strconv"
 
 	"dope/dope/domain/core"
@@ -132,4 +133,32 @@ func hostDashVenuesSection(data hostFestDashData, ref string) *dopeui.Element {
 		}
 	}
 	return dopeui.Section(dopeui.ID("venues"), dopeui.Subhead(dopeui.Text(s.Host.Multifest.Subhead())), dopeui.Actionlist(rows...))
+}
+
+// ownVenueRows keeps the venues a host has a part in: those they edit the
+// teams of, and those with a Game they run.
+func ownVenueRows(rows []venueRow, edited []int64) []venueRow {
+	var out []venueRow
+	for _, row := range rows {
+		if len(row.Games) > 0 || slices.Contains(edited, row.ID) {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+// hostDashVenueRosterSection is the roster of a host limited to venues: the
+// teams and the numbers of their venues.
+func hostDashVenueRosterSection(data hostFestDashData, ref string) *dopeui.Element {
+	s := dopestrings.Default
+	teams := 0
+	for _, row := range data.MultiFestVenues {
+		if slices.Contains(data.RosterVenues, row.ID) {
+			teams += row.Teams
+		}
+	}
+	return dopeui.Section(dopeui.Subhead(dopeui.Text(s.Host.Dash.RosterSubhead())), dopeui.List(
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTeamsLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(teams)))),
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/numbers"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.NumbersLink()))),
+	))
 }

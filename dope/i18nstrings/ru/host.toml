@@ -271,6 +271,8 @@ import_done_counts = 'Загружено команд: {{.teams}}, игроко�
 error_obj_player = "игрока"
 error_obj_team = "команду"
 error_obj_source_team = "исходную команду"
+# The teams page's venue picker: every venue the caller edits.
+all_venues = "Все площадки"
 
 [troikas]
 # The troikas page (hostTroikasDoc): troikas are teams put together for Тройка
@@ -390,6 +392,10 @@ col_games = "Игры"
 games_every = "все игры"
 # Under a host's Game boxes: what ticking none means.
 games_none_hint = "ничего не отмечено — ведёт все игры"
+# A host's venue boxes in a synch or multi fest (ADR-0032): the summary's
+# label, and what ticking a venue gives.
+col_venues = "Площадки"
+venues_hint = "Ведущий площадки ведёт её игры и правит её команды и номера."
 delete_access_confirm = 'Удалить доступ для {{.name}}?'
 add_btn = "Добавить"
 # The participants links: subhead and list rows.
@@ -430,12 +436,20 @@ kind_multi = "Несколько очных турниров"
 kind_hint = "В строгом синхроне загрузка команд с rating.chgk.info раскладывает их по площадкам и заводит каждой площадке свою игру. Тип можно поменять, только пока в турнире нет игр."
 subhead = "Площадки"
 teams = 'команд: {{.n}}'
+# A team put on a venue this fest does not have.
+venue_unknown = "В фесте нет такой площадки."
+# A host limited to venues adding someone who plays for a team of another
+# venue, which would take them off it.
+player_elsewhere = '{{.player}} играет за команду «{{.team}}» другой площадки. Перевести игрока могут организаторы феста.'
 
 [invites]
 # The dashboard's host invite links (hostDashInvitesSection, ADR-0030).
 subhead = "Ссылки для ведущих"
 lead = "Кто перейдёт по ссылке, станет ведущим одной игры. Остальные игры феста он будет видеть как зритель. Например, сделайте по ссылке на каждую городскую игру и отправьте их организаторам площадок."
+# The lead in a fest with venues (ADR-0032).
+lead_venues = "Кто перейдёт по ссылке на площадку, станет её ведущим: будет вести её игры и править её команды и номера. По ссылке на игру можно вести только эту игру. Остальное ведущий видит как зритель. Сделайте ссылку для каждой площадки и отправьте её организаторам этой площадки."
 game_label = "Игра"
+venue_or_game_label = "Площадка или игра"
 label_label = "Название"
 label_placeholder = "например, «Минск»"
 uses_label = "Сколько человек может войти (пусто — сколько угодно)"
@@ -467,9 +481,12 @@ created_notice = "Ссылка создана. Скопируйте её из с
 title = "Приглашение"
 active_heading = 'Вас приглашают вести {{.scope}}'
 active_note = "Вы станете ведущим этой игры и сможете вносить в неё результаты. Остальные игры феста будут видны вам как зрителю."
+# A link to a venue of a synch or multi fest (ADR-0032).
+active_note_venue = "Вы станете ведущим игр этой площадки, сможете вносить в них результаты и править команды площадки и их номера. Остальные игры феста будут видны вам как зрителю."
 join_submit = "Стать ведущим"
 member_heading = 'Вы уже ведёте {{.scope}}'
 open_game = "Открыть игру"
+open_fest = "Открыть фест"
 refused_heading = "Ссылка не работает"
 
 [pages]

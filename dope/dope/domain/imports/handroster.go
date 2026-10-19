@@ -140,6 +140,10 @@ type TeamInput struct {
 	Name     string
 	City     string
 	Players  []roster.FestRosterImportPlayer
+	// Venue is the venue of a synch or multi fest a team the host made plays
+	// at, 0 for none, nil to leave it where it is (ADR-0032). A rating team
+	// plays where the site says.
+	Venue *int64
 }
 
 func (in TeamInput) normalized() (TeamInput, error) {
@@ -219,6 +223,11 @@ insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted
 	if err != nil {
 		return 0, RosterWrite{}, err
 	}
+	if in.Venue != nil {
+		if err := placeHandTeamTx(ctx, tx, festID, teamID, *in.Venue); err != nil {
+			return 0, RosterWrite{}, err
+		}
+	}
 	if err := saveTeamPlayersTx(ctx, tx, festID, teamID, nil, in.Players); err != nil {
 		return 0, RosterWrite{}, err
 	}
@@ -256,6 +265,11 @@ func SaveHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in Te
 	case row.Hand:
 		if _, err := tx.ExecContext(ctx, `update fest_teams set name = ?, city = ? where id = ?`, in.Name, in.City, teamID); err != nil {
 			return RosterWrite{}, err
+		}
+		if in.Venue != nil {
+			if err := placeHandTeamTx(ctx, tx, festID, teamID, *in.Venue); err != nil {
+				return RosterWrite{}, err
+			}
 		}
 	default:
 		if in.Name != row.Name {
@@ -298,6 +312,23 @@ func SaveHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in Te
 		return RosterWrite{}, err
 	}
 	return rewriteFromHandTx(ctx, tx, festID, state)
+}
+
+// placeHandTeamTx puts a team the host made on a venue of the fest, under the
+// venue's next number; a team that stays where it is keeps its number.
+func placeHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID, venueID int64) error {
+	if venueID > 0 {
+		if _, err := multifest.VenueOf(ctx, tx, festID, venueID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+update fest_teams set multifest_venue_id = ?, venue_number = null
+where id = ? and multifest_venue_id is not ?`, util.NullableInt64(venueID), teamID, util.NullableInt64(venueID)); err != nil {
+		return err
+	}
+	_, err := multifest.NumberVenuesTx(ctx, tx, festID)
+	return err
 }
 
 // saveTeamPlayersTx records the edits that take a team from its people now to
