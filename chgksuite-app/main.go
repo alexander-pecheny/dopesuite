@@ -9,8 +9,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/typstinstall"
 
 	"xy/localserver"
 )
@@ -24,7 +27,7 @@ func main() {
 		log.Fatal(err)
 	}
 	dir := filepath.Join(config, "chgksuite")
-	local, err := localserver.Open(filepath.Join(dir, "local"))
+	local, err := localserver.Open(filepath.Join(dir, "local"), typstBinary())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,4 +64,20 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// typstBinary is the typst the release ships beside the executable, or, in a
+// checkout, the one chgksuite would find on PATH or in ~/.pecheny_utils.
+func typstBinary() string {
+	if exe, err := os.Executable(); err == nil {
+		name := "typst"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		bundled := filepath.Join(filepath.Dir(exe), name)
+		if _, err := os.Stat(bundled); err == nil {
+			return bundled
+		}
+	}
+	return typstinstall.Find()
 }

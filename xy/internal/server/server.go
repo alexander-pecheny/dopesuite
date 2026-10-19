@@ -38,9 +38,9 @@ type server struct {
 
 	staging *handoutStaging // staged handout images (see staging.go)
 
-	// typst, compiled to wasm and run in-process (see typst.go). Built lazily and
-	// shared: compiling the module is what costs, not using it. Tests inject a stub
-	// so they neither compile the wasm nor need a real image to render.
+	// typst, as wasm in-process or the desktop app's binary (see typst.go). Built
+	// lazily and shared: compiling the module is what costs, not using it. Tests
+	// inject a stub so they neither compile the wasm nor need a real image to render.
 	// The login bot, polling in this process (see bot.go). nil on an instance
 	// that holds no token — staging, a dev checkout, a second prod binary that
 	// lost the race for the poll lock.
@@ -78,6 +78,8 @@ type Config struct {
 	// plaintext, and every route that needs a second person or a server answers
 	// 404 (see local.go).
 	Local bool
+	// Typst is a typst binary to render with in place of the wasm (typst.go).
+	Typst string
 }
 
 // configFromEnv is the Config prod, staging and dev have always run with.

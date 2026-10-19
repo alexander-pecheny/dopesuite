@@ -1,5 +1,6 @@
-# The desktop app. It embeds xy's frontend and typst, so it needs the same
-# generated files xy does: the web dist trees and chgksuite's typst.wasm.
+# The desktop app. It embeds xy's frontend, so it needs xy's web dist trees.
+# It renders with a typst binary shipped beside it, so it leaves the wasm out.
+export GOFLAGS := "-tags=nowasmtypst"
 
 # The fork links for macOS 11; without this, cgo compiles for the running OS
 # and the linker warns about every object.
@@ -9,7 +10,7 @@ default:
     @just --list
 
 build:
-    cd ../xy && just build-web wasm
+    cd ../xy && just build-web
     go build -o build/chgksuite .
 
 run: build
@@ -26,18 +27,61 @@ test:
 
 check: fmt vet test
 
-# A double-clickable chgksuite.app, unsigned. Signing and notarising come later.
-app: build
+# The typst the release ships beside the app, checked against typst.sha256.
+typst_version := "0.15.1"
+
+# A double-clickable chgksuite.app for one Apple architecture (arm64 or
+# amd64), unsigned.
+app arch=arch():
     #!/usr/bin/env bash
     set -euo pipefail
-    rm -rf build/chgksuite.app build/icon.iconset
-    mkdir -p build/chgksuite.app/Contents/MacOS build/chgksuite.app/Contents/Resources build/icon.iconset
-    for s in 16 32 64 128 256 512; do
-        sips -z $s $s ../chgksuite-gui/icon.png --out "build/icon.iconset/icon_${s}x${s}.png" >/dev/null
-        sips -z $((s*2)) $((s*2)) ../chgksuite-gui/icon.png --out "build/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null
+    goarch={{arch}}; target=aarch64-apple-darwin
+    [ "$goarch" = aarch64 ] && goarch=arm64
+    [ "$goarch" = x86_64 ] && goarch=amd64
+    [ "$goarch" = amd64 ] && target=x86_64-apple-darwin
+    (cd ../xy && just build-web)
+    just typst $target
+    app=build/$goarch/chgksuite.app
+    rm -rf "$app" build/icon.iconset
+    mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" build/icon.iconset
+    CGO_ENABLED=1 GOARCH=$goarch go build -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/chgksuite" .
+    cp build/typst-$target/typst "$app/Contents/MacOS/"
+    for s in 16 32 128 256 512; do
+        sips -z $s $s icon.png --out "build/icon.iconset/icon_${s}x${s}.png" >/dev/null
+        sips -z $((s*2)) $((s*2)) icon.png --out "build/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null
     done
-    iconutil -c icns build/icon.iconset -o build/chgksuite.app/Contents/Resources/icon.icns
+    iconutil -c icns build/icon.iconset -o "$app/Contents/Resources/icon.icns"
     rm -rf build/icon.iconset
-    cp build/chgksuite build/chgksuite.app/Contents/MacOS/
-    cp Info.plist build/chgksuite.app/Contents/Info.plist
-    echo "built build/chgksuite.app"
+    cp Info.plist "$app/Contents/Info.plist"
+    cp ../LICENSE ../NOTICE "$app/Contents/Resources/"
+    cp build/typst-$target/LICENSE "$app/Contents/Resources/typst-LICENSE"
+    cp build/typst-$target/NOTICE "$app/Contents/Resources/typst-NOTICE"
+    echo "built $app"
+
+# build/windows/: chgksuite.exe with typst.exe beside it. Wails needs no cgo
+# there, so this builds on any OS. The window takes its icon from resource 3
+# (winres/winres.json).
+exe:
+    cd ../xy && just build-web
+    just typst x86_64-pc-windows-msvc
+    rm -rf build/windows
+    go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64
+    GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui" -o build/windows/chgksuite.exe .
+    rm rsrc_windows_amd64.syso
+    cp build/typst-x86_64-pc-windows-msvc/typst.exe ../LICENSE ../NOTICE build/windows/
+    cp build/typst-x86_64-pc-windows-msvc/LICENSE build/windows/typst-LICENSE
+    cp build/typst-x86_64-pc-windows-msvc/NOTICE build/windows/typst-NOTICE
+
+[private]
+typst target:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -d build/typst-{{target}} ] && exit 0
+    ext=tar.xz
+    [[ {{target}} == *windows* ]] && ext=zip
+    file=typst-{{target}}.$ext
+    mkdir -p build && cd build
+    curl -fsSL -o $file https://github.com/typst/typst/releases/download/v{{typst_version}}/$file
+    grep " $file\$" ../typst.sha256 | shasum -a 256 -c -
+    if [ $ext = zip ]; then unzip -q $file; else tar xf $file; fi
+    rm $file

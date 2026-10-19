@@ -1,6 +1,7 @@
 package handout
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -17,37 +18,59 @@ var fontNames = []string{
 }
 
 // fontFileMode is for the bundled fonts, which are not secret.
-const fontFileMode = 0o644
-
-var (
-	fontOnce sync.Once
-	fontDir  string
-	fontErr  error
+const (
+	fontFileMode = 0o644
+	fontDirMode  = 0o755
 )
 
-// bundledFontDir materialises the embedded Noto Sans fonts to a temp dir once per
-// process and returns its path (passed to typst's --font-path).
-func bundledFontDir() (string, error) {
-	fontOnce.Do(func() {
-		d, err := os.MkdirTemp("", "xy-typst-fonts-*")
+// bundledFontDir materialises the embedded Noto Sans fonts once per process and
+// returns their directory (passed to typst's --font-path). It is the same
+// directory in the user's cache every time, so runs reuse it instead of each
+// leaving a copy behind.
+var bundledFontDir = sync.OnceValues(func() (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	dir := filepath.Join(base, "chgksuite", "fonts")
+	if err := os.MkdirAll(dir, fontDirMode); err != nil {
+		return "", err
+	}
+	for _, n := range fontNames {
+		b, err := fontFS.ReadFile("assets/" + n)
 		if err != nil {
-			fontErr = err
-			return
+			return "", err
 		}
-		for _, n := range fontNames {
-			b, err := fontFS.ReadFile("assets/" + n)
-			if err != nil {
-				fontErr = err
-				return
-			}
-			if err := os.WriteFile(filepath.Join(d, n), b, fontFileMode); err != nil {
-				fontErr = err
-				return
-			}
+		if err := writeFontFile(filepath.Join(dir, n), b); err != nil {
+			return "", err
 		}
-		fontDir = d
-	})
-	return fontDir, fontErr
+	}
+	return dir, nil
+})
+
+// writeFontFile leaves a file that already holds b alone, and otherwise
+// replaces it by a rename, so that another process reading the font never sees
+// it half-written.
+func writeFontFile(path string, b []byte) error {
+	if old, err := os.ReadFile(path); err == nil && bytes.Equal(old, b) {
+		return nil
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".font-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), fontFileMode); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // Render typesets the .hndt source to a PDF. images are the pictures it

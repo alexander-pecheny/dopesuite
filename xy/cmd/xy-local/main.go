@@ -19,9 +19,10 @@ func main() {
 	dir := flag.String("dir", "xy-local-data", "the data directory: xy.db and blobs/")
 	addr := flag.String("addr", "127.0.0.1:9674", "where to listen")
 	pick := flag.String("pick", "", "a file the board's import gets every time, in place of the app's native dialog")
+	typst := flag.String("typst", "", "the typst binary to render with; empty is the built-in wasm")
 	flag.Parse()
 
-	srv, err := localserver.Open(*dir)
+	srv, err := localserver.Open(*dir, *typst)
 	if err != nil {
 		log.Fatal(err)
 	}

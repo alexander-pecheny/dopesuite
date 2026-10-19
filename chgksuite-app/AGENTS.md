@@ -36,11 +36,20 @@ tab is a native `WebviewPanel` under the strip: the first tab is the Local xy
   time; its `stripHeight` must match the strip's height in
   `shell/index.html`.
 - Like `chgksuite-gui`, this module needs cgo and stays out of the root
-  justfile's cross-module recipes. `just build` first builds xy's web dist and
-  checks that `../chgksuite/typstwasm/typst.wasm` exists.
+  justfile's cross-module recipes. `just build` first builds xy's web dist.
+- It renders with the typst release (`typst_version` in the justfile, its
+  sums in `typst.sha256`), which `just app` and `just exe` put beside the
+  executable. The justfile builds with `-tags nowasmtypst`, so the 30 MB wasm
+  that xy's server renders with is left out. A checkout without a bundled
+  typst uses the one on PATH or in `~/.pecheny_utils`. The fonts are the
+  Noto Sans that chgksuite embeds, plus whatever the computer has.
+- A tag `chgksuite-app/<date>` makes `.github/workflows/chgksuite-app.yml`
+  publish a GitHub pre-release. The icon is `icon.png`, from the Python
+  chgksuite.
 
 ```
 just run    # build and open the window
-just app    # build/chgksuite.app, unsigned
+just app    # build/<arch>/chgksuite.app, unsigned (macOS only)
+just exe    # build/windows/, from any OS
 just check  # fmt + vet + test
 ```

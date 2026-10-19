@@ -19,8 +19,9 @@ const dirMode = 0o700
 type Server struct{ s *server.Server }
 
 // Open opens (creating on first use) the local xy whose database and attachment
-// blobs live in dir.
-func Open(dir string) (*Server, error) {
+// blobs live in dir. typst is the typst binary to render with; empty is the
+// wasm, which a build with -tags nowasmtypst does not have.
+func Open(dir, typst string) (*Server, error) {
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return nil, err
 	}
@@ -28,6 +29,7 @@ func Open(dir string) (*Server, error) {
 		DB:    filepath.Join(dir, "xy.db"),
 		Blobs: filepath.Join(dir, "blobs"),
 		Local: true,
+		Typst: typst,
 	})
 	if err != nil {
 		return nil, err

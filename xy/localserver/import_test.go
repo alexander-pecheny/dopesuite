@@ -26,7 +26,7 @@ func TestImportFolder(t *testing.T) {
 	write("1 тур.4s", "### Первый тур\n\n? (img q1.png) Что на картинке?\n! Кот\n\n? Без картинки\n! Да\n")
 	write("q1.png", "PNG-BYTES")
 
-	s, err := Open(t.TempDir())
+	s, err := Open(t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

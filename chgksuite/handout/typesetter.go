@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,10 +59,7 @@ func (c *CLITypesetter) Measure(ctx context.Context, typ string) (int, float64, 
 	}
 	defer os.Remove(filepath.Join(c.dir, name))
 
-	cmd := exec.CommandContext(ctx, c.bin, append([]string{"query"},
-		c.args(name, "<"+measureLabel+">", "--field", "value", "--one")...)...)
-	cmd.Dir = c.dir
-	out, err := cmd.CombinedOutput()
+	out, err := c.run(ctx, "query", name, "<"+measureLabel+">", "--field", "value", "--one")
 	if err != nil {
 		return 0, 0, fmt.Errorf("typst query: %s", strings.TrimSpace(string(out)))
 	}
@@ -165,12 +163,16 @@ func (c *CLITypesetter) noted(out []byte) {
 }
 
 // args builds a typst invocation: the shared flags, then the caller's.
-func (c *CLITypesetter) args(rest ...string) []string {
-	out := []string{"--root", "/", "--font-path", c.fonts}
+// run runs typst's subcommand cmd on the scratch dir.
+func (c *CLITypesetter) run(ctx context.Context, cmd string, rest ...string) ([]byte, error) {
+	args := []string{cmd, "--root", "/", "--font-path", c.fonts}
 	if !c.system {
-		out = append(out, "--ignore-system-fonts")
+		args = append(args, "--ignore-system-fonts")
 	}
-	return append(out, rest...)
+	run := exec.CommandContext(ctx, c.bin, append(args, rest...)...)
+	run.Dir = c.dir
+	hideConsole(run)
+	return run.CombinedOutput()
 }
 
 func (c *CLITypesetter) Close() error { return os.RemoveAll(c.dir) }
@@ -197,10 +199,7 @@ func (c *CLITypesetter) Compile(ctx context.Context, typ string, wantPDF bool) (
 
 	if !wantPDF {
 		// Ask typst itself how many pages it paginates to, without building a PDF.
-		cmd := exec.CommandContext(ctx, c.bin, append([]string{"query"},
-			c.args(name, "<xypages>", "--field", "value", "--one")...)...)
-		cmd.Dir = c.dir
-		out, err := cmd.CombinedOutput()
+		out, err := c.run(ctx, "query", name, "<xypages>", "--field", "value", "--one")
 		if err != nil {
 			return nil, 0, fmt.Errorf("typst query: %s", strings.TrimSpace(string(out)))
 		}
@@ -214,9 +213,7 @@ func (c *CLITypesetter) Compile(ctx context.Context, typ string, wantPDF bool) (
 	}
 
 	pdfName := strings.TrimSuffix(name, ".typ") + ".pdf"
-	cmd := exec.CommandContext(ctx, c.bin, append([]string{"compile"}, c.args(name, pdfName)...)...)
-	cmd.Dir = c.dir
-	out, err := cmd.CombinedOutput()
+	out, err := c.run(ctx, "compile", name, pdfName)
 	if err != nil {
 		return nil, 0, fmt.Errorf("typst compile: %s", strings.TrimSpace(string(out)))
 	}
@@ -228,4 +225,33 @@ func (c *CLITypesetter) Compile(ctx context.Context, typ string, wantPDF bool) (
 		return nil, 0, err
 	}
 	return raw, 0, nil // the CLI's page count is only asked for via the query above
+}
+
+// SVG typesets typ to one SVG per page.
+func (c *CLITypesetter) SVG(ctx context.Context, typ string) ([][]byte, error) {
+	stem := fmt.Sprintf("svg_%d", c.seq.Add(1))
+	if err := writeScratch(c.dir, stem+".typ", []byte(typ)); err != nil {
+		return nil, err
+	}
+	defer os.Remove(filepath.Join(c.dir, stem+".typ"))
+	out, err := c.run(ctx, "compile", "--format", "svg", stem+".typ", stem+"-{0p}.svg")
+	if err != nil {
+		return nil, fmt.Errorf("typst compile: %s", strings.TrimSpace(string(out)))
+	}
+	c.noted(out)
+	files, err := filepath.Glob(filepath.Join(c.dir, stem+"-*.svg"))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+	pages := make([][]byte, 0, len(files))
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		os.Remove(f)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, b)
+	}
+	return pages, nil
 }

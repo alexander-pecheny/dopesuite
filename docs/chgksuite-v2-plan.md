@@ -104,8 +104,10 @@ These are small, because the seams already exist.
   process instead of running a subprocess. The last used values are saved as
   presets in the local database. A board can also be exported to a folder of
   `.4s` files.
-- typst is embedded as wasm (`-tags wasmtypst`), so the app needs nothing
-  installed next to it. html2img still needs a Chromium, as the CLI does.
+- The app ships the typst release beside its executable and leaves the wasm
+  out (`-tags nowasmtypst`). Its boards are plaintext on the user's own disk,
+  so the wasm's reason to exist does not apply, and the binary is faster.
+  html2img still needs a Chromium, as the CLI does.
 
 Once this covers what the Fyne window does, `chgksuite-gui` is retired.
 

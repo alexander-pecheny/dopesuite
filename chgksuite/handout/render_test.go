@@ -30,3 +30,23 @@ func TestRenderReal(t *testing.T) {
 	}
 	t.Logf("rendered %d-byte PDF", len(pdf))
 }
+
+func TestRenderSVGReal(t *testing.T) {
+	bin := os.Getenv("XY_TYPST_TEST_BIN")
+	if bin == "" {
+		t.Skip("set XY_TYPST_TEST_BIN to run the real typst render")
+	}
+	ts, err := NewCLITypesetter(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	hndt := "for_question: 1\n\nРаз\n\n---\n\nfor_question: 2\n\nДва\n"
+	pages, err := RenderSVG(context.Background(), hndt, nil, DefaultArgs(), ts)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if len(pages) == 0 || !bytes.Contains(pages[0], []byte("<svg")) {
+		t.Fatalf("got %d pages, the first starting %q", len(pages), pages[0][:min(16, len(pages[0]))])
+	}
+}

@@ -11,12 +11,12 @@ replace code.pecheny.me/pecheny/dopesuite/dopecore => ../dopecore
 replace code.pecheny.me/pecheny/dopesuite/chgksuite => ../chgksuite
 
 require (
+	code.pecheny.me/pecheny/dopesuite/chgksuite v0.0.0
 	github.com/wailsapp/wails/v3 v3.0.0-00010101000000-000000000000
 	xy v0.0.0
 )
 
 require (
-	code.pecheny.me/pecheny/dopesuite/chgksuite v0.0.0 // indirect
 	code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
@@ -38,6 +38,7 @@ require (
 	github.com/tdewolff/minify/v2 v2.24.17 // indirect
 	github.com/tdewolff/parse/v2 v2.8.16 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
+	github.com/ulikunitz/xz v0.5.16 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect

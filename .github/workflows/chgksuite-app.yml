@@ -1,0 +1,119 @@
+name: release chgksuite-app
+
+# A pre-release of the desktop app (chgksuite v2) for Windows and macOS, cut by
+# pushing a tag such as `chgksuite-app/2026.10.19`. Each build ships the pinned
+# typst release beside the app (chgksuite-app/justfile). The Mac apps are signed
+# and notarised only when the Developer ID secrets exist.
+on:
+  push:
+    tags: ["chgksuite-app/*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: chgksuite-app/go.mod
+
+      - name: Install just
+        run: curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+
+      - name: Build
+        run: |
+          cd chgksuite-app && just exe
+          cd build/windows && zip -r "$GITHUB_WORKSPACE/chgksuite-windows-x64.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: chgksuite-windows-x64.zip
+
+  macos:
+    runs-on: macos-latest
+    env:
+      P12: ${{ secrets.DEVELOPER_ID_P12 }}
+      P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: chgksuite-app/go.mod
+
+      - name: Install just
+        run: brew install just
+
+      - name: Build
+        run: cd chgksuite-app && just app arm64 && just app amd64 && just test
+
+      - name: Sign and notarise
+        if: env.P12 != ''
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KC_PASS="$(openssl rand -base64 24)"
+          security create-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          echo "$ASC_KEY_P8" > "$RUNNER_TEMP/key.p8"
+
+          for arch in arm64 amd64; do
+            app=chgksuite-app/build/$arch/chgksuite.app
+            # The bundled typst is signed first: a bundle's signature covers its
+            # nested code, and notarisation wants each part on the hardened runtime.
+            for target in "$app/Contents/MacOS/typst" "$app"; do
+              codesign --force --options runtime --timestamp --keychain "$KEYCHAIN" \
+                --sign "Developer ID Application" "$target"
+            done
+            codesign --verify --strict --verbose=2 "$app"
+            ditto -c -k --keepParent "$app" "$RUNNER_TEMP/notarise.zip"
+            xcrun notarytool submit "$RUNNER_TEMP/notarise.zip" --key "$RUNNER_TEMP/key.p8" \
+              --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait --timeout 30m
+            xcrun stapler staple "$app"
+            spctl --assess --type execute --verbose=2 "$app"
+          done
+
+      - name: Remove the signing keychain
+        if: always() && env.P12 != ''
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+
+      - name: Zip
+        run: |
+          ditto -c -k --keepParent chgksuite-app/build/arm64/chgksuite.app chgksuite-macos-arm64.zip
+          ditto -c -k --keepParent chgksuite-app/build/amd64/chgksuite.app chgksuite-macos-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: chgksuite-macos-*.zip
+
+  release:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum *.zip > SHA256SUMS
+          gh release create "${GITHUB_REF_NAME}" *.zip SHA256SUMS --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" --prerelease \
+            --notes "chgksuite v2, a preview build for Windows and macOS."
