@@ -1,0 +1,10 @@
+/qy.db
+*.db
+*.db-wal
+*.db-shm
+.env
+/qy-server
+# built by `just build-web` (root ADR-0001): the served bundles, and the ESM
+# the bun tests import
+dist/
+.tmp/

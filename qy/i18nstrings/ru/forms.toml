@@ -1,0 +1,3 @@
+# What a form that saves itself says while it saves.
+saving = "Сохраняю…"
+failed = "Не сохранилось. Нажмите «Сохранить»."

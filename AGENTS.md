@@ -1,6 +1,6 @@
 # dopesuite — monorepo
 
-This repo holds seven Go modules: three apps (xy, dope, spliff), two shared
+This repo holds eight Go modules: four apps (xy, dope, spliff, qy), two shared
 layers they are built on (dopeuikit, dopecore), the chgksuite module that xy
 builds its exports on, and one desktop GUI. Each app and chgksuite has its own
 `AGENTS.md`, so start there.
@@ -21,6 +21,9 @@ chgksuite/   code.pecheny.me/pecheny/dopesuite/chgksuite — the Go port of
              exports on it.
 xy/          ЧГК question-editing boards (encrypted, Trello-style)
 dope/        tournament management (EK/OD/KSI) + realtime web UI
+qy/          «Вопрос года», the question-of-the-year contest at qy.pecheny.me:
+             nomination, anonymisation, the jury's two stages, the popular
+             vote, the results and the CMS that holds every year's pages
 spliff/      shared expenses: who paid for whom, in any currency, and who owes
              whom. This is the only module whose UI is in English.
 chgksuite-gui/
@@ -28,7 +31,7 @@ chgksuite-gui/
              that CLI declares (`chgksuite spec`)
 ```
 
-- xy, dope and spliff use the shared layers through `replace
+- xy, dope, spliff and qy use the shared layers through `replace
   pecheny.me/dopeuikit => ../dopeuikit` and `replace code.pecheny.me/pecheny/dopesuite/dopecore =>
   ../dopecore`. xy also uses chgksuite through `replace
   code.pecheny.me/pecheny/dopesuite/chgksuite => ../chgksuite`. The monorepo
@@ -39,7 +42,7 @@ chgksuite-gui/
   needs cgo and a desktop toolchain, and neither server depends on it. Build and
   test it with its own `just check`, which also checks that it still matches the
   CLI it wraps.
-- xy, dope and spliff each have a `justfile` with `just dev`, `just test` and
+- xy, dope, spliff and qy each have a `justfile` with `just dev`, `just test` and
   `just check`, and chgksuite has one with `just test` and `just check`.
   dopeuikit and dopecore have none: their recipes live in the root `justfile`,
   which also runs `test`, `fmt` and `vet` across all six modules at once. `just pre-commit` is the gate for the whole repo and you can run it from
@@ -47,8 +50,8 @@ chgksuite-gui/
   class-check needs every app's TypeScript and the shared core.css together.
 - **Deploying** is done by one script for the whole repo, `deploy.py`. It has a
   table of targets (`dope-server`, `dopetest`, `xy-server`, `xytest`,
-  `spliff-server`, `splifftest`), and each row says which module, package,
-  binary, systemd unit and **host** that target uses. xy and spliff run on
+  `spliff-server`, `splifftest`, `qy-server`, `qytest`), and each row says which module, package,
+  binary, systemd unit and **host** that target uses. xy, spliff and qy run on
   `vps-he`, dope runs on `vps2day-ee`. Each app's `just deploy` calls the script
   with its own targets. If you are already logged in to the production host you
   are deploying to, do **not** `ssh` to it again — just run the commands.

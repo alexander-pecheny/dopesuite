@@ -1,0 +1,4 @@
+# The current contest at the top of the home page.
+before = 'Номинация вопросов откроется {{.date}}.'
+nomination = 'Номинировать вопросы можно до {{.date}} включительно.'
+rules = "Регламент"

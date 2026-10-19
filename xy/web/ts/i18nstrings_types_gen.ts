@@ -63,6 +63,20 @@ export type Strings = {
       sent: () => string;
       type: () => string;
     };
+    manual: {
+      added: (appeal: string) => string;
+      answer: () => string;
+      label: () => string;
+      needAnswer: () => string;
+      needQuestion: () => string;
+      question: () => string;
+      save: () => string;
+      title: (list: string) => string;
+      type: () => string;
+      typeAccept: () => string;
+      typeHostError: () => string;
+      typeRemove: () => string;
+    };
     offline: () => string;
     refresh: {
       done: (added: string, updated: string, total: string) => string;
@@ -74,9 +88,15 @@ export type Strings = {
     };
     settings: {
       create: () => string;
+      createManual: () => string;
       createTitle: () => string;
       groupOption: (name: string) => string;
       label: () => string;
+      mode: () => string;
+      modeHint: () => string;
+      modeLocked: () => string;
+      modeManual: () => string;
+      modeSite: () => string;
       needPacket: () => string;
       needTitle: () => string;
       needTournament: () => string;
@@ -117,6 +137,15 @@ export type Strings = {
       forWho: (names: string) => string;
       label: () => string;
       title: (pro: string, contra: string) => string;
+    };
+    xlsx: {
+      headAnswer: () => string;
+      headComment: () => string;
+      headId: () => string;
+      headQuestion: () => string;
+      headStatus: () => string;
+      headType: () => string;
+      label: () => string;
     };
   };
   attachments: {

@@ -1,0 +1,57 @@
+set dotenv-load := true
+
+default: dev
+
+# The shared toolchain (root ADR-0001) builds the gitignored dist trees the Go
+# build embeds (qy's own + the kit's), so every compiling recipe wants it.
+build-web:
+    cd .. && just build-web qy uikit
+
+build: build-web
+    CGO_ENABLED=0 go build -o qy-server ./qy/cmd/qy-server
+
+dev: build-web
+    go run ./qy/cmd/qy-server
+
+fmt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(find qy i18nstrings -type f -name '*.go')
+    ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
+
+vet: build-web
+    go vet ./...
+
+tidy-check:
+    go mod tidy -diff
+
+# Go tests + frontend (bun) tests; typecheck gates here, not in build-web.
+test: build-web
+    cd .. && just typecheck
+    go test ./...
+    bun test --parallel ./qy/web/jstest/
+
+# This module's own gate. The whole repo's is `just pre-commit`.
+check:
+    just fmt
+    just vet
+    just tidy-check
+    just test
+
+pre-commit:
+    cd .. && just pre-commit
+
+# Mint a password account (registration is otherwise telegram-only).
+# Usage: printf '<password>' | just adduser <username>
+adduser username: build-web
+    go run ./qy/cmd/qy-server adduser {{username}}
+
+# Import the old static site from a vopros_goda checkout into the CMS.
+import-archive dir: build-web
+    go run ./qy/cmd/qy-server import-archive {{dir}}
+
+deploy *args: build-web
+    python3 ../deploy.py --target qy-server {{args}}
+
+deploy-staging *args: build-web
+    python3 ../deploy.py --target qytest {{args}}

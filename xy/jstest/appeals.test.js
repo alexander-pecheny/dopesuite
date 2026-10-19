@@ -90,9 +90,11 @@ test("appeals: the export sends only decided verdicts the site does not have", (
 });
 
 test("appeals: the settings survive a round trip and a broken value", () => {
-  assert.deepEqual(A.parseMeta(A.composeMeta({ tournamentId: 7696, packetListId: 4 })), { tournamentId: 7696, packetListId: 4 });
-  assert.deepEqual(A.parseMeta("oops"), { tournamentId: null, packetListId: null });
-  assert.deepEqual(A.parseMeta(null), { tournamentId: null, packetListId: null });
+  const m = { tournamentId: 7696, packetListId: 4, manual: false };
+  assert.deepEqual(A.parseMeta(A.composeMeta(m)), m);
+  assert.deepEqual(A.parseMeta(A.composeMeta({ ...m, manual: true })), { ...m, manual: true });
+  assert.deepEqual(A.parseMeta("oops"), { tournamentId: null, packetListId: null, manual: false });
+  assert.deepEqual(A.parseMeta(null), { tournamentId: null, packetListId: null, manual: false });
 });
 
 test("appeals: question N is found by its number in the packet", () => {
@@ -101,7 +103,32 @@ test("appeals: question N is found by its number in the packet", () => {
 });
 
 test("appeals: a travelling list keeps its packet only if the packet came too", () => {
-  const meta = A.composeMeta({ tournamentId: 7, packetListId: 4 });
-  assert.deepEqual(A.parseMeta(A.relinkPacket(meta, new Map([[4, 40]]))), { tournamentId: 7, packetListId: 40 });
-  assert.deepEqual(A.parseMeta(A.relinkPacket(meta, new Map())), { tournamentId: 7, packetListId: null });
+  const meta = A.composeMeta({ tournamentId: 7, packetListId: 4, manual: false });
+  assert.deepEqual(A.parseMeta(A.relinkPacket(meta, new Map([[4, 40]]))), { tournamentId: 7, packetListId: 40, manual: false });
+  assert.deepEqual(A.parseMeta(A.relinkPacket(meta, new Map())), { tournamentId: 7, packetListId: null, manual: false });
+});
+
+test("appeals: the verdict table has a row per appeal, an undecided one with no status", () => {
+  const voted = A.fromSite(site({ id: 1 }), []);
+  voted.verdict.text = "Вердикт: принять\n";
+  const open = A.fromSite(site({ id: 2, type: "R", questionNumber: 3, answer: "" }), []);
+  const held = [{ cardId: 10, rank: "a", appeal: voted }, { cardId: 20, rank: "b", appeal: open }];
+  assert.deepEqual(A.verdictRows(held, [{ cardId: 10, userId: 1, value: "for" }]), [
+    [" ID", "Тип", "№", "Ответ", "Статус", "Комментарий"],
+    [1, "A", 28, "аутсайдер", "A", "Вердикт: принять"],
+    [2, "R", 3, "", "", ""],
+  ]);
+});
+
+test("appeals: a hand-made appeal takes the next id and its place by question", () => {
+  const held = [
+    { cardId: 1, rank: "a0", appeal: A.addManual([], { type: "A", question: 3, answer: "x", text: "t" }, "").appeal },
+    { cardId: 2, rank: "a1", appeal: { ...A.addManual([], { type: "R", question: 9, answer: "", text: "t" }, "").appeal, id: 2 } },
+  ];
+  const { appeal, rank } = A.addManual(held, { type: "R", question: 5, answer: "лишний", text: " снять \n" }, "2026-10-19T12:00:00Z");
+  assert.equal(appeal.id, 3);
+  assert.equal(appeal.answer, "", "a removal asks for no answer");
+  assert.equal(appeal.text, "снять");
+  assert.ok("a0" < rank && rank < "a1", rank);
+  assert.deepEqual(A.parseAppeal(A.composeAppeal(appeal)), appeal);
 });

@@ -106,6 +106,7 @@ var For = base.For
 var Autocomplete = base.Autocomplete
 var Method = base.Method
 var Action = base.Action
+var Enctype = base.Enctype
 var Name = base.Name
 var Placeholder = base.Placeholder
 var Spellcheck = base.Spellcheck

@@ -1,6 +1,6 @@
 # Context map
 
-There are four bounded contexts, one for each app and for the UI module.
+There are five bounded contexts, one for each app and for the UI module.
 `dopecore` is a shared platform layer and has no glossary of its own. `chgksuite`
 uses the words of `xy/CONTEXT.md` for packages and questions, and has no
 glossary of its own either.
@@ -14,4 +14,5 @@ root `docs/adr/`, and decisions that affect only one module in that module's own
 - [`dope/CONTEXT.md`](dope/CONTEXT.md) — tournament scoring: Fest, Game, Structure × Protocol, Match, Slot.
 - [`xy/CONTEXT.md`](xy/CONTEXT.md) — encrypted ЧГК question-editing boards: Board, Card, 4s, List Group.
 - [`spliff/CONTEXT.md`](spliff/CONTEXT.md) — shared expenses: Group, Transaction, Payment, Share, Unclaimed, Debt graph.
+- [`qy/CONTEXT.md`](qy/CONTEXT.md) — the question-of-the-year contest: Contest, Nomination, QY number, Portion, Like, Shortlist, Ballot, Popular vote.
 - [`dopeuikit/CONTEXT.md`](dopeuikit/CONTEXT.md) — the UI system: Engine, Kit, Overlay, Primitive, Mount.

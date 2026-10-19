@@ -3,7 +3,7 @@
 
 One script, one target table. Each target names its module, its Go package, the
 binary it installs, the systemd unit it restarts, and the host it lives on —
-xy and spliff live on one host and dope on another, so the host is per-target,
+xy, spliff and qy live on one host and dope on another, so the host is per-target,
 not global.
 
 Each app is one binary: the login bot polls inside the server process, so there
@@ -12,6 +12,7 @@ is no bot unit to deploy alongside it.
   ./deploy.py --target dope-server           # the default for `just deploy` in dope/
   ./deploy.py --target xy-server             # the default for `just deploy` in xy/
   ./deploy.py --target spliff-server         # the default for `just deploy` in spliff/
+  ./deploy.py --target qy-server             # the default for `just deploy` in qy/
   ./deploy.py --target dopetest              # dope staging (`just deploy-staging`)
   ./deploy.py --target dope-server --skip-tests
   ./deploy.py --target xy-server --dry-run   # builds, uploads nothing
@@ -57,7 +58,7 @@ DIST_DIR = ROOT / "dist" / "deploy"
 SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
 
 # Where a per-branch staging instance keeps its four pieces, and the band its
-# port comes from. 9673-9684 are taken by xy, spliff and the review tools, and
+# port comes from. 9673-9684 are taken by xy, spliff and the review tools, qy has 9686-9687, and
 # 978x is the verify skill's band for throwaway servers, so this starts above
 # both. The zone is wildcard-routed (*.dopetest.pecheny.me) with one Caddy
 # site block and one DNS-01 certificate, so a new instance needs no DNS work.
@@ -164,6 +165,28 @@ TARGETS: dict[str, dict] = {
         "package": "./spliff/cmd/spliff-server",
         "binary": "spliff-server",
         "env_prefix": "SPLIFFTEST",
+    },
+    "qy-server": {
+        "host": "vps-he",
+        "remote_dir": "/opt/qy",
+        "service": "qy.service",
+        "service_env": "QY_DEPLOY_SERVICE",
+        "module": "qy",
+        "package": "./qy/cmd/qy-server",
+        "binary": "qy-server",
+        "env_prefix": "QY",
+    },
+    # Staging: the same qy binary on the same box, its own database and no
+    # telegram bot. Bootstrap accounts with `qy-server adduser`.
+    "qytest": {
+        "host": "vps-he",
+        "remote_dir": "/opt/qytest",
+        "service": "qytest.service",
+        "service_env": "QYTEST_DEPLOY_SERVICE",
+        "module": "qy",
+        "package": "./qy/cmd/qy-server",
+        "binary": "qy-server",
+        "env_prefix": "QYTEST",
     },
     # Per-branch staging. --instance names the branch and fills in the rest:
     # the unit is dope-test@<name>, the dir /opt/dope-test/<name>, and the URL

@@ -20,7 +20,7 @@ import { createBundleExportPanel } from "./bundleexport.js";
 import { createBundleImport } from "./bundleimportpanel.js";
 import { createCopyBoardPanel } from "./copyboard.js";
 import { createAuthorCountPanel } from "./authorcount.js";
-import { createAppealsPanels, isAppeals } from "./appealspanel.js";
+import { createAppealsPanels, isAppeals, isManual } from "./appealspanel.js";
 import { appealHeading, createAppealCard } from "./appealcard.js";
 import { parseAppeal, parseMeta, questionCard, tally, verdictStatus, type VoteValue } from "./appeals.js";
 import { xyApp, xySizes } from "./app.js";
@@ -623,12 +623,16 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   // beside the ⋯ menu saves the menu round-trip. The menu item stays too.
   const addCardBtn = el("button", { class: "kadd", title: S.board.list.addCard(), "aria-label": S.board.list.addCard() }, icon("plus"));
   addCardBtn.addEventListener("click", () => {
-    if (isAppeals(list)) appealsPanels.refresh.open(listScope(board, list));
+    if (isManual(list)) appealsPanels.add.open(listScope(board, list));
+    else if (isAppeals(list)) appealsPanels.refresh.open(listScope(board, list));
     else void cardDetail.addCard(list);
   });
-  // An appeals list is filled from the rating site, so its + refreshes it, and
-  // there is no packet to preview.
-  if (isAppeals(list)) {
+  // An appeals list filled from the rating site has its + refresh it, and a
+  // manual one has it add an appeal by hand. Neither has a packet to preview.
+  if (isManual(list)) {
+    addCardBtn.title = S.appeals.manual.label();
+    addCardBtn.setAttribute("aria-label", S.appeals.manual.label());
+  } else if (isAppeals(list)) {
     addCardBtn.title = S.appeals.refresh.label();
     addCardBtn.setAttribute("aria-label", S.appeals.refresh.label());
     addCardBtn.replaceChildren(icon("refresh-cw"));
@@ -1454,6 +1458,7 @@ const appealCard = createAppealCard({
   myId: () => state.me?.user_id ?? null,
   question: appealQuestion,
   vote: castVote,
+  manual: (listId) => { const l = state.lists.find((x) => x.id === listId); return l ? isManual(l) : false; },
 });
 const cardDetail = createCardDetail({
   boardId,
@@ -1783,8 +1788,10 @@ registerPanel(
   questions({ id: "add-card", menu: "list", icon: "plus", label: S.board.list.addCard(), open: (s) => { void cardDetail.addCard(s.list); } }),
   questions({ id: "preview", menu: "list", icon: "eye", label: (s) => s.grouped ? S.board.preview.list() : S.board.preview.title(), open: (s) => { void previewList(s.list); } }),
   questions({ id: "preview-group", menu: "list", icon: "eye", label: S.board.preview.group(), offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } }),
+  appealsPanels.add,
   appealsPanels.refresh,
   appealsPanels.export,
+  appealsPanels.xlsx,
 
   // What is counted within it
   starts(questions(testerList.panel)),

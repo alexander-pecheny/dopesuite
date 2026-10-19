@@ -64,7 +64,7 @@ var RU = Strings{
 			Label:   func() string { return "Выгрузить вердикты" },
 			Loading: func() string { return "Сверяю вердикты с сайтом…" },
 			NeedToken: func() string {
-				return "Чтобы выгрузить вердикты, задайте токен рейтинга в настройках апелляций."
+				return "Чтобы выгрузить вердикты, задайте токен турнирного сайта в настройках апелляций. Если у вашего токена нет прав на запись, скачайте вердикты в .xlsx и загрузите этот файл на турнирном сайте."
 			},
 			Nothing: func() string {
 				return "Все решённые апелляции уже на сайте в том же виде."
@@ -81,10 +81,26 @@ var RU = Strings{
 		},
 		List: AppealsListStrings{
 			Count: func(total string, decided string) string { return fmt.Sprintf("%s · решено %s", total, decided) },
-			Sent:  func() string { return "Вердикт уже на сайте рейтинга" },
+			Sent:  func() string { return "Вердикт уже на турнирном сайте" },
 			Type:  func() string { return "Апелляции" },
 		},
-		Offline: func() string { return "Сайт рейтинга недоступен без сети." },
+		Manual: AppealsManualStrings{
+			Added: func(appeal string) string {
+				return fmt.Sprintf("Добавлено: %s. Можно ввести следующую.", appeal)
+			},
+			Answer:        func() string { return "Ответ, который просят зачесть" },
+			Label:         func() string { return "Добавить апелляцию" },
+			NeedAnswer:    func() string { return "Укажите ответ, который просят зачесть." },
+			NeedQuestion:  func() string { return "Укажите номер вопроса." },
+			Question:      func() string { return "Номер вопроса" },
+			Save:          func() string { return "Добавить" },
+			Title:         func(list string) string { return fmt.Sprintf("Новая апелляция: %s", list) },
+			Type:          func() string { return "Что просят" },
+			TypeAccept:    func() string { return "Зачесть ответ" },
+			TypeHostError: func() string { return "Снять вопрос из-за ошибки ведущего" },
+			TypeRemove:    func() string { return "Снять вопрос" },
+		},
+		Offline: func() string { return "Турнирный сайт недоступен без сети." },
 		Refresh: AppealsRefreshStrings{
 			Done: func(added string, updated string, total string) string {
 				return fmt.Sprintf("Добавлено: %s, обновлено: %s. Всего на сайте: %s.", added, updated, total)
@@ -102,10 +118,20 @@ var RU = Strings{
 			Title: func() string { return "Обновление апелляций" },
 		},
 		Settings: AppealsSettingsStrings{
-			Create:         func() string { return "Создать и загрузить" },
-			CreateTitle:    func() string { return "Новый список апелляций" },
-			GroupOption:    func(name string) string { return fmt.Sprintf("%s (группа)", name) },
-			Label:          func() string { return "Настройки апелляций…" },
+			Create:       func() string { return "Создать и загрузить" },
+			CreateManual: func() string { return "Создать" },
+			CreateTitle:  func() string { return "Новый список апелляций" },
+			GroupOption:  func(name string) string { return fmt.Sprintf("%s (группа)", name) },
+			Label:        func() string { return "Настройки апелляций…" },
+			Mode:         func() string { return "Откуда апелляции" },
+			ModeHint: func() string {
+				return "Выберите «Вводятся вручную», если апелляции турнира подаются не через турнирный сайт. Тогда каждую апелляцию добавляют кнопкой «+» у списка."
+			},
+			ModeLocked: func() string {
+				return "В списке уже есть апелляции, поэтому способ заполнения поменять нельзя."
+			},
+			ModeManual:     func() string { return "Вводятся вручную" },
+			ModeSite:       func() string { return "С турнирного сайта" },
 			NeedPacket:     func() string { return "Выберите пакет." },
 			NeedTitle:      func() string { return "Укажите название списка." },
 			NeedTournament: func() string { return "Укажите номер турнира." },
@@ -117,11 +143,11 @@ var RU = Strings{
 			Save:       func() string { return "Сохранить" },
 			Title:      func() string { return "Название списка" },
 			TitleFor:   func(list string) string { return fmt.Sprintf("Апелляции: %s", list) },
-			Token:      func() string { return "Токен рейтинга" },
+			Token:      func() string { return "Токен турнирного сайта" },
 			TokenHint: func() string {
-				return "Личный токен со страницы пользователя на rating.chgk.info, одинаковый для всей доски. Без него апелляции видны только после публикации результатов, и вердикты нельзя выгрузить. Токен хранится в доске зашифрованным."
+				return "Личный токен со страницы пользователя на турнирном сайте (rating.chgk.info), одинаковый для всей доски. Без него апелляции видны только после публикации результатов, и вердикты нельзя выгрузить. Токен хранится в доске зашифрованным."
 			},
-			Tournament:     func() string { return "Турнир на сайте рейтинга" },
+			Tournament:     func() string { return "Турнир на турнирном сайте" },
 			TournamentHint: func() string { return "Номер турнира или ссылка на его страницу." },
 		},
 		Site: AppealsSiteStrings{
@@ -142,7 +168,7 @@ var RU = Strings{
 			Label:       func() string { return "Вердикт" },
 			NoText:      func() string { return "Текст вердикта ещё не написан." },
 			Placeholder: func() string {
-				return "Обоснование вердикта. Оно уйдёт на сайт рейтинга."
+				return "Обоснование вердикта. Оно уйдёт на турнирный сайт."
 			},
 			StatusLabel: func() string { return "Решение" },
 			Undecided:   func() string { return "Не решено" },
@@ -156,6 +182,15 @@ var RU = Strings{
 			Title: func(pro string, contra string) string {
 				return fmt.Sprintf("Голосов за: %s, против: %s", pro, contra)
 			},
+		},
+		Xlsx: AppealsXlsxStrings{
+			HeadAnswer:   func() string { return "Ответ" },
+			HeadComment:  func() string { return "Комментарий" },
+			HeadId:       func() string { return " ID" },
+			HeadQuestion: func() string { return "№" },
+			HeadStatus:   func() string { return "Статус" },
+			HeadType:     func() string { return "Тип" },
+			Label:        func() string { return "Скачать вердикты (.xlsx)" },
 		},
 	},
 	Attachments: AttachmentsStrings{
@@ -2418,17 +2453,17 @@ var RU = Strings{
 				return "Турнир сейчас меняет кто-то другой, повторите через минуту"
 			},
 			Failed: func(status string) string {
-				return fmt.Sprintf("Сайт рейтинга ответил ошибкой %s", status)
+				return fmt.Sprintf("Турнирный сайт ответил ошибкой %s", status)
 			},
 			Forbidden:    func() string { return "У этого токена нет прав на турнир" },
-			NoToken:      func() string { return "Не задан токен рейтинга" },
+			NoToken:      func() string { return "Не задан токен турнирного сайта" },
 			NoTournament: func() string { return "Не указан номер турнира" },
 			NotFound: func() string {
-				return "Сайт рейтинга не нашёл турнир или апелляцию"
+				return "Турнирный сайт не нашёл турнир или апелляцию"
 			},
-			Unauthorized: func() string { return "Сайт рейтинга не принял токен" },
+			Unauthorized: func() string { return "Турнирный сайт не принял токен" },
 			Unreachable: func() string {
-				return "Сайт рейтинга не отвечает. Попробуйте ещё раз позже."
+				return "Турнирный сайт не отвечает. Попробуйте ещё раз позже."
 			},
 		},
 		Reaction: ServerReactionStrings{

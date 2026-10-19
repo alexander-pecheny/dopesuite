@@ -1,0 +1,63 @@
+/* qy's app CSS layer. The design system is DopeUIKit's assets/core.css, which
+   the server serves ahead of this file. What is left here is the reading
+   measure and the prose a question and a CMS page are set in. */
+
+/* The kit's sheet frame caps a section at a form's 420px. Questions, rules and
+   results are read, so qy's frame takes a column a text is read at, centred. */
+.wide-frame .section {
+  max-width: 46rem;
+  margin-inline: auto;
+  width: 100%;
+}
+
+/* HTML the server rendered: a CMS page, a question card, a factcheck. Text
+   primitives elsewhere are margin 0 and spaced by their container; prose is
+   the one place paragraphs space themselves, because its markup comes from
+   Markdown and not from the builder. */
+.richtext {
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.richtext > :first-child {
+  margin-top: 0;
+}
+
+.richtext > :last-child {
+  margin-bottom: 0;
+}
+
+.richtext img {
+  max-width: 100%;
+  height: auto;
+}
+
+.richtext summary {
+  cursor: var(--cursor-action);
+  color: var(--muted);
+}
+
+.richtext details[open] > summary {
+  margin-bottom: var(--space-2);
+}
+
+.richtext blockquote {
+  margin-inline: 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border);
+  color: var(--text-muted);
+}
+
+/* A page revision against the one before it, line by line. */
+.page-diff {
+  margin: 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+}
+
+.diff-add { background: var(--wash-positive); }
+.diff-del { background: var(--wash-negative); }
+.diff-skip,
+.diff-same { color: var(--muted); }
