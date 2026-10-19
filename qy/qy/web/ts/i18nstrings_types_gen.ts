@@ -336,7 +336,9 @@ export type Strings = {
   };
   forms: {
     failed: () => string;
+    hideAnswers: () => string;
     saving: () => string;
+    showAnswers: () => string;
   };
   nominate: {
     page: {

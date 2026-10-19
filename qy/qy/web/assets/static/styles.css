@@ -27,6 +27,11 @@
   margin-bottom: 0;
 }
 
+/* One colour whether or not the link was visited. */
+.richtext a {
+  color: var(--blue);
+}
+
 .richtext img {
   max-width: 100%;
   height: auto;

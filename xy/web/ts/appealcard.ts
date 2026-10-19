@@ -106,7 +106,10 @@ function foldedBlock(label: string, ...body: Node[]): HTMLElement {
   };
   toggle.addEventListener("click", () => { fold.classList.toggle("is-folded"); paint(); });
   const measure = new ResizeObserver(() => {
-    if (fold.classList.contains("is-folded")) toggle.hidden = fold.scrollHeight <= fold.clientHeight;
+    if (!fold.classList.contains("is-folded")) return;
+    const cut = fold.scrollHeight > fold.clientHeight;
+    toggle.hidden = !cut;
+    fold.classList.toggle("is-cut", cut);
   });
   measure.observe(fold);
   measure.observe(fold.firstElementChild!);
