@@ -8,7 +8,7 @@ let selected = "local";
 
 async function render() {
   const tabs = await call("Tabs");
-  const servers = { id: "", title: "Servers…", url: "" };
+  const servers = { id: "", title: "Добавить сервер xy…", url: "" };
   $("tabs").replaceChildren(...[...tabs, servers].map((tab) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -26,7 +26,7 @@ async function render() {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "btn btn-xs";
-    remove.textContent = "Remove";
+    remove.textContent = "Убрать";
     remove.onclick = async () => { await call("Remove", tab.id); render(); };
     row.append(name, remove);
     return row;
@@ -39,13 +39,6 @@ async function select(id) {
   await call("Select", id);
   render();
 }
-
-$("open").onclick = async () => {
-  if (await call("Open")) {
-    selected = "local";
-    render();
-  }
-};
 
 $("add").onsubmit = async (e) => {
   e.preventDefault();

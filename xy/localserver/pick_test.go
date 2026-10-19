@@ -62,3 +62,15 @@ func pick(s *Server) *httptest.ResponseRecorder {
 	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/import/pick", nil))
 	return rec
 }
+
+func get(t *testing.T, s *Server, path string, into any) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s: %d %s", path, rec.Code, rec.Body)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), into); err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+}

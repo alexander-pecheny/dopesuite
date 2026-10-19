@@ -18,10 +18,6 @@ tab is a native `WebviewPanel` under the strip: the first tab is the Local xy
 - The strip names tabs by id and never hands a URL to a panel. `Shell` in
   `shell.go` owns the panels and the saved server list
   (`servers.json` in the user's config directory, next to `local/`).
-- «Открыть папку/файл» is in the strip, not in xy's page, because a panel
-  cannot reach the runtime and so cannot open a native dialog. `Shell.Open`
-  hands the path to `localserver.Import` and sends the Local panel to the
-  new board.
 - The board's «Импорт из файла…» is in xy's page, so it cannot open a
   dialog either. Instead it asks the Local xy (`POST /api/import/pick`), and
   the app installs `Shell.pickFile` with `local.SetFilePicker`. The server
@@ -45,7 +41,9 @@ tab is a native `WebviewPanel` under the strip: the first tab is the Local xy
   Noto Sans that chgksuite embeds, plus whatever the computer has.
 - A tag `chgksuite-app/<date>` makes `.github/workflows/chgksuite-app.yml`
   publish a GitHub pre-release. The icon is `icon.png`, from the Python
-  chgksuite.
+  chgksuite. The Mac app uses `icon-mac.png`, the same picture on Apple's
+  icon grid (an 824 px rounded square on a 1024 px canvas), because macOS 26
+  puts any other shape inside a grey rounded square.
 
 ```
 just run    # build and open the window

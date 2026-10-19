@@ -47,8 +47,8 @@ app arch=arch():
     CGO_ENABLED=1 GOARCH=$goarch go build -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/chgksuite" .
     cp build/typst-$target/typst "$app/Contents/MacOS/"
     for s in 16 32 128 256 512; do
-        sips -z $s $s icon.png --out "build/icon.iconset/icon_${s}x${s}.png" >/dev/null
-        sips -z $((s*2)) $((s*2)) icon.png --out "build/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null
+        sips -z $s $s icon-mac.png --out "build/icon.iconset/icon_${s}x${s}.png" >/dev/null
+        sips -z $((s*2)) $((s*2)) icon-mac.png --out "build/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null
     done
     iconutil -c icns build/icon.iconset -o "$app/Contents/Resources/icon.icns"
     rm -rf build/icon.iconset

@@ -28,7 +28,7 @@ type Tab struct {
 	URL   string `json:"url"`
 }
 
-var localTab = Tab{ID: localID, Title: "Local", URL: "/"}
+var localTab = Tab{ID: localID, Title: "Локальный режим", URL: "/"}
 
 // Shell is the service the tab strip calls. It owns the panels, so the strip
 // names a tab and never hands a URL to a panel itself.
@@ -107,32 +107,6 @@ func (s *Shell) show(id, url string) error {
 	}
 	p.Show()
 	return nil
-}
-
-// Open asks for a package file or folder, makes a Local board of it and shows
-// that board. It reports whether it made one: a cancelled dialog makes none,
-// and a failed import is told in a dialog of its own.
-func (s *Shell) Open() bool {
-	dialogs := application.Get().Dialog
-	path, err := dialogs.OpenFile().
-		CanChooseFiles(true).CanChooseDirectories(true).
-		AddFilter("Пакеты", "*.4s;*.si4s;*.docx;*.txt;*.zip").
-		AttachToWindow(s.window).PromptForSingleSelection()
-	if err == nil && path == "" {
-		return false
-	}
-	var board int64
-	if err == nil {
-		board, err = s.local.Import(path)
-	}
-	if err == nil {
-		err = s.show(localID, fmt.Sprintf("/board/%d", board))
-	}
-	if err != nil {
-		dialogs.Error().SetTitle("Не удалось открыть").SetMessage(err.Error()).Show()
-		return false
-	}
-	return true
 }
 
 // pickFile is the native dialog behind the board's «Импорт из файла…» in the
@@ -219,10 +193,10 @@ func serverURL(address string) (*url.URL, error) {
 	}
 	u, err := url.Parse(address)
 	if err != nil || u.Host == "" {
-		return nil, fmt.Errorf("%q is not a server address", address)
+		return nil, fmt.Errorf("«%s» не похоже на адрес сервера", address)
 	}
 	if u.Scheme != "https" && (u.Scheme != "http" || !loopback(u.Hostname())) {
-		return nil, fmt.Errorf("%s: a server must use https", u.Host)
+		return nil, fmt.Errorf("%s: сервер должен работать по https", u.Host)
 	}
 	return &url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/"}, nil
 }

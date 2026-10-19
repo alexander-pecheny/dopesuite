@@ -35,16 +35,15 @@
 <script>if (navigator.platform.startsWith("Mac")) document.body.classList.add("mac");</script>
 <nav class="strip u-row u-align-center u-justify-between">
   <div class="seg" id="tabs"></div>
-  <button class="btn btn-primary btn-xs" id="open" type="button">Открыть папку/файл</button>
 </nav>
 <main class="room" id="room">
   <section class="servers u-col u-gap-lg" id="servers" hidden>
     <form class="u-col u-gap-sm" id="add">
-      <label class="field">xy server address
+      <label class="field">Адрес сервера xy
         <input id="address" placeholder="xy.example.org" autocomplete="off" required>
       </label>
       <p class="hint hint-danger" id="error" hidden></p>
-      <div class="u-row u-justify-end"><button class="btn btn-primary" type="submit">Add server</button></div>
+      <div class="u-row u-justify-end"><button class="btn btn-primary" type="submit">Добавить сервер</button></div>
     </form>
     <div class="u-col u-gap-sm" id="list"></div>
   </section>
