@@ -44,12 +44,6 @@ export function statusText(st: string): string {
   return S.appeals.status.open();
 }
 
-function controversialText(st: string): string {
-  if (st === "A") return S.appeals.controversial.accepted();
-  if (st === "D") return S.appeals.controversial.declined();
-  return S.appeals.controversial.open();
-}
-
 // verdictLines is the verdict as text, for the timeline's edit diff.
 export function verdictLines(a: Appeal): string {
   return `${a.verdict.status ? statusText(a.verdict.status) : S.appeals.verdict.followVotes()}\n\n${a.verdict.text}`;
@@ -65,12 +59,12 @@ function block(label: string, ...body: Node[]): HTMLElement {
 
 // prose is text from the site as written, with its URLs made clickable.
 const prose = (text: string): HTMLElement => el("div", { class: "pv-field" },
-  linkSegments(text).map((s) => (s.href ? el("a", { href: s.href, target: "_blank", rel: "noopener noreferrer", text: s.text }) : s.text)));
+  linkSegments(text).map((s) => (s.href ? el("a", { class: "pv-link", href: s.href, target: "_blank", rel: "noopener noreferrer", text: s.text }) : s.text)));
 
 // foldedBlock is a block cut to its first lines, with a toggle in its head
 // that shows only when there is more to see.
 function foldedBlock(label: string, ...body: Node[]): HTMLElement {
-  const fold = el("div", { class: "appeal-fold is-folded u-col u-gap-sm" }, ...body);
+  const fold = el("div", { class: "appeal-fold is-folded" }, el("div", { class: "u-col u-gap-sm" }, ...body));
   const toggle = el("button", { class: "btn btn-ghost btn-xs", type: "button", hidden: true });
   const paint = (): void => {
     const folded = fold.classList.contains("is-folded");
@@ -81,7 +75,8 @@ function foldedBlock(label: string, ...body: Node[]): HTMLElement {
   const measure = new ResizeObserver(() => {
     if (fold.classList.contains("is-folded")) toggle.hidden = fold.scrollHeight <= fold.clientHeight;
   });
-  for (const n of [fold, ...fold.children]) measure.observe(n);
+  measure.observe(fold);
+  measure.observe(fold.firstElementChild!);
   paint();
   return el("div", { class: "fld fld-wide" },
     el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: label }), el("span", { class: "u-spacer" }), toggle),
@@ -89,16 +84,28 @@ function foldedBlock(label: string, ...body: Node[]): HTMLElement {
 }
 
 export function createAppealCard(deps: AppealCardDeps): AppealCard {
+  // controversials groups the answers by the game jury's verdict, declined
+  // first, with the appealed one leading its group.
   function controversials(a: Appeal): HTMLElement {
-    if (!a.controversials.length) return block(S.appeals.card.controversials(String(a.question)), el("p", { class: "hint", text: S.appeals.card.noControversials() }));
-    const rows = a.controversials.map((c) => {
-      const row = el("div", { class: "u-row u-gap-sm u-align-center" },
-        el("span", { class: "badge" + tone(c.status), text: controversialText(c.status) }),
-        el("span", { class: "u-grow", text: c.answer }));
-      if (c.id === a.controversial) row.append(el("span", { class: "badge badge-emphasis", text: S.appeals.card.appealed() }));
-      return row;
+    const label = S.appeals.card.controversials(String(a.question));
+    if (!a.controversials.length) return block(label, el("p", { class: "hint", text: S.appeals.card.noControversials() }));
+    const groups: [string, string, string][] = [
+      ["D", "appeal-contro-declined", S.appeals.controversial.declined()],
+      ["A", "appeal-contro-accepted", S.appeals.controversial.accepted()],
+      ["N", "", S.appeals.controversial.open()],
+    ];
+    const boxes = groups.map(([st, cls, head]) => {
+      const mine = a.controversials.filter((c) => (st === "N" ? c.status !== "A" && c.status !== "D" : c.status === st))
+        .sort((x, y) => Number(y.id === a.controversial) - Number(x.id === a.controversial));
+      if (!mine.length) return null;
+      const rows = mine.map((c) => {
+        const row = el("div", { title: c.comment || null, text: c.answer });
+        if (c.id === a.controversial) row.append(" ", el("span", { class: "badge badge-emphasis", text: S.appeals.card.appealed() }));
+        return row;
+      });
+      return el("div", { class: `appeal-contro ${cls}` }, el("div", { class: "fld-label", text: `${head} · ${mine.length}` }), ...rows);
     });
-    return block(S.appeals.card.controversials(String(a.question)), ...rows);
+    return foldedBlock(label, el("div", { class: "appeal-contro-grid" }, ...boxes));
   }
 
   // votes is the voting row: the two buttons, the count, and who voted how.

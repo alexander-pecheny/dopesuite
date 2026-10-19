@@ -37,9 +37,9 @@ export const RU: Strings = {
       unfold: () => "Показать целиком",
     },
     controversial: {
-      accepted: () => "зачтён",
-      declined: () => "не зачтён",
-      open: () => "не рассмотрен",
+      accepted: () => "Зачтены",
+      declined: () => "Не зачтены",
+      open: () => "Не рассмотрены",
     },
     export: {
       done: (n: string) => `Отправлено: ${n}.`,

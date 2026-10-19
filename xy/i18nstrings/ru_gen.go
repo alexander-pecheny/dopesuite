@@ -51,9 +51,9 @@ var RU = Strings{
 			Unfold: func() string { return "Показать целиком" },
 		},
 		Controversial: AppealsControversialStrings{
-			Accepted: func() string { return "зачтён" },
-			Declined: func() string { return "не зачтён" },
-			Open:     func() string { return "не рассмотрен" },
+			Accepted: func() string { return "Зачтены" },
+			Declined: func() string { return "Не зачтены" },
+			Open:     func() string { return "Не рассмотрены" },
 		},
 		Export: AppealsExportStrings{
 			Done:      func(n string) string { return fmt.Sprintf("Отправлено: %s.", n) },

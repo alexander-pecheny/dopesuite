@@ -1412,12 +1412,24 @@
 /* A long question or appeal shows its first three lines, fading out at the cut.
    The packet's question carries its own padding, so its fold allows for it. */
 .appeal-fold.is-folded {
-  max-height: 3lh;
+  max-height: calc(var(--fold-lines, 3) * 1lh);
   overflow: hidden;
   -webkit-mask-image: linear-gradient(to bottom, var(--paper) 60%, transparent);
   mask-image: linear-gradient(to bottom, var(--paper) 60%, transparent);
 }
-.appeal-fold.is-folded:has(> .pv-q) { max-height: calc(3lh + var(--space-3)); }
+.appeal-fold.is-folded:has(.pv-q) { max-height: calc(3lh + var(--space-3)); }
+/* The controversial answers: declined and accepted side by side, in small type. */
+.appeal-fold:has(.appeal-contro-grid) { --fold-lines: 5; }
+.appeal-contro-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-2);
+  align-items: start;
+  font-size: var(--text-sm);
+}
+.appeal-contro { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--page); }
+.appeal-contro-declined { background: var(--wash-negative); }
+.appeal-contro-accepted { background: var(--wash-positive); }
 /* The copy tab: a small folder tab on a text field's top right edge, in the
    field's fill with no bottom border, and the field gives up that corner's
    rounding so the two read as one shape. It stays lower than the label beside

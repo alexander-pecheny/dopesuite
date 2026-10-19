@@ -36,10 +36,11 @@ unfold = "Показать целиком"
 fold = "Свернуть"
 
 [controversial]
-# The game jury's verdict on a controversial answer.
-accepted = "зачтён"
-declined = "не зачтён"
-open = "не рассмотрен"
+# The heads of the groups the controversial answers are sorted into, by the
+# game jury's verdict.
+accepted = "Зачтены"
+declined = "Не зачтены"
+open = "Не рассмотрены"
 
 [status]
 # An appeal's status: the jury's verdict, and what the site says.
