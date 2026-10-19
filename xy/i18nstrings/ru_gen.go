@@ -2029,7 +2029,7 @@ var RU = Strings{
 			ImagesMissing: func(n string) string { return fmt.Sprintf("\n\nНе нашлось картинок (%s): ", n) },
 			Label:         func() string { return "Импорт из файла…" },
 			MenuTitle: func() string {
-				return "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)"
+				return "Импортировать пакет вопросов (.4s, .docx, .txt) или архив xy (.zip)"
 			},
 			NoQuestions: func() string { return "В файле не найдено вопросов." },
 			NoToursNote: func() string {

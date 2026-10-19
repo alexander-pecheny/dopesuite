@@ -1,4 +1,4 @@
-// Package chgkimport turns a question package (.docx, .4s or a .zip of both)
+// Package chgkimport turns a question package (.docx, .txt, .4s or a .zip of both)
 // into 4s source plus the images it references — the whole chgksuite `parse`
 // pipeline, in-process.
 //
@@ -10,14 +10,17 @@ package chgkimport
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"mime"
+	"net/http"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
@@ -25,7 +28,9 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/docxread"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/textenc"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/textparse"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/typo"
 )
 
 // Image is one image referenced by the package, named as the 4s source's
@@ -67,6 +72,8 @@ func Parse(filename string, data []byte, game string) (*Result, error) {
 		return res, validate(res, game)
 	case ".docx":
 		return parseDocx(base, data, game, "")
+	case ".txt":
+		return parseTxt(base, data, game)
 	case ".zip":
 		res, err := parseZip(base, data)
 		if err != nil {
@@ -155,6 +162,63 @@ func parseDocx(base string, data []byte, game, language string) (*Result, error)
 		})
 	}
 	return res, nil
+}
+
+// parseTxt is chgksuite's parse of a .txt: the encoding guessed, db.chgk.info's
+// own export read as itself with its pictures downloaded, and a packet written
+// by hand read as a .docx's text is.
+func parseTxt(base string, data []byte, game string) (*Result, error) {
+	text, err := textenc.Decode(data, "")
+	if err != nil {
+		return nil, err
+	}
+	res := &Result{Name: base}
+	switch {
+	case gameOrDefault(game) == "si":
+		res.Source = fsource.Compose(textparse.ParseSI(text, textparse.SIOptions{}), fsource.NumbersAll)
+	case textparse.IsDBExport(text):
+		ctx, cancel := context.WithTimeout(context.Background(), dbFetchBudget)
+		defer cancel()
+		res.Source = fsource.Compose(textparse.ParseDB(text, res.dbFetcher(ctx)), fsource.NumbersDefault)
+	default:
+		text = typo.EscapeUnderscoresExceptURLs(text, false)
+		res.Source = fsource.Compose(textparse.Parse(text, textparse.Options{}), fsource.NumbersDefault)
+	}
+	return res, nil
+}
+
+// dbFetchBudget bounds all of one export's downloads from db.chgk.info
+// together, so an unreachable site costs the import one wait, not one per
+// picture.
+const dbFetchBudget = 60 * time.Second
+
+// dbClient fetches from db.chgk.info; tests replace it to stay offline.
+var dbClient = http.DefaultClient
+
+// dbFetcher downloads the pictures a db.chgk.info export names into r. One
+// that fails to arrive leaves its (img …) directive pointing at nothing, as in
+// chgksuite.
+func (r *Result) dbFetcher(ctx context.Context) textparse.Fetcher {
+	return func(url, name string) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := dbClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("%s: %s", url, resp.Status)
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, maxInflated))
+		if err != nil {
+			return err
+		}
+		r.Images = append(r.Images, Image{Name: name, MIME: mimeOf(name), Data: data})
+		return nil
+	}
 }
 
 // parseZip imports a package shipped as one .4s plus its images, so a user can

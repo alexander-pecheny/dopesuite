@@ -3,7 +3,7 @@
 // bundleimportpanel.ts to be appended to this board (ADR-0013), and everything
 // else is a package of questions for a new list.
 //
-// A package (.4s / .zip / .docx) becomes a new list. The
+// A package (.4s / .zip / .docx / .txt) becomes a new list. The
 // server parses the upload with the Go port of chgksuite's parser
 // (chgksuite/chgkimport) and hands back 4s source plus the images it
 // references. Everything below happens client-side under the board key: the
@@ -155,8 +155,8 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       const pkg = (await res.json()) as ImportPkg;
       board.setStatus("saved");
-      // A .docx parse is a guess; let the user check it before it becomes a list.
-      if (/\.docx$/i.test(file.name)) openImportVerify(pkg, splitTours, game);
+      // A .docx or .txt parse is a guess; let the user check it before it becomes a list.
+      if (/\.(docx|txt)$/i.test(file.name)) openImportVerify(pkg, splitTours, game);
       else await commitImport(pkg.name, pkg.source, pkg.images, splitTours, game);
     } catch (err) {
       board.setStatus("error");

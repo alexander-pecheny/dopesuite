@@ -116,7 +116,7 @@ func (s *Shell) Open() bool {
 	dialogs := application.Get().Dialog
 	path, err := dialogs.OpenFile().
 		CanChooseFiles(true).CanChooseDirectories(true).
-		AddFilter("Пакеты", "*.4s;*.si4s;*.docx;*.zip").
+		AddFilter("Пакеты", "*.4s;*.si4s;*.docx;*.txt;*.zip").
 		AttachToWindow(s.window).PromptForSingleSelection()
 	if err == nil && path == "" {
 		return false
@@ -140,7 +140,7 @@ func (s *Shell) Open() bool {
 func (s *Shell) pickFile() (string, error) {
 	return application.Get().Dialog.OpenFile().
 		CanChooseFiles(true).
-		AddFilter("Пакеты", "*.4s;*.si4s;*.docx;*.zip").
+		AddFilter("Пакеты", "*.4s;*.si4s;*.docx;*.txt;*.zip").
 		AttachToWindow(s.window).PromptForSingleSelection()
 }
 

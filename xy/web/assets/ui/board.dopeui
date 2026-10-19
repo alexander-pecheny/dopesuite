@@ -318,7 +318,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
   modal id="importPickOverlay" label=@board.importpick.title title=@board.importpick.title
     form id="importPickForm" dir="col"
       hint id="importPickHint" @board.importpick.hint
-      filefield id="importFile" accept=".4s,.si4s,.zip,.docx,image/*" multiple required
+      filefield id="importFile" accept=".4s,.si4s,.zip,.docx,.txt,image/*" multiple required
       hint id="importPickWhat"
       selectfield id="importGame" title=@board.list.type_label
         option value="normal" @board.list.type_chgk

@@ -117,7 +117,7 @@ report_failed = '«{{.name}}» — НЕ ИМПОРТИРОВАНА: {{.error}}'
 # Topbar button after the question count that opens the in-board import picker (importpack.ts).
 label = "Импорт из файла…"
 # Tooltip of that button.
-menu_title = "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)"
+menu_title = "Импортировать пакет вопросов (.4s, .docx, .txt) или архив xy (.zip)"
 # Picker line while the chosen file is being sniffed.
 reading_file = "Читаю файл…"
 # Picker line when the file is recognised as an xy board archive.
