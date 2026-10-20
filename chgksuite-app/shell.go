@@ -130,7 +130,7 @@ func (s *Shell) Update() error {
 func (s *Shell) pickFile() (string, error) {
 	return application.Get().Dialog.OpenFile().
 		CanChooseFiles(true).
-		AddFilter("Пакеты", "*.4s;*.si4s;*.docx;*.txt;*.zip").
+		AddFilter("Пакеты", "*.4s;*.si4s;*.tr4s;*.br4s;*.docx;*.txt;*.zip").
 		AttachToWindow(s.window).PromptForSingleSelection()
 }
 

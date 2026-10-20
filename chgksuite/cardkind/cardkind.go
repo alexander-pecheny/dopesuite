@@ -29,6 +29,12 @@ const (
 	Other = "other"
 	// Theme is one SI theme with its Ladder (ADR-0018).
 	Theme = "theme"
+	// TroikaTheme is one troika theme: a Theme whose Ladder is 1, 2, 3
+	// (ADR-0022).
+	TroikaTheme = "troika_theme"
+	// Battle is a `#B` line: one battle of a brain, troika or SI game. It
+	// restarts the Theme count, and in a brain game the question count too.
+	Battle = "battle"
 	// HandoutsPreamble is a tour's ///preamble block for the .hndt. It is not
 	// 4s and never goes into the package.
 	HandoutsPreamble = "handouts_preamble"
@@ -46,8 +52,10 @@ const (
 
 // The games a scope exports as.
 const (
-	GameChgk = "chgk"
-	GameSI   = "si"
+	GameChgk   = "chgk"
+	GameSI     = "si"
+	GameTroika = "troika"
+	GameBrain  = "brain"
 )
 
 // Kind is one Card Kind and what it does.
@@ -79,8 +87,12 @@ type Kind struct {
 	// count for the Cards after it.
 	SetsBase bool `json:"setsBase"`
 	// Game is the game one Card of this kind makes its whole scope export as,
-	// whatever the List Type says. "" for no say.
+	// whatever the List Type says. "" for no say. A theme's say is final, a
+	// battle's holds only until a theme turns up (GameOf).
 	Game string `json:"game"`
+	// Ladder is the `№` values a new theme of this kind is written with, in
+	// order. nil for a kind that is not a theme.
+	Ladder []string `json:"ladder"`
 	// Pickable is whether the card editor's kind menu offers it.
 	Pickable bool `json:"pickable"`
 }
@@ -88,7 +100,9 @@ type Kind struct {
 // All is every Card Kind, in the order the kind menu lists the pickable ones.
 var All = []Kind{
 	{Name: Question, Counter: CounterQuestion, Exported: true, Handouts: true, Versioned: true, Pickable: true},
-	{Name: Theme, Counter: CounterTheme, Exported: true, Game: GameSI, Pickable: true},
+	{Name: Theme, Counter: CounterTheme, Exported: true, Game: GameSI, Ladder: []string{"10", "20", "30", "40", "50"}, Pickable: true},
+	{Name: TroikaTheme, Counter: CounterTheme, Exported: true, Game: GameTroika, Ladder: []string{"1", "2", "3"}, Pickable: true},
+	{Name: Battle, Exported: true, Marker: "#B", Section: true, Game: GameBrain, Pickable: true},
 	{Name: Meta, Exported: true, Marker: "#", SetsBase: true, Pickable: true},
 	{Name: Heading, Exported: true, Marker: "##", Section: true, SetsBase: true, Pickable: true},
 	{Name: Other, Exported: true, Pickable: true},
@@ -132,31 +146,43 @@ func Exported(name string) bool { return Of(name).Exported }
 
 // ForListType is the kind a new Card gets in a List of this type when nobody
 // names one: what the board's add-card button makes there (cardkind.ts's
-// forListType), a Theme in an SI List and a Question anywhere else.
+// forListType): a theme of the List's game in an SI or troika List, and a
+// Question anywhere else, a brain List included.
 func ForListType(listType string) string {
 	switch listType {
 	case ListTypeSI:
 		return Theme
+	case ListTypeTroika:
+		return TroikaTheme
 	case ListTypeAppeals:
 		return Appeal
 	}
 	return Question
 }
 
-// The List Types that make a Card of their own (lists.type): SI themes, and
-// the appeals of one tournament.
+// The List Types beside the default (lists.type): SI themes, troika themes,
+// brain questions, and the appeals of one tournament.
 const (
 	ListTypeSI      = "si"
+	ListTypeTroika  = "troika"
+	ListTypeBrain   = "brain"
 	ListTypeAppeals = "appeals"
 )
 
-// GameOf is the game a scope of Cards with these kinds exports as: the game of
-// the first kind that has a say, GameChgk when none does.
+// GameOf is the game a scope of Cards with these kinds exports as. The first
+// theme decides it. Without one, a battle makes the scope a brain game, since
+// SI and troika packets have battles too, and GameChgk is what is left.
 func GameOf(kinds []string) string {
-	for _, k := range kinds {
-		if g := Of(k).Game; g != "" {
-			return g
+	game := GameChgk
+	for _, name := range kinds {
+		k := Of(name)
+		switch {
+		case k.Game == "":
+		case k.Counter == CounterTheme:
+			return k.Game
+		default:
+			game = k.Game
 		}
 	}
-	return GameChgk
+	return game
 }

@@ -184,36 +184,62 @@ func TestDocxBodyParity(t *testing.T) {
 
 // TestDocxSIParity is the same two checks on the СИ layout: themes, battles,
 // rounds and the theme-level author/comment, against chgksuite's own output for
-// the same source read as a .si4s (which is how its CLI picks the game up).
+// the same source read as a .si4s or a .tr4s (which is how its CLI picks the
+// game up). Each game's fixtures sit in a directory named after it; an oracle
+// holds only the word/document.xml these checks read.
 func TestDocxSIParity(t *testing.T) {
-	files, _ := filepath.Glob("testdata/si/*.4s")
-	if len(files) == 0 {
-		t.Skip("no si testdata")
+	for _, game := range []string{"si", "troika"} {
+		files, _ := filepath.Glob(filepath.Join("testdata", game, "*.4s"))
+		if len(files) == 0 {
+			t.Fatalf("no %s testdata", game)
+		}
+		for _, f := range files {
+			name := strings.TrimSuffix(filepath.Base(f), ".4s")
+			t.Run(game+"/"+name, func(t *testing.T) {
+				oracle, err := os.ReadFile(strings.TrimSuffix(f, ".4s") + ".docx")
+				if err != nil {
+					t.Skipf("no oracle: %v", err)
+				}
+				src, err := os.ReadFile(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				mine, err := Export(fsource.Parse(string(src), game), nil, Options{Game: game})
+				if err != nil {
+					t.Fatalf("export: %v", err)
+				}
+				if want, got := docText(t, oracle), docText(t, mine); want != got {
+					t.Errorf("text mismatch\n--- chgksuite ---\n%q\n--- go ---\n%q", want, got)
+				}
+				want := stripSrcSz(bodyXML(documentXML(t, oracle)))
+				got := stripSrcSz(bodyXML(documentXML(t, mine)))
+				if want != got {
+					t.Errorf("body XML mismatch\n--- chgksuite ---\n%s\n--- go ---\n%s", want, got)
+				}
+			})
+		}
 	}
-	for _, f := range files {
-		name := strings.TrimSuffix(filepath.Base(f), ".4s")
-		t.Run(name, func(t *testing.T) {
-			oracle, err := os.ReadFile(filepath.Join("testdata", "si", name+".docx"))
-			if err != nil {
-				t.Skipf("no oracle: %v", err)
-			}
-			src, err := os.ReadFile(f)
-			if err != nil {
-				t.Fatal(err)
-			}
-			mine, err := Export(fsource.Parse(string(src), "si"), nil, Options{Game: "si"})
-			if err != nil {
-				t.Fatalf("export: %v", err)
-			}
-			if want, got := docText(t, oracle), docText(t, mine); want != got {
-				t.Errorf("text mismatch\n--- chgksuite ---\n%q\n--- go ---\n%q", want, got)
-			}
-			want := stripSrcSz(bodyXML(documentXML(t, oracle)))
-			got := stripSrcSz(bodyXML(documentXML(t, mine)))
-			if want != got {
-				t.Errorf("body XML mismatch\n--- chgksuite ---\n%s\n--- go ---\n%s", want, got)
-			}
-		})
+}
+
+// A brain game prints each battle as a heading and numbers its questions anew
+// under it, where chgksuite drops the battle and leaves two «Вопрос 1.» in a row.
+func TestDocxBrainBattles(t *testing.T) {
+	src := "#B Бой 1\n\n? Раз?\n! А\n\n#B Бой 2\n\n? Два?\n! Б\n"
+	mine, err := Export(fsource.Parse(src, "brain"), nil, Options{Game: "brain"})
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	text := docText(t, mine)
+	for _, want := range []string{"Бой 1", "Вопрос 1. ", "Раз?", "Бой 2", "Два?"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("%q is not in the document:\n%q", want, text)
+		}
+	}
+	if n := strings.Count(text, "Вопрос 1. "); n != 2 {
+		t.Errorf("«Вопрос 1.» %d times, want once per battle:\n%q", n, text)
+	}
+	if n := strings.Count(documentXML(t, mine), `<w:pStyle w:val="Heading1"/>`); n != 2 {
+		t.Errorf("%d Heading1 paragraphs, want one per battle", n)
 	}
 }
 

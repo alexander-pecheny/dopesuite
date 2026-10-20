@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/chgkimport"
 
@@ -63,7 +62,7 @@ func pickedFiles(p string) ([]importedImage, error) {
 		return nil, errPickTooBig
 	}
 	files := []importedImage{{Name: filepath.Base(p), MIME: "application/octet-stream", Data: base64.StdEncoding.EncodeToString(data)}}
-	if ext := strings.ToLower(filepath.Ext(p)); ext != ".4s" && ext != ".si4s" {
+	if !chgkimport.Is4s(p) {
 		return files, nil
 	}
 	images, err := chgkimport.ImagesBeside(filepath.Dir(p), string(data))

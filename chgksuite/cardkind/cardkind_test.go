@@ -19,6 +19,8 @@ func TestKindTable(t *testing.T) {
 	want := []row{
 		{Question, true, true, true, true, "", false, false, "", true},
 		{Theme, true, true, false, false, "", false, false, GameSI, true},
+		{TroikaTheme, true, true, false, false, "", false, false, GameTroika, true},
+		{Battle, false, true, false, false, "#B", true, false, GameBrain, true},
 		{Meta, false, true, false, false, "#", false, true, "", true},
 		{Heading, false, true, false, false, "##", true, true, "", true},
 		{Other, false, true, false, false, "", false, false, "", true},
@@ -41,7 +43,7 @@ func TestKindTable(t *testing.T) {
 }
 
 func TestCounters(t *testing.T) {
-	for kind, want := range map[string]string{Question: CounterQuestion, Theme: CounterTheme, Meta: "", HandoutsPreamble: ""} {
+	for kind, want := range map[string]string{Question: CounterQuestion, Theme: CounterTheme, TroikaTheme: CounterTheme, Battle: "", Meta: "", HandoutsPreamble: ""} {
 		if got := Of(kind).Counter; got != want {
 			t.Errorf("Of(%q).Counter = %q, want %q", kind, got, want)
 		}
@@ -70,6 +72,9 @@ func TestGameOf(t *testing.T) {
 		{[]string{Question, Meta}, GameChgk},
 		{[]string{Question, Theme}, GameSI},
 		{[]string{HandoutsPreamble, Theme}, GameSI},
+		{[]string{Battle, Question}, GameBrain},
+		{[]string{Battle, TroikaTheme, Battle}, GameTroika},
+		{[]string{Battle, Theme}, GameSI},
 	}
 	for _, c := range cases {
 		if got := GameOf(c.kinds); got != c.want {
@@ -81,9 +86,18 @@ func TestGameOf(t *testing.T) {
 // ForListType is what the board's add-card button makes (cardkind.ts's
 // forListType, held to the same answers in xy/jstest/cardkind.test.js).
 func TestForListType(t *testing.T) {
-	for listType, want := range map[string]string{"si": Theme, "appeals": Appeal, "normal": Question, "test": Question, "": Question} {
+	for listType, want := range map[string]string{"si": Theme, "troika": TroikaTheme, "brain": Question, "appeals": Appeal, "normal": Question, "test": Question, "": Question} {
 		if got := ForListType(listType); got != want {
 			t.Errorf("ForListType(%q) = %q, want %q", listType, got, want)
+		}
+	}
+}
+
+// Every theme kind has a Ladder and nothing else has one.
+func TestLadder(t *testing.T) {
+	for _, k := range All {
+		if (k.Counter == CounterTheme) != (len(k.Ladder) > 0) {
+			t.Errorf("%s: Counter %q but Ladder %v", k.Name, k.Counter, k.Ladder)
 		}
 	}
 }

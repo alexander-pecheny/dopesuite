@@ -113,6 +113,56 @@ test("СИ import folds each #T block and its questions into one theme card", as
   assert.match(cards[2][1].description, /^e:#T Оружие/);
 });
 
+// A troika's themes sit inside battles and sections, and the host's notes sit
+// between them. A note above a theme's first question is the theme's; a battle,
+// a section, or a note after the last question is a card of its own.
+test("troika import keeps battles, sections and trailing notes out of the themes", async () => {
+  posts.length = 0;
+  parsed = {
+    name: "Сова",
+    source: [
+      "## Групповой этап 1", "",
+      "#B Бой 1", "",
+      "#T ТЕМА 1. Числа", "", "@ Автор", "", "# Ведущему: прочтите медленно", "",
+      "№ 1", "? Раз?", "! А", "", "№ 2", "? Два?", "! Б", "",
+      "# Ведущему: смена порядка", "",
+      "#T ТЕМА 2. Буквы", "", "№ 1", "? Три?", "! В", "",
+      "#B Бой 2", "",
+      "#T ТЕМА 1. Звуки", "", "№ 1", "? Четыре?", "! Г", "",
+    ].join("\n"),
+    images: [],
+  };
+  panel.open();
+  p.node("importFile").files = [new File([], "sova.tr4s")];
+  p.node("importGame").value = "normal";
+  p.node("importSplitTours").checked = false;
+  p.node("importPickForm").fire("submit");
+  await settle();
+  assert.equal(parseBody.get("game"), "troika", "the extension names the game, whatever was picked");
+  const [list, ...cards] = posts;
+  assert.equal(list[1].type, "troika");
+  assert.deepEqual(cards.map((c) => c[1].kind), ["heading", "battle", "troika_theme", "meta", "troika_theme", "battle", "troika_theme"]);
+  assert.match(cards[2][1].description, /прочтите медленно[\s\S]*№ 2/);
+  assert.doesNotMatch(cards[2][1].description, /смена порядка/);
+});
+
+// A brain package is ChGK questions in battles: each battle a card, the
+// questions their own, and the list typed brain.
+test("brain import makes battle cards between ordinary questions", async () => {
+  posts.length = 0;
+  parsed = { name: "Брейн", source: "#B Бой 1\n\n? Раз?\n! А\n\n#B Бой 2\n\n? Два?\n! Б\n", images: [] };
+  panel.open();
+  p.node("importFile").files = [new File([], "brain.4s")];
+  p.node("importGame").value = "brain";
+  p.node("importSplitTours").checked = false;
+  p.node("importPickForm").fire("submit");
+  await settle();
+  assert.equal(parseBody.get("game"), "brain");
+  const [list, ...cards] = posts;
+  assert.equal(list[1].type, "brain");
+  assert.deepEqual(cards.map((c) => c[1].kind), ["battle", "question", "battle", "question"]);
+});
+
 test("in the desktop app the native pick stands in for the file field, and its pictures go up with it", async () => {
   posts.length = 0;
   const { xyInstance } = await import("../web/assets/static/dist/instance.js");

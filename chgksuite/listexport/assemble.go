@@ -25,7 +25,7 @@ type Assembly struct {
 	// Source is the 4s document: the Cards' descriptions in board order, each
 	// one's Versions folded back into one question, blank-line separated.
 	Source string `json:"source"`
-	// Game is "si" when the scope holds a Theme and "chgk" otherwise.
+	// Game is the game the scope is composed as (cardkind.GameOf).
 	Game string `json:"game"`
 	// Hndt is the .hndt document: the tour's preamble, then one block per
 	// question that carries a Handout. "" when there is neither.
@@ -37,8 +37,9 @@ func Assemble(cards []Card) Assembly {
 	return Assembly{Source: source(cards), Game: game(cards), Hndt: hndt(cards)}
 }
 
-// game is the game a scope exports as: one Theme makes it SI, whatever the
-// List Type says, since a theme's name and author survive only an SI compose.
+// game is the game a scope exports as, whatever the List Type says: a theme's
+// name and author survive only an SI or troika compose, and a battle's heading
+// only a brain one.
 func game(cards []Card) string {
 	kinds := make([]string, len(cards))
 	for i, c := range cards {

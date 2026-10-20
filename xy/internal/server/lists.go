@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
+
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
@@ -144,12 +146,13 @@ insert into lists(board_id, type, title, rank, comment_first, handout_page, meta
 }
 
 // validListType allowlists the list types the client may set (mirrors the
-// lists.type CHECK constraint). 'si' is a list of SI theme's, 'normal' one of OD
-// questions, 'appeals' the appeals of one tournament (ADR-0021); the type decides
-// what kind of card the add-card button makes, and nothing else.
+// lists.type CHECK constraint). 'normal' is a list of OD questions, 'si' and
+// 'troika' lists of themes, 'brain' one of brain questions (ADR-0022), and
+// 'appeals' the appeals of one tournament (ADR-0021); the type decides what
+// kind of card the add-card button makes, and nothing else.
 func validListType(typ string) bool {
 	switch typ {
-	case "normal", "test", "si", "appeals":
+	case "normal", "test", cardkind.ListTypeSI, cardkind.ListTypeTroika, cardkind.ListTypeBrain, cardkind.ListTypeAppeals:
 		return true
 	}
 	return false

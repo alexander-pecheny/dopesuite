@@ -195,7 +195,7 @@ func (e *exporter) generate(doc fsource.Doc) string {
 			}
 
 		case "battle", "round", "theme":
-			if !si {
+			if !e.opts.heads(el.Type) {
 				continue
 			}
 			p := &para{above: e.cfg.HeadingAbove, below: e.cfg.HeadingBelow, sticky: true, size: e.cfg.BodyPt, body: e.cfg.BodyPt, bold: true}

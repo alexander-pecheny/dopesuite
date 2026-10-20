@@ -34,7 +34,7 @@ import { createCardLabels } from "./cardlabels.js";
 import { createBell } from "./bell.js";
 import { xyVersions } from "./versions.js";
 import { xyListExport } from "./listexport.js";
-import { carriesHandouts, counter, exported, KIND, label as kindLabel, numbered, versioned } from "./cardkind.js";
+import { carriesHandouts, counter, exported, isTheme, KIND, ladder, label as kindLabel, numbered, versioned } from "./cardkind.js";
 import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
@@ -875,8 +875,8 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
       cardBody(card));
     // A tour in progress is read by which themes are still short, so a theme
     // says how many of its questions are written right where it is looked at.
-    if (card.kind !== KIND.theme) return title;
-    const p = progress(card.desc);
+    if (!isTheme(card.kind)) return title;
+    const p = progress(card.desc, ladder(card.kind));
     title.append(el("span", {
       class: "kcard-progress", title: S.card.slot.progressTitle(),
       text: S.card.slot.progress(String(p.filled), String(p.total)),
@@ -1166,6 +1166,8 @@ function renderAddList(): HTMLElement {
   const typeSel = el("select", { class: "input", "aria-label": S.board.list.typeLabel() },
     el("option", { value: "normal", text: S.board.list.typeChgk() }),
     el("option", { value: "si", text: S.board.list.typeSi() }),
+    el("option", { value: "troika", text: S.board.list.typeTroika() }),
+    el("option", { value: "brain", text: S.board.list.typeBrain() }),
     el("option", { value: "appeals", text: S.appeals.list.type() })) as HTMLSelectElement;
   form.append(el("div", { class: "u-col u-gap-sm" },
     el("div", { class: "u-row u-gap-sm" }, input, okBtn), typeSel));

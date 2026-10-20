@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
-	"path"
 	"strings"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/chgkimport"
@@ -97,7 +96,7 @@ func (s *server) handleImportParse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if images := form.Files("image"); len(images) > 0 {
-		if ext := strings.ToLower(path.Ext(files[0].Filename)); ext != ".4s" && ext != ".si4s" {
+		if !chgkimport.Is4s(files[0].Filename) {
 			httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.ImagesNeed4s())
 			return
 		}

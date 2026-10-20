@@ -266,12 +266,14 @@ export type Strings = {
       excerptsView: () => string;
       feedLabel: () => string;
       handoutTitle: () => string;
+      kindBattle: () => string;
       kindHeading: () => string;
       kindLabel: () => string;
       kindMeta: () => string;
       kindOther: () => string;
       kindQuestion: () => string;
       kindTheme: () => string;
+      kindTroikaTheme: () => string;
       labelAdd: () => string;
       linkLabel: () => string;
       linkTitle: () => string;
@@ -601,10 +603,12 @@ export type Strings = {
       orderLabel: () => string;
       settings: () => string;
       settingsTitle: () => string;
+      typeBrain: () => string;
       typeChgk: () => string;
       typeHint: () => string;
       typeLabel: () => string;
       typeSi: () => string;
+      typeTroika: () => string;
       untitled: () => string;
     };
     listsmanage: {
@@ -1409,9 +1413,9 @@ export type Strings = {
       labelGrouped: () => string;
     };
     notes: {
+      gameFormats: () => string;
       noHandouts: () => string;
       offline: () => string;
-      siFormats: () => string;
     };
     run: {
       failed: (error: string) => string;

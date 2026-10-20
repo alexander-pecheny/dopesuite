@@ -826,6 +826,54 @@ pragma foreign_keys=on;`)},
 	{Version: 31, Name: "handout_page on lists and list_groups", Up: schema.Exec(`
 alter table lists add column handout_page text;
 alter table list_groups add column handout_page text;`)},
+	// v32 admits brain and troika (ADR-0022): a List may be typed 'brain' or
+	// 'troika', and a Card may be a 'battle' (a `#B` line) or a 'troika_theme'
+	// (a theme whose ladder is 1, 2, 3). Both CHECKs are rebuilt the way v30
+	// rebuilt them.
+	{Version: 32, Name: "brain and troika", Up: schema.Exec(`
+pragma foreign_keys=off;
+create table lists_v32(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  type text not null check (type in ('normal','test','si','troika','brain','appeals')) default 'normal',
+  title blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  group_id integer references list_groups(id),
+  comment_first integer not null default 0,
+  meta blob,
+  handout_page text
+);
+insert into lists_v32(id, board_id, type, title, rank, created_at, updated_at, deleted_at, group_id, comment_first, meta, handout_page)
+  select id, board_id, type, title, rank, created_at, updated_at, deleted_at, group_id, comment_first, meta, handout_page from lists;
+drop table lists;
+alter table lists_v32 rename to lists;
+create index if not exists idx_lists_board on lists(board_id);
+create index if not exists idx_lists_group on lists(group_id);
+
+create table cards_v32(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer not null references lists(id) on delete cascade,
+  kind text not null check (kind in ('normal','question','test','meta','heading','other','theme','troika_theme','battle','handouts_preamble','appeal')) default 'normal',
+  description blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  handout_meta blob,
+  alias blob,
+  seen blob
+);
+insert into cards_v32(id, board_id, list_id, kind, description, rank, created_at, updated_at, deleted_at, handout_meta, alias, seen)
+  select id, board_id, list_id, kind, description, rank, created_at, updated_at, deleted_at, handout_meta, alias, seen from cards;
+drop table cards;
+alter table cards_v32 rename to cards;
+create index if not exists idx_cards_list on cards(list_id);
+create index if not exists idx_cards_board on cards(board_id);
+pragma foreign_keys=on;`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }

@@ -58,9 +58,9 @@ export interface ListScope {
   cards: BoardCard[];
   numbers: Array<string | null>;
   title: string;
-  // What this tour is: "si" when its lists hold SI themes, "chgk" otherwise. The
-  // exports send it so chgksuite's SI layout is used, and the .4s goes out as
-  // .si4s, which is how its CLI reads the game back.
+  // What this tour is (cardkind.ts gameOf): "chgk", "si", "troika" or "brain".
+  // The exports send it so chgksuite lays the game out as itself, and the .4s
+  // goes out as .si4s, .tr4s or .br4s, which is how its CLI reads the game back.
   game: string;
   // Whether this tour shows a question's comment before its answer.
   commentFirst: boolean;

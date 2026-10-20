@@ -296,7 +296,7 @@ func (e *exporter) renderBody(doc fsource.Doc) string {
 			}
 
 		case "battle":
-			if !si {
+			if !e.opts.heads(el.Type) {
 				break
 			}
 			flushLead()

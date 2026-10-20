@@ -3,15 +3,17 @@
 // Every Card Kind and what it does, in the order the kind menu lists the
 // pickable ones. cardkind.ts is what reads it.
 export const KINDS = [
-  {"name":"question","counter":"question","exported":true,"handouts":true,"versioned":true,"marker":"","section":false,"setsBase":false,"game":"","pickable":true},
-  {"name":"theme","counter":"theme","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"si","pickable":true},
-  {"name":"meta","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"#","section":false,"setsBase":true,"game":"","pickable":true},
-  {"name":"heading","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"##","section":true,"setsBase":true,"game":"","pickable":true},
-  {"name":"other","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","pickable":true},
-  {"name":"normal","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","pickable":false},
-  {"name":"test","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","pickable":false},
-  {"name":"handouts_preamble","counter":"","exported":false,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","pickable":false},
-  {"name":"appeal","counter":"","exported":false,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","pickable":false},
+  {"name":"question","counter":"question","exported":true,"handouts":true,"versioned":true,"marker":"","section":false,"setsBase":false,"game":"","ladder":null,"pickable":true},
+  {"name":"theme","counter":"theme","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"si","ladder":["10","20","30","40","50"],"pickable":true},
+  {"name":"troika_theme","counter":"theme","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"troika","ladder":["1","2","3"],"pickable":true},
+  {"name":"battle","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"#B","section":true,"setsBase":false,"game":"brain","ladder":null,"pickable":true},
+  {"name":"meta","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"#","section":false,"setsBase":true,"game":"","ladder":null,"pickable":true},
+  {"name":"heading","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"##","section":true,"setsBase":true,"game":"","ladder":null,"pickable":true},
+  {"name":"other","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","ladder":null,"pickable":true},
+  {"name":"normal","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","ladder":null,"pickable":false},
+  {"name":"test","counter":"","exported":true,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","ladder":null,"pickable":false},
+  {"name":"handouts_preamble","counter":"","exported":false,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","ladder":null,"pickable":false},
+  {"name":"appeal","counter":"","exported":false,"handouts":false,"versioned":false,"marker":"","section":false,"setsBase":false,"game":"","ladder":null,"pickable":false},
 ] as const;
 
 export type KindName = (typeof KINDS)[number]["name"];

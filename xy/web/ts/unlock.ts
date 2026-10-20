@@ -50,11 +50,13 @@ export interface BoardList {
   // The decrypted lists.meta: an appeals list's settings (appeals.ts).
   meta?: string | null;
 }
-// listType is what a list holds as the type pickers spell it: "si" for SI
-// themes, "appeals" for a tournament's appeals, "normal" for anything else (an
-// older or unknown type included).
-export function listType(list: Pick<BoardList, "type">): "si" | "appeals" | "normal" {
-  return list.type === "si" || list.type === "appeals" ? list.type : "normal";
+// listType is what a list holds as the type pickers spell it: "si" or
+// "troika" for themes, "brain" for brain questions, "appeals" for a
+// tournament's appeals, "normal" for anything else (an older or unknown type
+// included).
+const LIST_TYPES = ["si", "troika", "brain", "appeals"] as const;
+export function listType(list: Pick<BoardList, "type">): (typeof LIST_TYPES)[number] | "normal" {
+  return LIST_TYPES.find((t) => t === list.type) ?? "normal";
 }
 // tourCommentFirst is a list's field order, which belongs to its tour: a
 // grouped list follows its group.

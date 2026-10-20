@@ -21,7 +21,7 @@ import { xyTypo } from "./typo.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import { normalizeAlias, xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
-import { forListType, KIND, label as kindLabel, numbered, versioned } from "./cardkind.js";
+import { forListType, isTheme as holdsTheme, KIND, ladder, label as kindLabel, numbered, versioned } from "./cardkind.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import { parseAppeal } from "./appeals.js";
 import { appealHeading, verdictLines, type AppealCard } from "./appealcard.js";
@@ -374,7 +374,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const kind = forListType(list.type);
     // A question opens blank and grows its markers as it is typed; a theme is
     // born as its whole ladder, which is the template an editor fills in.
-    const desc = kind === KIND.theme ? blankTheme(state().defaultAuthor || null) : "";
+    const desc = holdsTheme(kind) ? blankTheme(ladder(kind), state().defaultAuthor || null) : "";
     try {
       const dk = mustDK();
       const res = await verbs.create("createCard", `/api/lists/${list.id}/cards`, {
@@ -422,7 +422,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const c = openCardCard();
     return c ? c.kind : cardKindEl.value || KIND.question;
   }
-  function isTheme(): boolean { return draftKind() === KIND.theme; }
+  function isTheme(): boolean { return holdsTheme(draftKind()); }
   // Both card kinds that hold question fields get the Fields tab; a theme fills it
   // with a ladder of them instead of one.
   function fieldsAvailable(): boolean { return numbered(draftKind()) || isAppeal(); }
@@ -447,7 +447,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     for (const c of state().cards) {
       if (c.kind === KIND.question) add(pick(xyChgk.splitFields(c.desc)));
       // A theme's authors and sources are those of the questions inside it.
-      else if (c.kind === KIND.theme) for (const slot of splitTheme(c.desc).slots) add(pick(slot.fields));
+      else if (holdsTheme(c.kind)) for (const slot of splitTheme(c.desc).slots) add(pick(slot.fields));
     }
     return [...set].sort((a, b) => a.localeCompare(b, "ru"));
   }
@@ -456,7 +456,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function boardAuthors(): string[] {
     const names = new Set(boardFieldValues((f) => f.authors));
     for (const c of state().cards) {
-      if (c.kind !== KIND.theme) continue;
+      if (!holdsTheme(c.kind)) continue;
       const a = (splitTheme(c.desc).author || "").trim();
       if (a) names.add(a);
     }
@@ -985,7 +985,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     markFieldsBaseline(draft.desc, ed.read);
   }
 
-  // ---- SI themes ----
+  // ---- SI and troika themes ----
   // renderThemeFields draws a theme: its head, then one flat block per rung of
   // the ladder, each the ordinary field set under a № head carrying ↑ / ↓ / 🗑.
   // It draws the slots the 4s holds and no others — the creation template writes
@@ -1045,7 +1045,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       box.append(el("div", { class: "card-fields fld-wide" }, ...R.nodes));
     });
 
-    themeAddSlot = (): void => redraw(withSlot(current()));
+    themeAddSlot = (): void => redraw(withSlot(current(), ladder(draftKind())));
 
     for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
     themeReader = (): string => composeTheme(current());

@@ -30,8 +30,9 @@ function exportSource(cards: ReadonlyArray<Pick<ExportCard, "desc"> & { kind?: s
   return cards.filter((c) => exported(c.kind)).map((c) => foldBlankLines(withQuestionMarker(c.kind, withKindMarker(c.kind, xyVersions.composeVersions(c.desc).trim())))).filter(Boolean).join("\n\n") + "\n";
 }
 
-// exportGame is the game a scope exports as: one Theme makes it SI, whatever
-// the List Type says, since a theme's name and author survive only an SI compose.
+// exportGame is the game a scope exports as (cardkind.ts gameOf), whatever the
+// List Type says: a theme's name survives only an SI or troika compose, and a
+// battle's heading only a brain one.
 function exportGame(cards: ReadonlyArray<{ kind?: string }>): string {
   return gameOf(cards);
 }
@@ -160,12 +161,14 @@ function hndtBlock(number: string, handout: Handout, metaText: string | null | u
 // hndtOf is what a list's cards generate: their display numbers and the .hndt
 // document — the tour's preamble, then one block per question card that carries
 // a handout, each under its saved settings — joined with chgksuite's "\n---\n".
+// A brain game has no blocks: it numbers its questions anew in every battle.
 function hndtOf(cards: ReadonlyArray<ExportCard>): { numbers: Array<string | null>; source: string } {
   const numbers = numberQuestionCards(cards);
+  const brain = gameOf(cards) === "brain";
   const preamble = cards.find((c) => c.kind === KIND.handoutsPreamble)?.desc.trim();
   const blocks: string[] = [];
   cards.forEach((c, i) => {
-    if (!carriesHandouts(c.kind)) return;
+    if (brain || !carriesHandouts(c.kind)) return;
     // Version 1's handout, like every other reader outside the card editor. A
     // block per version would print two handouts under one question number, and
     // split-fit names its output by that number — the second would overwrite the

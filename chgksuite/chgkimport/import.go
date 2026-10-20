@@ -61,13 +61,17 @@ var imageExts = map[string]string{
 }
 
 // Parse imports one uploaded file. filename decides the format and gives the
-// package (and image-prefix) its name; game is "" / "chgk" for OD questions and
-// "si" for SI themes, which are read by a different parser off the document's own
-// outline (textparse.ParseSI).
+// package (and image-prefix) its name. game is the --game the package is read
+// as: "" or "chgk" for ChGK questions, "brain", "si" or "troika". A .si4s,
+// .br4s or .tr4s says its own game, as chgksuite's ext_to_game reads it.
 func Parse(filename string, data []byte, game string) (*Result, error) {
 	base := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
-	switch strings.ToLower(filepath.Ext(filename)) {
-	case ".4s", ".si4s":
+	ext := strings.ToLower(filepath.Ext(filename))
+	if g, ok := extGames[ext]; ok {
+		game = g
+	}
+	switch ext {
+	case ".4s", ".si4s", ".br4s", ".tr4s":
 		res := &Result{Name: base, Source: normalizeNewlines(string(data))}
 		return res, validate(res, game)
 	case ".docx":
@@ -82,6 +86,17 @@ func Parse(filename string, data []byte, game string) (*Result, error) {
 		return res, validate(res, game)
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnsupported, filepath.Ext(filename))
+}
+
+// extGames are the extensions that name their game (composer_common.GAME_EXTENSIONS).
+var extGames = map[string]string{".si4s": "si", ".br4s": "brain", ".tr4s": "troika"}
+
+// GameOf is the game a file's extension names, "" for one that names none.
+func GameOf(filename string) string { return extGames[strings.ToLower(filepath.Ext(filename))] }
+
+// Is4s is whether the file is a 4s packet, of any game.
+func Is4s(filename string) bool {
+	return strings.ToLower(filepath.Ext(filename)) == ".4s" || GameOf(filename) != ""
 }
 
 // ParseText turns the plain text of a question package into 4s source: the .docx
@@ -122,36 +137,53 @@ func validate(r *Result, game string) error {
 	return nil
 }
 
-// gameOrDefault maps an empty game onto ChGK, which is what every import was
-// before SI themes existed.
+// gameOrDefault maps a game nobody named, or one we do not know, onto ChGK,
+// which is what every import was before SI themes existed.
 func gameOrDefault(game string) string {
-	if game == "si" {
-		return "si"
+	switch game {
+	case "si", "troika", "brain":
+		return game
 	}
 	return "chgk"
 }
 
+// themed is whether the game is read by the SI or troika parser. Those read
+// the document's outline, so the docx reader marks headings and keeps a
+// numbered list's own start, and every number is written out (NumbersAll):
+// an SI question's number is its point value, and a troika's restarts in
+// every theme.
+func themed(game string) bool { return game == "si" || game == "troika" }
+
+// parseThemed reads an SI or troika package's text.
+func parseThemed(text, game string) string {
+	parse := textparse.ParseSI
+	if game == "troika" {
+		parse = textparse.ParseTroika
+	}
+	return fsource.Compose(parse(text, textparse.SIOptions{}), fsource.NumbersAll)
+}
+
 // parseDocx runs the full chgksuite pipeline: docx → plain text → structure → 4s.
-// SI takes a different route through the same pipeline: its parser reads the
-// document's outline, so the reader marks headings and keeps a numbered list's
-// own start (the point values), and every number is written out (NumbersAll)
-// because a SI question's number IS its point value.
+// A brain package reads as a ChGK one does; its battles are what set it apart,
+// and those the ChGK parser already knows.
 func parseDocx(base string, data []byte, game, language string) (*Result, error) {
+	game = gameOrDefault(game)
 	// chgksuite prefixes extracted image names with the source's basename, so the
 	// (img …) directives and the image names below agree.
 	prefix := strings.ReplaceAll(base, " ", "_") + "_"
-	si := gameOrDefault(game) == "si"
 	text, imgs, err := docxread.ToText(data, docxread.Options{
 		ImagePrefix:       prefix,
-		HeadingMarkers:    si,
-		PreserveListStart: si,
+		HeadingMarkers:    themed(game),
+		PreserveListStart: themed(game),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("read docx: %w", err)
 	}
-	source := fsource.Compose(textparse.Parse(text, textparse.Options{Language: language}), fsource.NumbersDefault)
-	if si {
-		source = fsource.Compose(textparse.ParseSI(text, textparse.SIOptions{}), fsource.NumbersAll)
+	var source string
+	if themed(game) {
+		source = parseThemed(text, game)
+	} else {
+		source = fsource.Compose(textparse.Parse(text, textparse.Options{Language: language}), fsource.NumbersDefault)
 	}
 	res := &Result{Name: base, Source: source}
 	for _, img := range imgs {
@@ -174,8 +206,8 @@ func parseTxt(base string, data []byte, game string) (*Result, error) {
 	}
 	res := &Result{Name: base}
 	switch {
-	case gameOrDefault(game) == "si":
-		res.Source = fsource.Compose(textparse.ParseSI(text, textparse.SIOptions{}), fsource.NumbersAll)
+	case themed(gameOrDefault(game)):
+		res.Source = parseThemed(text, gameOrDefault(game))
 	case textparse.IsDBExport(text):
 		ctx, cancel := context.WithTimeout(context.Background(), dbFetchBudget)
 		defer cancel()

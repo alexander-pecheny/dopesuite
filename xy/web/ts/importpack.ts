@@ -28,7 +28,7 @@ import { xyInstance } from "./instance.js";
 import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board } from "./panels.js";
 import S from "./i18nstrings.js";
-import { numbered } from "./cardkind.js";
+import { KIND, numbered } from "./cardkind.js";
 
 // Quiet time after the last option change before the preview is redrawn.
 const PREVIEW_DEBOUNCE_MS = 200;
@@ -131,7 +131,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     const { file, images } = picked();
     if (!file) { alert(S.import.pack.onePackage()); return; }
     const splitTours = byId<HTMLInputElement>("importSplitTours").checked;
-    const game = byId<HTMLSelectElement>("importGame").value;
+    const game = gameOfImport(file.name, byId<HTMLSelectElement>("importGame").value);
     importPickModal.close();
     const bundle = sniffed ?? await sniffBundle(file);
     if (bundle) {
@@ -141,6 +141,14 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     await importFile(file, images, splitTours, game);
   });
 
+  // gameOfImport is the game a package is read as: the one its extension names
+  // (.si4s, .tr4s, .br4s), or else the reader's pick, whose "normal" is ChGK.
+  function gameOfImport(filename: string, picked: string): string {
+    const ext = /\.(si4s|tr4s|br4s)$/i.exec(filename)?.[1].toLowerCase();
+    if (ext) return { si4s: "si", tr4s: "troika", br4s: "brain" }[ext] ?? "chgk";
+    return picked === "normal" ? "chgk" : picked;
+  }
+
   async function importFile(file: File, images: File[], splitTours: boolean, game: string): Promise<void> {
     if (!xySync.requireOnline(S.import.pack.offline())) return;
     board.setStatus("saving");
@@ -148,9 +156,9 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       const fd = new FormData();
       fd.append("file", file, file.name);
       for (const img of images) fd.append("image", img, img.name);
-      // SI themes are read by a different parser off the document's own outline,
-      // so the choice is the reader's rather than a guess about the file.
-      fd.append("game", game === "si" ? "si" : "chgk");
+      // SI and troika themes are read by a different parser off the document's
+      // own outline, so the choice is the reader's rather than a guess.
+      fd.append("game", game);
       const res = await fetch("/api/import/parse", { method: "POST", credentials: "same-origin", body: fd });
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       const pkg = (await res.json()) as ImportPkg;
@@ -172,36 +180,46 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // blank-line-separated block. Each card's kind comes from its leading marker.
   function importCards(source: string, game: string): ImportCard[] {
     const blocks = source.split(/\n[ \t]*\n/).map((b) => b.trim()).filter(Boolean);
-    // A SI package is one card per theme, not per question: a "#T …" block opens
-    // one and every block after it belongs to it until the next.
-    const joined = game === "si" ? joinThemes(blocks) : blocks;
-    return joined.map((desc, i) => ({ id: -(i + 1), kind: importKind(desc), desc }));
+    // An SI or troika package is one card per theme, not per question.
+    const joined = game === "si" || game === "troika" ? joinThemes(blocks) : blocks;
+    return joined.map((desc, i) => ({ id: -(i + 1), kind: importKind(desc, game), desc }));
   }
 
-  // joinThemes folds a SI package's blocks back into whole themes. Blocks before
-  // the first "#T" are the package's own preamble and stay one card each.
+  // joinThemes folds a themed package's blocks back into whole themes: a "#T …"
+  // block opens one, and its author, its comment and its rungs belong to it. A
+  // battle, a round or a section closes it, and so does a note once the theme
+  // has its rungs: a note to the host above the first question is the theme's,
+  // one below the last is about what comes next. Blocks before the first "#T"
+  // are the package's own preamble and stay one card each.
   function joinThemes(blocks: string[]): string[] {
     const out: string[] = [];
-    let open = false;
+    let open = false, laddered = false;
     for (const b of blocks) {
-      const opensTheme = xyChgk.parseBlocks(b).some((x) => x.type === "theme");
-      if (opensTheme) { out.push(b); open = true; continue; }
-      if (open) out[out.length - 1] += "\n\n" + b;
-      else out.push(b);
+      const types = xyChgk.parseBlocks(b).map((x) => x.type);
+      if (types.includes("theme")) { out.push(b); open = true; laddered = false; continue; }
+      if (open && !CLOSES_THEME.has(types[0]) && !(laddered && types[0] === "meta")) {
+        out[out.length - 1] += "\n\n" + b;
+        laddered ||= types.includes("number");
+        continue;
+      }
+      open = false;
+      out.push(b);
     }
     return out;
   }
+  const CLOSES_THEME = new Set(["battle", "round", "section", "heading", "ljheading", "editor", "date"]);
 
-  // importKind maps a 4s block to an xy card kind. A question is recognised by its
-  // fields, not by its first line: compose_4s puts the "№ N" directive ahead of the
-  // "? …" marker, and an unmarked block ("pre") is question text whose author
-  // didn't prefix it.
-  function importKind(desc: string): string {
-    const blocks = xyChgk.parseBlocks(desc);
-    if (blocks.some((b) => b.type === "theme")) return "theme";
-    if (blocks.some((b) => b.type === "question" || b.type === "answer" || b.type === "pre")) return "question";
-    if (blocks.some((b) => b.type === "heading" || b.type === "ljheading")) return "heading";
-    return "meta";
+  // importKind maps a 4s block to an xy card kind (chgksuite/listexport's
+  // ImportKind). A question is recognised by its fields, not by its first line:
+  // compose_4s puts the "№ N" directive ahead of the "? …" marker, and an
+  // unmarked block ("pre") is question text whose author didn't prefix it.
+  function importKind(desc: string, game: string): string {
+    const types = new Set(xyChgk.parseBlocks(desc).map((b) => b.type));
+    if (types.has("theme")) return game === "troika" ? KIND.troikaTheme : KIND.theme;
+    if (types.has("question") || types.has("answer") || types.has("pre")) return KIND.question;
+    if (types.has("battle")) return KIND.battle;
+    if (types.has("section") || types.has("heading") || types.has("ljheading")) return KIND.heading;
+    return KIND.meta;
   }
 
   // importImgMap turns the package's base64 images into object URLs so the preview
@@ -313,7 +331,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     board.setStatus("saving");
     // The lists this makes are typed by what was imported, so the add-card
     // button goes on making the right kind of card afterwards.
-    const listType = game === "si" ? "si" : "normal";
+    const listType = game === "chgk" ? "normal" : game;
     const byName = new Map((images || []).map((i): [string, ImportImage] => [i.name, i]));
     let done = 0, attached = 0;
     const failed: string[] = []; // images the server refused — the card would keep a dead (img …)

@@ -563,9 +563,9 @@
 }
 /* A card that isn't a question isn't a tile: no fill, so the list shows through
    and the eye can tell scaffolding (headings, meta) from the questions. */
-.kcard-heading { background: transparent; padding-bottom: var(--space-1); }
-.kcard-heading:hover { background: transparent; }
-.kcard-heading .kcard-title {
+.kcard-heading, .kcard-battle { background: transparent; padding-bottom: var(--space-1); }
+.kcard-heading:hover, .kcard-battle:hover { background: transparent; }
+.kcard-heading .kcard-title, .kcard-battle .kcard-title {
   font-weight: var(--fw-bold);
   letter-spacing: 0.02em;
   color: var(--muted);

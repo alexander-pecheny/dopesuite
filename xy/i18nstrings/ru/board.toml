@@ -101,6 +101,10 @@ kind_label = "Тип карточки"
 kind_question = "Вопрос"
 # A СИ theme: one card holding a ladder of questions, each worth its № in points.
 kind_theme = "Тема СИ"
+# A troika theme: an SI theme whose ladder is the three questions 1, 2, 3.
+kind_troika_theme = "Тема тройки"
+# A battle of a brain, troika or SI game: a heading that restarts the count.
+kind_battle = "Бой"
 kind_meta = "Метаинформация"
 kind_heading = "Заголовок"
 kind_other = "Другое"
@@ -900,6 +904,8 @@ create = "Создать список"
 type_label = "Что в списке"
 type_chgk = "Вопросы ОД"
 type_si = "Темы СИ"
+type_troika = "Темы тройки"
+type_brain = "Вопросы брейна"
 # The ⋯ entry and the modal it opens: the list's type and its tour's field order.
 settings = "Настройки списка…"
 settings_title = "Настройки списка"

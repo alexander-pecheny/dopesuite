@@ -20,7 +20,7 @@ const cards = [
   { id: 3, listId: 1, kind: "question", rank: "a2", desc: "? [Раздаточный материал: текст]\nВопрос\n! В", handoutMeta: "columns: 2" },
 ];
 const list = { id: 1, title: "Тур 1", rank: "a", groupId: null };
-const scope = { list, grouped: false, group: null, lists: [list], cards, title: "Тур 1" };
+const scope = { list, grouped: false, group: null, lists: [list], cards, title: "Тур 1", game: "chgk" };
 
 test("opening writes the .hndt of the scope into the editor, stages its images once and renders the preview; closing persists edited settings", async () => {
   const board = fakeBoard({ name: "Доска", cards });

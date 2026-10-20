@@ -10,8 +10,8 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
 )
 
-// docxFixtures are every chgk-game .docx in chgksuite's corpus. The si/troika
-// ones are excluded (different parser, out of scope for xy), as is
+// docxFixtures are every chgk-game .docx in chgksuite's corpus. The SI and
+// troika ones have tests of their own below, and left out altogether is
 // octo2021_khmelkov.docx, whose canon is produced with --preserve_formatting —
 // a flag the import path deliberately doesn't expose. (docxread's own test does
 // cover that flag.)
@@ -52,6 +52,44 @@ func TestSIDocxCanonParity(t *testing.T) {
 				t.Errorf("source mismatch:\n%s", firstDiff(want, got))
 			}
 		})
+	}
+}
+
+// gameFixtures are chgksuite's brain and troika packages, each read as the game
+// its settings.json gives it: a troika by its own parser, a brain one by the
+// ChGK parser, which already knows its battles.
+var gameFixtures = []struct{ file, game string }{
+	{"nesova2025_troika.docx", "troika"},
+	{"bkd_2021_all.txt", "brain"},
+	{"kinsbf_day_1.txt.encrypted", "brain"},
+}
+
+func TestGameCanonParity(t *testing.T) {
+	for _, f := range gameFixtures {
+		t.Run(f.file, func(t *testing.T) {
+			want := corpus.Canon(t, f.file)
+			res, err := Parse(corpus.Name(f.file), corpus.Read(t, f.file), f.game)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if got := res.Source; got != want {
+				t.Errorf("source mismatch:\n%s", firstDiff(want, got))
+			}
+		})
+	}
+}
+
+// A packet saved by chgksuite names its game in its extension, whatever the
+// reader picked.
+func TestExtensionNamesTheGame(t *testing.T) {
+	src := "#T Тема\n\n№ 1\n? Раз\n! Один\n"
+	for name, want := range map[string]string{"a.tr4s": "troika", "a.br4s": "brain", "a.SI4S": "si", "a.4s": "", "a.docx": ""} {
+		if got := GameOf(name); got != want {
+			t.Errorf("GameOf(%q) = %q, want %q", name, got, want)
+		}
+	}
+	if _, err := Parse("a.tr4s", []byte(src), "chgk"); err != nil {
+		t.Errorf("Parse(a.tr4s): %v", err)
 	}
 }
 

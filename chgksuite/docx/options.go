@@ -40,6 +40,13 @@ type Options struct {
 // siMode reports whether the game lays a package out as SI does.
 func (o Options) siMode() bool { return o.Game == "si" || o.Game == "troika" }
 
+// heads reports whether the game prints a battle, round or theme line as a
+// heading. A brain game prints its battles, which chgksuite drops: without
+// them its questions read 1 to 5 over and over with nothing in between.
+func (o Options) heads(elType string) bool {
+	return o.siMode() || (elType == "battle" && o.Game == "brain")
+}
+
 // Spoilers says how the answers are hidden from a reader of the printout.
 type Spoilers string
 

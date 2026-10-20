@@ -8,7 +8,7 @@
 
 import { MARKERS, type MarkerType } from "./markers_gen.js";
 import S from "./i18nstrings.js";
-import { counter, KIND, restartsThemes, setsBase } from "./cardkind.js";
+import { counter, gameOf, isTheme, KIND, restartsThemes, setsBase } from "./cardkind.js";
 export type { MarkerType };
 
 // The block types produced by the line-leading markers, plus "pre" for leading
@@ -210,10 +210,30 @@ function titleSource(kind: string, desc: string | null | undefined, mode: string
   if (kind === KIND.question) return questionText(desc);
   // A тема is shown by its name; the questions inside it are the card's content,
   // not its title.
-  if (kind === KIND.theme) return blockText(desc, "theme");
+  if (isTheme(kind)) return themeTitle(blockText(desc, "theme"));
   if (kind === KIND.meta) return blockText(desc, "meta");
-  if (kind === KIND.heading) return blockText(desc, "heading");
+  // A Заголовок stands for a `##` section, though a `###` one is a heading too.
+  if (kind === KIND.heading) return blockText(desc, parseBlocks(desc).some((b) => b.type === "section") ? "section" : "heading");
+  if (kind === KIND.battle) return blockText(desc, "battle");
   return (desc || "").trim();
+}
+
+// NUMBERED_THEME is fsource's reThemeLabel: a theme line that carries its own
+// number, «Тема 5 (2 балла). Звуки», as a troika's do. chgksuite prints such a
+// line as it is and gives any other «Тема N. » in front.
+const NUMBERED_THEME = /^тема\s+\d+(\s*\([^)]+\))?\.\s*(.+)/i;
+
+// themeLabel is the heading a theme is printed under, as numberThemes writes it.
+export function themeLabel(name: string, number: string): string {
+  return NUMBERED_THEME.test(name.trim()) ? name.trim() : S.fsource.theme.defaultLabel(number, name);
+}
+
+// themeTitle is a theme's name without the number its line may carry, which
+// the board puts in front of it anyway: «Звуки (2 балла)».
+function themeTitle(name: string): string {
+  const m = NUMBERED_THEME.exec(name.trim());
+  if (!m) return name;
+  return m[1] ? `${m[2]} ${m[1].trim()}` : m[2];
 }
 
 // isZeroNumber mirrors chgksuite's is_zero: a number that starts with "0" or
@@ -254,8 +274,10 @@ function baseReset(desc: string, next: number): number {
 export function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<string | null> {
   let next = 1;
   // Темы СИ run a sequence of their own — «Тема 3» is the third theme, whatever
-  // ЧГК questions sit beside it — and a Заголовок restarts it, mirroring
-  // chgksuite's reset on a battle or a section (fsource.numberThemes).
+  // ЧГК questions sit beside it — and a Заголовок or a Бой restarts it, mirroring
+  // chgksuite's reset on a battle or a section (fsource.numberThemes). In a
+  // brain game those restart the questions too, as parse_4s does.
+  const brain = gameOf(cards) === "brain";
   let nextTheme = 1;
   const out: Array<string | null> = [];
   for (const c of cards) {
@@ -265,7 +287,10 @@ export function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<strin
       nextTheme++;
       continue;
     }
-    if (restartsThemes(c.kind)) nextTheme = 1;
+    if (restartsThemes(c.kind)) {
+      nextTheme = 1;
+      if (brain) next = 1;
+    }
     if (seq === "question") {
       const r = questionNumber(c.desc, next);
       next = r.next;
@@ -1369,7 +1394,7 @@ export function composeFields(f: Partial<CardFields>): string {
 
 export const xyChgk = {
   parseBlocks, splitMarker, startsBlock, fieldOrder, opensQuestion, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
-  isZeroNumber, numberQuestionCards,
+  isZeroNumber, numberQuestionCards, themeLabel,
   removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,

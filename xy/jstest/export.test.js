@@ -33,7 +33,7 @@ const cards = [
   { id: 2, listId: 1, kind: "question", rank: "b", desc: "  " },
   { id: 3, listId: 1, kind: "question", rank: "c", desc: "? Два (img pic.png)\n! Б" },
 ];
-const scope = { list: { id: 1, title: "Тур 1", rank: "a", groupId: null }, grouped: false, group: null, lists: [], cards, title: "Тур 1" };
+const scope = { list: { id: 1, title: "Тур 1", rank: "a", groupId: null }, grouped: false, group: null, lists: [], cards, title: "Тур 1", game: "chgk" };
 
 test("offline, only the .4s is offered — the dropdown drops the rest and moves onto it", async () => {
   online = false;

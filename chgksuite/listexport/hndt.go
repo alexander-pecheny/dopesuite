@@ -100,9 +100,12 @@ func unbracketedHandout(q string) (handout, bool) {
 }
 
 // hndt is the tour's preamble, then one block per question Card with a
-// Handout, each under its saved settings or the default.
+// Handout, each under its saved settings or the default. A brain game has no
+// blocks: it numbers its questions anew in every battle, and the generator
+// keys a handout by its question's number.
 func hndt(cards []Card) string {
 	numbers := numberCards(cards)
+	brain := game(cards) == cardkind.GameBrain
 	var blocks []string
 	for _, c := range cards {
 		if c.Kind == cardkind.HandoutsPreamble {
@@ -113,7 +116,7 @@ func hndt(cards []Card) string {
 		}
 	}
 	for i, c := range cards {
-		if !cardkind.Of(c.Kind).Handouts {
+		if brain || !cardkind.Of(c.Kind).Handouts {
 			continue
 		}
 		// Version 1's handout only: a block per Version would print two
@@ -139,7 +142,8 @@ func hndt(cards []Card) string {
 // (chgk.ts numberQuestionCards). Questions count 1, 2, 3…; a `№ N` sets an
 // explicit number and a `№№ N` resets the running base, as in chgksuite. A
 // heading or meta Card has no number, but its `№№ N` resets the base for the
-// questions after it. Themes run a count of their own, which a heading restarts.
+// questions after it. Themes run a count of their own, which a heading or a
+// battle restarts.
 func numberCards(cards []Card) []string {
 	next, nextTheme := 1, 1
 	out := make([]string, len(cards))

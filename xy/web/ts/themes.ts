@@ -1,9 +1,11 @@
-// themes.ts — the SI theme algebra, the sibling of versions.ts.
+// themes.ts — the theme algebra, the sibling of versions.ts.
 //
-// A Card typed «An SI theme» holds one theme: a head (`#T` name, an optional
-// theme-level `@` author and `/` comment) and a LADDER of questions, each opened
-// by its own `№` line whose value is its point value. The ladder is the theme's
-// order: slot 1 is what a tester sees first, and it is worth what its `№` says.
+// A Card typed as an SI or a troika theme holds one theme: a head (`#T` name, an
+// optional theme-level `@` author and `/` comment) and a LADDER of questions,
+// each opened by its own `№` line: the point value in SI, the place in the
+// theme in a troika. The ladder is the theme's order: slot 1 is what a tester
+// sees first. Which values a new theme is written with is its kind's
+// (cardkind.ts ladder), and every function that makes rungs is handed it.
 //
 // Two rules everything else follows from:
 //   • the ladder never moves. Reordering swaps two slots' CONTENT between their
@@ -21,7 +23,7 @@ import { MARKERS } from "./markers_gen.js";
 import S from "./i18nstrings.js";
 
 export interface ThemeSlot {
-  // The `№` value: "10".."50" on the standard ladder, "reserve1" past it, and
+  // The `№` value: a rung of the kind's ladder, "reserve1" past it, and
   // whatever an import brought otherwise. Never derived — always the 4s's own.
   number: string;
   fields: CardFields;
@@ -35,9 +37,6 @@ export interface Theme {
   headExtra: string | null;
   slots: ThemeSlot[];
 }
-
-// SI_LADDER is what a full theme is worth, and the order «+ question» fills.
-export const SI_LADDER = ["10", "20", "30", "40", "50"] as const;
 
 const MARKER_OF: Partial<Record<string, string>> = (() => {
   const m: Partial<Record<string, string>> = {};
@@ -138,11 +137,11 @@ function marked(marker: string, value: string): string {
   return v ? `${marker} ${v}` : marker;
 }
 
-// nextNumber is what «+ question» appends: the first unused rung of the standard
+// nextNumber is what «+ question» appends: the first unused rung of the
 // ladder, then reserve1, reserve2… Never renumbers what is already there.
-export function nextNumber(slots: ReadonlyArray<ThemeSlot>): string {
+export function nextNumber(slots: ReadonlyArray<ThemeSlot>, ladder: ReadonlyArray<string>): string {
   const taken = new Set(slots.map((s) => s.number.trim()));
-  for (const n of SI_LADDER) if (!taken.has(n)) return n;
+  for (const n of ladder) if (!taken.has(n)) return n;
   for (let i = 1; ; i++) {
     const n = S.fsource.theme.reserveNumber(String(i));
     if (!taken.has(n)) return n;
@@ -152,17 +151,17 @@ export function nextNumber(slots: ReadonlyArray<ThemeSlot>): string {
 // withSlot appends a rung: the next free point value, or the next reserve once
 // the ladder is full. A new slot is blank but real — bare `?` and `!` hold its
 // place in the ladder, so the 50 can be written before the 10.
-export function withSlot(t: Theme): Theme {
-  return { ...t, slots: [...t.slots, { number: nextNumber(t.slots), fields: splitFields("?\n!") }] };
+export function withSlot(t: Theme, ladder: ReadonlyArray<string>): Theme {
+  return { ...t, slots: [...t.slots, { number: nextNumber(t.slots, ladder), fields: splitFields("?\n!") }] };
 }
 
-// blankTheme is what the add-card button makes in a list typed SI: a nameless
-// theme whose ladder is already the full 10–50, every rung blank. The blanks are
+// blankTheme is what the add-card button makes in a list typed SI or troika: a
+// nameless theme whose ladder is already whole, every rung blank. The blanks are
 // real 4s — that is what lets the 50 be written before the 10 and survive a
 // reload, and what an export ships as the visibly unfinished theme it is.
-export function blankTheme(author: string | null): string {
+export function blankTheme(ladder: ReadonlyArray<string>, author: string | null): string {
   let t: Theme = { name: "", author, comment: null, headExtra: null, slots: [] };
-  for (let i = 0; i < SI_LADDER.length; i++) t = withSlot(t);
+  for (let i = 0; i < ladder.length; i++) t = withSlot(t, ladder);
   return composeTheme(t);
 }
 
@@ -198,13 +197,13 @@ export function themeName(desc: string | null | undefined): string {
 }
 
 // progress is the «3/5» a theme card wears on the board: how many of its slots
-// carry a question, out of how many it has. A theme with more than five slots
-// reports its own total, reserve included, rather than pretending to five.
-export function progress(desc: string | null | undefined): { filled: number; total: number } {
+// carry a question, out of how many it has. A theme with more slots than its
+// ladder reports its own total, reserve included, rather than pretending to five.
+export function progress(desc: string | null | undefined, ladder: ReadonlyArray<string>): { filled: number; total: number } {
   const slots = splitTheme(desc).slots;
-  return { filled: slots.filter(isFilled).length, total: Math.max(slots.length, SI_LADDER.length) };
+  return { filled: slots.filter(isFilled).length, total: Math.max(slots.length, ladder.length) };
 }
 
 export const xyThemes = {
-  splitTheme, composeTheme, nextNumber, withSlot, blankTheme, swapSlots, isFilled, authorsOf, themeName, progress, SI_LADDER,
+  splitTheme, composeTheme, nextNumber, withSlot, blankTheme, swapSlots, isFilled, authorsOf, themeName, progress,
 };

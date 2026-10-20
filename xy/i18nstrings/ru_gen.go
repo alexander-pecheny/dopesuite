@@ -321,12 +321,14 @@ var RU = Strings{
 			ExcerptsView:        func() string { return "Смотреть" },
 			FeedLabel:           func() string { return "Лента " },
 			HandoutTitle:        func() string { return "Раздаточный материал" },
+			KindBattle:          func() string { return "Бой" },
 			KindHeading:         func() string { return "Заголовок" },
 			KindLabel:           func() string { return "Тип карточки" },
 			KindMeta:            func() string { return "Метаинформация" },
 			KindOther:           func() string { return "Другое" },
 			KindQuestion:        func() string { return "Вопрос" },
 			KindTheme:           func() string { return "Тема СИ" },
+			KindTroikaTheme:     func() string { return "Тема тройки" },
 			LabelAdd:            func() string { return "Добавить метку…" },
 			LinkLabel:           func() string { return "Ссылка на карточку" },
 			LinkTitle:           func() string { return "Скопировать прямую ссылку на карточку" },
@@ -752,13 +754,15 @@ var RU = Strings{
 			OrderLabel:    func() string { return "Порядок полей" },
 			Settings:      func() string { return "Настройки списка…" },
 			SettingsTitle: func() string { return "Настройки списка" },
+			TypeBrain:     func() string { return "Вопросы брейна" },
 			TypeChgk:      func() string { return "Вопросы ОД" },
 			TypeHint: func() string {
 				return "Тип решает, какую карточку создаёт кнопка «Добавить карточку». На уже созданные карточки не влияет."
 			},
-			TypeLabel: func() string { return "Что в списке" },
-			TypeSi:    func() string { return "Темы СИ" },
-			Untitled:  func() string { return "(без названия)" },
+			TypeLabel:  func() string { return "Что в списке" },
+			TypeSi:     func() string { return "Темы СИ" },
+			TypeTroika: func() string { return "Темы тройки" },
+			Untitled:   func() string { return "(без названия)" },
 		},
 		Listsmanage: BoardListsmanageStrings{
 			Drag:          func() string { return "Перетащить" },
@@ -1838,14 +1842,14 @@ var RU = Strings{
 			LabelGrouped: func() string { return "Экспорт группы" },
 		},
 		Notes: ExportNotesStrings{
+			GameFormats: func() string {
+				return "Такой пакет пока выгружается только в 4s, .docx и .pdf: остальные форматы теряют заголовки тем и боёв."
+			},
 			NoHandouts: func() string {
 				return "В списке нет вопросов с раздаточным материалом."
 			},
 			Offline: func() string {
 				return "Офлайн: доступен только .4s, без изображений."
-			},
-			SiFormats: func() string {
-				return "Темы СИ пока умеют только .si4s, .docx и .pdf — остальные форматы теряют заголовки тем."
 			},
 		},
 		Run: ExportRunStrings{

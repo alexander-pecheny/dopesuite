@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/docx"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
@@ -240,8 +241,13 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 
 // fourSExt is the 4s extension the game is recognised by (composer_common.ext_to_game).
 func fourSExt(game string) string {
-	if game == "si" {
+	switch game {
+	case cardkind.GameSI:
 		return ".si4s"
+	case cardkind.GameTroika:
+		return ".tr4s"
+	case cardkind.GameBrain:
+		return ".br4s"
 	}
 	return ".4s"
 }

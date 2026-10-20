@@ -1,25 +1,32 @@
 package listexport
 
-import "code.pecheny.me/pecheny/dopesuite/chgksuite/inline"
+import (
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/inline"
+)
 
 // ImportKind is the Card Kind an imported 4s block becomes (importpack.ts
 // importKind). A question is recognised by its fields, not its first line:
 // compose_4s puts "№ N" ahead of "? …", and unmarked text is a question whose
-// author did not mark it.
-func ImportKind(desc string) string {
+// author did not mark it. A theme is the kind of theme the game writes.
+func ImportKind(desc, game string) string {
 	has := map[string]bool{}
 	for _, b := range parseBlocks(desc) {
 		has[b.kind] = true
 	}
 	switch {
+	case has["theme"] && game == cardkind.GameTroika:
+		return cardkind.TroikaTheme
 	case has["theme"]:
-		return "theme"
+		return cardkind.Theme
 	case has["question"] || has["answer"] || has["pre"]:
-		return "question"
-	case has["heading"] || has["ljheading"]:
-		return "heading"
+		return cardkind.Question
+	case has["battle"]:
+		return cardkind.Battle
+	case has["section"] || has["heading"] || has["ljheading"]:
+		return cardkind.Heading
 	}
-	return "meta"
+	return cardkind.Meta
 }
 
 // ImageRefs are the pictures desc's (img …) directives name, each once, in

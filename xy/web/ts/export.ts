@@ -24,24 +24,27 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   // The export modal's formats, in the order they are offered — the same
   // order in the one-format dropdown and in the zip's tick boxes. `server` marks
   // the ones that need the server to render, so offline can disable exactly those.
-  // `si: false` marks a format that cannot yet set a SI package: its composer
-  // drops #T/#B/#R outright, so it would hand back a flat run of questions with
-  // no theme headings and say nothing about it. Offered on a ChGK tour, greyed
-  // out on a SI one — the same mechanism offline uses on the server formats.
+  // `everyGame: false` marks a format that can set only a ChGK tour: its
+  // composer drops #T/#B/#R outright, so an SI, troika or brain package would
+  // come back as a flat run of questions with no theme or battle headings, and
+  // nothing would say so. Greyed out on such a tour — the same mechanism
+  // offline uses on the server formats.
   const EXPORT_FORMATS = [
-    { key: "4s", box: "exportFmt4s", server: false, si: true },
-    { key: "docx", box: "exportFmtDocx", server: true, si: true },
-    { key: "docx_screen", box: "exportFmtDocxScreen", server: true, si: true },
-    { key: "docx_spoilers", box: "exportFmtDocxSpoilers", server: true, si: true },
-    { key: "pdf", box: "exportFmtPdf", server: true, si: true },
-    { key: "pdf_mobile", box: "exportFmtPdfMobile", server: true, si: true },
-    { key: "pptx", box: "exportFmtPptx", server: true, si: false },
-    { key: "openquiz", box: "exportFmtOpenquiz", server: true, si: false },
-    { key: "handouts", box: "exportFmtHandouts", server: true, si: false },
+    { key: "4s", box: "exportFmt4s", server: false, everyGame: true },
+    { key: "docx", box: "exportFmtDocx", server: true, everyGame: true },
+    { key: "docx_screen", box: "exportFmtDocxScreen", server: true, everyGame: true },
+    { key: "docx_spoilers", box: "exportFmtDocxSpoilers", server: true, everyGame: true },
+    { key: "pdf", box: "exportFmtPdf", server: true, everyGame: true },
+    { key: "pdf_mobile", box: "exportFmtPdfMobile", server: true, everyGame: true },
+    { key: "pptx", box: "exportFmtPptx", server: true, everyGame: false },
+    { key: "openquiz", box: "exportFmtOpenquiz", server: true, everyGame: false },
+    { key: "handouts", box: "exportFmtHandouts", server: true, everyGame: false },
     // Telegram publishes rather than downloads, so it cannot join a zip of
     // files: it is offered in the dropdown and has no tick box of its own.
-    { key: "telegram", box: "", server: true, si: false },
+    { key: "telegram", box: "", server: true, everyGame: false },
   ] as const;
+  // The .4s extension chgksuite's CLI reads each game back by (ext_to_game).
+  const FOUR_S_EXT: Record<string, string> = { si: ".si4s", troika: ".tr4s", brain: ".br4s" };
 
   // The .docx and .pptx settings: chgksuite's compose switches, each sent as the
   // form field the server reads (exportopts.go). A checkbox sends "1" or "0",
@@ -145,9 +148,9 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     // Offline everything but the .4s is unreachable: the other formats render
     // server-side, and even the .4s ships without its images (they are fetched).
     const offline = !xySync.isOnline();
-    const si = scope.game === "si";
+    const chgk = scope.game === "chgk";
     unavailable = new Set(EXPORT_FORMATS
-      .filter((f) => (offline && f.server) || (si && !f.si) || (f.key === "handouts" && !hndt.trim()))
+      .filter((f) => (offline && f.server) || (!chgk && !f.everyGame) || (f.key === "handouts" && !hndt.trim()))
       .map((f) => f.key));
     for (const f of EXPORT_FORMATS) {
       if (!f.box) continue;
@@ -162,7 +165,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     if (unavailable.has(one.value)) one.value = EXPORT_FORMATS.find((f) => !unavailable.has(f.key))?.key ?? "";
     const notes: string[] = [];
     if (offline) notes.push(S.export.notes.offline());
-    if (si) notes.push(S.export.notes.siFormats());
+    if (!chgk) notes.push(S.export.notes.gameFormats());
     else if (!hndt.trim()) notes.push(S.export.notes.noHandouts());
     syncExportForm();
     exportModal.open({ onClose: () => { exportCtx = null; } });
@@ -203,7 +206,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     const wantsImages = formats.includes("4s") && wanted.size > 0;
 
     if (formats.length === 1 && formats[0] === "4s" && !wantsImages) {
-      downloadBlob(new Blob([source], { type: "text/plain;charset=utf-8" }), `${title}${game === "si" ? ".si4s" : ".4s"}`);
+      downloadBlob(new Blob([source], { type: "text/plain;charset=utf-8" }), `${title}${FOUR_S_EXT[game] ?? ".4s"}`);
       exportModal.close();
       return;
     }

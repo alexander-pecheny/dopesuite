@@ -593,5 +593,56 @@
   "source": "> (img foto.png)\n? Что тут?\n! х\n",
   "game": "chgk",
   "hndt": "for_question: 1\ncolumns: 3\n\nimage: foto.png"
+ },
+ {
+  "name": "a plain battle card around questions makes a brain game with no .hndt",
+  "cards": [
+   {
+    "id": 1001,
+    "kind": "battle",
+    "desc": "Бой 1"
+   },
+   {
+    "id": 1002,
+    "kind": "question",
+    "desc": "[Раздаточный материал: ч]\n? Вопрос раз\n! Ответ"
+   },
+   {
+    "id": 1003,
+    "kind": "battle",
+    "desc": "#B Бой 2"
+   },
+   {
+    "id": 1004,
+    "kind": "question",
+    "desc": "? Вопрос два\n! Ответ"
+   }
+  ],
+  "source": "#B Бой 1\n\n[Раздаточный материал: ч]\n? Вопрос раз\n! Ответ\n\n#B Бой 2\n\n? Вопрос два\n! Ответ\n",
+  "game": "brain",
+  "hndt": ""
+ },
+ {
+  "name": "a troika theme under a battle makes a troika game",
+  "cards": [
+   {
+    "id": 1005,
+    "kind": "heading",
+    "desc": "Групповой этап 1"
+   },
+   {
+    "id": 1006,
+    "kind": "battle",
+    "desc": "Бой 1"
+   },
+   {
+    "id": 1007,
+    "kind": "troika_theme",
+    "desc": "#T Тема 1. Числа\n\n@ Автор\n\n№ 1\n? Раз\n! Один\n\n№ 2\nДва\n! Два\n\n№ 3\n? Три\n! Три"
+   }
+  ],
+  "source": "## Групповой этап 1\n\n#B Бой 1\n\n#T Тема 1. Числа\n@ Автор\n\n№ 1\n? Раз\n! Один\n\n№ 2\n? Два\n! Два\n\n№ 3\n? Три\n! Три\n",
+  "game": "troika",
+  "hndt": ""
  }
 ]

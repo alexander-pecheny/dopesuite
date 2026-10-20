@@ -580,11 +580,11 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     label: (scope) => scope.grouped ? S.board.handouts.menuGroup() : S.board.handouts.title(),
     // Handouts are the exception, not the rule: a tour without one has nothing
     // for this panel to open, and the row would only say so after the click.
-    // A SI tour has nothing for it either: the generator keys a question's
-    // settings by its number, and every theme has a № 10. The inline
-    // «[handout: …]» still reaches the .docx and the .pdf; it is
-    // the PDF generation that is not modelled at this grain yet.
-    offered: (scope) => scope.game !== "si" && xyListExport.hndtOf(scope.cards).source.trim() !== "",
+    // Only a ChGK tour has them: the generator keys a question's settings by
+    // its number, every SI theme has a № 10, and a brain game counts anew in
+    // every battle. The inline «[handout: …]» still reaches the .docx and the
+    // .pdf; it is the PDF generation that is not modelled at this grain yet.
+    offered: (scope) => scope.game === "chgk" && xyListExport.hndtOf(scope.cards).source.trim() !== "",
     open: openHandouts,
   };
 }

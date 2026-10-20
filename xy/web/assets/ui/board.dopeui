@@ -65,6 +65,8 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       selectfield id="cardKind" compact aria-label=@board.card.kind_label
         option value="question" @board.card.kind_question
         option value="theme" @board.card.kind_theme
+        option value="troika_theme" @board.card.kind_troika_theme
+        option value="battle" @board.card.kind_battle
         option value="meta" @board.card.kind_meta
         option value="heading" @board.card.kind_heading
         option value="other" @board.card.kind_other
@@ -386,11 +388,13 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
   modal id="importPickOverlay" label=@board.importpick.title title=@board.importpick.title
     form id="importPickForm" dir="col"
       hint id="importPickHint" @board.importpick.hint
-      filefield id="importFile" accept=".4s,.si4s,.zip,.docx,.txt,image/*" multiple required
+      filefield id="importFile" accept=".4s,.si4s,.tr4s,.br4s,.zip,.docx,.txt,image/*" multiple required
       hint id="importPickWhat"
       selectfield id="importGame" title=@board.list.type_label
         option value="normal" @board.list.type_chgk
         option value="si" @board.list.type_si
+        option value="troika" @board.list.type_troika
+        option value="brain" @board.list.type_brain
       checkbox id="importSplitTours" title=@board.importpick.split_title @board.importpick.split_label
       row gap="sm" wrap
         button submit @board.importpick.submit
@@ -500,6 +504,8 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         selectfield id="listTypeSelect"
           option value="normal" @board.list.type_chgk
           option value="si" @board.list.type_si
+          option value="troika" @board.list.type_troika
+          option value="brain" @board.list.type_brain
       hint @board.list.type_hint
       field label=@board.list.order_label
         selectfield id="listOrderSelect"
@@ -520,6 +526,8 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         selectfield id="addListType"
           option value="normal" @board.list.type_chgk
           option value="si" @board.list.type_si
+          option value="troika" @board.list.type_troika
+          option value="brain" @board.list.type_brain
           option value="appeals" @appeals.list.type
       field label=@board.list.add_where
         radio id="addListAfter" name="addListWhere" value="after" checked @board.list.add_after

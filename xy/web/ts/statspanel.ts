@@ -130,7 +130,7 @@ export function createStatsPanel(board: Board, transfer: Transfer): ListPanel {
     id: "stats", menu: "list", icon: "percent",
     label: (scope) => scope.grouped ? S.board.stats.labelGrouped() : S.board.stats.label(),
     title: S.board.stats.menuTitle(),
-    offered: (scope) => scope.game !== "si" && statsQuestions(scope).length > 0,
+    offered: (scope) => scope.game === "chgk" && statsQuestions(scope).length > 0,
     open,
   };
 }

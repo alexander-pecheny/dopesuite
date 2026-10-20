@@ -74,7 +74,7 @@ cmd/chgksuite/         the Go side of chgksuite's own CLI over the packages belo
                        typst along (-tags wasmtypst, 49 MB) for a machine that has none.
                        Nothing in xy uses it; see ../chgksuite_go_rewrite.md
 listexport/            what a List exports as: Assemble(cards) → the 4s (Versions folded, kind
-                       markers, blank lines as (LINEBREAK)), the game (a Theme makes it SI) and
+                       markers, blank lines as (LINEBREAK)), the game (a theme makes it SI or troika, a battle brain) and
                        the .hndt (preamble + one block per question with a Handout; the label
                        must open an unbracketed one — xy's rule, not handout.Generate's). The
                        REFERENCE: xy-cli calls it, and xy/web/ts/listexport.ts is the browser's
@@ -84,7 +84,7 @@ listexport/            what a List exports as: Assemble(cards) → the 4s (Versi
                        handout badge is drawn on every render
 cardkind/              the Card Kinds and what each does (numbered and in which count, exported,
                        carries handouts, versioned, the marker a plain one exports with, restarts
-                       the Theme count, sets the base, makes the tour SI, offered in the kind menu).
+                       the Theme count, sets the base, sets the tour's game, its theme ladder, offered in the kind menu).
                        One table: xy's allow-list is Valid, xy's tests hold the cards.kind CHECK
                        and board.dopeui's kind menu to it, listexport and xy-cli ask it, and
                        `go generate` writes it into xy/web/ts/cardkind_gen.ts for cardkind.ts

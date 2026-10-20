@@ -260,6 +260,26 @@ func TestGenerateTypSI(t *testing.T) {
 	}
 }
 
+// A brain game's battles reach the PDF as headings, and a troika's themes as
+// an SI theme does, each question under its bare number.
+func TestGenerateTypBattles(t *testing.T) {
+	brain := typstdoc.GenerateTyp(fsource.Parse("#B Бой 1\n\n? Раз?\n! А\n\n#B Бой 2\n\n? Два?\n! Б\n", "brain"), nil, typstdoc.Options{Game: "brain"})
+	for _, want := range []string{`text("Бой 1")`, `text("Бой 2")`} {
+		if !strings.Contains(brain, want) {
+			t.Errorf("brain source is missing %q\n---\n%s", want, brain)
+		}
+	}
+	if n := strings.Count(brain, `"Вопрос 1. "`); n != 2 {
+		t.Errorf("«Вопрос 1.» %d times, want once per battle\n---\n%s", n, brain)
+	}
+	troika := typstdoc.GenerateTyp(fsource.Parse("#B Бой 1\n\n#T Тема 1. Числа\n\n№ 1\n? Раз\n! Один\n", "troika"), nil, typstdoc.Options{Game: "troika"})
+	for _, want := range []string{`text("Бой 1")`, `text("Тема 1. Числа")`, `weight: "bold", "1. "`} {
+		if !strings.Contains(troika, want) {
+			t.Errorf("troika source is missing %q\n---\n%s", want, troika)
+		}
+	}
+}
+
 // A handout on lines of its own is set apart: the caption, then the handout in
 // a frame, and the question text in a block of its own below. One in the
 // middle of a sentence stays a part of the text.
