@@ -356,6 +356,37 @@ func TestLeadingWarmup(t *testing.T) {
 	}
 }
 
+// «№ 0» under «Тур 1» is the warm-up: «Вопрос 1» is the tournament's first.
+func TestZeroNumberedWarmup(t *testing.T) {
+	got := read(t, "p.4s", "## Тур 1\n\n№ 0\n? разминка\n! о\n@ Разминочный Автор\n\n"+questions(2))
+	if got.Questions != 2 || got.Tours[0].First != 1 || len(got.Authors) != 0 {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// Layouts of one packet (plain, with versions, two columns) repeat its tours
+// and are never joined: the copy nearest the question count is read.
+func TestZipLayoutCopies(t *testing.T) {
+	ru := "# Редакторы пакета благодарят всех, кто помогал готовить эти вопросы, и особенно тестировщиков за их работу и терпение.\n\n"
+	tours := func(perTour int) string {
+		return strings.Repeat(ru, 3) + "## Тур 1\n\n" + questions(perTour) + "## Тур 2\n\n" + questions(perTour)
+	}
+	data := zipOf(t, map[string]string{
+		"пакет.4s":         tours(18) + "? лишний\n! о\n",
+		"пакет_версии.4s":  tours(36),
+		"пакет_колонки.4s": tours(20),
+	})
+	for _, n := range []int{36, 0} {
+		got, err := Read("packet.zip", data, Options{Questions: n})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got.Sources, []string{"пакет.4s"}) {
+			t.Fatalf("questions=%d: sources %v", n, got.Sources)
+		}
+	}
+}
+
 func TestLanguage(t *testing.T) {
 	ua := strings.Repeat("Запитання 1. Цей тур присвячується всім, хто допомагав. Відповідь: кіт. Коментар: дякуємо редакторам за роботу. ", 5)
 	ru := strings.Repeat("Вопрос 1. Этот тур посвящается всем, кто помогал. Ответ: кот. Комментарий: благодарим редакторов за работу. ", 5)

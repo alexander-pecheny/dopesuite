@@ -11,6 +11,7 @@ package credits
 import (
 	"archive/zip"
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -321,8 +322,11 @@ var formats = []string{"docx", "doc", "4s", "pdf"}
 // Russian one, whose names match the site's players. With the question count
 // known, group by group: one file holding exactly that many questions, else all
 // files of the group if together they hold it (one file per tour). Otherwise
-// the first group: its biggest file alone when it has at least twice the
-// questions of the next (the packet beside spare questions), else all of them.
+// the first group: when its files repeat a tour heading they are copies of the
+// packet (plain, with versions, two columns), and the one nearest the question
+// count is read, the smallest when it is unknown; else its biggest file alone when it has at least
+// twice the questions of the next (the packet beside spare questions), else
+// all of them.
 func pick(files []file, questions int) []file {
 	groups, order := groupFiles(files)
 	if questions > 0 {
@@ -335,6 +339,12 @@ func pick(files []file, questions int) []file {
 		if len(g) == 0 {
 			continue
 		}
+		if repeatsTour(g) {
+			nearest := slices.MinFunc(g, func(a, b file) int {
+				return cmp.Compare(abs(a.questions-questions), abs(b.questions-questions))
+			})
+			return []file{nearest}
+		}
 		biggest := slices.Clone(g)
 		sort.SliceStable(biggest, func(i, j int) bool { return biggest[i].questions > biggest[j].questions })
 		if len(biggest) == 1 || biggest[0].questions >= 2*biggest[1].questions {
@@ -344,6 +354,26 @@ func pick(files []file, questions int) []file {
 	}
 	return files
 }
+
+// repeatsTour reports whether two of the files have a tour heading in common.
+func repeatsTour(files []file) bool {
+	seen := map[string]bool{}
+	for _, f := range files {
+		labels := map[string]bool{}
+		for _, t := range f.tours {
+			labels[t.Label] = true
+		}
+		for l := range labels {
+			if seen[l] {
+				return true
+			}
+			seen[l] = true
+		}
+	}
+	return false
+}
+
+func abs(n int) int { return max(n, -n) }
 
 type groupKey struct{ format, language string }
 
@@ -520,7 +550,8 @@ func fromDoc(doc fsource.Doc) file {
 				pending = append(pending, len(f.paragraphs)-1)
 			}
 		case "Question":
-			if warmup {
+			// «Вопрос 0» is the warm-up even outside a «Разминка» heading.
+			if q, ok := p.Content.(*fsource.Question); warmup || ok && text(q.Get("number")) == "0" {
 				continue
 			}
 			f.addQuestion(p, tour, pending)
