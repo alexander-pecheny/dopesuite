@@ -9,7 +9,7 @@ import (
 	"dope/dope/platform/util"
 	dopestrings "dope/i18nstrings"
 
-	"pecheny.me/dopecore/invitelink"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/invitelink"
 )
 
 // VenueInvites is dopecore/invitelink bound to dope's venue_invites: a link

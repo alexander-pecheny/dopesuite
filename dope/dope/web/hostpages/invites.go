@@ -17,9 +17,9 @@ import (
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/invitelink"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/invitelink"
 )
 
 // Host invite links (ADR-0030): an admin mints a link for one Game, or for one

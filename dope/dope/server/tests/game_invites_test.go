@@ -10,7 +10,7 @@ import (
 
 	"dope/dope/platform/roles"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // An admin mints a link to one Game. A stranger who follows it becomes a host

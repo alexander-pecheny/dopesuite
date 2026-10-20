@@ -17,7 +17,7 @@ import (
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // The fest types.
