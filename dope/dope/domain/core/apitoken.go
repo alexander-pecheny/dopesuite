@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // API tokens are month-lived bearer credentials a user mints on /profile (or

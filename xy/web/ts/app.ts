@@ -1,6 +1,7 @@
 // app.ts — shared frontend helpers. API fetch wrappers, HTML escaping, tiny
 // DOM builder, derived card titles.
 import S from "./i18nstrings.js";
+import { type InstanceCaps, xyInstance } from "./instance.js";
 
 export const HTTP_NO_CONTENT = 204;
 export const HTTP_UNAUTHORIZED = 401;
@@ -15,6 +16,7 @@ const TITLE_MIN_KEEP = 0.5;
 
 export interface AuthMe {
   user_id: number;
+  instance?: InstanceCaps;
   username?: string | null;
   telegram?: string | null;
   default_author?: string | null;
@@ -163,7 +165,10 @@ function deriveTitle(desc: string | null | undefined, max = 80): string {
 async function requireLogin(): Promise<AuthMe | { offline: true } | null> {
   try {
     const me = (await fetchJSON("/api/auth/me")) as AuthMe | null;
-    if (me && me.user_id) return me;
+    if (me && me.user_id) {
+      xyInstance.setInstance(me.instance);
+      return me;
+    }
   } catch (e) {
     // A network failure (offline) throws TypeError; an HTTP error (e.g. 401)
     // throws a plain Error. Only bounce to /login for the latter — offline, we

@@ -66,7 +66,7 @@ sorting: [rating]
 
 ## Grammar
 
-Line syntax is `.hndt`'s (xy `internal/chgk/handout`): one `key: value` per
+Line syntax is `.hndt`'s (`chgksuite/handout`): one `key: value` per
 line, values typed at the accessor (int, string, bracketed list). Lists are
 comma-separated: `[points, h2h, taken, diff]`. `#` starts a comment (at
 line start or after whitespace). Three `[section]` headers — `[defaults]`,

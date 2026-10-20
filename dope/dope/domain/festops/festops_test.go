@@ -16,7 +16,7 @@ import (
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 func newFest(t *testing.T) (*core.Engine, int64) {

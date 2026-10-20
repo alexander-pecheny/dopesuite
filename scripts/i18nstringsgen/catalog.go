@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template/parse"
 
-	core "pecheny.me/dopecore/i18nstrings"
+	core "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // A catalog is one module's strings in one language: surfaces, each a file.

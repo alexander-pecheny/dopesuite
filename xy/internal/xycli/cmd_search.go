@@ -6,7 +6,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // Search reads what the browser's Search Index reads — each Card's 4s, its Alias
@@ -76,7 +76,7 @@ func cmdSearch(a *app, args []string) error {
 			byCard[card.ID] = card.ListID
 		}
 		for _, cm := range comments {
-			text := EventText(b.DK.OpenPayload(KindComment, cm.PayloadEnc))
+			text := EventText(OpenPayload(b.DK, KindComment, cm.Payload))
 			for _, line := range strings.Split(text, "\n") {
 				if strings.TrimSpace(line) != "" && matches(line) {
 					hits = append(hits, searchHit{CardID: cm.CardID, ListID: byCard[cm.CardID], Where: "comment", Line: strings.TrimSpace(line)})

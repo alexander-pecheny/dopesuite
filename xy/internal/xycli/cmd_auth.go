@@ -8,7 +8,8 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
 	"golang.org/x/term"
 )
@@ -104,15 +105,8 @@ func cmdBoards(a *app, args []string) error {
 	}
 	rows := make([]boardRow, 0, len(boards))
 	for _, b := range boards {
-		dk, held := a.st.Key(b.ID)
-		name := b.Name
-		if name == "" && held {
-			// A legacy board (schema_version 1) still keeps its name encrypted.
-			if decoded, err := dk.DecField(b.NameEnc); err == nil {
-				name = decoded
-			}
-		}
-		rows = append(rows, boardRow{ID: b.ID, Name: name, Role: b.Role, Unlocked: held})
+		_, held := a.st.Key(b.ID)
+		rows = append(rows, boardRow{ID: b.ID, Name: b.Name, Role: b.Role, Unlocked: held})
 	}
 	return a.emit(rows, func() {
 		for _, r := range rows {
@@ -158,22 +152,16 @@ func cmdUnlock(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	dk, err := Unlock(pass, km)
+	dk, err := xyenvelope.Unlock(pass, km)
 	if err != nil {
 		return err
 	}
-	name := board.Name
-	if name == "" {
-		if decoded, err := dk.DecField(board.NameEnc); err == nil {
-			name = decoded
-		}
-	}
-	a.st.Hold(board.ID, name, dk)
+	a.st.Hold(board.ID, board.Name, dk)
 	if err := a.st.Save(); err != nil {
 		return err
 	}
-	return a.emit(map[string]any{"id": board.ID, "name": name}, func() {
-		a.printf("%s", s.Cli.Unlock.Done(itoa(board.ID), name))
+	return a.emit(map[string]any{"id": board.ID, "name": board.Name}, func() {
+		a.printf("%s", s.Cli.Unlock.Done(itoa(board.ID), board.Name))
 	})
 }
 

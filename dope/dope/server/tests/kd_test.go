@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A Кубок Дружбы (ADR-0026) seats its tables, not the fest's teams: a table

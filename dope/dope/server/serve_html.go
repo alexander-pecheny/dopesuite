@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 )
 
 // gameInitMarker is the placeholder string inside every game page that is

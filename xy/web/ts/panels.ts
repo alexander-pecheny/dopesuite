@@ -8,6 +8,7 @@
 // (the card detail's cross-board copy, the attachments cache) takes it as its
 // own dependency, so the board seam stays what every panel needs and no more.
 
+import { type Feature, xyInstance } from "./instance.js";
 import type { BoardCard, BoardGroup, BoardList, BoardSession, BoardState, CardLabel } from "./unlock.js";
 import type { SessionMeta, Tester } from "./sessions.js";
 import type { CardSeen, SeenPlaying } from "./seen.js";
@@ -57,12 +58,15 @@ export interface ListScope {
   cards: BoardCard[];
   numbers: Array<string | null>;
   title: string;
-  // What this tour is: "si" when its lists hold SI themes, "chgk" otherwise. The
-  // exports send it so chgksuite's SI layout is used, and the .4s goes out as
-  // .si4s, which is how its CLI reads the game back.
+  // What this tour is (cardkind.ts gameOf): "chgk", "si", "troika" or "brain".
+  // The exports send it so chgksuite lays the game out as itself, and the .4s
+  // goes out as .si4s, .tr4s or .br4s, which is how its CLI reads the game back.
   game: string;
   // Whether this tour shows a question's comment before its answer.
   commentFirst: boolean;
+  // The tour's handout page setup as JSON, "" for chgksuite's defaults: every
+  // handout render sends it.
+  handoutPage: string;
 }
 
 // sessionsNewestFirst is the order every test picker offers: a new question is
@@ -84,7 +88,7 @@ export function listScope(board: Board, list: BoardList): ListScope {
   // what the add-card button makes, and a list typed ChGK may well hold themes.
   // One theme makes the whole scope SI (cardkind.ts says why).
   const game = gameOf(cards);
-  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game, commentFirst: group ? group.commentFirst : list.commentFirst };
+  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game, commentFirst: group ? group.commentFirst : list.commentFirst, handoutPage: (group ? group.handoutPage : list.handoutPage) ?? "" };
 }
 
 // listNumbers is one list's slice of its scope's numbering, parallel to
@@ -109,6 +113,8 @@ interface Entry<S> {
   // that survives `offered` — not above this one, which may not be offered at
   // all — so a conditional cluster head cannot take the grouping with it.
   divider?: boolean;
+  // The instance feature this entry is part of; a local xy leaves some out.
+  needs?: Feature;
   offered?(scope: S): boolean;
   open(scope: S): void;
 }
@@ -153,6 +159,7 @@ function cluster<S>(panels: Array<Entry<S> & { menu: string }>, scope: S): Panel
   const out: PanelMenuItem[] = [];
   let last: number | null = null;
   for (const { p, n: mine } of numbered) {
+    if (p.needs && !xyInstance.offers(p.needs)) continue;
     if (p.offered && !p.offered(scope)) continue;
     const it = item(p, scope);
     if (last !== null && mine !== last) it.divider = true;

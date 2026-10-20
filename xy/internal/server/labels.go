@@ -1,25 +1,25 @@
 package server
 
 import (
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"context"
 	"database/sql"
 	"errors"
 	"net/http"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 	"time"
 )
 
 // A label is just a label (ADR-0004): what makes one a test's verdict rather
 // than the author's is the ASSIGNMENT carrying a session, not the label itself.
 type labelDTO struct {
-	ID       int64  `json:"id"`
-	NameEnc  string `json:"name_enc"`
-	ColorEnc string `json:"color_enc"`
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
 }
 
 func scanLabels(ctx context.Context, q querier, boardID int64) ([]labelDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, name_enc, color_enc from labels where board_id = ? and deleted_at is null order by id`, boardID)
+select id, name, color from labels where board_id = ? and deleted_at is null order by id`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -27,20 +27,20 @@ select id, name_enc, color_enc from labels where board_id = ? and deleted_at is 
 	out := []labelDTO{}
 	for rows.Next() {
 		var l labelDTO
-		var nameEnc, colorEnc []byte
-		if err := rows.Scan(&l.ID, &nameEnc, &colorEnc); err != nil {
+		var name, color []byte
+		if err := rows.Scan(&l.ID, &name, &color); err != nil {
 			return nil, err
 		}
-		l.NameEnc = b64(nameEnc)
-		l.ColorEnc = b64(colorEnc)
+		l.Name = b64(name)
+		l.Color = b64(color)
 		out = append(out, l)
 	}
 	return out, rows.Err()
 }
 
 type createLabelRequest struct {
-	NameEnc  string `json:"name_enc"`
-	ColorEnc string `json:"color_enc"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
 }
 
 func (s *server) handleListLabels(w http.ResponseWriter, r *http.Request) {
@@ -64,8 +64,8 @@ func (s *server) handleCreateLabel(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	nameEnc, err1 := unb64(req.NameEnc)
-	colorEnc, err2 := unb64(req.ColorEnc)
+	name, err1 := unb64(req.Name)
+	color, err2 := unb64(req.Color)
 	if err1 != nil || err2 != nil {
 		httpError(w, http.StatusBadRequest, "invalid label fields")
 		return
@@ -74,8 +74,8 @@ func (s *server) handleCreateLabel(w http.ResponseWriter, r *http.Request) {
 	var id int64
 	err := s.withWriteTx(r.Context(), "create-label", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
-			`insert into labels(board_id, name_enc, color_enc, created_at) values(?, ?, ?, ?)`,
-			bid, nameEnc, colorEnc, rfc3339(now))
+			`insert into labels(board_id, name, color, created_at) values(?, ?, ?, ?)`,
+			bid, name, color, rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -89,8 +89,8 @@ func (s *server) handleCreateLabel(w http.ResponseWriter, r *http.Request) {
 }
 
 type patchLabelRequest struct {
-	NameEnc  *string `json:"name_enc"`
-	ColorEnc *string `json:"color_enc"`
+	Name  *string `json:"name"`
+	Color *string `json:"color"`
 }
 
 func (s *server) handlePatchLabel(w http.ResponseWriter, r *http.Request) {
@@ -104,19 +104,19 @@ func (s *server) handlePatchLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.withWriteTx(r.Context(), "patch-label", func(ctx context.Context, tx *sql.Tx) error {
 		var p patch
-		if req.NameEnc != nil {
-			nameEnc, err := unb64(*req.NameEnc)
+		if req.Name != nil {
+			name, err := unb64(*req.Name)
 			if err != nil {
-				return corei18n.User("invalid name_enc")
+				return corei18n.User("invalid name")
 			}
-			p.set("name_enc", nameEnc)
+			p.set("name", name)
 		}
-		if req.ColorEnc != nil {
-			colorEnc, err := unb64(*req.ColorEnc)
+		if req.Color != nil {
+			color, err := unb64(*req.Color)
 			if err != nil {
-				return corei18n.User("invalid color_enc")
+				return corei18n.User("invalid color")
 			}
-			p.set("color_enc", colorEnc)
+			p.set("color", color)
 		}
 		return p.apply(ctx, tx, "labels", labelID)
 	})

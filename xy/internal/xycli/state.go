@@ -1,12 +1,14 @@
 package xycli
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // The state holds data keys, so only its owner may read it.
@@ -95,12 +97,12 @@ func (s *State) Save() error {
 }
 
 // Key returns the held data key of a board.
-func (s *State) Key(boardID int64) (DataKey, bool) {
+func (s *State) Key(boardID int64) (xyenvelope.DataKey, bool) {
 	held, ok := s.Boards[idstr.Format(boardID)]
 	if !ok {
 		return nil, false
 	}
-	dk, err := b64dec(held.DK)
+	dk, err := base64.StdEncoding.DecodeString(held.DK)
 	if err != nil {
 		return nil, false
 	}
@@ -108,8 +110,8 @@ func (s *State) Key(boardID int64) (DataKey, bool) {
 }
 
 // Hold remembers a board's key; Forget drops it.
-func (s *State) Hold(boardID int64, name string, dk DataKey) {
-	s.Boards[idstr.Format(boardID)] = HeldKey{Name: name, DK: b64enc(dk)}
+func (s *State) Hold(boardID int64, name string, dk xyenvelope.DataKey) {
+	s.Boards[idstr.Format(boardID)] = HeldKey{Name: name, DK: base64.StdEncoding.EncodeToString(dk)}
 }
 
 func (s *State) Forget(boardID int64) {

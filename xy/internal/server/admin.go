@@ -11,10 +11,10 @@ import (
 	"slices"
 	"time"
 
-	"pecheny.me/dopecore/adminusers"
-	"pecheny.me/dopecore/sameorigin"
-	"pecheny.me/dopecore/session"
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sameorigin"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 	kit "pecheny.me/dopeuikit/kit"
 
 	xystrings "xy/i18nstrings"

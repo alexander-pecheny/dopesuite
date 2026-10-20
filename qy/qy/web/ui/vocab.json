@@ -1,0 +1,15 @@
+{
+  "enums": {
+    "page-kind": {
+      "prefix": "Page",
+      "values": ["wide"]
+    }
+  },
+  "primitives": [
+    {
+      "name": "richtext",
+      "props": [],
+      "children": "any"
+    }
+  ]
+}

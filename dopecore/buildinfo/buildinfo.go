@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-// stamped is set at link time: -ldflags "-X pecheny.me/dopecore/buildinfo.stamped=<tag>".
+// stamped is set at link time: -ldflags "-X code.pecheny.me/pecheny/dopesuite/dopecore/buildinfo.stamped=<tag>".
 var stamped string
 
 // Version is the human-readable build identity, e.g. "xy/2026.08.03" for a

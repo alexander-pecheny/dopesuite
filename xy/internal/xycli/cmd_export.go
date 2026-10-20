@@ -8,16 +8,16 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	"xy/internal/chgk/inline"
-	"xy/internal/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/inline"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // `source` prints the 4s a List (or its whole List Group) exports as — a whole
 // tour as text, in one call. `export` hands that same source, its .hndt and the
 // images both reference, to the server, which renders the formats and streams
-// back one file or a zip of them. Both are assembled by internal/listexport.
+// back one file or a zip of them. Both are assembled by chgksuite/listexport.
 
 func cmdSource(a *app, args []string) error {
 	s := xystrings.Default
@@ -108,7 +108,7 @@ func gatherImages(c *Client, b *Board, cards []Card, source string) (map[string]
 			return nil, err
 		}
 		for _, att := range atts {
-			name, err := b.DK.DecField(att.FilenameEnc)
+			name, err := b.DK.DecField(att.Filename)
 			if err != nil || !wanted[name] || images[name] != nil {
 				continue
 			}

@@ -8,7 +8,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // The Timeline: a Card's comments, the word-level record of its description
@@ -66,7 +66,7 @@ func commentList(a *app, args []string) error {
 		if e.Deleted {
 			row.Text = s.Cli.Comment.Deleted()
 		} else {
-			row.Text = EventText(b.DK.OpenPayload(e.Type, e.PayloadEnc))
+			row.Text = EventText(OpenPayload(b.DK, e.Type, e.Payload))
 		}
 		rows = append(rows, row)
 	}
@@ -114,7 +114,7 @@ func commentAdd(a *app, args []string) error {
 	if strings.TrimSpace(body) == "" {
 		return corei18n.User(s.Cli.Comment.Empty())
 	}
-	payloadEnc, err := b.DK.SealPayload(KindComment, CommentPayload{Text: body})
+	sealedPayload, err := SealPayload(b.DK, KindComment, CommentPayload{Text: body})
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func commentAdd(a *app, args []string) error {
 		return err
 	}
 	mentions := resolveMentions(body, members)
-	req := map[string]any{"payload_enc": payloadEnc, "mentions": mentions}
+	req := map[string]any{"payload": sealedPayload, "mentions": mentions}
 	if *replyTo != 0 {
 		req["reply_to_id"] = *replyTo
 	}
@@ -161,7 +161,7 @@ func commentEdit(a *app, args []string) error {
 	if strings.TrimSpace(body) == "" {
 		return corei18n.User(s.Cli.Comment.Empty())
 	}
-	payloadEnc, err := b.DK.SealPayload(KindComment, CommentPayload{Text: body})
+	sealedPayload, err := SealPayload(b.DK, KindComment, CommentPayload{Text: body})
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func commentEdit(a *app, args []string) error {
 		return err
 	}
 	if err := c.PatchComment(commentID, map[string]any{
-		"payload_enc": payloadEnc, "mentions": resolveMentions(body, members),
+		"payload": sealedPayload, "mentions": resolveMentions(body, members),
 	}); err != nil {
 		return err
 	}

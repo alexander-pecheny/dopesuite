@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A DSL edit recompiles only what has not started: bumping questions rebuilds

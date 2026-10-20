@@ -1,0 +1,344 @@
+package chgkimport
+
+import (
+	"archive/zip"
+	"bytes"
+	"strings"
+	"testing"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/corpus"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
+)
+
+// docxFixtures are every chgk-game .docx in chgksuite's corpus. The SI and
+// troika ones have tests of their own below, and left out altogether is
+// octo2021_khmelkov.docx, whose canon is produced with --preserve_formatting —
+// a flag the import path deliberately doesn't expose. (docxread's own test does
+// cover that flag.)
+var docxFixtures = []string{
+	"2019-07-23_beln19_u.docx",
+	"Kubok_knyagini_Olgi-2015.docx",
+	"Shkolny_Chemp_Estonii-2014_(48v).docx",
+	"link_unwrap.docx",
+	"malkin_papkov_synchr.docx",
+	"ovsch_boronenko_3.docx",
+	"pass1.docx",
+	"single_number_line_test.docx",
+	"source_numbering_bug.docx",
+	"test_amper.docx",
+	"tourrev_with_razmin.docx",
+	"СЧР_Шередега_Ермишкин.docx",
+	"haifa2025.docx.encrypted",
+}
+
+// siDocxFixtures are the СИ packages in chgksuite's corpus. They go through the
+// same endpoint with game "si", which is a different parser reading the
+// document's own outline — so the same byte-equality check is the guard.
+var siDocxFixtures = []string{
+	"schr16_ek_all.docx",
+	"schr18_otbor_ssi_all.docx",
+}
+
+// TestSIDocxCanonParity is TestDocxCanonParity for темы СИ.
+func TestSIDocxCanonParity(t *testing.T) {
+	for _, file := range siDocxFixtures {
+		t.Run(file, func(t *testing.T) {
+			want := corpus.Canon(t, file)
+			res, err := Parse(corpus.Name(file), corpus.Read(t, file), "si")
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if got := res.Source; got != want {
+				t.Errorf("source mismatch:\n%s", firstDiff(want, got))
+			}
+		})
+	}
+}
+
+// gameFixtures are chgksuite's brain and troika packages, each read as the game
+// its settings.json gives it: a troika by its own parser, a brain one by the
+// ChGK parser, which already knows its battles.
+var gameFixtures = []struct{ file, game string }{
+	{"nesova2025_troika.docx", "troika"},
+	{"bkd_2021_all.txt", "brain"},
+	{"kinsbf_day_1.txt.encrypted", "brain"},
+}
+
+func TestGameCanonParity(t *testing.T) {
+	for _, f := range gameFixtures {
+		t.Run(f.file, func(t *testing.T) {
+			want := corpus.Canon(t, f.file)
+			res, err := Parse(corpus.Name(f.file), corpus.Read(t, f.file), f.game)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if got := res.Source; got != want {
+				t.Errorf("source mismatch:\n%s", firstDiff(want, got))
+			}
+		})
+	}
+}
+
+// A packet saved by chgksuite names its game in its extension, whatever the
+// reader picked.
+func TestExtensionNamesTheGame(t *testing.T) {
+	src := "#T Тема\n\n№ 1\n? Раз\n! Один\n"
+	for name, want := range map[string]string{"a.tr4s": "troika", "a.br4s": "brain", "a.SI4S": "si", "a.4s": "", "a.docx": ""} {
+		if got := GameOf(name); got != want {
+			t.Errorf("GameOf(%q) = %q, want %q", name, got, want)
+		}
+	}
+	if _, err := Parse("a.tr4s", []byte(src), "chgk"); err != nil {
+		t.Errorf("Parse(a.tr4s): %v", err)
+	}
+}
+
+// TestDocxCanonParity runs the whole pipeline the import endpoint runs — raw
+// .docx bytes in, 4s source out — and requires byte-equality with chgksuite.
+func TestDocxCanonParity(t *testing.T) {
+	for _, file := range docxFixtures {
+		t.Run(file, func(t *testing.T) {
+			want := corpus.Canon(t, file)
+			res, err := Parse(corpus.Name(file), corpus.Read(t, file), "")
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if got := res.Source; got != want {
+				t.Errorf("source mismatch:\n%s", firstDiff(want, got))
+			}
+
+			// After sanitising, every (img …) the source references must resolve
+			// to an extracted image — otherwise the import silently drops a
+			// handout. This is checked with the same rule the frontend uses.
+			res.SafeImageNames()
+			refs := listexport.ImageRefs(res.Source)
+			for _, ref := range refs {
+				if !hasImage(res.Images, ref) {
+					t.Errorf("source references %q but it was not extracted", ref)
+				}
+			}
+			if len(refs) != len(res.Images) {
+				t.Errorf("%d (img …) refs but %d images extracted", len(refs), len(res.Images))
+			}
+		})
+	}
+}
+
+// TestSafeImageNamesFixesUnreadableDirectives pins the parenthesis case: the
+// fixture's own filename has parens, so chgksuite emits a name that every reader
+// of the (img …) syntax truncates at the first ')'.
+func TestSafeImageNamesFixesUnreadableDirectives(t *testing.T) {
+	name := "Shkolny_Chemp_Estonii-2014_(48v).docx"
+	res, err := Parse(name, corpus.Read(t, name), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Source, "(img Shkolny_Chemp_Estonii-2014_(48v)_") {
+		t.Fatal("expected the raw image names to carry the fixture's parens")
+	}
+	res.SafeImageNames()
+	for _, ref := range listexport.ImageRefs(res.Source) {
+		if !hasImage(res.Images, ref) {
+			t.Errorf("after SafeImageNames, %q still does not resolve", ref)
+		}
+	}
+	if strings.ContainsAny(res.Images[0].Name, "() ") {
+		t.Errorf("image name %q still has directive-breaking characters", res.Images[0].Name)
+	}
+}
+
+// TestZipRoundTrip covers the .zip path: one .4s plus its images.
+func TestZipRoundTrip(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	add := func(name string, body []byte) {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("pack/questions.4s", []byte("### Тест\r\n\r\n? Вопрос (img pic.jpg)\r\n! Ответ\r\n"))
+	add("pack/pic.jpg", []byte{0xff, 0xd8, 0xff})
+	add("__MACOSX/._pic.jpg", []byte("junk"))
+	add("pack/.DS_Store", []byte("junk"))
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Parse("pack.zip", buf.Bytes(), "")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if res.Name != "questions" {
+		t.Errorf("name = %q, want %q (from the .4s inside)", res.Name, "questions")
+	}
+	if strings.Contains(res.Source, "\r") {
+		t.Error("CRLF survived into the source")
+	}
+	if len(res.Images) != 1 || res.Images[0].Name != "pic.jpg" || res.Images[0].MIME != "image/jpeg" {
+		t.Fatalf("images = %+v, want just pic.jpg (archiver junk filtered)", res.Images)
+	}
+}
+
+func TestUnsupported(t *testing.T) {
+	if _, err := Parse("notes.pdf", []byte("x"), ""); err == nil {
+		t.Fatal("want an error for .pdf")
+	}
+}
+
+func hasImage(imgs []Image, name string) bool {
+	for _, i := range imgs {
+		if i.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func firstDiff(want, got string) string {
+	w, g := strings.Split(want, "\n"), strings.Split(got, "\n")
+	for i := 0; i < len(w) || i < len(g); i++ {
+		var wl, gl string
+		if i < len(w) {
+			wl = w[i]
+		}
+		if i < len(g) {
+			gl = g[i]
+		}
+		if wl != gl {
+			return "line " + itoa(i+1) + "\n- want: " + wl + "\n+ got:  " + gl
+		}
+	}
+	return "(only trailing differences)"
+}
+
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	var b []byte
+	for i > 0 {
+		b = append([]byte{byte('0' + i%10)}, b...)
+		i /= 10
+	}
+	return string(b)
+}
+
+// TestRejectsNon4sText: a .4s that holds no questions must fail at import rather
+// than quietly become an empty list.
+func TestRejectsNon4sText(t *testing.T) {
+	if _, err := Parse("notes.4s", []byte("просто заметки\nбез единого маркера\n"), ""); err == nil {
+		t.Fatal("want an error for a .4s with no 4s markers")
+	}
+	if _, err := Parse("ok.4s", []byte("? Вопрос\n! Ответ\n"), ""); err != nil {
+		t.Fatalf("a minimal valid .4s must import: %v", err)
+	}
+}
+
+// zipOf builds an archive from name→body pairs.
+func zipOf(t *testing.T, files map[string][]byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestZipRelativeImageRefs: a package that refers to its handouts by archive path
+// must still resolve, since images are stored under their base name.
+func TestZipRelativeImageRefs(t *testing.T) {
+	res, err := Parse("p.zip", zipOf(t, map[string][]byte{
+		"q.4s":          []byte("? Вопрос (img images/q3.png)\n! Ответ\n"),
+		"images/q3.png": {1, 2, 3},
+	}), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listexport.ImageRefs(res.Source); len(got) != 1 || got[0] != "q3.png" {
+		t.Fatalf("directive should be rewritten to the stored name, got %q", got)
+	}
+	if !hasImage(res.Images, "q3.png") {
+		t.Fatal("image not extracted under its base name")
+	}
+}
+
+// TestZipDuplicateBasenames: two images with the same base name are ambiguous to
+// an (img …) directive, so the first must win rather than the directive being
+// silently repointed at the second.
+func TestZipDuplicateBasenames(t *testing.T) {
+	res, err := Parse("p.zip", zipOf(t, map[string][]byte{
+		"q.4s":      []byte("? Вопрос (img pic.png)\n! Ответ\n"),
+		"a/pic.png": {0xaa},
+		"b/pic.png": {0xbb},
+	}), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.SafeImageNames()
+	if len(res.Images) != 1 {
+		t.Fatalf("want a single pic.png, got %d images: %+v", len(res.Images), res.Images)
+	}
+	if got := listexport.ImageRefs(res.Source); len(got) != 1 || got[0] != "pic.png" {
+		t.Fatalf("the directive must be left alone, got %q", got)
+	}
+}
+
+// TestSafeImageNamesLeavesProseAlone: the rename must touch (img …) directives
+// only, not the same text where it appears in the question.
+func TestSafeImageNamesLeavesProseAlone(t *testing.T) {
+	r := &Result{
+		Source: "? Файл a(1).png упомянут в тексте. (img a(1).png)\n! Ответ\n",
+		Images: []Image{{Name: "a(1).png"}},
+	}
+	r.SafeImageNames()
+	if !strings.Contains(r.Source, "Файл a(1).png упомянут") {
+		t.Errorf("prose was rewritten: %q", r.Source)
+	}
+	if !strings.Contains(r.Source, "(img a_1_.png)") {
+		t.Errorf("directive was not rewritten: %q", r.Source)
+	}
+}
+
+// TestParseText: a question pasted as prose becomes 4s — what the card editor's
+// →.4s button is for. Nothing else in the app can turn unmarked text into markers.
+func TestParseText(t *testing.T) {
+	got := ParseText("Вопрос 1:\r\nВ известном романе ОН появляется дважды.\r\nОтвет: Кот\r\nЗачёт: кошка\r\nКомментарий: всё просто.\r\nИсточник: https://example.com\r\nАвтор: Иван Иванов")
+	want := "? В известном романе ОН появляется дважды.\n! Кот\n= кошка\n/ всё просто.\n^ https://example.com\n@ Иван Иванов"
+	if got != want {
+		t.Errorf("ParseText:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+	// Nothing parseable → nothing composed, so the handler can 400 on "".
+	if got := ParseText("   \n\n  "); got != "" {
+		t.Errorf("blank text: got %q, want empty", got)
+	}
+}
+
+// TestAddImages: images picked beside a .4s land under their base names, a
+// directive that names one by a path is pointed at it, and a non-image is dropped.
+func TestAddImages(t *testing.T) {
+	res, err := Parse("q.4s", []byte("? Вопрос (img pics/q3.png)\n! Ответ\n\n? Второй (img w=8 q4.jpg)\n! Ответ\n"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.AddImages([]Image{{Name: "q3.png", Data: []byte{1}}, {Name: "q4.jpg", Data: []byte{2}}, {Name: "notes.txt", Data: []byte{3}}})
+	if got := listexport.ImageRefs(res.Source); len(got) != 2 || got[0] != "q3.png" || got[1] != "q4.jpg" {
+		t.Fatalf("directives = %q", got)
+	}
+	if len(res.Images) != 2 || res.Images[0].MIME != "image/png" || res.Images[1].MIME != "image/jpeg" {
+		t.Fatalf("images = %+v", res.Images)
+	}
+}

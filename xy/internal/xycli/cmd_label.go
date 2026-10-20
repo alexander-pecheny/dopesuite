@@ -5,7 +5,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // Labels. An assignment may be scoped to a Playing (what the testers thought at
@@ -87,15 +87,15 @@ func labelAdd(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	nameEnc, err := b.DK.EncField(*name)
+	sealedName, err := b.DK.EncField(*name)
 	if err != nil {
 		return err
 	}
-	colorEnc, err := b.DK.EncField(*color)
+	sealedColor, err := b.DK.EncField(*color)
 	if err != nil {
 		return err
 	}
-	id, err := c.CreateLabel(b.ID, nameEnc, colorEnc)
+	id, err := c.CreateLabel(b.ID, sealedName, sealedColor)
 	if err != nil {
 		return err
 	}
@@ -166,11 +166,11 @@ func labelAssign(a *app, args []string) error {
 		eventType = KindLabelRemove
 	}
 	labelID := target.ID
-	payloadEnc, err := b.DK.SealPayload(eventType, LabelPayload{Label: target.Name, LabelID: &labelID})
+	sealedPayload, err := SealPayload(b.DK, eventType, LabelPayload{Label: target.Name, LabelID: &labelID})
 	if err != nil {
 		return err
 	}
-	events := []map[string]any{{"type": eventType, "payload_enc": payloadEnc}}
+	events := []map[string]any{{"type": eventType, "payload": sealedPayload}}
 	if err := c.SetCardLabels(cardID, next, events); err != nil {
 		return err
 	}

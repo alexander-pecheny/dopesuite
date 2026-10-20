@@ -2,12 +2,13 @@
 import { xyApp } from "./app.js";
 import { modal } from "./modal.js";
 import { xyCrypto } from "./crypto.js";
+import { xyInstance } from "./instance.js";
 import { xyFind } from "./find.js";
 import { xySearchIndex } from "./searchindex.js";
 import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
 import { stampPassCheck } from "./passcheck.js";
-import { iconed } from "./icons_gen.js";
+import { icon, iconed } from "./icons_gen.js";
 import { createNameOverflow } from "./nameoverflow.js";
 import S from "./i18nstrings.js";
 
@@ -19,9 +20,7 @@ const { fetchJSON, jpost, el, escapeHtml } = xyApp;
 interface BoardListItem {
   id: number;
   name: string;
-  name_enc: string;
   role: string;
-  schema_version: number;
   unread?: boolean;
   unread_mentions?: boolean;
   creator?: string;
@@ -39,6 +38,11 @@ const commentNote = byId("commentNote");
 const moreQuestions = byId("moreQuestions");
 const moreComments = byId("moreComments");
 const message = byId("message");
+
+const importIcon = icon("file-up");
+importIcon.setAttribute("class", "ico ico-lead");
+byId("homeTitle").after(el("a", { class: "btn btn-ghost btn-small crumb-action", href: "/import", title: S.chrome.home.importLabel(), "aria-label": S.chrome.home.importLabel() },
+  importIcon, el("span", { class: "crumb-action-label", text: S.chrome.home.importLabel() })));
 const createModal = modal("create");
 const createForm = byId<HTMLFormElement>("createForm");
 const createMessage = byId("createMessage");
@@ -48,6 +52,11 @@ const setStatus = badge.set;
 
 async function boot(): Promise<void> {
   if (!(await xyApp.requireLogin())) return;
+  if (!xyInstance.offers("passphrase")) {
+    byId("createPassBlock").hidden = true;
+    boardPass.required = false;
+    byId<HTMLButtonElement>("createSubmit").disabled = false;
+  }
   xySync.start();
   xySync.onStatus(badge.onSync);
   await refresh();
@@ -161,8 +170,7 @@ async function runSearch(query: string, keepShown = false): Promise<void> {
     await clearSearch();
     return;
   }
-  // A board matches by name without any key — names are plaintext (v2). A legacy
-  // board whose name is still encrypted matches nothing until it is migrated.
+  // A board matches by name without any key, because names are plaintext.
   const named = allBoards.filter((b) => xyFind.searchSpans(b.name || "", q).length > 0);
   await renderBoards(named);
   // An empty grid is not a result — it is padding with a message in it. Each
@@ -250,7 +258,7 @@ async function prewarm(): Promise<void> {
 // is touched, so a repaint never shows a name unlocked and then locks it.
 async function renderBoards(boards: BoardListItem[]): Promise<void> {
   const locked = await Promise.all(boards.map((b) =>
-    b.schema_version >= 2 ? xyCrypto.loadCachedDK(b.id).then((dk) => !dk, () => false) : true));
+    xyCrypto.loadCachedDK(b.id).then((dk) => !dk, () => false)));
   listNode.replaceChildren();
   if (!boards.length) {
     listNode.append(el("p", { class: "empty", text: searchBox.value.trim() ? S.chrome.home.emptyNamed() : S.chrome.home.emptyAll() }));
@@ -263,11 +271,9 @@ async function renderBoards(boards: BoardListItem[]): Promise<void> {
 
 // boardCard is one tile of the board list.
 function boardCard(b: BoardListItem, locked: boolean): HTMLElement {
-  // Migrated (v2) boards carry a plaintext name — shown with no key needed; the
-  // lock marks a board that will still ask for the passphrase. Legacy (v1)
-  // boards need the cached DK for the name itself, so start with a placeholder.
-  const migrated = b.schema_version >= 2;
-  const name = migrated ? b.name : S.chrome.home.boardLockedName(String(b.id));
+  // The name is plaintext, shown with no key needed; the lock marks a board
+  // that will still ask for the passphrase.
+  const name = b.name;
   const card = el("a", { class: "board-card", href: `/board/${b.id}` },
     el("span", { class: "board-card-name-wrap" },
       el("span", { class: "board-card-name" }, ...(locked ? iconed("lock", name) : [name]))),
@@ -278,15 +284,6 @@ function boardCard(b: BoardListItem, locked: boolean): HTMLElement {
     const mention = b.unread_mentions ? " unread-dot-mention" : "";
     const title = b.unread_mentions ? S.chrome.home.unreadMentionTitle() : S.chrome.home.unreadTitle();
     card.append(el("span", { class: "unread-dot unread-dot-corner board-card-unread" + mention, title }));
-  }
-  if (!migrated) {
-    // Decrypt the name lazily if we have the cached key, and — since we now hold
-    // the plaintext — opportunistically migrate the board off name_enc.
-    decryptName(b).then((name) => {
-      if (!name) return;
-      setCardName(card, name);
-      migrateName(b.id, name);
-    });
   }
   return card;
 }
@@ -299,28 +296,6 @@ const boardNames = createNameOverflow({
   name: ".board-card-name",
   truncatedClass: "board-card-name-truncated",
 });
-
-function setCardName(card: HTMLElement, text: string): void {
-  card.querySelector(".board-card-name")!.textContent = text;
-  boardNames.measure();
-}
-
-async function decryptName(b: BoardListItem): Promise<string | null> {
-  try {
-    const dk = await xyCrypto.loadCachedDK(b.id);
-    if (!dk) return null;
-    return await xyCrypto.decField(dk, b.name_enc);
-  } catch (_) {
-    return null;
-  }
-}
-
-// Backfill a legacy board's plaintext name once we've decrypted it. Best-effort and
-// online-only; the server ignores it if the board is already migrated (no clobber).
-async function migrateName(id: number, name: string): Promise<void> {
-  if (!xySync.isOnline()) return;
-  try { await jpost(`/api/boards/${id}/migrate-name`, { name }); } catch (_) {}
-}
 
 // ---- create board ----
 const boardPass = byId<HTMLInputElement>("boardPass");
@@ -337,8 +312,10 @@ const passSetup = xyApp.wirePassphraseSetup({
 // are ever shown in the clear.
 byId("newBoardBtn").addEventListener("click", () => {
   createForm.reset();
-  passSetup.reset();
-  void passSetup.roll(true);
+  if (xyInstance.offers("passphrase")) {
+    passSetup.reset();
+    void passSetup.roll(true);
+  }
   createModal.open();
   byId("boardName").focus();
 });
@@ -348,8 +325,9 @@ createForm.addEventListener("submit", async (e) => {
   createMessage.textContent = "";
   const name = byId<HTMLInputElement>("boardName").value.trim();
   const pass = boardPass.value;
-  if (!name || !pass) return;
-  const passErr = xyCrypto.validatePassphrase(pass);
+  const plain = !xyInstance.offers("passphrase");
+  if (!name || (!pass && !plain)) return;
+  const passErr = plain ? null : xyCrypto.validatePassphrase(pass);
   if (passErr) { createMessage.textContent = passErr; return; }
   if (!xySync.requireOnline(S.chrome.home.createOffline(), createMessage)) return;
   try {

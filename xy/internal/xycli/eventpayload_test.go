@@ -6,6 +6,8 @@ import (
 	"os"
 	"reflect"
 	"testing"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
 )
 
 // The corpus jstest/eventpayload.test.js reads too: the same rows must decode
@@ -131,24 +133,27 @@ func TestEncodePayloadCorpus(t *testing.T) {
 	}
 }
 
+// testKeyLen is an AES-256 data key, the length every board key has.
+const testKeyLen = 32
+
 func TestSealOpenPayloadPerKind(t *testing.T) {
-	dk := DataKey(bytes.Repeat([]byte{7}, defaultDKLen))
+	dk := xyenvelope.DataKey(bytes.Repeat([]byte{7}, testKeyLen))
 	for _, c := range loadPayloadFixture(t).Encode {
 		p := payloadFrom(t, c.Kind, c.Data)
-		b64, err := dk.SealPayload(c.Kind, p)
+		b64, err := SealPayload(dk, c.Kind, p)
 		if err != nil {
 			t.Fatalf("%s: %v", c.Name, err)
 		}
-		if got := dk.OpenPayload(c.Kind, b64); !reflect.DeepEqual(plainOf(c.Kind, got), plainOf(c.Kind, DecodePayload(c.Kind, c.Raw))) {
+		if got := OpenPayload(dk, c.Kind, b64); !reflect.DeepEqual(plainOf(c.Kind, got), plainOf(c.Kind, DecodePayload(c.Kind, c.Raw))) {
 			t.Errorf("%s: opened %#v", c.Name, got)
 		}
 	}
-	other := DataKey(bytes.Repeat([]byte{8}, defaultDKLen))
-	b64, err := dk.SealPayload(KindReaction, ReactionPayload{Emoji: "x"})
+	other := xyenvelope.DataKey(bytes.Repeat([]byte{8}, testKeyLen))
+	b64, err := SealPayload(dk, KindReaction, ReactionPayload{Emoji: "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := other.OpenPayload(KindReaction, b64); got != (UnreadablePayload{}) {
+	if got := OpenPayload(other, KindReaction, b64); got != (UnreadablePayload{}) {
 		t.Errorf("a payload under another key opened as %#v", got)
 	}
 }

@@ -8,15 +8,15 @@
 verb_mentioned = "упомянул(а) вас"
 # Verb fragment when the recipient is the parent comment's author instead.
 verb_replied = "ответил(а) на ваш комментарий"
-# Where fragment when the board's name is not available (legacy ciphertext).
+# Where fragment when the board has no name.
 board_unnamed = "на доске"
-# Where fragment when the board name is plaintext (schema_version 2).
+# Where fragment when the board has a name.
 board_named = 'на доске «{{.board}}»'
 
 [join]
-# Where fragment when the board's name is not available (legacy ciphertext).
+# Where fragment when the board has no name.
 board_unnamed = "в доску"
-# Where fragment when the board name is plaintext (boardDisplayName).
+# Where fragment when the board has a name (boardDisplayName).
 board_named = 'в доску «{{.board}}»'
 # The owner's nudge sentence: who is asking, through where, with the board link.
 text = '{{.requester}} просится {{.where}} по ссылке-приглашению: {{.link}}'

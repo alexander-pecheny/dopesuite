@@ -6,9 +6,9 @@
 // It runs in the browser because everything it touches is question text, and
 // question text is exactly what the server must never see: a board-wide pass
 // through an endpoint would have posted a whole package in the clear. The Go
-// packages it was ported from (internal/chgk/typo + typoedit) stay where they
+// packages it was ported from (chgksuite/typo + typoedit) stay where they
 // are as the parity oracle — both suites read the same fixtures
-// (internal/chgk/typoedit/testdata/pass_cases.json), so the two implementations
+// (chgksuite/typoedit/testdata/pass_cases.json), so the two implementations
 // cannot drift in silence.
 //
 // A port, quirks included: where chgksuite does something odd, so does this.

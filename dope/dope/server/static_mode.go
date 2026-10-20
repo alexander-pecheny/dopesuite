@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 
 	"dope/dope/domain/games"
 )

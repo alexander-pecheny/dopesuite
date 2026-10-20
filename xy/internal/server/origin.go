@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"os"
 
-	"pecheny.me/dopecore/sameorigin"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sameorigin"
 )
 
 // trustedOriginHostsEnv lists the hosts besides xy's own whose pages may send

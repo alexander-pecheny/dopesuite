@@ -83,7 +83,7 @@ func runBackup(args []string) {
 	if len(args) < 1 {
 		log.Fatal("usage: xy-server backup <dir>")
 	}
-	srv, err := newServer()
+	srv, err := newServer(configFromEnv())
 	if err != nil {
 		log.Fatal(err)
 	}

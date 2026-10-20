@@ -17,9 +17,9 @@ import (
 	"dope/dope/domain/roster"
 	"dope/dope/storage/store"
 
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"github.com/xuri/excelize/v2"
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/session"
 )
 
 // The Участники tab (CONTEXT.md, Entrant list): the host imports a list, then

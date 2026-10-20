@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 )
 
@@ -24,10 +26,16 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_, _ = w.Write(data)
 }
 
-// readJSON decodes the request body into v, rejecting unknown fields. Returns
+// readJSON decodes the request body into v, rejecting unknown fields and
+// accepting the field names from before v29 (renameLegacyFields). Returns
 // false (after writing a 400) on failure.
 func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBody))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxJSONBody))
+	if err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return false
+	}
+	dec := json.NewDecoder(bytes.NewReader(renameLegacyFields(body)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)

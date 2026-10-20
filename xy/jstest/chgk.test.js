@@ -50,6 +50,36 @@ test("headings and meta do not consume numbers", () => {
   assert.deepEqual(numberQuestionCards(cards), [null, "1", null, "2"]);
 });
 
+// A brain game counts anew in every battle, as parse_4s does, and a troika's
+// themes restart at each battle while its questions go on.
+test("a battle restarts the question count in a brain game and the theme count in any", () => {
+  const brain = [
+    { kind: "battle", desc: "Бой 1" },
+    { kind: "question", desc: "? a" },
+    { kind: "question", desc: "? b" },
+    { kind: "battle", desc: "Бой 2" },
+    { kind: "question", desc: "? c" },
+  ];
+  assert.deepEqual(numberQuestionCards(brain), [null, "1", "2", null, "1"]);
+  const troika = [
+    { kind: "battle", desc: "Бой 1" },
+    { kind: "troika_theme", desc: "#T А" },
+    { kind: "troika_theme", desc: "#T Б" },
+    { kind: "battle", desc: "Бой 2" },
+    { kind: "troika_theme", desc: "#T В" },
+  ];
+  assert.deepEqual(numberQuestionCards(troika), [null, "1", "2", null, "1"]);
+});
+
+// A section or battle card is shown by its text, not by its marker.
+test("a heading or battle card's title drops its ##, ### or #B", () => {
+  assert.equal(xyChgk.previewText("heading", "## Групповой этап 1"), "Групповой этап 1");
+  assert.equal(xyChgk.previewText("heading", "### Турнир"), "Турнир");
+  assert.equal(xyChgk.previewText("battle", "#B Бой 2"), "Бой 2");
+  assert.equal(xyChgk.previewText("battle", "Бой 2"), "Бой 2");
+  assert.equal(xyChgk.previewText("troika_theme", "#T ТЕМА 5 (2 БАЛЛА). Звуки\n№ 1\n? а"), "Звуки (2 БАЛЛА)");
+});
+
 test("№№ resets the running base and subsequent questions continue", () => {
   const cards = [
     { kind: "question", desc: "№№ 4\n? a" },

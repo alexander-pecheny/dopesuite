@@ -329,6 +329,10 @@ func Action(v string) Attr {
 	return Attr{Name: "action", Value: v}
 }
 
+func Enctype(v string) Attr {
+	return Attr{Name: "enctype", Value: v}
+}
+
 func Name(v string) Attr {
 	return Attr{Name: "name", Value: v}
 }
@@ -395,6 +399,10 @@ func Caps() Attr {
 
 func Accept(v string) Attr {
 	return Attr{Name: "accept", Value: v}
+}
+
+func Multiple() Attr {
+	return Attr{Name: "multiple", Bare: true}
 }
 
 func Min(v string) Attr {
@@ -526,6 +534,7 @@ var IconChevronDown = Attr{Name: "icon", Value: "chevron-down"}
 var IconChevronUp = Attr{Name: "icon", Value: "chevron-up"}
 var IconClipboard = Attr{Name: "icon", Value: "clipboard"}
 var IconCloudDownload = Attr{Name: "icon", Value: "cloud-download"}
+var IconCloudUpload = Attr{Name: "icon", Value: "cloud-upload"}
 var IconColumns3 = Attr{Name: "icon", Value: "columns-3"}
 var IconCopy = Attr{Name: "icon", Value: "copy"}
 var IconDices = Attr{Name: "icon", Value: "dices"}
@@ -536,6 +545,7 @@ var IconFileText = Attr{Name: "icon", Value: "file-text"}
 var IconFileUp = Attr{Name: "icon", Value: "file-up"}
 var IconFlaskConical = Attr{Name: "icon", Value: "flask-conical"}
 var IconFunnel = Attr{Name: "icon", Value: "funnel"}
+var IconGavel = Attr{Name: "icon", Value: "gavel"}
 var IconHouse = Attr{Name: "icon", Value: "house"}
 var IconImage = Attr{Name: "icon", Value: "image"}
 var IconInfo = Attr{Name: "icon", Value: "info"}
@@ -552,8 +562,10 @@ var IconPackage = Attr{Name: "icon", Value: "package"}
 var IconPalette = Attr{Name: "icon", Value: "palette"}
 var IconPaperclip = Attr{Name: "icon", Value: "paperclip"}
 var IconPencil = Attr{Name: "icon", Value: "pencil"}
+var IconPercent = Attr{Name: "icon", Value: "percent"}
 var IconPlay = Attr{Name: "icon", Value: "play"}
 var IconPlus = Attr{Name: "icon", Value: "plus"}
+var IconRefreshCw = Attr{Name: "icon", Value: "refresh-cw"}
 var IconReplace = Attr{Name: "icon", Value: "replace"}
 var IconSearch = Attr{Name: "icon", Value: "search"}
 var IconSettings = Attr{Name: "icon", Value: "settings"}
@@ -561,6 +573,8 @@ var IconSquare = Attr{Name: "icon", Value: "square"}
 var IconTag = Attr{Name: "icon", Value: "tag"}
 var IconTags = Attr{Name: "icon", Value: "tags"}
 var IconTextCursorInput = Attr{Name: "icon", Value: "text-cursor-input"}
+var IconThumbsDown = Attr{Name: "icon", Value: "thumbs-down"}
+var IconThumbsUp = Attr{Name: "icon", Value: "thumbs-up"}
 var IconTimer = Attr{Name: "icon", Value: "timer"}
 var IconTrash2 = Attr{Name: "icon", Value: "trash-2"}
 var IconUnlink = Attr{Name: "icon", Value: "unlink"}

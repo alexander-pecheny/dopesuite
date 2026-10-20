@@ -5,7 +5,7 @@ package i18nstrings
 import (
 	"fmt"
 
-	core "pecheny.me/dopecore/i18nstrings"
+	core "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // RU is the ru Catalog.
@@ -26,6 +26,171 @@ var RU = Strings{
 			Empty:       func() string { return "Пользователей нет." },
 			Name:        func() string { return "Пользователи" },
 			Title:       func() string { return "Пользователи · Админка" },
+		},
+	},
+	Appeals: AppealsStrings{
+		Card: AppealsCardStrings{
+			Appealed:       func() string { return "апелляция" },
+			Controversials: func(n string) string { return fmt.Sprintf("Спорные ответы на вопрос %s", n) },
+			Fold:           func() string { return "Свернуть" },
+			Heading:        func(n string, what string) string { return fmt.Sprintf("Вопрос %s · %s", n, what) },
+			NoControversials: func() string {
+				return "Сайт не прислал спорных ответов на этот вопрос."
+			},
+			NoPacket: func() string {
+				return "Пакет не привязан. Его можно выбрать в настройках апелляций."
+			},
+			NoQuestion: func(packet string, n string) string {
+				return fmt.Sprintf("В пакете «%s» нет вопроса %s.", packet, n)
+			},
+			Question: func() string { return "Вопрос из пакета" },
+			Text:     func() string { return "Текст апелляции" },
+			TextChanged: func(at string) string {
+				return fmt.Sprintf("Текст апелляции изменился на сайте (%s).", at)
+			},
+			Unfold: func() string { return "Показать целиком" },
+		},
+		Controversial: AppealsControversialStrings{
+			Accepted: func() string { return "Зачтены" },
+			Declined: func() string { return "Не зачтены" },
+			Open:     func() string { return "Не рассмотрены" },
+		},
+		Export: AppealsExportStrings{
+			Done:      func(n string) string { return fmt.Sprintf("Отправлено: %s.", n) },
+			FailedOne: func(id string, reason string) string { return fmt.Sprintf("Апелляция %s: %s", id, reason) },
+			Hint: func() string {
+				return "Здесь решённые апелляции, у которых на сайте другой статус или другой текст вердикта. Снимите галочку с тех, что отправлять пока не нужно."
+			},
+			Label:   func() string { return "Выгрузить вердикты" },
+			Loading: func() string { return "Сверяю вердикты с сайтом…" },
+			NeedToken: func() string {
+				return "Чтобы выгрузить вердикты, задайте токен турнирного сайта в настройках апелляций. Если у вашего токена нет прав на запись, скачайте вердикты в .xlsx и загрузите этот файл на турнирном сайте."
+			},
+			Nothing: func() string {
+				return "Все решённые апелляции уже на сайте в том же виде."
+			},
+			Send:    func(n string) string { return fmt.Sprintf("Отправить (%s)", n) },
+			Sending: func(n string) string { return fmt.Sprintf("Отправляю вердикты: %s…", n) },
+			SiteNow: func(status string) string { return fmt.Sprintf("Сейчас на сайте: %s", status) },
+			Title:   func() string { return "Выгрузка вердиктов" },
+		},
+		Kind: AppealsKindStrings{
+			Accept:    func(answer string) string { return fmt.Sprintf("зачёт «%s»", answer) },
+			HostError: func() string { return "снятие из-за ошибки ведущего" },
+			Remove:    func() string { return "снятие" },
+		},
+		List: AppealsListStrings{
+			Count: func(total string, decided string) string { return fmt.Sprintf("%s · решено %s", total, decided) },
+			Sent:  func() string { return "Вердикт уже на турнирном сайте" },
+			Type:  func() string { return "Апелляции" },
+		},
+		Manual: AppealsManualStrings{
+			Added: func(appeal string) string {
+				return fmt.Sprintf("Добавлено: %s. Можно ввести следующую.", appeal)
+			},
+			Answer:        func() string { return "Ответ, который просят зачесть" },
+			Label:         func() string { return "Добавить апелляцию" },
+			NeedAnswer:    func() string { return "Укажите ответ, который просят зачесть." },
+			NeedQuestion:  func() string { return "Укажите номер вопроса." },
+			Question:      func() string { return "Номер вопроса" },
+			Save:          func() string { return "Добавить" },
+			Title:         func(list string) string { return fmt.Sprintf("Новая апелляция: %s", list) },
+			Type:          func() string { return "Что просят" },
+			TypeAccept:    func() string { return "Зачесть ответ" },
+			TypeHostError: func() string { return "Снять вопрос из-за ошибки ведущего" },
+			TypeRemove:    func() string { return "Снять вопрос" },
+		},
+		Offline: func() string { return "Турнирный сайт недоступен без сети." },
+		Refresh: AppealsRefreshStrings{
+			Done: func(added string, updated string, total string) string {
+				return fmt.Sprintf("Добавлено: %s, обновлено: %s. Всего на сайте: %s.", added, updated, total)
+			},
+			Label: func() string { return "Обновить апелляции" },
+			Loading: func(id string) string {
+				return fmt.Sprintf("Загружаю апелляции турнира %s…", id)
+			},
+			NoControversials: func(reason string) string {
+				return fmt.Sprintf("Спорные ответы не загрузились: %s", reason)
+			},
+			TextChanged: func(n int) string {
+				return fmt.Sprintf("Текст изменился на сайте у %d %s. Эти карточки отмечены.", n, core.Plural("ru", n, "апелляции", "апелляций", "апелляций"))
+			},
+			Title: func() string { return "Обновление апелляций" },
+		},
+		Settings: AppealsSettingsStrings{
+			Create:       func() string { return "Создать и загрузить" },
+			CreateManual: func() string { return "Создать" },
+			CreateTitle:  func() string { return "Новый список апелляций" },
+			GroupOption:  func(name string) string { return fmt.Sprintf("%s (группа)", name) },
+			Label:        func() string { return "Настройки апелляций…" },
+			Mode:         func() string { return "Откуда апелляции" },
+			ModeHint: func() string {
+				return "Выберите «Вводятся вручную», если апелляции турнира подаются не через турнирный сайт. Тогда каждую апелляцию добавляют кнопкой «+» у списка."
+			},
+			ModeLocked: func() string {
+				return "В списке уже есть апелляции, поэтому способ заполнения поменять нельзя."
+			},
+			ModeManual:     func() string { return "Вводятся вручную" },
+			ModeSite:       func() string { return "С турнирного сайта" },
+			NeedPacket:     func() string { return "Выберите пакет." },
+			NeedTitle:      func() string { return "Укажите название списка." },
+			NeedTournament: func() string { return "Укажите номер турнира." },
+			Packet:         func() string { return "Пакет" },
+			PacketHint: func() string {
+				return "Список или группа списков с вопросами турнира. Карточки апелляций показывают вопрос из пакета по номеру."
+			},
+			PacketNone: func() string { return "— выберите список —" },
+			Save:       func() string { return "Сохранить" },
+			Title:      func() string { return "Название списка" },
+			TitleFor:   func(list string) string { return fmt.Sprintf("Апелляции: %s", list) },
+			Token:      func() string { return "Токен турнирного сайта" },
+			TokenHint: func() string {
+				return "Личный токен со страницы пользователя на турнирном сайте (rating.chgk.info), одинаковый для всей доски. Без него апелляции видны только после публикации результатов, и вердикты нельзя выгрузить. Токен хранится в доске зашифрованным."
+			},
+			Tournament:     func() string { return "Турнир на турнирном сайте" },
+			TournamentHint: func() string { return "Номер турнира или ссылка на его страницу." },
+		},
+		Site: AppealsSiteStrings{
+			Overridden: func(id string) string {
+				return fmt.Sprintf("На сайте не рассматривалась: принята апелляция %s", id)
+			},
+			Status: func(status string) string { return fmt.Sprintf("На сайте: %s", status) },
+		},
+		Status: AppealsStatusStrings{
+			Accepted: func() string { return "Принять" },
+			Declined: func() string { return "Отклонить" },
+			Open:     func() string { return "Не рассмотрена" },
+		},
+		Verdict: AppealsVerdictStrings{
+			ByHand:      func() string { return "выставлено вручную" },
+			ByVotes:     func(pro string, contra string) string { return fmt.Sprintf("по голосам %s:%s", pro, contra) },
+			FollowVotes: func() string { return "По голосам" },
+			Label:       func() string { return "Вердикт" },
+			NoText:      func() string { return "Текст вердикта ещё не написан." },
+			Placeholder: func() string {
+				return "Обоснование вердикта. Оно уйдёт на турнирный сайт."
+			},
+			StatusLabel: func() string { return "Решение" },
+			Undecided:   func() string { return "Не решено" },
+		},
+		Vote: AppealsVoteStrings{
+			Against:    func() string { return "Против" },
+			AgainstWho: func(names string) string { return fmt.Sprintf("Против: %s", names) },
+			For:        func() string { return "За" },
+			ForWho:     func(names string) string { return fmt.Sprintf("За: %s", names) },
+			Label:      func() string { return "Голосование" },
+			Title: func(pro string, contra string) string {
+				return fmt.Sprintf("Голосов за: %s, против: %s", pro, contra)
+			},
+		},
+		Xlsx: AppealsXlsxStrings{
+			HeadAnswer:   func() string { return "Ответ" },
+			HeadComment:  func() string { return "Комментарий" },
+			HeadId:       func() string { return " ID" },
+			HeadQuestion: func() string { return "№" },
+			HeadStatus:   func() string { return "Статус" },
+			HeadType:     func() string { return "Тип" },
+			Label:        func() string { return "Скачать вердикты (.xlsx)" },
 		},
 	},
 	Attachments: AttachmentsStrings{
@@ -156,12 +321,14 @@ var RU = Strings{
 			ExcerptsView:        func() string { return "Смотреть" },
 			FeedLabel:           func() string { return "Лента " },
 			HandoutTitle:        func() string { return "Раздаточный материал" },
+			KindBattle:          func() string { return "Бой" },
 			KindHeading:         func() string { return "Заголовок" },
 			KindLabel:           func() string { return "Тип карточки" },
 			KindMeta:            func() string { return "Метаинформация" },
 			KindOther:           func() string { return "Другое" },
 			KindQuestion:        func() string { return "Вопрос" },
 			KindTheme:           func() string { return "Тема СИ" },
+			KindTroikaTheme:     func() string { return "Тема тройки" },
 			LabelAdd:            func() string { return "Добавить метку…" },
 			LinkLabel:           func() string { return "Ссылка на карточку" },
 			LinkTitle:           func() string { return "Скопировать прямую ссылку на карточку" },
@@ -316,6 +483,48 @@ var RU = Strings{
 			TelegramLabel:  func() string { return "телеграм-канал" },
 			Title:          func() string { return "Экспорт" },
 		},
+		ExportDocx: BoardExportDocxStrings{
+			Answers:            func() string { return "Ответы" },
+			AnswersDots:        func() string { return "Под строками точек" },
+			AnswersNone:        func() string { return "Без ответов" },
+			AnswersOff:         func() string { return "Как есть" },
+			AnswersPagebreak:   func() string { return "С новой страницы" },
+			AnswersWhiten:      func() string { return "Белым шрифтом" },
+			Noparagraph:        func() string { return "Текст вопроса в одной строке с «Вопрос N.»" },
+			OnlyQuestionNumber: func() string { return "«N.» вместо «Вопрос N.»" },
+			SameSourceSize: func() string {
+				return "Источник и автор того же размера, что и текст"
+			},
+			Screen:                   func() string { return "Текст вопросов" },
+			ScreenAddVersions:        func() string { return "Для ведущего и для экрана, друг за другом" },
+			ScreenAddVersionsColumns: func() string { return "Для ведущего и для экрана, в две колонки" },
+			ScreenOff:                func() string { return "Для ведущего" },
+			ScreenReplaceAll:         func() string { return "Для экрана" },
+			Template:                 func() string { return "Свой шаблон .docx" },
+			Title:                    func() string { return "Настройки .docx" },
+			VariantsHint: func() string {
+				return "Эти два пункта задают только обычный .docx. Варианты для экрана и со спойлерами берут отсюда остальные настройки."
+			},
+		},
+		ExportHandouts: BoardExportHandoutsStrings{
+			Teams: func() string { return "Команд" },
+			TeamsHint: func() string {
+				return "Если указать, в архив добавится PDF для печати: каждая раздатка столько раз, сколько нужно командам. Страница — из настроек раздаток тура."
+			},
+			Title: func() string { return "Печать раздаток" },
+		},
+		ExportOpts: BoardExportOptsStrings{
+			Font:     func() string { return "Шрифт" },
+			Layout:   func() string { return "Оформление" },
+			Optimize: func() string { return "Сжать картинки" },
+		},
+		ExportPptx: BoardExportPptxStrings{
+			Config:         func() string { return "Свой pptx_config.toml" },
+			DisableNumbers: func() string { return "Без номера вопроса в углу слайда" },
+			KeepAccents:    func() string { return "Оставить ударения" },
+			Template:       func() string { return "Свой шаблон .pptx" },
+			Title:          func() string { return "Настройки .pptx" },
+		},
 		Feed: BoardFeedStrings{
 			CommentPlaceholder: func() string { return "Комментарий…" },
 			DiffView:           func() string { return "Вид правок" },
@@ -370,6 +579,32 @@ var RU = Strings{
 			Label: func() string { return "Забыть пароль доски" },
 			Title: func() string { return "Забыть пароль доски на этом устройстве" },
 		},
+		HandoutPage: BoardHandoutPageStrings{
+			AutoResize: func() string {
+				return "Уменьшать картинку, если так поместится ещё один ряд"
+			},
+			BottomSpace: func() string { return "Пустое место внизу, рядов" },
+			Boxwidth:    func() string { return "Ширина ячейки, мм" },
+			Font:        func() string { return "Шрифт" },
+			FontSize:    func() string { return "Размер, пт" },
+			Height:      func() string { return "Высота, мм" },
+			Lead: func() string {
+				return "Действует на все раздатки тура: просмотр, PDF, split-fit и печать. Пустое поле — значение по умолчанию."
+			},
+			MarginBottom:  func() string { return "Снизу, мм" },
+			MarginLeft:    func() string { return "Слева, мм" },
+			MarginRight:   func() string { return "Справа, мм" },
+			MarginTop:     func() string { return "Поле сверху, мм" },
+			MinResize:     func() string { return "Не меньше, доля" },
+			Paper:         func() string { return "Формат" },
+			PaperCustom:   func() string { return "Свой размер" },
+			ResizeTitle:   func() string { return "Картинки в split-fit" },
+			Saved:         func() string { return "Сохранено." },
+			ShrinkPercent: func() string { return "Шаг, %" },
+			TikzMm:        func() string { return "Промежуток между ячейками, мм" },
+			Title:         func() string { return "Страница раздаток" },
+			Width:         func() string { return "Ширина, мм" },
+		},
 		Handouts: BoardHandoutsStrings{
 			AlignCenter:        func() string { return "по центру" },
 			AlignLeft:          func() string { return "по левому краю" },
@@ -408,8 +643,22 @@ var RU = Strings{
 			LabelInside:        func() string { return "на каждой раздатке" },
 			MenuGroup:          func() string { return "Вёрстка раздаток (вся группа)" },
 			MoreTitle:          func() string { return "Ещё настройки" },
-			PdfOffline:         func() string { return "Генерация PDF доступна только онлайн." },
-			PreambleAdd:        func() string { return "+ Общие настройки" },
+			Pack:               func() string { return "Для печати…" },
+			PackDone:           func() string { return "Готово." },
+			PackFailed: func(error string) string {
+				return fmt.Sprintf("Не получилось подготовить печать: %s", error)
+			},
+			PackTeams: func() string { return "Сколько команд играет?" },
+			PackTitle: func() string {
+				return "Split-fit, затем столько копий каждой раздатки, сколько нужно командам: один PDF для цветного принтера и один для обычного"
+			},
+			Packing: func() string { return "Готовлю печать…" },
+			Page:    func() string { return "Страница…" },
+			PageTitle: func() string {
+				return "Размер страницы, поля и шрифт раздаток этого тура"
+			},
+			PdfOffline:  func() string { return "Генерация PDF доступна только онлайн." },
+			PreambleAdd: func() string { return "+ Общие настройки" },
 			PreambleAddTitle: func() string {
 				return "Настройки по умолчанию для всех раздаток тура"
 			},
@@ -436,7 +685,7 @@ var RU = Strings{
 		},
 		Importpick: BoardImportpickStrings{
 			Hint: func() string {
-				return "Пакет вопросов (.4s, .docx) или архив xy (.zip) — что именно, разберёмся сами."
+				return "Пакет вопросов (.4s, .docx, .zip) или архив xy (.zip). Что именно, разберёмся сами. Картинки к .4s выберите вместе с ним."
 			},
 			SplitLabel: func() string { return " разбить по турам" },
 			SplitTitle: func() string {
@@ -505,13 +754,15 @@ var RU = Strings{
 			OrderLabel:    func() string { return "Порядок полей" },
 			Settings:      func() string { return "Настройки списка…" },
 			SettingsTitle: func() string { return "Настройки списка" },
+			TypeBrain:     func() string { return "Вопросы брейна" },
 			TypeChgk:      func() string { return "Вопросы ОД" },
 			TypeHint: func() string {
 				return "Тип решает, какую карточку создаёт кнопка «Добавить карточку». На уже созданные карточки не влияет."
 			},
-			TypeLabel: func() string { return "Что в списке" },
-			TypeSi:    func() string { return "Темы СИ" },
-			Untitled:  func() string { return "(без названия)" },
+			TypeLabel:  func() string { return "Что в списке" },
+			TypeSi:     func() string { return "Темы СИ" },
+			TypeTroika: func() string { return "Темы тройки" },
+			Untitled:   func() string { return "(без названия)" },
 		},
 		Listsmanage: BoardListsmanageStrings{
 			Drag:          func() string { return "Перетащить" },
@@ -742,6 +993,32 @@ var RU = Strings{
 			},
 			Name: func() string { return "Тесты" },
 		},
+		Stats: BoardStatsStrings{
+			CopyTitle:    func(title string) string { return fmt.Sprintf("%s (взятия)", title) },
+			Done:         func() string { return "Копия создана." },
+			FileLabel:    func() string { return "Или файл с результатами (.csv, .xlsx)" },
+			Label:        func() string { return "Добавить взятия…" },
+			LabelGrouped: func() string { return "Добавить взятия в группу…" },
+			Lead: func() string {
+				return "Получится копия тура, в которой к комментарию каждого вопроса добавлена строка «Взятия: N/M». Сам тур не изменится."
+			},
+			MenuTitle: func() string {
+				return "Копия тура со строкой «Взятия» в комментарии к каждому вопросу"
+			},
+			Offline: func() string { return "Взятия добавляются только онлайн." },
+			RangeHint: func() string {
+				return "Номера вопросов этого тура в таблице результатов. Если в ней только этот тур, номера начинаются с 1."
+			},
+			RangeLabel: func() string { return "Вопросы в результатах" },
+			RatingHint: func() string {
+				return "У синхрона, который играли и асинхронно, два номера через запятую."
+			},
+			RatingLabel:    func() string { return "Номер турнира на турнирном сайте" },
+			Reading:        func() string { return "Читаю результаты…" },
+			Run:            func() string { return "Создать копию" },
+			ThresholdLabel: func() string { return "Называть команды, если взяли не больше" },
+			Title:          func() string { return "Добавить взятия" },
+		},
 		Testerlist: BoardTesterlistStrings{
 			Empty: func() string { return "Вопросы этого тура никто не тестировал." },
 			Hint: func() string {
@@ -765,8 +1042,6 @@ var RU = Strings{
 			},
 			ChannelLabel:       func() string { return "Канал" },
 			ChannelPlaceholder: func() string { return "@channel, ссылка или id" },
-			ChatLabel:          func() string { return "Группа обсуждения" },
-			ChatPlaceholder:    func() string { return "@group, ссылка или id" },
 			Done:               func() string { return "Опубликовано." },
 			Hint: func() string {
 				return "Бот публикует вопросы в канал, а обсуждение — в связанную группу. Токен уходит на сервер xy: публикует он."
@@ -822,25 +1097,6 @@ var RU = Strings{
 			Comments: func() string { return "Непрочитанные комментарии" },
 			Dot:      func() string { return "Непрочитанные изменения" },
 			Mention:  func() string { return "Вас упомянули" },
-		},
-	},
-	Boardsync: BoardsyncStrings{
-		Config: BoardsyncConfigStrings{
-			EmptyUrl:     func() string { return "пустая ссылка на доску" },
-			Unrecognized: func(url string) string { return fmt.Sprintf("не понял, какая доска: %s", url) },
-		},
-		Fetch: BoardsyncFetchStrings{
-			Card: func(id string, err string) string { return fmt.Sprintf("карточка %s: %s", id, err) },
-			List: func(id string, err string) string { return fmt.Sprintf("список %s: %s", id, err) },
-		},
-		Upload: BoardsyncUploadStrings{
-			DefaultCaption: func() string { return "вопрос" },
-			ListMissing: func(name string, known string) string {
-				return fmt.Sprintf("список «%s» не найден; есть: %s", name, known)
-			},
-			NoLists:   func() string { return "на доске нет списков" },
-			Posted:    func(caption string) string { return fmt.Sprintf("отправлено: %s", caption) },
-			Uploading: func(name string) string { return fmt.Sprintf("загружаю в список «%s»", name) },
 		},
 	},
 	Bot: BotStrings{
@@ -1103,81 +1359,6 @@ var RU = Strings{
 			Zip64Unsupported: func() string { return "zip64 не поддерживается" },
 		},
 	},
-	Chgkcli: ChgkcliStrings{
-		AddStats: ChgkcliAddStatsStrings{
-			CustomCsvFlag: func() string {
-				return "a csv/xlsx результаты table in rating.chgk.info's format, comma-separated"
-			},
-		},
-		Board: ChgkcliBoardStrings{
-			BoardUrlPrompt: func() string { return "Вставьте ссылку на доску: " },
-			EmptyToken:     func() string { return "пустой токен" },
-			InitialPassphrasePrompt: func() string {
-				return "Введите пароль доски xy (он будет сохранён в board_metadata.toml): "
-			},
-			NeedBoardUrl: func() string {
-				return "Чтобы работать с доской, нужна ссылка на неё. Примеры:"
-			},
-			NoAnswersFlag: func() string { return "СИ .docx: drop the answer lines" },
-			NoToken: func(host string, url string) string {
-				return fmt.Sprintf("нет сохранённого токена для %s. Сначала выполните:\n  chgksuite board token %s", host, url)
-			},
-			NothingToUpload: func() string { return "нечего загружать" },
-			OnlyAnswersFlag: func() string { return "СИ .docx: keep only the answer lines" },
-			OpenBrowser:     func() string { return "Откройте в браузере:" },
-			OpenBrowserTokens: func(url string) string {
-				return fmt.Sprintf("Откройте в браузере %s/profile/tokens,\nсоздайте токен и вставьте его сюда.\n", url)
-			},
-			PassphrasePrompt: func() string { return "Пароль доски xy: " },
-			TokenPrompt:      func() string { return "Токен: " },
-		},
-		Docx: ChgkcliDocxStrings{
-			NoParagraphFlag:        func() string { return "no line break after \"Вопрос N.\"" },
-			OnlyQuestionNumberFlag: func() string { return "label questions \"N.\" instead of \"Вопрос N.\"" },
-		},
-		Handouts: ChgkcliHandoutsStrings{
-			AlreadyExists: func(file string) string {
-				return fmt.Sprintf("%s уже есть: удалите его или возьмите другое имя", file)
-			},
-			ColourSuffix:   func() string { return ", цветных" },
-			DimensionsNote: func(width string, height string) string { return fmt.Sprintf("%s × %s мм", width, height) },
-			HtmlGeometryNote: func(width string, share string) string {
-				return fmt.Sprintf("ширина %s мм — %s листа A4", width, share)
-			},
-			PagesNote: func(file string, pages string, colour string) string {
-				return fmt.Sprintf("%s: %s страниц%s", file, pages, colour)
-			},
-			ScaleNote:    func(scale string) string { return fmt.Sprintf("масштаб ×%s", scale) },
-			SkipWarning:  func(file string, err string) string { return fmt.Sprintf("%s: %s — пропускаем", file, err) },
-			WarnQuestion: func(number string, text string) string { return fmt.Sprintf("вопрос %s: %s", number, text) },
-			WatchNote: func(file string) string {
-				return fmt.Sprintf("слежу за %s — Ctrl-C, чтобы закончить", file)
-			},
-		},
-		Lj: ChgkcliLjStrings{
-			GenimpFlag: func() string { return "add the «Общие впечатления» post" },
-		},
-		Parse: ChgkcliParseStrings{
-			TourNumbersAsWordsFlag: func() string { return "rename the tours «Первый тур», «Второй тур»…: on|off" },
-		},
-		Shared: ChgkcliSharedStrings{
-			ReplaceNoBreakHyphensFlag: func() string { return "make the hyphen of а short word non-breaking: on|off" },
-		},
-		Telegram: ChgkcliTelegramStrings{
-			Done: func(duration string) string { return fmt.Sprintf("готово за %s", duration) },
-			Posting: func(channel string, chat string) string {
-				return fmt.Sprintf("публикую в %s, комментарии в %s", channel, chat)
-			},
-			StopIfNoStatsFlag: func() string { return "refuse to publish a package whose questions carry no «Взятия:»" },
-		},
-	},
-	Chgkimport: ChgkimportStrings{
-		Error: ChgkimportErrorStrings{
-			No4s:        func() string { return "в архиве нет файла .4s" },
-			NoQuestions: func() string { return "в файле не найдено вопросов" },
-			TooBig:      func() string { return "архив слишком велик в распакованном виде" },
-		},
-	},
 	Chrome: ChromeStrings{
 		Bell: ChromeBellStrings{
 			Empty:        func() string { return "Нет новых событий" },
@@ -1194,14 +1375,13 @@ var RU = Strings{
 			ButtonTitle: func() string { return "Цвет метки" },
 		},
 		Home: ChromeHomeStrings{
-			BoardLockedName: func(id string) string { return fmt.Sprintf("доска #%s", id) },
 			CreateOffline:   func() string { return "Создание доски доступно только онлайн." },
 			CreateSubmit:    func() string { return "Создать" },
 			CreateTitle:     func() string { return "Новая доска" },
 			Creator:         func(name string) string { return fmt.Sprintf("Создатель: %s", name) },
 			EmptyAll:        func() string { return "Пока нет досок. Нажмите + чтобы создать." },
 			EmptyNamed:      func() string { return "Досок с таким названием нет." },
-			ImportLabel:     func() string { return "Импорт из Trello" },
+			ImportLabel:     func() string { return "Импорт из Trello или другой доски xy" },
 			More:            func() string { return "Показать ещё" },
 			NamePlaceholder: func() string { return "Название доски" },
 			NewBoard:        func() string { return "Новая доска" },
@@ -1650,74 +1830,6 @@ var RU = Strings{
 			Usage: func() string {
 				return "xy-cli unlock <id|имя>\nСпрашивает пароль доски и запоминает её ключ."
 			},
-			WrongPassphrase: func() string { return "неверный пароль доски" },
-		},
-	},
-	Docs: DocsStrings{
-		Docx: DocsDocxStrings{
-			HostVersion:   func() string { return "Версия для ведущего" },
-			ScreenVersion: func() string { return "Версия для экрана" },
-		},
-		Handout: DocsHandoutStrings{
-			BadMarkup: func() string { return "раздатка, похоже, размечена неправильно" },
-			ImageMissing: func() string {
-				return "файл картинки не найден, добавьте раздатку вручную"
-			},
-			LanguageMissing: func(language string) string {
-				return fmt.Sprintf("язык \"%s\": нет выражения handout_short", language)
-			},
-			PackMultiple: func() string {
-				return "больше одной раздатки: pack берёт только файлы после split_fit"
-			},
-			PackNoGrid: func() string {
-				return "нет columns или rows: pack берёт только файлы после split_fit"
-			},
-			PackNone: func() string { return "в файле нет раздаток" },
-			PreambleSetting: func(line string) string {
-				return fmt.Sprintf("в преамбуле может быть только настройка, кроме for_question, image, columns и rows: \"%s\"", line)
-			},
-			RotateImageMissing: func(name string) string { return fmt.Sprintf("rotate: нет картинки \"%s\"", name) },
-		},
-		HandoutList: DocsHandoutListStrings{
-			ByNumberLead: func() string { return "Сквозная нумерация:\n" },
-			ByTourLead:   func() string { return "По турам:\n" },
-			Heading:      func() string { return "ВОПРОСЫ С РАЗДАТОЧНЫМ МАТЕРИАЛОМ:\n\n" },
-			TourNone:     func(n string) string { return fmt.Sprintf("Тур %s: нет раздаток\n", n) },
-			TourNumbers:  func(n string, numbers string) string { return fmt.Sprintf("Тур %s: %s\n", n, numbers) },
-		},
-		Image: DocsImageStrings{
-			Missing: func(name string) string { return fmt.Sprintf("[нет изображения: %s]", name) },
-		},
-		Markdown: DocsMarkdownStrings{
-			Answer:    func() string { return "Ответ" },
-			Author:    func() string { return "Автор" },
-			Comment:   func() string { return "Комментарий" },
-			ImageLink: func() string { return "картинка" },
-			Nezachet:  func() string { return "Незачёт" },
-			Question:  func(n string) string { return fmt.Sprintf("Вопрос %s", n) },
-			Source:    func() string { return "Источник" },
-			Zachet:    func() string { return "Зачёт" },
-		},
-		Pptx: DocsPptxStrings{
-			QuestionCaps: func(n string) string { return fmt.Sprintf("ВОПРОС %s", n) },
-		},
-		Print: DocsPrintStrings{
-			Measure: func(err string) string { return fmt.Sprintf("измерение: %s", err) },
-			MeasureNoSize: func() string {
-				return "измерение: браузер не вернул размеры страницы"
-			},
-			MeasureZeroHeight: func() string { return "измерение: нулевая высота" },
-			Pdf:               func(err string) string { return fmt.Sprintf("печать PDF: %s", err) },
-			Png:               func(err string) string { return fmt.Sprintf("снимок PNG: %s", err) },
-			WidthMissing: func() string {
-				return "не нашёл \"width: <N>mm\" — ширина тела должна быть задана в миллиметрах"
-			},
-		},
-		Typst: DocsTypstStrings{
-			LineError: func(n string, err string) string { return fmt.Sprintf("строка %s: %s", n, err) },
-			LineNotPair: func(n string) string {
-				return fmt.Sprintf("строка %s: не пара ключ = значение", n)
-			},
 		},
 	},
 	Export: ExportStrings{
@@ -1730,14 +1842,14 @@ var RU = Strings{
 			LabelGrouped: func() string { return "Экспорт группы" },
 		},
 		Notes: ExportNotesStrings{
+			GameFormats: func() string {
+				return "Такой пакет пока выгружается только в 4s, .docx и .pdf: остальные форматы теряют заголовки тем и боёв."
+			},
 			NoHandouts: func() string {
 				return "В списке нет вопросов с раздаточным материалом."
 			},
 			Offline: func() string {
 				return "Офлайн: доступен только .4s, без изображений."
-			},
-			SiFormats: func() string {
-				return "Темы СИ пока умеют только .si4s, .docx и .pdf — остальные форматы теряют заголовки тем."
 			},
 		},
 		Run: ExportRunStrings{
@@ -2026,17 +2138,28 @@ var RU = Strings{
 			ImagesFailed: func(n string) string {
 				return fmt.Sprintf("\n\nНе удалось загрузить изображения (%s): ", n)
 			},
-			Label: func() string { return "Импорт…" },
+			ImagesMissing: func(n string) string { return fmt.Sprintf("\n\nНе нашлось картинок (%s): ", n) },
+			Label:         func() string { return "Импорт из файла…" },
 			MenuTitle: func() string {
-				return "Импортировать пакет вопросов (.4s, .docx) или архив xy (.zip)"
+				return "Импортировать пакет вопросов (.4s, .docx, .txt) или архив xy (.zip)"
 			},
 			NoQuestions: func() string { return "В файле не найдено вопросов." },
 			NoToursNote: func() string {
 				return "\nТуры («## …») в файле не найдены — создан один список."
 			},
 			Offline: func() string { return "Импорт доступен только онлайн." },
+			OnePackage: func() string {
+				return "Выберите один пакет вопросов. Картинки к .4s можно выбрать вместе с ним."
+			},
 			ParseFailed: func(error string) string {
 				return fmt.Sprintf("Не удалось разобрать файл: %s", error)
+			},
+			PickFailed: func(reason string) string {
+				return fmt.Sprintf("Не удалось открыть файл: %s", reason)
+			},
+			PickedFile: func(name string) string { return fmt.Sprintf("Файл «%s».", name) },
+			PickedImages: func(name string, n string) string {
+				return fmt.Sprintf("Файл «%s», картинок рядом с ним: %s.", name, n)
 			},
 			Preamble:    func() string { return "Преамбула" },
 			PromptGroup: func() string { return "Название группы списков:" },
@@ -2125,43 +2248,6 @@ var RU = Strings{
 			Question: func(n string, question string) string { return fmt.Sprintf("Версия %s: %s", n, question) },
 		},
 	},
-	Install: InstallStrings{
-		ArchiveEscape: func(name string) string {
-			return fmt.Sprintf("архив пытается писать за пределы каталога: %s", name)
-		},
-		Browser: InstallBrowserStrings{
-			ArchiveNoShell: func() string { return "в архиве нет chrome-headless-shell" },
-			Downloading: func(version string, platform string) string {
-				return fmt.Sprintf("качаю chromium %s для %s…", version, platform)
-			},
-			NoBuild: func(platform string) string {
-				return fmt.Sprintf("для %s готовой сборки chromium нет — поставьте браузер системой (apt install chromium / brew install chromium) и укажите его через --browser или $CHGKSUITE_BROWSER", platform)
-			},
-			NoSandbox: func() string {
-				return "система запрещает песочницу chromium, запускаю с --no-sandbox"
-			},
-			NotFound: func() string {
-				return "не нашёл браузер: поставьте chromium, укажите его через --browser или $CHGKSUITE_BROWSER"
-			},
-			NotInstalled:     func() string { return "браузера на этой машине нет" },
-			PlatformMissing:  func(platform string) string { return fmt.Sprintf("для %s сборки нет", platform) },
-			ReleasesFailed:   func(status string) string { return fmt.Sprintf("список сборок chromium: %s", status) },
-			ReleasesNoStable: func() string { return "список сборок chromium: нет стабильного канала" },
-			SymlinkEscape: func(name string, dest string) string {
-				return fmt.Sprintf("архив ссылается за пределы каталога: %s → %s", name, dest)
-			},
-		},
-		Installed: func(path string) string { return fmt.Sprintf("установлен: %s", path) },
-		Typst: InstallTypstStrings{
-			ArchiveNoBinary: func(binary string) string { return fmt.Sprintf("в архиве нет %s", binary) },
-			Downloading:     func(version string) string { return fmt.Sprintf("качаю typst %s…", version) },
-			NotFound:        func() string { return "typst на этой машине нет" },
-			PlatformMissing: func(platform string) string { return fmt.Sprintf("для %s сборки typst нет", platform) },
-			ReleaseNoBuild:  func(build string) string { return fmt.Sprintf("в релизе typst нет сборки %s", build) },
-			ReleasesFailed:  func(status string) string { return fmt.Sprintf("список сборок typst: %s", status) },
-			UnknownArchive:  func(archive string) string { return fmt.Sprintf("непонятный архив: %s", archive) },
-		},
-	},
 	Invite: InviteStrings{
 		Facts: InviteFactsStrings{
 			Approval: func() string { return "с одобрением" },
@@ -2243,17 +2329,6 @@ var RU = Strings{
 				return fmt.Sprintf("использований: %s, осталось: %s", n, left)
 			},
 			Used: func(n string) string { return fmt.Sprintf("использований: %s", n) },
-		},
-	},
-	Lj: LjStrings{
-		Error: LjErrorStrings{
-			Fault: func(message string, code string) string {
-				return fmt.Sprintf("livejournal: %s (код %s)", message, code)
-			},
-			Malformed:   func(err string) string { return fmt.Sprintf("ответ livejournal: %s", err) },
-			NoChallenge: func() string { return "livejournal не выдал challenge" },
-			Nothing:     func() string { return "нечего публиковать" },
-			Status:      func(status string) string { return fmt.Sprintf("livejournal ответил %s", status) },
 		},
 	},
 	Notify: NotifyStrings{
@@ -2405,6 +2480,9 @@ var RU = Strings{
 		Blank: func() string { return "(пусто)" },
 	},
 	Server: ServerStrings{
+		Appeal: ServerAppealStrings{
+			VoteNotAppeal: func() string { return "голосовать можно только за апелляцию" },
+		},
 		Attachment: ServerAttachmentStrings{
 			NotFound: func() string { return "вложение не найдено" },
 		},
@@ -2447,15 +2525,32 @@ var RU = Strings{
 		Error: ServerErrorStrings{
 			BadRequest: func() string { return "Некорректный запрос." },
 		},
+		Export: ServerExportStrings{
+			BadDocxTemplate: func() string { return "шаблон .docx не открывается" },
+			BadFont: func() string {
+				return "в названии шрифта могут быть только буквы, цифры, пробелы и дефисы"
+			},
+			BadPptxConfig: func(reason string) string {
+				return fmt.Sprintf("не удалось прочитать настройки .pptx: %s", reason)
+			},
+			BadPptxTemplate: func() string { return "шаблон .pptx не открывается" },
+		},
+		Handouts: ServerHandoutsStrings{
+			BadPage: func() string {
+				return "настройки страницы раздаток не подходят: проверьте размеры и поля"
+			},
+			BadTeams: func() string { return "число команд должно быть от 1 до 9999" },
+		},
 		Import: ServerImportStrings{
 			FileNoQuestions: func() string { return "в файле не найдено вопросов" },
+			ImagesNeed4s:    func() string { return "картинки можно добавить только к файлу .4s" },
 			NoFile:          func() string { return "файл не выбран" },
 			ParseFailed: func(reason string) string {
 				return fmt.Sprintf("не удалось разобрать файл: %s", reason)
 			},
 			ReadFailed:      func() string { return "не удалось прочитать файл" },
 			TextNoQuestions: func() string { return "в тексте не найдено вопросов" },
-			Unsupported:     func() string { return "поддерживаются только .4s, .zip и .docx" },
+			Unsupported:     func() string { return "поддерживаются только .4s, .zip, .docx и .txt" },
 		},
 		Internal: func() string { return "ошибка сервера" },
 		Invite: ServerInviteStrings{
@@ -2484,6 +2579,24 @@ var RU = Strings{
 			},
 			HumanMb: func(mb string) string { return fmt.Sprintf("%s МБ", mb) },
 		},
+		Rating: ServerRatingStrings{
+			Busy: func() string {
+				return "Турнир сейчас меняет кто-то другой, повторите через минуту"
+			},
+			Failed: func(status string) string {
+				return fmt.Sprintf("Турнирный сайт ответил ошибкой %s", status)
+			},
+			Forbidden:    func() string { return "У этого токена нет прав на турнир" },
+			NoToken:      func() string { return "Не задан токен турнирного сайта" },
+			NoTournament: func() string { return "Не указан номер турнира" },
+			NotFound: func() string {
+				return "Турнирный сайт не нашёл турнир или апелляцию"
+			},
+			Unauthorized: func() string { return "Турнирный сайт не принял токен" },
+			Unreachable: func() string {
+				return "Турнирный сайт не отвечает. Попробуйте ещё раз позже."
+			},
+		},
 		Reaction: ServerReactionStrings{
 			DeleteOwnerOnly: func() string { return "убрать может только автор" },
 			NotFound:        func() string { return "реакция не найдена" },
@@ -2496,6 +2609,19 @@ var RU = Strings{
 			Revoked:   func() string { return "ссылка отозвана" },
 			Spent: func() string {
 				return "по этой ссылке вы уже проходили — попросите новую"
+			},
+		},
+		Stats: ServerStatsStrings{
+			BadFile: func() string { return "файл с результатами не открывается" },
+			BadIds: func() string {
+				return "номер турнира — это число, а у синхрона с асинхроном два числа через запятую"
+			},
+			BadThreshold: func() string { return "число команд должно быть от 0 до 99" },
+			FetchFailed: func(reason string) string {
+				return fmt.Sprintf("не удалось получить результаты с турнирного сайта: %s", reason)
+			},
+			NoSource: func() string {
+				return "укажите номер турнира или выберите файл с результатами"
 			},
 		},
 	},
@@ -2586,84 +2712,14 @@ var RU = Strings{
 			StopTitle: func() string { return "Завершить тест-режим" },
 		},
 	},
-	Stats: StatsStrings{
-		Options: StatsOptionsStrings{
-			Label: func() string { return "Взятия" },
-		},
-		Question: StatsQuestionStrings{
-			Line: func(label string, taken string, total string, percent string) string {
-				return fmt.Sprintf("%s: %s/%s (%s%%)", label, taken, total, percent)
-			},
-			Takers: func(names string) string { return fmt.Sprintf(" (%s)", names) },
-		},
-		Range: StatsRangeStrings{
-			Bad: func(value string) string {
-				return fmt.Sprintf("--question_range \"%s\": нужен диапазон вида 25-36", value)
-			},
-		},
-		Rating: StatsRatingStrings{
-			Decode: func(id string, err string) string { return fmt.Sprintf("турнир %s: %s", id, err) },
-			Status: func(id string, status string) string {
-				return fmt.Sprintf("турнир %s: рейтинг ответил %s", id, status)
-			},
-		},
-		Results: StatsResultsStrings{
-			Empty: func() string {
-				return "в результатах нет ни одной команды с расплюсовкой"
-			},
-		},
-		Table: StatsTableStrings{
-			Disputed: func(n string, value string, team string) string {
-				return fmt.Sprintf("В расплюсовке найдены нерассмотренные спорные или неожиданные значения (%s шт.), они засчитаны как неверные. Например: значение=\"%s\", команда=\"%s\".", n, value, team)
-			},
-			HeaderMissing: func() string {
-				return "Не удалось найти заголовок вопросной таблицы (строку со столбцом «Название»)."
-			},
-		},
-		Xlsx: StatsXlsxStrings{
-			NoSheets:     func() string { return "в книге нет листов" },
-			PartMissing:  func(name string) string { return fmt.Sprintf("%s: нет в книге", name) },
-			SheetMissing: func(id string) string { return fmt.Sprintf("лист \"%s\" не найден", id) },
-		},
-	},
 	Tg: TgStrings{
 		Export: TgExportStrings{
-			Connecting: func() string { return "Подключаемся к боту…" },
-			Failed:     func() string { return "Не удалось опубликовать в телеграм." },
-			MissingFields: func() string {
-				return "Нужны токен бота, канал и группа обсуждения."
-			},
+			Connecting:    func() string { return "Подключаемся к боту…" },
+			Failed:        func() string { return "Не удалось опубликовать в телеграм." },
+			MissingFields: func() string { return "Нужны токен бота и канал." },
 			Posting: func(channel string, chat string) string {
 				return fmt.Sprintf("Публикуем в %s, обсуждение %s…", channel, chat)
 			},
-		},
-		Resolve: TgResolveStrings{
-			Done: func() string { return "✅ Готово, продолжаем." },
-			Forward: func(name string) string {
-				return fmt.Sprintf("Перешлите боту любое сообщение из канала «%s».", name)
-			},
-			GroupCode: func(name string, code string) string {
-				return fmt.Sprintf("Напишите в группе обсуждения «%s» сообщение: %s", name, code)
-			},
-			GroupCodeHint: func() string {
-				return "Бот должен быть в группе и быть администратором, иначе он не увидит."
-			},
-			PrivateCode: func(code string) string {
-				return fmt.Sprintf("Отправьте боту в личном чате код: %s", code)
-			},
-			SameChannel: func() string {
-				return "Это тот же канал, а нужна группа обсуждения — напишите в неё, не в канал."
-			},
-		},
-		Verify: TgVerifyStrings{
-			NotAdmin: func(what string) string { return fmt.Sprintf("бот не администратор %s", what) },
-			NotMember: func(what string, err string) string {
-				return fmt.Sprintf("бот не добавлен к %s: %s", what, err)
-			},
-			OfChannel:   func() string { return "канала" },
-			OfChat:      func() string { return "группы обсуждения" },
-			WhatChannel: func() string { return "каналу" },
-			WhatChat:    func() string { return "группе обсуждения" },
 		},
 	},
 	Timeline: TimelineStrings{

@@ -9,17 +9,19 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"strings"
 	"sync"
 
 	_ "modernc.org/sqlite"
 
-	"pecheny.me/dopecore/blobstore"
-	"pecheny.me/dopecore/sqlitex"
-	"pecheny.me/dopecore/tgbot"
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/blobstore"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
-	"xy/internal/chgk/handout"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
 )
 
 const dbFile = "xy.db"
@@ -36,9 +38,9 @@ type server struct {
 
 	staging *handoutStaging // staged handout images (see staging.go)
 
-	// typst, compiled to wasm and run in-process (see typst.go). Built lazily and
-	// shared: compiling the module is what costs, not using it. Tests inject a stub
-	// so they neither compile the wasm nor need a real image to render.
+	// typst, as wasm in-process or the desktop app's binary (see typst.go). Built
+	// lazily and shared: compiling the module is what costs, not using it. Tests
+	// inject a stub so they neither compile the wasm nor need a real image to render.
 	// The login bot, polling in this process (see bot.go). nil on an instance
 	// that holds no token — staging, a dev checkout, a second prod binary that
 	// lost the race for the poll lock.
@@ -51,28 +53,62 @@ type server struct {
 	// tgAPIBase is where the telegram export's own bot reaches the Bot API;
 	// empty is Telegram's. Tests point it at a stub.
 	tgAPIBase string
+	// ratingAPIBase is where the rating relay reaches the site (rating.go);
+	// empty is api.rating.chgk.info. Tests point it at a stub.
+	ratingAPIBase string
+
+	cfg Config
+	// pickFile is the desktop app's native file dialog (importpick.go); nil
+	// everywhere else.
+	pickFile func() (string, error)
+	// localUser is the one account a local server has, created on first open;
+	// every request is it (see local.go).
+	localUser session.User
 }
 
 func openDB(path string) (*sql.DB, error) { return sqlitex.Open(path, migrate) }
 
-func newServer() (*server, error) {
-	path := os.Getenv("XY_DB")
-	if path == "" {
-		path = dbFile
+// Config is what a server is built from. Main fills it from the environment;
+// localserver fills it for the desktop app.
+type Config struct {
+	DB       string // the SQLite database file
+	Blobs    string // the attachment blob directory
+	BotToken string // the login bot's token; empty runs no bot
+	// Local is the desktop app's mode: one user and no login, boards stored as
+	// plaintext, and every route that needs a second person or a server answers
+	// 404 (see local.go).
+	Local bool
+	// Typst is a typst binary to render with in place of the wasm (typst.go).
+	Typst string
+}
+
+// configFromEnv is the Config prod, staging and dev have always run with.
+func configFromEnv() Config {
+	cfg := Config{
+		DB:       os.Getenv("XY_DB"),
+		Blobs:    os.Getenv("XY_BLOBS"),
+		BotToken: strings.TrimSpace(os.Getenv("XY_BOT_TOKEN")),
 	}
-	db, err := openDB(path)
+	if cfg.DB == "" {
+		cfg.DB = dbFile
+	}
+	if cfg.Blobs == "" {
+		cfg.Blobs = "blobs"
+	}
+	return cfg
+}
+
+func newServer(cfg Config) (*server, error) {
+	db, err := openDB(cfg.DB)
 	if err != nil {
 		return nil, err
 	}
-	blobDir := os.Getenv("XY_BLOBS")
-	if blobDir == "" {
-		blobDir = "blobs"
-	}
-	blobs, err := blobstore.New(blobDir)
+	blobs, err := blobstore.New(cfg.Blobs)
 	if err != nil {
+		db.Close()
 		return nil, err
 	}
-	return &server{db: db, blobs: blobs, staging: newHandoutStaging()}, nil
+	return &server{db: db, blobs: blobs, staging: newHandoutStaging(), cfg: cfg}, nil
 }
 
 // withWriteTx runs fn in one serialised write transaction under the global

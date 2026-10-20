@@ -2,7 +2,7 @@
 // the tool what commands it has, draws a form for the one you pick, and runs
 // it, streaming the output into the pane below.
 //
-// It is its own module so that xy, a server, never depends on a GUI toolkit,
+// It is its own module so that chgksuite and xy never depend on a GUI toolkit,
 // and it drives chgksuite as a subprocess rather than linking it, so a command
 // that fails cannot take the window down with it.
 package main

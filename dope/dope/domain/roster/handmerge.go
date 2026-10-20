@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"dope/dope/storage/store"
 )

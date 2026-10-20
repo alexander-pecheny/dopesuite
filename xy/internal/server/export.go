@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"xy/internal/chgk/docx"
-	"xy/internal/chgk/fsource"
-	"xy/internal/chgk/typstdoc"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/docx"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/typstdoc"
 
 	xystrings "xy/i18nstrings"
 )
@@ -77,7 +78,7 @@ type exportRequest struct {
 	source string
 	name   string
 	device string // "" (desktop) or "mobile" — PDF export only
-	game   string // "" (ChGK) or "si" — taken from the exported List's type
+	game   string // exportGame's answer to what the client says the cards make
 	images map[string][]byte
 	// commentFirst puts every question's comment before its answer.
 	commentFirst bool
@@ -129,13 +130,14 @@ func (s *server) readExportForm(w http.ResponseWriter, r *http.Request, ext stri
 	return req, form, true
 }
 
-// exportGame allowlists the game the client may ask for: anything but SI lays
+// exportGame allowlists the game the client may ask for: anything else lays
 // out as ChGK, which is what every board did before SI themes existed.
 func exportGame(v string) string {
-	if v == "si" {
-		return "si"
+	switch v {
+	case cardkind.GameSI, cardkind.GameTroika, cardkind.GameBrain:
+		return v
 	}
-	return "chgk"
+	return cardkind.GameChgk
 }
 
 // attrChar reports whether r may appear unescaped in an RFC 5987 ext-value.
@@ -202,7 +204,7 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleExportPDF is the same export in the other format: the same 4s source and
-// the same images, laid out by typst (internal/chgk/typstdoc) to look like the
+// the same images, laid out by typst (chgksuite/typstdoc) to look like the
 // docx. It runs on the shared in-process typst (wasm) pool, so — like handouts —
 // the plaintext stays in memory.
 func (s *server) handleExportPDF(w http.ResponseWriter, r *http.Request) {

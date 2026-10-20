@@ -1,0 +1,4 @@
+# What the HTTP edge says when something goes wrong.
+[error]
+bad_request = "Запрос не удалось разобрать."
+internal = "Что-то сломалось на нашей стороне. Попробуйте ещё раз."

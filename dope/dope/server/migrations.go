@@ -19,7 +19,7 @@ import (
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
-	"pecheny.me/dopecore/schema"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/schema"
 )
 
 // migrations is dope's schema, as a list (storage/schema): each step a

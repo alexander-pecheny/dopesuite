@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"pecheny.me/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 func TestParse(t *testing.T) {

@@ -49,7 +49,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // Flag defaults.

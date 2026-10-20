@@ -25,8 +25,8 @@ import (
 	"dope/dope/platform/util"
 	dopestrings "dope/i18nstrings"
 
-	core "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
+	core "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 func main() {

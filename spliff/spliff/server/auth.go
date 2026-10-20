@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/session"
-	"pecheny.me/dopecore/tglogin"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tglogin"
 
 	"spliff/spliff/web/route"
 

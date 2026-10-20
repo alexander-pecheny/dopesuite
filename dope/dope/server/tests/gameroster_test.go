@@ -14,7 +14,7 @@ import (
 
 	"dope/dope/domain/replay"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A фест's Games rarely share an entrant list. СтудЧР-2026 registered 65 teams;

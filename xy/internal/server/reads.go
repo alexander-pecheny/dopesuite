@@ -65,7 +65,7 @@ type activityEventDTO struct {
 	// has to be able to name the same people.
 	AuthorUsername *string `json:"author_username,omitempty"`
 	CreatedAt      string  `json:"created_at"`
-	PayloadEnc     string  `json:"payload_enc"`
+	Payload        string  `json:"payload"`
 	Unread         bool    `json:"unread"`
 	// Mention: this row names the caller — the 🔔 panel paints it red while
 	// Unread holds. MentionReply: it does so by replying to their comment
@@ -102,7 +102,7 @@ func (s *server) handleBoardActivity(w http.ResponseWriter, r *http.Request) {
 select e.id, e.card_id, e.type, e.author_user_id,
   (select coalesce(nullif(u.username, ''), u.telegram_username)
      from users u where u.id = e.author_user_id),
-  e.created_at, e.payload_enc, e.reply_to_id,
+  e.created_at, e.payload, e.reply_to_id,
   case when `+sqlUnread+` then 1 else 0 end as unread,
   case when `+sqlMentionExplicit("?")+` then 1 else 0 end as mention_explicit,
   case when `+sqlMentionReply("?")+` then 1 else 0 end as mention_reply
@@ -126,7 +126,7 @@ limit ?`, uid, uid, uid, uid, bid, limit)
 		if authorName.Valid {
 			e.AuthorUsername = &authorName.String
 		}
-		e.PayloadEnc = b64(payload)
+		e.Payload = b64(payload)
 		e.Unread = unread == 1
 		e.Mention = explicit == 1 || reply == 1
 		e.MentionReply = reply == 1 && explicit == 0

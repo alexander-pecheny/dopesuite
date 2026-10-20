@@ -25,8 +25,8 @@ import (
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // What an entrant is in a format: a team, a troika or a player

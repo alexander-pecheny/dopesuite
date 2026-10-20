@@ -1,0 +1,128 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/stats"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/tg"
+)
+
+// composeTelegram is `chgksuite compose telegram`: post a packet to a channel,
+// question by question, with its comments in the linked discussion group.
+func composeTelegram(args []string) error {
+	fs := newFlagSet("compose telegram")
+	s := chgkstrings.Default
+	channel := fs.String("tgchannel", "", "channel to post to: an id, a t.me link or @username")
+	dryRun := fs.Bool("dry_run", false, "print what would be posted, post nothing")
+	noSpoilers := fs.Bool("nospoilers", false, "print the answers openly")
+	disableAsterisks := fs.Bool("disable_asterisks_processing", false, "leave * alone")
+	skipUntil := fs.Int("skip_until", 0, "start at question N")
+	commentFirst := commentFirstFlag(fs)
+	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the packet")
+	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
+	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
+	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", s.Chgkcli.Telegram.StopIfNoStatsFlag())
+	language := languageFlag(fs)
+	config := configFlag(fs)
+	if err := parseConfigured(fs, args, *config); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("compose telegram takes exactly one .4s file")
+	}
+	in := fs.Arg(0)
+
+	lang, labelsFile, langErr := language()
+	if langErr != nil {
+		return langErr
+	}
+	opts := tg.Options{
+		Language:         lang,
+		LabelsFile:       labelsFile,
+		NoSpoilers:       *noSpoilers,
+		DisableAsterisks: *disableAsterisks,
+		SkipUntil:        *skipUntil,
+		CommentFirst:     *commentFirst,
+	}
+	var polls *tg.PollConfig
+	if *addPolls {
+		var err error
+		if *pollConfig == "" {
+			if polls, err = tg.DefaultPollConfig(); err != nil {
+				return err
+			}
+		} else {
+			raw, readErr := os.ReadFile(*pollConfig)
+			if readErr != nil {
+				return readErr
+			}
+			if polls, err = tg.ParsePollConfig(string(raw)); err != nil {
+				return fmt.Errorf("%s: %w", *pollConfig, err)
+			}
+		}
+	}
+
+	src, err := os.ReadFile(in)
+	if err != nil {
+		return err
+	}
+	if game := gameOf(in); game != "chgk" {
+		return fmt.Errorf("the telegram export is ported for chgk only, not %s", game)
+	}
+	doc := fsource.Parse(string(src), "chgk")
+	if *stopIfNoStats && !stats.HasStats(doc) {
+		return fmt.Errorf("don't publish questions without stats")
+	}
+	images, err := loadImages(doc, filepath.Dir(in))
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	req := tg.Request{Doc: doc, Images: images, Options: opts, Polls: polls}
+	if *dryRun {
+		// The id given, so the links in the navigation post look like the ones a
+		// real run would write; placeholders otherwise.
+		req.Target = tg.DryRunTarget(*channel)
+		return tg.Export(ctx, tg.NewDryRunPoster(), req)
+	}
+
+	botToken := strings.TrimSpace(*token)
+	if botToken == "" {
+		botToken = strings.TrimSpace(os.Getenv("CHGKSUITE_TG_TOKEN"))
+	}
+	if botToken == "" {
+		return fmt.Errorf("no bot token: pass --token or set CHGKSUITE_TG_TOKEN")
+	}
+	bot := tg.NewBot(botToken)
+	stop, err := bot.Start(ctx)
+	if err != nil {
+		return err
+	}
+	defer stop()
+
+	say := func(format string, a ...any) { fmt.Fprintf(os.Stderr, "\n"+format+"\n", a...) }
+	target, err := tg.ResolveTarget(ctx, bot, *channel, say)
+	if err != nil {
+		return err
+	}
+	poster, err := tg.NewPoster(bot, target)
+	if err != nil {
+		return err
+	}
+	req.Target = target
+	reportNote("%s", s.Chgkcli.Telegram.Posting(target.ChannelID, target.ChatID))
+	start := time.Now()
+	if err := tg.Export(ctx, poster, req); err != nil {
+		return err
+	}
+	reportDone("%s", s.Chgkcli.Telegram.Done(time.Since(start).Round(time.Second).String()))
+	return nil
+}

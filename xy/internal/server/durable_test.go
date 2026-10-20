@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"pecheny.me/dopecore/sqlitex/sqlitextest"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 )
 
 // openTestDB opens and migrates a database the way openDB does, but without

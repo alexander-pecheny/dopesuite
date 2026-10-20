@@ -29,8 +29,8 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FACES = ROOT / "xy/internal/chgk/handout/assets"
-TEMPLATE = ROOT / "xy/internal/chgk/docx/assets/template.docx"
+FACES = ROOT / "chgksuite/handout/assets"
+TEMPLATE = ROOT / "chgksuite/docx/assets/template.docx"
 
 OBFUSCATED_BYTES = 32
 KEY_BYTES = 16

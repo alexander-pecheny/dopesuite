@@ -10,7 +10,7 @@ import (
 
 	"dope/dope/storage/store"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // Macro is a Kind's compile-time role at Block grain — CONTEXT.md's own word

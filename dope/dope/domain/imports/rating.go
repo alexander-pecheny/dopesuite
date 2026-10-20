@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"dope/dope/domain/core"
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/roster"
@@ -20,7 +21,6 @@ import (
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 const (

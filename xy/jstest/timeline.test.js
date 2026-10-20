@@ -181,6 +181,7 @@ test("trailing sentence punctuation stays outside the link", () => {
 test("a wikipedia-style path keeps its closing paren, a wrapping one loses it", () => {
   const wiki = "https://ru.wikipedia.org/wiki/%D0%9C%D0%B8%D1%80_(%D1%84%D0%B8%D0%BB%D1%8C%D0%BC)";
   assert.deepEqual(linkSegments(wiki), [{ text: wiki, href: wiki }]);
+  assert.deepEqual(linkSegments(`(${wiki})`), [{ text: "(" }, { text: wiki, href: wiki }, { text: ")" }]);
   assert.deepEqual(linkSegments("(см. https://example.com/a)"), [
     { text: "(см. " },
     { text: "https://example.com/a", href: "https://example.com/a" },

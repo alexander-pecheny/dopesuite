@@ -1,5 +1,5 @@
 // eventpayload.ts — the codec for a Timeline event's encrypted payload. Every
-// writer and reader of payload_enc goes through it, so the shape each kind
+// writer and reader of payload goes through it, so the shape each kind
 // stores lives in one place:
 //
 //   comment      a plain string, or {"xy":1,"t":text,"img":[attachment ids]}
@@ -145,8 +145,8 @@ export function decodePayload(type: string, raw: string): OpenedPayload {
   }
 }
 
-// sealPayload encodes and encrypts: what goes into payload_enc,
-// desc_event_enc or event_payload_enc.
+// sealPayload encodes and encrypts: what goes into payload,
+// desc_event or event_payload.
 export function sealPayload<K extends EventKind>(dk: DataKey, kind: K, data: PayloadOf<K>): Promise<string> {
   return xyCrypto.encField(dk, encodePayload(kind, data));
 }
@@ -155,12 +155,12 @@ export function sealPayload<K extends EventKind>(dk: DataKey, kind: K, data: Pay
 // No key, or a field that will not open, gives UNREADABLE for that event.
 export async function openPayloads(
   dk: DataKey | null,
-  events: readonly { type: string; payload_enc?: string | null }[],
+  events: readonly { type: string; payload?: string | null }[],
 ): Promise<OpenedPayload[]> {
   if (!dk) return events.map(() => UNREADABLE);
   let texts: (string | null)[];
   try {
-    texts = await xyCrypto.decFields(dk, events.map((e) => e.payload_enc || ""));
+    texts = await xyCrypto.decFields(dk, events.map((e) => e.payload || ""));
   } catch (_) {
     return events.map(() => UNREADABLE);
   }
@@ -171,7 +171,7 @@ export async function openPayloads(
 }
 
 export async function openPayload(dk: DataKey | null, type: string, b64: string | null | undefined): Promise<OpenedPayload> {
-  return (await openPayloads(dk, [{ type, payload_enc: b64 }]))[0];
+  return (await openPayloads(dk, [{ type, payload: b64 }]))[0];
 }
 
 // commentText is what search, the 🔔 and a reply's quote want from an event: a

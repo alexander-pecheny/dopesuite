@@ -3,9 +3,9 @@
 // bundleimportpanel.ts to be appended to this board (ADR-0013), and everything
 // else is a package of questions for a new list.
 //
-// A package (.4s / .zip / .docx) becomes a new list. The
+// A package (.4s / .zip / .docx / .txt) becomes a new list. The
 // server parses the upload with the Go port of chgksuite's parser
-// (internal/chgk/chgkimport) and hands back 4s source plus the images it
+// (chgksuite/chgkimport) and hands back 4s source plus the images it
 // references. Everything below happens client-side under the board key: the
 // list, its cards and the image attachments are all encrypted before they go
 // back up.
@@ -24,13 +24,16 @@ import { byRank } from "./dragrank.js";
 import { nowStamp } from "./carddetail.js";
 import { modal } from "./modal.js";
 import { sniffBundle } from "./bundleimport.js";
+import { xyInstance } from "./instance.js";
 import type { BundleImport } from "./bundleimportpanel.js";
-import type { Board, BoardPanel } from "./panels.js";
+import type { Board } from "./panels.js";
 import S from "./i18nstrings.js";
-import { numbered } from "./cardkind.js";
+import { KIND, numbered } from "./cardkind.js";
 
 // Quiet time after the last option change before the preview is redrawn.
 const PREVIEW_DEBOUNCE_MS = 200;
+// The app's file dialog was cancelled.
+const HTTP_NO_CONTENT = 204;
 
 const { jpost, byId, errMsg } = xyApp;
 const { keyBetween } = xyRank;
@@ -39,7 +42,7 @@ const { keyBetween } = xyRank;
 // does; the renderer is the board's.
 export type PreviewRenderer = (card: { id: number; kind: string; desc: string }, number: string | null, imgMap: Map<string, string>, screen: boolean) => HTMLElement;
 
-export function createImportPanel(board: Board, renderPreviewCard: PreviewRenderer, bundles: BundleImport): BoardPanel {
+export function createImportPanel(board: Board, renderPreviewCard: PreviewRenderer, bundles: BundleImport): { open(): void } {
   interface ImportImage { name: string; data: string; mime: string }
   interface ImportCard { id: number; kind: string; desc: string }
   interface ImportPkg { name: string; source: string; images?: ImportImage[] }
@@ -53,12 +56,39 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // what will happen before pressing anything — and "split by tours", which
   // means nothing to an archive, goes away when one is picked.
   let sniffed: Awaited<ReturnType<typeof sniffBundle>> = null;
+  // What the desktop app's own dialog picked, standing in for the file field.
+  let native: File[] | null = null;
+  const fileField = byId<HTMLInputElement>("importFile");
 
-  function openImportPick(): void {
+  async function openImportPick(): Promise<void> {
     byId<HTMLFormElement>("importPickForm").reset();
     sniffed = null;
+    native = null;
     showKind("");
+    if (xyInstance.picksFiles()) {
+      try {
+        native = await pickNative();
+      } catch (err) {
+        alert(S.import.pack.pickFailed(errMsg(err)));
+        return;
+      }
+      if (!native) return;
+    }
+    fileField.hidden = native != null;
+    byId("importPickHint").hidden = native != null;
+    fileField.required = native == null;
     importPickModal.open();
+    if (native) filesChanged();
+  }
+
+  // pickNative asks the app for a package; it comes back with the pictures
+  // beside it that it names. null is a cancelled dialog.
+  async function pickNative(): Promise<File[] | null> {
+    const res = await fetch("/api/import/pick", { method: "POST", credentials: "same-origin" });
+    if (res.status === HTTP_NO_CONTENT) return null;
+    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+    const { files } = (await res.json()) as { files: ImportImage[] };
+    return files.map((f) => new File([Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0))], f.name, { type: f.mime }));
   }
 
   function showKind(what: string): void {
@@ -67,51 +97,74 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     if (tours) (tours as HTMLElement).hidden = sniffed != null;
   }
 
-  byId("importFile").addEventListener("change", () => {
-    const file = byId<HTMLInputElement>("importFile").files?.[0];
+  // picked splits the selection into the one package and the images that came
+  // with it, since a browser hands over a .4s without the pictures beside it.
+  function picked(): { file: File | null; images: File[] } {
+    const files = native ?? [...(fileField.files ?? [])];
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    const rest = files.filter((f) => !images.includes(f));
+    return { file: rest.length === 1 ? rest[0] : null, images };
+  }
+
+  function filesChanged(): void {
+    const { file, images } = picked();
     sniffed = null;
     showKind("");
-    if (!file) return;
-    showKind(S.import.pack.readingFile());
+    if (!file) {
+      if (images.length) showKind(S.import.pack.onePackage());
+      return;
+    }
+    // A native pick shows no file field, so the line says what was picked.
+    const lead = !native ? "" : (images.length ? S.import.pack.pickedImages(file.name, String(images.length)) : S.import.pack.pickedFile(file.name)) + " ";
+    showKind(lead + S.import.pack.readingFile());
     void sniffBundle(file).then((b) => {
       sniffed = b;
-      showKind(b
+      showKind(lead + (b
         ? S.import.pack.sniffedArchive(b.bundle.board.name, b.bundle.exported_at.slice(0, ISO_DATE_LEN))
-        : S.import.pack.sniffedPackage());
+        : S.import.pack.sniffedPackage()));
     });
-  });
+  }
+  fileField.addEventListener("change", filesChanged);
 
   byId("importPickForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const files = byId<HTMLInputElement>("importFile").files;
-    const file = files && files[0];
-    if (!file) return;
+    const { file, images } = picked();
+    if (!file) { alert(S.import.pack.onePackage()); return; }
     const splitTours = byId<HTMLInputElement>("importSplitTours").checked;
-    const game = byId<HTMLSelectElement>("importGame").value;
+    const game = gameOfImport(file.name, byId<HTMLSelectElement>("importGame").value);
     importPickModal.close();
     const bundle = sniffed ?? await sniffBundle(file);
     if (bundle) {
       bundles.openWith(file, bundle.bundle, bundle.bytesOf);
       return;
     }
-    await importFile(file, splitTours, game);
+    await importFile(file, images, splitTours, game);
   });
 
-  async function importFile(file: File, splitTours: boolean, game: string): Promise<void> {
+  // gameOfImport is the game a package is read as: the one its extension names
+  // (.si4s, .tr4s, .br4s), or else the reader's pick, whose "normal" is ChGK.
+  function gameOfImport(filename: string, picked: string): string {
+    const ext = /\.(si4s|tr4s|br4s)$/i.exec(filename)?.[1].toLowerCase();
+    if (ext) return { si4s: "si", tr4s: "troika", br4s: "brain" }[ext] ?? "chgk";
+    return picked === "normal" ? "chgk" : picked;
+  }
+
+  async function importFile(file: File, images: File[], splitTours: boolean, game: string): Promise<void> {
     if (!xySync.requireOnline(S.import.pack.offline())) return;
     board.setStatus("saving");
     try {
       const fd = new FormData();
       fd.append("file", file, file.name);
-      // SI themes are read by a different parser off the document's own outline,
-      // so the choice is the reader's rather than a guess about the file.
-      fd.append("game", game === "si" ? "si" : "chgk");
+      for (const img of images) fd.append("image", img, img.name);
+      // SI and troika themes are read by a different parser off the document's
+      // own outline, so the choice is the reader's rather than a guess.
+      fd.append("game", game);
       const res = await fetch("/api/import/parse", { method: "POST", credentials: "same-origin", body: fd });
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       const pkg = (await res.json()) as ImportPkg;
       board.setStatus("saved");
-      // A .docx parse is a guess; let the user check it before it becomes a list.
-      if (/\.docx$/i.test(file.name)) openImportVerify(pkg, splitTours, game);
+      // A .docx or .txt parse is a guess; let the user check it before it becomes a list.
+      if (/\.(docx|txt)$/i.test(file.name)) openImportVerify(pkg, splitTours, game);
       else await commitImport(pkg.name, pkg.source, pkg.images, splitTours, game);
     } catch (err) {
       board.setStatus("error");
@@ -127,36 +180,46 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // blank-line-separated block. Each card's kind comes from its leading marker.
   function importCards(source: string, game: string): ImportCard[] {
     const blocks = source.split(/\n[ \t]*\n/).map((b) => b.trim()).filter(Boolean);
-    // A SI package is one card per theme, not per question: a "#T …" block opens
-    // one and every block after it belongs to it until the next.
-    const joined = game === "si" ? joinThemes(blocks) : blocks;
-    return joined.map((desc, i) => ({ id: -(i + 1), kind: importKind(desc), desc }));
+    // An SI or troika package is one card per theme, not per question.
+    const joined = game === "si" || game === "troika" ? joinThemes(blocks) : blocks;
+    return joined.map((desc, i) => ({ id: -(i + 1), kind: importKind(desc, game), desc }));
   }
 
-  // joinThemes folds a SI package's blocks back into whole themes. Blocks before
-  // the first "#T" are the package's own preamble and stay one card each.
+  // joinThemes folds a themed package's blocks back into whole themes: a "#T …"
+  // block opens one, and its author, its comment and its rungs belong to it. A
+  // battle, a round or a section closes it, and so does a note once the theme
+  // has its rungs: a note to the host above the first question is the theme's,
+  // one below the last is about what comes next. Blocks before the first "#T"
+  // are the package's own preamble and stay one card each.
   function joinThemes(blocks: string[]): string[] {
     const out: string[] = [];
-    let open = false;
+    let open = false, laddered = false;
     for (const b of blocks) {
-      const opensTheme = xyChgk.parseBlocks(b).some((x) => x.type === "theme");
-      if (opensTheme) { out.push(b); open = true; continue; }
-      if (open) out[out.length - 1] += "\n\n" + b;
-      else out.push(b);
+      const types = xyChgk.parseBlocks(b).map((x) => x.type);
+      if (types.includes("theme")) { out.push(b); open = true; laddered = false; continue; }
+      if (open && !CLOSES_THEME.has(types[0]) && !(laddered && types[0] === "meta")) {
+        out[out.length - 1] += "\n\n" + b;
+        laddered ||= types.includes("number");
+        continue;
+      }
+      open = false;
+      out.push(b);
     }
     return out;
   }
+  const CLOSES_THEME = new Set(["battle", "round", "section", "heading", "ljheading", "editor", "date"]);
 
-  // importKind maps a 4s block to an xy card kind. A question is recognised by its
-  // fields, not by its first line: compose_4s puts the "№ N" directive ahead of the
-  // "? …" marker, and an unmarked block ("pre") is question text whose author
-  // didn't prefix it.
-  function importKind(desc: string): string {
-    const blocks = xyChgk.parseBlocks(desc);
-    if (blocks.some((b) => b.type === "theme")) return "theme";
-    if (blocks.some((b) => b.type === "question" || b.type === "answer" || b.type === "pre")) return "question";
-    if (blocks.some((b) => b.type === "heading" || b.type === "ljheading")) return "heading";
-    return "meta";
+  // importKind maps a 4s block to an xy card kind (chgksuite/listexport's
+  // ImportKind). A question is recognised by its fields, not by its first line:
+  // compose_4s puts the "№ N" directive ahead of the "? …" marker, and an
+  // unmarked block ("pre") is question text whose author didn't prefix it.
+  function importKind(desc: string, game: string): string {
+    const types = new Set(xyChgk.parseBlocks(desc).map((b) => b.type));
+    if (types.has("theme")) return game === "troika" ? KIND.troikaTheme : KIND.theme;
+    if (types.has("question") || types.has("answer") || types.has("pre")) return KIND.question;
+    if (types.has("battle")) return KIND.battle;
+    if (types.has("section") || types.has("heading") || types.has("ljheading")) return KIND.heading;
+    return KIND.meta;
   }
 
   // importImgMap turns the package's base64 images into object URLs so the preview
@@ -268,10 +331,11 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     board.setStatus("saving");
     // The lists this makes are typed by what was imported, so the add-card
     // button goes on making the right kind of card afterwards.
-    const listType = game === "si" ? "si" : "normal";
+    const listType = game === "chgk" ? "normal" : game;
     const byName = new Map((images || []).map((i): [string, ImportImage] => [i.name, i]));
     let done = 0, attached = 0;
     const failed: string[] = []; // images the server refused — the card would keep a dead (img …)
+    const missing = new Set<string>(); // images the cards name but the import never had
     try {
       const key = board.dk();
       const ranks = [...board.state.lists].sort(byRank);
@@ -280,7 +344,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       for (const part of parts) {
         rank = keyBetween(rank, null);
         const lres = (await jpost(`/api/boards/${board.id}/lists`, {
-          title_enc: await xyCrypto.encField(key, part.title), rank, type: listType,
+          title: await xyCrypto.encField(key, part.title), rank, type: listType,
         })) as { id: number };
         listIds.push(lres.id);
         board.state.lists.push({ id: lres.id, type: listType, rank, groupId: null, title: part.title, commentFirst: false });
@@ -289,7 +353,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
         for (const c of part.cards) {
           cardRank = keyBetween(cardRank, null);
           const res = (await jpost(`/api/lists/${lres.id}/cards`, {
-            description_enc: await xyCrypto.encField(key, c.desc), rank: cardRank, kind: c.kind,
+            description: await xyCrypto.encField(key, c.desc), rank: cardRank, kind: c.kind,
           })) as { id: number };
           board.state.cards.push({ id: res.id, listId: lres.id, kind: c.kind, rank: cardRank, desc: c.desc, handoutMeta: null, alias: null, createdAt: nowStamp() });
           done++;
@@ -297,14 +361,14 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
           // on the question that uses it (which is where the preview/export look).
           for (const ref of xyChgk.imageRefs([c])) {
             const img = byName.get(ref);
-            if (!img) continue;
+            if (!img) { missing.add(ref); continue; }
             if (await attachImported(res.id, img)) attached++;
             else failed.push(ref);
           }
         }
       }
       if (grouped) {
-        await jpost(`/api/boards/${board.id}/list-groups`, { name_enc: await xyCrypto.encField(key, title), list_ids: listIds });
+        await jpost(`/api/boards/${board.id}/list-groups`, { name: await xyCrypto.encField(key, title), list_ids: listIds });
         // Reload rather than mirror group_id/groups[] locally — import is online-only.
         await board.reload();
       } else board.render();
@@ -316,6 +380,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       // A dropped image is invisible otherwise: the card keeps its (img …) directive
       // but the picture is gone, and the parse response is not kept to retry from.
       if (failed.length) msg += S.import.pack.imagesFailed(String(failed.length)) + failed.join(", ");
+      if (missing.size) msg += S.import.pack.imagesMissing(String(missing.size)) + [...missing].join(", ");
       alert(msg);
     } catch (err) {
       // The lists and the cards created so far are already on the server — show them
@@ -337,9 +402,9 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       const cipher = await xyCrypto.encBytes(key, bytes);
       const fd = new FormData();
       fd.append("meta", JSON.stringify({
-        filename_enc: await xyCrypto.encField(key, img.name),
+        filename: await xyCrypto.encField(key, img.name),
         mime: img.mime, lossless: true,
-        event_payload_enc: await sealPayload(key, "attach_add", { file: img.name }),
+        event_payload: await sealPayload(key, "attach_add", { file: img.name }),
       }));
       fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
       const res = await fetch(`/api/cards/${cardId}/attachments`, {
@@ -350,10 +415,5 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   }
 
 
-  return {
-    id: "import", menu: "board", icon: "file-up",
-    label: S.import.pack.label(),
-    title: S.import.pack.menuTitle(),
-    open: openImportPick,
-  };
+  return { open: () => { void openImportPick(); } };
 }

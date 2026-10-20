@@ -1,6 +1,6 @@
 # chgksuite → Go: what is ported and what is not
 
-The Go port lives in `xy/internal/chgk/` (~9.5k lines). The reference is
+The Go port lives in the `chgksuite/` module (~9.5k lines). The reference is
 `~/chgksuite` (`chgksuite/`, ~13k lines of source). This file is the map: what
 already matches, what does not, and in what order the rest is worth doing.
 
@@ -33,7 +33,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `stats/` | `composer/stats.py` + the results readers of `common.py` | done, oracle-tested |
 | `lj/` | `composer/lj.py` | rendering oracle-tested; the XML-RPC posting untried |
 | `textparse/db.go` | `parser_db.py` | done, canon-tested |
-| `board/` | `board.py`, `board_config.py`, `xy_crypto.py` | done; the crypto is `internal/xycli`'s, parity-tested against crypto.ts |
+| `board/` | `board.py`, `board_config.py`, `xy_crypto.py` | done; the crypto is `xyenvelope`, parity-tested against crypto.ts |
 | `htmlshot/` | `handouter/html_handout.py` | done; a Chromium off the command line, not Playwright |
 | `typstinstall/` | `handouter/installer.py` | done; the same release into the same `~/.pecheny_utils` |
 | `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx|pptx|telegram|markdown|redditmd|base|openquiz|add_stats` |
@@ -73,7 +73,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 ### A. Export formats
 
-- [x] **A1. pptx**: `internal/chgk/pptx`. An OOXML pptx writer (the package,
+- [x] **A1. pptx**: `chgksuite/pptx`. An OOXML pptx writer (the package,
       its slides, its rels and content types, written as python-pptx writes
       them — part names and ids assigned once and never reissued, every .rels
       sorted by number), the slide builders (title, tour, question, handout,
@@ -103,9 +103,9 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       twice in those 2077 parts — an inline picture's offset, which the parity
       test allows a pixel, and one answer slide that shrank to 29pt where
       chgksuite stopped at 30.
-- [x] **A2. markdown / redditmd**: `internal/chgk/markdown`. Both dialects,
+- [x] **A2. markdown / redditmd**: `chgksuite/markdown`. Both dialects,
       character-for-character against chgksuite (`scripts/gen_export_oracles.py`).
-- [x] **A3. base (db.chgk.info txt)**: `internal/chgk/dbtext`, the other side of
+- [x] **A3. base (db.chgk.info txt)**: `chgksuite/dbtext`, the other side of
       D3: consecutive «Инфо» merged, a warm-up hoisted to the top of its tour
       under a «Нулевой вопрос N» heading, a незачёт folded onto the зачёт.
       Byte-parity against chgksuite. One thing is NOT reproduced: chgksuite
@@ -115,9 +115,9 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       with the Russian month names — and falls back, as chgksuite does for what
       it cannot read, to 2010-01-01. dateparser's looser guesses differ: a bare
       year becomes today's month and day, and `12.01.2020` is read month-first.
-- [x] **A4. openquiz JSON**: `internal/chgk/openquiz`. Byte-parity against
+- [x] **A4. openquiz JSON**: `chgksuite/openquiz`. Byte-parity against
       chgksuite, key order and `indent=2` included.
-- [x] **A5. lj (LiveJournal)**: `internal/chgk/lj`. The rendering half is
+- [x] **A5. lj (LiveJournal)**: `chgksuite/lj`. The rendering half is
       oracle-tested — eight runs over two fixtures (plain, `--nospoilers`,
       `--splittours`, `--genimp`) come out character for character as
       chgksuite's `lj_process` would post them, `<lj-spoiler>`, the imgur links
@@ -129,7 +129,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       request it builds, the answer it reads and the hash it computes.
       `compose lj` therefore writes the posts as .html unless `--login` is
       given, where chgksuite always publishes.
-- [x] **A6. Imgur upload**: `internal/chgk/imghost`, behind an `imghost.Host`
+- [x] **A6. Imgur upload**: `chgksuite/imghost`, behind an `imghost.Host`
       the three exporters take, so a test hands them a stub and the parity
       oracles need no network. The cache is chgksuite's own
       `~/.chgksuite/image_cache.json`, same key (sha256 of the base64) and same
@@ -137,7 +137,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 ### B. Telegram
 
-- [x] **B1. Telegram exporter**: `internal/chgk/tg`. A package posted question by
+- [x] **B1. Telegram exporter**: `chgksuite/tg`. A package posted question by
       question to a channel, each post's copy in the discussion group carrying
       the polls, and a pinned navigation post at the end. Oracle-tested:
       `scripts/gen_tg_oracle.py` runs chgksuite's own exporter with every call to
@@ -159,7 +159,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 ### C. Statistics
 
-- [x] **C1. add_stats**: `internal/chgk/stats`. `compose add_stats
+- [x] **C1. add_stats**: `chgksuite/stats`. `compose add_stats
       --rating_ids` fetches a tournament's results from rating.chgk.info and
       appends «Взятия: N/M (P%)» to each question's comment, naming the teams
       when few enough took it; `--question_range` and `--team_naming_threshold`
@@ -280,7 +280,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
       the merge is pdfcpu's rather than pypdf's. It renders in memory instead of
       shelling out to `hndt2pdf` per file, so it leaves no per-file PDFs behind.
 - [x] **F4. `create_html` / `html2img`**: the scaffold is byte-identical to
-      chgksuite's. `html2img` is `internal/chgk/htmlshot`, and it drives a
+      chgksuite's. `html2img` is `chgksuite/htmlshot`, and it drives a
       Chromium the user already has — `--browser`, `$CHGKSUITE_BROWSER`, one of
       the usual names on PATH, or the copy Playwright downloaded — through its
       command line, rather than through Playwright and a Python runtime.
@@ -308,7 +308,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 
 ### G. Cross-cutting
 
-- [x] **G1. i18n**: `internal/chgk/i18n` embeds chgksuite's own ten
+- [x] **G1. i18n**: `chgksuite/i18n` embeds chgksuite's own ten
       `labels_*.toml` and ten `regexes_*.json` verbatim, so neither tool can
       drift on a label or a marker. `--language` reaches `parse` (the field
       markers, and English's "leave the quotes alone" rule) and every `compose`
@@ -367,7 +367,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
   Python tool can be retired. The [cli]-tagged items are therefore in scope,
   except the deliberate non-goals (D6; A5's XML-RPC half is last).
 - **Order**: as below. Chunk 1 (E1–E3 + F1), B1 and D1/D2/D4/D5 are done.
-- **No xy wiring.** Features land in `internal/chgk/*` and in a Go
+- **No xy wiring.** Features land in `chgksuite/*` and in a Go
   `chgksuite` CLI, and are checked against the Python CLI's output. What xy
   then exposes in its export modal is a separate decision, later.
 

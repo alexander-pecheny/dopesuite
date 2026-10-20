@@ -1,0 +1,6 @@
+# xy's Envelope (xyenvelope/): what unlocking a board says when the
+# passphrase is wrong. xy-cli and chgksuite's board sync both print it.
+
+[unlock]
+# A failed unwrap and a failed verify say the same.
+wrong_passphrase = "неверный пароль доски"

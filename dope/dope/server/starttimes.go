@@ -15,7 +15,7 @@ import (
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // A bout's start time is a schedule note the host types ("10:30"), shown

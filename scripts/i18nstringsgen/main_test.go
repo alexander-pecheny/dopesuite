@@ -87,7 +87,7 @@ func TestGeneratedGoCompiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mod := "module proof\n\ngo 1.26\n\nrequire pecheny.me/dopecore v0.0.0\n\nreplace pecheny.me/dopecore => " + core + "\n"
+	mod := "module proof\n\ngo 1.26\n\nrequire code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0\n\nreplace code.pecheny.me/pecheny/dopesuite/dopecore => " + core + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(mod), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func runCatalog(t *testing.T, dir, expr string) string {
 		t.Fatal(err)
 	}
 	root := filepath.Dir(dir)
-	mod := "module proof\n\ngo 1.26\n\nrequire pecheny.me/dopecore v0.0.0\n\nreplace pecheny.me/dopecore => " + core + "\n"
+	mod := "module proof\n\ngo 1.26\n\nrequire code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0\n\nreplace code.pecheny.me/pecheny/dopesuite/dopecore => " + core + "\n"
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte(mod), 0o644); err != nil {
 		t.Fatal(err)
 	}

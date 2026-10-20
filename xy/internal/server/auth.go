@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 
-	"pecheny.me/dopecore/session"
-	"pecheny.me/dopecore/tglogin"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tglogin"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -46,6 +46,9 @@ func bearerToken(r *http.Request) string {
 // carries one, the session cookie otherwise. A token IS the user (ADR-0015) —
 // bar the routes requireCookieUser guards.
 func (s *server) lookupSession(w http.ResponseWriter, r *http.Request) (session.User, bool) {
+	if s.cfg.Local {
+		return s.localUser, true
+	}
 	if raw := bearerToken(r); raw != "" {
 		return s.lookupAPIToken(r, raw)
 	}
@@ -155,6 +158,9 @@ func (s *server) requireUser(w http.ResponseWriter, r *http.Request) (session.Us
 // change the password (its own kill switch — see handleSetPassword), change the
 // username, and reach /admin. Everything else a token does as the user.
 func (s *server) requireCookieUser(w http.ResponseWriter, r *http.Request) (session.User, bool) {
+	if s.cfg.Local {
+		return s.localUser, true
+	}
 	if bearerToken(r) != "" {
 		httpError(w, http.StatusForbidden, xystrings.Default.Auth.Token.Forbidden())
 		return session.User{}, false
@@ -194,6 +200,8 @@ type meResponse struct {
 	AnnounceCities   json.RawMessage `json:"announce_cities,omitempty"`
 	SessionTitleMode string          `json:"session_title_mode,omitempty"`
 	OnboardedAt      string          `json:"onboarded_at,omitempty"`
+	// Instance is set on a local server only: what it leaves out (local.go).
+	Instance *instanceCaps `json:"instance,omitempty"`
 }
 
 func meOf(u session.User) meResponse {
@@ -254,6 +262,7 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	resp.Timezone = p.Timezone.String
 	resp.SessionTitleMode = p.SessionTitleMode.String
 	resp.OnboardedAt = p.OnboardedAt.String
+	resp.Instance = s.instance()
 	writeJSON(w, resp)
 }
 

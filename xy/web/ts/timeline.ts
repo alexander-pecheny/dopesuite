@@ -309,7 +309,7 @@ export function readBucketsOf(filter: FeedFilter): { content: boolean; comments:
 // linkSegments splits a comment's text into plain runs and URLs so the timeline can
 // make links clickable without ever treating user text as markup. Trailing
 // sentence punctuation stays outside the link; a ")" is cut only when the URL
-// itself opened no "(" (wikipedia-style paths keep theirs).
+// has more of them than "(" (wikipedia-style paths keep theirs).
 export function linkSegments(text: string): { text: string; href?: string }[] {
   const out: { text: string; href?: string }[] = [];
   let last = 0;
@@ -318,7 +318,7 @@ export function linkSegments(text: string): { text: string; href?: string }[] {
     for (;;) {
       const c = url.charAt(url.length - 1);
       if (".,;:!?…'\"".includes(c)) { url = url.slice(0, -1); continue; }
-      if (c === ")" && !url.includes("(")) { url = url.slice(0, -1); continue; }
+      if (c === ")" && url.split(")").length > url.split("(").length) { url = url.slice(0, -1); continue; }
       break;
     }
     if (url.endsWith("//")) continue; // a bare "https://" is not a link
@@ -591,7 +591,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       if (mine) await jdelete(`/api/reactions/${mine}`);
       else {
         await jpost(`/api/cards/${oc}/reactions`, {
-          payload_enc: await sealPayload(mustDK(), "reaction", { emoji }), target_id: targetId,
+          payload: await sealPayload(mustDK(), "reaction", { emoji }), target_id: targetId,
         });
       }
       msg.textContent = "";
@@ -957,7 +957,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       const dk = mustDK();
       const sid = deps.testSession?.(oc) ?? null;
       await deps.post("comment", `/api/cards/${oc}/comments`, {
-        payload_enc: await sealPayload(dk, "comment", { text, images: [] }), reply_to_id: threadRootId,
+        payload: await sealPayload(dk, "comment", { text, images: [] }), reply_to_id: threadRootId,
         mentions: resolveMentions(text, state().members || []),
         ...(sid != null ? { session_id: sid } : {}),
       });
@@ -1059,7 +1059,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         const text = ta.value.trim();
         if (!text) return;
         await commentAction(async () => jpatch(`/api/comments/${ev.id}`, {
-          payload_enc: await sealPayload(mustDK(), "comment", { text, images: decoded.images }),
+          payload: await sealPayload(mustDK(), "comment", { text, images: decoded.images }),
           mentions: resolveMentions(text, state().members || []),
         }));
       },
@@ -1121,7 +1121,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       // tagged from its own ⋯ menu once it exists.
       const sid = deps.testSession?.(oc) ?? null;
       await deps.post("comment", `/api/cards/${oc}/comments`, {
-        payload_enc: await sealPayload(mustDK(), "comment", { text, images: draftImages }),
+        payload: await sealPayload(mustDK(), "comment", { text, images: draftImages }),
         mentions: resolveMentions(text, state().members || []),
         ...(sid != null ? { session_id: sid } : {}),
       });

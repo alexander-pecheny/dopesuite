@@ -21,6 +21,133 @@ export type Strings = {
       title: () => string;
     };
   };
+  appeals: {
+    card: {
+      appealed: () => string;
+      controversials: (n: string) => string;
+      fold: () => string;
+      heading: (n: string, what: string) => string;
+      noControversials: () => string;
+      noPacket: () => string;
+      noQuestion: (packet: string, n: string) => string;
+      question: () => string;
+      text: () => string;
+      textChanged: (at: string) => string;
+      unfold: () => string;
+    };
+    controversial: {
+      accepted: () => string;
+      declined: () => string;
+      open: () => string;
+    };
+    export: {
+      done: (n: string) => string;
+      failedOne: (id: string, reason: string) => string;
+      hint: () => string;
+      label: () => string;
+      loading: () => string;
+      needToken: () => string;
+      nothing: () => string;
+      send: (n: string) => string;
+      sending: (n: string) => string;
+      siteNow: (status: string) => string;
+      title: () => string;
+    };
+    kind: {
+      accept: (answer: string) => string;
+      hostError: () => string;
+      remove: () => string;
+    };
+    list: {
+      count: (total: string, decided: string) => string;
+      sent: () => string;
+      type: () => string;
+    };
+    manual: {
+      added: (appeal: string) => string;
+      answer: () => string;
+      label: () => string;
+      needAnswer: () => string;
+      needQuestion: () => string;
+      question: () => string;
+      save: () => string;
+      title: (list: string) => string;
+      type: () => string;
+      typeAccept: () => string;
+      typeHostError: () => string;
+      typeRemove: () => string;
+    };
+    offline: () => string;
+    refresh: {
+      done: (added: string, updated: string, total: string) => string;
+      label: () => string;
+      loading: (id: string) => string;
+      noControversials: (reason: string) => string;
+      textChanged: (n: number) => string;
+      title: () => string;
+    };
+    settings: {
+      create: () => string;
+      createManual: () => string;
+      createTitle: () => string;
+      groupOption: (name: string) => string;
+      label: () => string;
+      mode: () => string;
+      modeHint: () => string;
+      modeLocked: () => string;
+      modeManual: () => string;
+      modeSite: () => string;
+      needPacket: () => string;
+      needTitle: () => string;
+      needTournament: () => string;
+      packet: () => string;
+      packetHint: () => string;
+      packetNone: () => string;
+      save: () => string;
+      title: () => string;
+      titleFor: (list: string) => string;
+      token: () => string;
+      tokenHint: () => string;
+      tournament: () => string;
+      tournamentHint: () => string;
+    };
+    site: {
+      overridden: (id: string) => string;
+      status: (status: string) => string;
+    };
+    status: {
+      accepted: () => string;
+      declined: () => string;
+      open: () => string;
+    };
+    verdict: {
+      byHand: () => string;
+      byVotes: (pro: string, contra: string) => string;
+      followVotes: () => string;
+      label: () => string;
+      noText: () => string;
+      placeholder: () => string;
+      statusLabel: () => string;
+      undecided: () => string;
+    };
+    vote: {
+      against: () => string;
+      againstWho: (names: string) => string;
+      for: () => string;
+      forWho: (names: string) => string;
+      label: () => string;
+      title: (pro: string, contra: string) => string;
+    };
+    xlsx: {
+      headAnswer: () => string;
+      headComment: () => string;
+      headId: () => string;
+      headQuestion: () => string;
+      headStatus: () => string;
+      headType: () => string;
+      label: () => string;
+    };
+  };
   attachments: {
     confirm: {
       remove: (name: string) => string;
@@ -139,12 +266,14 @@ export type Strings = {
       excerptsView: () => string;
       feedLabel: () => string;
       handoutTitle: () => string;
+      kindBattle: () => string;
       kindHeading: () => string;
       kindLabel: () => string;
       kindMeta: () => string;
       kindOther: () => string;
       kindQuestion: () => string;
       kindTheme: () => string;
+      kindTroikaTheme: () => string;
       labelAdd: () => string;
       linkLabel: () => string;
       linkTitle: () => string;
@@ -257,6 +386,42 @@ export type Strings = {
       telegramLabel: () => string;
       title: () => string;
     };
+    exportDocx: {
+      answers: () => string;
+      answersDots: () => string;
+      answersNone: () => string;
+      answersOff: () => string;
+      answersPagebreak: () => string;
+      answersWhiten: () => string;
+      noparagraph: () => string;
+      onlyQuestionNumber: () => string;
+      sameSourceSize: () => string;
+      screen: () => string;
+      screenAddVersions: () => string;
+      screenAddVersionsColumns: () => string;
+      screenOff: () => string;
+      screenReplaceAll: () => string;
+      template: () => string;
+      title: () => string;
+      variantsHint: () => string;
+    };
+    exportHandouts: {
+      teams: () => string;
+      teamsHint: () => string;
+      title: () => string;
+    };
+    exportOpts: {
+      font: () => string;
+      layout: () => string;
+      optimize: () => string;
+    };
+    exportPptx: {
+      config: () => string;
+      disableNumbers: () => string;
+      keepAccents: () => string;
+      template: () => string;
+      title: () => string;
+    };
     feed: {
       commentPlaceholder: () => string;
       diffView: () => string;
@@ -307,6 +472,28 @@ export type Strings = {
       label: () => string;
       title: () => string;
     };
+    handoutPage: {
+      autoResize: () => string;
+      bottomSpace: () => string;
+      boxwidth: () => string;
+      font: () => string;
+      fontSize: () => string;
+      height: () => string;
+      lead: () => string;
+      marginBottom: () => string;
+      marginLeft: () => string;
+      marginRight: () => string;
+      marginTop: () => string;
+      minResize: () => string;
+      paper: () => string;
+      paperCustom: () => string;
+      resizeTitle: () => string;
+      saved: () => string;
+      shrinkPercent: () => string;
+      tikzMm: () => string;
+      title: () => string;
+      width: () => string;
+    };
     handouts: {
       alignCenter: () => string;
       alignLeft: () => string;
@@ -339,6 +526,14 @@ export type Strings = {
       labelInside: () => string;
       menuGroup: () => string;
       moreTitle: () => string;
+      pack: () => string;
+      packDone: () => string;
+      packFailed: (error: string) => string;
+      packTeams: () => string;
+      packTitle: () => string;
+      packing: () => string;
+      page: () => string;
+      pageTitle: () => string;
       pdfOffline: () => string;
       preambleAdd: () => string;
       preambleAddTitle: () => string;
@@ -408,10 +603,12 @@ export type Strings = {
       orderLabel: () => string;
       settings: () => string;
       settingsTitle: () => string;
+      typeBrain: () => string;
       typeChgk: () => string;
       typeHint: () => string;
       typeLabel: () => string;
       typeSi: () => string;
+      typeTroika: () => string;
       untitled: () => string;
     };
     listsmanage: {
@@ -581,6 +778,24 @@ export type Strings = {
       menuTitle: () => string;
       name: () => string;
     };
+    stats: {
+      copyTitle: (title: string) => string;
+      done: () => string;
+      fileLabel: () => string;
+      label: () => string;
+      labelGrouped: () => string;
+      lead: () => string;
+      menuTitle: () => string;
+      offline: () => string;
+      rangeHint: () => string;
+      rangeLabel: () => string;
+      ratingHint: () => string;
+      ratingLabel: () => string;
+      reading: () => string;
+      run: () => string;
+      thresholdLabel: () => string;
+      title: () => string;
+    };
     testerlist: {
       empty: () => string;
       hint: () => string;
@@ -598,8 +813,6 @@ export type Strings = {
       adminHint: () => string;
       channelLabel: () => string;
       channelPlaceholder: () => string;
-      chatLabel: () => string;
-      chatPlaceholder: () => string;
       done: () => string;
       hint: () => string;
       interrupted: () => string;
@@ -649,23 +862,6 @@ export type Strings = {
       comments: () => string;
       dot: () => string;
       mention: () => string;
-    };
-  };
-  boardsync: {
-    config: {
-      emptyUrl: () => string;
-      unrecognized: (url: string) => string;
-    };
-    fetch: {
-      card: (id: string, err: string) => string;
-      list: (id: string, err: string) => string;
-    };
-    upload: {
-      defaultCaption: () => string;
-      listMissing: (name: string, known: string) => string;
-      noLists: () => string;
-      posted: (caption: string) => string;
-      uploading: (name: string) => string;
     };
   };
   bot: {
@@ -888,61 +1084,6 @@ export type Strings = {
       zip64Unsupported: () => string;
     };
   };
-  chgkcli: {
-    addStats: {
-      customCsvFlag: () => string;
-    };
-    board: {
-      boardUrlPrompt: () => string;
-      emptyToken: () => string;
-      initialPassphrasePrompt: () => string;
-      needBoardUrl: () => string;
-      noAnswersFlag: () => string;
-      noToken: (host: string, url: string) => string;
-      nothingToUpload: () => string;
-      onlyAnswersFlag: () => string;
-      openBrowser: () => string;
-      openBrowserTokens: (url: string) => string;
-      passphrasePrompt: () => string;
-      tokenPrompt: () => string;
-    };
-    docx: {
-      noParagraphFlag: () => string;
-      onlyQuestionNumberFlag: () => string;
-    };
-    handouts: {
-      alreadyExists: (file: string) => string;
-      colourSuffix: () => string;
-      dimensionsNote: (width: string, height: string) => string;
-      htmlGeometryNote: (width: string, share: string) => string;
-      pagesNote: (file: string, pages: string, colour: string) => string;
-      scaleNote: (scale: string) => string;
-      skipWarning: (file: string, err: string) => string;
-      warnQuestion: (number: string, text: string) => string;
-      watchNote: (file: string) => string;
-    };
-    lj: {
-      genimpFlag: () => string;
-    };
-    parse: {
-      tourNumbersAsWordsFlag: () => string;
-    };
-    shared: {
-      replaceNoBreakHyphensFlag: () => string;
-    };
-    telegram: {
-      done: (duration: string) => string;
-      posting: (channel: string, chat: string) => string;
-      stopIfNoStatsFlag: () => string;
-    };
-  };
-  chgkimport: {
-    error: {
-      no4s: () => string;
-      noQuestions: () => string;
-      tooBig: () => string;
-    };
-  };
   chrome: {
     bell: {
       empty: () => string;
@@ -959,7 +1100,6 @@ export type Strings = {
       buttonTitle: () => string;
     };
     home: {
-      boardLockedName: (id: string) => string;
       createOffline: () => string;
       createSubmit: () => string;
       createTitle: () => string;
@@ -1261,58 +1401,6 @@ export type Strings = {
       passphrasePrompt: (name: string) => string;
       summary: () => string;
       usage: () => string;
-      wrongPassphrase: () => string;
-    };
-  };
-  docs: {
-    docx: {
-      hostVersion: () => string;
-      screenVersion: () => string;
-    };
-    handout: {
-      badMarkup: () => string;
-      imageMissing: () => string;
-      languageMissing: (language: string) => string;
-      packMultiple: () => string;
-      packNoGrid: () => string;
-      packNone: () => string;
-      preambleSetting: (line: string) => string;
-      rotateImageMissing: (name: string) => string;
-    };
-    handoutList: {
-      byNumberLead: () => string;
-      byTourLead: () => string;
-      heading: () => string;
-      tourNone: (n: string) => string;
-      tourNumbers: (n: string, numbers: string) => string;
-    };
-    image: {
-      missing: (name: string) => string;
-    };
-    markdown: {
-      answer: () => string;
-      author: () => string;
-      comment: () => string;
-      imageLink: () => string;
-      nezachet: () => string;
-      question: (n: string) => string;
-      source: () => string;
-      zachet: () => string;
-    };
-    pptx: {
-      questionCaps: (n: string) => string;
-    };
-    print: {
-      measure: (err: string) => string;
-      measureNoSize: () => string;
-      measureZeroHeight: () => string;
-      pdf: (err: string) => string;
-      png: (err: string) => string;
-      widthMissing: () => string;
-    };
-    typst: {
-      lineError: (n: string, err: string) => string;
-      lineNotPair: (n: string) => string;
     };
   };
   export: {
@@ -1325,9 +1413,9 @@ export type Strings = {
       labelGrouped: () => string;
     };
     notes: {
+      gameFormats: () => string;
       noHandouts: () => string;
       offline: () => string;
-      siFormats: () => string;
     };
     run: {
       failed: (error: string) => string;
@@ -1523,12 +1611,17 @@ export type Strings = {
       doneGrouped: (lists: string, cards: string, images: string) => string;
       doneSingle: (cards: string, images: string) => string;
       imagesFailed: (n: string) => string;
+      imagesMissing: (n: string) => string;
       label: () => string;
       menuTitle: () => string;
       noQuestions: () => string;
       noToursNote: () => string;
       offline: () => string;
+      onePackage: () => string;
       parseFailed: (error: string) => string;
+      pickFailed: (reason: string) => string;
+      pickedFile: (name: string) => string;
+      pickedImages: (name: string, n: string) => string;
       preamble: () => string;
       promptGroup: () => string;
       promptList: () => string;
@@ -1588,31 +1681,6 @@ export type Strings = {
       head: (n: string) => string;
       label: (n: string) => string;
       question: (n: string, question: string) => string;
-    };
-  };
-  install: {
-    archiveEscape: (name: string) => string;
-    browser: {
-      archiveNoShell: () => string;
-      downloading: (version: string, platform: string) => string;
-      noBuild: (platform: string) => string;
-      noSandbox: () => string;
-      notFound: () => string;
-      notInstalled: () => string;
-      platformMissing: (platform: string) => string;
-      releasesFailed: (status: string) => string;
-      releasesNoStable: () => string;
-      symlinkEscape: (name: string, dest: string) => string;
-    };
-    installed: (path: string) => string;
-    typst: {
-      archiveNoBinary: (binary: string) => string;
-      downloading: (version: string) => string;
-      notFound: () => string;
-      platformMissing: (platform: string) => string;
-      releaseNoBuild: (build: string) => string;
-      releasesFailed: (status: string) => string;
-      unknownArchive: (archive: string) => string;
     };
   };
   invite: {
@@ -1686,15 +1754,6 @@ export type Strings = {
     usage: {
       left: (n: string, left: string) => string;
       used: (n: string) => string;
-    };
-  };
-  lj: {
-    error: {
-      fault: (message: string, code: string) => string;
-      malformed: (err: string) => string;
-      noChallenge: () => string;
-      nothing: () => string;
-      status: (status: string) => string;
     };
   };
   notify: {
@@ -1828,6 +1887,9 @@ export type Strings = {
     blank: () => string;
   };
   server: {
+    appeal: {
+      voteNotAppeal: () => string;
+    };
     attachment: {
       notFound: () => string;
     };
@@ -1868,8 +1930,19 @@ export type Strings = {
     error: {
       badRequest: () => string;
     };
+    export: {
+      badDocxTemplate: () => string;
+      badFont: () => string;
+      badPptxConfig: (reason: string) => string;
+      badPptxTemplate: () => string;
+    };
+    handouts: {
+      badPage: () => string;
+      badTeams: () => string;
+    };
     import: {
       fileNoQuestions: () => string;
+      imagesNeed4s: () => string;
       noFile: () => string;
       parseFailed: (reason: string) => string;
       readFailed: () => string;
@@ -1899,6 +1972,16 @@ export type Strings = {
       exceeded: (mb: string) => string;
       humanMb: (mb: string) => string;
     };
+    rating: {
+      busy: () => string;
+      failed: (status: string) => string;
+      forbidden: () => string;
+      noToken: () => string;
+      noTournament: () => string;
+      notFound: () => string;
+      unauthorized: () => string;
+      unreachable: () => string;
+    };
     reaction: {
       deleteOwnerOnly: () => string;
       notFound: () => string;
@@ -1910,6 +1993,13 @@ export type Strings = {
       expired: () => string;
       revoked: () => string;
       spent: () => string;
+    };
+    stats: {
+      badFile: () => string;
+      badIds: () => string;
+      badThreshold: () => string;
+      fetchFailed: (reason: string) => string;
+      noSource: () => string;
     };
   };
   sessions: {
@@ -1983,56 +2073,12 @@ export type Strings = {
       stopTitle: () => string;
     };
   };
-  stats: {
-    options: {
-      label: () => string;
-    };
-    question: {
-      line: (label: string, taken: string, total: string, percent: string) => string;
-      takers: (names: string) => string;
-    };
-    range: {
-      bad: (value: string) => string;
-    };
-    rating: {
-      decode: (id: string, err: string) => string;
-      status: (id: string, status: string) => string;
-    };
-    results: {
-      empty: () => string;
-    };
-    table: {
-      disputed: (n: string, value: string, team: string) => string;
-      headerMissing: () => string;
-    };
-    xlsx: {
-      noSheets: () => string;
-      partMissing: (name: string) => string;
-      sheetMissing: (id: string) => string;
-    };
-  };
   tg: {
     export: {
       connecting: () => string;
       failed: () => string;
       missingFields: () => string;
       posting: (channel: string, chat: string) => string;
-    };
-    resolve: {
-      done: () => string;
-      forward: (name: string) => string;
-      groupCode: (name: string, code: string) => string;
-      groupCodeHint: () => string;
-      privateCode: (code: string) => string;
-      sameChannel: () => string;
-    };
-    verify: {
-      notAdmin: (what: string) => string;
-      notMember: (what: string, err: string) => string;
-      ofChannel: () => string;
-      ofChat: () => string;
-      whatChannel: () => string;
-      whatChat: () => string;
     };
   };
   timeline: {

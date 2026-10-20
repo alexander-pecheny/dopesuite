@@ -38,6 +38,21 @@ test("a heading card is a heading; a meta card a paragraph; numbering directives
   assert.ok(!node.textContent.includes("№ 5"), "the numbering directive is not shown");
 });
 
+// A battle is a heading, whether it was written with its #B or as the plain
+// text its kind stands for; a troika theme that carries its own «Тема N.» is
+// printed under it as chgksuite prints it, and its rungs by their bare number.
+test("a battle card is a heading; a troika theme keeps its own numbered label", () => {
+  for (const desc of ["#B Бой 1", "Бой 1"]) {
+    const node = renderPreviewCard({ id: 3, kind: "battle", desc }, null, new Map(), false);
+    assert.deepEqual(node.querySelectorAll("h2").map((n) => n.textContent), ["Бой 1"], desc);
+  }
+  const theme = renderPreviewCard({ id: 4, kind: "troika_theme", desc: "#T ТЕМА 5 (2 БАЛЛА). Звуки\n\n№ 1\n? Раз\n! Один" }, "5", new Map(), false);
+  assert.deepEqual(theme.querySelectorAll("h3").map((n) => n.textContent), ["ТЕМА 5 (2 БАЛЛА). Звуки"]);
+  assert.equal(theme.querySelectorAll(".pv-label")[0].textContent, "1. ");
+  const plain = renderPreviewCard({ id: 5, kind: "troika_theme", desc: "#T Звуки\n\n№ 1\n? Раз\n! Один" }, "2", new Map(), false);
+  assert.deepEqual(plain.querySelectorAll("h3").map((n) => n.textContent), ["Тема 2. Звуки"]);
+});
+
 test("renderRich: marks, a link, a screen alternative in print vs screen mode, an image placeholder that fills in", () => {
   const frag = renderRich("Текст _курсив_ https://x.test/", new Map(), {});
   assert.ok(frag.querySelectorAll(".pv-link").length === 1, "a bare URL is a link");

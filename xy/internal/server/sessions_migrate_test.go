@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/schema"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 )
 
 // The data half of schema v18: a test card becomes a Test Session, its comments
@@ -12,7 +15,7 @@ import (
 // by hand, so the assertions are about the rebinding rather than the DDL (which
 // every other test exercises by simply booting).
 func TestMigrateV18Sessions(t *testing.T) {
-	db := migratedDB(t)
+	db := migratedDBThrough(t, 28)
 
 	uid := insertUser(t, db, "owner")
 	bid := insertBoard(t, db, uid, "board")
@@ -124,7 +127,7 @@ func TestUnscopedLabelAssignmentIsUnique(t *testing.T) {
 	}
 
 	// The same label scoped to a playing is a DIFFERENT claim and must be allowed.
-	sid := execIns(t, db, `insert into test_sessions(board_id, meta_enc, created_at) values(?, ?, ?)`,
+	sid := execIns(t, db, `insert into test_sessions(board_id, meta, created_at) values(?, ?, ?)`,
 		bid, []byte("meta"), fixtureNow)
 	if _, err := db.Exec(`insert into card_labels(card_id, label_id, session_id) values(?, ?, ?)`, card, label, sid); err != nil {
 		t.Fatalf("scoped assignment rejected: %v", err)
@@ -144,7 +147,7 @@ func TestRemovingAPlayingCascadesItsLabels(t *testing.T) {
 	list := insertList(t, db, bid, "normal")
 	card := insertCard(t, db, bid, list, "question", "q")
 	label := insertLabel(t, db, bid, "взяли")
-	sid := execIns(t, db, `insert into test_sessions(board_id, meta_enc, created_at) values(?, ?, ?)`,
+	sid := execIns(t, db, `insert into test_sessions(board_id, meta, created_at) values(?, ?, ?)`,
 		bid, []byte("meta"), fixtureNow)
 	mustExec(t, db, `insert into card_sessions(card_id, session_id) values(?, ?)`, card, sid)
 	mustExec(t, db, `insert into card_labels(card_id, label_id, session_id) values(?, ?, ?)`, card, label, sid)
@@ -168,6 +171,34 @@ func migratedDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	return db
+}
+
+// migratedDBThrough is a database at an older schema: every step up to and
+// including version, for a test of the step after it.
+func migratedDBThrough(t *testing.T, version int) *sql.DB {
+	t.Helper()
+	var steps []schema.Migration
+	for _, m := range migrations {
+		if m.Version <= version {
+			steps = append(steps, m)
+		}
+	}
+	db, err := sqlitextest.Open(filepath.Join(t.TempDir(), "xy.db"), func(db *sql.DB) error { return schema.Apply(db, steps) })
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+// col is a content column's name in the schema db is at: before v29 it ends
+// in _enc, so the same fixtures serve both sides of that step.
+func col(t *testing.T, db *sql.DB, table, name string) string {
+	t.Helper()
+	if scalarInt(t, db, `select count(*) from pragma_table_info(?) where name = ?`, table, name) == 1 {
+		return name
+	}
+	return name + "_enc"
 }
 
 func execIns(t *testing.T, db *sql.DB, q string, args ...any) int64 {
@@ -212,6 +243,12 @@ func insertUser(t *testing.T, db *sql.DB, name string) int64 {
 }
 
 func insertBoard(t *testing.T, db *sql.DB, uid int64, name string) int64 {
+	if scalarInt(t, db, `select count(*) from pragma_table_info('boards') where name = 'name_enc'`) == 0 {
+		return execIns(t, db, `
+insert into boards(owner_user_id, name, kdf_salt, kdf_params, wrapped_key, verify_token, created_at, updated_at)
+values(?, ?, ?, '{}', ?, ?, ?, ?)`,
+			uid, name, []byte("salt"), []byte("dk"), []byte("v"), fixtureNow, fixtureNow)
+	}
 	return execIns(t, db, `
 insert into boards(owner_user_id, name, name_enc, kdf_salt, kdf_params, wrapped_key, verify_token, created_at, updated_at, schema_version)
 values(?, ?, ?, ?, '{}', ?, ?, ?, ?, 2)`,
@@ -219,17 +256,17 @@ values(?, ?, ?, ?, '{}', ?, ?, ?, ?, 2)`,
 }
 
 func insertList(t *testing.T, db *sql.DB, bid int64, typ string) int64 {
-	return execIns(t, db, `insert into lists(board_id, type, title_enc, rank, created_at, updated_at) values(?, ?, ?, 'a', ?, ?)`,
+	return execIns(t, db, `insert into lists(board_id, type, `+col(t, db, "lists", "title")+`, rank, created_at, updated_at) values(?, ?, ?, 'a', ?, ?)`,
 		bid, typ, []byte("list"), fixtureNow, fixtureNow)
 }
 
 func insertCard(t *testing.T, db *sql.DB, bid, listID int64, kind, desc string) int64 {
-	return execIns(t, db, `insert into cards(board_id, list_id, kind, description_enc, rank, created_at, updated_at) values(?, ?, ?, ?, 'a', ?, ?)`,
+	return execIns(t, db, `insert into cards(board_id, list_id, kind, `+col(t, db, "cards", "description")+`, rank, created_at, updated_at) values(?, ?, ?, ?, 'a', ?, ?)`,
 		bid, listID, kind, []byte(desc), fixtureNow, fixtureNow)
 }
 
 func insertLabel(t *testing.T, db *sql.DB, bid int64, name string) int64 {
-	return execIns(t, db, `insert into labels(board_id, name_enc, color_enc, created_at) values(?, ?, ?, ?)`,
+	return execIns(t, db, `insert into labels(board_id, `+col(t, db, "labels", "name")+`, `+col(t, db, "labels", "color")+`, created_at) values(?, ?, ?, ?)`,
 		bid, []byte(name), []byte("#3aa657"), fixtureNow)
 }
 
@@ -245,12 +282,12 @@ func assignLabel(t *testing.T, db *sql.DB, cardID, labelID int64) {
 }
 
 func insertLegacyEvent(t *testing.T, db *sql.DB, bid, cardID int64, typ, payload string) int64 {
-	return execIns(t, db, `insert into timeline_events(board_id, card_id, type, created_at, payload_enc) values(?, ?, ?, ?, ?)`,
+	return execIns(t, db, `insert into timeline_events(board_id, card_id, type, created_at, `+col(t, db, "timeline_events", "payload")+`) values(?, ?, ?, ?, ?)`,
 		bid, cardID, typ, fixtureNow, []byte(payload))
 }
 
 func insertAttachment(t *testing.T, db *sql.DB, bid, cardID int64) int64 {
-	return execIns(t, db, `insert into attachments(board_id, card_id, filename_enc, mime, size, blob_ref, created_at) values(?, ?, ?, 'image/png', 10, 'ref', ?)`,
+	return execIns(t, db, `insert into attachments(board_id, card_id, `+col(t, db, "attachments", "filename")+`, mime, size, blob_ref, created_at) values(?, ?, ?, 'image/png', 10, 'ref', ?)`,
 		bid, cardID, []byte("f.png"), fixtureNow)
 }
 
@@ -265,7 +302,7 @@ func TestDeclarationDiesWithItsTour(t *testing.T) {
 	uid := insertUser(t, db, "owner")
 	bid := insertBoard(t, db, uid, "board")
 	list := insertList(t, db, bid, "normal")
-	sid := execIns(t, db, `insert into test_sessions(board_id, meta_enc, created_at) values(?, ?, ?)`,
+	sid := execIns(t, db, `insert into test_sessions(board_id, meta, created_at) values(?, ?, ?)`,
 		bid, []byte("meta"), fixtureNow)
 	mustExec(t, db, `insert into tour_testers(board_id, list_id, session_id) values(?, ?, ?)`, bid, list, sid)
 

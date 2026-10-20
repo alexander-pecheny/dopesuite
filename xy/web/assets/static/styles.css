@@ -563,9 +563,9 @@
 }
 /* A card that isn't a question isn't a tile: no fill, so the list shows through
    and the eye can tell scaffolding (headings, meta) from the questions. */
-.kcard-heading { background: transparent; padding-bottom: var(--space-1); }
-.kcard-heading:hover { background: transparent; }
-.kcard-heading .kcard-title {
+.kcard-heading, .kcard-battle { background: transparent; padding-bottom: var(--space-1); }
+.kcard-heading:hover, .kcard-battle:hover { background: transparent; }
+.kcard-heading .kcard-title, .kcard-battle .kcard-title {
   font-weight: var(--fw-bold);
   letter-spacing: 0.02em;
   color: var(--muted);
@@ -640,7 +640,7 @@
   background: var(--muted);
 }
 .kcard-handout .ico { --ico-size: 15px; stroke-width: 1.5; }
-.kcard-versions .ico { --ico-size: 14px; stroke-width: 1.5; }
+.kcard-versions .ico, .kcard-votes .ico { --ico-size: 14px; stroke-width: 1.5; }
 
 /* card detail overlay — occupies the whole lower section (below the fixed
    header), fully obscuring the kanban; the panel itself scrolls internally so
@@ -967,6 +967,7 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  background: var(--uchu-yang);
   cursor: zoom-in;
   will-change: transform;
   user-select: none;
@@ -1192,7 +1193,7 @@
 }
 .pv-edit:hover, .pv-edit:focus-visible { background: var(--action-hover-bg); }
 /* preserve authored line breaks inside multi-line question/answer/meta text */
-.pv-q-text, .pv-field, .pv-meta, .pv-list-body { white-space: pre-wrap; }
+.pv-q-text, .pv-field, .pv-meta, .pv-list-body { white-space: pre-wrap; overflow-wrap: anywhere; }
 .pv-q-text { margin-bottom: var(--space-2); }
 .pv-field { margin-bottom: 0; }
 .pv-label { font-weight: var(--fw-bold); }
@@ -1239,6 +1240,7 @@
   height: auto;
   margin: var(--space-2) 0;
   border-radius: var(--radius-sm);
+  background: var(--uchu-yang); /* a transparent handout is printed on white paper */
   cursor: zoom-in; /* click opens the lightbox */
 }
 /* block, like the image it stands in for — renderRich swallows the source
@@ -1405,6 +1407,37 @@
   cursor: text;
 }
 .card-preview-body > * { max-width: none; }
+/* An appeal reads as a column of blocks, like its Поля, with only the packet's
+   question set the docx way: unbounded, so the whole appeal scrolls with the card. */
+.card-preview-body.card-preview-appeal { padding: 0; background: transparent; max-height: none; overflow: visible; cursor: auto; }
+.card-preview-appeal .pv-q { padding: var(--space-3) var(--space-4); background: var(--page); border-radius: var(--radius-md); }
+/* A long question or appeal shows its first three lines, fading out at the cut,
+   and a short one shows whole without the fade.
+   The packet's question carries its own padding, so its fold allows for it. */
+.appeal-fold.is-folded {
+  max-height: calc(var(--fold-lines, 3) * 1lh);
+  overflow: hidden;
+}
+.appeal-fold.is-folded.is-cut {
+  -webkit-mask-image: linear-gradient(to bottom, var(--paper) 60%, transparent);
+  mask-image: linear-gradient(to bottom, var(--paper) 60%, transparent);
+}
+.appeal-fold.is-folded:has(.pv-q) { max-height: calc(3lh + var(--space-3)); }
+/* The controversial answers: declined and accepted side by side, in small type. */
+.appeal-fold:has(.appeal-contro-grid) { --fold-lines: 5; }
+.appeal-contro-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-2);
+  align-items: start;
+  font-size: var(--text-sm);
+}
+.appeal-contro { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--page); }
+.appeal-contro-declined { background: var(--wash-negative); }
+.appeal-contro-accepted { background: var(--wash-positive); }
+/* The rating token: a text field drawn as dots, since a password field draws
+   the password manager in. */
+.input-secret { -webkit-text-security: disc; }
 /* The copy tab: a small folder tab on a text field's top right edge, in the
    field's fill with no bottom border, and the field gives up that corner's
    rounding so the two read as one shape. It stays lower than the label beside
@@ -1730,7 +1763,7 @@ textarea.fld-src {
 @media (max-width: 760px) {
   .handouts-body { flex-direction: column; }
   .handouts-src { border-right: none; border-bottom: 1px solid var(--grid); }
-  .card-preview-body { max-height: 40vh; }
+  .card-preview-body:not(.card-preview-appeal) { max-height: 40vh; }
 }
 
 /* ── import verification modal ─────────────────────────────────────────────────
@@ -1929,9 +1962,18 @@ body {
    takes the row's own height. */
 /* how many questions the board holds, beside its name in the crumb trail */
 .board-qcount { margin-left: var(--space-2); color: var(--muted); font-size: var(--text-sm); font-weight: var(--fw-regular); }
+/* an import button right after the page's crumb; the crumb must not grow and push it to the far end */
+.crumb-current:has(+ .crumb-action) { flex-grow: 0; }
+.crumb-action { flex: 0 0 auto; align-self: center; font-size: var(--text-sm); }
+@media (max-width: 640px) {
+  .crumb-action { padding: 0 var(--space-2); }
+  .crumb-action-label { display: none; }
+  .crumb-action .ico-lead { margin-right: 0; }
+}
 
 .kcard-handout,
-.kcard-versions {
+.kcard-versions,
+.kcard-votes {
   display: inline-flex;
   align-items: center;
   height: var(--chip-h);
@@ -1941,12 +1983,14 @@ body {
 /* The count belongs to the icon, not to the label that follows it: tighter
    inside than the row's own gap, or it reads as a label of its own. The kit's
    0.4em lead is meant for WORDS after a glyph, and here it is the whole gap. */
-.kcard-versions {
+.kcard-versions,
+.kcard-votes {
   gap: 1px;
   margin-right: var(--space-2);
   font-size: var(--text-sm);
 }
-.kcard-versions .ico-lead { margin-right: 0; }
+.kcard-versions .ico-lead,
+.kcard-votes .ico-lead { margin-right: 0; }
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere.
    A head row of controls over a column of names — one person per line, which is

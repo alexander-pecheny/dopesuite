@@ -65,6 +65,8 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       selectfield id="cardKind" compact aria-label=@board.card.kind_label
         option value="question" @board.card.kind_question
         option value="theme" @board.card.kind_theme
+        option value="troika_theme" @board.card.kind_troika_theme
+        option value="battle" @board.card.kind_battle
         option value="meta" @board.card.kind_meta
         option value="heading" @board.card.kind_heading
         option value="other" @board.card.kind_other
@@ -257,10 +259,78 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         checkbox id="exportFmtHandouts" title=@board.export.handouts_title @board.export.handouts_label
         row
           button small kind="ghost" id="exportToggleAll" @board.export.select_all
+      -- chgksuite's compose switches for the formats that have them; each
+      -- section shows only while its format is chosen
+      details id="exportDocxOpts" hidden
+        summary @board.export_docx.title
+        col gap="sm"
+          label for="exportDocxAnswers" @board.export_docx.answers
+          selectfield id="exportDocxAnswers"
+            option value="off" selected @board.export_docx.answers_off
+            option value="whiten" @board.export_docx.answers_whiten
+            option value="pagebreak" @board.export_docx.answers_pagebreak
+            option value="dots" @board.export_docx.answers_dots
+            option value="none" @board.export_docx.answers_none
+          label for="exportDocxScreen" @board.export_docx.screen
+          selectfield id="exportDocxScreen"
+            option value="off" selected @board.export_docx.screen_off
+            option value="replace_all" @board.export_docx.screen_replace_all
+            option value="add_versions" @board.export_docx.screen_add_versions
+            option value="add_versions_columns" @board.export_docx.screen_add_versions_columns
+          hint @board.export_docx.variants_hint
+          label @board.export_opts.layout
+          col gap="xs"
+            checkbox id="exportDocxNoParagraph" @board.export_docx.noparagraph
+            checkbox id="exportDocxOnlyNumber" @board.export_docx.only_question_number
+            checkbox id="exportDocxSameSize" @board.export_docx.same_source_size
+            checkbox id="exportDocxOptimize" checked @board.export_opts.optimize
+          label for="exportDocxFont" @board.export_opts.font
+          textfield id="exportDocxFont" placeholder="Noto Sans" autocomplete="off" spellcheck="false"
+          label for="exportDocxTemplate" @board.export_docx.template
+          filefield id="exportDocxTemplate" accept=".docx"
+      details id="exportPptxOpts" hidden
+        summary @board.export_pptx.title
+        col gap="sm"
+          label @board.export_opts.layout
+          col gap="xs"
+            checkbox id="exportPptxDisableNumbers" @board.export_pptx.disable_numbers
+            checkbox id="exportPptxKeepAccents" @board.export_pptx.keep_accents
+            checkbox id="exportPptxOptimize" checked @board.export_opts.optimize
+          label for="exportPptxFont" @board.export_opts.font
+          textfield id="exportPptxFont" placeholder="Arial" autocomplete="off" spellcheck="false"
+          label for="exportPptxTemplate" @board.export_pptx.template
+          filefield id="exportPptxTemplate" accept=".pptx"
+          label for="exportPptxConfig" @board.export_pptx.config
+          filefield id="exportPptxConfig" accept=".toml"
+      details id="exportHandoutsOpts" hidden
+        summary @board.export_handouts.title
+        col gap="sm"
+          field label=@board.export_handouts.teams
+            numfield id="exportHandoutsTeams" min="1" max="9999" narrow
+          hint @board.export_handouts.teams_hint
       row gap="sm" align="center" wrap
         button submit id="exportRun" @board.export.run
         button kind="ghost" id="exportCancel" @board.actions.cancel
     message id="exportMessage"
+
+  -- add stats: chgksuite's add_stats, made into a copy of the tour
+  modal id="statsOverlay" label=@board.stats.title title=@board.stats.title
+    form id="statsForm" dir="col"
+      hint @board.stats.lead
+      label for="statsRatingIds" @board.stats.rating_label
+      textfield id="statsRatingIds" placeholder="12345" autocomplete="off" spellcheck="false"
+      hint @board.stats.rating_hint
+      label for="statsFile" @board.stats.file_label
+      filefield id="statsFile" accept=".csv,.xlsx"
+      label for="statsRange" @board.stats.range_label
+      textfield id="statsRange" placeholder="1-12" autocomplete="off" spellcheck="false"
+      hint @board.stats.range_hint
+      label for="statsThreshold" @board.stats.threshold_label
+      numfield id="statsThreshold" min="0" max="99" placeholder="2" narrow
+      row gap="sm" align="center" wrap
+        button submit id="statsRun" @board.stats.run
+        button kind="ghost" id="statsCancel" @board.actions.cancel
+    message id="statsMessage"
 
   -- publishing to telegram: the one export that posts rather than downloads,
   -- so it asks where to post and then reports what the bot is waiting for.
@@ -271,8 +341,6 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       password id="tgExportToken" placeholder=@board.tgexport.token_placeholder autocomplete="off" required
       label for="tgExportChannel" @board.tgexport.channel_label
       textfield id="tgExportChannel" placeholder=@board.tgexport.channel_placeholder autocomplete="off" spellcheck="false" required
-      label for="tgExportChat" @board.tgexport.chat_label
-      textfield id="tgExportChat" placeholder=@board.tgexport.chat_placeholder autocomplete="off" spellcheck="false" required
       hint @board.tgexport.admin_hint
       row gap="sm" align="center" wrap
         button submit id="tgExportRun" @board.tgexport.run
@@ -319,12 +387,14 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
   -- continuous numbering and combined export
   modal id="importPickOverlay" label=@board.importpick.title title=@board.importpick.title
     form id="importPickForm" dir="col"
-      hint @board.importpick.hint
-      filefield id="importFile" accept=".4s,.si4s,.zip,.docx" required
+      hint id="importPickHint" @board.importpick.hint
+      filefield id="importFile" accept=".4s,.si4s,.tr4s,.br4s,.zip,.docx,.txt,image/*" multiple required
       hint id="importPickWhat"
       selectfield id="importGame" title=@board.list.type_label
         option value="normal" @board.list.type_chgk
         option value="si" @board.list.type_si
+        option value="troika" @board.list.type_troika
+        option value="brain" @board.list.type_brain
       checkbox id="importSplitTours" title=@board.importpick.split_title @board.importpick.split_label
       row gap="sm" wrap
         button submit @board.importpick.submit
@@ -365,13 +435,67 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         editor id="handoutsSource" kind="handouts" spellcheck="false" aria-label=@board.handouts.src_label
         -- pinned to the pane's bottom edge: a long form must not scroll them away
         row id="handoutsActions" gap="sm" align="center" wrap
+          button small kind="ghost" id="handoutsPage" title=@board.handouts.page_title @board.handouts.page
           button small kind="ghost" id="handoutsSplitFit" title=@board.handouts.splitfit_title "Split-fit"
+          button small kind="ghost" id="handoutsPack" title=@board.handouts.pack_title @board.handouts.pack
           message id="handoutsMessage"
       pane kind="preview"
         row gap="sm" align="center" justify="between"
           label "PDF"
           button small download id="handoutsDownload" hidden @board.handouts.download
         mount id="handoutsPdf" kind="handouts-pdf"
+
+  -- a tour's handout page setup: chgksuite's handout flags, kept on the list
+  -- or its group and sent with every render
+  modal id="handoutPageOverlay" label=@board.handout_page.title title=@board.handout_page.title
+    form id="handoutPageForm" dir="col"
+      hint @board.handout_page.lead
+      field label=@board.handout_page.paper
+        selectfield id="handoutPagePaper"
+          option value="" selected "A4"
+          option value="a5" "A5"
+          option value="a3" "A3"
+          option value="letter" "Letter"
+          option value="custom" @board.handout_page.paper_custom
+      row id="handoutPageSize" gap="sm" wrap hidden
+        field label=@board.handout_page.width
+          numfield id="handoutPageWidth" min="50" max="1000" placeholder="210" narrow
+        field label=@board.handout_page.height
+          numfield id="handoutPageHeight" min="50" max="1000" placeholder="297" narrow
+      row gap="sm" wrap
+        field label=@board.handout_page.margin_top
+          numfield id="handoutPageMarginTop" min="0" max="200" placeholder="5" narrow
+        field label=@board.handout_page.margin_bottom
+          numfield id="handoutPageMarginBottom" min="0" max="200" placeholder="5" narrow
+        field label=@board.handout_page.margin_left
+          numfield id="handoutPageMarginLeft" min="0" max="200" placeholder="5" narrow
+        field label=@board.handout_page.margin_right
+          numfield id="handoutPageMarginRight" min="0" max="200" placeholder="5" narrow
+      row gap="sm" wrap
+        field label=@board.handout_page.font
+          textfield id="handoutPageFont" placeholder="Noto Sans" autocomplete="off" spellcheck="false"
+        field label=@board.handout_page.font_size
+          numfield id="handoutPageFontSize" min="4" max="96" placeholder="14" narrow
+      row gap="sm" wrap
+        field label=@board.handout_page.boxwidth
+          numfield id="handoutPageBoxWidth" min="1" max="1000" step="0.1" narrow
+        field label=@board.handout_page.tikz_mm
+          numfield id="handoutPageTikz" min="0" max="50" step="0.1" placeholder="2" narrow
+      details
+        summary @board.handout_page.resize_title
+        col gap="sm"
+          checkbox id="handoutPageAutoResize" checked @board.handout_page.auto_resize
+          row gap="sm" wrap
+            field label=@board.handout_page.shrink_percent
+              numfield id="handoutPageShrink" min="0.1" max="90" step="0.1" placeholder="2" narrow
+            field label=@board.handout_page.min_resize
+              numfield id="handoutPageMinResize" min="0.05" max="1" step="0.05" placeholder="0.6" narrow
+            field label=@board.handout_page.bottom_space
+              numfield id="handoutPageBottomSpace" min="0.1" max="10" step="0.1" placeholder="0.6" narrow
+      message id="handoutPageMessage"
+      row gap="sm" wrap
+        button submit @board.actions.save
+        button kind="ghost" id="handoutPageCancel" @board.actions.cancel
 
   -- the ⋯ list-settings entry: what the list holds, and where its tour puts the comment
   modal id="listSettingsOverlay" label=@board.list.settings_title title=@board.list.settings_title
@@ -380,6 +504,8 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         selectfield id="listTypeSelect"
           option value="normal" @board.list.type_chgk
           option value="si" @board.list.type_si
+          option value="troika" @board.list.type_troika
+          option value="brain" @board.list.type_brain
       hint @board.list.type_hint
       field label=@board.list.order_label
         selectfield id="listOrderSelect"
@@ -400,6 +526,9 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         selectfield id="addListType"
           option value="normal" @board.list.type_chgk
           option value="si" @board.list.type_si
+          option value="troika" @board.list.type_troika
+          option value="brain" @board.list.type_brain
+          option value="appeals" @appeals.list.type
       field label=@board.list.add_where
         radio id="addListAfter" name="addListWhere" value="after" checked @board.list.add_after
         radio id="addListBefore" name="addListWhere" value="before" @board.list.add_before

@@ -5,7 +5,7 @@ import (
 	"math"
 	"sort"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"dope/dope/domain/games"
 	"dope/dope/storage/store"

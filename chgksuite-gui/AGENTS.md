@@ -1,6 +1,6 @@
 # chgksuite-gui — agent notes
 
-This is a Fyne window over the `chgksuite` CLI in `../xy/cmd/chgksuite`, for
+This is a Fyne window over the `chgksuite` CLI in `../chgksuite/cmd/chgksuite`, for
 people who would rather not type flags. Nothing about the commands is written
 here. The CLI prints its own flags as JSON when you run `chgksuite spec`, and
 this program draws a form from that output. If you add a flag to a command, it
@@ -8,9 +8,10 @@ appears in the window, and you don't have to edit anything on this side.
 
 ## Why it is a module of its own, and a subprocess
 
-- Fyne needs cgo and brings a GPU stack with it. `xy` is a server and its
-  `go.mod` should not have to carry any of that, so this is a separate module,
-  and the root `justfile` leaves it out of its cross-module recipes.
+- Fyne needs cgo and brings a GPU stack with it. The `chgksuite` module is
+  what xy, a server, builds on, and neither `go.mod` should have to carry any
+  of that, so this is a separate module, and the root `justfile` leaves it out
+  of its cross-module recipes.
 - The CLI is run as a subprocess instead of being linked in. Its output is
   streamed into the log pane one line at a time, `Stop` kills it, and a command
   that panics or calls `os.Exit` cannot bring the window down with it.

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"dope/dope/storage/buffdb"
 	"dope/dope/storage/store"

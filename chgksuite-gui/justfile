@@ -7,7 +7,7 @@ default:
 
 build:
     mkdir -p build
-    cd ../xy && go build -o ../chgksuite-gui/build/chgksuite ./cmd/chgksuite
+    cd ../chgksuite && go build -o ../chgksuite-gui/build/chgksuite ./cmd/chgksuite
     go build -o build/chgksuite-gui .
 
 test: build

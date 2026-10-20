@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/invitelink"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/invitelink"
 
 	xystrings "xy/i18nstrings"
 )
@@ -294,17 +294,11 @@ func (s *server) handlePeekInvite(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// boardDisplayName is the plaintext board name (schema_version 2). A legacy
-// board still holds its name in name_enc, and the invitee has no key — so it
-// gets no name at all rather than a lie.
+// boardDisplayName is the board's plaintext name.
 func boardDisplayName(ctx context.Context, q rowQuerier, bid int64) (string, error) {
 	var name sql.NullString
-	var version int
-	if err := q.QueryRowContext(ctx, `select name, schema_version from boards where id = ?`, bid).Scan(&name, &version); err != nil {
+	if err := q.QueryRowContext(ctx, `select name from boards where id = ?`, bid).Scan(&name); err != nil {
 		return "", err
-	}
-	if version < 2 {
-		return "", nil
 	}
 	return name.String, nil
 }

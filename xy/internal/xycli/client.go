@@ -14,7 +14,8 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	"xy/internal/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
 )
 
 const (
@@ -167,41 +168,39 @@ func dispositionName(header string) string {
 type BoardSummary struct {
 	ID             int64  `json:"id"`
 	Name           string `json:"name"`
-	NameEnc        string `json:"name_enc"`
-	SchemaVersion  int    `json:"schema_version"`
 	Role           string `json:"role"`
 	Unread         bool   `json:"unread"`
 	UnreadMentions bool   `json:"unread_mentions"`
 }
 
 type listDTO struct {
-	ID       int64  `json:"id"`
-	Type     string `json:"type"`
-	TitleEnc string `json:"title_enc"`
-	Rank     string `json:"rank"`
-	GroupID  *int64 `json:"group_id,omitempty"`
+	ID      int64  `json:"id"`
+	Type    string `json:"type"`
+	Title   string `json:"title"`
+	Rank    string `json:"rank"`
+	GroupID *int64 `json:"group_id,omitempty"`
 }
 
 type groupDTO struct {
-	ID      int64  `json:"id"`
-	NameEnc string `json:"name_enc"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
 }
 
 type cardDTO struct {
-	ID        int64   `json:"id"`
-	ListID    int64   `json:"list_id"`
-	Kind      string  `json:"kind"`
-	DescEnc   string  `json:"description_enc"`
-	Rank      string  `json:"rank"`
-	AliasEnc  *string `json:"alias_enc,omitempty"`
-	MetaEnc   *string `json:"handout_meta_enc,omitempty"`
-	CreatedAt string  `json:"created_at"`
+	ID          int64   `json:"id"`
+	ListID      int64   `json:"list_id"`
+	Kind        string  `json:"kind"`
+	Desc        string  `json:"description"`
+	Rank        string  `json:"rank"`
+	Alias       *string `json:"alias,omitempty"`
+	HandoutMeta *string `json:"handout_meta,omitempty"`
+	CreatedAt   string  `json:"created_at"`
 }
 
 type labelDTO struct {
-	ID       int64  `json:"id"`
-	NameEnc  string `json:"name_enc"`
-	ColorEnc string `json:"color_enc"`
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
 }
 
 type cardLabelDTO struct {
@@ -231,14 +230,14 @@ type TimelineEvent struct {
 	ReplyToID  *int64  `json:"reply_to_id,omitempty"`
 	ReplyCount int     `json:"reply_count"`
 	Deleted    bool    `json:"deleted,omitempty"`
-	PayloadEnc string  `json:"payload_enc"`
+	Payload    string  `json:"payload"`
 	CardID     *int64  `json:"card_id,omitempty"`
 }
 
 type boardCommentDTO struct {
-	ID         int64  `json:"id"`
-	CardID     int64  `json:"card_id"`
-	PayloadEnc string `json:"payload_enc"`
+	ID      int64  `json:"id"`
+	CardID  int64  `json:"card_id"`
+	Payload string `json:"payload"`
 }
 
 type MemberDTO struct {
@@ -249,13 +248,13 @@ type MemberDTO struct {
 
 // AttachmentDTO is one attachment's metadata; the bytes come separately.
 type AttachmentDTO struct {
-	ID          int64  `json:"id"`
-	FilenameEnc string `json:"filename_enc"`
-	Mime        string `json:"mime"`
-	Size        int64  `json:"size"`
-	IsExcerpt   bool   `json:"is_excerpt"`
-	CreatedAt   string `json:"created_at"`
-	Rev         int64  `json:"rev"`
+	ID        int64  `json:"id"`
+	Filename  string `json:"filename"`
+	Mime      string `json:"mime"`
+	Size      int64  `json:"size"`
+	IsExcerpt bool   `json:"is_excerpt"`
+	CreatedAt string `json:"created_at"`
+	Rev       int64  `json:"rev"`
 }
 
 type idResponse struct {
@@ -283,8 +282,8 @@ func (c *Client) Boards() ([]BoardSummary, error) {
 	return out, c.get("/api/boards", &out)
 }
 
-func (c *Client) Keymeta(boardID int64) (Keymeta, error) {
-	var km Keymeta
+func (c *Client) Keymeta(boardID int64) (xyenvelope.Keymeta, error) {
+	var km xyenvelope.Keymeta
 	return km, c.get(fmt.Sprintf("/api/boards/%d/keymeta", boardID), &km)
 }
 
@@ -308,10 +307,10 @@ func (c *Client) Timeline(cardID int64) ([]TimelineEvent, error) {
 	return out, c.get(fmt.Sprintf("/api/cards/%d/timeline", cardID), &out)
 }
 
-func (c *Client) CreateList(boardID int64, titleEnc, rank string) (int64, error) {
+func (c *Client) CreateList(boardID int64, title, rank string) (int64, error) {
 	var out idResponse
 	err := c.do("POST", fmt.Sprintf("/api/boards/%d/lists", boardID),
-		map[string]any{"title_enc": titleEnc, "rank": rank, "type": "normal"}, &out)
+		map[string]any{"title": title, "rank": rank, "type": "normal"}, &out)
 	return out.ID, err
 }
 
@@ -349,10 +348,10 @@ func (c *Client) DeleteComment(commentID int64) error {
 	return c.do("DELETE", fmt.Sprintf("/api/comments/%d", commentID), nil, nil)
 }
 
-func (c *Client) CreateLabel(boardID int64, nameEnc, colorEnc string) (int64, error) {
+func (c *Client) CreateLabel(boardID int64, name, color string) (int64, error) {
 	var out idResponse
 	err := c.do("POST", fmt.Sprintf("/api/boards/%d/labels", boardID),
-		map[string]any{"name_enc": nameEnc, "color_enc": colorEnc}, &out)
+		map[string]any{"name": name, "color": color}, &out)
 	return out.ID, err
 }
 

@@ -1,0 +1,95 @@
+package docx
+
+// Options are chgksuite's `compose docx` switches. The zero value is its
+// defaults: the host's copy of every question, answers shown, no spoilers.
+type Options struct {
+	Spoilers   Spoilers
+	ScreenMode ScreenMode
+	// NoAnswers prints questions only — not even spoilered answers.
+	NoAnswers bool
+	// NoParagraph drops the line break after "Question N.".
+	NoParagraph bool
+	// OnlyQuestionNumber labels a question "N." instead of "Question N.".
+	OnlyQuestionNumber bool
+	// SameSourceAndAuthorSize is --smaller_source_and_author off: source and
+	// author keep the body size instead of dropping 2pt into a paragraph of
+	// their own. Inverted because chgksuite's default is on.
+	SameSourceAndAuthorSize bool
+	// OptimizeSize is --optimize_size: re-encode the pictures once the document
+	// is built, keeping whichever is smaller. On by default in chgksuite.
+	OptimizeSize bool
+	// Language is --language: which labels_*.toml the headings come from.
+	// Empty is Russian.
+	Language string
+	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
+	// language's.
+	LabelsFile string
+	// Font is --font: a family name, or a font file to take one from. Empty
+	// keeps the template's own Noto Sans.
+	Font string
+	// Template is --docx_template: a .docx to build on. nil is the embedded one.
+	Template []byte
+	// CommentFirst is --comment_first: the comment comes before the answer.
+	CommentFirst bool
+	// Game is --game. "si" and "troika" switch on si_mode: themes, battles and
+	// rounds become headings, a stand-alone author or comment is a theme-level
+	// field, and a question is labelled by its bare point value under its theme.
+	Game string
+}
+
+// siMode reports whether the game lays a package out as SI does.
+func (o Options) siMode() bool { return o.Game == "si" || o.Game == "troika" }
+
+// heads reports whether the game prints a battle, round or theme line as a
+// heading. A brain game prints its battles, which chgksuite drops: without
+// them its questions read 1 to 5 over and over with nothing in between.
+func (o Options) heads(elType string) bool {
+	return o.siMode() || (elType == "battle" && o.Game == "brain")
+}
+
+// Spoilers says how the answers are hidden from a reader of the printout.
+type Spoilers string
+
+const (
+	SpoilersOff Spoilers = "off"
+	// SpoilersWhiten paints the answer white (the template's "Whitened" style).
+	SpoilersWhiten Spoilers = "whiten"
+	// SpoilersPagebreak starts the answers on a new page.
+	SpoilersPagebreak Spoilers = "pagebreak"
+	// SpoilersDots pushes the answer down behind 30 lines of dots.
+	SpoilersDots Spoilers = "dots"
+)
+
+// ScreenMode says whose copy of a question is printed: the host's (with stress
+// accents and bracketed reading notes) or the screen's (without).
+type ScreenMode string
+
+const (
+	ScreenOff ScreenMode = "off"
+	// ScreenReplaceAll prints the screen's copy only.
+	ScreenReplaceAll ScreenMode = "replace_all"
+	// ScreenAddVersions prints both copies, one after the other.
+	ScreenAddVersions ScreenMode = "add_versions"
+	// ScreenAddVersionsColumns prints both copies side by side in a table.
+	ScreenAddVersionsColumns ScreenMode = "add_versions_columns"
+)
+
+// whitenField is chgksuite's WHITEN: which fields a spoiler hides. The handout
+// and the author never are.
+var whitenField = map[string]bool{
+	"answer": true, "zachet": true, "nezachet": true, "comment": true, "source": true,
+}
+
+// textOpts are the per-call switches format_docx_element takes: whether to glue
+// non-breaking spaces, whether this field is hidden behind a spoiler, and which
+// copy of the text — the host's or the screen's — is being printed.
+type textOpts struct {
+	nbsp           bool
+	whiten         bool
+	removeAccents  bool
+	removeBrackets bool
+}
+
+// screen reports whether this is the screen's copy, which is what a (screen …)
+// directive switches on.
+func (o textOpts) screen() bool { return o.removeAccents || o.removeBrackets }

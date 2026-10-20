@@ -7,7 +7,6 @@ import { createUnlock } from "../web/assets/static/dist/unlock.js";
 
 const SNAP = {
   role: "owner",
-  schema_version: 2,
   name: "Доска",
   sizes: null,
   default_author: "Автор",
@@ -15,12 +14,12 @@ const SNAP = {
   card_labels: [{ card_id: 2, label_id: 3 }],
   card_sessions: [{ card_id: 2, session_id: 9 }],
   unread: { 2: { comments: true } },
-  lists: [{ id: 1, type: "normal", rank: "a", group_id: 5, title_enc: "e:list" }],
-  groups: [{ id: 5, name_enc: "e:group" }],
-  cards: [{ id: 2, list_id: 1, kind: "question", rank: "b", description_enc: "e:desc", handout_meta_enc: "e:meta", alias_enc: null, seen_enc: "e:seen", created_at: "2026-01-01" }],
-  tour_declarations: [{ list_id: 1, names_enc: "e:names" }],
-  labels: [{ id: 3, name_enc: "e:lname", color_enc: "e:lcolor" }],
-  sessions: [{ id: 9, meta_enc: "e:smeta" }],
+  lists: [{ id: 1, type: "normal", rank: "a", group_id: 5, title: "e:list" }],
+  groups: [{ id: 5, name: "e:group" }],
+  cards: [{ id: 2, list_id: 1, kind: "question", rank: "b", description: "e:desc", handout_meta: "e:meta", alias: null, seen: "e:seen", created_at: "2026-01-01" }],
+  tour_declarations: [{ list_id: 1, names: "e:names" }],
+  labels: [{ id: 3, name: "e:lname", color: "e:lcolor" }],
+  sessions: [{ id: 9, meta: "e:smeta" }],
 };
 
 const GOOD_PASS = "correct horse battery staple";
@@ -126,8 +125,10 @@ test("cached-DK fast path: no overlay, onDK + decrypted onState, mirror written,
   assert.deepEqual(state.cardLabels, [{ cardId: 2, labelId: 3, sessionId: null }]);
   assert.deepEqual(state.cardSessions, [{ cardId: 2, sessionId: 9 }]);
   assert.deepEqual(state.unread, { 2: { comments: true } });
-  assert.deepEqual(state.lists, [{ id: 1, type: "normal", rank: "a", groupId: 5, title: "d:e:list", commentFirst: false }]);
-  assert.deepEqual(state.groups, [{ id: 5, name: "d:e:group", commentFirst: false }]);
+  assert.deepEqual(state.lists, [{ id: 1, type: "normal", rank: "a", groupId: 5, title: "d:e:list", commentFirst: false, handoutPage: null, meta: null }]);
+  assert.deepEqual(state.votes, []);
+  assert.equal(state.ratingToken, "");
+  assert.deepEqual(state.groups, [{ id: 5, name: "d:e:group", commentFirst: false, handoutPage: null }]);
   assert.deepEqual(state.cards, [{
     id: 2, listId: 1, kind: "question", rank: "b",
     desc: "d:e:desc", handoutMeta: "d:e:meta", alias: null, seen: "d:e:seen", createdAt: "2026-01-01",
@@ -227,18 +228,6 @@ test("offline with no mirror: onUnavailable, status error, no state", async () =
   assert.equal(calls.unavailable, 1);
   assert.equal(calls.states.length, 0);
   assert.deepEqual(calls.status, ["saving", "error"]);
-});
-
-test("legacy board (schema_version 1): name decrypted from name_enc and backfilled", async () => {
-  const snap = { ...structuredClone(SNAP) };
-  delete snap.name;
-  snap.schema_version = 1;
-  snap.name_enc = "e:name";
-  const { deps, calls } = makeDeps({ cachedDK: { key: "K", raw: new Uint8Array([9]) }, snap });
-  const u = createUnlock(deps);
-  await u.boot();
-  assert.equal(calls.states[0].state.name, "d:e:name");
-  assert.deepEqual(calls.jposts[0], ["/api/boards/7/migrate-name", { name: "d:e:name" }]);
 });
 
 test("visit ping fires once per page session across reloads", async () => {

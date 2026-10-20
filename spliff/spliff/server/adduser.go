@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 )
 
 // maxPasswordInput caps what adduser reads from stdin.

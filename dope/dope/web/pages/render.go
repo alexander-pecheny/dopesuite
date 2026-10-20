@@ -6,8 +6,8 @@ import (
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/webassets"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 )
 
 // RenderDoc renders a typed-builder page document, cache-busts its /static asset

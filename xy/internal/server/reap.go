@@ -139,16 +139,21 @@ func (s *server) reap() {
 	}
 }
 
-func (s *server) reapLoop() {
+func (s *server) reapLoop(ctx context.Context) {
 	t := time.NewTicker(reapInterval)
 	defer t.Stop()
-	for range t.C {
-		s.reap()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.reap()
+		}
 	}
 }
 
 func runGC() {
-	srv, err := newServer()
+	srv, err := newServer(configFromEnv())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -160,10 +165,7 @@ func runGC() {
 // from a directory without the prod env would silently "succeed" against
 // nothing and litter cwd with a new xy.db.
 func requireExistingDB() {
-	path := os.Getenv("XY_DB")
-	if path == "" {
-		path = dbFile
-	}
+	path := configFromEnv().DB
 	if _, err := os.Stat(path); err != nil {
 		log.Fatalf("no database at %q — set XY_DB (maintenance commands never create one)", path)
 	}

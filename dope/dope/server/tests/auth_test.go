@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 func newAuthTestServer(t *testing.T) *dopeserver.Server {

@@ -5,7 +5,9 @@ import { xyThemes } from "../web/assets/static/dist/themes.js";
 // A Card typed «Тема СИ» holds one theme: a `#T` head and a ladder of `№` slots
 // whose values are the point values. The ladder is the order and the points at
 // once, which is why nothing here ever renumbers.
-const { splitTheme, composeTheme, nextNumber, swapSlots, isFilled, authorsOf, progress } = xyThemes;
+const { splitTheme, composeTheme, nextNumber, withSlot, blankTheme, swapSlots, isFilled, authorsOf, progress } = xyThemes;
+const SI = ["10", "20", "30", "40", "50"];
+const TROIKA = ["1", "2", "3"];
 
 const THEME = [
   "#T Острова Тихого океана",
@@ -57,20 +59,29 @@ test("swapSlots moves content, never the numbers", () => {
 
 test("nextNumber fills the ladder, then запас", () => {
   const t = splitTheme(THEME);
-  assert.equal(nextNumber(t.slots, false), "40");
+  assert.equal(nextNumber(t.slots, SI), "40");
   const full = splitTheme("#T Т\n№ 10\n?\n№ 20\n?\n№ 30\n?\n№ 40\n?\n№ 50\n?\n");
-  assert.equal(nextNumber(full.slots, false), "запас1");
-  assert.equal(nextNumber(full.slots, true), "запас1");
-  assert.equal(nextNumber([...full.slots, { number: "запас1", fields: {} }], true), "запас2");
+  assert.equal(nextNumber(full.slots, SI), "запас1");
+  assert.equal(nextNumber([...full.slots, { number: "запас1", fields: {} }], SI), "запас2");
+});
+
+// A troika theme is the same card on a ladder of three: it is born with 1, 2
+// and 3, and «+ вопрос» goes on to запас past them.
+test("a troika theme is born 1–3 and grows into запас", () => {
+  const t = splitTheme(blankTheme(TROIKA, "Автор"));
+  assert.deepEqual(t.slots.map((s) => s.number), ["1", "2", "3"]);
+  assert.equal(t.author, "Автор");
+  assert.deepEqual(withSlot(t, TROIKA).slots.map((s) => s.number), ["1", "2", "3", "запас1"]);
+  assert.deepEqual(progress(composeTheme(t), TROIKA), { filled: 0, total: 3 });
 });
 
 // A slot counts as written once it has question text: an answer alone is a note
 // to oneself, not something a tester could be asked.
 test("progress counts written slots out of at least five", () => {
-  assert.deepEqual(progress(THEME), { filled: 2, total: 5 });
+  assert.deepEqual(progress(THEME, SI), { filled: 2, total: 5 });
   assert.equal(isFilled(splitTheme(THEME).slots[2]), false);
   const six = splitTheme("#T Т\n№ 10\n? a\n№ 20\n? b\n№ 30\n? c\n№ 40\n? d\n№ 50\n? e\n№ запас1\n? f\n");
-  assert.deepEqual(progress(composeTheme(six)), { filled: 6, total: 6 });
+  assert.deepEqual(progress(composeTheme(six), SI), { filled: 6, total: 6 });
 });
 
 // The theme's own `@` is a default: a question that names nobody inherits it,

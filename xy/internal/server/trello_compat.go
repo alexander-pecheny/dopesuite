@@ -9,7 +9,7 @@ import (
 
 	"xy/internal/rank"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // trelloPosStep is the gap between the positions given to consecutive lists,
@@ -132,23 +132,16 @@ func (s *server) handleTrelloGetBoard(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		name          sql.NullString
-		nameEnc       []byte
 		salt, wrapped []byte
 		verify        []byte
 		kdfParams     string
-		schemaVersion int
 	)
 	if err := s.db.QueryRowContext(ctx,
-		`select name, name_enc, schema_version, kdf_salt, kdf_params, wrapped_key, verify_token from boards where id = ?`, bid).
-		Scan(&name, &nameEnc, &schemaVersion, &salt, &kdfParams, &wrapped, &verify); handleErr(w, err) {
+		`select name, kdf_salt, kdf_params, wrapped_key, verify_token from boards where id = ?`, bid).
+		Scan(&name, &salt, &kdfParams, &wrapped, &verify); handleErr(w, err) {
 		return
 	}
-	// Board name is plaintext once migrated (schema_version 2); legacy boards still
-	// return the base64 ciphertext envelope, which chgksuite decrypts locally.
-	boardName := b64(nameEnc)
-	if schemaVersion >= 2 {
-		boardName = name.String
-	}
+	boardName := name.String
 
 	lists, err := scanLists(ctx, s.db, bid)
 	if handleErr(w, err) {
@@ -166,7 +159,7 @@ func (s *server) handleTrelloGetBoard(w http.ResponseWriter, r *http.Request) {
 	labelByID := map[int64]trelloLabel{}
 	outLabels := make([]trelloLabel, 0, len(labels))
 	for _, l := range labels {
-		tl := trelloLabel{ID: idStr(l.ID), IDBoard: bidStr, Name: l.NameEnc}
+		tl := trelloLabel{ID: idStr(l.ID), IDBoard: bidStr, Name: l.Name}
 		labelByID[l.ID] = tl
 		outLabels = append(outLabels, tl)
 	}
@@ -190,13 +183,13 @@ func (s *server) handleTrelloGetBoard(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, l := range lists {
 		board.Lists = append(board.Lists, trelloList{
-			ID: idStr(l.ID), Name: l.TitleEnc, IDBoard: bidStr, Pos: (i + 1) * trelloPosStep,
+			ID: idStr(l.ID), Name: l.Title, IDBoard: bidStr, Pos: (i + 1) * trelloPosStep,
 		})
 	}
 	for i, c := range cards {
 		tc := trelloCard{
 			ID: idStr(c.ID), IDList: idStr(c.ListID), IDBoard: bidStr,
-			Desc: c.DescEnc, Pos: (i + 1) * trelloPosStep, Labels: []trelloLabel{},
+			Desc: c.Desc, Pos: (i + 1) * trelloPosStep, Labels: []trelloLabel{},
 		}
 		for _, lid := range cardLabels[c.ID] {
 			if tl, ok := labelByID[lid]; ok {
@@ -247,7 +240,7 @@ func (s *server) handleTrelloGetLists(w http.ResponseWriter, r *http.Request) {
 	bidStr := idStr(bid)
 	out := make([]trelloList, 0, len(lists))
 	for i, l := range lists {
-		out = append(out, trelloList{ID: idStr(l.ID), Name: l.TitleEnc, IDBoard: bidStr, Pos: (i + 1) * trelloPosStep})
+		out = append(out, trelloList{ID: idStr(l.ID), Name: l.Title, IDBoard: bidStr, Pos: (i + 1) * trelloPosStep})
 	}
 	writeJSON(w, out)
 }
@@ -259,7 +252,7 @@ func (s *server) handleTrelloGetLists(w http.ResponseWriter, r *http.Request) {
 // client-side), so name is ignored. The board is end-to-end encrypted and the
 // download path returns desc as the base64 ciphertext envelope, so this upload
 // is symmetric: desc must be that same base64 envelope, which is decoded and
-// stored into description_enc. The caller encrypts locally with the board key
+// stored into description. The caller encrypts locally with the board key
 // (the server never sees plaintext); a plaintext desc is rejected as non-base64.
 func (s *server) handleTrelloCreateCard(w http.ResponseWriter, r *http.Request) {
 	uid, ok := s.authToken(w, r)
@@ -277,8 +270,8 @@ func (s *server) handleTrelloCreateCard(w http.ResponseWriter, r *http.Request) 
 	if _, err := boardRole(r.Context(), s.db, bid, uid); handleErr(w, err) {
 		return
 	}
-	descEnc, err := unb64(strings.TrimSpace(r.FormValue("desc")))
-	if err != nil || len(descEnc) == 0 {
+	desc, err := unb64(strings.TrimSpace(r.FormValue("desc")))
+	if err != nil || len(desc) == 0 {
 		httpError(w, http.StatusBadRequest, "desc must be a base64 ciphertext envelope")
 		return
 	}
@@ -296,8 +289,8 @@ func (s *server) handleTrelloCreateCard(w http.ResponseWriter, r *http.Request) 
 			return err
 		}
 		res, err := tx.ExecContext(ctx, `
-insert into cards(board_id, list_id, kind, description_enc, rank, created_at, updated_at)
-values(?, ?, 'normal', ?, ?, ?, ?)`, bid, listID, descEnc, newRank, rfc3339(now), rfc3339(now))
+insert into cards(board_id, list_id, kind, description, rank, created_at, updated_at)
+values(?, ?, 'normal', ?, ?, ?, ?)`, bid, listID, desc, newRank, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -309,6 +302,6 @@ values(?, ?, 'normal', ?, ?, ?, ?)`, bid, listID, descEnc, newRank, rfc3339(now)
 	}
 	writeJSON(w, trelloCard{
 		ID: idStr(id), IDList: idStr(listID), IDBoard: idStr(bid),
-		Desc: b64(descEnc), Labels: []trelloLabel{},
+		Desc: b64(desc), Labels: []trelloLabel{},
 	})
 }

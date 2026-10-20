@@ -22,7 +22,7 @@ func TestSkips(t *testing.T) {
 			t.Errorf("%s is linted", name)
 		}
 	}
-	if !skipPath("xy/internal/chgk/i18n/assets/labels_ru.toml") || !skipPath("xy/web/ts/towns.ts") {
+	if !skipPath("chgksuite/i18n/assets/labels_ru.toml") || !skipPath("xy/web/ts/towns.ts") {
 		t.Error("a parity asset is linted")
 	}
 }

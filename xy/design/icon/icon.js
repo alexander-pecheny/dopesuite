@@ -12,7 +12,7 @@
 export const SIZE = 1024;
 
 // Noto Sans 'x' and 'y' outlines, extracted from the TTFs vendored for the
-// handout renderer (internal/chgk/handout/assets). Baked in as paths so the
+// handout renderer (chgksuite/handout/assets). Baked in as paths so the
 // browser and rsvg-convert draw exactly the same shape with no font lookup.
 export const GLYPHS = {
   regular: {

@@ -1,0 +1,96 @@
+default:
+    @just --list
+
+# typst is linked in as a wasm module, which typstwasm embeds. The 30 MB
+# artifact is NOT in git — build it once with `just build-wasm` (the only step
+# that needs Rust), then again only when bumping typst. Every recipe that
+# compiles typstwasm depends on `wasm`, so a fresh clone fails with an
+# instruction, not a cryptic //go:embed error.
+wasm_path := "typstwasm/typst.wasm"
+
+# It renders PDFs and раздатки with the typst BINARY — one it is pointed at,
+# else `typst` on PATH — so it needs neither the wasm nor Rust.
+# The Python tool's CLI in Go (../chgksuite_go_rewrite.md), ~14 MB
+chgksuite:
+    go build -ldflags="-s -w" -o ~/.local/bin/chgksuite ./cmd/chgksuite
+    @echo "собрано: ~/.local/bin/chgksuite ($(du -h ~/.local/bin/chgksuite | cut -f1), typst не встроен)"
+
+# Needs the wasm built first, and comes out ~35 MB heavier (14 → 48 stripped).
+# The same, with typst carried along, for a machine that has none
+chgksuite-wasm: wasm
+    go build -tags wasmtypst -ldflags="-s -w" -o ~/.local/bin/chgksuite ./cmd/chgksuite
+    @echo "собрано: ~/.local/bin/chgksuite ($(du -h ~/.local/bin/chgksuite | cut -f1), typst внутри)"
+
+# Compile typst to wasm32-wasip1 and drop the artifact where //go:embed wants it.
+# Needs Rust: rustup target add wasm32-wasip1
+# One-time per clone, and once per typst bump (typst-wasm/Cargo.toml).
+# Links with thin LTO (typst-wasm/Cargo.toml) and takes ~4 min. Fat LTO peaks at
+# 4.9 GB RSS and gets OOM-killed (bare SIGKILL) on an 8 GB box; it would buy ~9%
+# on pool startup and nothing per render. If you ever want it on a big machine:
+#   CARGO_PROFILE_RELEASE_LTO=fat just build-wasm
+build-wasm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release --target wasm32-wasip1 --manifest-path typst-wasm/Cargo.toml
+    cp typst-wasm/target/wasm32-wasip1/release/typst_wasm.wasm {{wasm_path}}
+    ls -lh {{wasm_path}}
+
+# Guard: the embedded artifact must exist before anything compiles typstwasm.
+[private]
+wasm:
+    #!/usr/bin/env bash
+    [ -f {{wasm_path}} ] && exit 0
+    echo "missing chgksuite/{{wasm_path}} — run 'just build-wasm' in chgksuite/ once (needs Rust + the wasm32-wasip1 target)" >&2
+    exit 1
+
+fmt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(find . -path ./third_party -prune -o -type f -name '*.go' -print)
+    ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
+
+vet: wasm
+    go vet ./...
+
+tidy-check:
+    go mod tidy -diff
+
+test: wasm
+    go test ./...
+
+# fsource's marker table and cardkind's table are generated into xy's
+# TypeScript, so a change to either leaves xy/web/ts stale until regenerated.
+generate-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Compare each regenerated file against what was on disk, NOT against HEAD:
+    # a git diff also fires when the table and its output are both edited
+    # correctly but not yet committed, which makes pre-commit unusable mid-change.
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    rc=0
+    for target in "./fsource ../xy/web/ts/markers_gen.ts" \
+                  "./cardkind ../xy/web/ts/cardkind_gen.ts"; do
+      set -- $target
+      gentarget=$1 file=$2
+      cp "$file" "$tmp/before"
+      go generate "$gentarget"
+      if ! diff -q "$tmp/before" "$file" >/dev/null; then
+        echo "$file is stale w.r.t. its source: run 'go generate $gentarget' in chgksuite/" >&2
+        diff "$tmp/before" "$file" >&2 || true
+        rc=1
+      fi
+    done
+    exit $rc
+
+# This module's own gate: fast, and all you need mid-change.
+check:
+    just fmt
+    just vet
+    just tidy-check
+    just generate-check
+    just test
+
+# The whole repo, from wherever you are.
+pre-commit:
+    cd .. && just pre-commit

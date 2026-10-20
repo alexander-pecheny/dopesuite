@@ -14,8 +14,8 @@ import (
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
-	core "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
+	core "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // assortiFixture is what read-assorti-sheets.py carried out of the workbook.

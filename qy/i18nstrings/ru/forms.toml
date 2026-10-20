@@ -1,0 +1,7 @@
+# What a form that saves itself says while it saves.
+saving = "Сохраняю…"
+failed = "Не сохранилось. Нажмите «Сохранить»."
+
+# The archive's results pages: the button that opens every answer at once.
+show_answers = "Показать все ответы"
+hide_answers = "Скрыть все ответы"

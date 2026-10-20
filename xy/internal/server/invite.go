@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 )
 
 const (
@@ -42,7 +42,7 @@ func runMintInvite(args []string) {
 			days = d
 		}
 	}
-	srv, err := newServer()
+	srv, err := newServer(configFromEnv())
 	if err != nil {
 		log.Fatal(err)
 	}

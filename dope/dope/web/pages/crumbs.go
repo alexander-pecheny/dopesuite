@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"

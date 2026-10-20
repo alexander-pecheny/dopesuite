@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A compiled reseed Edge must actually resolve: group bouts are played, the

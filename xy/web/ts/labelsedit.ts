@@ -64,8 +64,8 @@ export function createLabelsEditor(board: Board): LabelsEditor {
       // A blanked name is a slip, not a rename: a nameless label is unusable.
       if (!name || (name === row.lbl.name && color === row.lbl.color)) continue;
       await board.verbs.patch("patchLabel", `/api/labels/${row.lbl.id}`, {
-        name_enc: await xyCrypto.encField(board.dk(), name),
-        color_enc: await xyCrypto.encField(board.dk(), color),
+        name: await xyCrypto.encField(board.dk(), name),
+        color: await xyCrypto.encField(board.dk(), color),
       });
       row.lbl.name = name;
       row.lbl.color = color;
@@ -169,8 +169,8 @@ export function createLabelsEditor(board: Board): LabelsEditor {
 
   async function createLabel(name: string, color: string): Promise<BoardLabel> {
     const res = await board.verbs.create("createLabel", `/api/boards/${board.id}/labels`, {
-      name_enc: await xyCrypto.encField(board.dk(), name),
-      color_enc: await xyCrypto.encField(board.dk(), color),
+      name: await xyCrypto.encField(board.dk(), name),
+      color: await xyCrypto.encField(board.dk(), color),
     });
     const lbl: BoardLabel = { id: res.id as number, name, color };
     board.state.labels.push(lbl);

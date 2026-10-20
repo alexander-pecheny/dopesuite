@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/session"
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 )
 
 // The statuses the login page understands (login-model.ts).

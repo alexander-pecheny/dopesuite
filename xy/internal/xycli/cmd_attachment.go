@@ -10,7 +10,7 @@ import (
 	"fmt"
 	xystrings "xy/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // Attachments are ciphertext on the server like everything else: the CLI seals
@@ -47,7 +47,7 @@ func attachmentList(a *app, args []string) error {
 	}
 	rows := []row{}
 	for _, att := range atts {
-		name, err := b.DK.DecField(att.FilenameEnc)
+		name, err := b.DK.DecField(att.Filename)
 		if err != nil {
 			name = s.Cli.Attachment.UnreadableName()
 		}
@@ -82,7 +82,7 @@ func attachmentGet(a *app, args []string) error {
 		}
 		for _, att := range atts {
 			if att.ID == attID {
-				if decoded, err := b.DK.DecField(att.FilenameEnc); err == nil {
+				if decoded, err := b.DK.DecField(att.Filename); err == nil {
 					name = decoded
 				}
 			}
@@ -147,12 +147,12 @@ func attachmentAdd(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	filenameEnc, err := b.DK.EncField(filename)
+	sealedFilename, err := b.DK.EncField(filename)
 	if err != nil {
 		return err
 	}
 	// The timeline entry that says an attachment arrived, in the browser's shape.
-	eventEnc, err := b.DK.SealPayload(KindAttachAdd, AttachPayload{File: filename})
+	sealedEvent, err := SealPayload(b.DK, KindAttachAdd, AttachPayload{File: filename})
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func attachmentAdd(a *app, args []string) error {
 		mimeType = "application/octet-stream"
 	}
 	id, err := c.UploadAttachment(cardID, map[string]any{
-		"filename_enc": filenameEnc, "mime": mimeType, "event_payload_enc": eventEnc,
+		"filename": sealedFilename, "mime": mimeType, "event_payload": sealedEvent,
 	}, sealed)
 	if err != nil {
 		return err

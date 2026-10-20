@@ -11,8 +11,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"pecheny.me/dopecore/sqlitex"
-	"pecheny.me/dopecore/sqlitex/sqlitextest"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 )
 
 func newWriter(t *testing.T) sqlitex.Writer {

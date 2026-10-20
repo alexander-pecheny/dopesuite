@@ -16,9 +16,9 @@ import (
 	"net/url"
 	"os"
 
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/sameorigin"
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sameorigin"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // Access is what a route asks of its caller.

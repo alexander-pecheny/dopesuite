@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"sort"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/gamebuild"

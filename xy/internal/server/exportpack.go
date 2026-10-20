@@ -8,13 +8,14 @@ import (
 	"net/http"
 	"strings"
 
-	"xy/internal/chgk/docx"
-	"xy/internal/chgk/fsource"
-	"xy/internal/chgk/handout"
-	"xy/internal/chgk/imghost"
-	"xy/internal/chgk/openquiz"
-	"xy/internal/chgk/pptx"
-	"xy/internal/chgk/typstdoc"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/docx"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/imghost"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/openquiz"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/pptx"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/typstdoc"
 
 	xystrings "xy/i18nstrings"
 )
@@ -109,7 +110,12 @@ func (s *server) handleExportPack(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
-	files, err := s.renderPack(ctx, req, formats, normalizeNewlines(form.Value("hndt")), ts)
+	settings, err := readExportSettings(form, req.game, req.commentFirst)
+	if err != nil {
+		handleUser(w, err)
+		return
+	}
+	files, err := s.renderPack(ctx, req, formats, settings, normalizeNewlines(form.Value("hndt")), ts)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "export timed out")
@@ -138,7 +144,7 @@ func (s *server) handleExportPack(w http.ResponseWriter, r *http.Request) {
 
 // renderPack renders every selected format. The parsed 4s is shared: all three
 // document exports read the same structure.
-func (s *server) renderPack(ctx context.Context, req exportRequest, formats packFormats, hndt string, ts handout.Typesetter) ([]packFile, error) {
+func (s *server) renderPack(ctx context.Context, req exportRequest, formats packFormats, settings exportSettings, hndt string, ts handout.Typesetter) ([]packFile, error) {
 	var files []packFile
 	var parsed fsource.Doc
 	var parsedOK bool
@@ -167,14 +173,13 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		opts   docx.Options
 		suffix string
 	}{
-		{formats.docx, docx.Options{Game: req.game}, ".docx"},
-		{formats.docxScreen, docx.Options{Game: req.game, ScreenMode: docx.ScreenReplaceAll}, "_screen.docx"},
-		{formats.docxSpoilers, docx.Options{Game: req.game, ScreenMode: docx.ScreenReplaceAll, Spoilers: docx.SpoilersDots}, "_screen_spoilers.docx"},
+		{formats.docx, settings.docx, ".docx"},
+		{formats.docxScreen, screenCopy(settings.docx, docx.SpoilersOff), "_screen.docx"},
+		{formats.docxSpoilers, screenCopy(settings.docx, docx.SpoilersDots), "_screen_spoilers.docx"},
 	} {
 		if !v.want {
 			continue
 		}
-		v.opts.CommentFirst = req.commentFirst
 		b, err := docx.Export(structure(), req.images, v.opts)
 		if err != nil {
 			return nil, err
@@ -199,7 +204,7 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		files = append(files, packFile{req.name + v.suffix, b})
 	}
 	if formats.pptx {
-		b, err := pptx.Export(structure(), req.images, pptx.Options{OptimizeSize: true, CommentFirst: req.commentFirst})
+		b, err := pptx.Export(structure(), req.images, settings.pptx)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +218,7 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 		files = append(files, packFile{req.name + ".json", b})
 	}
 	if formats.handouts && strings.TrimSpace(hndt) != "" {
-		zipped, err := handout.SplitFit(ctx, hndt, req.images, handout.DefaultArgs(), ts)
+		zipped, err := handout.SplitFit(ctx, hndt, req.images, settings.handouts, ts)
 		if err != nil {
 			return nil, err
 		}
@@ -222,14 +227,27 @@ func (s *server) renderPack(ctx context.Context, req exportRequest, formats pack
 			return nil, err
 		}
 		files = append(files, inner...)
+		if settings.teams > 0 {
+			hr := handoutRequest{source: hndt, name: handoutsDir + req.name, images: req.images, args: settings.handouts}
+			packed, err := packFiles(ctx, hr, ts, settings.teams)
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, packed...)
+		}
 	}
 	return files, nil
 }
 
 // fourSExt is the 4s extension the game is recognised by (composer_common.ext_to_game).
 func fourSExt(game string) string {
-	if game == "si" {
+	switch game {
+	case cardkind.GameSI:
 		return ".si4s"
+	case cardkind.GameTroika:
+		return ".tr4s"
+	case cardkind.GameBrain:
+		return ".br4s"
 	}
 	return ".4s"
 }

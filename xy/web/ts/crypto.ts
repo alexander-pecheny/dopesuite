@@ -18,6 +18,7 @@ import { scrypt as scryptJS } from "../vendor/scrypt.js";
 import { WORDLIST } from "./wordlist.js";
 import S from "./i18nstrings.js";
 import { start as startWorker, type CryptoWorker } from "./cryptoworkerclient.js";
+import { xyInstance } from "./instance.js";
 
 // scrypt KDF parameters, stored (JSON-encoded) per board.
 export interface KdfParams {
@@ -39,9 +40,10 @@ export interface BoardKeymeta {
 
 // A live board data key: the imported WebCrypto handle plus the raw bytes. Both
 // are needed — WebCrypto takes the handle, wasm takes the bytes — and the raw
-// key is also what the IndexedDB cache and a passphrase re-wrap store.
+// key is also what the IndexedDB cache and a passphrase re-wrap store. A null
+// handle is PLAINTEXT_KEY's: the board is stored as plaintext.
 export interface DataKey {
-  key: CryptoKey;
+  key: CryptoKey | null;
   raw: Uint8Array<ArrayBuffer>;
 }
 
@@ -212,7 +214,9 @@ async function importDK(raw: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
 
 // createBoardKeys generates a fresh DK and wraps it under a passphrase-derived
 // KEK. Returns the keymeta to persist plus the live DK (CryptoKey + raw).
+// On a local xy a new board takes no passphrase and gets the plaintext key.
 async function createBoardKeys(passphrase: string): Promise<{ keymeta: BoardKeymeta; dk: DataKey }> {
+  if (xyInstance.isLocal()) return { keymeta: plainKeymeta(), dk: PLAINTEXT_KEY };
   const params = { ...DEFAULT_KDF };
   const salt = randomBytes(SALT_LEN);
   const dkRaw = randomBytes(KEY_LEN);
@@ -234,6 +238,7 @@ async function createBoardKeys(passphrase: string): Promise<{ keymeta: BoardKeym
 // unlockBoard derives the KEK, unwraps DK, and verifies the token. Throws on a
 // wrong passphrase.
 async function unlockBoard(passphrase: string, keymeta: BoardKeymeta): Promise<DataKey> {
+  if (isPlainKeymeta(keymeta)) return PLAINTEXT_KEY;
   const params = JSON.parse(keymeta.kdf_params) as KdfParams;
   const salt = fromB64(keymeta.kdf_salt);
   const kek = await deriveKEK(passphrase, salt, params);
@@ -263,13 +268,29 @@ async function rewrapKey(newPassphrase: string, dk: DataKey): Promise<Omit<Board
   return { kdf_salt: toB64(salt), kdf_params: JSON.stringify(params), wrapped_key: toB64(wrapped) };
 }
 
+// ---- plaintext boards ----
+// A local xy (the desktop app's) stores its boards as plaintext: their keymeta
+// names no KDF, and their key is PLAINTEXT_KEY, under which every field helper
+// below passes the bytes through. A server refuses such a board, and a local
+// xy refuses any other, so the two never meet.
+const PLAIN_KDF_PARAMS = JSON.stringify({ kdf: "none" });
+const PLAINTEXT_KEY: DataKey = { key: null, raw: new Uint8Array(0) };
+
+function plainKeymeta(): BoardKeymeta {
+  return { kdf_salt: "", kdf_params: PLAIN_KDF_PARAMS, wrapped_key: "", verify_token: "" };
+}
+
+function isPlainKeymeta(keymeta: BoardKeymeta): boolean {
+  try { return (JSON.parse(keymeta.kdf_params) as KdfParams).kdf === "none"; } catch (_) { return false; }
+}
+
 // ---- field helpers (string <-> base64 envelope) ----
 
 async function encField(dk: DataKey, str: string): Promise<string> {
-  return toB64(await seal(dk.key, te.encode(str)));
+  return toB64(await encBytes(dk, te.encode(str)));
 }
 async function decField(dk: DataKey, b64: string): Promise<string> {
-  return td.decode(await open(dk.key, fromB64(b64)));
+  return td.decode(await decBytes(dk, fromB64(b64)));
 }
 
 // encFields/decFields are the batch forms, and the ones any loop over a board's
@@ -291,10 +312,10 @@ async function decFields(dk: DataKey, b64s: string[]): Promise<(string | null)[]
 }
 
 async function encBytes(dk: DataKey, bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
-  return await seal(dk.key, bytes);
+  return dk.key ? seal(dk.key, bytes) : bytes;
 }
 async function decBytes(dk: DataKey, bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
-  return await open(dk.key, bytes);
+  return dk.key ? open(dk.key, bytes) : bytes;
 }
 
 // ---- IndexedDB key cache (raw DK per board) ----
@@ -310,6 +331,7 @@ function idb(): Promise<IDBDatabase> {
   });
 }
 async function cacheDK(boardId: number | string, dk: DataKey): Promise<void> {
+  if (!dk.key) return;
   const db = await idb();
   await new Promise<void>((res, rej) => {
     const tx = db.transaction(STORE, "readwrite");
@@ -318,7 +340,9 @@ async function cacheDK(boardId: number | string, dk: DataKey): Promise<void> {
     tx.onerror = () => rej(tx.error);
   });
 }
+// On a local xy every board is plaintext, so its key is never looked for.
 async function loadCachedDK(boardId: number | string): Promise<DataKey | null> {
+  if (xyInstance.isLocal()) return PLAINTEXT_KEY;
   const db = await idb();
   const raw = await new Promise<Uint8Array<ArrayBuffer> | ArrayBuffer | undefined>((res, rej) => {
     const tx = db.transaction(STORE, "readonly");
@@ -344,6 +368,7 @@ export const xyCrypto = {
   toB64, fromB64,
   createBoardKeys, unlockBoard, rewrapKey, validatePassphrase, generatePassphrase,
   encField, decField, encFields, decFields, encBytes, decBytes,
+  PLAINTEXT_KEY, plainKeymeta, isPlainKeymeta,
   cacheDK, loadCachedDK, forgetDK,
   warm,
   // low-level, exposed for tests

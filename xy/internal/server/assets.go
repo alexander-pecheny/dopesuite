@@ -7,7 +7,7 @@ import (
 
 	kit "pecheny.me/dopeuikit/kit"
 
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 
 	xystrings "xy/i18nstrings"
 	"xy/internal/ui"

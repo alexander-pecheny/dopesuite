@@ -12,7 +12,7 @@ import (
 	"dope/dope/domain/roster"
 	dopeserver "dope/dope/server"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A Мультиигры game's guest teams are the host's: added by name on the game's

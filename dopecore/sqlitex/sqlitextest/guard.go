@@ -12,7 +12,7 @@ import (
 )
 
 // importPath is this package, the import Guard looks for.
-const importPath = "pecheny.me/dopecore/sqlitex/sqlitextest"
+const importPath = "code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 
 // syncFull is what pragma synchronous reads back as under synchronous(FULL).
 const syncFull = 2

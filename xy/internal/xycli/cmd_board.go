@@ -7,10 +7,11 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
-	"xy/internal/cardkind"
 	"xy/internal/rank"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
 )
 
 // ---- board show ----
@@ -121,11 +122,11 @@ func listAdd(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	titleEnc, err := b.DK.EncField(*title)
+	sealedTitle, err := b.DK.EncField(*title)
 	if err != nil {
 		return err
 	}
-	id, err := c.CreateList(b.ID, titleEnc, newRank)
+	id, err := c.CreateList(b.ID, sealedTitle, newRank)
 	if err != nil {
 		return err
 	}
@@ -155,11 +156,11 @@ func listRename(a *app, args []string) error {
 	if _, err := b.List(listID); err != nil {
 		return err
 	}
-	titleEnc, err := b.DK.EncField(*title)
+	sealedTitle, err := b.DK.EncField(*title)
 	if err != nil {
 		return err
 	}
-	if err := c.PatchList(listID, map[string]any{"title_enc": titleEnc}); err != nil {
+	if err := c.PatchList(listID, map[string]any{"title": sealedTitle}); err != nil {
 		return err
 	}
 	return a.emit(map[string]any{"id": listID}, func() { a.printf("%s", s.Cli.List.Renamed(itoa(listID))) })
@@ -266,7 +267,7 @@ func cardSet(a *app, args []string) error {
 			return corei18n.User(s.Cli.Card.SetEmpty())
 		}
 		if desc != card.Desc {
-			descEnc, err := b.DK.EncField(desc)
+			sealedDesc, err := b.DK.EncField(desc)
 			if err != nil {
 				return err
 			}
@@ -274,20 +275,20 @@ func cardSet(a *app, args []string) error {
 			// real change only, as the browser's rewrites do. The server writes the
 			// row, but only from a payload the client seals: before/after are
 			// plaintext it never sees.
-			eventEnc, err := b.DK.SealPayload(KindDescEdit, DescEditPayload{Before: card.Desc, After: desc})
+			sealedEvent, err := SealPayload(b.DK, KindDescEdit, DescEditPayload{Before: card.Desc, After: desc})
 			if err != nil {
 				return err
 			}
-			body["description_enc"] = descEnc
-			body["desc_event_enc"] = eventEnc
+			body["description"] = sealedDesc
+			body["desc_event"] = sealedEvent
 		}
 	}
 	if *alias != "" {
-		aliasEnc, err := b.DK.EncField(*alias)
+		sealedAlias, err := b.DK.EncField(*alias)
 		if err != nil {
 			return err
 		}
-		body["alias_enc"] = aliasEnc
+		body["alias"] = sealedAlias
 	}
 	if *kind != "" {
 		body["kind"] = *kind
@@ -351,17 +352,17 @@ func cardAdd(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	descEnc, err := b.DK.EncField(desc)
+	sealedDesc, err := b.DK.EncField(desc)
 	if err != nil {
 		return err
 	}
-	body := map[string]any{"description_enc": descEnc, "rank": newRank, "kind": *kind}
+	body := map[string]any{"description": sealedDesc, "rank": newRank, "kind": *kind}
 	if *alias != "" {
-		aliasEnc, err := b.DK.EncField(*alias)
+		sealedAlias, err := b.DK.EncField(*alias)
 		if err != nil {
 			return err
 		}
-		body["alias_enc"] = aliasEnc
+		body["alias"] = sealedAlias
 	}
 	id, err := c.CreateCard(*list, body)
 	if err != nil {

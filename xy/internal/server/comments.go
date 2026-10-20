@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	xystrings "xy/i18nstrings"
 )
 
@@ -25,9 +25,9 @@ type timelineEventDTO struct {
 	ReplyToID      *int64  `json:"reply_to_id,omitempty"`
 	ReplyCount     int     `json:"reply_count"`
 	// Deleted marks a tombstone: a comment whose text is gone but which is still
-	// rendered because live replies hang off it. PayloadEnc is empty for these.
-	Deleted    bool   `json:"deleted,omitempty"`
-	PayloadEnc string `json:"payload_enc"`
+	// rendered because live replies hang off it. Payload is empty for these.
+	Deleted bool   `json:"deleted,omitempty"`
+	Payload string `json:"payload"`
 	// SessionID tags a comment with the Test Session it came out of ("on this
 	// test the team stumbled over the wording"). CardID is null on a note about
 	// the session itself, which is what a comment on the old test card was.
@@ -39,9 +39,9 @@ type timelineEventDTO struct {
 // its ciphertext, and the id a search hit deep-links to. Nothing else — an
 // author or a date would only be shown by a timeline, and the timeline asks per card.
 type boardCommentDTO struct {
-	ID         int64  `json:"id"`
-	CardID     int64  `json:"card_id"`
-	PayloadEnc string `json:"payload_enc"`
+	ID      int64  `json:"id"`
+	CardID  int64  `json:"card_id"`
+	Payload string `json:"payload"`
 }
 
 // handleGetBoardComments returns every live comment on a board's cards in one
@@ -54,7 +54,7 @@ func (s *server) handleGetBoardComments(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	rows, err := s.db.QueryContext(r.Context(), `
-select e.id, e.card_id, e.payload_enc
+select e.id, e.card_id, e.payload
 from timeline_events e
 join cards c on c.id = e.card_id
 where c.board_id = ? and e.type = 'comment'
@@ -71,7 +71,7 @@ order by e.id`, bid)
 		if err := rows.Scan(&e.ID, &e.CardID, &payload); handleErr(w, err) {
 			return
 		}
-		e.PayloadEnc = b64(payload)
+		e.Payload = b64(payload)
 		out = append(out, e)
 	}
 	if err := rows.Err(); handleErr(w, err) {
@@ -101,9 +101,9 @@ order by e.id`, cardID)
 }
 
 type addCommentRequest struct {
-	PayloadEnc string `json:"payload_enc"`
-	ReplyToID  *int64 `json:"reply_to_id"`
-	SessionID  *int64 `json:"session_id"` // optional: the test this came out of
+	Payload   string `json:"payload"`
+	ReplyToID *int64 `json:"reply_to_id"`
+	SessionID *int64 `json:"session_id"` // optional: the test this came out of
 	// Mentions: board-member ids the comment's text names, resolved by the
 	// client at compose time. Plaintext routing metadata (ADR-0009).
 	Mentions []int64 `json:"mentions"`
@@ -147,8 +147,8 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.PayloadEnc == "" {
-		httpError(w, http.StatusBadRequest, "payload_enc required")
+	if req.Payload == "" {
+		httpError(w, http.StatusBadRequest, "payload required")
 		return
 	}
 	var replyTo *int64
@@ -169,9 +169,9 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = s.withWriteTx(r.Context(), "add-comment", func(ctx context.Context, tx *sql.Tx) error {
-		payload, err := unb64(req.PayloadEnc)
+		payload, err := unb64(req.Payload)
 		if err != nil {
-			return corei18n.User("invalid payload_enc")
+			return corei18n.User("invalid payload")
 		}
 		evID, err := insertEvent(ctx, tx, timelineEvent{BoardID: bid, CardID: cardID, SessionID: req.SessionID, Type: "comment", AuthorID: &uid, Payload: payload, ReplyToID: replyTo})
 		if err != nil {
@@ -211,12 +211,12 @@ select card_id, coalesce(reply_to_id, id) from timeline_events where id = ? and 
 }
 
 type patchCommentRequest struct {
-	PayloadEnc *string `json:"payload_enc"`
-	IsExcerpt  *bool   `json:"is_excerpt"`
+	Payload   *string `json:"payload"`
+	IsExcerpt *bool   `json:"is_excerpt"`
 	// The test this comment came out of; 0 clears it (the optBlob convention).
 	SessionID *int64 `json:"session_id"`
 	// Mentions re-resolved from the edited text; nil = leave as they were.
-	// Only meaningful alongside PayloadEnc — mentions are the text's shadow.
+	// Only meaningful alongside Payload — mentions are the text's shadow.
 	Mentions *[]int64 `json:"mentions"`
 }
 
@@ -234,7 +234,7 @@ func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.PayloadEnc != nil && (author == nil || *author != uid) {
+	if req.Payload != nil && (author == nil || *author != uid) {
 		httpError(w, http.StatusForbidden, xystrings.Default.Server.Comment.EditOwnerOnly())
 		return
 	}
@@ -270,13 +270,13 @@ func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		if req.PayloadEnc != nil {
-			payload, err := unb64(*req.PayloadEnc)
+		if req.Payload != nil {
+			payload, err := unb64(*req.Payload)
 			if err != nil || len(payload) == 0 {
-				return corei18n.User("invalid payload_enc")
+				return corei18n.User("invalid payload")
 			}
 			if _, err := tx.ExecContext(ctx, `
-update timeline_events set payload_enc = ?, edited_at = ? where id = ?`, payload, rfc3339(time.Now()), evID); err != nil {
+update timeline_events set payload = ?, edited_at = ? where id = ?`, payload, rfc3339(time.Now()), evID); err != nil {
 				return err
 			}
 			if req.Mentions != nil {
@@ -338,7 +338,7 @@ func (s *server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.withWriteTx(r.Context(), "delete-comment", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-update timeline_events set deleted_at = ?, payload_enc = x'', is_excerpt = 0
+update timeline_events set deleted_at = ?, payload = x'', is_excerpt = 0
 where id = ? and deleted_at is null`, rfc3339(time.Now()), evID)
 		return err
 	})
@@ -394,7 +394,7 @@ type importedEvent struct {
 	AuthorUserID *int64 `json:"author_user_id"`
 	CreatedAt    string `json:"created_at"`
 	IsExcerpt    bool   `json:"is_excerpt"`
-	PayloadEnc   string `json:"payload_enc"`
+	Payload      string `json:"payload"`
 }
 
 // handleImportEvents bulk-inserts timeline events while preserving their
@@ -423,9 +423,9 @@ func (s *server) handleImportEvents(w http.ResponseWriter, r *http.Request) {
 			if typ != "comment" && typ != "desc_edit" {
 				return corei18n.User("bad event type")
 			}
-			payload, err := unb64(c.PayloadEnc)
+			payload, err := unb64(c.Payload)
 			if err != nil {
-				return corei18n.User("invalid payload_enc")
+				return corei18n.User("invalid payload")
 			}
 			created := c.CreatedAt
 			if _, perr := time.Parse(time.RFC3339, created); perr != nil {

@@ -15,9 +15,9 @@ import (
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
-	"pecheny.me/dopecore/adminusers"
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // SiteAdminEnv names the one account that runs /admin (default "pecheny").

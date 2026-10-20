@@ -1,3 +1,6 @@
+// Package xycli is the guts of xy-cli: the API client, the decrypted board
+// model and the commands over them, sealing and opening through
+// chgksuite/xyenvelope. cmd/xy-cli is a thin main.
 package xycli
 
 import (
@@ -12,8 +15,9 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // outputFileMode is the permission every file xy-cli writes out gets.
@@ -212,7 +216,7 @@ func (a *app) client() (*Client, error) {
 // boardRef resolves --board: an id, or a name matched against the boards whose
 // key this machine holds. Only those, because without the key nothing on the
 // board can be read anyway.
-func (a *app) boardRef(ref string) (int64, DataKey, error) {
+func (a *app) boardRef(ref string) (int64, xyenvelope.DataKey, error) {
 	if ref == "" {
 		return 0, nil, corei18n.User(xystrings.Default.Cli.Shared.NeedBoard())
 	}

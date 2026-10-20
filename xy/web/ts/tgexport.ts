@@ -1,11 +1,11 @@
 // tgexport.ts — the telegram publisher's dialog: the export that posts instead
-// of downloading. The dialog asks for the bot and the two places (the channel and
+// of downloading. The dialog asks for the bot and the channel (the server finds
 // its discussion group), then watches /api/export/telegram, which answers with a
 // stream of lines rather than a file — resolving a channel named by @username is
 // a conversation the reader has to take part in, inside Telegram.
 //
 // What they type is remembered on this device (IndexedDB, store.ts): the bot
-// once, the target per board, and beside it the ids Telegram resolved, so the
+// once, the channel per board, and beside it the id Telegram resolved, so the
 // second export of the same package skips the conversation entirely.
 
 import { xyApp } from "./app.js";
@@ -22,7 +22,6 @@ interface TelegramLine {
   error?: string;
   done?: boolean;
   channel?: string;
-  chat?: string;
 }
 
 export interface TelegramExportDeps {
@@ -57,7 +56,6 @@ export function createTelegramExport(deps: TelegramExportDeps) {
     const saved = await xyStore.getTgTarget(deps.boardId());
     field("tgExportToken").value = (await xyStore.getTgBot()) ?? "";
     field("tgExportChannel").value = saved?.channel ?? "";
-    field("tgExportChat").value = saved?.chat ?? "";
     byId("tgExportMessage").textContent = "";
     tgModal.open();
   }
@@ -65,10 +63,9 @@ export function createTelegramExport(deps: TelegramExportDeps) {
   async function run(): Promise<void> {
     const token = field("tgExportToken").value.trim();
     const channel = field("tgExportChannel").value.trim();
-    const chat = field("tgExportChat").value.trim();
-    if (!token || !channel || !chat || !body) return;
+    if (!token || !channel || !body) return;
     const boardId = deps.boardId();
-    await addTarget(body, boardId, token, channel, chat);
+    await addTarget(body, boardId, token, channel);
 
     const btn = byId<HTMLButtonElement>("tgExportRun");
     btn.disabled = true;
@@ -77,7 +74,7 @@ export function createTelegramExport(deps: TelegramExportDeps) {
     try {
       const res = await post(body);
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-      await read(res, boardId, channel, chat);
+      await read(res, boardId, channel);
     } catch (err) {
       log(errMsg(err));
     } finally {
@@ -87,23 +84,22 @@ export function createTelegramExport(deps: TelegramExportDeps) {
 
   // addTarget puts the bot and its destination into the request and remembers
   // them for the next export from this board.
-  async function addTarget(form: FormData, boardId: number, token: string, channel: string, chat: string): Promise<void> {
-    // The ids Telegram resolved last time stand in for the same names typed
-    // again — that, and not the names, is what spares the reader the dialogue.
+  async function addTarget(form: FormData, boardId: number, token: string, channel: string): Promise<void> {
+    // The id Telegram resolved last time stands in for the same name typed
+    // again — that, and not the name, is what spares the reader the dialogue.
     const saved = await xyStore.getTgTarget(boardId);
-    const same = saved?.channel === channel && saved?.chat === chat;
+    const same = saved?.channel === channel;
     form.append("token", token);
     form.append("channel", (same && saved?.channelId) || channel);
-    form.append("chat", (same && saved?.chatId) || chat);
     await xyStore.putTgBot(token);
-    // A renamed target keeps no ids: those belonged to the old one. They come
-    // back on the last line of the stream, once Telegram has said what they are.
-    await xyStore.putTgTarget(boardId, same ? { channel, chat, channelId: saved?.channelId, chatId: saved?.chatId } : { channel, chat });
+    // A renamed channel keeps no id: that belonged to the old one. It comes
+    // back on the last line of the stream, once Telegram has said what it is.
+    await xyStore.putTgTarget(boardId, same ? { channel, channelId: saved?.channelId } : { channel });
   }
 
   // read walks the stream. A dropped connection ends it without a last line,
   // and that is worth saying out loud: the questions posted so far are posted.
-  async function read(res: Response, boardId: number, channel: string, chat: string): Promise<void> {
+  async function read(res: Response, boardId: number, channel: string): Promise<void> {
     const reader = res.body?.getReader();
     if (!reader) return;
     const decoder = new TextDecoder();
@@ -122,7 +118,7 @@ export function createTelegramExport(deps: TelegramExportDeps) {
         if (line.note) log(line.note);
         if (line.error) { log(line.error); finished = true; }
         if (line.done) {
-          await xyStore.putTgTarget(boardId, { channel, chat, channelId: line.channel, chatId: line.chat });
+          await xyStore.putTgTarget(boardId, { channel, channelId: line.channel });
           log(S.board.tgexport.done());
           finished = true;
         }

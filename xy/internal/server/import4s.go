@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"xy/internal/chgk/chgkimport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/chgkimport"
 
 	xystrings "xy/i18nstrings"
 )
@@ -63,7 +63,7 @@ func (s *server) handleImportText(w http.ResponseWriter, r *http.Request) {
 
 // handleImportParse parses an uploaded question package (.4s, .zip or .docx) into
 // 4s source plus its images. This is the read side of chgksuite's `parse` command,
-// ported to Go (internal/chgk/chgkimport).
+// ported to Go (chgksuite/chgkimport).
 //
 // Like the docx export and handout endpoints, this handler sees the package in
 // plaintext — it has to, since only the server can parse a .docx. Nothing is
@@ -94,6 +94,17 @@ func (s *server) handleImportParse(w http.ResponseWriter, r *http.Request) {
 		}
 		httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.ParseFailed(err.Error()))
 		return
+	}
+	if images := form.Files("image"); len(images) > 0 {
+		if !chgkimport.Is4s(files[0].Filename) {
+			httpError(w, http.StatusBadRequest, xystrings.Default.Server.Import.ImagesNeed4s())
+			return
+		}
+		picked := make([]chgkimport.Image, 0, len(images))
+		for _, f := range images {
+			picked = append(picked, chgkimport.Image{Name: f.Filename, Data: f.Data})
+		}
+		res.AddImages(picked)
 	}
 	// Give the images names the (img …) directives can actually reference.
 	res.SafeImageNames()

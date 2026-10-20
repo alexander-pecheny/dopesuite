@@ -92,7 +92,7 @@ export function createTesterList(board: Board, shell: PanelShell, deps: { copyPl
     const s = tourScope(list);
     await board.verbs.put("setTourDeclaration", `/api/boards/${board.id}/tour-declaration`, {
       list_id: s.listId, group_id: s.groupId,
-      names_enc: await xyCrypto.encField(board.dk(), serializeDeclaration(names)),
+      names: await xyCrypto.encField(board.dk(), serializeDeclaration(names)),
     });
     const other = (d: { listId: number | null; groupId: number | null }): boolean => d.listId !== s.listId || d.groupId !== s.groupId;
     board.state.tourTesters = board.state.tourTesters.filter(other);

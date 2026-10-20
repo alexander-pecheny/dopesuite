@@ -1,8 +1,8 @@
 // Test Sessions: one sitting at which a group of testers played a set of
-// questions. A board-level entity (test_sessions.meta_enc), NOT a card in a
+// questions. A board-level entity (test_sessions.meta), NOT a card in a
 // list — see docs/labels-redesign.md and ADR-0003.
 //
-// Everything here is pure: parsing meta_enc, deriving a label's display name,
+// Everything here is pure: parsing meta, deriving a label's display name,
 // writing the invite line, and the tester lists (players / teams) of the test
 // cards the sessions grew out of. The DOM lives in board.ts and sessionspanel.ts.
 
@@ -205,7 +205,7 @@ function str(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
-// parseSession folds every shape meta_enc has ever held into the current one.
+// parseSession folds every shape meta has ever held into the current one.
 // migrateV18 moved the old test card's ciphertext across verbatim — it could not
 // decrypt to reshape it — so the legacy {datetime,title,testers} arrives here
 // untouched and is split into date/time on read. The same trick chgk.ts already

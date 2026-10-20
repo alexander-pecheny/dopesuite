@@ -3,10 +3,10 @@
 // Cards. The export modal, the handouts panel and the board's handout badge all
 // read it here.
 //
-// The reference is Go's internal/listexport, which xy-cli exports through. This
+// The reference is Go's chgksuite/listexport, which xy-cli exports through. This
 // copy stays in the browser because a bare .4s is written offline and the badge
-// is drawn on every render. Its corpus, internal/listexport/testdata/cases.json,
-// is written by the Go side (`go test ./internal/listexport -update`), and
+// is drawn on every render. Its corpus, chgksuite/listexport/testdata/cases.json,
+// is written by the Go side (`go test ./listexport -update` in chgksuite/), and
 // jstest/listexport_parity.test.js holds this file to it. A rule changed here
 // is changed there first.
 
@@ -30,8 +30,9 @@ function exportSource(cards: ReadonlyArray<Pick<ExportCard, "desc"> & { kind?: s
   return cards.filter((c) => exported(c.kind)).map((c) => foldBlankLines(withQuestionMarker(c.kind, withKindMarker(c.kind, xyVersions.composeVersions(c.desc).trim())))).filter(Boolean).join("\n\n") + "\n";
 }
 
-// exportGame is the game a scope exports as: one Theme makes it SI, whatever
-// the List Type says, since a theme's name and author survive only an SI compose.
+// exportGame is the game a scope exports as (cardkind.ts gameOf), whatever the
+// List Type says: a theme's name survives only an SI or troika compose, and a
+// battle's heading only a brain one.
 function exportGame(cards: ReadonlyArray<{ kind?: string }>): string {
   return gameOf(cards);
 }
@@ -138,7 +139,7 @@ function handoutForCard(desc: string | null | undefined): Handout | null {
 // chgksuite's own 4s2hndt is looser: any mention of a handout in the text counts,
 // with a warning printed for whoever runs it. Here the answer lights the
 // board's badge and offers the handouts panel with nobody to warn, so the label
-// has to open the text (internal/listexport/hndt.go says the same).
+// has to open the text (chgksuite/listexport/hndt.go says the same).
 const HANDOUT_LABEL = new RegExp(`^${S.chgk.label.handout()}[.:]?\\s*`, "i");
 function unbracketedHandout(q: string): Handout | null {
   const name = imgInText(q);
@@ -160,12 +161,14 @@ function hndtBlock(number: string, handout: Handout, metaText: string | null | u
 // hndtOf is what a list's cards generate: their display numbers and the .hndt
 // document — the tour's preamble, then one block per question card that carries
 // a handout, each under its saved settings — joined with chgksuite's "\n---\n".
+// A brain game has no blocks: it numbers its questions anew in every battle.
 function hndtOf(cards: ReadonlyArray<ExportCard>): { numbers: Array<string | null>; source: string } {
   const numbers = numberQuestionCards(cards);
+  const brain = gameOf(cards) === "brain";
   const preamble = cards.find((c) => c.kind === KIND.handoutsPreamble)?.desc.trim();
   const blocks: string[] = [];
   cards.forEach((c, i) => {
-    if (!carriesHandouts(c.kind)) return;
+    if (brain || !carriesHandouts(c.kind)) return;
     // Version 1's handout, like every other reader outside the card editor. A
     // block per version would print two handouts under one question number, and
     // split-fit names its output by that number — the second would overwrite the

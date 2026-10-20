@@ -1,0 +1,19 @@
+# The question captions the Go side reads too. xy's chgk.toml holds the rest.
+# listexport looks for the handout caption at the start of a handout, and
+# writes an author caption only when it is not the one chgksuite prints.
+
+[label]
+# The preview and copy caption of the handout field.
+handout = "Раздаточный материал"
+
+[author]
+# The caption choices the card editor offers for the author field; the first is
+# what chgksuite prints.
+# The default caption.
+default = "Автор"
+# The feminine singular caption.
+feminine = "Авторка"
+# The plural caption.
+plural = "Авторы"
+# The feminine plural caption.
+feminine_plural = "Авторки"

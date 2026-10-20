@@ -28,8 +28,8 @@ import (
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
 
-	"pecheny.me/dopecore/idstr"
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 const (

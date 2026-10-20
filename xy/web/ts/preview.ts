@@ -9,7 +9,7 @@ import { xyApp } from "./app.js";
 import { xyChgk } from "./chgk.js";
 import { splitTheme } from "./themes.js";
 import S from "./i18nstrings.js";
-import { KIND } from "./cardkind.js";
+import { exportMarker, isTheme, KIND } from "./cardkind.js";
 import type { HandoutPiece, ScreenValue } from "./chgk.js";
 import type { BoardCard } from "./unlock.js";
 
@@ -185,6 +185,14 @@ function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: M
   return wrap;
 }
 
+// markedDesc is a card as its export reads it: a heading, meta or battle card
+// written as plain text gets the marker its kind stands for (listexport.ts).
+function markedDesc(card: PvCard): string {
+  const marker = exportMarker(card.kind);
+  if (!marker || !card.desc.trim() || xyChgk.startsBlock(card.desc.trimStart().split("\n")[0])) return card.desc;
+  return `${marker} ${card.desc.trimStart()}`;
+}
+
 export interface PreviewOpts {
   edit?: (card: BoardCard) => HTMLElement;
   commentFirst?: boolean;
@@ -192,18 +200,18 @@ export interface PreviewOpts {
 
 export function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<string, string>, screen: boolean, opts: PreviewOpts = {}): HTMLElement {
   const { edit } = opts;
-  const blocks = xyChgk.parseBlocks(card.desc);
+  const blocks = xyChgk.parseBlocks(markedDesc(card));
   const find = (t: string) => blocks.find((b) => b.type === t);
 
-  // A an SI theme is a heading and a ladder of questions, each labelled by its bare
-  // point value — the layout chgksuite's si_mode sets, which is what the .docx
-  // and the .pdf of this card will look like.
-  if (card.kind === KIND.theme || find("theme")) {
+  // A theme is a heading and a ladder of questions, each labelled by its bare
+  // number — the layout chgksuite's si_mode sets, which is what the .docx and
+  // the .pdf of this card will look like.
+  if (isTheme(card.kind) || find("theme")) {
     const t = splitTheme(card.desc);
     const wrap = el("div", { class: "pv-theme", dataset: { cardId: card.id } });
     const head = el("h3", { class: "pv-section" });
     if (edit) head.append(edit(card as BoardCard));
-    head.append(renderRich(S.fsource.theme.defaultLabel(number ?? "", t.name), imgMap, { nbsp: true }));
+    head.append(renderRich(xyChgk.themeLabel(t.name, number ?? ""), imgMap, { nbsp: true }));
     wrap.append(head);
     if (t.author !== null) wrap.append(pvField("author", t.author, imgMap, screen, ""));
     if (t.comment !== null) wrap.append(pvField("comment", t.comment, imgMap, screen, pvSmallCls("comment")));
@@ -221,7 +229,7 @@ export function renderPreviewCard(card: PvCard, number: string | null, imgMap: M
   const wrap = el("div", { class: "pv-block", dataset: { cardId: card.id } });
   for (const b of blocks) {
     if (b.type === "number" || b.type === "setcounter") continue; // numbering directive only
-    if (b.type === "heading" || b.type === "ljheading") {
+    if (b.type === "heading" || b.type === "ljheading" || b.type === "battle") {
       const h = el("h2", { class: "pv-heading" });
       h.append(renderRich(b.text, imgMap, { nbsp: true }));
       wrap.append(h);

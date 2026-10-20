@@ -30,7 +30,7 @@ test("the editor lists every label with its usage; Добавить creates one 
   rows[0].querySelector("input").value = "проверить";
   rows[0].querySelectorAll("button").find((b) => b.text === "Добавить").fire("click");
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(board.writes.map((w) => [w[0], w[2], w[3].name_enc]), [["create", "/api/boards/7/labels", "e:проверить"]]);
+  assert.deepEqual(board.writes.map((w) => [w[0], w[2], w[3].name]), [["create", "/api/boards/7/labels", "e:проверить"]]);
   assert.equal(board.state.labels.length, 3);
   // Rename in place; leaving (Готово → confirm gate) writes it.
   const renamed = p.node("labelsEditor").querySelectorAll(".sess-row")[1].querySelector("input");
@@ -38,6 +38,6 @@ test("the editor lists every label with its usage; Добавить creates one 
   await new Promise((r) => setTimeout(r, 0));
   p.node("labelsEditClose").fire("click");
   await new Promise((r) => setTimeout(r, 5));
-  assert.deepEqual(board.writes.slice(1).map((w) => [w[0], w[2], w[3].name_enc]), [["patch", "/api/labels/1", "e:взяли!"]]);
+  assert.deepEqual(board.writes.slice(1).map((w) => [w[0], w[2], w[3].name]), [["patch", "/api/labels/1", "e:взяли!"]]);
   assert.equal(p.node("labelsEditOverlay").hidden, true);
 });

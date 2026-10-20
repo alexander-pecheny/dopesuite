@@ -16,8 +16,8 @@ test("collect keeps only cards a transform changes; apply patches each with a de
   const changes = rw.collect((c) => (c.id === 2 ? c.desc + "!" : null));
   assert.deepEqual(changes.map((ch) => [ch.card.id, ch.desc]), [[2, "? Два!"]]);
   await rw.apply(changes);
-  assert.deepEqual(board.writes.map((w) => [w[0], w[2], w[3].description_enc]), [["patch", "/api/cards/2", "e:? Два!"]]);
-  assert.equal(JSON.parse(board.writes[0][3].desc_event_enc.slice(2)).before, "? Два");
+  assert.deepEqual(board.writes.map((w) => [w[0], w[2], w[3].description]), [["patch", "/api/cards/2", "e:? Два!"]]);
+  assert.equal(JSON.parse(board.writes[0][3].desc_event.slice(2)).before, "? Два");
   assert.equal(board.state.cards[1].desc, "? Два!");
   assert.equal(board.renders, 1);
 });

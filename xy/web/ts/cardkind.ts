@@ -3,9 +3,9 @@
 // asked here, so a new kind is one row in the table and not an edit in every
 // file that used to spell the answer out.
 //
-// The table is Go's internal/cardkind, which the server's allow-list and xy-cli
-// read too. cardkind_gen.ts is generated from it (`go generate
-// ./internal/cardkind`), so a rule changes there, never here.
+// The table is Go's chgksuite/cardkind, which the server's allow-list and xy-cli
+// read too. cardkind_gen.ts is generated from it (`go generate ./cardkind` in
+// chgksuite/), so a rule changes there, never here.
 
 import S from "./i18nstrings.js";
 import { KINDS, type KindName } from "./cardkind_gen.js";
@@ -23,7 +23,8 @@ function kindOf(name: string | null | undefined): Kind | undefined {
 // The stored names, for the places that mean one kind in particular.
 export const KIND = {
   normal: "normal", question: "question", test: "test", meta: "meta",
-  heading: "heading", other: "other", theme: "theme", handoutsPreamble: "handouts_preamble",
+  heading: "heading", other: "other", theme: "theme", troikaTheme: "troika_theme", battle: "battle",
+  handoutsPreamble: "handouts_preamble", appeal: "appeal",
 } as const satisfies Record<string, KindName>;
 
 // counter is the number sequence a kind is numbered in: "question" (1, 2, 3…
@@ -37,6 +38,12 @@ export function counter(kind: string | null | undefined): "" | "question" | "the
 // count.
 export function numbered(kind: string | null | undefined): boolean {
   return counter(kind) !== "";
+}
+
+// isTheme is whether a Card of this kind holds a theme with its ladder: an SI
+// theme or a troika one.
+export function isTheme(kind: string | null | undefined): boolean {
+  return counter(kind) === "theme";
 }
 
 // testable is whether a Test Session plays a Card of this kind, so whether the
@@ -82,20 +89,33 @@ export function setsBase(kind: string | null | undefined): boolean {
   return kindOf(kind)?.setsBase ?? false;
 }
 
-// gameOf is the game a scope exports as: one Theme makes it SI, whatever the
-// List Type says, since a theme's name and author survive only an SI compose.
+// ladder is the `№` values a new theme of this kind is written with: 10–50
+// for SI, 1–3 for a troika. Empty for a kind that is not a theme.
+export function ladder(kind: string | null | undefined): ReadonlyArray<string> {
+  return kindOf(kind)?.ladder ?? [];
+}
+
+// gameOf is the game a scope exports as, whatever the List Type says. The first
+// theme decides it. Without one, a battle makes the scope a brain game, since
+// SI and troika packets have battles too.
 export function gameOf(cards: ReadonlyArray<{ kind?: string | null }>): string {
+  let game = "chgk";
   for (const c of cards) {
-    const g = kindOf(c.kind)?.game;
-    if (g) return g;
+    const k = kindOf(c.kind);
+    if (!k?.game) continue;
+    if (k.counter === "theme") return k.game;
+    game = k.game;
   }
-  return "chgk";
+  return game;
 }
 
 // forListType is the kind the add-card button makes in a List of this
 // type. The type decides that and nothing else.
 export function forListType(type: string | null | undefined): KindName {
-  return type === "si" ? KIND.theme : KIND.question;
+  if (type === "si") return KIND.theme;
+  if (type === "troika") return KIND.troikaTheme;
+  if (type === "appeals") return KIND.appeal;
+  return KIND.question;
 }
 
 // pickable is the kinds the card editor's kind menu offers, in its order.
@@ -107,6 +127,8 @@ export function label(kind: string | null | undefined): string | null {
   switch (kind) {
     case KIND.question: return S.board.card.kindQuestion();
     case KIND.theme: return S.board.card.kindTheme();
+    case KIND.troikaTheme: return S.board.card.kindTroikaTheme();
+    case KIND.battle: return S.board.card.kindBattle();
     case KIND.meta: return S.board.card.kindMeta();
     case KIND.heading: return S.board.card.kindHeading();
     case KIND.other: return S.board.card.kindOther();
@@ -116,6 +138,6 @@ export function label(kind: string | null | undefined): string | null {
 }
 
 export const xyCardKind = {
-  KIND, counter, numbered, testable, exported, carriesHandouts, versioned, exportMarker,
-  restartsThemes, setsBase, gameOf, forListType, pickable, label,
+  KIND, counter, numbered, isTheme, testable, exported, carriesHandouts, versioned, exportMarker,
+  restartsThemes, setsBase, ladder, gameOf, forListType, pickable, label,
 };

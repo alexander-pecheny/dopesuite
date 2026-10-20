@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"pecheny.me/dopecore/tgbot"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 )
 
 // stubBot is a bot wired to a fake Telegram. `polling` decides whether it has

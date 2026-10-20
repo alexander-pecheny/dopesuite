@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	dopestrings "dope/i18nstrings"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // Result is what dope made of a Match for one participant.

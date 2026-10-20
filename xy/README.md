@@ -94,18 +94,18 @@ and give it a numeric xy board id (the `/board/{id}` path segment).
 The "export list to docx" action (list `⋯` menu → **Экспорт в docx**) posts the
 list's decrypted card descriptions — plus any images referenced by `(img …)`
 directives — to `POST /api/export/docx`. The server composes the `.docx`
-**in-process** with the Go port of chgksuite's core (`internal/chgk/docx`,
+**in-process** with the Go port of chgksuite's core (`chgksuite/docx`,
 output byte-for-byte equal to chgksuite's), returns it, and wipes the plaintext
 immediately (the one place plaintext briefly reaches the server — a tolerated
 risk). No external tool is involved, so there is nothing to install.
 
 Handout PDFs (**генерация раздаток**, `POST /api/handouts/{pdf,split_fit}`) are
 also produced in-process: the `.hndt` source is rendered to `.typ` by
-`internal/chgk/handout` and typeset with [**typst**](https://typst.app/) — which is
+`chgksuite/handout` and typeset with [**typst**](https://typst.app/) — which is
 **linked into the binary as a WebAssembly module**, not shelled out to. There is
 nothing to install: xy has no external runtime dependencies at all.
 
-typst's `World` trait is its filesystem abstraction, so `internal/chgk/typstwasm`
+typst's `World` trait is its filesystem abstraction, so `chgksuite/typstwasm`
 serves the source, the fonts and every referenced image from memory. Handout
 rendering therefore writes **nothing to disk** — the one place xy used to have to
 put the user's decrypted questions on a filesystem. It runs under
@@ -123,12 +123,12 @@ building the app:
 
 ```sh
 rustup target add wasm32-wasip1   # once
-just build-wasm                   # compiles typst-wasm/ → internal/chgk/typstwasm/typst.wasm
+just build-wasm                   # compiles ../chgksuite/typst-wasm/ → ../chgksuite/typstwasm/typst.wasm
 just build                        # the app; embeds the wasm built above
 ```
 
 `just build-wasm` is the only step that needs Rust, and the only step that has to
-be repeated when bumping typst (`typst-wasm/Cargo.toml`). Everything else — build,
+be repeated when bumping typst (`chgksuite/typst-wasm/Cargo.toml`). Everything else — build,
 dev, test — is pure Go and just embeds whatever `typst.wasm` is sitting there; the
 recipes fail with an instruction if it is missing.
 
@@ -139,7 +139,7 @@ time is identical (~1.9 ms, within noise) and only pool startup is ~9% faster
 (627 ms → 576 ms, from a 3 MB smaller module) — once per server restart, not per
 request. On a machine with the RAM for it: `CARGO_PROFILE_RELEASE_LTO=fat just build-wasm`.
 
-`internal/chgk/handout`'s `CLITypesetter` still drives the standalone typst binary,
+`chgksuite/handout`'s `CLITypesetter` still drives the standalone typst binary,
 but only as the **oracle** the wasm path is tested against (`wasm_parity_test.go`
 requires the fitted `split_fit` row counts to match) — it is on no request path.
 Set `XY_TYPST_TEST_BIN` to a typst binary to run those tests.

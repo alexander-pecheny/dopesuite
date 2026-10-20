@@ -13,7 +13,7 @@ import (
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // noCandidateDistance sorts an entry with no candidate teams after every other.

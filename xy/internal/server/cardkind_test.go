@@ -1,13 +1,14 @@
 package server
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
-	"xy/internal/cardkind"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/cardkind"
 )
 
 // The cards.kind CHECK constraint and the server's allow-list both say which
@@ -45,5 +46,63 @@ func TestCardKindCheckMatchesTable(t *testing.T) {
 	}
 	if validCardKind("tema") {
 		t.Error("validCardKind accepts a kind the table does not have")
+	}
+}
+
+// The card editor's kind menu is static markup in board.dopeui; it has to
+// offer the pickable kinds, in table order, and no others.
+func TestKindMenuMatchesTable(t *testing.T) {
+	raw, err := os.ReadFile("../../web/assets/ui/board.dopeui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	menu := regexp.MustCompile(`(?s)selectfield id="cardKind"[^\n]*\n((?:\s+option [^\n]*\n)+)`).FindSubmatch(raw)
+	if menu == nil {
+		t.Fatal("board.dopeui: no cardKind selectfield")
+	}
+	var offered []string
+	for _, m := range regexp.MustCompile(`option value="([^"]+)"`).FindAllSubmatch(menu[1], -1) {
+		offered = append(offered, string(m[1]))
+	}
+	var pickable []string
+	for _, k := range cardkind.All {
+		if k.Pickable {
+			pickable = append(pickable, k.Name)
+		}
+	}
+	if !slices.Equal(offered, pickable) {
+		t.Errorf("board.dopeui offers %v, the table's pickable kinds are %v", offered, pickable)
+	}
+}
+
+// The lists.type CHECK and validListType say the same thing, and every List
+// Type cardkind names is in both.
+func TestListTypeCheckMatchesAllowList(t *testing.T) {
+	db, err := openTestDB(filepath.Join(t.TempDir(), "types.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var ddl string
+	if err := db.QueryRow(`select sql from sqlite_master where type = 'table' and name = 'lists'`).Scan(&ddl); err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`check \(type in \(([^)]*)\)\)`).FindStringSubmatch(ddl)
+	if m == nil {
+		t.Fatalf("no type CHECK in the lists table:\n%s", ddl)
+	}
+	var checked []string
+	for _, q := range strings.Split(m[1], ",") {
+		checked = append(checked, strings.Trim(strings.TrimSpace(q), "'"))
+	}
+	for _, typ := range checked {
+		if !validListType(typ) {
+			t.Errorf("the CHECK allows %q and validListType does not", typ)
+		}
+	}
+	for _, typ := range []string{cardkind.ListTypeSI, cardkind.ListTypeTroika, cardkind.ListTypeBrain, cardkind.ListTypeAppeals} {
+		if !slices.Contains(checked, typ) {
+			t.Errorf("cardkind's list type %q is not in the CHECK %v", typ, checked)
+		}
 	}
 }

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { installDOM } from "./dom.js";
 
-const ids = ["tgExportOverlay", "tgExportForm", "tgExportToken", "tgExportChannel", "tgExportChat", "tgExportRun", "tgExportCancel", "tgExportMessage"];
+const ids = ["tgExportOverlay", "tgExportForm", "tgExportToken", "tgExportChannel", "tgExportRun", "tgExportCancel", "tgExportMessage"];
 const p = installDOM(ids);
 p.node("tgExportOverlay").hidden = true;
 
@@ -37,21 +37,20 @@ function panel(lines) {
   });
 }
 
-function fill(token, channel, chat) {
+function fill(token, channel) {
   p.node("tgExportToken").value = token;
   p.node("tgExportChannel").value = channel;
-  p.node("tgExportChat").value = chat;
 }
 
-test("the notes arrive as they are streamed, and the resolved ids are kept", async () => {
+test("the notes arrive as they are streamed, and the resolved id is kept", async () => {
   const tg = panel([
     { note: "Подключаемся к боту…" },
     {},
     { note: "Перешлите боту любое сообщение из канала «@pack»." },
-    { done: true, channel: "-1001111", chat: "-1002222" },
+    { done: true, channel: "-1001111" },
   ]);
   await tg.open(new FormData());
-  fill("12345:secret", "@pack", "@packchat");
+  fill("12345:secret", "@pack");
   await tg.run();
 
   const log = p.node("tgExportMessage").textContent;
@@ -59,31 +58,31 @@ test("the notes arrive as they are streamed, and the resolved ids are kept", asy
   assert.match(log, /Перешлите боту/);
   assert.match(log, /Опубликовано\./);
   assert.equal(kept.get("bot"), "12345:secret");
-  assert.deepEqual(kept.get("target:7"), { channel: "@pack", chat: "@packchat", channelId: "-1001111", chatId: "-1002222" });
+  assert.deepEqual(kept.get("target:7"), { channel: "@pack", channelId: "-1001111" });
 });
 
-test("the second export of the same package sends the ids, not the names", async () => {
-  const tg = panel([{ done: true, channel: "-1001111", chat: "-1002222" }]);
+test("the second export of the same package sends the id, not the name", async () => {
+  const tg = panel([{ done: true, channel: "-1001111" }]);
   await tg.open(new FormData());
   assert.equal(p.node("tgExportChannel").value, "@pack", "what was typed comes back");
   await tg.run();
   assert.equal(sent[0].get("channel"), "-1001111");
-  assert.equal(sent[0].get("chat"), "-1002222");
+  assert.equal(sent[0].get("chat"), null, "the server finds the group itself");
 });
 
-test("renaming the target drops the remembered ids — they belong to the old one", async () => {
-  const tg = panel([{ done: true, channel: "-1003333", chat: "-1004444" }]);
+test("renaming the channel drops the remembered id — it belongs to the old one", async () => {
+  const tg = panel([{ done: true, channel: "-1003333" }]);
   await tg.open(new FormData());
-  fill("12345:secret", "@other", "@otherchat");
+  fill("12345:secret", "@other");
   await tg.run();
   assert.equal(sent[0].get("channel"), "@other");
-  assert.deepEqual(kept.get("target:7"), { channel: "@other", chat: "@otherchat", channelId: "-1003333", chatId: "-1004444" });
+  assert.deepEqual(kept.get("target:7"), { channel: "@other", channelId: "-1003333" });
 });
 
 test("a stream that stops without a last line says so: some questions may be out", async () => {
   const tg = panel([{ note: "Публикуем…" }]);
   await tg.open(new FormData());
-  fill("12345:secret", "@pack", "@packchat");
+  fill("12345:secret", "@pack");
   await tg.run();
   assert.match(p.node("tgExportMessage").textContent, /Связь оборвалась/);
 });
@@ -91,7 +90,7 @@ test("a stream that stops without a last line says so: some questions may be out
 test("an incomplete form posts nothing", async () => {
   const tg = panel([{ done: true }]);
   await tg.open(new FormData());
-  fill("12345:secret", "", "@packchat");
+  fill("12345:secret", "");
   await tg.run();
   assert.equal(sent.length, 0);
 });

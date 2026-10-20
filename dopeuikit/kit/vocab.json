@@ -16,6 +16,7 @@
         "chevron-up",
         "clipboard",
         "cloud-download",
+        "cloud-upload",
         "columns-3",
         "copy",
         "dices",
@@ -26,6 +27,7 @@
         "file-up",
         "flask-conical",
         "funnel",
+        "gavel",
         "house",
         "image",
         "info",
@@ -42,8 +44,10 @@
         "palette",
         "paperclip",
         "pencil",
+        "percent",
         "play",
         "plus",
+        "refresh-cw",
         "replace",
         "search",
         "settings",
@@ -51,6 +55,8 @@
         "tag",
         "tags",
         "text-cursor-input",
+        "thumbs-down",
+        "thumbs-up",
         "timer",
         "trash-2",
         "unlink",
@@ -445,6 +451,9 @@
         },
         {
           "name": "action"
+        },
+        {
+          "name": "enctype"
         }
       ],
       "children": "any"
@@ -611,7 +620,14 @@
       "name": "filefield",
       "props": [
         {
+          "name": "name"
+        },
+        {
           "name": "accept"
+        },
+        {
+          "name": "multiple",
+          "kind": "bare"
         },
         {
           "name": "required",

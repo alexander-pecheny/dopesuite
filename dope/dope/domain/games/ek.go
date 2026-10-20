@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"dope/dope/domain/structure"
 	"dope/dope/storage/store"

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"strings"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // ResolveFestID accepts either a positive integer (the fest id) or a slug and

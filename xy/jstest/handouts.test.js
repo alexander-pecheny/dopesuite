@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeBoard, installDOM } from "./dom.js";
 
-const p = installDOM(["handoutsOverlay", "handoutsSource", "handoutsFields", "handoutsTabFields", "handoutsTabText", "handoutsMessage", "handoutsSplitFit", "handoutsPdf", "handoutsDownload", "handoutsClose"]);
+const p = installDOM(["handoutsOverlay", "handoutsSource", "handoutsFields", "handoutsTabFields", "handoutsTabText", "handoutsMessage", "handoutsSplitFit", "handoutsPage", "handoutsPack",
+  "handoutPageOverlay", "handoutPageForm", "handoutPagePaper", "handoutPageSize", "handoutPageMessage", "handoutPageCancel", "handoutsPdf", "handoutsDownload", "handoutsClose"]);
 p.node("handoutsOverlay").hidden = true;
 p.node("handoutsSource").tag = "textarea";
 const requests = [];
@@ -19,7 +20,7 @@ const cards = [
   { id: 3, listId: 1, kind: "question", rank: "a2", desc: "? [Раздаточный материал: текст]\nВопрос\n! В", handoutMeta: "columns: 2" },
 ];
 const list = { id: 1, title: "Тур 1", rank: "a", groupId: null };
-const scope = { list, grouped: false, group: null, lists: [list], cards, title: "Тур 1" };
+const scope = { list, grouped: false, group: null, lists: [list], cards, title: "Тур 1", game: "chgk" };
 
 test("opening writes the .hndt of the scope into the editor, stages its images once and renders the preview; closing persists edited settings", async () => {
   const board = fakeBoard({ name: "Доска", cards });
@@ -35,7 +36,7 @@ test("opening writes the .hndt of the scope into the editor, stages its images o
   p.node("handoutsSource").value = p.node("handoutsSource").value.replace("columns: 2", "columns: 4\nfont_size: 12");
   p.node("handoutsClose").fire("click");
   await new Promise((r) => setTimeout(r, 5));
-  assert.deepEqual(board.writes.map((w) => [w[0], w[2], w[3].handout_meta_enc]), [["patch", "/api/cards/1", "e:columns: 3"], ["patch", "/api/cards/3", "e:columns: 4\nfont_size: 12"]]);
+  assert.deepEqual(board.writes.map((w) => [w[0], w[2], w[3].handout_meta]), [["patch", "/api/cards/1", "e:columns: 3"], ["patch", "/api/cards/3", "e:columns: 4\nfont_size: 12"]]);
   assert.equal(cards[2].handoutMeta, "columns: 4\nfont_size: 12");
   assert.equal(p.node("handoutsOverlay").hidden, true);
 });
@@ -88,7 +89,7 @@ test("a preamble added in the panel becomes a card on top of the list and opens 
   p.node("handoutsClose").fire("click");
   await new Promise((r) => setTimeout(r, 5));
   const created = board.writes.filter((w) => w[0] === "create");
-  assert.deepEqual(created.map((w) => [w[2], w[3].kind, w[3].description_enc]),
+  assert.deepEqual(created.map((w) => [w[2], w[3].kind, w[3].description]),
     [["/api/lists/1/cards", "handouts_preamble", "e:///preamble\n/// для всего тура\nfont_size: 16"]]);
   assert.ok(created[0][3].rank < "a0", "it goes above the first card");
   panel.open({ ...scope, cards: board.cardsOf(1) });

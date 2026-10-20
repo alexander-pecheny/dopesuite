@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"pecheny.me/dopecore/buildinfo"
-	"pecheny.me/dopecore/tgbot"
-	"pecheny.me/dopecore/tgbridge"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/buildinfo"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbridge"
 
 	spliffstrings "spliff/i18nstrings"
 )

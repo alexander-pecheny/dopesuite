@@ -52,7 +52,11 @@ var coreExpanders = map[string]ExpandFunc{
 	"password": func(c *ExpandCtx, p *Element) []Node {
 		return one(Input(c, "password", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern"))
 	},
-	"filefield": func(c *ExpandCtx, p *Element) []Node { return one(Input(c, "file", p, "accept")) },
+	"filefield": func(c *ExpandCtx, p *Element) []Node {
+		in := Input(c, "file", p, "name", "accept")
+		in.Attrs = append(in.Attrs, CopyFlags(p, "multiple")...)
+		return one(in)
+	},
 	"hiddenfield": func(c *ExpandCtx, p *Element) []Node {
 		attrs := []Attr{At("type", "hidden")}
 		attrs = append(attrs, IDAttr(p)...)
@@ -184,7 +188,7 @@ func expandForm(c *ExpandCtx, p *Element) []Node {
 	classes := []string{dirClass, gapClass(p, "sm")}
 	attrs := []Attr{ClassAttr(GrowClasses(classes, p)...)}
 	attrs = append(attrs, IDAttr(p)...)
-	attrs = append(attrs, CopyProps(p, "autocomplete", "method", "action")...)
+	attrs = append(attrs, CopyProps(p, "autocomplete", "method", "action", "enctype")...)
 	attrs = append(attrs, MetaAttrs(p)...)
 	return one(El("form", attrs, c.Nodes(p.Block)...))
 }

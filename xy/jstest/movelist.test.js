@@ -4,7 +4,7 @@ import { fakeBoard, installDOM } from "./dom.js";
 
 const p = installDOM(["moveListOverlay", "moveListBoard", "moveListPos", "moveListMessage", "moveListCopyBtn", "moveListMoveBtn", "moveListClose"]);
 p.node("moveListOverlay").hidden = true;
-globalThis.fetch = async (url) => ({ ok: true, status: 200, json: async () => (String(url).endsWith("/api/boards") ? [{ id: 7, name: "Доска", schema_version: 2 }, { id: 8, name: "Другая", schema_version: 2 }] : []), text: async () => "" });
+globalThis.fetch = async (url) => ({ ok: true, status: 200, json: async () => (String(url).endsWith("/api/boards") ? [{ id: 7, name: "Доска" }, { id: 8, name: "Другая" }] : []), text: async () => "" });
 const { createMoveListPanel } = await import("../web/assets/static/dist/movelist.js");
 
 const settle = () => new Promise((r) => setTimeout(r, 5));

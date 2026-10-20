@@ -32,13 +32,13 @@ func mentionBoard(t *testing.T) (a, b, c *apiClient, meA, meB, meC meResponse, b
 	addBoardMember(t, srv, createdBoard.ID, meB.UserID)
 	addBoardMember(t, srv, createdBoard.ID, meC.UserID)
 
-	resp = a.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("l"), "rank": "m"})
+	resp = a.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title": enc("l"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var listC struct {
 		ID int64 `json:"id"`
 	}
 	a.decode(resp, &listC)
-	resp = a.do("POST", "/api/lists/"+itoa(listC.ID)+"/cards", map[string]string{"description_enc": enc("q"), "rank": "m"})
+	resp = a.do("POST", "/api/lists/"+itoa(listC.ID)+"/cards", map[string]string{"description": enc("q"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var cardC struct {
 		ID int64 `json:"id"`
@@ -56,8 +56,8 @@ func TestMentions(t *testing.T) {
 
 	// B mentions A. A goes red, C goes plain blue.
 	resp := b.do("POST", "/api/cards/"+cardID+"/comments", map[string]any{
-		"payload_enc": enc("@mention-a смотри"),
-		"mentions":    []int64{meA.UserID},
+		"payload":  enc("@mention-a смотри"),
+		"mentions": []int64{meA.UserID},
 	})
 	mustStatus(t, resp, 204)
 
@@ -100,8 +100,8 @@ func TestMentions(t *testing.T) {
 	// B edits the comment and the mention goes away: red must not come back,
 	// but C (never having read) still sees plain blue.
 	resp = b.do("PATCH", "/api/comments/"+itoa(commentID), map[string]any{
-		"payload_enc": enc("без упоминаний"),
-		"mentions":    []int64{},
+		"payload":  enc("без упоминаний"),
+		"mentions": []int64{},
 	})
 	mustStatus(t, resp, 204)
 	if u := getBoardSnapshot(a, boardID).Unread[cardID]; u.Mentions {
@@ -109,13 +109,13 @@ func TestMentions(t *testing.T) {
 	}
 
 	// A root comment by A; B replies without any @. The reply alone turns A red.
-	resp = a.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload_enc": enc("мой вопрос")})
+	resp = a.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload": enc("мой вопрос")})
 	mustStatus(t, resp, 204)
 	var actB []activityEventDTO
 	b.decode(b.do("GET", "/api/boards/"+boardID+"/activity", nil), &actB)
 	rootID := actB[0].ID
 	resp = b.do("POST", "/api/cards/"+cardID+"/comments", map[string]any{
-		"payload_enc": enc("отвечаю"),
+		"payload":     enc("отвечаю"),
 		"reply_to_id": rootID,
 	})
 	mustStatus(t, resp, 204)
@@ -129,8 +129,8 @@ func TestMentions(t *testing.T) {
 	// A stranger in the mention list is dropped, not bounced — the comment
 	// itself must land (an offline-queued op may outlive the roster it saw).
 	resp = b.do("POST", "/api/cards/"+cardID+"/comments", map[string]any{
-		"payload_enc": enc("@кто-то"),
-		"mentions":    []int64{999999},
+		"payload":  enc("@кто-то"),
+		"mentions": []int64{999999},
 	})
 	mustStatus(t, resp, 204)
 	var actC []activityEventDTO
@@ -149,15 +149,15 @@ func TestReactions(t *testing.T) {
 	a, b, _, _, _, _, boardID, cardID := mentionBoard(t)
 
 	// A comments; B reacts to that comment.
-	resp := a.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload_enc": enc("вопрос")})
+	resp := a.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload": enc("вопрос")})
 	mustStatus(t, resp, 204)
 	var actB []activityEventDTO
 	b.decode(b.do("GET", "/api/boards/"+boardID+"/activity", nil), &actB)
 	commentID := actB[0].ID
 
 	resp = b.do("POST", "/api/cards/"+cardID+"/reactions", map[string]any{
-		"payload_enc": enc("👍"),
-		"target_id":   commentID,
+		"payload":   enc("👍"),
+		"target_id": commentID,
 	})
 	mustStatus(t, resp, 200)
 	var made struct {
@@ -186,8 +186,8 @@ func TestReactions(t *testing.T) {
 
 	// Only the author may remove a reaction.
 	resp = b.do("POST", "/api/cards/"+cardID+"/reactions", map[string]any{
-		"payload_enc": enc("🔥"),
-		"target_id":   commentID,
+		"payload":   enc("🔥"),
+		"target_id": commentID,
 	})
 	mustStatus(t, resp, 200)
 	b.decode(resp, &made)
@@ -195,7 +195,7 @@ func TestReactions(t *testing.T) {
 	mustStatus(t, resp, 403)
 
 	// A card-level reaction (no target) lands in the content bucket.
-	resp = b.do("POST", "/api/cards/"+cardID+"/reactions", map[string]any{"payload_enc": enc("❤️")})
+	resp = b.do("POST", "/api/cards/"+cardID+"/reactions", map[string]any{"payload": enc("❤️")})
 	mustStatus(t, resp, 200)
 	u = getBoardSnapshot(a, boardID).Unread[cardID]
 	if !u.Content {
@@ -204,8 +204,8 @@ func TestReactions(t *testing.T) {
 
 	// Reacting to a description edit is not a thing.
 	resp = a.do("PATCH", "/api/cards/"+cardID, map[string]string{
-		"description_enc": enc("q2"),
-		"desc_event_enc":  enc(`{"before":"q","after":"q2"}`),
+		"description": enc("q2"),
+		"desc_event":  enc(`{"before":"q","after":"q2"}`),
 	})
 	mustStatus(t, resp, 204)
 	var actB2 []activityEventDTO
@@ -217,8 +217,8 @@ func TestReactions(t *testing.T) {
 		}
 	}
 	resp = b.do("POST", "/api/cards/"+cardID+"/reactions", map[string]any{
-		"payload_enc": enc("👍"),
-		"target_id":   descID,
+		"payload":   enc("👍"),
+		"target_id": descID,
 	})
 	mustStatus(t, resp, 404)
 }

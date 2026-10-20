@@ -34,13 +34,15 @@ page title=@import.page.title kind="wide" scripts="dist/import.js"
     textfield id="boardName" placeholder=@import.board.name_placeholder
     -- textfield (not password): board creation is the one safe moment to show the
     -- passphrase; the dice button fills a strong one and copies it. Mirrors the create dialog.
-    row gap="sm" align="center"
-      textfield id="boardPass" placeholder=@import.board.pass_placeholder autocomplete="new-password" required grow
-      iconbtn id="genPassBtn" icon="dices" label=@import.board.gen_pass
-    muted id="importPassCopied" hidden @import.board.pass_copied
-    hint @import.board.pass_hint
-    hint kind="danger" @import.board.pass_danger
-    checkbox id="importPassSaved" @import.board.pass_saved
+    -- a local xy stores its boards as plaintext and hides this block
+    col id="importPassBlock" gap="sm"
+      row gap="sm" align="center"
+        textfield id="boardPass" placeholder=@import.board.pass_placeholder autocomplete="new-password" required grow
+        iconbtn id="genPassBtn" icon="dices" label=@import.board.gen_pass
+      muted id="importPassCopied" hidden @import.board.pass_copied
+      hint @import.board.pass_hint
+      hint kind="danger" @import.board.pass_danger
+      checkbox id="importPassSaved" @import.board.pass_saved
     row gap="sm" wrap
       button submit id="importBtn" disabled @import.board.submit
       button kind="ghost" href="/" @import.board.cancel

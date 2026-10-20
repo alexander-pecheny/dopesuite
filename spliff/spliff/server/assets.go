@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
 	"spliff/spliff/web/assets"

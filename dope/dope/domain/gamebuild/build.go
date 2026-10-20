@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
@@ -30,7 +31,6 @@ import (
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 type gameIdentity struct {

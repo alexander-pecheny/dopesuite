@@ -108,17 +108,57 @@ event_without_target = "событие ни на карточке, ни на т�
 
 [import]
 # The server side of question-package import (import4s.go): the parse-text
-# endpoint and the .4s/.zip/.docx upload parser.
+# endpoint and the .4s/.zip/.docx/.txt upload parser.
 text_no_questions = "в тексте не найдено вопросов"
 read_failed = "не удалось прочитать файл"
 no_file = "файл не выбран"
-unsupported = "поддерживаются только .4s, .zip и .docx"
+unsupported = "поддерживаются только .4s, .zip, .docx и .txt"
 # The parser's own error detail rides along after the colon.
 parse_failed = 'не удалось разобрать файл: {{.reason}}'
 file_no_questions = "в файле не найдено вопросов"
+# Images were picked together with a package that is not a .4s.
+images_need_4s = "картинки можно добавить только к файлу .4s"
+
+[export]
+# The export modal's .docx and .pptx settings (exportopts.go), when one of them
+# cannot be used.
+bad_font = "в названии шрифта могут быть только буквы, цифры, пробелы и дефисы"
+bad_docx_template = "шаблон .docx не открывается"
+bad_pptx_template = "шаблон .pptx не открывается"
+bad_pptx_config = 'не удалось прочитать настройки .pptx: {{.reason}}'
+
+[handouts]
+# A tour's handout page setup (handoutpage.go) and the print run (pack).
+bad_page = "настройки страницы раздаток не подходят: проверьте размеры и поля"
+bad_teams = "число команд должно быть от 1 до 9999"
+
+[stats]
+# «Добавить взятия» (stats.go): reading a tournament's results for a copy of
+# a tour with the stats line on every question.
+bad_ids = "номер турнира — это число, а у синхрона с асинхроном два числа через запятую"
+no_source = "укажите номер турнира или выберите файл с результатами"
+bad_file = "файл с результатами не открывается"
+bad_threshold = "число команд должно быть от 0 до 99"
+fetch_failed = 'не удалось получить результаты с турнирного сайта: {{.reason}}'
 
 [quota]
 # enforceQuota: an upload that would outgrow the owner's storage remainder.
 exceeded = 'превышен лимит хранилища ({{.mb}} МБ)'
 # humanMB: MiB number with unit for user-facing storage display.
 human_mb = '{{.mb}} МБ'
+
+[appeal]
+# votes.go: a vote is cast only on an appeal card (ADR-0021).
+vote_not_appeal = "голосовать можно только за апелляцию"
+
+[rating]
+# rating.go, the relay to api.rating.chgk.info. Each refusal may be followed
+# by the site's own words after a colon.
+unreachable = "Турнирный сайт не отвечает. Попробуйте ещё раз позже."
+unauthorized = "Турнирный сайт не принял токен"
+forbidden = "У этого токена нет прав на турнир"
+not_found = "Турнирный сайт не нашёл турнир или апелляцию"
+busy = "Турнир сейчас меняет кто-то другой, повторите через минуту"
+failed = 'Турнирный сайт ответил ошибкой {{.status}}'
+no_tournament = "Не указан номер турнира"
+no_token = "Не задан токен турнирного сайта"

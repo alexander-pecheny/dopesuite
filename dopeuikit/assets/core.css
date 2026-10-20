@@ -1245,9 +1245,23 @@ input[type="radio"]:focus-visible {
   cursor: var(--cursor-disabled);
 }
 
+/* The native marker is replaced by one drawn here, the same in every browser:
+   a heading that does not look clickable is one nobody clicks. */
 .disclosure > summary {
   width: max-content;
   list-style: none;
+  cursor: var(--cursor-action);
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+  padding: var(--space-1) 0;
+}
+
+.disclosure > summary::before {
+  content: "▸\00a0";
+}
+
+.disclosure[open] > summary::before {
+  content: "▾\00a0";
 }
 
 .disclosure > summary::-webkit-details-marker {

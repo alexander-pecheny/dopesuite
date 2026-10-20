@@ -24,7 +24,7 @@ const CLOSE_AFTER_SUCCESS_MS = 700;
 
 const { fetchJSON, jdelete, el, byId, errMsg } = xyApp;
 
-interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; schema_version?: number }
+interface MoveBoardItem { id: number; name?: string }
 
 export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "loadMoveBoard">): ListPanel {
 
@@ -46,15 +46,11 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
     sel.replaceChildren();
     let boards: MoveBoardItem[] = [];
     try { boards = (await fetchJSON("/api/boards")) as MoveBoardItem[]; } catch (_) {}
-    if (!boards.some((b) => b.id === board.id)) boards.unshift({ id: board.id, name_enc: null });
+    if (!boards.some((b) => b.id === board.id)) boards.unshift({ id: board.id });
     for (const b of boards) {
       let label = S.board.transfer.boardNumber(String(b.id));
       if (b.id === board.id) label = (board.state.name || label) + S.board.transfer.thisBoard();
-      else if ((b.schema_version ?? 0) >= 2) label = b.name || label; // plaintext name, no key needed
-      else {
-        try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc || ""); }
-        catch (_) {}
-      }
+      else label = b.name || label; // plaintext name, no key needed
       sel.append(el("option", { value: b.id, text: label }));
     }
     sel.value = String(board.id);

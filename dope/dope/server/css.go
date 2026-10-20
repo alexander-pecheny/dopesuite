@@ -1,7 +1,7 @@
 package dopeserver
 
 import (
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
 	"dope/dope/web/assets"

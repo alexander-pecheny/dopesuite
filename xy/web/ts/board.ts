@@ -11,6 +11,7 @@ import { createAddListPanel, createList } from "./addlist.js";
 import { progress } from "./themes.js";
 import { createImportPanel } from "./importpack.js";
 import { createExportPanel } from "./export.js";
+import { createStatsPanel } from "./statspanel.js";
 import { createHandoutsPanel } from "./handouts.js";
 import { createMassPanel } from "./masspanel.js";
 import { createLabelFilter, shownCards } from "./labelfilter.js";
@@ -20,7 +21,11 @@ import { createBundleExportPanel } from "./bundleexport.js";
 import { createBundleImport } from "./bundleimportpanel.js";
 import { createCopyBoardPanel } from "./copyboard.js";
 import { createAuthorCountPanel } from "./authorcount.js";
+import { createAppealsPanels, isAppeals, isManual } from "./appealspanel.js";
+import { appealHeading, createAppealCard } from "./appealcard.js";
+import { parseAppeal, parseMeta, questionCard, tally, verdictStatus, type VoteValue } from "./appeals.js";
 import { xyApp, xySizes } from "./app.js";
+import { xyInstance } from "./instance.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
@@ -29,7 +34,7 @@ import { createCardLabels } from "./cardlabels.js";
 import { createBell } from "./bell.js";
 import { xyVersions } from "./versions.js";
 import { xyListExport } from "./listexport.js";
-import { carriesHandouts, counter, exported, KIND, label as kindLabel, numbered, versioned } from "./cardkind.js";
+import { carriesHandouts, counter, exported, isTheme, KIND, ladder, label as kindLabel, numbered, versioned } from "./cardkind.js";
 import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
@@ -102,12 +107,15 @@ function refreshBoardMenu(): void {
 const statusNode = byId("status");
 const kanban = byId("kanban");
 const titleNode = byId("boardTitle");
+const importButton = el("button", { class: "btn btn-ghost btn-small crumb-action", type: "button", title: S.import.pack.menuTitle(), "aria-label": S.import.pack.label(), hidden: true },
+  leadIcon(icon("file-up")), el("span", { class: "crumb-action-label", text: S.import.pack.label() }));
+titleNode.after(importButton);
 
 // The board's live state: the decrypted snapshot (unlock.js BoardState) plus the
 // members roster boardmembers.js merges onto it.
 type LiveState = BoardState & MembersState;
 
-const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], tourDeclarations: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "" };
+const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], tourDeclarations: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "", votes: [], ratingToken: "" };
 let dk: DataKey | null = null;
 // Whether that key came out of the cache rather than off the unlock overlay —
 // the Passphrase Check's one question (passcheck.ts).
@@ -169,6 +177,7 @@ const unlock = createUnlock({
     // moment, so this costs a pass over a handful of sessions and no decryption.
     rememberPeople();
     render();
+    byId("notifToggle").hidden = !xyInstance.offers("activity");
     renderNotifBadge();
     // best-effort, online only: the author-name map for timelines, and the
     // invite links whose pending count the ☰ row shows.
@@ -176,7 +185,7 @@ const unlock = createUnlock({
     void rewrites.convertLegacyVersions();
     if (dk) void xySearchIndex.refreshComments(boardId, dk);
     cardDetail.maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
-    passCheck.maybe({
+    if (xyInstance.offers("passphrase")) passCheck.maybe({
       owner: state.role === "owner",
       cached: dkFromCache,
       online: xySync.isOnline(),
@@ -344,7 +353,7 @@ function seenOf(cardId: number): Tester[] {
 }
 
 async function patchSessionMeta(id: number, meta: string): Promise<void> {
-  await patch("patchSession", `/api/sessions/${id}`, { meta_enc: await xyCrypto.encField(mustDK(), meta) });
+  await patch("patchSession", `/api/sessions/${id}`, { meta: await xyCrypto.encField(mustDK(), meta) });
   const s = state.sessions.find((x) => x.id === id);
   if (s) s.meta = meta;
   sessionMetaCache.delete(id);
@@ -365,7 +374,7 @@ async function writeSeen(card: BoardCard, next: CardSeen): Promise<void> {
     delete next.absent[ref];
   }
   const raw = serializeCardSeen(next);
-  await patch("patchCard", `/api/cards/${card.id}`, { seen_enc: raw ? await xyCrypto.encField(mustDK(), raw) : "" });
+  await patch("patchCard", `/api/cards/${card.id}`, { seen: raw ? await xyCrypto.encField(mustDK(), raw) : "" });
   card.seen = raw || null;
   rememberPeople();
 }
@@ -520,6 +529,7 @@ function renderBoardTitle(): void {
   const themes = state.cards.filter((c) => counter(c.kind) === "theme").length;
   titleNode.replaceChildren(state.name);
   if (n || themes) titleNode.append(el("span", { class: "board-qcount", text: countLabel(n, themes) }));
+  importButton.hidden = false;
 }
 
 // The Search Index is written by whoever holds the key (ADR-0008), and on this
@@ -614,7 +624,21 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   // Adding a card is the most-used list action (issue #4): a dedicated "+"
   // beside the ⋯ menu saves the menu round-trip. The menu item stays too.
   const addCardBtn = el("button", { class: "kadd", title: S.board.list.addCard(), "aria-label": S.board.list.addCard() }, icon("plus"));
-  addCardBtn.addEventListener("click", () => { void cardDetail.addCard(list); });
+  addCardBtn.addEventListener("click", () => {
+    if (isManual(list)) appealsPanels.add.open(listScope(board, list));
+    else if (isAppeals(list)) appealsPanels.refresh.open(listScope(board, list));
+    else void cardDetail.addCard(list);
+  });
+  // An appeals list filled from the rating site has its + refresh it, and a
+  // manual one has it add an appeal by hand. Neither has a packet to preview.
+  if (isManual(list)) {
+    addCardBtn.title = S.appeals.manual.label();
+    addCardBtn.setAttribute("aria-label", S.appeals.manual.label());
+  } else if (isAppeals(list)) {
+    addCardBtn.title = S.appeals.refresh.label();
+    addCardBtn.setAttribute("aria-label", S.appeals.refresh.label());
+    addCardBtn.replaceChildren(icon("refresh-cw"));
+  }
   const menuBtn = el("button", { class: "kadd", title: S.board.list.menuTitle(), "aria-haspopup": "true" }, icon("ellipsis"));
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -624,7 +648,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   menuWrap.append(menuBtn);
   // The preview is the other thing people open a list for. Always this one
   // list: the whole group stays a ⋯ row.
-  const previewBtn = el("button", { class: "kadd", title: S.board.preview.title(), "aria-label": S.board.preview.title() }, icon("eye"));
+  const previewBtn = el("button", { class: "kadd", title: S.board.preview.title(), "aria-label": S.board.preview.title(), hidden: isAppeals(list) }, icon("eye"));
   previewBtn.addEventListener("click", () => { void previewList(list); });
   const cards = cardsOf(list.id);
   const headMain = el("div", { class: "klist-headmain" },
@@ -637,7 +661,8 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const counted = (cs: ReadonlyArray<BoardCard>): number => cs.filter((c) => numbered(c.kind)).length;
   const qCount = counted(cards);
   const qShown = counted(shown);
-  if (qCount) {
+  if (isAppeals(list)) headMain.append(appealsCount(cards));
+  else if (qCount) {
     headMain.append(el("span", {
       class: "klist-count",
       // "1 of 4", not "1 of 4 questions": the word cannot agree with both numbers.
@@ -733,7 +758,7 @@ async function renameList(list: BoardList): Promise<void> {
   if (!t || t === list.title) return;
   setStatus("saving");
   try {
-    await patch("patchList", `/api/lists/${list.id}`, { title_enc: await xyCrypto.encField(mustDK(), t) });
+    await patch("patchList", `/api/lists/${list.id}`, { title: await xyCrypto.encField(mustDK(), t) });
     list.title = t;
     setStatus("saved");
     render();
@@ -818,7 +843,12 @@ function forgetCardLabels(deletedCards: BoardCard[]): void {
 // state.cardTitle is the reader's fallback preference — question text or answer.
 const cardBody = (card: BoardCard): string =>
   card.kind === KIND.handoutsPreamble ? kindLabel(card.kind) ?? "" :
-  aliasOf(card) || deriveTitle(xyChgk.previewText(card.kind, card.desc, state.cardTitle), Infinity);
+  aliasOf(card) || (card.kind === KIND.appeal ? appealTitle(card) : deriveTitle(xyChgk.previewText(card.kind, card.desc, state.cardTitle), Infinity));
+
+function appealTitle(card: BoardCard): string {
+  const a = parseAppeal(card.desc);
+  return a ? appealHeading(a) : "";
+}
 
 // aliasOf normalizes a card's alias to a non-empty string or "" (absent cards,
 // null, and whitespace-only all collapse to "no alias").
@@ -845,8 +875,8 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
       cardBody(card));
     // A tour in progress is read by which themes are still short, so a theme
     // says how many of its questions are written right where it is looked at.
-    if (card.kind !== KIND.theme) return title;
-    const p = progress(card.desc);
+    if (!isTheme(card.kind)) return title;
+    const p = progress(card.desc, ladder(card.kind));
     title.append(el("span", {
       class: "kcard-progress", title: S.card.slot.progressTitle(),
       text: S.card.slot.progress(String(p.filled), String(p.total)),
@@ -888,6 +918,63 @@ function flaskIcon(color: string): SVGSVGElement {
   svg.querySelector("path")?.setAttribute("fill", "currentColor");
   svg.style.color = labelFill(color);
   return svg;
+}
+
+// ---- appeals (ADR-0021) ----
+// appealsCount is an appeals list's head: how many appeals, and how many of
+// them the jury has decided.
+function appealsCount(cards: ReadonlyArray<BoardCard>): HTMLElement {
+  let decided = 0;
+  for (const c of cards) {
+    const a = parseAppeal(c.desc);
+    if (a && verdictStatus(a, tally(state.votes, c.id)).status) decided++;
+  }
+  return el("span", { class: "klist-count", text: S.appeals.list.count(String(cards.length), String(decided)) });
+}
+
+// appealBadges lead an appeal card's row: the decided status, the votes, and
+// a tick once the site has the verdict as the jury wrote it.
+function appealBadges(card: BoardCard): HTMLElement[] {
+  const a = parseAppeal(card.desc);
+  if (!a) return [];
+  const t = tally(state.votes, card.id);
+  const v = verdictStatus(a, t);
+  const out: HTMLElement[] = [];
+  if (v.status) out.push(el("span", { class: "badge " + (v.status === "A" ? "badge-positive" : "badge-negative"), text: v.status === "A" ? S.appeals.status.accepted() : S.appeals.status.declined() }));
+  if (t.for || t.against) out.push(el("span", { class: "kcard-votes", title: S.appeals.vote.title(String(t.for), String(t.against)) }, ...iconed("thumbs-up", `${t.for}:${t.against}`)));
+  if (v.status && a.site.status === v.status && a.site.comment.trim() === a.verdict.text.trim()) {
+    out.push(el("span", { class: "kcard-handout", title: S.appeals.list.sent() }, icon("check")));
+  }
+  return out;
+}
+
+// The appeals list's packet question, as the card editor shows it.
+function appealQuestion(listId: number, n: number): HTMLElement {
+  const list = state.lists.find((l) => l.id === listId);
+  const packetId = list ? parseMeta(list.meta).packetListId : null;
+  const packet = packetId != null ? state.lists.find((l) => l.id === packetId) : undefined;
+  if (!packet) return el("p", { class: "hint", text: S.appeals.card.noPacket() });
+  const scope = listScope(board, packet);
+  const card = questionCard(scope.cards, scope.numbers, n);
+  if (!card) return el("p", { class: "hint", text: S.appeals.card.noQuestion(scope.title, String(n)) });
+  const imgMap = new Map<string, string>();
+  const node = renderPreviewCard(card, String(n), imgMap, true, { commentFirst: scope.commentFirst });
+  void attachments.resolveImages([card], xyChgk.imageRefs([card]), (name, url) => { imgMap.set(name, url); fillPreviewImages(node, imgMap); });
+  return node;
+}
+
+async function castVote(cardId: number, value: VoteValue | null): Promise<void> {
+  const me = state.me?.user_id;
+  if (me == null) return;
+  setStatus("saving");
+  try {
+    if (value) await put("putVote", `/api/cards/${cardId}/vote`, { value: await xyCrypto.encField(mustDK(), value) });
+    else await del("deleteVote", `/api/cards/${cardId}/vote`);
+    state.votes = state.votes.filter((v) => !(v.cardId === cardId && v.userId === me));
+    if (value) state.votes.push({ cardId, userId: me, value });
+    setStatus("saved");
+    render();
+  } catch (err) { setStatus("error"); alert(errMsg(err)); }
 }
 
 function renderCard(card: BoardCard, number?: string | null): HTMLElement {
@@ -953,6 +1040,7 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
     labelRow.append(el("span", { class: "kcard-test", title: S.board.card.seenByHandTitle([...players, ...teams].join(", ")) },
       el("span", { class: "kcard-test-icon" }, icon("user-plus"))));
   }
+  if (card.kind === KIND.appeal) labelRow.prepend(...appealBadges(card));
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
   const u = state.unread[card.id];
@@ -1077,7 +1165,10 @@ function renderAddList(): HTMLElement {
   // changeable later from the ⋯ menu.
   const typeSel = el("select", { class: "input", "aria-label": S.board.list.typeLabel() },
     el("option", { value: "normal", text: S.board.list.typeChgk() }),
-    el("option", { value: "si", text: S.board.list.typeSi() })) as HTMLSelectElement;
+    el("option", { value: "si", text: S.board.list.typeSi() }),
+    el("option", { value: "troika", text: S.board.list.typeTroika() }),
+    el("option", { value: "brain", text: S.board.list.typeBrain() }),
+    el("option", { value: "appeals", text: S.appeals.list.type() })) as HTMLSelectElement;
   form.append(el("div", { class: "u-col u-gap-sm" },
     el("div", { class: "u-row u-gap-sm" }, input, okBtn), typeSel));
   form.addEventListener("submit", async (e) => {
@@ -1087,6 +1178,7 @@ function renderAddList(): HTMLElement {
     const type = typeSel.value;
     const ranks = [...state.lists].sort(byRank);
     const rank = keyBetween(ranks.length ? ranks[ranks.length - 1].rank : null, null);
+    if (type === "appeals") { input.value = ""; okBtn.hidden = true; appealsPanels.create(title, rank); return; }
     try {
       await createList(board, title, type, rank);
       input.value = "";
@@ -1364,9 +1456,18 @@ function askTargetPass(unlock: (pass: string) => Promise<DataKey>): Promise<Data
   });
 }
 
+const appealCard = createAppealCard({
+  votes: () => state.votes,
+  memberName: (uid) => (state.memberNames || {})[uid] || `#${uid}`,
+  myId: () => state.me?.user_id ?? null,
+  question: appealQuestion,
+  vote: castVote,
+  manual: (listId) => { const l = state.lists.find((x) => x.id === listId); return l ? isManual(l) : false; },
+});
 const cardDetail = createCardDetail({
   boardId,
   transfer,
+  appeal: appealCard,
   ui: {
     addSlot: byId<HTMLButtonElement>("cardAddSlot"),
     addVersion: byId("cardAddVersion"),
@@ -1524,7 +1625,7 @@ const sessionsPanel = createSessionsPanel({
     new Set(state.cardSessions.filter((p) => p.sessionId === sessionId).map((p) => p.cardId)).size,
   createSession: async (meta) => {
     const res = await create("createSession", `/api/boards/${boardId}/sessions`, {
-      meta_enc: await xyCrypto.encField(mustDK(), meta),
+      meta: await xyCrypto.encField(mustDK(), meta),
     });
     const id = res.id as number;
     state.sessions.push({ id, meta, createdAt: nowStamp() });
@@ -1547,10 +1648,10 @@ const sessionsPanel = createSessionsPanel({
   setTestMode,
   loadNotes: async (sessionId) => {
     const raw = (await fetchJSON(`/api/sessions/${sessionId}/timeline`)) as Array<{
-      id?: number; type?: string; payload_enc: string; card_id?: number; created_at: string;
+      id?: number; type?: string; payload: string; card_id?: number; created_at: string;
       author_user_id?: number | null; author_username?: string | null;
     }>;
-    const opened = await openPayloads(mustDK(), raw.map((e) => ({ type: e.type || "comment", payload_enc: e.payload_enc })));
+    const opened = await openPayloads(mustDK(), raw.map((e) => ({ type: e.type || "comment", payload: e.payload })));
     const out: Array<{ text: string; card: number | null; when: string; author: string }> = [];
     for (const [i, e] of raw.entries()) {
       const p = opened[i];
@@ -1563,7 +1664,7 @@ const sessionsPanel = createSessionsPanel({
   },
   addNote: async (sessionId, text) => {
     await post("addSessionNote", `/api/sessions/${sessionId}/comments`, {
-      payload_enc: await sealPayload(mustDK(), "comment", { text, images: [] }),
+      payload: await sealPayload(mustDK(), "comment", { text, images: [] }),
     });
   },
   modal,
@@ -1642,6 +1743,11 @@ const starts = <P extends Panel>(p: P): P => ({ ...p, divider: true });
 
 const exportPanel = createExportPanel(board, attachments);
 const handoutsPanel = createHandoutsPanel(board, attachments);
+const appealsPanels = createAppealsPanels(board, shell);
+// questions marks a panel that works on a packet, which an appeals list is not.
+const questions = <P extends Panel & { menu: "list" }>(p: P): P => ({ ...p, offered: (s: ListScope) => !isAppeals(s.list) && (p.offered?.(s) ?? true) });
+const importPanel = createImportPanel(board, renderPreviewCard, createBundleImport(board, shell));
+importButton.addEventListener("click", () => importPanel.open());
 registerPanel(
   // What is on the board
   listsManage.panel,
@@ -1654,9 +1760,8 @@ registerPanel(
   createReplacePanel(board, rewrites),
   rewrites.typograph,
 
-  // Files: the same content there and back
-  starts(createImportPanel(board, renderPreviewCard, createBundleImport(board, shell))),
-  createBundleExportPanel(board, shell),
+  // Files: the same content there and back. Import is on the topbar instead.
+  starts(createBundleExportPanel(board, shell)),
 
   // The board itself
   starts({ id: "rename-board", menu: "board", icon: "pencil", label: S.board.rename.boardLabel(), title: S.board.rename.boardTitle(), open: () => { void renameBoard(); } }),
@@ -1665,12 +1770,12 @@ registerPanel(
   // it has no place in the 🔔 (which reads encrypted card events), and the owner
   // would otherwise never learn someone is queued (ADR-0017).
   {
-    id: "members", menu: "board", icon: "users", title: S.board.members.menuTitle(),
+    id: "members", menu: "board", needs: "members", icon: "users", title: S.board.members.menuTitle(),
     label: () => { const n = boardMembers.pendingCount(); return n ? S.board.members.menuPending(String(n)) : S.board.members.name(); },
     open: () => boardMembers.open(),
   },
   {
-    id: "forget-password", menu: "board", icon: "lock", label: S.board.forget.label(), title: S.board.forget.title(),
+    id: "forget-password", menu: "board", needs: "passphrase", icon: "lock", label: S.board.forget.label(), title: S.board.forget.title(),
     // Once the DK is gone the board is ciphertext with no key on this device, so
     // everything derived from it goes too — the Search Index for a sharper reason
     // (ADR-0008): plaintext outliving its key would keep the board readable with none.
@@ -1679,27 +1784,33 @@ registerPanel(
       location.reload();
     },
   },
-  changePass.panel,
+  { ...changePass.panel, needs: "passphrase" },
   { id: "delete-board", menu: "board", icon: "trash-2", label: S.board.delete.label(), title: S.board.delete.title(), offered: () => state.role === "owner", open: () => { void deleteBoard(state.name); } },
-  { id: "leave-board", menu: "board", icon: "unlink", label: S.board.leave.label(), title: S.board.leave.title(), offered: () => state.role !== "" && state.role !== "owner", open: () => { void leaveBoard(state.name); } },
+  { id: "leave-board", menu: "board", needs: "members", icon: "unlink", label: S.board.leave.label(), title: S.board.leave.title(), offered: () => state.role !== "" && state.role !== "owner", open: () => { void leaveBoard(state.name); } },
 
   // The list's cards
-  { id: "add-card", menu: "list", icon: "plus", label: S.board.list.addCard(), open: (s) => { void cardDetail.addCard(s.list); } },
-  { id: "preview", menu: "list", icon: "eye", label: (s) => s.grouped ? S.board.preview.list() : S.board.preview.title(), open: (s) => { void previewList(s.list); } },
-  { id: "preview-group", menu: "list", icon: "eye", label: S.board.preview.group(), offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } },
+  questions({ id: "add-card", menu: "list", icon: "plus", label: S.board.list.addCard(), open: (s) => { void cardDetail.addCard(s.list); } }),
+  questions({ id: "preview", menu: "list", icon: "eye", label: (s) => s.grouped ? S.board.preview.list() : S.board.preview.title(), open: (s) => { void previewList(s.list); } }),
+  questions({ id: "preview-group", menu: "list", icon: "eye", label: S.board.preview.group(), offered: (s) => s.grouped, open: (s) => { void previewList(s.list, true); } }),
+  appealsPanels.add,
+  appealsPanels.refresh,
+  appealsPanels.export,
+  appealsPanels.xlsx,
 
   // What is counted within it
-  starts(testerList.panel),
-  createAuthorCountPanel(shell, cardDetail),
+  starts(questions(testerList.panel)),
+  questions(createAuthorCountPanel(shell, cardDetail)),
 
   // What comes out of it
-  starts(exportPanel),
-  handoutsPanel,
+  starts(questions(exportPanel)),
+  questions(handoutsPanel),
+  questions(createStatsPanel(board, transfer)),
 
   // The list itself
-  starts(createAddListPanel(board)),
+  starts(createAddListPanel(board, appealsPanels.create)),
   { id: "rename-list", menu: "list", icon: "pencil", label: S.board.rename.listLabel(), open: (s) => { void renameList(s.list); } },
-  { id: "list-settings", menu: "list", icon: "settings", label: S.board.list.settings(), open: (s) => openListSettings(s.list) },
+  questions({ id: "list-settings", menu: "list", icon: "settings", label: S.board.list.settings(), open: (s) => openListSettings(s.list) }),
+  appealsPanels.settings,
   createMoveListPanel(board, transfer),
   { id: "delete-list", menu: "list", icon: "trash-2", label: S.board.delete.listLabel(), open: (s) => { void deleteList(s.list); } },
 );

@@ -140,7 +140,7 @@ export async function decrypt(dk: DataKey, snap: BoardSnapshot): Promise<{ lists
   // comparison reverses).
   const ranked = (v: { rank?: unknown }): { rank: string } => ({ rank: String(v.rank ?? "") });
   const rawLists = [...(snap.lists || [])].sort((a, b) => byRank(ranked(a), ranked(b)));
-  const listTitles = await decAll(dk, rawLists.map((l) => l.title_enc));
+  const listTitles = await decAll(dk, rawLists.map((l) => l.title));
   const lists: IndexList[] = rawLists.map((l, i) => ({ id: l.id, title: listTitles[i] }));
   const order = new Map(lists.map((l, i) => [l.id, i]));
   const rawCards = [...(snap.cards || [])].sort((a, b) =>
@@ -151,8 +151,8 @@ export async function decrypt(dk: DataKey, snap: BoardSnapshot): Promise<{ lists
   // these two columns are every card on the board, and nothing about them needs
   // to be decrypted in order.
   const fields = await decAll(dk, [
-    ...rawCards.map((c) => c.description_enc),
-    ...rawCards.map((c) => c.alias_enc),
+    ...rawCards.map((c) => c.description),
+    ...rawCards.map((c) => c.alias),
   ]);
   const n = rawCards.length;
   const cards: IndexCard[] = rawCards.map((c, i) => ({
@@ -174,13 +174,13 @@ async function decAll(dk: DataKey, b64s: (string | null | undefined)[]): Promise
 }
 
 // What GET /api/boards/{id}/comments returns, per comment.
-interface CommentRow { id: number; card_id: number; payload_enc: string }
+interface CommentRow { id: number; card_id: number; payload: string }
 
 async function decryptComments(dk: DataKey, rows: CommentRow[]): Promise<IndexComment[]> {
-  const live = rows.filter((row) => row.card_id && row.payload_enc);
+  const live = rows.filter((row) => row.card_id && row.payload);
   // Search wants a comment's words, not the envelope a comment with images is
   // stored in; one that will not open reads as "" and is skipped.
-  const payloads = await openPayloads(dk, live.map((row) => ({ type: "comment", payload_enc: row.payload_enc })));
+  const payloads = await openPayloads(dk, live.map((row) => ({ type: "comment", payload: row.payload })));
   const out: IndexComment[] = [];
   for (let i = 0; i < live.length; i++) {
     const text = commentText(payloads[i]);

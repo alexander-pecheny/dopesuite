@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
 	"spliff/spliff/web/route"
 

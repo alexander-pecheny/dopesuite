@@ -41,9 +41,6 @@ title_empty = "(пусто)"
 
 [home]
 # The home page's board grid (index.ts).
-# Placeholder name of a legacy board whose real name is still encrypted;
-# id is the board's numeric id.
-board_locked_name = 'доска #{{.id}}'
 # The line under the name of a board somebody else created; name is their login.
 creator = 'Создатель: {{.name}}'
 # Tooltip of the unread dot on a board card, plain and mention variants.
@@ -57,8 +54,8 @@ empty_all = "Пока нет досок. Нажмите + чтобы созда�
 create_offline = "Создание доски доступно только онлайн."
 # Topbar heading and the current-page crumb of / (index.dopeui).
 title = "Доски"
-# The two topbar actions.
-import_label = "Импорт из Trello"
+# The link after the «Доски» crumb to /import, and the topbar's one action.
+import_label = "Импорт из Trello или другой доски xy"
 new_board = "Новая доска"
 # The one search box over both grids, and its label.
 search_placeholder = "Поиск по доскам, вопросам и комментариям"

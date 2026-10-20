@@ -19,10 +19,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"pecheny.me/dopecore/authcred"
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
 	dopestrings "dope/i18nstrings"
@@ -45,7 +45,7 @@ import (
 	"dope/dope/storage/store"
 	"dope/dope/web/editbatch"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 const (

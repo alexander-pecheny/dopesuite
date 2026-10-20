@@ -1,0 +1,33 @@
+# The unit qy runs under on vps-he, as an example to copy to
+# /etc/systemd/system/qy.service. Staging is the same file with `qy` read as
+# `qytest` throughout, PORT=9687, and no QY_BOT_TOKEN in its environment file.
+#
+# /run/lock is writable because tgbot.AcquirePollLock holds an flock there for
+# as long as the process polls (root ADR-0005).
+
+[Unit]
+Description=qy
+After=network.target
+
+[Service]
+Type=simple
+User=qy
+Group=qy
+WorkingDirectory=/var/lib/qy
+EnvironmentFile=/etc/qy.env
+ExecStart=/opt/qy/qy-server
+Restart=on-failure
+RestartSec=2
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/qy /run/lock
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

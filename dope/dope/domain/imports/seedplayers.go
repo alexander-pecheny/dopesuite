@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"dope/dope/domain/core"
 	"dope/dope/domain/expr"
 	"dope/dope/domain/games"
@@ -18,7 +19,6 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // The seeding an assembled-team format needs: a Participant here is three

@@ -1,0 +1,281 @@
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/docx"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/i18n"
+	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/inline"
+)
+
+// compose runs `chgksuite compose <filetype> …`.
+func compose(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("compose needs a filetype (docx, pdf, pptx, telegram, markdown, redditmd, base, openquiz, lj, add_stats)")
+	}
+	switch args[0] {
+	case "docx":
+		return composeDocx(args[1:])
+	case "telegram":
+		return composeTelegram(args[1:])
+	case "markdown", "redditmd", "base", "openquiz":
+		return composePublished(args[0], args[1:])
+	case "pptx":
+		return composePptx(args[1:])
+	case "add_stats":
+		return composeAddStats(args[1:])
+	case "pdf":
+		return composePDF(args[1:])
+	case "lj":
+		return composeLJ(args[1:])
+	default:
+		return fmt.Errorf("compose %s is not ported yet", args[0])
+	}
+}
+
+func composeDocx(args []string) error {
+	fs := newFlagSet("compose docx")
+	spoilers := fs.String("spoilers", override("spoilers", "off"), "hide answers: off|whiten|pagebreak|dots")
+	screenMode := fs.String("screen_mode", override("screen_mode", "off"), "export for screen: off|replace_all|add_versions|add_versions_columns")
+	noAnswers := fs.Bool("noanswers", false, "do not print answers")
+	noParagraph := fs.Bool("noparagraph", false, chgkstrings.Default.Chgkcli.Docx.NoParagraphFlag())
+	onlyNumber := fs.Bool("only_question_number", false, chgkstrings.Default.Chgkcli.Docx.OnlyQuestionNumberFlag())
+	smallerSource := fs.String("smaller_source_and_author", override("smaller_source_and_author", "on"), "set source and author 2pt below the body: on|off")
+	commentFirst := commentFirstFlag(fs)
+	randomize := fs.Bool("randomize", false, "shuffle the questions")
+	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")
+	merge := fs.Bool("merge", false, "export the input files as one packet")
+	font := fs.String("font", override("font", override("font_face", "")), "a font family, or a font file to take one from; empty keeps the template's")
+	docxTemplate := fs.String("docx_template", "", "a .docx to build on; empty is the one chgksuite ships")
+	optimizeSize := fs.String("optimize_size", override("optimize_size", "on"), "re-encode the pictures to shrink the file: on|off")
+	language := languageFlag(fs)
+	// Declared and not read, as in chgksuite: the .docx export calls the
+	// no-break pass through its standalone wrapper, which ignores the switches.
+	noBreakFlags(fs)
+	config := configFlag(fs)
+	if err := parseConfigured(fs, args, *config); err != nil {
+		return err
+	}
+	lang, labelsFile, err := language()
+	if err != nil {
+		return err
+	}
+	var template []byte
+	if *docxTemplate != "" {
+		if template, err = os.ReadFile(*docxTemplate); err != nil {
+			return err
+		}
+	}
+	opts, err := validDocxOptions(docx.Options{
+		Spoilers:                docx.Spoilers(*spoilers),
+		ScreenMode:              docx.ScreenMode(*screenMode),
+		NoAnswers:               *noAnswers,
+		NoParagraph:             *noParagraph,
+		OnlyQuestionNumber:      *onlyNumber,
+		SameSourceAndAuthorSize: *smallerSource == "off",
+		CommentFirst:            *commentFirst,
+		OptimizeSize:            *optimizeSize != "off",
+		Language:                lang,
+		LabelsFile:              labelsFile,
+		Font:                    *font,
+		Template:                template,
+	})
+	if err != nil {
+		return err
+	}
+	sources, err := loadSources(fs.Args(), *merge)
+	if err != nil {
+		return err
+	}
+	for _, s := range sources {
+		out, err := composeDocxFile(s, opts, *randomize, *addTS == "on")
+		if err != nil {
+			return err
+		}
+		reportOutput(out)
+	}
+	return nil
+}
+
+func validDocxOptions(o docx.Options) (docx.Options, error) {
+	switch o.Spoilers {
+	case docx.SpoilersOff, docx.SpoilersWhiten, docx.SpoilersPagebreak, docx.SpoilersDots:
+	default:
+		return o, fmt.Errorf("unknown --spoilers %q", o.Spoilers)
+	}
+	switch o.ScreenMode {
+	case docx.ScreenOff, docx.ScreenReplaceAll, docx.ScreenAddVersions, docx.ScreenAddVersionsColumns:
+	default:
+		return o, fmt.Errorf("unknown --screen_mode %q", o.ScreenMode)
+	}
+	return o, nil
+}
+
+func composeDocxFile(s source, opts docx.Options, randomize, addTS bool) (string, error) {
+	if randomize {
+		fsource.Randomize(s.doc, rand.New(rand.NewSource(time.Now().UnixNano())))
+	}
+	images, err := loadImages(s.doc, s.dir)
+	if err != nil {
+		return "", err
+	}
+	data, err := docx.Export(s.doc, images, opts)
+	if err != nil {
+		return "", err
+	}
+	out := outputName(s.path, "docx", docxSuffix(opts), addTS)
+	return out, os.WriteFile(out, data, outputFileMode)
+}
+
+// docxSuffix is chgksuite's addsuffix: the export's switches, in its filename.
+func docxSuffix(o docx.Options) string {
+	s := ""
+	switch o.ScreenMode {
+	case docx.ScreenReplaceAll:
+		s = "_screen"
+	case docx.ScreenAddVersions, docx.ScreenAddVersionsColumns:
+		s = "_screen_versions"
+	}
+	if o.Spoilers != "" && o.Spoilers != docx.SpoilersOff {
+		s += "_spoilers"
+	}
+	return s
+}
+
+// outputName ports make_filename: the input's basename, the switches' suffix,
+// an optional timestamp, and the new extension, beside the input.
+func outputName(in, ext, suffix string, addTS bool) string {
+	base := stem(in) + suffix
+	if addTS {
+		base += time.Now().Format("_20060102T1504")
+	}
+	return filepath.Join(filepath.Dir(in), base+"."+ext)
+}
+
+// gameOf reads the game from the extension, as ext_to_game does.
+func gameOf(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".si4s":
+		return "si"
+	case ".br4s":
+		return "brain"
+	case ".tr4s":
+		return "troika"
+	default:
+		return "chgk"
+	}
+}
+
+// languageFlag declares --language, which every compose subcommand takes, and
+// checks it against the sets i18n carries.
+func languageFlag(fs *flagSet) func() (string, string, error) {
+	lang := fs.String("language", override("language", i18n.DefaultLanguage),
+		"which labels the export prints: "+strings.Join(i18n.Languages(), ", "))
+	file := fs.String("labels_file", "", "a labels TOML of your own, in place of the language's")
+	return func() (string, string, error) {
+		if !i18n.Known(*lang) {
+			return "", "", fmt.Errorf("--language: %q is not one of %s", *lang, strings.Join(i18n.Languages(), ", "))
+		}
+		return *lang, *file, nil
+	}
+}
+
+// noBreakFlags declares --replace_no_break_spaces and --replace_no_break_hyphens,
+// which every compose subcommand takes, and reads them once it has parsed.
+// commentFirstFlag is --comment_first, which every export that writes a
+// question's fields in order takes.
+func commentFirstFlag(fs *flagSet) *bool {
+	return fs.Bool("comment_first", false, "put the comment before the answer")
+}
+
+func noBreakFlags(fs *flagSet) func() inline.NoBreak {
+	spaces := fs.String("replace_no_break_spaces", override("replace_no_break_spaces", "on"), "glue short words to what follows with a non-breaking space: on|off")
+	hyphens := fs.String("replace_no_break_hyphens", override("replace_no_break_hyphens", "on"), chgkstrings.Default.Chgkcli.Shared.ReplaceNoBreakHyphensFlag())
+	return func() inline.NoBreak {
+		return inline.NoBreak{NoSpaces: *spaces == "off", NoHyphens: *hyphens == "off"}
+	}
+}
+
+// source is one packet to export: several files when --merge put them
+// together, in which case the output is named after all of them.
+type source struct {
+	doc  fsource.Doc
+	dir  string
+	path string
+}
+
+// loadSources reads the inputs a compose command was given. --merge parses them
+// all into one structure; without it each file is its own export.
+func loadSources(files []string, merge bool) ([]source, error) {
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no input file")
+	}
+	if !merge {
+		out := make([]source, 0, len(files))
+		for _, in := range files {
+			doc, err := parseSource(in)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, source{doc: doc, dir: filepath.Dir(in), path: in})
+		}
+		return out, nil
+	}
+	// chgksuite resolves every name against the first file's directory, and so
+	// the merged packet's pictures all come from there too.
+	dir := filepath.Dir(files[0])
+	merged := source{dir: dir, path: filepath.Join(dir, mergedName(files)+filepath.Ext(files[0]))}
+	for _, in := range files {
+		doc, err := parseSource(filepath.Join(dir, filepath.Base(in)))
+		if err != nil {
+			return nil, err
+		}
+		merged.doc = append(merged.doc, doc...)
+	}
+	return []source{merged}, nil
+}
+
+// stem is a file's name without its directory and extension.
+func stem(path string) string {
+	return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+}
+
+func parseSource(in string) (fsource.Doc, error) {
+	src, err := os.ReadFile(in)
+	if err != nil {
+		return nil, err
+	}
+	return fsource.Parse(string(src), gameOf(in)), nil
+}
+
+// mergedName is make_merged_filename: the basenames' common prefix, then what
+// each of them has after it. Python compares characters, not bytes.
+func mergedName(files []string) string {
+	stems := make([][]rune, len(files))
+	for i, f := range files {
+		stems[i] = []rune(stem(f))
+	}
+	n := len(stems[0])
+	for _, s := range stems[1:] {
+		n = min(n, len(s))
+		for i := range n {
+			if s[i] != stems[0][i] {
+				n = i
+				break
+			}
+		}
+	}
+	name := string(stems[0][:n])
+	tails := make([]string, len(stems))
+	for i, s := range stems {
+		tails[i] = string(s[n:])
+	}
+	return name + strings.Join(tails, "_")
+}

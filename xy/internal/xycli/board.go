@@ -6,9 +6,10 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	"xy/internal/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // Board is a snapshot decrypted under a held key — the plaintext model every
@@ -18,7 +19,7 @@ type Board struct {
 	ID         int64
 	Name       string
 	Role       string
-	DK         DataKey
+	DK         xyenvelope.DataKey
 	Lists      []List
 	Groups     map[int64]string
 	Cards      []Card
@@ -61,7 +62,7 @@ type Label struct {
 }
 
 // LoadBoard fetches a board's snapshot and decrypts every field of it.
-func LoadBoard(c *Client, dk DataKey, boardID int64) (*Board, error) {
+func LoadBoard(c *Client, dk xyenvelope.DataKey, boardID int64) (*Board, error) {
 	snap, err := c.Snapshot(boardID)
 	if err != nil {
 		return nil, err
@@ -70,43 +71,43 @@ func LoadBoard(c *Client, dk DataKey, boardID int64) (*Board, error) {
 		Groups: map[int64]string{}, CardLabels: snap.CardLabels}
 	s := xystrings.Default
 	for _, g := range snap.Groups {
-		name, err := dk.DecField(g.NameEnc)
+		name, err := dk.DecField(g.Name)
 		if err != nil {
 			return nil, corei18n.User(s.Cli.Snapshot.Group(itoa(g.ID), err.Error()))
 		}
 		b.Groups[g.ID] = name
 	}
 	for _, l := range snap.Lists {
-		title, err := dk.DecField(l.TitleEnc)
+		title, err := dk.DecField(l.Title)
 		if err != nil {
 			return nil, corei18n.User(s.Cli.Snapshot.List(itoa(l.ID), err.Error()))
 		}
 		b.Lists = append(b.Lists, List{ID: l.ID, Title: title, Rank: l.Rank, Type: l.Type, GroupID: l.GroupID})
 	}
 	for _, c := range snap.Cards {
-		desc, err := dk.DecField(c.DescEnc)
+		desc, err := dk.DecField(c.Desc)
 		if err != nil {
 			return nil, corei18n.User(s.Cli.Snapshot.Card(itoa(c.ID), err.Error()))
 		}
 		card := Card{ID: c.ID, ListID: c.ListID, Kind: c.Kind, Desc: desc, Rank: c.Rank, CreatedAt: c.CreatedAt}
-		if c.AliasEnc != nil {
-			if card.Alias, err = dk.DecField(*c.AliasEnc); err != nil {
+		if c.Alias != nil {
+			if card.Alias, err = dk.DecField(*c.Alias); err != nil {
 				return nil, corei18n.User(s.Cli.Snapshot.CardAlias(itoa(c.ID), err.Error()))
 			}
 		}
-		if c.MetaEnc != nil {
-			if card.HandoutMeta, err = dk.DecField(*c.MetaEnc); err != nil {
+		if c.HandoutMeta != nil {
+			if card.HandoutMeta, err = dk.DecField(*c.HandoutMeta); err != nil {
 				return nil, corei18n.User(s.Cli.Snapshot.CardHandoutMeta(itoa(c.ID), err.Error()))
 			}
 		}
 		b.Cards = append(b.Cards, card)
 	}
 	for _, l := range snap.Labels {
-		name, err := dk.DecField(l.NameEnc)
+		name, err := dk.DecField(l.Name)
 		if err != nil {
 			return nil, corei18n.User(s.Cli.Snapshot.Label(itoa(l.ID), err.Error()))
 		}
-		color, err := dk.DecField(l.ColorEnc)
+		color, err := dk.DecField(l.Color)
 		if err != nil {
 			return nil, corei18n.User(s.Cli.Snapshot.LabelColor(itoa(l.ID), err.Error()))
 		}

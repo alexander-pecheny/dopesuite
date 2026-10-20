@@ -8,6 +8,7 @@
 // Bundle: a board's worth of handouts must not sit on the heap just because
 // something downstream might want them.
 
+import { xyInstance } from "./instance.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import type { DataKey } from "./crypto.js";
@@ -17,7 +18,7 @@ import type { AttachmentBytes } from "./bundleapply.js";
 import { zipWrite } from "./zip.js";
 import type { ZipEntry } from "./zip.js";
 import type { Board, BoardPanel, PanelShell } from "./panels.js";
-import { type BoardState, tourCommentFirst } from "./unlock.js";
+import { type BoardState, tourCommentFirst, tourHandoutPage } from "./unlock.js";
 import S from "./i18nstrings.js";
 
 const { fetchJSON, downloadBlob, el, errMsg } = xyApp;
@@ -37,12 +38,12 @@ interface EventRow {
   edited_at?: string;
   is_excerpt: boolean;
   reply_to_id?: number;
-  payload_enc: string;
+  payload: string;
 }
 interface AttachmentRow {
   id: number;
   card_id: number;
-  filename_enc: string;
+  filename: string;
   mime: string;
   size: number;
   lossless: boolean;
@@ -81,7 +82,7 @@ export async function buildBundle(
   };
 
   log(S.import.export.collecting());
-  const members = (await fetchJSON(`/api/boards/${board.id}/members`)) as MemberRow[];
+  const members = xyInstance.offers("members") ? (await fetchJSON(`/api/boards/${board.id}/members`)) as MemberRow[] : [];
   const rawEvents = (await fetchJSON(`/api/boards/${board.id}/timeline`)) as EventRow[];
   const rawAtts = (await fetchJSON(`/api/boards/${board.id}/attachments`)) as AttachmentRow[];
 
@@ -92,7 +93,7 @@ export async function buildBundle(
 
   const keptEvents = rawEvents.filter((e) => mine(e.card_id) || e.card_id == null);
   log(S.import.export.decrypting(String(keptEvents.length)));
-  const payloads = await decAll(keptEvents.map((e) => e.payload_enc));
+  const payloads = await decAll(keptEvents.map((e) => e.payload));
   const timeline: BundleEvent[] = keptEvents.map((e, i) => ({
     id: e.id,
     card_id: e.card_id ?? null,
@@ -107,7 +108,7 @@ export async function buildBundle(
   }));
 
   const keptAtts = rawAtts.filter((a) => mine(a.card_id));
-  const filenames = await decAll(keptAtts.map((a) => a.filename_enc));
+  const filenames = await decAll(keptAtts.map((a) => a.filename));
   const attachments: BundleAttachment[] = keptAtts.map((a, i) => ({
     id: a.id, card_id: a.card_id, filename: filenames[i], mime: a.mime,
     size: a.size, lossless: !!a.lossless, is_excerpt: !!a.is_excerpt,
@@ -119,7 +120,7 @@ export async function buildBundle(
     exported_at: new Date().toISOString(),
     board: { name: state.name },
     members: members.filter((m) => m.username).map((m) => ({ username: m.username!, role: m.role })),
-    lists: state.lists.map((l) => ({ id: l.id, type: l.type, title: l.title, rank: l.rank, group_id: l.groupId, comment_first: tourCommentFirst(state, l) })),
+    lists: state.lists.map((l) => ({ id: l.id, type: l.type, title: l.title, rank: l.rank, group_id: l.groupId, comment_first: tourCommentFirst(state, l), handout_page: tourHandoutPage(state, l), ...(l.meta ? { meta: l.meta } : {}) })),
     groups: state.groups.map((g) => ({ id: g.id, name: g.name })),
     cards: state.cards.map((c) => ({
       id: c.id, list_id: c.listId, kind: c.kind, description: c.desc, rank: c.rank,

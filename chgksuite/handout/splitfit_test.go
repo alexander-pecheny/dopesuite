@@ -1,0 +1,144 @@
+package handout
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"io"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+)
+
+// TestSplitFitReal runs the real typst fit and checks the invariant: every
+// per-question PDF is exactly one page (the densest layout that still fits), and
+// every output is a valid PDF. Set XY_TYPST_TEST_BIN to run.
+func TestSplitFitReal(t *testing.T) {
+	bin := os.Getenv("XY_TYPST_TEST_BIN")
+	if bin == "" {
+		t.Skip("set XY_TYPST_TEST_BIN to run the real split_fit")
+	}
+	src := "for_question: 1\ncolumns: 3\n\nКороткий\n" +
+		"---\nfor_question: 7\ncolumns: 3\n\nПобольше текста для второго вопроса, чтобы он занял заметно больше места и поместилось меньше строк на странице.\n" +
+		"---\nfor_question: 13\ncolumns: 6\nhandouts_per_team: 2\n\nКоманде\n"
+
+	ts, err := NewCLITypesetter(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	zipBytes, err := SplitFit(context.Background(), src, nil, DefaultArgs(), ts)
+	if err != nil {
+		t.Fatalf("SplitFit: %v", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	names := map[string]bool{}
+	for _, f := range zr.File {
+		names[f.Name] = true
+		rc, _ := f.Open()
+		data, _ := io.ReadAll(rc)
+		rc.Close()
+		if !bytes.HasPrefix(data, []byte("%PDF")) {
+			t.Errorf("%s is not a PDF", f.Name)
+			continue
+		}
+		pages, err := api.PageCount(bytes.NewReader(data), model.NewDefaultConfiguration())
+		if err != nil {
+			t.Errorf("%s page count: %v", f.Name, err)
+			continue
+		}
+		if strings.HasPrefix(f.Name, "q") && pages != 1 {
+			t.Errorf("%s should be 1 page, got %d", f.Name, pages)
+		}
+		t.Logf("%s: %d page(s), %d bytes", f.Name, pages, len(data))
+	}
+	for _, want := range []string{"q01.pdf", "q07.pdf", "q13.pdf", "all_q.pdf"} {
+		if !names[want] {
+			t.Errorf("missing %s in zip", want)
+		}
+	}
+}
+
+// TestFitRowsReal logs the chosen row counts (compare against chgksuite's
+// "final rows=N" by eye / the manual parity check).
+func TestFitRowsReal(t *testing.T) {
+	bin := os.Getenv("XY_TYPST_TEST_BIN")
+	if bin == "" {
+		t.Skip("set XY_TYPST_TEST_BIN")
+	}
+	src := os.Getenv("XY_SPLITFIT_SRC")
+	if src == "" {
+		src = "for_question: 1\ncolumns: 3\n\nКороткий\n---\nfor_question: 2\ncolumns: 3\n\nДлинный текст раздаточного материала для второго вопроса.\n"
+	}
+	ts, err := NewCLITypesetter(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	rows, err := FitRows(context.Background(), src, nil, DefaultArgs(), ts)
+	if err != nil {
+		t.Fatalf("FitRows: %v", err)
+	}
+	t.Logf("fitted rows: %v", rows)
+}
+
+func TestAllQIsOneTeamWhenColumnsExceedIt(t *testing.T) {
+	for hndt, want := range map[string]string{
+		"columns: 6\nhandouts_per_team: 3\n\nhandout": "columns: 3\nhandouts_per_team: 3\nrows: 1\nmax_width: 0.5\n\nhandout\n",
+		"columns: 3\nmax_width: 0.5\n\nhandout":       "columns: 3\nmax_width: 0.5\nrows: 1\n\nhandout\n",
+		"columns: 2\n\nhandout":                       "columns: 1\nrows: 3\nmax_width: 0.5\n\nhandout\n",
+	} {
+		if got := parseSFBlocks(hndt)[0].allQ(nil); got != want {
+			t.Errorf("allQ(%q) = %q, want %q", hndt, got, want)
+		}
+	}
+}
+
+func TestAllQCarriesTheFittedImageSize(t *testing.T) {
+	b := parseSFBlocks("columns: 3\nimage: pic.png\n\n")[0]
+	want := "columns: 3\nimage: pic.png\nrows: 1\nresize_image: 0.8\n"
+	if got := b.allQ(b.resizeUpdate(0.8)); got != want {
+		t.Errorf("allQ = %q, want %q", got, want)
+	}
+}
+
+// TestPackReal: every fitted handout is printed as many times as PackPages
+// says the field needs, and a colour one goes to the colour run.
+func TestPackReal(t *testing.T) {
+	bin := os.Getenv("XY_TYPST_TEST_BIN")
+	if bin == "" {
+		t.Skip("set XY_TYPST_TEST_BIN to run the real pack")
+	}
+	src := "for_question: 1\ncolumns: 3\n\nКороткий\n" +
+		"---\nfor_question: 2\ncolumns: 2\ncolor: 1\n\nЦветной\n"
+	ts, err := NewCLITypesetter(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	const teams = 40
+	colour, bw, err := Pack(context.Background(), src, nil, DefaultArgs(), ts, teams)
+	if err != nil {
+		t.Fatalf("Pack: %v", err)
+	}
+	_, fitted, err := fitAll(context.Background(), src, nil, DefaultArgs(), ts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, out := range [][]byte{bw, colour} {
+		want, _, err := PackPages(fitted[i].hndt, teams)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := api.PageCount(bytes.NewReader(out), model.NewDefaultConfiguration())
+		if err != nil || got != want {
+			t.Errorf("run %d: %d pages (%v), want %d", i, got, err, want)
+		}
+	}
+}

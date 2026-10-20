@@ -24,27 +24,91 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   // The export modal's formats, in the order they are offered — the same
   // order in the one-format dropdown and in the zip's tick boxes. `server` marks
   // the ones that need the server to render, so offline can disable exactly those.
-  // `si: false` marks a format that cannot yet set a SI package: its composer
-  // drops #T/#B/#R outright, so it would hand back a flat run of questions with
-  // no theme headings and say nothing about it. Offered on a ChGK tour, greyed
-  // out on a SI one — the same mechanism offline uses on the server formats.
+  // `everyGame: false` marks a format that can set only a ChGK tour: its
+  // composer drops #T/#B/#R outright, so an SI, troika or brain package would
+  // come back as a flat run of questions with no theme or battle headings, and
+  // nothing would say so. Greyed out on such a tour — the same mechanism
+  // offline uses on the server formats.
   const EXPORT_FORMATS = [
-    { key: "4s", box: "exportFmt4s", server: false, si: true },
-    { key: "docx", box: "exportFmtDocx", server: true, si: true },
-    { key: "docx_screen", box: "exportFmtDocxScreen", server: true, si: true },
-    { key: "docx_spoilers", box: "exportFmtDocxSpoilers", server: true, si: true },
-    { key: "pdf", box: "exportFmtPdf", server: true, si: true },
-    { key: "pdf_mobile", box: "exportFmtPdfMobile", server: true, si: true },
-    { key: "pptx", box: "exportFmtPptx", server: true, si: false },
-    { key: "openquiz", box: "exportFmtOpenquiz", server: true, si: false },
-    { key: "handouts", box: "exportFmtHandouts", server: true, si: false },
+    { key: "4s", box: "exportFmt4s", server: false, everyGame: true },
+    { key: "docx", box: "exportFmtDocx", server: true, everyGame: true },
+    { key: "docx_screen", box: "exportFmtDocxScreen", server: true, everyGame: true },
+    { key: "docx_spoilers", box: "exportFmtDocxSpoilers", server: true, everyGame: true },
+    { key: "pdf", box: "exportFmtPdf", server: true, everyGame: true },
+    { key: "pdf_mobile", box: "exportFmtPdfMobile", server: true, everyGame: true },
+    { key: "pptx", box: "exportFmtPptx", server: true, everyGame: false },
+    { key: "openquiz", box: "exportFmtOpenquiz", server: true, everyGame: false },
+    { key: "handouts", box: "exportFmtHandouts", server: true, everyGame: false },
     // Telegram publishes rather than downloads, so it cannot join a zip of
     // files: it is offered in the dropdown and has no tick box of its own.
-    { key: "telegram", box: "", server: true, si: false },
+    { key: "telegram", box: "", server: true, everyGame: false },
   ] as const;
+  // The .4s extension chgksuite's CLI reads each game back by (ext_to_game).
+  const FOUR_S_EXT: Record<string, string> = { si: ".si4s", troika: ".tr4s", brain: ".br4s" };
+
+  // The .docx and .pptx settings: chgksuite's compose switches, each sent as the
+  // form field the server reads (exportopts.go). A checkbox sends "1" or "0",
+  // since some of them are on by default. The last values are this reader's own
+  // preference, so they live in localStorage; the uploaded files do not.
+  const SETTINGS = [
+    { id: "exportDocxAnswers", field: "docx_answers" },
+    { id: "exportDocxScreen", field: "docx_screen_mode" },
+    { id: "exportDocxNoParagraph", field: "docx_noparagraph" },
+    { id: "exportDocxOnlyNumber", field: "docx_only_question_number" },
+    { id: "exportDocxSameSize", field: "docx_same_source_size" },
+    { id: "exportDocxOptimize", field: "docx_optimize" },
+    { id: "exportDocxFont", field: "docx_font" },
+    { id: "exportPptxDisableNumbers", field: "pptx_disable_numbers" },
+    { id: "exportPptxKeepAccents", field: "pptx_keep_accents" },
+    { id: "exportPptxOptimize", field: "pptx_optimize" },
+    { id: "exportPptxFont", field: "pptx_font" },
+  ] as const;
+  const SETTING_FILES = [
+    { id: "exportDocxTemplate", field: "docx_template" },
+    { id: "exportPptxTemplate", field: "pptx_template" },
+    { id: "exportPptxConfig", field: "pptx_config" },
+  ] as const;
+  const SETTINGS_KEY = "xy.export.settings";
+  const DOCX_FORMATS = ["docx", "docx_screen", "docx_spoilers"];
+
+  function settingValue(id: string): string {
+    const el = byId<HTMLInputElement>(id);
+    if (el.type === "checkbox") return el.checked ? "1" : "0";
+    return el.value.trim();
+  }
+
+  function setSetting(id: string, v: string): void {
+    const el = byId<HTMLInputElement>(id);
+    if (el.type === "checkbox") el.checked = v === "1";
+    else el.value = v;
+  }
+
+  function saveSettings(): void {
+    const saved: Record<string, string> = {};
+    for (const st of SETTINGS) saved[st.id] = settingValue(st.id);
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(saved)); } catch (_) { /* the dialog's defaults come back next time */ }
+  }
+
+  function restoreSettings(): void {
+    let saved: Record<string, string> = {};
+    try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") as Record<string, string>; } catch (_) { return; }
+    for (const st of SETTINGS) if (typeof saved[st.id] === "string") setSetting(st.id, saved[st.id]);
+  }
+
+  function appendSettings(fd: FormData, formats: string[]): void {
+    const docx = formats.some((f) => DOCX_FORMATS.includes(f));
+    const pptx = formats.includes("pptx");
+    for (const st of SETTINGS) {
+      if ((st.field.startsWith("docx_") && docx) || (st.field.startsWith("pptx_") && pptx)) fd.append(st.field, settingValue(st.id));
+    }
+    for (const f of SETTING_FILES) {
+      const file = byId<HTMLInputElement>(f.id).files?.[0];
+      if (file && ((f.field.startsWith("docx_") && docx) || (f.field.startsWith("pptx_") && pptx))) fd.append(f.field, file, file.name);
+    }
+  }
 
   const exportModal = modal("export");
-  let exportCtx: { cards: BoardCard[]; title: string; hndt: string; game: string; commentFirst: boolean } | null = null;
+  let exportCtx: { cards: BoardCard[]; title: string; hndt: string; game: string; commentFirst: boolean; handoutPage: string } | null = null;
 
   function exportBox(box: string): HTMLInputElement { return byId<HTMLInputElement>(box); }
   function oneFormat(): HTMLSelectElement { return byId<HTMLSelectElement>("exportOneFormat"); }
@@ -72,18 +136,21 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     const available = EXPORT_FORMATS.filter((f) => f.box && !unavailable.has(f.key));
     const allOn = available.length > 0 && chosen.length === available.length;
     byId("exportToggleAll").textContent = allOn ? S.export.form.deselectAll() : S.export.form.selectAll();
+    byId("exportDocxOpts").hidden = !chosen.some((f) => DOCX_FORMATS.includes(f));
+    byId("exportPptxOpts").hidden = !chosen.includes("pptx");
+    byId("exportHandoutsOpts").hidden = !chosen.includes("handouts");
   }
 
   function openExport(scope: ListScope): void {
     const hndt = xyListExport.hndtOf(scope.cards).source;
-    exportCtx = { cards: scope.cards, title: scope.title, hndt, game: scope.game, commentFirst: scope.commentFirst };
+    exportCtx = { cards: scope.cards, title: scope.title, hndt, game: scope.game, commentFirst: scope.commentFirst, handoutPage: scope.handoutPage };
 
     // Offline everything but the .4s is unreachable: the other formats render
     // server-side, and even the .4s ships without its images (they are fetched).
     const offline = !xySync.isOnline();
-    const si = scope.game === "si";
+    const chgk = scope.game === "chgk";
     unavailable = new Set(EXPORT_FORMATS
-      .filter((f) => (offline && f.server) || (si && !f.si) || (f.key === "handouts" && !hndt.trim()))
+      .filter((f) => (offline && f.server) || (!chgk && !f.everyGame) || (f.key === "handouts" && !hndt.trim()))
       .map((f) => f.key));
     for (const f of EXPORT_FORMATS) {
       if (!f.box) continue;
@@ -98,7 +165,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     if (unavailable.has(one.value)) one.value = EXPORT_FORMATS.find((f) => !unavailable.has(f.key))?.key ?? "";
     const notes: string[] = [];
     if (offline) notes.push(S.export.notes.offline());
-    if (si) notes.push(S.export.notes.siFormats());
+    if (!chgk) notes.push(S.export.notes.gameFormats());
     else if (!hndt.trim()) notes.push(S.export.notes.noHandouts());
     syncExportForm();
     exportModal.open({ onClose: () => { exportCtx = null; } });
@@ -129,7 +196,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   // the network — it is the one export that works offline.
   async function runExport(): Promise<void> {
     if (!exportCtx) return;
-    const { cards, title, hndt, game } = exportCtx;
+    const { cards, title, hndt, game, handoutPage } = exportCtx;
     const formats = exportChosen();
     if (!formats.length) return;
     const source = xyListExport.exportSource(cards);
@@ -139,7 +206,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     const wantsImages = formats.includes("4s") && wanted.size > 0;
 
     if (formats.length === 1 && formats[0] === "4s" && !wantsImages) {
-      downloadBlob(new Blob([source], { type: "text/plain;charset=utf-8" }), `${title}${game === "si" ? ".si4s" : ".4s"}`);
+      downloadBlob(new Blob([source], { type: "text/plain;charset=utf-8" }), `${title}${FOUR_S_EXT[game] ?? ".4s"}`);
       exportModal.close();
       return;
     }
@@ -168,7 +235,13 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
         return;
       }
       fd.append("formats", formats.join(","));
-      if (formats.includes("handouts")) fd.append("hndt", hndt);
+      appendSettings(fd, formats);
+      if (formats.includes("handouts")) {
+        fd.append("hndt", hndt);
+        if (handoutPage) fd.append("page", handoutPage);
+        const teams = byId<HTMLInputElement>("exportHandoutsTeams").value.trim();
+        if (teams) fd.append("teams", teams);
+      }
       const res = await fetch("/api/export/pack", { method: "POST", credentials: "same-origin", body: fd });
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
       downloadBlob(await res.blob(), filenameFromResponse(res) || `${title}.zip`);
@@ -203,6 +276,8 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
   });
   for (const f of EXPORT_FORMATS) if (f.box) exportBox(f.box).addEventListener("change", syncExportForm);
   for (const id of ["exportModeOne", "exportModeMany", "exportOneFormat"]) byId(id).addEventListener("change", syncExportForm);
+  restoreSettings();
+  for (const st of SETTINGS) byId(st.id).addEventListener("change", saveSettings);
 
 
   return {

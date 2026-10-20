@@ -1,4 +1,4 @@
-// The browser's Card Kind rules against the same table internal/cardkind's
+// The browser's Card Kind rules against the same table chgksuite/cardkind's
 // TestKindTable spells out: every kind against every question cardkind.ts
 // answers.
 import { test } from "node:test";
@@ -12,12 +12,15 @@ const K = xyCardKind;
 const TABLE = [
   ["question", true, true, true, true, "", false, false, "chgk", true],
   ["theme", true, true, false, false, "", false, false, "si", true],
+  ["troika_theme", true, true, false, false, "", false, false, "troika", true],
+  ["battle", false, true, false, false, "#B", true, false, "brain", true],
   ["meta", false, true, false, false, "#", false, true, "chgk", true],
   ["heading", false, true, false, false, "##", true, true, "chgk", true],
   ["other", false, true, false, false, "", false, false, "chgk", true],
   ["normal", false, true, false, false, "", false, false, "chgk", false],
   ["test", false, true, false, false, "", false, false, "chgk", false],
   ["handouts_preamble", false, false, false, false, "", false, false, "chgk", false],
+  ["appeal", false, false, false, false, "", false, false, "chgk", false],
   ["no-such-kind", false, false, false, false, "", false, false, "chgk", false],
 ];
 
@@ -49,6 +52,9 @@ test("cardkind: counters", () => {
 
 test("cardkind: a List Type picks the new card's kind", () => {
   assert.equal(K.forListType("si"), "theme");
+  assert.equal(K.forListType("troika"), "troika_theme");
+  assert.equal(K.forListType("brain"), "question");
+  assert.equal(K.forListType("appeals"), "appeal");
   assert.equal(K.forListType("normal"), "question");
   assert.equal(K.forListType("test"), "question");
 });
@@ -56,6 +62,18 @@ test("cardkind: a List Type picks the new card's kind", () => {
 test("cardkind: one theme makes a scope SI", () => {
   assert.equal(K.gameOf([]), "chgk");
   assert.equal(K.gameOf([{ kind: "question" }, { kind: "theme" }]), "si");
+});
+
+test("cardkind: a battle makes a scope brain until a theme says otherwise", () => {
+  assert.equal(K.gameOf([{ kind: "battle" }, { kind: "question" }]), "brain");
+  assert.equal(K.gameOf([{ kind: "battle" }, { kind: "troika_theme" }]), "troika");
+  assert.equal(K.gameOf([{ kind: "battle" }, { kind: "theme" }]), "si");
+});
+
+test("cardkind: a theme's ladder is its game's", () => {
+  assert.deepEqual(K.ladder("theme"), ["10", "20", "30", "40", "50"]);
+  assert.deepEqual(K.ladder("troika_theme"), ["1", "2", "3"]);
+  assert.deepEqual(K.ladder("question"), []);
 });
 
 test("cardkind: the kinds people pick or see have a label, the others none", () => {

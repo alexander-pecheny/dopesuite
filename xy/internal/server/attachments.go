@@ -11,7 +11,7 @@ import (
 
 	xystrings "xy/i18nstrings"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // Attachments carry ciphertext bytes (already an xy envelope) plus encrypted
@@ -29,13 +29,13 @@ const maxAttachmentRequest = maxAttachmentBytes + 8<<20
 const multipartMemory = 8 << 20
 
 type attachmentDTO struct {
-	ID          int64  `json:"id"`
-	FilenameEnc string `json:"filename_enc"`
-	Mime        string `json:"mime"`
-	Size        int64  `json:"size"`
-	Lossless    bool   `json:"lossless"`
-	IsExcerpt   bool   `json:"is_excerpt"`
-	CreatedAt   string `json:"created_at"`
+	ID        int64  `json:"id"`
+	Filename  string `json:"filename"`
+	Mime      string `json:"mime"`
+	Size      int64  `json:"size"`
+	Lossless  bool   `json:"lossless"`
+	IsExcerpt bool   `json:"is_excerpt"`
+	CreatedAt string `json:"created_at"`
 	// Rev counts replacements (schema v14). Attachment bytes used to be immutable
 	// for a given id, which both the client's object-URL memo and its IndexedDB
 	// mirror rely on; a replace keeps the id, so the client keys those caches by
@@ -49,7 +49,7 @@ func (s *server) handleListAttachments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.QueryContext(r.Context(), `
-select id, filename_enc, mime, size, lossless, is_excerpt, rev, created_at
+select id, filename, mime, size, lossless, is_excerpt, rev, created_at
 from attachments where card_id = ? and deleted_at is null order by id`, cardID)
 	if handleErr(w, err) {
 		return
@@ -63,7 +63,7 @@ from attachments where card_id = ? and deleted_at is null order by id`, cardID)
 		if err := rows.Scan(&a.ID, &fn, &a.Mime, &a.Size, &lossless, &excerpt, &a.Rev, &a.CreatedAt); handleErr(w, err) {
 			return
 		}
-		a.FilenameEnc = b64(fn)
+		a.Filename = b64(fn)
 		a.Lossless = lossless != 0
 		a.IsExcerpt = excerpt != 0
 		out = append(out, a)
@@ -73,30 +73,30 @@ from attachments where card_id = ? and deleted_at is null order by id`, cardID)
 
 // attachmentUpload is the "meta" JSON field of an attachment multipart body.
 type attachmentUpload struct {
-	FilenameEnc     string `json:"filename_enc"`
-	Mime            string `json:"mime"`
-	Lossless        bool   `json:"lossless"`
-	IsExcerpt       bool   `json:"is_excerpt"`
-	EventPayloadEnc string `json:"event_payload_enc"`
+	Filename     string `json:"filename"`
+	Mime         string `json:"mime"`
+	Lossless     bool   `json:"lossless"`
+	IsExcerpt    bool   `json:"is_excerpt"`
+	EventPayload string `json:"event_payload"`
 }
 
 // readUpload parses the multipart body shared by create and replace: a "meta"
 // JSON field plus a "blob" part holding the ciphertext bytes. On success the
 // blob is already in the blob store; the caller owns that ref and must Remove
 // it if the transaction referencing it fails.
-func (s *server) readUpload(w http.ResponseWriter, r *http.Request) (meta attachmentUpload, filenameEnc []byte, ref string, size int64, ok bool) {
+func (s *server) readUpload(w http.ResponseWriter, r *http.Request) (meta attachmentUpload, filename []byte, ref string, size int64, ok bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentRequest)
 	if err := r.ParseMultipartForm(multipartMemory); err != nil {
 		httpError(w, http.StatusBadRequest, "bad multipart form")
 		return
 	}
-	if err := json.Unmarshal([]byte(r.FormValue("meta")), &meta); err != nil {
+	if err := json.Unmarshal(renameLegacyFields([]byte(r.FormValue("meta"))), &meta); err != nil {
 		httpError(w, http.StatusBadRequest, "bad meta json")
 		return
 	}
-	filenameEnc, err := unb64(meta.FilenameEnc)
+	filename, err := unb64(meta.Filename)
 	if err != nil {
-		httpError(w, http.StatusBadRequest, "invalid filename_enc")
+		httpError(w, http.StatusBadRequest, "invalid filename")
 		return
 	}
 	file, _, err := r.FormFile("blob")
@@ -117,7 +117,7 @@ func (s *server) readUpload(w http.ResponseWriter, r *http.Request) (meta attach
 	if meta.Mime == "" {
 		meta.Mime = "application/octet-stream"
 	}
-	return meta, filenameEnc, ref, size, true
+	return meta, filename, ref, size, true
 }
 
 // attachmentRow is the plaintext side of a live attachment.
@@ -168,25 +168,25 @@ func boolInt(b bool) int {
 }
 
 // handleCreateAttachment accepts multipart/form-data: a "meta" JSON field
-// (filename_enc, mime, lossless, is_excerpt, optional event_payload_enc) and a
+// (filename, mime, lossless, is_excerpt, optional event_payload) and a
 // "blob" file part holding the ciphertext bytes.
 func (s *server) handleCreateAttachment(w http.ResponseWriter, r *http.Request) {
 	uid, cardID, bid, ok := s.requireChildAccess(w, r, childCard)
 	if !ok {
 		return
 	}
-	meta, filenameEnc, ref, size, ok := s.readUpload(w, r)
+	meta, filename, ref, size, ok := s.readUpload(w, r)
 	if !ok {
 		return
 	}
 	var id int64
 	err := s.withWriteTx(r.Context(), "create-attachment", func(ctx context.Context, tx *sql.Tx) error {
-		if err := enforceQuota(ctx, tx, bid, size); err != nil {
+		if err := s.enforceQuota(ctx, tx, bid, size); err != nil {
 			return err
 		}
 		res, err := tx.ExecContext(ctx, `
-insert into attachments(board_id, card_id, filename_enc, mime, size, lossless, is_excerpt, blob_ref, created_at)
-values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, bid, cardID, filenameEnc, meta.Mime, size, boolInt(meta.Lossless), boolInt(meta.IsExcerpt), ref, rfc3339(time.Now()))
+insert into attachments(board_id, card_id, filename, mime, size, lossless, is_excerpt, blob_ref, created_at)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, bid, cardID, filename, meta.Mime, size, boolInt(meta.Lossless), boolInt(meta.IsExcerpt), ref, rfc3339(time.Now()))
 		if err != nil {
 			return err
 		}
@@ -194,8 +194,8 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, bid, cardID, filenameEnc, meta.Mime, size, b
 		if err != nil {
 			return err
 		}
-		if meta.EventPayloadEnc != "" {
-			return appendEvent(ctx, tx, bid, cardID, "attach_add", uid, meta.EventPayloadEnc)
+		if meta.EventPayload != "" {
+			return appendEvent(ctx, tx, bid, cardID, "attach_add", uid, meta.EventPayload)
 		}
 		return nil
 	})
@@ -216,21 +216,21 @@ func (s *server) handleReplaceAttachment(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	meta, filenameEnc, ref, size, ok := s.readUpload(w, r)
+	meta, filename, ref, size, ok := s.readUpload(w, r)
 	if !ok {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "replace-attachment", func(ctx context.Context, tx *sql.Tx) error {
-		if err := enforceQuota(ctx, tx, old.boardID, size-old.size); err != nil {
+		if err := s.enforceQuota(ctx, tx, old.boardID, size-old.size); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
-update attachments set filename_enc = ?, mime = ?, size = ?, lossless = ?, blob_ref = ?, rev = rev + 1
-where id = ?`, filenameEnc, meta.Mime, size, boolInt(meta.Lossless), ref, old.id); err != nil {
+update attachments set filename = ?, mime = ?, size = ?, lossless = ?, blob_ref = ?, rev = rev + 1
+where id = ?`, filename, meta.Mime, size, boolInt(meta.Lossless), ref, old.id); err != nil {
 			return err
 		}
-		if meta.EventPayloadEnc != "" {
-			return appendEvent(ctx, tx, old.boardID, old.cardID, "attach_replace", uid, meta.EventPayloadEnc)
+		if meta.EventPayload != "" {
+			return appendEvent(ctx, tx, old.boardID, old.cardID, "attach_replace", uid, meta.EventPayload)
 		}
 		return nil
 	})
@@ -298,13 +298,13 @@ func (s *server) handleDeleteAttachment(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	eventEnc := r.URL.Query().Get("event_payload_enc")
+	event := queryParam(r, "event_payload")
 	err := s.withWriteTx(r.Context(), "delete-attachment", func(ctx context.Context, tx *sql.Tx) error {
 		if err := tombstone(ctx, tx, "attachments", "id = ?", att.id); err != nil {
 			return err
 		}
-		if eventEnc != "" {
-			return appendEvent(ctx, tx, att.boardID, att.cardID, "attach_remove", uid, eventEnc)
+		if event != "" {
+			return appendEvent(ctx, tx, att.boardID, att.cardID, "attach_remove", uid, event)
 		}
 		return nil
 	})

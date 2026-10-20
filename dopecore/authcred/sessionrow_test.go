@@ -8,7 +8,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 func TestSessionsLookupStatesAndSlide(t *testing.T) {

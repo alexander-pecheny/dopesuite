@@ -8,11 +8,11 @@ import (
 	"sort"
 	"strings"
 
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
-	corei18n "pecheny.me/dopecore/i18nstrings"
 )
 
 // A Game's Entrant list (CONTEXT.md) is who a buzzer Game seats, in seed

@@ -1,0 +1,150 @@
+# xy — the appeals list (ADR-0021): its settings, the refresh from the rating
+# site and the export of verdicts back to it (appealspanel.ts), an appeal card
+# in the card editor (appealcard.ts) and on the board (board.ts).
+
+# Shown when the rating site is needed and the device is offline.
+offline = "Турнирный сайт недоступен без сети."
+
+[list]
+# The List Type, in every type picker.
+type = "Апелляции"
+# The list head: how many appeals, and how many have a decided status.
+count = '{{.total}} · решено {{.decided}}'
+# Tooltip of the ✓ on a card whose verdict the site already has.
+sent = "Вердикт уже на турнирном сайте"
+
+[kind]
+# What the appeal asks for, after the question number in its heading.
+accept = 'зачёт «{{.answer}}»'
+remove = "снятие"
+host_error = "снятие из-за ошибки ведущего"
+
+[card]
+# An appeal's one-line name, on the board and in the editor's title.
+heading = 'Вопрос {{.n}} · {{.what}}'
+question = "Вопрос из пакета"
+text = "Текст апелляции"
+no_packet = "Пакет не привязан. Его можно выбрать в настройках апелляций."
+no_question = 'В пакете «{{.packet}}» нет вопроса {{.n}}.'
+text_changed = 'Текст апелляции изменился на сайте ({{.at}}).'
+controversials = 'Спорные ответы на вопрос {{.n}}'
+no_controversials = "Сайт не прислал спорных ответов на этот вопрос."
+# Beside the controversial answer this appeal is about.
+appealed = "апелляция"
+# The toggle on a long question or appeal, which shows its first lines only.
+unfold = "Показать целиком"
+fold = "Свернуть"
+
+[controversial]
+# The heads of the groups the controversial answers are sorted into, by the
+# game jury's verdict.
+accepted = "Зачтены"
+declined = "Не зачтены"
+open = "Не рассмотрены"
+
+[status]
+# An appeal's status: the jury's verdict, and what the site says.
+accepted = "Принять"
+declined = "Отклонить"
+open = "Не рассмотрена"
+
+[vote]
+label = "Голосование"
+for = "За"
+against = "Против"
+for_who = 'За: {{.names}}'
+against_who = 'Против: {{.names}}'
+# Tooltip of the votes on the board card.
+title = 'Голосов за: {{.pro}}, против: {{.contra}}'
+
+[verdict]
+label = "Вердикт"
+status_label = "Решение"
+# The status option that leaves the decision to the votes.
+follow_votes = "По голосам"
+undecided = "Не решено"
+by_hand = "выставлено вручную"
+by_votes = 'по голосам {{.pro}}:{{.contra}}'
+no_text = "Текст вердикта ещё не написан."
+placeholder = "Обоснование вердикта. Оно уйдёт на турнирный сайт."
+
+[site]
+status = 'На сайте: {{.status}}'
+overridden = 'На сайте не рассматривалась: принята апелляция {{.id}}'
+
+[settings]
+# The ⋯ entry and the form behind it.
+label = "Настройки апелляций…"
+title_for = 'Апелляции: {{.list}}'
+create_title = "Новый список апелляций"
+title = "Название списка"
+# Where the list's appeals come from.
+mode = "Откуда апелляции"
+mode_site = "С турнирного сайта"
+mode_manual = "Вводятся вручную"
+mode_hint = "Выберите «Вводятся вручную», если апелляции турнира подаются не через турнирный сайт. Тогда каждую апелляцию добавляют кнопкой «+» у списка."
+mode_locked = "В списке уже есть апелляции, поэтому способ заполнения поменять нельзя."
+tournament = "Турнир на турнирном сайте"
+tournament_hint = "Номер турнира или ссылка на его страницу."
+packet = "Пакет"
+packet_hint = "Список или группа списков с вопросами турнира. Карточки апелляций показывают вопрос из пакета по номеру."
+packet_none = "— выберите список —"
+# A List Group among the packet choices.
+group_option = '{{.name}} (группа)'
+token = "Токен турнирного сайта"
+token_hint = "Личный токен со страницы пользователя на турнирном сайте (rating.chgk.info), одинаковый для всей доски. Без него апелляции видны только после публикации результатов, и вердикты нельзя выгрузить. Токен хранится в доске зашифрованным."
+save = "Сохранить"
+create = "Создать и загрузить"
+create_manual = "Создать"
+need_tournament = "Укажите номер турнира."
+need_packet = "Выберите пакет."
+need_title = "Укажите название списка."
+
+[refresh]
+label = "Обновить апелляции"
+title = "Обновление апелляций"
+loading = 'Загружаю апелляции турнира {{.id}}…'
+done = 'Добавлено: {{.added}}, обновлено: {{.updated}}. Всего на сайте: {{.total}}.'
+no_controversials = 'Спорные ответы не загрузились: {{.reason}}'
+text_changed = 'Текст изменился на сайте у {{.n}} {{plural .n "апелляции" "апелляций" "апелляций"}}. Эти карточки отмечены.'
+
+[export]
+label = "Выгрузить вердикты"
+title = "Выгрузка вердиктов"
+loading = "Сверяю вердикты с сайтом…"
+need_token = "Чтобы выгрузить вердикты, задайте токен турнирного сайта в настройках апелляций. Если у вашего токена нет прав на запись, скачайте вердикты в .xlsx и загрузите этот файл на турнирном сайте."
+nothing = "Все решённые апелляции уже на сайте в том же виде."
+hint = "Здесь решённые апелляции, у которых на сайте другой статус или другой текст вердикта. Снимите галочку с тех, что отправлять пока не нужно."
+site_now = 'Сейчас на сайте: {{.status}}'
+send = 'Отправить ({{.n}})'
+sending = 'Отправляю вердикты: {{.n}}…'
+done = 'Отправлено: {{.n}}.'
+failed_one = 'Апелляция {{.id}}: {{.reason}}'
+
+[xlsx]
+# The ⋯ entry that downloads the verdicts as the rating site's .xlsx table.
+label = "Скачать вердикты (.xlsx)"
+
+# The head row of the verdict table. It copies the rating site's own export,
+# leading space in " ID" included, so the site can read the file back.
+head_id = " ID"
+head_type = "Тип"
+head_question = "№"
+head_answer = "Ответ"
+head_status = "Статус"
+head_comment = "Комментарий"
+
+[manual]
+# Adding an appeal by hand to a manual list: the ⋯ entry, the + and the form.
+label = "Добавить апелляцию"
+title = 'Новая апелляция: {{.list}}'
+question = "Номер вопроса"
+type = "Что просят"
+type_accept = "Зачесть ответ"
+type_remove = "Снять вопрос"
+type_host_error = "Снять вопрос из-за ошибки ведущего"
+answer = "Ответ, который просят зачесть"
+save = "Добавить"
+added = 'Добавлено: {{.appeal}}. Можно ввести следующую.'
+need_question = "Укажите номер вопроса."
+need_answer = "Укажите ответ, который просят зачесть."

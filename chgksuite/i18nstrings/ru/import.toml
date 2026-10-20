@@ -1,0 +1,12 @@
+# The import strings the Go side writes too. xy's import.toml holds the rest;
+# these are the Version labels and heads listexport folds into a question.
+
+[versions]
+# "версия N: " label prefixed to a field value when versions disagree
+# (listexport's mergeField); the trailing space is part of the label.
+label = 'версия {{.n}}: '
+# Head of each version's question block in the composed multi-version export.
+question = 'Версия {{.n}}: {{.question}}'
+# The same head on a line of its own, for a version that opens with a handout:
+# the exports set a handout apart only when it has its lines to itself.
+head = 'Версия {{.n}}:'

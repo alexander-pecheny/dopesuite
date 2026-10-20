@@ -18,6 +18,7 @@ import { xyListExport } from "./listexport.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import { modal } from "./modal.js";
+import { createHandoutPage } from "./handoutpage.js";
 import { icon } from "./icons_gen.js";
 import { anchorPopup } from "./popup.js";
 import { xyRank } from "./rank.js";
@@ -36,7 +37,9 @@ const { el, byId, errMsg, downloadBlob, onCmdEnter } = xyApp;
 
 export function createHandoutsPanel(board: Board, attachments: Pick<Attachments, "appendImages" | "cardAttachments">): ListPanel {
   const handoutsModal = modal("handouts");
-  let handoutsCtx: { cards: BoardCard[]; numbers: Array<string | null>; title: string; listId: number } | null = null;
+  // page is the tour's handout page setup (handoutpage.ts), sent with every render.
+  let handoutsCtx: { cards: BoardCard[]; numbers: Array<string | null>; title: string; listId: number; scope: ListScope; page: string } | null = null;
+  const handoutPage = createHandoutPage(board);
   let handoutsPdfUrl: string | null = null;
   let handoutsDlUrl: string | null = null;
 
@@ -46,7 +49,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     // concatenated cards), matching the board + docx export.
     const cards = scope.cards;
     const { numbers, source } = xyListExport.hndtOf(cards);
-    handoutsCtx = { cards, numbers, title: scope.title, listId: scope.lists[0].id };
+    handoutsCtx = { cards, numbers, title: scope.title, listId: scope.lists[0].id, scope, page: scope.handoutPage };
     byId<HTMLTextAreaElement>("handoutsSource").value = source;
     clearHandoutsPdf();
     handoutsModal.open({ onClose: hideHandouts });
@@ -327,7 +330,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
       const norm = meta && meta.trim() ? meta : null;
       if (norm === (c.handoutMeta || null)) continue;
       try {
-        const body: OpBody = { handout_meta_enc: norm ? await xyCrypto.encField(board.dk(), norm) : "" };
+        const body: OpBody = { handout_meta: norm ? await xyCrypto.encField(board.dk(), norm) : "" };
         await board.verbs.patch("patchCard", `/api/cards/${c.id}`, body);
         c.handoutMeta = norm;
       } catch (_) { /* best-effort: keep editing even if a write fails */ }
@@ -347,14 +350,14 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
         await board.verbs.del("deleteCard", `/api/cards/${card.id}`);
         board.state.cards.splice(board.state.cards.indexOf(card), 1);
       } else if (card && text && text !== card.desc.trim()) {
-        await board.verbs.patch("patchCard", `/api/cards/${card.id}`, { description_enc: await xyCrypto.encField(board.dk(), text) });
+        await board.verbs.patch("patchCard", `/api/cards/${card.id}`, { description: await xyCrypto.encField(board.dk(), text) });
         card.desc = text;
       } else if (!card && text) {
         const listId = handoutsCtx.listId;
         const first = board.cardsOf(listId)[0];
         const rank = xyRank.keyBetween(null, first ? first.rank : null);
         const kind = KIND.handoutsPreamble;
-        const res = await board.verbs.create("createCard", `/api/lists/${listId}/cards`, { description_enc: await xyCrypto.encField(board.dk(), text), rank, kind });
+        const res = await board.verbs.create("createCard", `/api/lists/${listId}/cards`, { description: await xyCrypto.encField(board.dk(), text), rank, kind });
         board.state.cards.push({ id: res.id as number, listId, kind, rank, desc: text, handoutMeta: null, alias: null, createdAt: new Date().toISOString() });
       } else return;
       board.render();
@@ -490,6 +493,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     const fd = new FormData();
     fd.append("source", source);
     fd.append("filename", handoutsCtx?.title || "handouts");
+    if (handoutsCtx?.page) fd.append("page", handoutsCtx.page);
     const sid = await handoutSession.ensure(source);
     if (sid) fd.append("session", sid);
     return fd;
@@ -528,11 +532,47 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     }
   }
 
+  // generatePack is split_fit followed by chgksuite's pack: each handout as many
+  // times as the teams need, one PDF for the colour printer and one for the
+  // other (a zip when there are both).
+  let lastTeams = "";
+  async function generatePack(): Promise<void> {
+    if (!handoutsCtx) return;
+    const msg = byId("handoutsMessage");
+    if (!xySync.requireOnline(S.board.handouts.splitfitOffline(), msg)) return;
+    const source = byId<HTMLTextAreaElement>("handoutsSource").value;
+    if (!source.trim()) { msg.textContent = S.board.handouts.sourceEmpty(); return; }
+    const teams = (prompt(S.board.handouts.packTeams(), lastTeams) || "").trim();
+    if (!teams) return;
+    lastTeams = teams;
+    const btn = byId<HTMLButtonElement>("handoutsPack");
+    btn.disabled = true;
+    msg.textContent = S.board.handouts.packing();
+    try {
+      const fd = await handoutsBody(source);
+      fd.append("teams", teams);
+      const res = await fetch("/api/handouts/pack", { method: "POST", credentials: "same-origin", body: fd });
+      if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+      const zipped = (res.headers.get("Content-Type") || "").includes("zip");
+      downloadBlob(await res.blob(), handoutFileBase() + (zipped ? "_print.zip" : "_print.pdf"));
+      msg.textContent = S.board.handouts.packDone();
+    } catch (err) {
+      msg.textContent = S.board.handouts.packFailed(errMsg(err));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   sourceEl.addEventListener("input", schedulePreview);
   // Cmd/Ctrl-Enter skips the wait.
   onCmdEnter(sourceEl, () => { void refreshPreview(); });
   onCmdEnter(fieldsEl, () => { void refreshPreview(); });
   byId("handoutsSplitFit").addEventListener("click", () => { void generateSplitFitZip(); });
+  byId("handoutsPack").addEventListener("click", () => { void generatePack(); });
+  byId("handoutsPage").addEventListener("click", () => {
+    const ctx = handoutsCtx;
+    if (ctx) handoutPage.open(ctx.scope, (json) => { ctx.page = json; void refreshPreview(); });
+  });
 
 
   return {
@@ -540,11 +580,11 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
     label: (scope) => scope.grouped ? S.board.handouts.menuGroup() : S.board.handouts.title(),
     // Handouts are the exception, not the rule: a tour without one has nothing
     // for this panel to open, and the row would only say so after the click.
-    // A SI tour has nothing for it either: the generator keys a question's
-    // settings by its number, and every theme has a № 10. The inline
-    // «[handout: …]» still reaches the .docx and the .pdf; it is
-    // the PDF generation that is not modelled at this grain yet.
-    offered: (scope) => scope.game !== "si" && xyListExport.hndtOf(scope.cards).source.trim() !== "",
+    // Only a ChGK tour has them: the generator keys a question's settings by
+    // its number, every SI theme has a № 10, and a brain game counts anew in
+    // every battle. The inline «[handout: …]» still reaches the .docx and the
+    // .pdf; it is the PDF generation that is not modelled at this grain yet.
+    offered: (scope) => scope.game === "chgk" && xyListExport.hndtOf(scope.cards).source.trim() !== "",
     open: openHandouts,
   };
 }

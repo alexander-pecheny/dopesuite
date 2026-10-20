@@ -1,0 +1,315 @@
+package typstdoc_test
+
+import (
+	"bytes"
+	"context"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/typstdoc"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/typstwasm"
+)
+
+const sample = `### Тестовый пакет
+
+## Тур 1
+
+? Вопрос _с курсивом_ и __жирным__ про то, что из-за этого не ломается.
+! Ответ
+= Зачёт
+/ Комментарий с ссылкой https://example.com/a_b~c
+^ Источник
+@ Автор
+`
+
+func parse(t *testing.T, src string) fsource.Doc {
+	t.Helper()
+	doc := fsource.Parse(src, "chgk")
+	if len(doc) == 0 {
+		t.Fatal("parsed to nothing")
+	}
+	return doc
+}
+
+// The layout properties the docx export gets from Word's paragraph flags have to
+// survive into the typst source, or a question splits across a page.
+func TestGenerateTypLayout(t *testing.T) {
+	typ := typstdoc.GenerateTyp(parse(t, sample), nil, typstdoc.Options{})
+
+	for _, want := range []string{
+		`#set text(font: "Noto Sans"`,
+		"hyphenate: false",     // docx: suppressAutoHyphens
+		"breakable: false",     // docx: keepLines on question/answer/source
+		"sticky: true",         // docx: keepNext on headings
+		`weight: "bold"`,       // the labels ("Вопрос 1. ", "Ответ: ")
+		`style: "italic"`,      // _с курсивом_
+		`link("https://`,       // the source's URL
+		`underline(text(fill:`, // …styled like the docx Hyperlink style
+	} {
+		if !strings.Contains(typ, want) {
+			t.Errorf("generated source is missing %q\n---\n%s", want, typ)
+		}
+	}
+}
+
+// The non-breaking pass is the whole point of sharing inline with the
+// docx exporter: the same prepositions glue, and the same short hyphenated words get
+// a non-breaking hyphen.
+func TestGenerateTypNoBreak(t *testing.T) {
+	typ := typstdoc.GenerateTyp(parse(t, sample), nil, typstdoc.Options{})
+	if !strings.Contains(typ, "из‑за") {
+		t.Error("short hyphenated word did not get a non-breaking hyphen (U+2011)")
+	}
+	if !strings.Contains(typ, " ") {
+		t.Error("no non-breaking space was glued anywhere")
+	}
+	// …but not inside a URL, which the gluing skips.
+	if strings.Contains(typ, "https://example.com/a ") {
+		t.Error("the URL was mangled by the nbsp pass")
+	}
+}
+
+// Editorial text is data, never typst code: a question full of typst syntax must
+// come out as those characters, not as markup (nor as a compile error).
+func TestGenerateTypEscaping(t *testing.T) {
+	doc := parse(t, "? #let x = 1 $e^x$ \"кавычки\" и #[markup]\n! Ответ\n")
+	typ := typstdoc.GenerateTyp(doc, nil, typstdoc.Options{})
+	if !strings.Contains(typ, `\"кавычки\"`) {
+		t.Errorf("quotes were not escaped into the string literal:\n%s", typ)
+	}
+	if !strings.Contains(typ, `#let x = 1 $e^x$`) {
+		t.Errorf("typst-looking text did not survive verbatim:\n%s", typ)
+	}
+	// The only '#' that starts a typst expression is the one opening a block/pagebreak.
+	for _, line := range strings.Split(typ, "\n") {
+		if strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "#set ") &&
+			!strings.HasPrefix(line, "#block(") && !strings.HasPrefix(line, "#pagebreak(") {
+			t.Errorf("unexpected top-level typst expression: %q", line)
+		}
+	}
+}
+
+// A (PAGEBREAK) inside a question can't stay inside the block — typst rejects a
+// pagebreak in a container — so the paragraph splits around it.
+func TestGenerateTypPageBreak(t *testing.T) {
+	typ := typstdoc.GenerateTyp(parse(t, "? До(PAGEBREAK)после\n! Ответ\n"), nil, typstdoc.Options{})
+	i := strings.Index(typ, "#pagebreak(")
+	if i < 0 {
+		t.Fatalf("no pagebreak emitted:\n%s", typ)
+	}
+	before, after := typ[:i], typ[i:]
+	if !strings.Contains(before, "До") || !strings.Contains(after, "после") {
+		t.Errorf("the paragraph did not split around the page break:\n%s", typ)
+	}
+}
+
+// Noto Sans has no `smcp` feature, so small caps are synthesized (uppercase +
+// smaller), the way Word synthesizes w:smallCaps.
+//
+// (sc…) only becomes its own run when it directly follows another token — a quirk
+// of chgksuite's tokenizer that the shared inline package reproduces — hence the
+// (LINEBREAK) in front of it here.
+func TestGenerateTypSmallCaps(t *testing.T) {
+	typ := typstdoc.GenerateTyp(parse(t, "? Имя(LINEBREAK)(scВасилий)\n! Ответ\n"), nil, typstdoc.Options{})
+	if !strings.Contains(typ, "size: 0.8em") || !strings.Contains(typ, "АСИЛИЙ") {
+		t.Errorf("small caps were not synthesized:\n%s", typ)
+	}
+}
+
+// A giant image is scaled down into the preview's box (2in tall / 5in wide) —
+// even when the directive sets an explicit size.
+func TestGenerateTypImageCap(t *testing.T) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 300, 3000))); err != nil {
+		t.Fatal(err)
+	}
+	images := map[string][]byte{"tall.png": buf.Bytes()}
+	for _, src := range []string{
+		"? Вопрос:\n(img tall.png)\n! Ответ\n",        // auto size: 600px@120dpi = 5in tall
+		"? Вопрос:\n(img h=10in tall.png)\n! Ответ\n", // explicit
+	} {
+		typ := typstdoc.GenerateTyp(parse(t, src), images, typstdoc.Options{})
+		if !strings.Contains(typ, "width: 5.08mm, height: 50.8mm") {
+			t.Errorf("tall image not capped to 2in in %q:\n%s", src, typ)
+		}
+	}
+}
+
+// The mobile device swaps the A4 page for the phone-screen-sized one and caps
+// images to its narrower text column.
+func TestGenerateTypMobile(t *testing.T) {
+	typ := typstdoc.GenerateTyp(parse(t, sample), nil, typstdoc.Options{Device: typstdoc.Mobile})
+	if !strings.Contains(typ, "width: 99.89mm, height: 217.17mm") {
+		t.Errorf("mobile page size missing:\n%s", typ)
+	}
+	if strings.Contains(typ, `paper: "a4"`) {
+		t.Errorf("mobile source still sets a4:\n%s", typ)
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 3000, 300))); err != nil {
+		t.Fatal(err)
+	}
+	images := map[string][]byte{"wide.png": buf.Bytes()}
+	typ = typstdoc.GenerateTyp(parse(t, "? Вопрос:\n(img w=10in wide.png)\n! Ответ\n"), images, typstdoc.Options{Device: typstdoc.Mobile})
+	// text column = 99.89mm − 2×7.5mm = 84.89mm
+	if !strings.Contains(typ, "width: 84.89mm") {
+		t.Errorf("wide image not capped to the mobile text column:\n%s", typ)
+	}
+}
+
+// End-to-end: the same typst (wasm) pool the server uses turns the source into a
+// real PDF. This is what catches a typst syntax error in a generated expression.
+func TestExportPDF(t *testing.T) {
+	fonts, err := handout.BundledFonts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache := os.Getenv("XY_WASM_CACHE")
+	if cache == "" {
+		cache = filepath.Join(os.TempDir(), "xy-wazero-cache")
+	}
+	pool, err := typstwasm.NewPool(context.Background(), fonts, cache, 1)
+	if err != nil {
+		t.Fatalf("typst pool: %v", err)
+	}
+	defer pool.Close()
+
+	// Everything at once: headings, markup, an image, a link, a page break, small
+	// caps, a numbered source list — if any expression is malformed, typst says so.
+	src := sample + `
+? Вопрос с картинкой:
+(img w=200 pic.png)
+И (scкапителью), и ~зачёркнутым~, и (PAGEBREAK)разрывом.
+! Ответ
+^
+- Первый источник
+- https://example.com/second
+`
+	pdf, err := typstdoc.Export(context.Background(), parse(t, src),
+		map[string][]byte{"pic.png": testPNG(t)}, pool, typstdoc.Options{})
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if !bytes.HasPrefix(pdf, []byte("%PDF")) {
+		t.Fatalf("not a PDF (%d bytes)", len(pdf))
+	}
+	t.Logf("rendered %d-byte PDF", len(pdf))
+}
+
+// testPNG is a 2×1 PNG (the smallest thing the image pipeline will accept).
+func testPNG(t *testing.T) []byte {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", "pic.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+const siSample = `#B 1/16 финала. 1 бой
+
+#R Открытый раунд
+
+#T Острова Тихого океана
+@ Александр Рождествин
+/ вся тема про острова.
+
+№ 10
+? Первый вопрос.
+! Гавайи.
+
+№ 20
+? Второй вопрос.
+! Сахалин.
+
+#T Холодное оружие
+
+№ 10
+? Третий вопрос.
+! Швейцарский нож.
+`
+
+// The СИ layout the docx export gained has to reach the PDF too: a theme is a
+// heading rather than a dropped element, and a question is labelled by its bare
+// point value and runs on from it.
+func TestGenerateTypSI(t *testing.T) {
+	doc := fsource.Parse(siSample, "si")
+	typ := typstdoc.GenerateTyp(doc, nil, typstdoc.Options{Game: "si"})
+
+	for _, want := range []string{
+		`text("1/16 финала. 1 бой")`,
+		`text("Открытый раунд")`,
+		`text("Тема 1. Острова Тихого океана")`,
+		`text("Тема 2. Холодное оружие")`,
+		`text("Александр Рождествин")`, // the theme's own author
+		`weight: "bold", "10. "`,       // the bare point value, not «Вопрос 1.»
+	} {
+		if !strings.Contains(typ, want) {
+			t.Errorf("generated source is missing %q\n---\n%s", want, typ)
+		}
+	}
+	if strings.Contains(typ, "Вопрос 1. ") {
+		t.Errorf("СИ questions must not carry the ЧГК question label\n---\n%s", typ)
+	}
+}
+
+// A brain game's battles reach the PDF as headings, and a troika's themes as
+// an SI theme does, each question under its bare number.
+func TestGenerateTypBattles(t *testing.T) {
+	brain := typstdoc.GenerateTyp(fsource.Parse("#B Бой 1\n\n? Раз?\n! А\n\n#B Бой 2\n\n? Два?\n! Б\n", "brain"), nil, typstdoc.Options{Game: "brain"})
+	for _, want := range []string{`text("Бой 1")`, `text("Бой 2")`} {
+		if !strings.Contains(brain, want) {
+			t.Errorf("brain source is missing %q\n---\n%s", want, brain)
+		}
+	}
+	if n := strings.Count(brain, `"Вопрос 1. "`); n != 2 {
+		t.Errorf("«Вопрос 1.» %d times, want once per battle\n---\n%s", n, brain)
+	}
+	troika := typstdoc.GenerateTyp(fsource.Parse("#B Бой 1\n\n#T Тема 1. Числа\n\n№ 1\n? Раз\n! Один\n", "troika"), nil, typstdoc.Options{Game: "troika"})
+	for _, want := range []string{`text("Бой 1")`, `text("Тема 1. Числа")`, `weight: "bold", "1. "`} {
+		if !strings.Contains(troika, want) {
+			t.Errorf("troika source is missing %q\n---\n%s", want, troika)
+		}
+	}
+}
+
+// A handout on lines of its own is set apart: the caption, then the handout in
+// a frame, and the question text in a block of its own below. One in the
+// middle of a sentence stays a part of the text.
+func TestGenerateTypHandoutFrame(t *testing.T) {
+	src := "? [Раздаточный материал:\nстрока один\nстрока два\n]\nЧто это?\n! Ответ\n\n" +
+		"? Взгляните на [Раздаточный материал: АБВ] и ответьте.\n! Ответ\n"
+	typ := typstdoc.GenerateTyp(parse(t, src), nil, typstdoc.Options{})
+	caption := strings.Index(typ, `text(size: 10pt, "Раздаточный материал")`)
+	frame := strings.Index(typ, "stroke: 1pt")
+	text := strings.Index(typ, `это?")`)
+	if caption < 0 || frame < caption || text < frame {
+		t.Fatalf("want caption, frame, text in that order\n---\n%s", typ)
+	}
+	if strings.Count(typ, "stroke:") != 1 {
+		t.Errorf("a handout inside a sentence should not be framed\n---\n%s", typ)
+	}
+	if !strings.Contains(typ, "[Раздаточный материал: АБВ]") {
+		t.Errorf("the mid-sentence handout lost its bracket\n---\n%s", typ)
+	}
+}
+
+func TestGenerateTypCommentFirst(t *testing.T) {
+	order := func(opts typstdoc.Options) []int {
+		typ := typstdoc.GenerateTyp(parse(t, sample), nil, opts)
+		return []int{strings.Index(typ, "Комментарий:"), strings.Index(typ, "Ответ:"), strings.Index(typ, "Зачёт:")}
+	}
+	if o := order(typstdoc.Options{}); !(o[1] < o[2] && o[2] < o[0]) {
+		t.Errorf("default: comment at %d, answer at %d, zachet at %d", o[0], o[1], o[2])
+	}
+	if o := order(typstdoc.Options{CommentFirst: true}); !(0 <= o[0] && o[0] < o[1] && o[1] < o[2]) {
+		t.Errorf("comment first: comment at %d, answer at %d, zachet at %d", o[0], o[1], o[2])
+	}
+}

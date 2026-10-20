@@ -51,7 +51,7 @@ export function createBell(board: Board, ui: BellUI, deps: BellDeps): Bell {
     mention?: boolean;
     mention_reply?: boolean;
     reply_to_id?: number | null;
-    payload_enc?: string;
+    payload?: string;
     author_user_id?: number | null;
     author_username?: string | null;
   }
@@ -120,7 +120,7 @@ export function createBell(board: Board, ui: BellUI, deps: BellDeps): Bell {
         el("div", { class: "notif-row-meta", text: `${eventAuthor(ev, board.state.me, board.state.memberNames)} ${verb} · ${deps.cardTitle(card)} · ${when}` }));
       if (ev.type === "comment" || ev.type === "reaction") {
         let opened: OpenedPayload = UNREADABLE;
-        try { opened = await openPayload(deps.mustDK(), ev.type, ev.payload_enc); } catch (_) {}
+        try { opened = await openPayload(deps.mustDK(), ev.type, ev.payload); } catch (_) {}
         const preview = commentText(opened);
         bodyWrap.append(el("div", { class: "notif-row-preview u-clip-fade", text: deriveTitle(preview, PREVIEW_CHARS) }));
       }

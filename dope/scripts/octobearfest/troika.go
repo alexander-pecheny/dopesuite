@@ -18,8 +18,8 @@ import (
 	"dope/dope/domain/resolver"
 	dopestrings "dope/i18nstrings"
 
-	corestrings "pecheny.me/dopecore/i18nstrings"
-	"pecheny.me/dopecore/idstr"
+	corestrings "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // buildTroika plays the transcript through the same writes a host's taps make:

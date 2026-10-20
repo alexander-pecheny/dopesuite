@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"pecheny.me/dopecore/sqlitex"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 )
 
 // recorder is a testing.TB that keeps the failures instead of failing.

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // The per-match Protocol state blob (matches.state_json, ADR-0002). Participant

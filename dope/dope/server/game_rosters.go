@@ -15,7 +15,7 @@ import (
 	"dope/dope/storage/festwrite"
 	"dope/dope/web/route"
 
-	"pecheny.me/dopecore/idstr"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // A Game's roster tab reads who the Game seats and the roster each team plays

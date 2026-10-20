@@ -1,0 +1,177 @@
+package typstdoc
+
+import (
+	"strconv"
+	"strings"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/i18n"
+	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/inline"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+)
+
+// The defaults below are template.docx's, in mm and pt.
+const (
+	// Noto Sans's ascender and descender, in em.
+	notoTopEdgeEm    = 1.07
+	notoBottomEdgeEm = -0.29
+
+	docxMarginVMM = 25.4  // 1in
+	docxMarginHMM = 19.05 // 0.75in
+
+	docxBodyPt     = 12
+	docxHeading1Pt = 16
+	docxHeading2Pt = 14
+	docxHeading3Pt = 13
+	docxSourcePt   = 10
+
+	docxHeadingAbovePt    = 12
+	docxHeadingBelowPt    = 3
+	docxQuestionAbovePt   = 18
+	docxAnswerAbovePt     = 6
+	docxThemeAbovePt      = 24
+	docxSIQuestionAbovePt = 12
+	// The shrunk source block starts one body line below: 2pt × Noto Sans's
+	// 1.362em line box (ascender 1.069 + descender 0.293).
+	docxSourceGapPt = 2.72
+
+	floatBits = 64
+)
+
+// Config is pdf_config.toml: the typography and page setup a project can
+// override with --pdf_config. The defaults are template.docx's, transcribed
+// (twips → mm/pt), so the PDF and the .docx lay out the same.
+//
+// TopEdge and BottomEdge are load-bearing, not taste. By default typst measures
+// a line box from cap-height to baseline, so a block's height leaves out its
+// descenders — fine when blocks are separated by par.spacing, ruinous here,
+// because Word's paragraphs are flush and consecutive blocks would then overlap
+// by a descender. Fixed em edges keep the line box the same whatever the font;
+// the defaults are Noto Sans's own metrics, so its output is unchanged.
+type Config struct {
+	TopEdge, BottomEdge, LeadingPt           float64
+	MarginVMM, MarginHMM                     float64
+	BodyPt, Heading1Pt, Heading2Pt, SourcePt float64
+	HeadingAbove, HeadingBelow               float64
+	QuestionAbove, AnswerAbove, SourceGap    float64
+	// SI only: a theme is a Heading 3, and its questions sit tighter under it
+	// than a ChGK question does under its own label.
+	Heading3Pt, ThemeAbove, SIQuestionAbove float64
+}
+
+// DefaultConfig is the pdf_config.toml chgksuite ships.
+func DefaultConfig() Config {
+	return Config{
+		TopEdge: notoTopEdgeEm, BottomEdge: notoBottomEdgeEm, LeadingPt: 0,
+		MarginVMM: docxMarginVMM, MarginHMM: docxMarginHMM,
+		BodyPt: docxBodyPt, Heading1Pt: docxHeading1Pt, Heading2Pt: docxHeading2Pt, SourcePt: docxSourcePt,
+		HeadingAbove: docxHeadingAbovePt, HeadingBelow: docxHeadingBelowPt,
+		QuestionAbove: docxQuestionAbovePt, AnswerAbove: docxAnswerAbovePt,
+		Heading3Pt: docxHeading3Pt, ThemeAbove: docxThemeAbovePt, SIQuestionAbove: docxSIQuestionAbovePt,
+		SourceGap: docxSourceGapPt,
+	}
+}
+
+// Options are the switches `compose pdf` takes.
+type Options struct {
+	// Device is --device: Desktop is the A4 layout that mirrors the .docx,
+	// Mobile a page sized for a phone screen. Empty means Desktop.
+	Device Device
+	// Config is --pdf_config. The zero value is DefaultConfig.
+	Config Config
+	// Font is --font. Empty is the bundled Noto Sans, the only face the wasm
+	// typst has loaded unless the caller loaded more.
+	Font string
+	// Language is --language, which typst hyphenates and quotes by. Empty is ru.
+	Language string
+	// NoBreak is --replace_no_break_spaces / --replace_no_break_hyphens.
+	NoBreak inline.NoBreak
+	// LabelsFile is --labels_file: a labels TOML of one's own, in place of the
+	// language's.
+	LabelsFile string
+	// CommentFirst is --comment_first: the comment comes before the answer.
+	CommentFirst bool
+	// Game is --game: "si"/"troika" lay the package out as SI, with themes,
+	// battles and rounds as headings. See docx.Options.Game.
+	Game string
+}
+
+// siMode reports whether the game lays a package out as SI does.
+func (o Options) siMode() bool { return o.Game == "si" || o.Game == "troika" }
+
+// heads reports whether the game prints a battle, round or theme line as a
+// heading. A brain game prints its battles, which chgksuite drops: without
+// them its questions read 1 to 5 over and over with nothing in between.
+func (o Options) heads(elType string) bool {
+	return o.siMode() || (elType == "battle" && o.Game == "brain")
+}
+
+func (o Options) resolve() Options {
+	if o.Config == (Config{}) {
+		o.Config = DefaultConfig()
+	}
+	if o.Device == "" {
+		o.Device = Desktop
+	}
+	if o.Font == "" {
+		o.Font = fontFamily
+	}
+	if o.Language == "" {
+		o.Language = i18n.DefaultLanguage
+	}
+	return o
+}
+
+// lang is typst's two-letter language tag, which is what chgksuite passes it.
+func lang(language string) string {
+	if len(language) > 2 {
+		return language[:2]
+	}
+	return language
+}
+
+// ParseConfig reads the subset of TOML pdf_config.toml is: tables of numbers.
+// A key the file leaves out keeps its default.
+func ParseConfig(text string) (Config, error) {
+	c := DefaultConfig()
+	fields := map[string]*float64{
+		"line_box.top_edge": &c.TopEdge, "line_box.bottom_edge": &c.BottomEdge,
+		"line_box.leading_pt": &c.LeadingPt,
+		"page.margin_v_mm":    &c.MarginVMM, "page.margin_h_mm": &c.MarginHMM,
+		"font.body_pt": &c.BodyPt, "font.heading1_pt": &c.Heading1Pt,
+		"font.heading2_pt": &c.Heading2Pt, "font.source_pt": &c.SourcePt,
+		"spacing.heading_above": &c.HeadingAbove, "spacing.heading_below": &c.HeadingBelow,
+		"spacing.question_above": &c.QuestionAbove, "spacing.answer_above": &c.AnswerAbove,
+		"spacing.source_gap":  &c.SourceGap,
+		"font.heading3_pt":    &c.Heading3Pt,
+		"spacing.theme_above": &c.ThemeAbove, "spacing.si_question_above": &c.SIQuestionAbove,
+	}
+	table := ""
+	for n, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if i := strings.IndexByte(line, '#'); i >= 0 {
+			line = strings.TrimSpace(line[:i])
+		}
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			table = strings.TrimSpace(line[1 : len(line)-1])
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			return c, corei18n.User(chgkstrings.Default.Docs.Typst.LineNotPair(strconv.Itoa(n + 1)))
+		}
+		field, known := fields[table+"."+strings.TrimSpace(key)]
+		if !known {
+			continue
+		}
+		v, err := strconv.ParseFloat(strings.TrimSpace(value), floatBits)
+		if err != nil {
+			return c, corei18n.User(chgkstrings.Default.Docs.Typst.LineError(strconv.Itoa(n+1), err.Error()))
+		}
+		*field = v
+	}
+	return c, nil
+}

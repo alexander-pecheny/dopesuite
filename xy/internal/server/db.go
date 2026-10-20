@@ -2,18 +2,24 @@ package server
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
-	"pecheny.me/dopecore/schema"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/schema"
 )
 
 // migrations is xy's schema as a list (dopecore/schema): each step runs once
 // and is recorded in schema_versions; a new step takes the next number and
 // goes at the end. The whole M1 schema is version 1.
 //
-// Content columns suffixed `_enc` hold client-side encryption envelopes (opaque
-// BLOBs, base64 over the wire). Everything else is plaintext structural metadata
-// the server needs to order, sync, and authorize (the trust model — see AGENTS.md).
+// The content columns (cards.description, lists.title, labels.name,
+// timeline_events.payload and the rest; v29 names them) each hold an Envelope:
+// an opaque BLOB that is base64 over the wire and that the server never opens.
+// Whether an Envelope is encrypted is a property of its board (its keymeta), not
+// of the column. Everything else is plaintext structural metadata the server
+// needs to order, sync and authorize (the trust model, see AGENTS.md). Steps
+// before v29 still say `_enc`, because that is what the columns were called
+// when they ran.
 var migrations = []schema.Migration{
 	{Version: 1, Name: "the M1 schema", Up: schema.Exec(`
 -- ===== auth (ported from dope) =====
@@ -274,7 +280,7 @@ alter table users add column default_author text;`)},
 	// question — 1–3 keywords that identify it in a list faster than the opening
 	// words of its text. Deliberately NOT a 4s marker: the alias is xy card
 	// metadata, and the 4s markers mirror chgksuite's table byte-for-byte (see
-	// internal/chgk/fsource), so a marker of our own would either break import /
+	// chgksuite/fsource), so a marker of our own would either break import /
 	// export parity or leak the alias into exported documents. NULL means no alias.
 	{Version: 12, Name: "cards.alias_enc", Up: schema.Exec(`
 alter table cards add column alias_enc blob;`)},
@@ -753,9 +759,159 @@ pragma foreign_keys=on;`)},
 	{Version: 28, Name: "comment_first on lists and list_groups", Up: schema.Exec(`
 alter table lists add column comment_first integer not null default 0;
 alter table list_groups add column comment_first integer not null default 0;`)},
+	// v29 drops the `_enc` suffix: a local board keeps plaintext Envelopes in the
+	// same columns. RENAME COLUMN only rewrites the schema, so no table is copied.
+	// boards.name_enc and boards.schema_version go: every board has had a
+	// plaintext name since v10's backfill, and the step refuses to run otherwise.
+	{Version: 29, Name: "content columns without _enc", Up: migrateV29},
+	// v30 admits appeals (ADR-0021): a List typed 'appeals' with its settings in
+	// lists.meta, Cards of kind 'appeal', the board's rating token, and one vote
+	// per member per card, its value an Envelope. Both CHECKs are rebuilt the way
+	// v24 and v27 rebuilt them.
+	{Version: 30, Name: "appeals", Up: schema.Exec(`
+pragma foreign_keys=off;
+create table lists_v30(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  type text not null check (type in ('normal','test','si','appeals')) default 'normal',
+  title blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  group_id integer references list_groups(id),
+  comment_first integer not null default 0,
+  meta blob
+);
+insert into lists_v30(id, board_id, type, title, rank, created_at, updated_at, deleted_at, group_id, comment_first)
+  select id, board_id, type, title, rank, created_at, updated_at, deleted_at, group_id, comment_first from lists;
+drop table lists;
+alter table lists_v30 rename to lists;
+create index if not exists idx_lists_board on lists(board_id);
+create index if not exists idx_lists_group on lists(group_id);
+
+create table cards_v30(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer not null references lists(id) on delete cascade,
+  kind text not null check (kind in ('normal','question','test','meta','heading','other','theme','handouts_preamble','appeal')) default 'normal',
+  description blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  handout_meta blob,
+  alias blob,
+  seen blob
+);
+insert into cards_v30(id, board_id, list_id, kind, description, rank, created_at, updated_at, deleted_at, handout_meta, alias, seen)
+  select id, board_id, list_id, kind, description, rank, created_at, updated_at, deleted_at, handout_meta, alias, seen from cards;
+drop table cards;
+alter table cards_v30 rename to cards;
+create index if not exists idx_cards_list on cards(list_id);
+create index if not exists idx_cards_board on cards(board_id);
+
+alter table boards add column rating_token blob;
+
+create table if not exists card_votes(
+  card_id integer not null references cards(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  value blob not null,
+  updated_at text not null,
+  primary key (card_id, user_id)
+);
+pragma foreign_keys=on;`)},
+	// v31 gives a tour its handout page setup (handoutpage.go): chgksuite's
+	// handout flags as JSON, on the list or on its group, like comment_first.
+	{Version: 31, Name: "handout_page on lists and list_groups", Up: schema.Exec(`
+alter table lists add column handout_page text;
+alter table list_groups add column handout_page text;`)},
+	// v32 admits brain and troika (ADR-0022): a List may be typed 'brain' or
+	// 'troika', and a Card may be a 'battle' (a `#B` line) or a 'troika_theme'
+	// (a theme whose ladder is 1, 2, 3). Both CHECKs are rebuilt the way v30
+	// rebuilt them.
+	{Version: 32, Name: "brain and troika", Up: schema.Exec(`
+pragma foreign_keys=off;
+create table lists_v32(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  type text not null check (type in ('normal','test','si','troika','brain','appeals')) default 'normal',
+  title blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  group_id integer references list_groups(id),
+  comment_first integer not null default 0,
+  meta blob,
+  handout_page text
+);
+insert into lists_v32(id, board_id, type, title, rank, created_at, updated_at, deleted_at, group_id, comment_first, meta, handout_page)
+  select id, board_id, type, title, rank, created_at, updated_at, deleted_at, group_id, comment_first, meta, handout_page from lists;
+drop table lists;
+alter table lists_v32 rename to lists;
+create index if not exists idx_lists_board on lists(board_id);
+create index if not exists idx_lists_group on lists(group_id);
+
+create table cards_v32(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer not null references lists(id) on delete cascade,
+  kind text not null check (kind in ('normal','question','test','meta','heading','other','theme','troika_theme','battle','handouts_preamble','appeal')) default 'normal',
+  description blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  handout_meta blob,
+  alias blob,
+  seen blob
+);
+insert into cards_v32(id, board_id, list_id, kind, description, rank, created_at, updated_at, deleted_at, handout_meta, alias, seen)
+  select id, board_id, list_id, kind, description, rank, created_at, updated_at, deleted_at, handout_meta, alias, seen from cards;
+drop table cards;
+alter table cards_v32 rename to cards;
+create index if not exists idx_cards_list on cards(list_id);
+create index if not exists idx_cards_board on cards(board_id);
+pragma foreign_keys=on;`)},
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }
+
+const migrateV29Renames = `
+alter table lists rename column title_enc to title;
+alter table list_groups rename column name_enc to name;
+alter table cards rename column description_enc to description;
+alter table cards rename column handout_meta_enc to handout_meta;
+alter table cards rename column alias_enc to alias;
+alter table cards rename column seen_enc to seen;
+alter table labels rename column name_enc to name;
+alter table labels rename column color_enc to color;
+alter table timeline_events rename column payload_enc to payload;
+alter table attachments rename column filename_enc to filename;
+alter table test_sessions rename column meta_enc to meta;
+alter table tour_declarations rename column names_enc to names;
+alter table boards drop column name_enc;
+alter table boards drop column schema_version;`
+
+func migrateV29(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var legacy int
+	if err := tx.QueryRow(`select count(*) from boards where schema_version < 2 or name is null`).Scan(&legacy); err != nil {
+		return err
+	}
+	if legacy > 0 {
+		return fmt.Errorf("%d boards still keep their name in name_enc (schema_version 1); open each once with a build before v29 so the name is backfilled", legacy)
+	}
+	if _, err := tx.Exec(migrateV29Renames); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 // migrateV18Sessions is v18's data half: one session per test card, its
 // comments and its labels' Playings rebound, then the test lists demoted.

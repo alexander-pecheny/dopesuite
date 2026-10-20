@@ -1,0 +1,16 @@
+# The login page's title and everything the handshake can refuse with.
+[page]
+title = "Вход — Вопрос года"
+
+[login]
+fields_required = "Введите логин и пароль."
+invalid = "Неверный логин или пароль."
+
+[tg]
+code_missing = "Этот код никто не ждёт. Начните вход заново."
+not_configured = "Вход через телеграм на этом сайте не настроен."
+telegram_taken = "Этот телеграм уже привязан к другому пользователю."
+
+[username]
+format = "Логин — от 3 до 64 латинских букв, цифр и знаков . _ -"
+reserved = "Этот логин занят."

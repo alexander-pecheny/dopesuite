@@ -11,7 +11,7 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 
-	corei18n "pecheny.me/dopecore/i18nstrings"
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // Troikas are assembled out of fest players: they are Participants the rating

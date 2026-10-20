@@ -1,0 +1,12 @@
+# Words several screens share.
+home = "Главная"
+site_name = "Вопрос года"
+title_suffix = '{{.page}} — {{.site}}'
+error_title = "Не получилось"
+to_home = "На главную"
+saved = "Сохранено."
+save = "Сохранить"
+add = "Добавить"
+remove = "Удалить"
+rating_id = "Ваш ID на рейтинге (rating.chgk.info)"
+rating_id_invalid = "ID на рейтинге — это число со страницы игрока на rating.chgk.info."

@@ -23,11 +23,11 @@ func postID(t *testing.T, c *apiClient, path string, body any) int64 {
 }
 
 func makeList(t *testing.T, c *apiClient, boardID int64, rank string) int64 {
-	return postID(t, c, "/api/boards/"+itoa(boardID)+"/lists", map[string]string{"title_enc": enc("l"), "rank": rank})
+	return postID(t, c, "/api/boards/"+itoa(boardID)+"/lists", map[string]string{"title": enc("l"), "rank": rank})
 }
 
 func makeCard(t *testing.T, c *apiClient, listID int64) int64 {
-	return postID(t, c, "/api/lists/"+itoa(listID)+"/cards", map[string]string{"description_enc": enc("question text"), "rank": "m"})
+	return postID(t, c, "/api/lists/"+itoa(listID)+"/cards", map[string]string{"description": enc("question text"), "rank": "m"})
 }
 
 // makeBoardCard provisions board → list → card and returns their ids.
@@ -44,7 +44,7 @@ func uploadAttachment(t *testing.T, c *apiClient, ts *httptest.Server, cardID in
 	t.Helper()
 	body := new(bytes.Buffer)
 	mw := multipart.NewWriter(body)
-	_ = mw.WriteField("meta", `{"filename_enc":"`+enc("f.webp")+`","mime":"image/webp"}`)
+	_ = mw.WriteField("meta", `{"filename":"`+enc("f.webp")+`","mime":"image/webp"}`)
 	fw, _ := mw.CreateFormFile("blob", "blob")
 	fw.Write(cipher)
 	mw.Close()
@@ -129,7 +129,7 @@ func TestReapDestroysExpiredTombstones(t *testing.T) {
 	doomedRef := blobRef(t, srv, attID)
 	l2ID := makeList(t, c, bID, "n")
 	resp := c.do("POST", "/api/boards/"+itoa(bID)+"/list-groups", map[string]any{
-		"name_enc": enc("g"), "list_ids": []int64{l1ID, l2ID},
+		"name": enc("g"), "list_ids": []int64{l1ID, l2ID},
 	})
 	mustStatus(t, resp, 200)
 
@@ -208,10 +208,10 @@ func TestReapKeepsThreadAnchors(t *testing.T) {
 		}
 		return id
 	}
-	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{"payload_enc": enc("root")}), 204)
+	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{"payload": enc("root")}), 204)
 	rootID := lastCommentID()
 	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{
-		"payload_enc": enc("reply"), "reply_to_id": rootID,
+		"payload": enc("reply"), "reply_to_id": rootID,
 	}), 204)
 	replyID := lastCommentID()
 	mustStatus(t, c.do("DELETE", "/api/comments/"+itoa(rootID), nil), 204)
@@ -234,7 +234,7 @@ func TestReapKeepsThreadAnchors(t *testing.T) {
 		t.Fatal("thread not reaped after all replies expired")
 	}
 
-	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{"payload_enc": enc("after")}), 204)
+	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{"payload": enc("after")}), 204)
 	if nextID := lastCommentID(); nextID <= replyID {
 		t.Fatalf("comment id %d reuses reaped id space (max was %d)", nextID, replyID)
 	}
@@ -354,14 +354,14 @@ func TestTombstoneNeverRestamps(t *testing.T) {
 	}
 }
 
-// Comment deletion bypasses tombstone() (it must also scrub payload_enc), so
+// Comment deletion bypasses tombstone() (it must also scrub payload), so
 // its hand-written stamp carries its own only-if-live guard — verify a
 // re-delete request can't reset a comment tombstone's reap clock either.
 func TestCommentRedeleteKeepsReapClock(t *testing.T) {
 	ts, srv := newTestServer(t)
 	c := registerUser(t, srv, ts, 771007, "comment-restamp-user")
 	_, _, cardID := makeBoardCard(t, c, "comment-restamp")
-	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{"payload_enc": enc("bye")}), 204)
+	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{"payload": enc("bye")}), 204)
 	var evID int64
 	if err := srv.db.QueryRow(
 		`select max(id) from timeline_events where card_id = ? and type = 'comment'`, cardID).Scan(&evID); err != nil {

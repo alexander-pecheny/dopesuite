@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyenvelope"
 )
 
 // The codec for a Timeline event's encrypted payload, the twin of
@@ -242,9 +244,9 @@ func DecodePayload(kind, raw string) EventPayload {
 	return UnreadablePayload{}
 }
 
-// SealPayload encodes and encrypts: what goes into payload_enc, desc_event_enc
-// or event_payload_enc.
-func (dk DataKey) SealPayload(kind string, p EventPayload) (string, error) {
+// SealPayload encodes and encrypts: what goes into payload, desc_event
+// or event_payload.
+func SealPayload(dk xyenvelope.DataKey, kind string, p EventPayload) (string, error) {
 	plain, err := EncodePayload(kind, p)
 	if err != nil {
 		return "", err
@@ -253,7 +255,7 @@ func (dk DataKey) SealPayload(kind string, p EventPayload) (string, error) {
 }
 
 // OpenPayload decrypts and decodes; a field that will not open is unreadable.
-func (dk DataKey) OpenPayload(kind, b64 string) EventPayload {
+func OpenPayload(dk xyenvelope.DataKey, kind, b64 string) EventPayload {
 	plain, err := dk.DecField(b64)
 	if err != nil {
 		return UnreadablePayload{}

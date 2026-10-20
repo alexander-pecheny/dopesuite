@@ -14,8 +14,8 @@ import (
 	"os"
 	"strings"
 
-	"pecheny.me/dopecore/authcred"
-	"pecheny.me/dopecore/session"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // AdminUsername gates the /admin tooling. Defaults to "pecheny"; override with

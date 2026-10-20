@@ -14,19 +14,26 @@ One ordered column of Cards on a Board.
 One question, one Theme, or a note. It holds encrypted content in 4s form, plus Labels, a Timeline, Attachments and an optional Alias.
 
 **Card Kind**:
-What a Card is: a question, a Theme, a Заголовок, a Метаинформация note, a «Другое» note, or a tour's handouts preamble. Two older kinds survive from imports and from xy-cli's default: `normal` and `test`. The kind decides what the board does with the Card. A question or a Theme gets a number, is counted in the List's head, holds question fields, and is what a Test Session plays. A Заголовок restarts the Theme count. Every kind but the handouts preamble goes into the export. One Theme makes its whole tour export as Своя игра. Only a question's Handout goes into the раздатки, and only a question has Versions. Changing a Card's kind rewrites nothing in its text. The list of kinds and these rules live in one table (`internal/cardkind`, read by the browser as `cardkind.ts`).
+What a Card is: a question, a Theme (СИ or тройка), a Бой, a Заголовок, a Метаинформация note, a «Другое» note, or a tour's handouts preamble. Two older kinds survive from imports and from xy-cli's default: `normal` and `test`. The kind decides what the board does with the Card. A question or a Theme gets a number, is counted in the List's head, holds question fields, and is what a Test Session plays. A Заголовок or a Бой restarts the Theme count, and in a брейн tour a Бой or a Заголовок restarts the question count too. Every kind but the handouts preamble goes into the export. One Theme makes its whole tour export as its game (Своя игра or тройка); without a Theme, one Бой makes it брейн. Only a question's Handout goes into the раздатки, and only a question has Versions. Changing a Card's kind rewrites nothing in its text. The list of kinds and these rules live in one table (`chgksuite/cardkind`, read by the browser as `cardkind.ts`).
 _Avoid_: card type in code and docs, since Type is the List's word (the screen still says «Тип карточки»); category
 
 **Theme (тема СИ)**:
 One Своя игра theme, held as a single Card. It has a name, optionally an author and a comment of its own, and a **Ladder** of questions. Those questions are ordinary questions in every respect except their number, which is their point value. A theme is written, tested and judged as a whole: if the 30 turns out to be easier than the 20, that is a fault of the theme rather than of either question. That is why a theme is one Card and not five (ADR-0018).
 _Avoid_: round, category, block
 
+**Тройка theme (тема тройки)**:
+A Theme of a тройка: the same Card with a Ladder of three questions numbered 1, 2 and 3 instead of point values (ADR-0022).
+
+**Бой**:
+A `#B` Card: one battle of a брейн, a тройка or a Своя игра. It is a heading, not a container: the questions or Themes after it belong to it until the next Бой. In a брейн tour each Бой numbers its questions anew (ADR-0022).
+_Avoid_: match, game, which are dope's words for the same sitting
+
 **Ladder**:
-The questions of a Theme, in order, each under its own `№`. The order is what determines the points. The first question is worth whatever its `№` says. Moving a question up swaps its CONTENT with its neighbour's, while the `№` values themselves stay where they are. That is what lets a theme numbered 10/30/50 by an import, or one that runs past 50, survive being reordered. After the five that are actually played come the rungs `запас1` and `запас2`. A blank rung is valid 4s and holds its position, which is what lets somebody write the 50 before the 10.
+The questions of a Theme, in order, each under its own `№`. The order is what determines the points, or in a тройка the place. Which values a new Theme is written with is its kind's: 10–50 for СИ, 1–3 for a тройка. The first question is worth whatever its `№` says. Moving a question up swaps its CONTENT with its neighbour's, while the `№` values themselves stay where they are. That is what lets a theme numbered 10/30/50 by an import, or one that runs past 50, survive being reordered. After the five that are actually played come the rungs `запас1` and `запас2`. A blank rung is valid 4s and holds its position, which is what lets somebody write the 50 before the 10.
 _Avoid_: treating the order of the slots as separate from the points. They are the same thing.
 
 **List Type**:
-What a List is meant to hold: either вопросы ОД or темы СИ. It only decides which kind of Card the «Добавить карточку» button creates, and nothing else. Both kinds are still offered on every Card, a List containing a mixture of them is perfectly legal, and changing the type rewrites nothing.
+What a List is meant to hold: вопросы ОД, темы СИ, темы тройки or вопросы брейна (or a tournament's appeals). It only decides which kind of Card the «Добавить карточку» button creates, and nothing else. Both kinds are still offered on every Card, a List containing a mixture of them is perfectly legal, and changing the type rewrites nothing.
 
 **Alias**:
 A Card's own short display label, stored in its own encrypted column. It is deliberately not a 4s marker, because the markers mirror chgksuite byte for byte, and inventing a new one would break parity on import and export.
@@ -121,7 +128,7 @@ _Avoid_: password, which is the account's, and master password.
 A question the Board asks its owner once a month, on a device that holds the key but not the words: either type the Board Passphrase, or set a new one. It is local to the device, it never appears while Тест-режим is on, and it has no «Позже» button, because the only two ways out of it are the two ways the passphrase becomes known again. Members who are not the owner are never asked; they ask the owner.
 
 **Envelope**:
-The single wire format for ciphertext: `magic("xy1") | alg | nonce | ct+tag`, base64-encoded inside JSON. `crypto.js` is the only file that owns it. Each board has a random data key (DK) that does the encrypting, and the passphrase-derived KEK only wraps the DK, so changing a passphrase re-wraps it without re-encrypting anything.
+The single wire format for ciphertext: `magic("xy1") | alg | nonce | ct+tag`, base64-encoded inside JSON. `crypto.js` is the only file that owns it. Each board has a random data key (DK) that does the encrypting, and the passphrase-derived KEK only wraps the DK, so changing a passphrase re-wraps it without re-encrypting anything. Every content column (`cards.description`, `lists.title`, `labels.name`, `timeline_events.payload` and the rest) holds one, base64 in the JSON under the same name. Whether an Envelope is encrypted is a property of its Board (the keymeta), not of the column, so the columns have no `_enc` suffix.
 
 **Outbox**:
 The queue of mutations made while offline, in `sync.js`. Anything created offline gets a negative temporary id, which is remapped to the real id when the queue is flushed.

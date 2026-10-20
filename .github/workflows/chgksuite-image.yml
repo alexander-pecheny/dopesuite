@@ -7,10 +7,11 @@ name: chgksuite image
 #
 # Cut by pushing a CalVer tag, e.g. `chgksuite/2026.09.24` (`.2` for a second
 # one the same day), like xy's releases (docs/adr/0003). No GitHub release is
-# created: the image is the artifact.
+# created: the image is the artifact. Tags `chgksuite/vX.Y.Z` are Go module
+# versions and do not trigger this.
 on:
   push:
-    tags: ["chgksuite/*"]
+    tags: ["chgksuite/2*"]
   # Rebuild without moving the tag; pick the tag as the ref.
   workflow_dispatch:
 
@@ -26,12 +27,12 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version-file: xy/go.mod
+          go-version-file: chgksuite/go.mod
 
-      # Only what the binary is built from; the full xy suite belongs to xy's
-      # own releases, and it needs the typst.wasm build this image does without.
+      # Only what the binary is built from; the full suite needs the typst.wasm
+      # build this image does without.
       - name: Test
-        run: go -C xy test ./cmd/chgksuite/ ./internal/chgk/credits/ ./internal/chgk/chgkimport/ ./internal/chgk/fsource/ ./internal/chgk/textparse/ ./internal/chgk/docxread/ ./internal/chgk/docread/...
+        run: go -C chgksuite test ./cmd/chgksuite/ ./credits/ ./chgkimport/ ./fsource/ ./textparse/ ./docxread/ ./docread/...
 
       - name: Build
         run: |
@@ -39,7 +40,7 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           mkdir -p dist
           for arch in amd64 arm64; do
-            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go -C xy build \
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go -C chgksuite build \
               -trimpath -ldflags "-s -w" \
               -o "../dist/chgksuite-linux-$arch" ./cmd/chgksuite
           done
@@ -59,7 +60,7 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: dist
-          file: xy/cmd/chgksuite/Dockerfile
+          file: chgksuite/cmd/chgksuite/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |

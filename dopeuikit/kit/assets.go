@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"pecheny.me/dopecore/webassets"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 	"pecheny.me/dopeuikit/assets"
 )
 

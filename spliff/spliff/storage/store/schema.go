@@ -8,7 +8,7 @@ package store
 import (
 	"database/sql"
 
-	"pecheny.me/dopecore/schema"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/schema"
 )
 
 // Migrations is the schema as a list (dopecore/schema): each step runs once and

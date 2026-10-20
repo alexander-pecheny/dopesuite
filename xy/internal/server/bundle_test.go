@@ -28,19 +28,19 @@ func TestBoardBundleEndpoints(t *testing.T) {
 	}
 	board := mkBoard("source")
 
-	resp := c.do("POST", "/api/boards/"+board+"/lists", map[string]string{"title_enc": enc("l"), "rank": "m"})
+	resp := c.do("POST", "/api/boards/"+board+"/lists", map[string]string{"title": enc("l"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var list struct {
 		ID int64 `json:"id"`
 	}
 	c.decode(resp, &list)
-	resp = c.do("POST", "/api/lists/"+itoa(list.ID)+"/cards", map[string]string{"description_enc": enc("d"), "rank": "m"})
+	resp = c.do("POST", "/api/lists/"+itoa(list.ID)+"/cards", map[string]string{"description": enc("d"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var card struct {
 		ID int64 `json:"id"`
 	}
 	c.decode(resp, &card)
-	resp = c.do("POST", "/api/boards/"+board+"/sessions", map[string]string{"meta_enc": enc("meta")})
+	resp = c.do("POST", "/api/boards/"+board+"/sessions", map[string]string{"meta": enc("meta")})
 	mustStatus(t, resp, 200)
 	var session struct {
 		ID int64 `json:"id"`
@@ -49,9 +49,9 @@ func TestBoardBundleEndpoints(t *testing.T) {
 
 	// One event of each flavor: a card comment, a session comment, a reaction on
 	// the comment, and a deleted comment that must stay behind.
-	resp = c.do("POST", "/api/cards/"+itoa(card.ID)+"/comments", map[string]string{"payload_enc": enc("норм")})
+	resp = c.do("POST", "/api/cards/"+itoa(card.ID)+"/comments", map[string]string{"payload": enc("норм")})
 	mustStatus(t, resp, 204)
-	resp = c.do("POST", "/api/sessions/"+itoa(session.ID)+"/comments", map[string]string{"payload_enc": enc("про тест")})
+	resp = c.do("POST", "/api/sessions/"+itoa(session.ID)+"/comments", map[string]string{"payload": enc("про тест")})
 	mustStatus(t, resp, 204)
 	resp = c.do("GET", "/api/cards/"+itoa(card.ID)+"/timeline", nil)
 	mustStatus(t, resp, 200)
@@ -61,16 +61,16 @@ func TestBoardBundleEndpoints(t *testing.T) {
 		t.Fatalf("card timeline: %d events, want 1", len(cardEvents))
 	}
 	commentID := cardEvents[0].ID
-	resp = c.do("POST", "/api/cards/"+itoa(card.ID)+"/reactions", map[string]any{"payload_enc": enc("👍"), "target_id": commentID})
+	resp = c.do("POST", "/api/cards/"+itoa(card.ID)+"/reactions", map[string]any{"payload": enc("👍"), "target_id": commentID})
 	mustStatus(t, resp, 200)
-	resp = c.do("POST", "/api/cards/"+itoa(card.ID)+"/comments", map[string]string{"payload_enc": enc("удалю")})
+	resp = c.do("POST", "/api/cards/"+itoa(card.ID)+"/comments", map[string]string{"payload": enc("удалю")})
 	mustStatus(t, resp, 204)
 	resp = c.do("GET", "/api/cards/"+itoa(card.ID)+"/timeline", nil)
 	mustStatus(t, resp, 200)
 	c.decode(resp, &cardEvents)
 	var deletedID int64
 	for _, e := range cardEvents {
-		if e.Type == "comment" && dec(e.PayloadEnc) == "удалю" {
+		if e.Type == "comment" && dec(e.Payload) == "удалю" {
 			deletedID = e.ID
 		}
 	}
@@ -102,7 +102,7 @@ func TestBoardBundleEndpoints(t *testing.T) {
 	// ---- whole-board attachment read ----
 	body := new(bytes.Buffer)
 	mw := multipart.NewWriter(body)
-	_ = mw.WriteField("meta", `{"filename_enc":"`+enc("р.png")+`","mime":"image/png","lossless":true}`)
+	_ = mw.WriteField("meta", `{"filename":"`+enc("р.png")+`","mime":"image/png","lossless":true}`)
 	fw, _ := mw.CreateFormFile("blob", "blob")
 	fw.Write([]byte("xy1cipherbytes"))
 	mw.Close()
@@ -121,10 +121,10 @@ func TestBoardBundleEndpoints(t *testing.T) {
 	mustStatus(t, resp, 200)
 	var atts []boardAttachmentDTO
 	c.decode(resp, &atts)
-	if len(atts) != 1 || atts[0].CardID != card.ID || dec(atts[0].FilenameEnc) != "р.png" {
+	if len(atts) != 1 || atts[0].CardID != card.ID || dec(atts[0].Filename) != "р.png" {
 		t.Fatalf("board attachments: %+v", atts)
 	}
-	// An upload with no event_payload_enc (the import's shape) adds no
+	// An upload with no event_payload (the import's shape) adds no
 	// attach_add event — imported history must not double up.
 	resp = c.do("GET", "/api/boards/"+board+"/timeline", nil)
 	mustStatus(t, resp, 200)
@@ -135,26 +135,26 @@ func TestBoardBundleEndpoints(t *testing.T) {
 
 	// ---- board-level timeline import onto a fresh board ----
 	dst := mkBoard("target")
-	resp = c.do("POST", "/api/boards/"+dst+"/lists", map[string]string{"title_enc": enc("l"), "rank": "m"})
+	resp = c.do("POST", "/api/boards/"+dst+"/lists", map[string]string{"title": enc("l"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	c.decode(resp, &list)
-	resp = c.do("POST", "/api/lists/"+itoa(list.ID)+"/cards", map[string]string{"description_enc": enc("d"), "rank": "m"})
+	resp = c.do("POST", "/api/lists/"+itoa(list.ID)+"/cards", map[string]string{"description": enc("d"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	c.decode(resp, &card)
-	resp = c.do("POST", "/api/boards/"+dst+"/sessions", map[string]string{"meta_enc": enc("meta")})
+	resp = c.do("POST", "/api/boards/"+dst+"/sessions", map[string]string{"meta": enc("meta")})
 	mustStatus(t, resp, 200)
 	c.decode(resp, &session)
 
 	batch1 := map[string]any{"events": []map[string]any{
 		{"src_id": 10, "card_id": card.ID, "type": "comment", "author_username": "bundle-user",
-			"created_at": "2026-01-01T10:00:00Z", "payload_enc": enc("родитель")},
+			"created_at": "2026-01-01T10:00:00Z", "payload": enc("родитель")},
 		{"src_id": 11, "card_id": card.ID, "type": "comment", "author_username": "стёртый-с-той-стороны",
-			"reply_to_src_id": 10, "created_at": "2026-01-01T11:00:00Z", "payload_enc": enc("ответ")},
+			"reply_to_src_id": 10, "created_at": "2026-01-01T11:00:00Z", "payload": enc("ответ")},
 		{"src_id": 12, "session_id": session.ID, "type": "comment",
-			"created_at": "2026-01-01T12:00:00Z", "payload_enc": enc("про тест")},
+			"created_at": "2026-01-01T12:00:00Z", "payload": enc("про тест")},
 		{"src_id": 13, "card_id": card.ID, "type": "desc_edit", "author_username": "bundle-user",
 			"created_at": "2026-01-02T10:00:00Z", "edited_at": "2026-01-02T11:00:00Z",
-			"is_excerpt": false, "payload_enc": enc(`{"before":"a","after":"b"}`)},
+			"is_excerpt": false, "payload": enc(`{"before":"a","after":"b"}`)},
 	}}
 	resp = c.do("POST", "/api/boards/"+dst+"/timeline/import", batch1)
 	mustStatus(t, resp, 200)
@@ -170,9 +170,9 @@ func TestBoardBundleEndpoints(t *testing.T) {
 	// dropped, not reparented onto the card.
 	batch2 := map[string]any{"events": []map[string]any{
 		{"src_id": 14, "card_id": card.ID, "type": "reaction", "author_username": "bundle-user",
-			"reply_to_id": mapped.IDs["10"], "created_at": "2026-01-03T10:00:00Z", "payload_enc": enc("👍")},
+			"reply_to_id": mapped.IDs["10"], "created_at": "2026-01-03T10:00:00Z", "payload": enc("👍")},
 		{"src_id": 15, "card_id": card.ID, "type": "reaction", "author_username": "bundle-user",
-			"reply_to_src_id": 99999, "created_at": "2026-01-03T11:00:00Z", "payload_enc": enc("💀")},
+			"reply_to_src_id": 99999, "created_at": "2026-01-03T11:00:00Z", "payload": enc("💀")},
 	}}
 	resp = c.do("POST", "/api/boards/"+dst+"/timeline/import", batch2)
 	mustStatus(t, resp, 200)
@@ -188,7 +188,7 @@ func TestBoardBundleEndpoints(t *testing.T) {
 	}
 	got := map[string]bundleEventDTO{}
 	for _, e := range imported {
-		got[dec(e.PayloadEnc)] = e
+		got[dec(e.Payload)] = e
 	}
 	if e := got["ответ"]; e.ReplyToID == nil || *e.ReplyToID != mapped.IDs["10"] {
 		t.Fatalf("reply not threaded: %+v", e)
@@ -211,16 +211,16 @@ func TestBoardBundleEndpoints(t *testing.T) {
 
 	// Rejections: a bad type, and an event pointing at another board's card.
 	resp = c.do("POST", "/api/boards/"+dst+"/timeline/import", map[string]any{"events": []map[string]any{
-		{"src_id": 1, "card_id": card.ID, "type": "hack", "created_at": "2026-01-01T00:00:00Z", "payload_enc": enc("x")},
+		{"src_id": 1, "card_id": card.ID, "type": "hack", "created_at": "2026-01-01T00:00:00Z", "payload": enc("x")},
 	}})
 	mustStatus(t, resp, 400)
 	resp = c.do("POST", "/api/boards/"+board+"/timeline/import", map[string]any{"events": []map[string]any{
-		{"src_id": 1, "card_id": card.ID, "type": "comment", "created_at": "2026-01-01T00:00:00Z", "payload_enc": enc("x")},
+		{"src_id": 1, "card_id": card.ID, "type": "comment", "created_at": "2026-01-01T00:00:00Z", "payload": enc("x")},
 	}})
 	mustStatus(t, resp, 400)
 }
 
-func payloadKey(e bundleEventDTO) string { return ":" + dec(e.PayloadEnc) }
+func payloadKey(e bundleEventDTO) string { return ":" + dec(e.Payload) }
 
 // TestImportedAuthorIsNamedWithoutMembership covers what an archive import
 // leaves behind: events authored by people who are not members of the board the
@@ -244,13 +244,13 @@ func TestImportedAuthorIsNamedWithoutMembership(t *testing.T) {
 	owner.decode(resp, &b)
 	board := itoa(b.ID)
 
-	resp = owner.do("POST", "/api/boards/"+board+"/lists", map[string]string{"title_enc": enc("l"), "rank": "m"})
+	resp = owner.do("POST", "/api/boards/"+board+"/lists", map[string]string{"title": enc("l"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var list struct {
 		ID int64 `json:"id"`
 	}
 	owner.decode(resp, &list)
-	resp = owner.do("POST", "/api/lists/"+itoa(list.ID)+"/cards", map[string]string{"description_enc": enc("d"), "rank": "m"})
+	resp = owner.do("POST", "/api/lists/"+itoa(list.ID)+"/cards", map[string]string{"description": enc("d"), "rank": "m"})
 	mustStatus(t, resp, 200)
 	var card struct {
 		ID int64 `json:"id"`
@@ -259,9 +259,9 @@ func TestImportedAuthorIsNamedWithoutMembership(t *testing.T) {
 
 	resp = owner.do("POST", "/api/boards/"+board+"/timeline/import", map[string]any{"events": []map[string]any{
 		{"src_id": 1, "card_id": card.ID, "type": "comment", "author_username": "stranger",
-			"created_at": "2026-01-01T10:00:00Z", "payload_enc": enc("чужой комментарий")},
+			"created_at": "2026-01-01T10:00:00Z", "payload": enc("чужой комментарий")},
 		{"src_id": 2, "card_id": card.ID, "type": "comment", "author_username": "never-heard-of-them",
-			"created_at": "2026-01-01T11:00:00Z", "payload_enc": enc("ничей комментарий")},
+			"created_at": "2026-01-01T11:00:00Z", "payload": enc("ничей комментарий")},
 	}})
 	mustStatus(t, resp, 200)
 
@@ -283,7 +283,7 @@ func TestImportedAuthorIsNamedWithoutMembership(t *testing.T) {
 	}
 	got := map[string]timelineEventDTO{}
 	for _, e := range tl {
-		got[dec(e.PayloadEnc)] = e
+		got[dec(e.Payload)] = e
 	}
 	e := got["чужой комментарий"]
 	if e.AuthorID == nil {
