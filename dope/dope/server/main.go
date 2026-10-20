@@ -211,6 +211,7 @@ func Main() {
 	if srv.assets.NoCache {
 		mux.HandleFunc("/gallery", srv.serveCompiledPage("static/gallery.html"))
 	}
+	mux.HandleFunc("/strict-synch-manual", srv.serveCompiledPage("static/strict-synch-manual.html"))
 	mux.HandleFunc("/profile", srv.hostPageServer().HandleProfilePage)
 	mux.HandleFunc("/profile/logout", srv.hostPageServer().HandleProfileLogout)
 	mux.HandleFunc("/profile/tokens", srv.hostPageServer().HandleProfileTokens)
