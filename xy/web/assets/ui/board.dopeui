@@ -99,27 +99,29 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
     mount id="cardVersions" kind="card-versions" hidden
 
     -- editing tools: the stress tool types into whichever field of Fields/Text the caret
-    -- was last in; the typographer and →.4s rewrite the whole card, so they need no caret
-    row id="cardEditTools" gap="sm" align="center" wrap
-      button small kind="ghost" id="cardInsStress" title=@board.card.stress_title @board.card.stress_label
-      button small kind="ghost" id="cardTypo" title=@board.card.typo_title @board.card.typo_label
-      button small kind="ghost" id="cardTo4s" title=@board.card.to4s_title "→.4s"
+    -- was last in; the typographer and →.4s rewrite the whole card, so they need no caret.
+    -- The row stays pinned under the head for as long as this column is on screen.
+    col gap="sm"
+      row id="cardEditTools" gap="sm" align="center" wrap
+        button small kind="ghost" id="cardInsStress" title=@board.card.stress_title @board.card.stress_label
+        button small kind="ghost" id="cardTypo" title=@board.card.typo_title @board.card.typo_label
+        button small kind="ghost" id="cardTo4s" title=@board.card.to4s_title "→.4s"
 
-    -- Preview: single-card docx-style render (read-only)
-    tabpanel id="cardViewPreview"
-      checkbox id="cardPreviewScreen" kind="card-preview" title=@board.card.screen_title @board.card.screen_label
-      mount id="cardPreviewBody" kind="card-preview-body" title=@board.card.preview_dblclick
+      -- Preview: single-card docx-style render (read-only)
+      tabpanel id="cardViewPreview"
+        checkbox id="cardPreviewScreen" kind="card-preview" title=@board.card.screen_title @board.card.screen_label
+        mount id="cardPreviewBody" kind="card-preview-body" title=@board.card.preview_dblclick
 
-    -- Fields: structured field editor (question cards)
-    tabpanel id="cardViewFields"
-      mount id="cardFields" kind="card-fields"
+      -- Fields: structured field editor (question cards)
+      tabpanel id="cardViewFields"
+        mount id="cardFields" kind="card-fields"
 
-    -- Text: raw 4s editor
-    tabpanel id="cardViewText"
-      row gap="sm" align="end" justify="between"
-        label id="cardDescLabel" @board.card.desc_label
-        button small kind="ghost" id="cardCopy4s" icon="clipboard" title=@board.card.copy_4s_title @board.card.copy_4s_label
-      editor id="cardDesc" spellcheck="false"
+      -- Text: raw 4s editor
+      tabpanel id="cardViewText"
+        row gap="sm" align="end" justify="between"
+          label id="cardDescLabel" @board.card.desc_label
+          button small kind="ghost" id="cardCopy4s" icon="clipboard" title=@board.card.copy_4s_title @board.card.copy_4s_label
+        editor id="cardDesc" spellcheck="false"
 
     row gap="sm" wrap
       button id="cardSave" @board.actions.save
