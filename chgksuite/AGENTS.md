@@ -113,6 +113,9 @@ docxread/              .docx → plain text — a hand-rolled python-docx (zip/O
 docread/               Word 97–2003 .doc → the same plain text, minus images, list numbers
                        and formatting: OLE container, FIB, piece table. Only `chgksuite
                        credits` uses it; doctest/ writes minimal .doc files for tests
+rtfread/               .rtf → plain text, body only (font tables, info, pictures, headers,
+                       field instructions dropped; \'hh in the font's code page, \uN as is).
+                       Only `chgksuite credits` uses it
 textparse/             parser.py's parsers: plain text → structure. The chgk/brain parser
                        runs in stages, one file each: label.go (each line typed by its
                        marker), starts.go (questions that carry no marker), group.go (which

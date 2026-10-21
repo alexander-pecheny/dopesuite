@@ -4,7 +4,10 @@
 package main
 
 import (
+	"errors"
 	"os"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/credits"
 )
 
 // outputFileMode is the permission every file the command writes gets.
@@ -74,6 +77,13 @@ func main() {
 	}
 	if err != nil {
 		fail(err)
+		if errors.Is(err, credits.ErrEncrypted) {
+			// The rating site tells a locked packet from a broken one by this code.
+			os.Exit(exitEncrypted)
+		}
 		os.Exit(1)
 	}
 }
+
+// exitEncrypted is `credits` refusing a password-protected file.
+const exitEncrypted = 3

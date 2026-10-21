@@ -9,13 +9,11 @@
 package credits
 
 import (
-	"archive/zip"
 	"bytes"
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -33,6 +31,8 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/chgkimport"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/docread"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/rtfread"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/textenc"
 )
 
 // Tour is one tour heading of the packet and the questions under it, numbered
@@ -110,15 +110,28 @@ const (
 	wrappedLineRunes = 40
 )
 
+// ErrEncrypted is a file, or every candidate in an archive, under a password:
+// nothing can be read, and nothing is wrong with the reader either.
+var ErrEncrypted = errors.New("encrypted")
+
+// documents are the formats a packet can come in; archives hold any number of them.
+var (
+	documents = []string{".docx", ".doc", ".4s", ".pdf", ".rtf", ".txt"}
+	archives  = []string{".zip", ".rar", ".7z"}
+)
+
 // Read extracts the credits of one uploaded file. The name's extension picks the
-// format: .docx, .doc, .4s, .pdf, or a .zip holding any number of those (images and
-// everything else in an archive are ignored). A zip member that can't be
-// unpacked or parsed is skipped; an error means nothing at all could be read.
+// format: .docx, .doc, .4s, .pdf, .rtf, .txt, or a .zip, .rar or .7z holding any
+// number of those (images and everything else in an archive are ignored). An
+// archive member that can't be unpacked or parsed is skipped. An archive with no
+// packet in it (handouts, audio) reads as 0 questions; an error means nothing at
+// all could be read, and wraps ErrEncrypted when a password stood in the way.
 func Read(name string, data []byte, opt Options) (*Credits, error) {
-	switch strings.ToLower(path.Ext(name)) {
-	case ".zip":
-		return readZip(data, opt)
-	case ".docx", ".doc", ".4s", ".pdf":
+	ext := strings.ToLower(path.Ext(name))
+	switch {
+	case slices.Contains(archives, ext):
+		return readArchive(ext, data, opt)
+	case slices.Contains(documents, ext):
 		f, err := readOne(name, data, opt)
 		if err != nil {
 			return nil, err
@@ -132,12 +145,36 @@ func Read(name string, data []byte, opt Options) (*Credits, error) {
 // before merging.
 type file struct {
 	name       string
-	format     string // docx, doc, 4s or pdf
+	format     string // docx, doc, 4s, pdf, rtf or txt
 	language   string // chgksuite's --language code, "" for Russian
 	questions  int
 	tours      []Tour
 	paragraphs []Paragraph
 	authors    []Author
+}
+
+// Uzbek Cyrillic writes ў, қ, ғ and ҳ. Belarusian has ў but none of the others;
+// Kazakh and Tajik have қ and ғ but also letters Uzbek lacks.
+const (
+	uzbekLetters    = "ўқғҳЎҚҒҲ"
+	notUzbekLetters = "әөұүіңһӣҷӯӘӨҰҮІҢҺӢҶӮ"
+	minUzbekLetters = 10
+)
+
+func isUzbekCyrillic(text string) bool {
+	var hasU, hasH bool
+	uzbek := 0
+	for _, r := range text {
+		switch {
+		case strings.ContainsRune(notUzbekLetters, r):
+			return false
+		case strings.ContainsRune(uzbekLetters, r):
+			uzbek++
+			hasU = hasU || r == 'ў' || r == 'Ў'
+			hasH = hasH || r == 'ҳ' || r == 'Ҳ' || r == 'қ' || r == 'Қ'
+		}
+	}
+	return uzbek >= minUzbekLetters && hasU && hasH
 }
 
 func readOne(name string, data []byte, opt Options) (file, error) {
@@ -163,11 +200,29 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		text = unwrap(t)
 	case "doc":
 		t, err := docread.ToText(data)
+		if errors.Is(err, docread.ErrEncrypted) {
+			return file{}, fmt.Errorf("%w: %v", ErrEncrypted, err)
+		}
+		if err != nil {
+			return file{}, err
+		}
+		text = t
+	case "rtf":
+		t, err := rtfread.ToText(data)
+		if err != nil {
+			return file{}, err
+		}
+		text = t
+	case "txt":
+		t, err := textenc.Decode(data, "")
 		if err != nil {
 			return file{}, err
 		}
 		text = t
 	default:
+		if isEncryptedOffice(data) {
+			return file{}, fmt.Errorf("%w: password-protected Word file", ErrEncrypted)
+		}
 		t, err := chgkimport.DocxText(data)
 		if err != nil {
 			return file{}, err
@@ -181,7 +236,7 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 	// Field markers differ by language («Вопрос» / «Запитання» / «Пытанне»):
 	// parse in the language the packet is written in.
 	lang := language(text)
-	if format == "pdf" || format == "doc" {
+	if format != "docx" {
 		source = chgkimport.ParseTextIn(text, lang)
 	} else {
 		res, err := chgkimport.ParseDocxIn(name, data, lang)
@@ -232,14 +287,17 @@ var detector = lingua.NewLanguageDetectorBuilder().
 
 // language names a packet's language as chgksuite's --language code ("" is
 // Russian), by lingua's n-gram model over the first 20 000 bytes of text. Too
-// little text to tell (an image-only file) reads as Russian, as does Uzbek,
-// which lingua does not know.
+// little text to tell (an image-only file) reads as Russian. Uzbek, which lingua
+// does not know, is told by its letters first.
 func language(text string) string {
 	if len(text) > languageSample {
 		text = text[:languageSample]
 	}
 	if utf8.RuneCountInString(strings.TrimSpace(text)) < minLanguageRunes {
 		return ""
+	}
+	if isUzbekCyrillic(text) {
+		return "uz_cyr"
 	}
 	l, ok := detector.DetectLanguageOf(text)
 	if !ok {
@@ -262,53 +320,6 @@ func language(text string) string {
 		return "ro"
 	}
 	return ""
-}
-
-func readZip(data []byte, opt Options) (*Credits, error) {
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		return nil, fmt.Errorf("read zip: %w", err)
-	}
-	budget := int64(maxInflated)
-	var files []file
-	for _, zf := range zr.File {
-		if !mayBePacket(zf) {
-			continue
-		}
-		body, err := readEntry(zf, &budget)
-		if errors.Is(err, errTooLarge) {
-			return nil, err
-		}
-		if err != nil {
-			// A member the archive can't give back (an unknown compression
-			// method, a corrupt stream) is skipped like an unparsable one: the
-			// packet is often another file beside it.
-			continue
-		}
-		f, err := readOne(path.Base(zf.Name), body, opt)
-		if err != nil || f.questions == 0 {
-			// Handouts, an answer sheet, a scan: nothing that is a packet.
-			continue
-		}
-		f.name = zf.Name
-		files = append(files, f)
-	}
-	if len(files) == 0 {
-		return nil, fmt.Errorf("no packet in the archive: no .docx, .doc, .4s or .pdf with questions")
-	}
-	return merge(pick(files, opt.Questions)), nil
-}
-
-// mayBePacket skips the members of an archive that cannot be a packet:
-// directories, hidden and lock files, macOS metadata and other formats.
-func mayBePacket(zf *zip.File) bool {
-	base := path.Base(zf.Name)
-	ext := strings.ToLower(path.Ext(base))
-	if zf.FileInfo().IsDir() || strings.HasPrefix(base, ".") || strings.HasPrefix(base, "~$") ||
-		strings.HasPrefix(zf.Name, "__MACOSX/") {
-		return false
-	}
-	return ext == ".docx" || ext == ".doc" || ext == ".4s" || ext == ".pdf"
 }
 
 // formats is the order formats are trusted in: a docx is the organizer's own
@@ -473,6 +484,9 @@ func pdfText(data []byte, bin string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pdftotextTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, bin, "-enc", "UTF-8", "-nopgbrk", tmp.Name(), "-").Output()
+	if ee := (*exec.ExitError)(nil); errors.As(err, &ee) && bytes.Contains(ee.Stderr, []byte("Incorrect password")) {
+		return "", fmt.Errorf("%w: password-protected PDF", ErrEncrypted)
+	}
 	if err != nil {
 		return "", fmt.Errorf("pdftotext: %w", err)
 	}
@@ -504,26 +518,6 @@ func unwrap(text string) string {
 		out = append(out, line)
 	}
 	return strings.Join(out, "\n")
-}
-
-// errTooLarge stops reading an archive whose documents inflate past maxInflated.
-var errTooLarge = errors.New("archive too large")
-
-func readEntry(f *zip.File, budget *int64) ([]byte, error) {
-	rc, err := f.Open()
-	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", f.Name, err)
-	}
-	defer rc.Close()
-	body, err := io.ReadAll(io.LimitReader(rc, *budget+1))
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", f.Name, err)
-	}
-	if int64(len(body)) > *budget {
-		return nil, errTooLarge
-	}
-	*budget -= int64(len(body))
-	return body, nil
 }
 
 // reWarmup is a tour heading of warm-up questions, which the tournament does

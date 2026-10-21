@@ -18,7 +18,7 @@ import (
 //	chgksuite credits [--name packet.zip] [--questions 36] <file | ->
 //
 // --name gives the format when the file itself has no telling extension, as with
-// a stored upload or stdin. --questions is the tournament's question count, which
+// a stored upload or stdin. A password-protected file exits with code 3. --questions is the tournament's question count, which
 // picks the packet out of a zip's other documents.
 func creditsCmd(args []string) error {
 	fs := newFlagSet("credits")

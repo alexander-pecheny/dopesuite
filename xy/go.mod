@@ -14,7 +14,7 @@ require (
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/image v0.43.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 )
 
 require (
