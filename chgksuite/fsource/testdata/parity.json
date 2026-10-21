@@ -458,14 +458,14 @@
     {
       "source": "? Раздатка: (img big two words.png) и ещё (img a.png)\n! (img a.png)",
       "refs": [
-        "words.png",
+        "two words.png",
         "a.png"
       ]
     },
     {
       "source": "? Скобка в имени (img file (1).png)",
       "refs": [
-        "(1).png"
+        "file (1).png"
       ]
     },
     {
@@ -494,6 +494,13 @@
       "source": "? Закодировано (img my%5Fpic.png)",
       "refs": [
         "my_pic.png"
+      ]
+    },
+    {
+      "source": "? Раздатка (img w=200 Раздатка орудия.png)\n! (img \"в кавычках.png\")",
+      "refs": [
+        "Раздатка орудия.png",
+        "в кавычках.png"
       ]
     }
   ],

@@ -1088,12 +1088,11 @@ function rawLine(b: Block): string {
   return b.text ? marker + " " + b.text : marker;
 }
 
-// imgName extracts the referenced filename from an (img …) run value: like
-// chgksuite's parseimg, the filename is the last whitespace token (the rest are
-// w=/h=/big/inline options).
+// imgName extracts the referenced filename from an (img …) run value: whatever
+// follows the leading w=/h=/big/inline options, spaces and all (inline.ParseImg).
 function imgName(val: unknown): string {
-  const toks = String(val).trim().split(/\s+/).filter(Boolean);
-  return toks.length ? toks[toks.length - 1] : "";
+  const name = String(val).trim().replace(/^(?:(?:big|inline|[wh]=\S*|inline=\S*)\s+)*/, "");
+  return name.replace(/^["']+|["']+$/g, "");
 }
 
 // imgInText returns the first (img …) filename referenced in a string, or null.

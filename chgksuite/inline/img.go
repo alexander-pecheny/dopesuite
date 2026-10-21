@@ -17,8 +17,9 @@ const (
 	hundredths   = 100 // Round2 keeps two decimals
 )
 
-// Img is a parsed (img …) directive: the last whitespace token is the file name,
-// the rest are options (chgksuite parseimg).
+// Img is a parsed (img …) directive: leading options, then the file name, which
+// may contain spaces. chgksuite's parseimg takes only the last word, which broke
+// every attachment named like "Раздатка орудия.png".
 type Img struct {
 	Name   string
 	Width  float64 // px; -1 = unset
@@ -30,12 +31,10 @@ type Img struct {
 // ParseImg parses the argument of an (img …) directive. ok is false when it names
 // no file.
 func ParseImg(arg string) (Img, bool) {
-	fields := strings.Fields(arg)
-	if len(fields) == 0 {
-		return Img{}, false
-	}
-	im := Img{Name: fields[len(fields)-1], Width: -1, Height: -1}
-	for _, o := range fields[:len(fields)-1] {
+	im := Img{Width: -1, Height: -1}
+	rest := strings.TrimSpace(arg)
+	for rest != "" {
+		o, after, _ := strings.Cut(rest, " ")
 		switch {
 		case o == "big":
 			im.Big = true
@@ -48,9 +47,13 @@ func ParseImg(arg string) (Img, bool) {
 		case strings.HasPrefix(o, "inline="):
 			v := o[len("inline="):]
 			im.Inline = v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
+		default:
+			im.Name = strings.Trim(rest, `"'`)
+			return im, im.Name != ""
 		}
+		rest = strings.TrimSpace(after)
 	}
-	return im, true
+	return Img{}, false
 }
 
 // ImageRefs is the file names of the (img …) directives in a 4s text, in order

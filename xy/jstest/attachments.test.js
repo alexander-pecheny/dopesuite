@@ -38,6 +38,11 @@ test("gatherTargets picks the first attachment per wanted name, in card order", 
   assert.equal(targets.get("c.png").id, 5);
 });
 
+test("gatherTargets matches a decomposed й in a file name to the composed one in the text", () => {
+  const targets = gatherTargets([[{ id: 1, name: "чаи\u0306ник.png" }]], new Set(["чайник.png"]));
+  assert.equal(targets.get("чайник.png").id, 1);
+});
+
 test("humanSize scales through B/KB/MB", () => {
   assert.equal(humanSize(512), "512 B");
   assert.equal(humanSize(2048), "2.0 KB");
