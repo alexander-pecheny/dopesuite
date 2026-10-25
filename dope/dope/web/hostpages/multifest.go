@@ -135,8 +135,8 @@ func hostDashVenuesSection(data hostFestDashData, ref string) *dopeui.Element {
 		if venue.Town != "" {
 			facts = venue.Town + " · " + facts
 		}
-		rows = append(rows, dopeui.Listrow(dopeui.Href(venuePageURL(ref, venue.ID)),
-			dopeui.Listtitle(dopeui.Text(venue.Label())), dopeui.Muted(dopeui.Text(facts))))
+		rows = append(rows, dopeui.Actionrow(dopeui.Rowlink(dopeui.Href(venuePageURL(ref, venue.ID)),
+			dopeui.Listtitle(dopeui.Text(venue.Label())), dopeui.Muted(dopeui.Text(facts)))))
 		for _, g := range venue.Games {
 			rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames, g.Type))
 		}
