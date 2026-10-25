@@ -48,7 +48,7 @@ import { createChangePass } from "./changepass.js";
 import { createPassCheck, passCheckStore } from "./passcheck.js";
 import { createNameOverflow } from "./nameoverflow.js";
 import { createTransfer } from "./transfer.js";
-import { type AnnounceCity, newKey, parseSession, type SessionMeta, serializeSession, sessionLabel, type Tester, testerNames, type TitleMode, whoSaw } from "./sessions.js";
+import { type AnnounceCity, newKey, parseSession, type SessionMeta, serializeSession, sessionLabel, sessionNumbers, type Tester, testerNames, type TitleMode, whoSaw } from "./sessions.js";
 import { type CardSeen, parseCardSeen, seenBy, type SeenPlaying, sessionRef, serializeCardSeen } from "./seen.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
@@ -560,6 +560,7 @@ function render(): void {
   const liveSid = testMode.sessionFor(boardId);
   if (liveSid != null && !state.sessions.some((s) => s.id === liveSid)) testMode.stop();
   updateTestBadge();
+  testNumbers = sessionNumbers(state.sessions);
   // The list "⋯" menu floats on <body>: a rebuild would strand it next to a
   // stale anchor, so close it with the DOM it was opened for.
   if (openListMenu) openListMenu.close();
@@ -913,12 +914,25 @@ function labelDot(color: string, title: string): HTMLElement {
 // .kcard-verdicts), so the flask keeps one colour however many were recorded.
 const VERDICT_DOTS = 6;
 
-function flaskIcon(color: string): SVGSVGElement {
-  const svg = icon("flask-conical");
+// The flask carries the test's number, so two tests on one card can be told
+// apart. The round flask is the one whose body holds two digits.
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function flaskIcon(color: string, n: number): SVGSVGElement {
+  const svg = icon("flask-round");
+  svg.classList.add("kcard-flask");
   svg.querySelector("path")?.setAttribute("fill", "currentColor");
   svg.style.color = labelFill(color);
+  const num = document.createElementNS(SVG_NS, "text");
+  num.setAttribute("x", "12");
+  num.setAttribute("y", "15");
+  num.setAttribute("fill", labelInk(color) || "var(--kanban-card)");
+  num.textContent = String(n);
+  svg.append(num);
   return svg;
 }
+
+let testNumbers = new Map<number, number>();
 
 // ---- appeals (ADR-0021) ----
 // appealsCount is an appeals list's head: how many appeals, and how many of
@@ -1015,10 +1029,11 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
     const verdicts = assignmentsOf(card.id, sid)
       .map((a) => labelById(a.labelId))
       .filter((l): l is BoardLabel => !!l);
-    const title = S.board.card.testLead() + sessionName(sid) +
+    const n = testNumbers.get(sid) || 0;
+    const title = S.board.card.testLead(String(n)) + sessionName(sid) +
       (verdicts.length ? S.board.card.testMid() + verdicts.map((l) => l.name).join(", ") : "");
     const test = el("span", { class: "kcard-test", title },
-      el("span", { class: "kcard-test-icon" }, flaskIcon(verdicts[0]?.color || "")));
+      el("span", { class: "kcard-test-icon" }, flaskIcon(verdicts[0]?.color || "", n)));
     // The rest of the verdicts, as many as the grid holds; the tooltip above
     // still names every one of them.
     if (verdicts.length > 1) {

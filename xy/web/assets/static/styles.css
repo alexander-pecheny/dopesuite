@@ -1947,6 +1947,18 @@ body {
    whitespace. Pull the box onto the ink, so a row of flasks is spaced like a row
    of dots and a flask's own verdict dots sit where the gap above puts them. */
 .kcard-test .ico { margin: 0 -2px; }
+/* The numbered flask stands taller than the row's chips: at --chip-h its round
+   body is 9px across, and two digits inside that are a smudge. */
+.kcard-test, .kcard-test-icon:has(.kcard-flask) { height: auto; }
+.kcard-test-icon .kcard-flask { --ico-size: 20px; }
+.kcard-flask text {
+  stroke: none;
+  font-size: 10.5px;
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
 /* Verdicts past the first, beside the flask: a braille cell — fill a column of
    three top-down, then start the next one. Six is the cell's capacity, and the
    test's tooltip names every verdict regardless. Column wrap rather than a grid

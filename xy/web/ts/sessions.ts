@@ -268,6 +268,13 @@ export function newKey(): string {
 
 export type TitleMode = "date-title" | "title" | "date";
 
+// sessionNumbers numbers a board's tests 1, 2, 3… in the order they were
+// created, which is the number a card's flask carries.
+export function sessionNumbers(sessions: ReadonlyArray<{ id: number; createdAt: string | null }>): Map<number, number> {
+  const sorted = [...sessions].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || "") || a.id - b.id);
+  return new Map(sorted.map((s, i) => [s.id, i + 1]));
+}
+
 export function sessionLabel(m: SessionMeta, mode: TitleMode = "date-title"): string {
   const date = humanDate(m.date);
   if (mode === "date") return date || m.title;

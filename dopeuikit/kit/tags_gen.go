@@ -544,6 +544,7 @@ var IconFileDown = Attr{Name: "icon", Value: "file-down"}
 var IconFileText = Attr{Name: "icon", Value: "file-text"}
 var IconFileUp = Attr{Name: "icon", Value: "file-up"}
 var IconFlaskConical = Attr{Name: "icon", Value: "flask-conical"}
+var IconFlaskRound = Attr{Name: "icon", Value: "flask-round"}
 var IconFunnel = Attr{Name: "icon", Value: "funnel"}
 var IconGavel = Attr{Name: "icon", Value: "gavel"}
 var IconHouse = Attr{Name: "icon", Value: "house"}
