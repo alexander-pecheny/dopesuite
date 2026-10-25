@@ -227,6 +227,8 @@ import_submit = "Показать, что изменится"
 preview_title = "Что изменит импорт"
 preview_nothing = "Импорт ничего не изменит: составы уже совпадают с рейтингом и вашими правками."
 plan_added_venues = 'Новые площадки: {{.venues}}'
+# The Game of the whole synch fest the import makes when there is none.
+plan_added_games = 'Новая игра для всего турнира: {{.games}}'
 plan_added_teams = 'Новые команды: {{.teams}}'
 plan_dropped_teams = 'Уйдут из составов: {{.teams}}'
 plan_renamed = 'Переименуется: «{{.from}}» → «{{.to}}»'

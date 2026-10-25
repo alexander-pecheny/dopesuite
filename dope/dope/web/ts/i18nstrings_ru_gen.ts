@@ -1013,6 +1013,7 @@ shootout: true
       overrideShadowed: (game: string) => `${game} (не действует: состав команды в этой игре изменён вручную)`,
       overrideTitle: () => "Оверрайд игрока",
       overridesSubhead: () => "Оверрайды",
+      planAddedGames: (games: string) => `Новая игра для всего турнира: ${games}`,
       planAddedTeams: (teams: string) => `Новые команды: ${teams}`,
       planAddedVenues: (venues: string) => `Новые площадки: ${venues}`,
       planDroppedTeams: (teams: string) => `Уйдут из составов: ${teams}`,

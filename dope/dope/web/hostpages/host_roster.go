@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
@@ -423,6 +424,9 @@ func hostImportPlanSection(plan imports.ImportPlan, choice imports.RosterChoice,
 	var items []dopeui.Item
 	if plan.Empty() {
 		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PreviewNothing())))
+	}
+	if len(plan.AddedGames) > 0 {
+		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PlanAddedGames(strings.Join(plan.AddedGames, ", ")))))
 	}
 	if len(plan.AddedVenues) > 0 {
 		items = append(items, dopeui.Muted(dopeui.Text(s.Host.Roster.PlanAddedVenues(strings.Join(plan.AddedVenues, ", ")))))
@@ -1025,6 +1029,14 @@ func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice im
 	}
 	if result.Plan != nil {
 		result.Plan.AddedVenues = venues
+		missing, err := s.synchGameMissing(ctx, festID)
+		if err != nil {
+			return result, err
+		}
+		if missing {
+			result.Plan.AddedGames = []string{games.Get(games.OD).Title}
+			result.Unchanged = false
+		}
 	}
 	if err != nil || choice.Preview {
 		return result, err

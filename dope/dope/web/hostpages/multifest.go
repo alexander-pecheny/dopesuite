@@ -49,12 +49,7 @@ func kindField(current string, festGames []PublicFestGame) *dopeui.Element {
 // OD of the tournament's tours, which keeps a sheet per venue (ADR-0033), on
 // every import, so a fest whose Game the host deleted gets a new one.
 func (s *Server) ensureSynchGame(ctx context.Context, festID, ratingID int64) error {
-	db := s.h.Engine().DB
-	if kind, err := multifest.FestKind(ctx, db, festID); err != nil || kind != multifest.Synch {
-		return err
-	}
-	var exists bool
-	if err := db.QueryRowContext(ctx, `select exists(select 1 from games where fest_id = ? and multifest_venue_id is null)`, festID).Scan(&exists); err != nil || exists {
+	if missing, err := s.synchGameMissing(ctx, festID); err != nil || !missing {
 		return err
 	}
 	tours, err := imports.FetchRatingTourComp(ctx, ratingID)
@@ -67,6 +62,18 @@ func (s *Server) ensureSynchGame(ctx context.Context, festID, ratingID int64) er
 		return written, err
 	})
 	return err
+}
+
+// synchGameMissing says the fest is a synch one without a Game of the whole
+// fest, which its next import makes.
+func (s *Server) synchGameMissing(ctx context.Context, festID int64) (bool, error) {
+	db := s.h.Engine().DB
+	if kind, err := multifest.FestKind(ctx, db, festID); err != nil || kind != multifest.Synch {
+		return false, err
+	}
+	var exists bool
+	err := db.QueryRowContext(ctx, `select exists(select 1 from games where fest_id = ? and multifest_venue_id is null)`, festID).Scan(&exists)
+	return !exists, err
 }
 
 // venueRow is one venue on the dashboard: how many teams play there and

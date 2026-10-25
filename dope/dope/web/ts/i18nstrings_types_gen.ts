@@ -991,6 +991,7 @@ export type Strings = {
       overrideShadowed: (game: string) => string;
       overrideTitle: () => string;
       overridesSubhead: () => string;
+      planAddedGames: (games: string) => string;
       planAddedTeams: (teams: string) => string;
       planAddedVenues: (venues: string) => string;
       planDroppedTeams: (teams: string) => string;

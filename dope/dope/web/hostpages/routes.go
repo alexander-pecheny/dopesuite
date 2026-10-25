@@ -152,9 +152,20 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, sc ro
 	// A host an admin limited to other Games watches this one as a viewer: the
 	// same page under /fest, where nothing is editable, rather than an editor
 	// whose every write would be refused.
-	if may, err := festaccess.MayRunGame(r.Context(), s.h.Engine().DB, sc.FestID, gameID, sc.User.UserID, sc.Role); err != nil {
+	may, err := festaccess.MayRunGame(r.Context(), s.h.Engine().DB, sc.FestID, gameID, sc.User.UserID, sc.Role)
+	if err != nil {
 		return err
-	} else if !may {
+	}
+	if !may {
+		// A host of a venue enters its sheet of the whole fest's Game.
+		sc.GameID = gameID
+		sheets, err := route.SheetVenues(r.Context(), s.h.Engine().DB, sc)
+		if err != nil {
+			return err
+		}
+		may = len(sheets) > 0
+	}
+	if !may {
 		http.Redirect(w, r, "/fest/"+r.PathValue("fest")+"/"+strings.Join(parts, "/"), http.StatusSeeOther)
 		return nil
 	}

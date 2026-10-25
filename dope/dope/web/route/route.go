@@ -275,7 +275,7 @@ func (t *Table) admit(r *http.Request, access Access, sc *Scope) (Denial, error)
 				return 0, err
 			}
 			if !allow && access.sheets {
-				if sc.SheetVenues, err = sheetVenues(ctx, t.Eng.DB, *sc); err != nil {
+				if sc.SheetVenues, err = SheetVenues(ctx, t.Eng.DB, *sc); err != nil {
 					return 0, err
 				}
 				allow = len(sc.SheetVenues) > 0

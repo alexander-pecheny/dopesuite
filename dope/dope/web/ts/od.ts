@@ -2189,7 +2189,8 @@ function teamNameCell(teamIndex: number): HTMLElement {
     className: "team-name od-detailed-team-cell",
     layout: true,
     number: {text: num ? String(num) : "", className: "od-detailed-team-number"},
-    badges: teamBadges(teamIndex),
+    // The venue would crowd the name out of this narrow column; Итог shows it.
+    badges: lens.badges(teamIndex),
   });
 }
 

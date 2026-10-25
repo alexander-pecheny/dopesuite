@@ -14,10 +14,10 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
-// sheetVenues is the venues a host limited to them may write the sheets of in
-// this Game: their own, when the Game is one of the whole synch fest that
-// keeps a sheet per venue; none otherwise.
-func sheetVenues(ctx context.Context, q store.Queryer, sc Scope) ([]int64, error) {
+// SheetVenues is the venues a host limited to them may write the sheets of in
+// the Scope's Game: their own, when the Game is one of the whole synch fest
+// that keeps a sheet per venue; none otherwise.
+func SheetVenues(ctx context.Context, q store.Queryer, sc Scope) ([]int64, error) {
 	var gameType string
 	var venue *int64
 	if err := q.QueryRowContext(ctx, `select game_type, multifest_venue_id from games where id = ? and fest_id = ?`, sc.GameID, sc.FestID).Scan(&gameType, &venue); err != nil {

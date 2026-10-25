@@ -1348,8 +1348,11 @@ var RU = Strings{
 			OverrideShadowed: func(game string) string {
 				return fmt.Sprintf("%s (не действует: состав команды в этой игре изменён вручную)", game)
 			},
-			OverrideTitle:      func() string { return "Оверрайд игрока" },
-			OverridesSubhead:   func() string { return "Оверрайды" },
+			OverrideTitle:    func() string { return "Оверрайд игрока" },
+			OverridesSubhead: func() string { return "Оверрайды" },
+			PlanAddedGames: func(games string) string {
+				return fmt.Sprintf("Новая игра для всего турнира: %s", games)
+			},
 			PlanAddedTeams:     func(teams string) string { return fmt.Sprintf("Новые команды: %s", teams) },
 			PlanAddedVenues:    func(venues string) string { return fmt.Sprintf("Новые площадки: %s", venues) },
 			PlanDroppedTeams:   func(teams string) string { return fmt.Sprintf("Уйдут из составов: %s", teams) },

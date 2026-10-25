@@ -127,8 +127,9 @@ func venueGamesSection(data hostVenuePageData, ref string) *dopeui.Element {
 		if g.MultiFestVenueID == 0 {
 			href += "?venue=" + idstr.Format(data.Venue.ID) + "#input"
 		}
-		row := []dopeui.Item{dopeui.Href(href), dopeui.Listtitle(dopeui.Text(games.Get(g.Type).Title))}
-		if g.Title != data.Venue.Title {
+		kind := games.Get(g.Type).Title
+		row := []dopeui.Item{dopeui.Href(href), dopeui.Listtitle(dopeui.Text(kind))}
+		if g.Title != data.Venue.Title && g.Title != kind {
 			row = append(row, dopeui.Muted(dopeui.Text(g.Title)))
 		}
 		rows = append(rows, dopeui.Listrow(row...))
