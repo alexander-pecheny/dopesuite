@@ -609,3 +609,6 @@ public_index_empty = "Нет публичных фестов."
 jump_host_title_fest = "Открыть в режиме ведущего"
 fest_games_empty = "В этом фесте пока нет игр."
 games_subhead = "Игры"
+# A multi-site fest's площадки, each with its games: its view of the fest's
+# games, and its own.
+venues_subhead = "Площадки"

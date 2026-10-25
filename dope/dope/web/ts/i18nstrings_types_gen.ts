@@ -932,6 +932,7 @@ export type Strings = {
       tokensLead: () => string;
       tokensSubhead: () => string;
       usernameFallback: () => string;
+      venuesSubhead: () => string;
     };
     roster: {
       addOverrideBtn: () => string;

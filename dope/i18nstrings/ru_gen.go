@@ -1265,6 +1265,7 @@ var RU = Strings{
 			},
 			TokensSubhead:    func() string { return "API-токены" },
 			UsernameFallback: func() string { return "Профиль" },
+			VenuesSubhead:    func() string { return "Площадки" },
 		},
 		Roster: HostRosterStrings{
 			AddOverrideBtn:      func() string { return "Добавить оверрайд для игры" },

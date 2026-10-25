@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/multifest"
 	"dope/dope/platform/markdown"
 	"dope/dope/platform/util"
 	"dope/dope/web/hostpages"
@@ -43,6 +44,7 @@ type publicFestDetail struct {
 	Dates       string
 	Description template.HTML
 	Games       []hostpages.PublicFestGame
+	Venues      []hostpages.PublicVenue
 }
 
 func (d publicFestDetail) Ref() string {
@@ -144,6 +146,7 @@ func (s *server) renderPublicFestPage(w http.ResponseWriter, r *http.Request, id
 		Dates:       detail.Dates,
 		Description: detail.Description,
 		Games:       detail.Games,
+		Venues:      detail.Venues,
 	}))
 }
 
@@ -204,22 +207,31 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 	}
 	publicGames := make([]hostpages.PublicFestGame, len(gameRows))
 	for i, g := range gameRows {
+		_, sheets := games.As[games.VenueSheets](g.Type)
 		publicGames[i] = hostpages.PublicFestGame{
-			ID:    g.ID,
-			Slug:  g.Slug,
-			Code:  g.Code,
-			Title: g.Title,
-			Type:  games.Label(g.Type),
-			URL:   fmt.Sprintf("/fest/%s/game/%s/", festRef, g.Ref()),
+			ID:               g.ID,
+			Slug:             g.Slug,
+			Code:             g.Code,
+			Title:            g.Title,
+			Type:             games.Label(g.Type),
+			URL:              fmt.Sprintf("/fest/%s/game/%s/", festRef, g.Ref()),
+			MultiFestVenueID: g.MultiFestVenueID,
+			VenueSheets:      sheets,
 		}
 	}
+	venues, err := multifest.List(ctx, s.eng.DB, id)
+	if err != nil {
+		return publicFestDetail{}, err
+	}
+	festGames, venueGames := hostpages.SplitByVenue(publicGames, venues)
 	detail := publicFestDetail{
 		ID:          id,
 		Slug:        slug,
 		Title:       title,
 		Dates:       util.FormatFestDates(startDate.String, endDate.String),
 		Description: markdown.Render(description),
-		Games:       publicGames,
+		Games:       festGames,
+		Venues:      venueGames,
 	}
 	return detail, nil
 }

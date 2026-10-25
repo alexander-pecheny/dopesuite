@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"dope/dope/domain/multifest"
 	"dope/dope/storage/store"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // PublicFestGame is the per-game view model rendered in the public fest detail
@@ -18,6 +21,42 @@ type PublicFestGame struct {
 	URL   string
 	// MultiFestVenueID is the venue the game is on, 0 for none.
 	MultiFestVenueID int64
+	// VenueSheets: a game of the whole fest that each venue enters a sheet
+	// of, and so shows a view per venue (ADR-0033).
+	VenueSheets bool
+}
+
+// PublicVenue is a venue of a multi-site fest on its public page: its view of
+// each game of the whole fest that keeps a sheet per venue, then its own games.
+type PublicVenue struct {
+	Title string
+	Games []PublicFestGame
+}
+
+// SplitByVenue parts a fest's games into the games of the whole fest and the
+// games each of its venues shows.
+func SplitByVenue(all []PublicFestGame, venues []multifest.Venue) ([]PublicFestGame, []PublicVenue) {
+	var fest []PublicFestGame
+	for _, g := range all {
+		if g.MultiFestVenueID == 0 {
+			fest = append(fest, g)
+		}
+	}
+	out := make([]PublicVenue, 0, len(venues))
+	for _, v := range venues {
+		venue := PublicVenue{Title: v.Title}
+		for _, g := range all {
+			switch {
+			case g.MultiFestVenueID == 0 && g.VenueSheets:
+				g.URL += "?venue=" + idstr.Format(v.ID)
+			case g.MultiFestVenueID != v.ID:
+				continue
+			}
+			venue.Games = append(venue.Games, g)
+		}
+		out = append(out, venue)
+	}
+	return fest, out
 }
 
 // Ref returns the game's slug if set, otherwise the stringified id.

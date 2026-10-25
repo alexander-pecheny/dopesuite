@@ -37,6 +37,7 @@ type PublicFestDetail struct {
 	// goes through ui.Raw rather than being escaped as text.
 	Description template.HTML
 	Games       []PublicFestGame
+	Venues      []PublicVenue
 }
 
 // jumpHostNav are the body data-jump-* attrs menu.js reads to offer the host
@@ -95,18 +96,45 @@ func PublicFestDoc(d PublicFestDetail) *ui.Doc {
 	if d.Description != "" {
 		page = append(page, ui.Richtext(ui.Raw(string(d.Description))))
 	}
-	if len(d.Games) == 0 {
+	if len(d.Games) == 0 && len(d.Venues) == 0 {
 		page = append(page, ui.Empty(ui.Text(s.Host.Pages.FestGamesEmpty())))
 		return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 	}
-	rows := make([]ui.Item, 0, len(d.Games))
-	for _, g := range d.Games {
-		row := []ui.Item{ui.Href(g.URL), ui.Listtitle(ui.Text(g.Title))}
-		if g.Slug != "" {
-			row = append(row, ui.Muted(ui.Text(g.Slug)))
+	if len(d.Games) > 0 {
+		rows := make([]ui.Item, 0, len(d.Games))
+		for _, g := range d.Games {
+			row := []ui.Item{ui.Href(g.URL), ui.Listtitle(ui.Text(g.Title))}
+			if g.Slug != "" {
+				row = append(row, ui.Muted(ui.Text(g.Slug)))
+			}
+			rows = append(rows, ui.Listrow(row...))
 		}
-		rows = append(rows, ui.Listrow(row...))
+		page = append(page, ui.Section(ui.Subhead(ui.Text(s.Host.Pages.GamesSubhead())), ui.List(rows...)))
 	}
-	page = append(page, ui.Section(ui.Subhead(ui.Text(s.Host.Pages.GamesSubhead())), ui.List(rows...)))
+	if len(d.Venues) > 0 {
+		page = append(page, publicVenuesSection(d.Venues))
+	}
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
+
+// publicVenuesSection is each venue's name with its games as buttons under it.
+func publicVenuesSection(venues []PublicVenue) *ui.Element {
+	sect := []ui.Item{ui.Subhead(ui.Text(dopestrings.Default.Host.Pages.VenuesSubhead()))}
+	for _, v := range venues {
+		buttons := []ui.Item{ui.SpaceSM, ui.Wrap()}
+		for _, g := range v.Games {
+			buttons = append(buttons, ui.Button(ui.Href(g.URL), ui.Text(venueGameLabel(g, v.Title))))
+		}
+		sect = append(sect, ui.Col(ui.SpaceXS, ui.Strong(ui.Text(v.Title)), ui.Row(buttons...)))
+	}
+	return ui.Section(sect...)
+}
+
+// venueGameLabel names a game on its venue's row: by its format, unless its
+// title says more than the format and the venue.
+func venueGameLabel(g PublicFestGame, venue string) string {
+	if g.Title == "" || g.Title == venue {
+		return g.Type
+	}
+	return g.Title
 }
