@@ -125,8 +125,8 @@ select multifest_venue_id, count(*) from fest_teams where fest_id = ? and delete
 	return out, nil
 }
 
-// hostDashVenuesSection lists the venues, each with its team count and the
-// Games played there.
+// hostDashVenuesSection lists the venues, each a link to its page with its
+// team count, and under it the Games played there.
 func hostDashVenuesSection(data hostFestDashData, ref string) *dopeui.Element {
 	s := dopestrings.Default
 	rows := make([]dopeui.Item, 0, len(data.MultiFestVenues))
@@ -135,12 +135,10 @@ func hostDashVenuesSection(data hostFestDashData, ref string) *dopeui.Element {
 		if venue.Town != "" {
 			facts = venue.Town + " · " + facts
 		}
-		if len(venue.Games) == 0 {
-			rows = append(rows, dopeui.Listrow(dopeui.Col(dopeui.Listtitle(dopeui.Text(venue.Title)), dopeui.Muted(dopeui.Text(facts)))))
-			continue
-		}
+		rows = append(rows, dopeui.Listrow(dopeui.Href(venuePageURL(ref, venue.ID)),
+			dopeui.Listtitle(dopeui.Text(venue.Label())), dopeui.Muted(dopeui.Text(facts))))
 		for _, g := range venue.Games {
-			rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames, facts))
+			rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames, g.Type))
 		}
 	}
 	return dopeui.Section(dopeui.ID("venues"), dopeui.Subhead(dopeui.Text(s.Host.Multifest.Subhead())), dopeui.Actionlist(rows...))
@@ -158,18 +156,16 @@ func ownVenueRows(rows []venueRow, edited []int64) []venueRow {
 	return out
 }
 
-// hostDashVenueRosterSection is the roster of a host limited to venues: the
-// teams and the numbers of their venues.
+// hostDashVenueRosterSection is the roster of a host limited to venues: a link
+// to the page of each of their venues, where its teams and numbers are.
 func hostDashVenueRosterSection(data hostFestDashData, ref string) *dopeui.Element {
 	s := dopestrings.Default
-	teams := 0
+	var rows []dopeui.Item
 	for _, row := range data.MultiFestVenues {
 		if slices.Contains(data.RosterVenues, row.ID) {
-			teams += row.Teams
+			rows = append(rows, dopeui.Listrow(dopeui.Href(venuePageURL(ref, row.ID)), dopeui.Listtitle(dopeui.Text(row.Label())),
+				dopeui.Muted(dopeui.Text(s.Host.Multifest.Teams(strconv.Itoa(row.Teams))))))
 		}
 	}
-	return dopeui.Section(dopeui.Subhead(dopeui.Text(s.Host.Dash.RosterSubhead())), dopeui.List(
-		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTeamsLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(teams)))),
-		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/numbers"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.NumbersLink()))),
-	))
+	return dopeui.Section(dopeui.Subhead(dopeui.Text(s.Host.Dash.RosterSubhead())), dopeui.List(rows...))
 }

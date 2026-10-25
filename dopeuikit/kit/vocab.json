@@ -653,6 +653,12 @@
       "name": "numfield",
       "props": [
         {
+          "name": "name"
+        },
+        {
+          "name": "value"
+        },
+        {
           "name": "min"
         },
         {

@@ -85,6 +85,8 @@ viewer_title = "Открыть зрительскую страницу"
 unassigned_lead = "Командам не присвоены номера — редактирование результатов заблокировано. "
 # The link to the fest's numbers page.
 assign = "Присвоить номера"
+# The link to a venue's page, where a venue's Game numbers its teams.
+venue = "Открыть страницу площадки"
 
 # The game's download links in the ☰ menu (game-page.ts).
 [downloads]

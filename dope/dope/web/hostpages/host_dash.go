@@ -53,7 +53,6 @@ type hostFestDashData struct {
 	PlayerCount           int
 	TroikaCount           int
 	NumbersAssigned       int
-	NumbersAllSet         bool
 	CurrentRole           string
 	CanManageFest         bool
 	CanManageGames        bool
@@ -342,20 +341,14 @@ func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
 	if data.RosterNotice != "" {
 		sect = append(sect, dopeui.Note(dopeui.Text(data.RosterNotice)))
 	}
+	teams := strconv.Itoa(data.TeamCount)
+	if data.TeamCount > 0 && len(data.MultiFestVenues) == 0 {
+		teams = s.Host.Dash.TeamsNumbered(teams, strconv.Itoa(data.NumbersAssigned))
+	}
 	rows := []dopeui.Item{
-		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTeamsLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TeamCount)))),
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTeamsLink())), dopeui.Muted(dopeui.Text(teams))),
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/players"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterPlayersLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.PlayerCount)))),
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/troikas"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTroikasLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TroikaCount)))),
-	}
-	if data.TeamCount > 0 {
-		status := s.Host.Dash.NumbersStatusUnset()
-		if data.NumbersAllSet {
-			status = s.Host.Dash.NumbersStatusDone()
-		} else if data.NumbersAssigned > 0 {
-			status = s.Host.Dash.NumbersStatusPartial(strconv.Itoa(data.NumbersAssigned), strconv.Itoa(data.TeamCount))
-		}
-		rows = append(rows, dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/numbers"),
-			dopeui.Listtitle(dopeui.Text(s.Host.Dash.NumbersLink())), dopeui.Muted(dopeui.Text(status))))
 	}
 	ratingStatus := s.Host.Dash.RatingStatusNone()
 	if data.RatingID != 0 {
@@ -827,7 +820,6 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 		PlayerCount:     playerCount,
 		TroikaCount:     troikaCount,
 		NumbersAssigned: numbersAssigned,
-		NumbersAllSet:   teamCount > 0 && numbersAssigned == teamCount,
 		CurrentRole:     currentRole,
 		CanManageFest:   canManageFest,
 		CanManageGames:  canManageGames,

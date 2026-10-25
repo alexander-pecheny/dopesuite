@@ -13,7 +13,7 @@ import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, 
 import {bindNameCells} from "./name-cell.js";
 import {bindPinnedScroll} from "./sheet-pins.js";
 import {createStatusReporter, createViewerCounter, floatingPopover} from "./widgets.js";
-import {createGameDataLoader, fetchGameData, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
+import {createGameDataLoader, fetchGameData, gameVenue, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
 import type {GameDataSnapshot, GameRoute} from "./game-page.js";
 import {cssEscape} from "./cells.js";
 
@@ -98,7 +98,7 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
       if (canEdit) jumpLink = mountEditorLink();
     } else {
       jumpLink = mountViewerLink();
-      if (spec.init?.teamsUnnumbered) mountUnnumberedBanner(spec.festID);
+      if (spec.init?.teamsUnnumbered) mountUnnumberedBanner(spec.festID, gameVenue(spec.init));
     }
     if (spec.apiBase && spec.downloads !== false) mountGameDownloads({apiBase: spec.apiBase, canEdit});
   }
@@ -127,6 +127,7 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
       gameHref: chrome.gameHref || "",
       gameTitle,
       currentTitle,
+      venue: viewer ? null : gameVenue(spec.init),
     });
   }
 

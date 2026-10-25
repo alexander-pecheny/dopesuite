@@ -8,6 +8,7 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/storage/festaccess"
 	"dope/dope/web/route"
+	dopestrings "dope/i18nstrings"
 )
 
 // HandleHostRouter serves /host/…: every page as one row of the table below.
@@ -55,12 +56,27 @@ func (s *Server) buildRoutes() *route.Table {
 		return nil
 	})
 	t.Handle("GET "+fest, route.Member, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		// A host of one venue works on that venue's page alone.
+		if venues, all, err := festaccess.RosterVenues(r.Context(), s.h.Engine().DB, sc.FestID, sc.User.UserID, sc.Role); err != nil {
+			return err
+		} else if !all && len(venues) == 1 {
+			http.Redirect(w, r, venuePageURL(r.PathValue("fest"), venues[0]), http.StatusSeeOther)
+			return nil
+		}
 		s.renderHostFestDashboard(w, r, sc.FestID, hostDashMessages{})
 		return nil
 	})
 	t.Handle("POST "+fest, route.Manager, page(s.handleHostUpdateFest))
 	t.Handle("GET "+fest+"/teams", route.Roster, scoped(s.renderHostFestTeams))
 	t.Handle("POST "+fest+"/teams", route.Roster, scoped(s.handleHostSaveFestTeamFlags))
+	t.Handle("GET "+fest+"/venue/{venue}", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		notice := ""
+		if r.URL.Query().Get("saved") != "" {
+			notice = dopestrings.Default.Host.Venue.NumbersSaved()
+		}
+		return s.renderHostVenuePage(w, r, sc, "", notice, nil)
+	})
+	t.Handle("POST "+fest+"/venue/{venue}/numbers", route.Roster, s.handleHostSaveVenueNumbers)
 	t.Handle("GET "+fest+"/players", route.Manager, page(s.renderHostFestPlayers))
 	t.Handle("GET "+fest+"/troikas", route.Manager, page(s.renderHostFestTroikas))
 	t.Handle("POST "+fest+"/troikas", route.Manager, page(s.handleHostSaveTroikas))
@@ -86,9 +102,17 @@ func (s *Server) buildRoutes() *route.Table {
 		s.renderHostGameSettings(w, r, id, gid, "")
 	}))
 	t.Handle("POST "+game+"/settings", route.Manager, gamePage(s.handleHostUpdateGameSettings))
-	t.Handle("GET "+fest+"/numbers", route.Roster, scoped(func(w http.ResponseWriter, r *http.Request, sc route.Scope) {
+	t.Handle("GET "+fest+"/numbers", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		// A venue numbers its teams on its own page.
+		if venue, _, err := s.pages().NumbersVenue(r, sc); err != nil {
+			return err
+		} else if venue > 0 {
+			http.Redirect(w, r, venuePageURL(r.PathValue("fest"), venue), http.StatusSeeOther)
+			return nil
+		}
 		s.pages().RenderHostFestNumbers(w, r, sc, "", "", nil)
-	}))
+		return nil
+	})
 	t.Handle("POST "+fest+"/numbers", route.Roster, scoped(s.pages().HandleHostSaveFestNumbers))
 	t.Handle("POST "+fest+"/numbers/auto", route.Roster, scoped(s.pages().HandleHostAutoFestNumbers))
 	t.Handle("POST "+fest+"/numbers/clear", route.Roster, scoped(s.pages().HandleHostClearFestNumbers))

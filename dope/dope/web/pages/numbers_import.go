@@ -250,7 +250,7 @@ func (s *Server) HandleHostFestNumbersImportMatch(w http.ResponseWriter, r *http
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	venue, _, err := s.numbersVenue(r, sc)
+	venue, _, err := s.NumbersVenue(r, sc)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -336,7 +336,7 @@ func (s *Server) HandleHostFestNumbersImportApply(w http.ResponseWriter, r *http
 		}
 		return
 	}
-	venue, _, err := s.numbersVenue(r, sc)
+	venue, _, err := s.NumbersVenue(r, sc)
 	if err == nil {
 		err = s.AssignFestNumbers(r.Context(), festID, venue, req.Assignments)
 	}

@@ -15,7 +15,7 @@ import {keyedPlayers as kdKeyedPlayers, players as kdPlayers} from "./kd-protoco
 import type {KDSeat, KDState} from "./kd-protocol.js";
 import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
-import {parseGameRoute} from "./game-page.js";
+import {gameVenue, parseGameRoute, venuePageURL} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
@@ -369,7 +369,8 @@ function invalidateShootoutCaches(): void {
 
 function numbersPageURL(): string {
   if (!route.festID) return "#";
-  return `/host/fest/${route.festID}/numbers`;
+  const venue = gameVenue(gameInit);
+  return venue ? venuePageURL(route.festID, venue) : `/host/fest/${route.festID}/numbers`;
 }
 
 function invalidateTabCache(...tabs: string[]): void {
@@ -1209,13 +1210,15 @@ function buildNumberingGuard(): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "od-input-gate";
   const msg = document.createElement("p");
-  msg.appendChild(document.createTextNode(S.od.guard.lead()));
+  const venue = gameVenue(gameInit);
+  msg.appendChild(document.createTextNode(venue ? S.od.guard.leadVenue() : S.od.guard.lead()));
+  const phrase = venue ? S.od.guard.venuePage() : S.od.guard.numbers();
   if (viewer || !route.festID) {
-    msg.appendChild(document.createTextNode(S.od.guard.numbers()));
+    msg.appendChild(document.createTextNode(phrase));
   } else {
     const link = document.createElement("a");
     link.href = numbersPageURL();
-    link.textContent = S.od.guard.numbers();
+    link.textContent = phrase;
     msg.appendChild(link);
   }
   msg.appendChild(document.createTextNode("."));

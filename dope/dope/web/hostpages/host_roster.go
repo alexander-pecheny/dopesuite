@@ -44,8 +44,12 @@ type hostFestTeam struct {
 	// (ADR-0024).
 	Hand   bool
 	Edited bool
-	// Venue is the venue the team plays at, 0 for none (ADR-0032).
-	Venue int64
+	// Venue is the venue the team plays at, 0 for none (ADR-0032), and
+	// VenueNumber its number there, 0 for none.
+	Venue       int64
+	VenueNumber int
+	// Number is the team's number in a fest without venues, 0 for none.
+	Number int
 }
 
 type hostFestPlayer struct {
@@ -70,6 +74,8 @@ type hostFestRosterData struct {
 	Overrides       []overrides.HostPlayerOverrideRow
 	Error           string
 	Notice          string
+	// Numbers holds the numbers typed when a save was refused, by team id.
+	Numbers map[int64]string
 }
 
 type hostFestImportData struct {
@@ -127,11 +133,16 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 	if len(data.Teams) > 0 && !data.AllVenues {
 		page = append(page, hostVenueTeamsTable(data.Teams))
 	} else if len(data.Teams) > 0 {
-		rows := []dopeui.Item{dopeui.Trow(
+		numbered := len(data.Venues) == 0
+		head := []dopeui.Item{}
+		if numbered {
+			head = append(head, dopeui.Hcell(dopeui.Text(s.Host.Venue.ColNumber())))
+		}
+		rows := []dopeui.Item{dopeui.Trow(append(head,
 			dopeui.Hcell(dopeui.Text("ID")), dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())),
 			dopeui.Hcell(dopeui.Text(s.Host.Roster.ColCity())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColPlayers())),
 			dopeui.Hcell(dopeui.Text(s.Host.Roster.ColFlags())), dopeui.Hcell(),
-		)}
+		)...)}
 		for _, t := range data.Teams {
 			name := []dopeui.Item{dopeui.Text(t.Name)}
 			switch {
@@ -140,7 +151,11 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 			case t.Edited:
 				name = []dopeui.Item{dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(), dopeui.Paragraph(dopeui.Text(t.Name)), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeEdited())))}
 			}
-			rows = append(rows, dopeui.Trow(
+			cells := []dopeui.Item{}
+			if numbered {
+				cells = append(cells, numberCell(t, t.Number, data.Numbers))
+			}
+			rows = append(rows, dopeui.Trow(append(cells,
 				dopeui.Cell(dopeui.Text(optionalID(t.RatingID))),
 				dopeui.Cell(name...),
 				dopeui.Cell(dopeui.Text(t.City)),
@@ -151,14 +166,21 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 				)),
 				dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditTeamLabel(t.Name)),
 					dopeui.Data("team-edit", idstr.Format(t.ID)))),
-			))
+			)...))
 		}
-		page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(base+query), dopeui.Autocomplete("off"),
-			dopeui.Note(dopeui.Text(s.Host.Roster.TeamsEditHint())),
+		if numbered {
+			page = append(page, dopeui.Row(dopeui.Button(dopeui.Href("/host/fest/"+ref+"/numbers"), dopeui.Text(s.Host.Roster.NumbersTools()))))
+		}
+		form := []dopeui.Item{dopeui.DirCol, dopeui.Method("post"), dopeui.Action(base + query), dopeui.Autocomplete("off"),
+			dopeui.Note(dopeui.Text(s.Host.Roster.TeamsEditHint()))}
+		if numbered {
+			form = append(form, dopeui.Note(dopeui.Text(s.Host.Roster.NumbersHint())))
+		}
+		page = append(page, dopeui.Form(append(form,
 			dopeui.Note(dopeui.Text(s.Host.Roster.FlagsHint())),
 			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
 			dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.SaveSubmit()))),
-		))
+		)...))
 	} else if data.AllVenues {
 		page = append(page, dopeui.Empty(dopeui.Text(s.Host.Roster.TeamsEmpty())))
 	} else {
@@ -592,12 +614,31 @@ func importMessages(errMsg, notice string) []dopeui.Item {
 }
 
 func (s *Server) renderHostFestTeams(w http.ResponseWriter, r *http.Request, sc route.Scope) {
+	// One venue's teams live on its page.
+	venue, _ := idstr.Parse(r.URL.Query().Get("venue"))
+	if venue == 0 {
+		venue = soleVenue(sc)
+	}
+	if venue > 0 && sc.MayEditVenue(venue) {
+		http.Redirect(w, r, venuePageURL(r.PathValue("fest"), venue), http.StatusSeeOther)
+		return
+	}
 	s.renderHostFestTeamsWithMessage(w, r, sc, "", "")
 }
 
 func (s *Server) renderHostFestTeamsWithMessage(w http.ResponseWriter, r *http.Request, sc route.Scope, errMsg, notice string) {
+	s.renderHostFestTeamsPage(w, r, sc, hostFestRosterData{Error: errMsg, Notice: notice})
+}
+
+// renderHostFestTeamsTyped shows the teams page again with the numbers the
+// host typed, after a save refused them.
+func (s *Server) renderHostFestTeamsTyped(w http.ResponseWriter, r *http.Request, sc route.Scope, refusal string, numbers map[int64]string) {
+	s.renderHostFestTeamsPage(w, r, sc, hostFestRosterData{Error: refusal, Numbers: numbers})
+}
+
+func (s *Server) renderHostFestTeamsPage(w http.ResponseWriter, r *http.Request, sc route.Scope, data hostFestRosterData) {
 	s.festPage(w, r, sc.FestID, func(fest view.HostFest) (*dopeui.Doc, error) {
-		data := hostFestRosterData{Fest: fest, Error: errMsg, Notice: notice, AllVenues: sc.AllVenues}
+		data.Fest, data.AllVenues = fest, sc.AllVenues
 		var err error
 		if data.Teams, data.Venues, data.Venue, err = s.loadShownTeams(r, sc); err != nil {
 			return nil, err
@@ -669,7 +710,27 @@ func (s *Server) handleHostSaveFestTeamFlags(w http.ResponseWriter, r *http.Requ
 		s.renderHostFestTeamsWithMessage(w, r, sc, err.Error(), "")
 		return
 	}
-	s.renderHostFestTeamsWithMessage(w, r, sc, "", dopestrings.Default.Host.Roster.FlagsSavedNotice())
+	// A fest without venues numbers its teams in the same table.
+	venues, err := multifest.List(r.Context(), s.h.Engine().DB, sc.FestID)
+	if err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
+	if len(venues) > 0 {
+		s.renderHostFestTeamsWithMessage(w, r, sc, "", dopestrings.Default.Host.Roster.FlagsSavedNotice())
+		return
+	}
+	numbers, assignments, refusal := typedNumbers(r.PostForm, teams)
+	if refusal == "" {
+		if err := s.pages().SaveFestNumbers(r.Context(), sc.FestID, 0, assignments); err != nil {
+			refusal = err.Error()
+		}
+	}
+	if refusal != "" {
+		s.renderHostFestTeamsTyped(w, r, sc, refusal, numbers)
+		return
+	}
+	s.renderHostFestTeamsWithMessage(w, r, sc, "", dopestrings.Default.Host.Roster.SavedNotice())
 }
 
 // parseTypedFlags reads one team's Flags as an organizer types them: short
@@ -847,14 +908,14 @@ func (s *Server) renderHostRatingImport(w http.ResponseWriter, r *http.Request, 
 func (s *Server) loadHostFestTeams(ctx context.Context, sc route.Scope) ([]hostFestTeam, error) {
 	festID := sc.FestID
 	all, err := store.CollectRows(ctx, s.h.Engine().DB, `
-select tt.id, coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id), coalesce(tt.multifest_venue_id, 0)
+select tt.id, coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id), coalesce(tt.multifest_venue_id, 0), coalesce(tt.venue_number, 0), coalesce(tt.number, 0)
 from fest_teams tt
 left join fest_team_players ttp on ttp.team_id = tt.id
 where tt.fest_id = ? and tt.deleted = 0
 group by tt.id
 order by tt.position, tt.id`, []any{festID}, func(rows *sql.Rows) (hostFestTeam, error) {
 		var team hostFestTeam
-		return team, rows.Scan(&team.ID, &team.RatingID, &team.Name, &team.City, &team.Players, &team.Venue)
+		return team, rows.Scan(&team.ID, &team.RatingID, &team.Name, &team.City, &team.Players, &team.Venue, &team.VenueNumber, &team.Number)
 	})
 	if err != nil {
 		return nil, err

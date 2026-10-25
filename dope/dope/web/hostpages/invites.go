@@ -218,13 +218,12 @@ func (s *Server) JoinInvite(ctx context.Context, code string, userID int64) (joi
 	return out, inviteError(err)
 }
 
-// openURL is the page a followed link leads to: its Game, or the fest's
-// dashboard for a venue.
+// openURL is the page a followed link leads to: its Game, or its venue's page.
 func (s *Server) openURL(ctx context.Context, j joined) string {
 	if j.GameID > 0 {
 		return s.hostGameURL(ctx, j.FestID, j.GameID)
 	}
-	return "/host/fest/" + s.festRefOrID(ctx, j.FestID)
+	return venuePageURL(s.festRefOrID(ctx, j.FestID), j.MultiFestVenueID)
 }
 
 // ---- the dashboard ----

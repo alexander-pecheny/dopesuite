@@ -734,10 +734,6 @@ export type Strings = {
       jumpLabel: () => string;
       jumpTitle: () => string;
       kindImportFailed: (err: string) => string;
-      numbersLink: () => string;
-      numbersStatusDone: () => string;
-      numbersStatusPartial: (done: string, total: string) => string;
-      numbersStatusUnset: () => string;
       pageTitle: (title: string) => string;
       publicLabel: () => string;
       ratingStatusNone: () => string;
@@ -750,6 +746,7 @@ export type Strings = {
       settingsBtn: () => string;
       slugLabel: () => string;
       startDateLabel: () => string;
+      teamsNumbered: (n: string, numbered: string) => string;
       titleLabel: () => string;
       venuesHint: () => string;
     };
@@ -984,6 +981,8 @@ export type Strings = {
       needRatingNote: () => string;
       newTeamLabel: () => string;
       noOverrideGames: () => string;
+      numbersHint: () => string;
+      numbersTools: () => string;
       overrideShadowed: (game: string) => string;
       overrideTitle: () => string;
       overridesSubhead: () => string;
@@ -1006,6 +1005,7 @@ export type Strings = {
       ratingImportTitle: (title: string) => string;
       ratingSource: (id: string) => string;
       saveSubmit: () => string;
+      savedNotice: () => string;
       teamLabel: () => string;
       teamsCrumb: () => string;
       teamsEditHint: () => string;
@@ -1059,6 +1059,19 @@ export type Strings = {
       teamHint: () => string;
       teamNone: () => string;
       title: (title: string) => string;
+    };
+    venue: {
+      colNumber: () => string;
+      gamesEmpty: () => string;
+      gamesSubhead: () => string;
+      numberLabel: (team: string) => string;
+      numberRange: (team: string, max: string) => string;
+      numberTaken: (n: string, first: string, second: string) => string;
+      numbersSaved: () => string;
+      saveNumbers: () => string;
+      teamsHint: () => string;
+      teamsSubhead: (n: string) => string;
+      title: (venue: string, fest: string) => string;
     };
   };
   imports: {
@@ -1369,8 +1382,10 @@ export type Strings = {
     };
     guard: {
       lead: () => string;
+      leadVenue: () => string;
       missing: (names: string) => string;
       numbers: () => string;
+      venuePage: () => string;
     };
     head: {
       place: () => string;
@@ -1710,6 +1725,7 @@ export type Strings = {
     banner: {
       assign: () => string;
       unassignedLead: () => string;
+      venue: () => string;
     };
     division: {
       all: () => string;

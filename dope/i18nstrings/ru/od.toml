@@ -21,6 +21,9 @@ label = "Инвертировать"
 # the lead, then the phrase — a link on the host page, plain text for a viewer.
 lead = "Чтобы ввод работал, надо заполнить "
 numbers = "номера команд"
+# The same in a venue's Game, whose teams and numbers are on the venue's page.
+lead_venue = "Сначала добавьте команды и их номера "
+venue_page = "на странице площадки"
 # The teams still missing a number.
 missing = 'Без номера: {{.names}}.'
 

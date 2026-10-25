@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
+	"strings"
 	"testing"
 
 	"dope/dope/domain/entrants"
@@ -20,6 +23,8 @@ import (
 	"dope/dope/domain/roster"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/store"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A synch fest's import puts each team on the площадка the rating site has it
@@ -320,5 +325,125 @@ func TestAFestChangesItsTypeByStartingItsGamesAfresh(t *testing.T) {
 	settings.Kind, settings.ReplaceGames = multifest.Synch, false
 	if err := host.UpdateFest(t.Context(), festID, settings); err != nil {
 		t.Fatalf("a fest without Games needs no agreement: %v", err)
+	}
+}
+
+// A host of one venue lands on the venue's page, which holds its teams with
+// their numbers, and saves the numbers there; a number two teams share is
+// refused, and another venue's page is not theirs.
+func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, slug, revision, created_at, updated_at, kind) values('Синхрон', 'sync', 1, '2026-10-25', '2026-10-25', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
+		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
+			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
+	}
+	teams := []roster.FestRosterImportTeam{team(1, "Альфа", minsk), team(2, "Бета", minsk), team(3, "Гамма", brest)}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var minskID, brestID int64
+	db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = 10`, festID).Scan(&minskID)
+	db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = 20`, festID).Scan(&brestID)
+	hostID, _ := createAPITestSession(t, srv, "minsk")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	if _, err := db.Exec(`insert into fest_venue_hosts(fest_id, multifest_venue_id, user_id) values(?, ?, ?)`, festID, minskID, hostID); err != nil {
+		t.Fatal(err)
+	}
+	cookie := createTestSession(t, srv, hostID)
+	page := func(method, path string, form url.Values) *httptest.ResponseRecorder {
+		t.Helper()
+		var body io.Reader
+		if form != nil {
+			body = strings.NewReader(form.Encode())
+		}
+		req := httptest.NewRequest(method, path, body)
+		if form != nil {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
+		resp := httptest.NewRecorder()
+		srv.HostPageServer().HandleHostRouter(resp, req)
+		return resp
+	}
+	minskPage := fmt.Sprintf("/host/fest/sync/venue/%d", minskID)
+	for _, path := range []string{"/host/fest/sync", "/host/fest/sync/teams", "/host/fest/sync/numbers"} {
+		if resp := page(http.MethodGet, path, nil); resp.Code != http.StatusSeeOther || resp.Header().Get("Location") != minskPage {
+			t.Fatalf("%s answers %d to %q; want the venue page", path, resp.Code, resp.Header().Get("Location"))
+		}
+	}
+	body := page(http.MethodGet, minskPage, nil).Body.String()
+	if !strings.Contains(body, "Альфа") || !strings.Contains(body, "Бета") || strings.Contains(body, "Гамма") {
+		t.Fatalf("the venue page shows the wrong teams: %s", body)
+	}
+	if resp := page(http.MethodGet, fmt.Sprintf("/host/fest/sync/venue/%d", brestID), nil); resp.Code != http.StatusForbidden {
+		t.Fatalf("the venue host opened another venue's page: %d", resp.Code)
+	}
+
+	var alfa, beta int64
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Альфа'`, festID).Scan(&alfa)
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Бета'`, festID).Scan(&beta)
+	numbers := func(a, b string) url.Values {
+		return url.Values{fmt.Sprintf("number_%d", alfa): {a}, fmt.Sprintf("number_%d", beta): {b}}
+	}
+	if resp := page(http.MethodPost, minskPage+"/numbers", numbers("5", "5")); resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "Номер 5 стоит у двух команд") {
+		t.Fatalf("a shared number was not refused: %d %s", resp.Code, resp.Body.String())
+	}
+	if resp := page(http.MethodPost, minskPage+"/numbers", numbers("7", "")); resp.Code != http.StatusSeeOther {
+		t.Fatalf("save: %d %s", resp.Code, resp.Body.String())
+	}
+	var a, b sql.NullInt64
+	db.QueryRow(`select venue_number from fest_teams where id = ?`, alfa).Scan(&a)
+	db.QueryRow(`select venue_number from fest_teams where id = ?`, beta).Scan(&b)
+	if a.Int64 != 7 || b.Valid {
+		t.Fatalf("the venue numbers are %v and %v; want 7 and none", a, b)
+	}
+}
+
+// A fest without venues numbers its teams on its teams page, in the same
+// table and save as their Flags.
+func TestTheTeamsPageNumbersAFestWithoutVenues(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, slug, revision, created_at, updated_at) values('Кубок', 'cup', 1, '2026-10-25', '2026-10-25')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	teams := []roster.FestRosterImportTeam{
+		{RatingID: 1, Name: "Альфа", Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "А", LastName: "Капитан"}}},
+		{RatingID: 2, Name: "Бета", Players: []roster.FestRosterImportPlayer{{RatingID: 20, FirstName: "Б", LastName: "Капитан"}}},
+	}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	adminID, _ := createAPITestSession(t, srv, "boss")
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	cookie := createTestSession(t, srv, adminID)
+	var alfa, beta int64
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Альфа'`, festID).Scan(&alfa)
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Бета'`, festID).Scan(&beta)
+	form := url.Values{fmt.Sprintf("number_%d", alfa): {"2"}, fmt.Sprintf("number_%d", beta): {"1"}}
+	req := httptest.NewRequest(http.MethodPost, "/host/fest/cup/teams", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
+	resp := httptest.NewRecorder()
+	srv.HostPageServer().HandleHostRouter(resp, req)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "Номера и зачёты сохранены") {
+		t.Fatalf("save: %d %s", resp.Code, resp.Body.String())
+	}
+	var a, b int
+	db.QueryRow(`select number from fest_teams where id = ?`, alfa).Scan(&a)
+	db.QueryRow(`select number from fest_teams where id = ?`, beta).Scan(&b)
+	if a != 2 || b != 1 {
+		t.Fatalf("the numbers are %d and %d; want 2 and 1", a, b)
 	}
 }

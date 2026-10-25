@@ -125,7 +125,7 @@ func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, s
 		route.WriteError(w, r, err)
 		return
 	}
-	venue, list, err := s.numbersVenue(r, sc)
+	venue, list, err := s.NumbersVenue(r, sc)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -253,7 +253,7 @@ func (s *Server) HandleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	venue, _, err := s.numbersVenue(r, sc)
+	venue, _, err := s.NumbersVenue(r, sc)
 	if err != nil {
 		route.WriteError(w, r, err)
 		return
@@ -367,7 +367,7 @@ func (s *Server) ClearFestNumbers(ctx context.Context, festID, multiFestVenueID 
 
 func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Request, sc route.Scope) {
 	festID := sc.FestID
-	venue, _, err := s.numbersVenue(r, sc)
+	venue, _, err := s.NumbersVenue(r, sc)
 	if err == nil {
 		err = s.AutoFestNumbers(r.Context(), festID, venue)
 	}
@@ -380,7 +380,7 @@ func (s *Server) HandleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) HandleHostClearFestNumbers(w http.ResponseWriter, r *http.Request, sc route.Scope) {
 	festID := sc.FestID
-	venue, _, err := s.numbersVenue(r, sc)
+	venue, _, err := s.NumbersVenue(r, sc)
 	if err == nil {
 		err = s.ClearFestNumbers(r.Context(), festID, venue)
 	}
@@ -459,10 +459,10 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID, multiFestVenueI
 	return err
 }
 
-// numbersVenue is the venue a numbers request is about: the one ?venue= names,
+// NumbersVenue is the venue a numbers request is about: the one ?venue= names,
 // else the first the caller may edit, or 0 in a fest without venues. A venue
 // numbers its own teams. The list is the venues the caller may edit.
-func (s *Server) numbersVenue(r *http.Request, sc route.Scope) (int64, []multifest.Venue, error) {
+func (s *Server) NumbersVenue(r *http.Request, sc route.Scope) (int64, []multifest.Venue, error) {
 	all, err := multifest.List(r.Context(), s.h.Engine().DB, sc.FestID)
 	if err != nil || len(all) == 0 {
 		return 0, nil, err

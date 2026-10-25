@@ -979,24 +979,21 @@ var RU = Strings{
 			KindImportFailed: func(err string) string {
 				return fmt.Sprintf("Тип турнира поменян, но площадки с rating.chgk.info не загрузились: %s Загрузите команды на странице «Команды».", err)
 			},
-			NumbersLink:          func() string { return "Номера команд" },
-			NumbersStatusDone:    func() string { return "готово" },
-			NumbersStatusPartial: func(done string, total string) string { return fmt.Sprintf("%s из %s", done, total) },
-			NumbersStatusUnset:   func() string { return "не выставлены" },
-			PageTitle:            func(title string) string { return fmt.Sprintf("%s · ведущий", title) },
-			PublicLabel:          func() string { return "Публичный" },
-			RatingStatusNone:     func() string { return "нет rating ID" },
-			RosterImportLink:     func() string { return "Загрузить команды и игроков" },
-			RosterPlayersLink:    func() string { return "Игроки" },
-			RosterSubhead:        func() string { return "Участники" },
-			RosterTeamsLink:      func() string { return "Команды" },
-			RosterTroikasLink:    func() string { return "Тройки" },
-			SaveSubmit:           func() string { return "Сохранить" },
-			SettingsBtn:          func() string { return "Свойства" },
+			PageTitle:         func(title string) string { return fmt.Sprintf("%s · ведущий", title) },
+			PublicLabel:       func() string { return "Публичный" },
+			RatingStatusNone:  func() string { return "нет rating ID" },
+			RosterImportLink:  func() string { return "Загрузить команды и игроков" },
+			RosterPlayersLink: func() string { return "Игроки" },
+			RosterSubhead:     func() string { return "Участники" },
+			RosterTeamsLink:   func() string { return "Команды" },
+			RosterTroikasLink: func() string { return "Тройки" },
+			SaveSubmit:        func() string { return "Сохранить" },
+			SettingsBtn:       func() string { return "Свойства" },
 			SlugLabel: func() string {
 				return "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"
 			},
 			StartDateLabel: func() string { return "Дата начала" },
+			TeamsNumbered:  func(n string, numbered string) string { return fmt.Sprintf("%s, с номером: %s", n, numbered) },
 			TitleLabel:     func() string { return "Название" },
 			VenuesHint: func() string {
 				return "Ведущий площадки ведёт её игры и правит её команды и номера."
@@ -1335,6 +1332,10 @@ var RU = Strings{
 			},
 			NewTeamLabel:    func() string { return "Новая команда" },
 			NoOverrideGames: func() string { return "В фесте пока нет игр КСИ, ЭК или ЭС." },
+			NumbersHint: func() string {
+				return "Номер команды стоит в столбце «№». Этот номер команда пишет на бланках. Чтобы поменять номер, исправьте его и нажмите «Сохранить»."
+			},
+			NumbersTools: func() string { return "Номера списком или по алфавиту" },
 			OverrideShadowed: func(game string) string {
 				return fmt.Sprintf("%s (не действует: состав команды в этой игре изменён вручную)", game)
 			},
@@ -1365,13 +1366,14 @@ var RU = Strings{
 			RatingImportTitle: func(title string) string { return fmt.Sprintf("%s · импорт участников", title) },
 			RatingSource:      func(id string) string { return fmt.Sprintf("Источник: rating.chgk.info ID %s", id) },
 			SaveSubmit:        func() string { return "Сохранить" },
+			SavedNotice:       func() string { return "Номера и зачёты сохранены." },
 			TeamLabel:         func() string { return "Команда" },
 			TeamsCrumb:        func() string { return "Команды" },
 			TeamsEditHint: func() string {
 				return "Команду можно добавить, переименовать и поменять её состав прямо здесь. Повторный импорт из rating.chgk.info эти правки сохранит и перед записью покажет, что изменится."
 			},
 			TeamsEditHintVenue: func() string {
-				return "Здесь команды вашей площадки. Чтобы поменять название или состав, нажмите на карандаш в строке команды. Номер команда получает сама, по порядку добавления. Посмотреть и поменять номера можно на странице «Номера команд»."
+				return "Здесь команды ваших площадок. Чтобы поменять название или состав, нажмите на карандаш в строке команды. Номера команд меняются на странице площадки."
 			},
 			TeamsEmpty: func() string {
 				return "Команд пока нет. Загрузите их из rating.chgk.info или добавьте вручную."
@@ -1464,6 +1466,27 @@ var RU = Strings{
 			},
 			TeamNone: func() string { return "Ни за какую" },
 			Title:    func(title string) string { return fmt.Sprintf("%s · тройки", title) },
+		},
+		Venue: HostVenueStrings{
+			ColNumber: func() string { return "№" },
+			GamesEmpty: func() string {
+				return "У этой площадки пока нет игр. Их заводит организатор турнира."
+			},
+			GamesSubhead: func() string { return "Игры" },
+			NumberLabel:  func(team string) string { return fmt.Sprintf("Номер команды %s", team) },
+			NumberRange: func(team string, max string) string {
+				return fmt.Sprintf("Номер команды «%s» должен быть от 1 до %s.", team, max)
+			},
+			NumberTaken: func(n string, first string, second string) string {
+				return fmt.Sprintf("Номер %s стоит у двух команд: «%s» и «%s».", n, first, second)
+			},
+			NumbersSaved: func() string { return "Номера сохранены." },
+			SaveNumbers:  func() string { return "Сохранить номера" },
+			TeamsHint: func() string {
+				return "Номер команда получает сама, по порядку добавления. Этот номер команда пишет на бланках. Чтобы поменять номер, исправьте его в таблице и нажмите «Сохранить номера». Чтобы поменять название или состав, нажмите на карандаш."
+			},
+			TeamsSubhead: func(n string) string { return fmt.Sprintf("Команды: %s", n) },
+			Title:        func(venue string, fest string) string { return fmt.Sprintf("%s · %s", venue, fest) },
 		},
 	},
 	Imports: ImportsStrings{
@@ -1901,9 +1924,11 @@ var RU = Strings{
 			Tour: func(n string) string { return fmt.Sprintf("Т%s", n) },
 		},
 		Guard: OdGuardStrings{
-			Lead:    func() string { return "Чтобы ввод работал, надо заполнить " },
-			Missing: func(names string) string { return fmt.Sprintf("Без номера: %s.", names) },
-			Numbers: func() string { return "номера команд" },
+			Lead:      func() string { return "Чтобы ввод работал, надо заполнить " },
+			LeadVenue: func() string { return "Сначала добавьте команды и их номера " },
+			Missing:   func(names string) string { return fmt.Sprintf("Без номера: %s.", names) },
+			Numbers:   func() string { return "номера команд" },
+			VenuePage: func() string { return "на странице площадки" },
 		},
 		Head: OdHeadStrings{
 			Place:      func() string { return "Место" },
@@ -2489,6 +2514,7 @@ var RU = Strings{
 			UnassignedLead: func() string {
 				return "Командам не присвоены номера — редактирование результатов заблокировано. "
 			},
+			Venue: func() string { return "Открыть страницу площадки" },
 		},
 		Division: ScreenDivisionStrings{
 			All:   func() string { return "Все" },

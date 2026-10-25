@@ -3,6 +3,8 @@ package dopeserver
 import (
 	"context"
 	"dope/dope/domain/core"
+	"dope/dope/domain/games"
+	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/towns"
 	"dope/dope/storage/festaccess"
@@ -49,9 +51,20 @@ type gameInitPayload struct {
 	// is the universal team identity, so editing is blocked server-side; the
 	// client uses this to show a banner pointing the host at the numbers page.
 	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
+	// Venue is the venue a Game of a synch fest is played at, whose page
+	// holds its teams and their numbers.
+	Venue *gameVenue `json:"venue,omitempty"`
 	// Static marks a snapshot served in static (lockdown) mode: the client skips
 	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
 	Static bool `json:"static,omitempty"`
+}
+
+type gameVenue struct {
+	ID    int64  `json:"id"`
+	Title string `json:"title"`
+	// GameLabel names the Game by its format, since a venue's Game is
+	// usually titled after the venue.
+	GameLabel string `json:"gameLabel"`
 }
 
 // staticRoute is what a lockdown snapshot is cached under: one per Game, since
@@ -159,6 +172,19 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 		payload.TeamsUnnumbered = unnumbered
 	}
 	payload.CityCountry = towns.FestCityCountries(ctx, s.eng.DB, s.eng.Buff, scope.FestID)
+	if id, err := multifest.GameVenue(ctx, s.eng.DB, scope.GameID); err != nil {
+		return payload, err
+	} else if id > 0 {
+		venue, err := multifest.VenueOf(ctx, s.eng.DB, scope.FestID, id)
+		if err != nil {
+			return payload, err
+		}
+		var gameType string
+		if err := s.eng.DB.QueryRowContext(ctx, `select game_type from games where id = ?`, scope.GameID).Scan(&gameType); err != nil {
+			return payload, err
+		}
+		payload.Venue = &gameVenue{ID: venue.ID, Title: venue.Title, GameLabel: games.Get(gameType).Title}
+	}
 	return payload, nil
 }
 

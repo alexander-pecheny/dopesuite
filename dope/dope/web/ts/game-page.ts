@@ -41,12 +41,32 @@ interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
 }
 
+export interface GameVenue {
+  id: number;
+  title: string;
+  gameLabel: string;
+}
+
+// gameVenue reads the venue off a game's init payload.
+export function gameVenue(init: Record<string, unknown> | null | undefined): GameVenue | null {
+  const v = init?.venue as GameVenue | undefined;
+  return v && typeof v.id === "number" ? v : null;
+}
+
+// venuePageURL is a venue's page on the host tree.
+export function venuePageURL(festID: string | number, venue: GameVenue): string {
+  return `/host/fest/${festID}/venue/${venue.id}`;
+}
+
 export interface GameBreadcrumbsOptions {
   festTitle?: string;
   gameTitle?: string;
   currentTitle?: string;
   festHref?: string;
   gameHref?: string;
+  // A Game of a synch fest sits under its venue's page, the host's way to the
+  // venue's teams and numbers.
+  venue?: GameVenue | null;
   // Host pages sit under /host/fest/…, so their trail carries the My fests
   // crumb the URL does; the public viewer's does not.
   host?: boolean;
@@ -67,11 +87,16 @@ export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, opti
   ];
   if (options.host) trail.push({ text: S.screen.trail.host(), href: "/host" });
   trail.push({ text: festTitle, href: options.festHref || "/" });
+  let shownGame = gameTitle;
+  if (options.venue && options.festHref) {
+    trail.push({ text: options.venue.title, href: `${options.festHref}/venue/${options.venue.id}` });
+    if (gameTitle === options.venue.title) shownGame = options.venue.gameLabel || gameTitle;
+  }
   if (options.gameHref && currentTitle && currentTitle !== gameTitle) {
-    trail.push({ text: gameTitle, href: options.gameHref });
+    trail.push({ text: shownGame, href: options.gameHref });
     trail.push({ text: currentTitle });
   } else {
-    trail.push({ text: currentTitle || gameTitle });
+    trail.push({ text: currentTitle && currentTitle !== gameTitle ? currentTitle : shownGame });
   }
 
   root.replaceChildren();
@@ -121,7 +146,7 @@ function editorHrefForCurrentLocation(): string {
 // numbers. Team number is the universal team identity, so the server blocks
 // result editing until every team is numbered (409); this points the host at
 // the numbers page. Idempotent — re-mounting is a no-op while the banner is up.
-export function mountUnnumberedBanner(festID: string | number | null | undefined): HTMLElement | null {
+export function mountUnnumberedBanner(festID: string | number | null | undefined, venue: GameVenue | null = null): HTMLElement | null {
   if (!festID || document.querySelector("[data-unnumbered-banner]")) return null;
   const bar = document.createElement("div");
   bar.dataset.unnumberedBanner = "";
@@ -137,8 +162,8 @@ export function mountUnnumberedBanner(festID: string | number | null | undefined
   });
   bar.append(S.screen.banner.unassignedLead());
   const link = document.createElement("a");
-  link.href = `/host/fest/${festID}/numbers`;
-  link.textContent = S.screen.banner.assign();
+  link.href = venue ? venuePageURL(festID, venue) : `/host/fest/${festID}/numbers`;
+  link.textContent = venue ? S.screen.banner.venue() : S.screen.banner.assign();
   Object.assign(link.style, {color: "inherit", fontWeight: "600", textDecoration: "underline"});
   bar.appendChild(link);
   document.body.prepend(bar);

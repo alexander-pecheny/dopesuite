@@ -201,7 +201,7 @@ func expandNumfield(c *ExpandCtx, p *Element) []Node {
 	attrs := []Attr{ClassAttr(GrowClasses(base, p)...)}
 	attrs = append(attrs, IDAttr(p)...)
 	attrs = append(attrs, At("type", "number"))
-	attrs = append(attrs, CopyProps(p, "min", "max", "step", "placeholder")...)
+	attrs = append(attrs, CopyProps(p, "name", "value", "min", "max", "step", "placeholder")...)
 	attrs = append(attrs, MetaAttrs(p)...)
 	return one(El("input", attrs))
 }

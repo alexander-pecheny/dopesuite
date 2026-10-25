@@ -163,14 +163,20 @@ badge_hand = "вручную"
 badge_edited = "изменена"
 # Above the teams table: what the host's edits do to an import.
 # The hint a host limited to площадки reads instead of the import and зачёты notes.
-teams_edit_hint_venue = "Здесь команды вашей площадки. Чтобы поменять название или состав, нажмите на карандаш в строке команды. Номер команда получает сама, по порядку добавления. Посмотреть и поменять номера можно на странице «Номера команд»."
+teams_edit_hint_venue = "Здесь команды ваших площадок. Чтобы поменять название или состав, нажмите на карандаш в строке команды. Номера команд меняются на странице площадки."
 teams_edit_hint = "Команду можно добавить, переименовать и поменять её состав прямо здесь. Повторный импорт из rating.chgk.info эти правки сохранит и перед записью покажет, что изменится."
 # The зачёты column of the teams table: its header, the hint above the form and
 # the notice after a save.
 col_flags = "Зачёты"
+# The № column of a fest without venues.
+numbers_hint = "Номер команды стоит в столбце «№». Этот номер команда пишет на бланках. Чтобы поменять номер, исправьте его и нажмите «Сохранить»."
 flags_hint = "Зачёты команды пишутся через запятую: «Школ, Студ». На страницах ОД и КСИ по зачёту можно отфильтровать таблицу, а ЭС может брать в посев из ОД только команды одного зачёта. Зачёты, которые вы поменяли здесь, повторный импорт из rating.chgk.info не трогает."
 flags_placeholder = "Школ, Студ"
 flags_saved_notice = "Зачёты сохранены."
+# The teams page of a fest without venues saves the numbers too.
+saved_notice = "Номера и зачёты сохранены."
+# The way to the numbers page, for numbering from a pasted list or by name.
+numbers_tools = "Номера списком или по алфавиту"
 # Flags were sent for a team id this fest does not have.
 error_flags_foreign_team = 'Команды {{.id}} нет в этом фесте.'
 # Players page title and crumb: "<fest title> · игроки".
@@ -410,14 +416,12 @@ add_btn = "Добавить"
 # The participants links: subhead and list rows.
 roster_subhead = "Участники"
 roster_teams_link = "Команды"
+# The teams row of a fest without venues: how many teams, and how many of
+# them have a number.
+teams_numbered = '{{.n}}, с номером: {{.numbered}}'
 roster_players_link = "Игроки"
 # The dashboard link to the troikas page (hostTroikasDoc).
 roster_troikas_link = "Тройки"
-numbers_link = "Номера команд"
-# The team-numbers row's status note.
-numbers_status_unset = "не выставлены"
-numbers_status_done = "готово"
-numbers_status_partial = '{{.done}} из {{.total}}'
 # The rating-import row's status note.
 rating_status_none = "нет rating ID"
 roster_import_link = "Загрузить команды и игроков"
@@ -437,6 +441,21 @@ error_kind_invalid = "Такого типа турнира нет."
 error_kind_has_games = "Смена типа удалит игры турнира. Подтвердите удаление игр."
 # The type changed to a strict synch, and loading its площадки from the site failed.
 kind_import_failed = 'Тип турнира поменян, но площадки с rating.chgk.info не загрузились: {{.err}} Загрузите команды на странице «Команды».'
+
+[venue]
+# The площадка page (venue_page.go): a venue's teams with their numbers, and
+# the Games it plays.
+title = '{{.venue}} · {{.fest}}'
+games_subhead = "Игры"
+games_empty = "У этой площадки пока нет игр. Их заводит организатор турнира."
+teams_subhead = 'Команды: {{.n}}'
+col_number = "№"
+number_label = 'Номер команды {{.team}}'
+teams_hint = "Номер команда получает сама, по порядку добавления. Этот номер команда пишет на бланках. Чтобы поменять номер, исправьте его в таблице и нажмите «Сохранить номера». Чтобы поменять название или состав, нажмите на карандаш."
+save_numbers = "Сохранить номера"
+numbers_saved = "Номера сохранены."
+number_range = 'Номер команды «{{.team}}» должен быть от 1 до {{.max}}.'
+number_taken = 'Номер {{.n}} стоит у двух команд: «{{.first}}» и «{{.second}}».'
 
 [multifest]
 # A fest's type and its площадки (ADR-0031, web/hostpages/multifest.go).
