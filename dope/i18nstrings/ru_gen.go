@@ -1108,6 +1108,8 @@ var RU = Strings{
 			},
 		},
 		Invites: HostInvitesStrings{
+			CopiedNotice: func() string { return "Скопировано" },
+			CopyVenues:   func() string { return "Скопировать ссылки всех площадок" },
 			CreateSubmit: func() string { return "Создать ссылку" },
 			CreatedNotice: func() string {
 				return "Ссылка создана. Скопируйте её из списка ниже."
@@ -1126,7 +1128,7 @@ var RU = Strings{
 				return "Кто перейдёт по ссылке, станет ведущим одной игры. Остальные игры феста он будет видеть как зритель. Например, сделайте по ссылке на каждую городскую игру и отправьте их организаторам площадок."
 			},
 			LeadVenues: func() string {
-				return "Кто перейдёт по ссылке на площадку, станет её ведущим: будет вести её игры и править её команды и номера. По ссылке на игру можно вести только эту игру. Остальное ведущий видит как зритель. Сделайте ссылку для каждой площадки и отправьте её организаторам этой площадки."
+				return "Кто перейдёт по ссылке на площадку, станет её ведущим: будет вести её игры и править её команды и номера. По ссылке на игру можно вести только эту игру. Остальное ведущий видит как зритель. У каждой площадки уже есть своя ссылка. Отправьте её организаторам этой площадки."
 			},
 			Revoke: func() string { return "Отозвать" },
 			RevokeConfirm: func() string {
@@ -1135,6 +1137,7 @@ var RU = Strings{
 			RowMeta: func(game string, state string, usage string) string {
 				return fmt.Sprintf("%s · %s · %s", game, state, usage)
 			},
+			RowMetaUnnamed: func(state string, usage string) string { return fmt.Sprintf("%s · %s", state, usage) },
 			StateActive:    func() string { return "действует" },
 			StateExhausted: func() string { return "мест не осталось" },
 			StateExpired:   func() string { return "просрочена" },

@@ -262,6 +262,10 @@ func FetchRatingVenues(ctx context.Context, ratingID int64) ([]multifest.RatingV
 			Name string      `json:"name"`
 			Town *ratingTown `json:"town"`
 		} `json:"venue"`
+		Representative *struct {
+			Name    string `json:"name"`
+			Surname string `json:"surname"`
+		} `json:"representative"`
 	}
 	if err := getRatingJSON(ctx, fmt.Sprintf("/tournaments/%d/requests?itemsPerPage=%d", ratingID, ratingRequestsPage), &requests); err != nil {
 		return nil, err
@@ -269,7 +273,11 @@ func FetchRatingVenues(ctx context.Context, ratingID int64) ([]multifest.RatingV
 	var venues []multifest.RatingVenue
 	for _, r := range requests {
 		if r.Status == requestAccepted && r.Venue.ID > 0 {
-			venues = append(venues, multifest.RatingVenue{ID: r.Venue.ID, Title: strings.TrimSpace(r.Venue.Name), Town: ratingTownName(r.Venue.Town)})
+			venue := multifest.RatingVenue{ID: r.Venue.ID, Title: strings.TrimSpace(r.Venue.Name), Town: ratingTownName(r.Venue.Town)}
+			if p := r.Representative; p != nil {
+				venue.Representative = strings.TrimSpace(strings.TrimSpace(p.Surname) + " " + strings.TrimSpace(p.Name))
+			}
+			venues = append(venues, venue)
 		}
 	}
 	return venues, nil

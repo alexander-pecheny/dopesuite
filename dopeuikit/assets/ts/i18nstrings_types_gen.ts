@@ -35,6 +35,7 @@ export type Strings = {
       botHintLead: () => string;
       botHintMid: () => string;
       linkHint: () => string;
+      qrHint: () => string;
       waiting: () => string;
     };
     field: {

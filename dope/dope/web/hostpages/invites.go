@@ -12,6 +12,7 @@ import (
 
 	"dope/dope/domain/multifest"
 	"dope/dope/storage/festaccess"
+	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
 	dopeui "dope/dope/web/ui"
@@ -90,7 +91,7 @@ func (s *Server) loadFestInvites(ctx context.Context, festID int64, origin strin
 		return err
 	}
 	for _, v := range venues {
-		if err := add(venueInvites, v.ID, festInvite{MultiFestVenueID: v.ID, Opens: v.Title}); err != nil {
+		if err := add(venueInvites, v.ID, festInvite{MultiFestVenueID: v.ID, Opens: v.Label()}); err != nil {
 			return nil, err
 		}
 	}
@@ -130,6 +131,34 @@ func (s *Server) mintInvite(ctx context.Context, kind inviteKind, festID, scopeI
 		}
 		_, err := kind.links.Mint(ctx, tx, scopeID, userID, code, opt, time.Now())
 		return err
+	})
+}
+
+// ensureVenueInvites gives every venue that never had a link one, made in the
+// name of the fest's creator, so the organizer only sends them out.
+func (s *Server) ensureVenueInvites(ctx context.Context, festID int64) error {
+	type bare struct{ venue, creator int64 }
+	missing, err := store.CollectRows(ctx, s.h.Engine().DB, `
+select v.id, f.created_by from multifest_venues v join fests f on f.id = v.fest_id
+where v.fest_id = ? and not exists (select 1 from venue_invites i where i.multifest_venue_id = v.id)
+order by v.position, v.id`, []any{festID}, func(rows *sql.Rows) (bare, error) {
+		var b bare
+		return b, rows.Scan(&b.venue, &b.creator)
+	})
+	if err != nil || len(missing) == 0 {
+		return err
+	}
+	return s.saveAccess(ctx, festID, func(ctx context.Context, tx *sql.Tx) error {
+		for _, m := range missing {
+			code, err := authcred.NewInviteCode()
+			if err != nil {
+				return err
+			}
+			if _, err := venueInvites.links.Mint(ctx, tx, m.venue, m.creator, code, invitelink.Options{}, time.Now()); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
@@ -252,6 +281,10 @@ func hostDashInvitesSection(data hostFestDashData, ref string) *dopeui.Element {
 		lead = s.Host.Invites.LeadVenues()
 	}
 	sect := []dopeui.Item{dopeui.ID("invites"), dopeui.Subhead(dopeui.Text(s.Host.Invites.Subhead())), dopeui.Hint(dopeui.Text(lead))}
+	if text := venueInviteLines(data.Invites); text != "" {
+		sect = append(sect, dopeui.Row(dopeui.Button(dopeui.Data("copy", text), dopeui.Data("copied", s.Host.Invites.CopiedNotice()),
+			dopeui.Text(s.Host.Invites.CopyVenues()))))
+	}
 	if data.InviteError != "" {
 		sect = append(sect, dopeui.Empty(dopeui.Text(data.InviteError)))
 	}
@@ -273,9 +306,13 @@ func hostDashInvitesSection(data hostFestDashData, ref string) *dopeui.Element {
 		opensLabel = s.Host.Invites.VenueOrGameLabel()
 	}
 	for _, v := range data.MultiFestVenues {
-		opens = append(opens, dopeui.Option(dopeui.Value(opensVenue+idstr.Format(v.ID)), dopeui.Text(v.Title)))
+		opens = append(opens, dopeui.Option(dopeui.Value(opensVenue+idstr.Format(v.ID)), dopeui.Text(v.Label())))
 	}
 	for _, g := range data.Games {
+		if g.MultiFestVenueID > 0 {
+			// A venue's link opens its Games too.
+			continue
+		}
 		opens = append(opens, dopeui.Option(dopeui.Value(opensGame+idstr.Format(g.ID)), dopeui.Text(g.Title)))
 	}
 	ttl := func(hours int, label string) *dopeui.Element {
@@ -293,6 +330,21 @@ func hostDashInvitesSection(data hostFestDashData, ref string) *dopeui.Element {
 	return dopeui.Section(sect...)
 }
 
+// venueInviteLines is one line per venue with a working link, its name and
+// its newest such link, for the organizer to send out at once.
+func venueInviteLines(invites []festInvite) string {
+	var lines []string
+	seen := map[int64]bool{}
+	for _, inv := range invites {
+		if inv.MultiFestVenueID == 0 || inv.State != string(invitelink.Active) || seen[inv.MultiFestVenueID] {
+			continue
+		}
+		seen[inv.MultiFestVenueID] = true
+		lines = append(lines, inv.Opens+" "+inv.URL)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // inviteRow is one link: its name and facts, the URL to copy while it works,
 // who came in, and its revoke and delete buttons.
 func inviteRow(inv festInvite, ref string) *dopeui.Element {
@@ -305,7 +357,11 @@ func inviteRow(inv festInvite, ref string) *dopeui.Element {
 	if inv.Left != nil {
 		usage = s.Host.Invites.UsageLeft(strconv.FormatInt(inv.Used, 10), strconv.FormatInt(*inv.Left, 10))
 	}
-	facts := []dopeui.Item{dopeui.DirCol, dopeui.SpaceSM, dopeui.Strong(dopeui.Text(title)), dopeui.Muted(dopeui.Text(s.Host.Invites.RowMeta(inv.Opens, inviteStateText(inv.State), usage)))}
+	meta := s.Host.Invites.RowMeta(inv.Opens, inviteStateText(inv.State), usage)
+	if inv.Label == "" {
+		meta = s.Host.Invites.RowMetaUnnamed(inviteStateText(inv.State), usage)
+	}
+	facts := []dopeui.Item{dopeui.DirCol, dopeui.SpaceSM, dopeui.Strong(dopeui.Text(title)), dopeui.Muted(dopeui.Text(meta))}
 	active := inv.State == string(invitelink.Active)
 	if active && inv.ExpiresAt != "" {
 		facts = append(facts, dopeui.Muted(dopeui.Text(s.Host.Invites.Expires(tokenDate(inv.ExpiresAt)))))

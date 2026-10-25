@@ -12,6 +12,7 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strings"
 
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -36,13 +37,27 @@ type Venue struct {
 	Title         string `json:"title"`
 	Town          string `json:"town"`
 	RatingVenueID int64  `json:"rating_venue_id,omitempty"`
+	// Representative is the venue's representative on the rating site,
+	// surname first.
+	Representative string `json:"representative,omitempty"`
+}
+
+// Label names the venue with its representative, unless its title already
+// does, as the rating site often names a venue after the person.
+func (v Venue) Label() string {
+	surname, _, _ := strings.Cut(v.Representative, " ")
+	if surname == "" || strings.Contains(v.Title, surname) {
+		return v.Title
+	}
+	return v.Title + " / " + v.Representative
 }
 
 // RatingVenue is a venue as rating.chgk.info names it.
 type RatingVenue struct {
-	ID    int64
-	Title string
-	Town  string
+	ID             int64
+	Title          string
+	Town           string
+	Representative string
 }
 
 // FestKind is the fest's type.
@@ -55,10 +70,10 @@ func FestKind(ctx context.Context, q store.Queryer, festID int64) (string, error
 // List is the fest's venues in their order.
 func List(ctx context.Context, q store.Queryer, festID int64) ([]Venue, error) {
 	return store.CollectRows(ctx, q, `
-select id, title, town, coalesce(rating_venue_id, 0) from multifest_venues
+select id, title, town, coalesce(rating_venue_id, 0), representative from multifest_venues
 where fest_id = ? order by position, id`, []any{festID}, func(rows *sql.Rows) (Venue, error) {
 		var s Venue
-		return s, rows.Scan(&s.ID, &s.Title, &s.Town, &s.RatingVenueID)
+		return s, rows.Scan(&s.ID, &s.Title, &s.Town, &s.RatingVenueID, &s.Representative)
 	})
 }
 
@@ -67,7 +82,7 @@ where fest_id = ? order by position, id`, []any{festID}, func(rows *sql.Rows) (V
 func VenueOf(ctx context.Context, q store.Queryer, festID, venueID int64) (Venue, error) {
 	var v Venue
 	err := q.QueryRowContext(ctx, `
-select id, title, town, coalesce(rating_venue_id, 0) from multifest_venues where id = ? and fest_id = ?`, venueID, festID).Scan(&v.ID, &v.Title, &v.Town, &v.RatingVenueID)
+select id, title, town, coalesce(rating_venue_id, 0), representative from multifest_venues where id = ? and fest_id = ?`, venueID, festID).Scan(&v.ID, &v.Title, &v.Town, &v.RatingVenueID, &v.Representative)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, corei18n.User(dopestrings.Default.Host.Multifest.VenueUnknown())
 	}
@@ -198,13 +213,16 @@ func ratingVenueTx(ctx context.Context, tx *sql.Tx, festID int64, venue RatingVe
 	if err == nil && venue.Town != "" {
 		_, err = tx.ExecContext(ctx, `update multifest_venues set town = ? where id = ? and town = ''`, venue.Town, id)
 	}
+	if err == nil && venue.Representative != "" {
+		_, err = tx.ExecContext(ctx, `update multifest_venues set representative = ? where id = ?`, venue.Representative, id)
+	}
 	if err == nil || !errors.Is(err, sql.ErrNoRows) {
 		return id, err
 	}
 	res, err := tx.ExecContext(ctx, `
-insert into multifest_venues(fest_id, title, town, rating_venue_id, position)
-values(?, ?, ?, ?, (select coalesce(max(position), 0) + 1 from multifest_venues where fest_id = ?))`,
-		festID, venue.Title, venue.Town, venue.ID, festID)
+insert into multifest_venues(fest_id, title, town, rating_venue_id, representative, position)
+values(?, ?, ?, ?, ?, (select coalesce(max(position), 0) + 1 from multifest_venues where fest_id = ?))`,
+		festID, venue.Title, venue.Town, venue.ID, venue.Representative, festID)
 	if err != nil {
 		return 0, err
 	}

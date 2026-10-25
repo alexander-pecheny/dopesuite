@@ -38,7 +38,10 @@ var RU = Strings{
 			BotHintLead: func() string { return "Если ссылка не открывается, напишите боту " },
 			BotHintMid:  func() string { return " и пришлите код " },
 			LinkHint:    func() string { return "Для входа пройдите по ссылке:" },
-			Waiting:     func() string { return "Жду подтверждения от бота…" },
+			QrHint: func() string {
+				return "Если телеграм есть только на телефоне, наведите камеру телефона на этот код:"
+			},
+			Waiting: func() string { return "Жду подтверждения от бота…" },
 		},
 		Field: LoginFieldStrings{
 			Password: func() string { return "Пароль" },

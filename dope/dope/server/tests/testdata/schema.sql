@@ -369,7 +369,7 @@ CREATE TABLE multifest_venues(
   rating_venue_id integer,
   rating_id integer,
   position integer not null default 0
-);
+, representative TEXT NOT NULL DEFAULT '');
 
 -- table participant_players
 CREATE TABLE participant_players(

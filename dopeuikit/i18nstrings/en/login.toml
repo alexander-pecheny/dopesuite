@@ -12,6 +12,7 @@ password = "Log in with a password"
 
 [code]
 link_hint = "Follow this link to log in:"
+qr_hint = "If Telegram is only on your phone, point the phone camera at this code:"
 bot_hint_lead = "If the link does not open, write to the bot "
 bot_hint_mid = " and send it the code "
 waiting = "Waiting for the bot to confirm…"

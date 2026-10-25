@@ -817,6 +817,8 @@ export type Strings = {
       wholeRosterHint: () => string;
     };
     invites: {
+      copiedNotice: () => string;
+      copyVenues: () => string;
       createSubmit: () => string;
       createdNotice: () => string;
       delete: () => string;
@@ -832,6 +834,7 @@ export type Strings = {
       revoke: () => string;
       revokeConfirm: () => string;
       rowMeta: (game: string, state: string, usage: string) => string;
+      rowMetaUnnamed: (state: string, usage: string) => string;
       stateActive: () => string;
       stateExhausted: () => string;
       stateExpired: () => string;

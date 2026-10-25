@@ -14,6 +14,7 @@ The shipped binaries embed third-party work under its own terms:
 | JetBrains Mono | `dopeuikit/assets/fonts/` | OFL-1.1 — `licenses/OFL-1.1.txt` |
 | the body faces a reader may switch to, each rebuilt from its upstream by `scripts/bodyfonts.py`: Inter Fix RA (Inter + Raveo), IBM Plex Sans Fix and IBM Plex Serif Fix (IBM Plex), Literata Fix (Literata), STIX Two Text Fix (STIX Two) | `dopeuikit/assets/fonts/` | OFL-1.1 — `licenses/OFL-1.1.txt` |
 | @noble/hashes | `xy/web/assets/static/vendor/` | MIT — `licenses/MIT-noble-hashes.txt` |
+| QR Code generator library (Project Nayuki), made an ES module | `dopeuikit/assets/ts/vendor/qrcodegen.ts` | MIT — `licenses/MIT-qrcodegen.txt` |
 
 Go dependencies are declared in each module's `go.mod` and carry their own
 licences, which travel with those modules.

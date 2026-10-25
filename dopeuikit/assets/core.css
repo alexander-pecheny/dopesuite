@@ -566,6 +566,7 @@
   --control-h-sm: 30px;
   /* the micro tier: buttons that live INSIDE a table cell or a text line */
   --control-h-xs: 20px;
+  --qr-size: 200px;
 
   --leading-tight: 1;
   --leading-snug: 1.25;
@@ -2096,6 +2097,11 @@ input[type="radio"]:focus-visible {
    login code on one line at the 420px a sheet section is capped to — a box that
    cannot hold the thing it is for is the wrong size — and it breaks anywhere, so
    on a phone the code takes a second line instead of pushing the column wide. */
+/* The login code as a QR to scan with a phone: dark modules on white in either
+   theme, because a camera reads a dark-on-light code best. */
+.qr { width: var(--qr-size); height: var(--qr-size); padding: var(--space-2); border-radius: var(--radius-md); background: var(--uchu-yang); }
+.qr path { fill: var(--uchu-yin); }
+
 .bigcode { margin: 0; font-family: var(--font-mono); font-size: var(--text-xl); font-weight: var(--fw-bold); letter-spacing: 0.08em; text-align: center; padding: var(--space-3); border: 1px dashed var(--grid-dark); border-radius: var(--radius-md); overflow-wrap: anywhere; }
 
 /* Click-to-copy inline token (login: bot handle + code). The dashed underline

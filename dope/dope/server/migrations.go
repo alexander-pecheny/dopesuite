@@ -1050,6 +1050,10 @@ create table if not exists venue_invite_uses(
 `)
 		return err
 	}},
+	// v47: who represents a venue on the rating site, to name its invite link.
+	{Version: 47, Name: "multifest_venues.representative", Up: func(db *sql.DB) error {
+		return store.AddColumnsIfMissing(db, "multifest_venues", []store.ColumnSpec{{Name: "representative", Type: "TEXT NOT NULL DEFAULT ''"}})
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

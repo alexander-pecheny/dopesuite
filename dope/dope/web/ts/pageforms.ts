@@ -5,6 +5,8 @@
 //   - [data-confirm-changed] on a <select> inside a <form>: window.confirm()
 //     gate before submit, only when the select's choice differs from the one
 //     the page came with.
+//   - [data-copy] on a button: copy its text to the clipboard, and show
+//     data-copied on the button for a moment.
 //   - [data-select-all] on a field: select its text on focus/click (copy helper).
 //   - [data-autosubmit] on a control: submit its form on change (the access-role
 //     selects, which saved on change via an inline onchange before).
@@ -79,6 +81,21 @@ document.addEventListener("click", (event) => {
       else dialog.removeAttribute("open");
     }
   }
+});
+
+const COPIED_MS = 1500;
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  const button = target instanceof Element ? target.closest<HTMLElement>("[data-copy]") : null;
+  if (!button) return;
+  const label = button.textContent;
+  void navigator.clipboard.writeText(button.dataset.copy ?? "").then(() => {
+    button.textContent = button.dataset.copied ?? label;
+    setTimeout(() => {
+      button.textContent = label;
+    }, COPIED_MS);
+  });
 });
 
 function openAutoDialogs(): void {

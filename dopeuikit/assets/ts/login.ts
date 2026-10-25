@@ -8,9 +8,12 @@
 
 import S from "./i18nstrings.js";
 import { claimOutcome, errorMessage, loginMethods, pollTelegram, tgStartView } from "./login-model";
+import { qrcodegen } from "./vendor/qrcodegen";
 
 // How long a copied code shows its "copied" mark.
 const COPIED_FLASH_MS = 1000;
+// The quiet margin around a QR, in modules.
+const QR_BORDER = 2;
 const HTTP_NO_CONTENT = 204;
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -35,6 +38,8 @@ const methodMessage = byId("methodMessage");
 
 const tgDeepLink = byId<HTMLAnchorElement>("tgDeepLink");
 const tgBotName = byId("tgBotName");
+const tgQr = byId("tgQr");
+const tgQrHint = byId("tgQrHint");
 const tgCode = byId("tgCode");
 const codeMessage = byId("codeMessage");
 
@@ -125,9 +130,34 @@ function showCode(view: ReturnType<typeof tgStartView>): void {
     tgDeepLink.target = "_blank";
     tgDeepLink.rel = "noopener";
     tgDeepLink.hidden = false;
+    tgQr.replaceChildren(qrSvg(view.deepLinkHref));
   } else {
     tgDeepLink.hidden = true;
   }
+  tgQr.hidden = tgQrHint.hidden = tgDeepLink.hidden;
+}
+
+// qrSvg draws text as a QR code, one square per dark module.
+function qrSvg(text: string): SVGSVGElement {
+  const qr = qrcodegen.QrCode.encodeText(text, qrcodegen.QrCode.Ecc.MEDIUM);
+  const ns = "http://www.w3.org/2000/svg";
+  const side = qr.size + 2 * QR_BORDER;
+  let d = "";
+  for (let y = 0; y < qr.size; y++) {
+    for (let x = 0; x < qr.size; x++) {
+      if (qr.getModule(x, y)) d += `M${x + QR_BORDER},${y + QR_BORDER}h1v1h-1z`;
+    }
+  }
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${side} ${side}`);
+  svg.setAttribute("shape-rendering", "crispEdges");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", S.login.code.qrHint());
+  svg.classList.add("qr");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", d);
+  svg.append(path);
+  return svg;
 }
 
 // makeCopyable turns an inline token into a click-to-copy control that flashes a
