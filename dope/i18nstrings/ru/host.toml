@@ -455,6 +455,8 @@ teams_hint = "Номер команда получает сама, по поря
 save_numbers = "Сохранить номера"
 numbers_saved = "Номера сохранены."
 number_range = 'Номер команды «{{.team}}» должен быть от 1 до {{.max}}.'
+# Beside a number field whose number another team in the table already has.
+number_duplicate = "Этот номер уже стоит у другой команды."
 number_taken = 'Номер {{.n}} стоит у двух команд: «{{.first}}» и «{{.second}}».'
 
 [multifest]

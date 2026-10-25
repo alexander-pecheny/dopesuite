@@ -1091,6 +1091,7 @@ shootout: true
       colNumber: () => "№",
       gamesEmpty: () => "У этой площадки пока нет игр. Их заводит организатор турнира.",
       gamesSubhead: () => "Игры",
+      numberDuplicate: () => "Этот номер уже стоит у другой команды.",
       numberLabel: (team: string) => `Номер команды ${team}`,
       numberRange: (team: string, max: string) => `Номер команды «${team}» должен быть от 1 до ${max}.`,
       numberTaken: (n: string, first: string, second: string) => `Номер ${n} стоит у двух команд: «${first}» и «${second}».`,

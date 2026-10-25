@@ -101,9 +101,6 @@ func hostVenueDoc(data hostVenuePageData) *dopeui.Doc {
 		dopeui.Classicscripts("dist/pageforms.js dist/fest-teams.js"),
 		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), data.Venue.Label())),
 	}
-	if data.Error != "" {
-		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
-	}
 	if data.Notice != "" {
 		page = append(page, dopeui.Note(dopeui.Text(data.Notice)))
 	}
@@ -155,10 +152,14 @@ func venueTeamsSection(data hostVenuePageData, ref string) *dopeui.Element {
 			dopeui.Cell(dopeui.Text(strconv.Itoa(t.Players))),
 		))
 	}
+	sect = append(sect, dopeui.Note(dopeui.Text(s.Host.Venue.TeamsHint())))
+	// A refusal is about the table, so it stands right above it.
+	if data.Error != "" {
+		sect = append(sect, dopeui.Empty(dopeui.Text(data.Error)))
+	}
 	return dopeui.Section(append(sect,
-		dopeui.Note(dopeui.Text(s.Host.Venue.TeamsHint())),
 		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(venuePageURL(ref, data.Venue.ID)+"/numbers"), dopeui.Autocomplete("off"),
-			dopeui.Data("dirty-submit", ""),
+			dopeui.Data("dirty-submit", ""), dopeui.Data("unique-values", s.Host.Venue.NumberDuplicate()), refusedForm(data.Numbers != nil),
 			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
 			dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Venue.SaveNumbers()))),
 		))...)
@@ -235,9 +236,18 @@ func numberCell(t hostFestTeam, number int, typed map[int64]string) *dopeui.Elem
 	if !ok && number > 0 {
 		text = strconv.Itoa(number)
 	}
-	return dopeui.Cell(dopeui.Numfield(dopeui.Name(venueNumberField(t.ID)), dopeui.Value(text), dopeui.Narrow(),
+	return dopeui.Cell(dopeui.Numfield(dopeui.Name(venueNumberField(t.ID)), dopeui.Value(text), dopeui.Narrow(), dopeui.Data("unique", ""),
 		dopeui.Min("1"), dopeui.Max(strconv.Itoa(numbering.MaxNumber)),
 		dopeui.Aria("label", dopestrings.Default.Host.Venue.NumberLabel(t.Name))))
+}
+
+// refusedForm marks a form the server sent back with what the host typed,
+// which counts as changed though its fields hold the values they came with.
+func refusedForm(refused bool) dopeui.Item {
+	if refused {
+		return dopeui.Data("refused", "yes")
+	}
+	return dopeui.Data("refused", "no")
 }
 
 // searchMode tells the team editor whether to ask the rating search at every

@@ -7,6 +7,11 @@
 //     the page came with.
 //   - [data-dirty-submit] on a <form>: its submit buttons stay disabled until
 //     a field differs from the value the page came with.
+//     A form the server sent back after refusing it ([data-refused=yes]) counts
+//     as changed, since what it shows is not what is saved.
+//   - [data-unique-values="message"] on a <form>: two of its [data-unique]
+//     fields holding the same value are both marked invalid with that
+//     message, which stops the submit at the first of them.
 //   - [data-copy] on a button: copy its text to the clipboard, and show
 //     data-copied on the button for a moment.
 //   - [data-select-all] on a field: select its text on focus/click (copy helper).
@@ -101,13 +106,29 @@ document.addEventListener("click", (event) => {
 });
 
 function syncDirtySubmit(form: HTMLFormElement): void {
-  const dirty = [...form.elements].some((el) =>
+  const dirty = form.dataset.refused === "yes" || [...form.elements].some((el) =>
     (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && el.type !== "hidden" && el.value !== el.defaultValue);
   for (const button of form.querySelectorAll<HTMLButtonElement>("button[type=submit]")) button.disabled = !dirty;
 }
 
+function syncUnique(form: HTMLFormElement): void {
+  const message = form.dataset.uniqueValues || "";
+  const fields = [...form.querySelectorAll<HTMLInputElement>("input[data-unique]")];
+  const count = new Map<string, number>();
+  for (const field of fields) {
+    const value = field.value.trim();
+    if (value) count.set(value, (count.get(value) || 0) + 1);
+  }
+  for (const field of fields) {
+    const taken = (count.get(field.value.trim()) || 0) > 1;
+    field.setCustomValidity(taken ? message : "");
+    field.setAttribute("aria-invalid", String(taken));
+  }
+}
+
 document.addEventListener("input", (event) => {
   const form = (event.target as FormControl).form;
+  if (form?.hasAttribute("data-unique-values")) syncUnique(form);
   if (form?.hasAttribute("data-dirty-submit")) syncDirtySubmit(form);
 });
 
@@ -119,6 +140,7 @@ function openAutoDialogs(): void {
   }
 }
 function boot(): void {
+  for (const form of document.querySelectorAll<HTMLFormElement>("form[data-unique-values]")) syncUnique(form);
   for (const form of document.querySelectorAll<HTMLFormElement>("form[data-dirty-submit]")) syncDirtySubmit(form);
   openAutoDialogs();
 }

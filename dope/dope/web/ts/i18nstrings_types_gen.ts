@@ -1069,6 +1069,7 @@ export type Strings = {
       colNumber: () => string;
       gamesEmpty: () => string;
       gamesSubhead: () => string;
+      numberDuplicate: () => string;
       numberLabel: (team: string) => string;
       numberRange: (team: string, max: string) => string;
       numberTaken: (n: string, first: string, second: string) => string;

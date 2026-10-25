@@ -951,6 +951,10 @@ select.input,
    was narrow in xy and full width in every other app. */
 .input-narrow { width: 4.5rem; }
 
+/* A field a page marked invalid (a number two teams share) says so before it
+   is submitted. */
+.input[aria-invalid="true"] { outline: 2px solid var(--danger); outline-offset: -2px; }
+
 .checkbox {
   display: inline-flex;
   align-items: center;

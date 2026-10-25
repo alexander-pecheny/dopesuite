@@ -174,6 +174,7 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 			page = append(page, dopeui.Row(dopeui.Button(dopeui.Href("/host/fest/"+ref+"/numbers"), dopeui.Text(s.Host.Roster.NumbersTools()))))
 		}
 		form := []dopeui.Item{dopeui.DirCol, dopeui.Method("post"), dopeui.Action(base + query), dopeui.Autocomplete("off"), dopeui.Data("dirty-submit", ""),
+			dopeui.Data("unique-values", s.Host.Venue.NumberDuplicate()), refusedForm(data.Numbers != nil),
 			dopeui.Note(dopeui.Text(s.Host.Roster.TeamsEditHint()))}
 		if numbered {
 			form = append(form, dopeui.Note(dopeui.Text(s.Host.Roster.NumbersHint())))

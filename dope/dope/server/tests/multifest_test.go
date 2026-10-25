@@ -393,7 +393,9 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	numbers := func(a, b string) url.Values {
 		return url.Values{fmt.Sprintf("number_%d", alfa): {a}, fmt.Sprintf("number_%d", beta): {b}}
 	}
-	if resp := page(http.MethodPost, minskPage+"/numbers", numbers("5", "5")); resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "Номер 5 стоит у двух команд") {
+	// The refused page shows what was typed, and its save stays enabled.
+	if resp := page(http.MethodPost, minskPage+"/numbers", numbers("5", "5")); resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "Номер 5 стоит у двух команд") ||
+		!strings.Contains(resp.Body.String(), `data-refused="yes"`) {
 		t.Fatalf("a shared number was not refused: %d %s", resp.Code, resp.Body.String())
 	}
 	if resp := page(http.MethodPost, minskPage+"/numbers", numbers("7", "")); resp.Code != http.StatusSeeOther {

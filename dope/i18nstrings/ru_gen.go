@@ -1481,8 +1481,9 @@ var RU = Strings{
 			GamesEmpty: func() string {
 				return "У этой площадки пока нет игр. Их заводит организатор турнира."
 			},
-			GamesSubhead: func() string { return "Игры" },
-			NumberLabel:  func(team string) string { return fmt.Sprintf("Номер команды %s", team) },
+			GamesSubhead:    func() string { return "Игры" },
+			NumberDuplicate: func() string { return "Этот номер уже стоит у другой команды." },
+			NumberLabel:     func(team string) string { return fmt.Sprintf("Номер команды %s", team) },
 			NumberRange: func(team string, max string) string {
 				return fmt.Sprintf("Номер команды «%s» должен быть от 1 до %s.", team, max)
 			},
