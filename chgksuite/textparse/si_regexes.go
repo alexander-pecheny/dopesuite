@@ -25,12 +25,17 @@ var (
 	reURLLike = regexp.MustCompile(`https?://|www\.|/|\.(?:ru|com|net|org|io|info|edu|su|by|ua|kz)(?:[^\p{L}\p{N}_]|$)`)
 )
 
+// The point values an SI question can be worth run from siStep to siTop in
+// steps of siStep, and a troika тема has troikaQuestions questions.
+const (
+	siStep          = 10
+	siTop           = 100
+	troikaQuestions = 3
+)
+
 // siQuestionNumbers are the point values an SI question can be worth; a line
 // numbered anything else is not a question.
-var siQuestionNumbers = map[int]bool{
-	10: true, 20: true, 30: true, 40: true, 50: true,
-	60: true, 70: true, 80: true, 90: true, 100: true,
-}
+var siQuestionNumbers = numbersBy(siStep, siTop, siStep)
 
 var (
 	reTroikaRedundantThemePrefix    = regexp.MustCompile(`(?i)^ТЕМА[\.:]` + ws + `*`)
@@ -57,7 +62,15 @@ var (
 )
 
 // troikaQuestionNumbers: a troika theme holds three questions.
-var troikaQuestionNumbers = map[int]bool{1: true, 2: true, 3: true}
+var troikaQuestionNumbers = numbersBy(1, troikaQuestions, 1)
+
+func numbersBy(from, to, step int) map[int]bool {
+	out := map[int]bool{}
+	for n := from; n <= to; n += step {
+		out[n] = true
+	}
+	return out
+}
 
 // structuralTypes are the elements that close whatever question was being read.
 var structuralTypes = map[string]bool{

@@ -15,6 +15,7 @@ import (
 // is recorded in schema_versions; a new step takes the next number and goes at
 // the end, never in the middle. `server/tests/testdata/schema.sql` pins what
 // the list makes of an empty file.
+// sloplint: ignore[magic-numbers] a step's version is its id in schema_versions, not a quantity
 var Migrations = []schema.Migration{
 	{Version: 1, Name: "the v1 schema", Up: schema.Exec(`
 -- ===== accounts =====

@@ -242,8 +242,8 @@ func (s *Server) handleHostCreateInvite(w http.ResponseWriter, r *http.Request, 
 		kind = venueInvites
 	}
 	scopeID, _ := idstr.Parse(opens[min(1, len(opens)):])
-	maxUses, _ := strconv.ParseInt(strings.TrimSpace(r.FormValue("max_uses")), 10, 64)
-	ttl, _ := strconv.ParseInt(r.FormValue("ttl_hours"), 10, 64)
+	maxUses, _ := idstr.Parse(strings.TrimSpace(r.FormValue("max_uses")))
+	ttl, _ := idstr.Parse(r.FormValue("ttl_hours"))
 	req := invitelink.MintRequest{Label: r.FormValue("label"), MaxUses: maxUses, TTLHours: ttl}
 	if err := s.mintInvite(r.Context(), kind, sc.FestID, scopeID, sc.User.UserID, req); err != nil {
 		return s.renderInviteMessage(w, r, sc.FestID, err)
@@ -353,9 +353,9 @@ func inviteRow(inv festInvite, ref string) *dopeui.Element {
 	if title == "" {
 		title = inv.Opens
 	}
-	usage := s.Host.Invites.Usage(strconv.FormatInt(inv.Used, 10))
+	usage := s.Host.Invites.Usage(idstr.Format(inv.Used))
 	if inv.Left != nil {
-		usage = s.Host.Invites.UsageLeft(strconv.FormatInt(inv.Used, 10), strconv.FormatInt(*inv.Left, 10))
+		usage = s.Host.Invites.UsageLeft(idstr.Format(inv.Used), idstr.Format(*inv.Left))
 	}
 	meta := s.Host.Invites.RowMeta(inv.Opens, inviteStateText(inv.State), usage)
 	if inv.Label == "" {

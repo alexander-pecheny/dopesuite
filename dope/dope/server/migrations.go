@@ -28,6 +28,7 @@ import (
 // 2025 — under the number it was always recorded as; 6, 7 and 20 were
 // recorded without a step of their own and are not re-issued. A new step
 // takes the next number and goes at the end.
+// sloplint: ignore[magic-numbers] a step's version is its id in schema_versions, not a quantity
 var migrations = []schema.Migration{
 	{Version: 2, Name: "base schema", Up: func(db *sql.DB) error {
 		if err := migrateLegacyFestSchema(db); err != nil {

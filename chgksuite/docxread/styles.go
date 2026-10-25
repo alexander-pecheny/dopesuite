@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/roman"
 )
 
 // style is what python-docx's ParagraphStyle exposes to parsing_engine.py:
@@ -269,24 +271,10 @@ func alphaNumber(value int) string {
 	return result
 }
 
-var romanNumerals = []struct {
-	n int
-	s string
-}{
-	{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"},
-	{50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"},
-}
-
+// romanNumber is value in Roman numerals, and "I" where Word would have none.
 func romanNumber(value int) string {
-	var b strings.Builder
-	for _, nm := range romanNumerals {
-		for value >= nm.n {
-			b.WriteString(nm.s)
-			value -= nm.n
-		}
+	if r := roman.Upper(value); r != "" {
+		return r
 	}
-	if b.Len() == 0 {
-		return "I"
-	}
-	return b.String()
+	return "I"
 }

@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -226,19 +225,17 @@ var festMonthsGenitive = [...]string{
 }
 
 // parseFestYMD parses a "YYYY-MM-DD" date, returning the components and whether
-// it is a valid in-range calendar date.
+// it is a valid calendar date.
 func parseFestYMD(s string) (year, month, day int, ok bool) {
 	s = strings.TrimSpace(s)
-	if len(s) < 10 || s[4] != '-' || s[7] != '-' {
+	if len(s) < len(time.DateOnly) {
 		return 0, 0, 0, false
 	}
-	y, err1 := strconv.Atoi(s[0:4])
-	m, err2 := strconv.Atoi(s[5:7])
-	d, err3 := strconv.Atoi(s[8:10])
-	if err1 != nil || err2 != nil || err3 != nil || m < 1 || m > 12 || d < 1 || d > 31 {
+	t, err := time.Parse(time.DateOnly, s[:len(time.DateOnly)])
+	if err != nil {
 		return 0, 0, 0, false
 	}
-	return y, m, d, true
+	return t.Year(), int(t.Month()), t.Day(), true
 }
 
 // HumanizeFestDates renders a fest's start/end as a Russian human-readable date

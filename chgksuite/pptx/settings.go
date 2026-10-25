@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/roman"
 )
 
 // chgksuite's fallbacks, in points, for the keys a config may leave out.
@@ -236,26 +238,11 @@ func alphaMarker(n int, upper bool) string {
 	return out
 }
 
-var romanNumerals = []struct {
-	value int
-	text  string
-}{
-	{1000, "m"}, {900, "cm"}, {500, "d"}, {400, "cd"}, {100, "c"}, {90, "xc"},
-	{50, "l"}, {40, "xl"}, {10, "x"}, {9, "ix"}, {5, "v"}, {4, "iv"}, {1, "i"},
-}
-
 func romanMarker(n int, upper bool) string {
-	out := ""
-	for _, nm := range romanNumerals {
-		for n >= nm.value {
-			out += nm.text
-			n -= nm.value
-		}
-	}
 	if upper {
-		return strings.ToUpper(out)
+		return roman.Upper(n)
 	}
-	return out
+	return strings.ToLower(roman.Upper(n))
 }
 
 // serviceSlideIndices is _slide_indices_from_config: one index or a list of them.

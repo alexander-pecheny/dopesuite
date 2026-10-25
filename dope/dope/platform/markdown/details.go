@@ -36,12 +36,19 @@ const detailsKeyword = "details"
 // text.
 var defaultDetailsSummary = dopestrings.Default.Markdown.Details.DefaultSummary()
 
+// detailsPriority places the parser and renderer among goldmark's own, and a
+// fence takes at least minFenceColons colons.
+const (
+	detailsPriority = 100
+	minFenceColons  = 3
+)
+
 func (detailsExtension) Extend(md goldmark.Markdown) {
 	md.Parser().AddOptions(parser.WithBlockParsers(
-		util.Prioritized(&detailsParser{}, 100),
+		util.Prioritized(&detailsParser{}, detailsPriority),
 	))
 	md.Renderer().AddOptions(renderer.WithNodeRenderers(
-		util.Prioritized(&detailsRenderer{}, 100),
+		util.Prioritized(&detailsRenderer{}, detailsPriority),
 	))
 }
 
@@ -81,7 +88,7 @@ func (p *detailsParser) Trigger() []byte { return []byte{':'} }
 func (p *detailsParser) Open(parent ast.Node, reader text.Reader, pc parser.Context) (ast.Node, parser.State) {
 	line, segment := reader.PeekLine()
 	colons, rest := fenceColonRun(line, pc.BlockOffset())
-	if colons < 3 || !strings.HasPrefix(rest, detailsKeyword) {
+	if colons < minFenceColons || !strings.HasPrefix(rest, detailsKeyword) {
 		return nil, parser.NoChildren
 	}
 	// Require the keyword to stand alone or be followed by space — so a future
@@ -97,7 +104,7 @@ func (p *detailsParser) Open(parent ast.Node, reader text.Reader, pc parser.Cont
 
 func (p *detailsParser) Continue(node ast.Node, reader text.Reader, pc parser.Context) parser.State {
 	line, segment := reader.PeekLine()
-	if colons, rest := fenceColonRun(line, pc.BlockOffset()); colons >= 3 && rest == "" {
+	if colons, rest := fenceColonRun(line, pc.BlockOffset()); colons >= minFenceColons && rest == "" {
 		reader.Advance(segment.Len())
 		return parser.Close
 	}

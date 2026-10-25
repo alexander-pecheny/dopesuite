@@ -20,6 +20,7 @@ import (
 // needs to order, sync and authorize (the trust model, see AGENTS.md). Steps
 // before v29 still say `_enc`, because that is what the columns were called
 // when they ran.
+// sloplint: ignore[magic-numbers] a step's version is its id in schema_versions, not a quantity
 var migrations = []schema.Migration{
 	{Version: 1, Name: "the M1 schema", Up: schema.Exec(`
 -- ===== auth (ported from dope) =====
