@@ -70,6 +70,10 @@ BRANCH_ZONE = "dopetest.pecheny.me"
 BRANCH_USER = "dopetest"
 BRANCH_PORT_BASE = 9791
 BRANCH_PORT_LIMIT = 9819
+# A copy of production's buff.db (/home/ap/buff/buff.db on vps2day-ee), read
+# by every instance's rating search; refresh it by copying again. An instance
+# reads none when the file is missing.
+BRANCH_BUFF_DB = f"{BRANCH_STATE_DIR}/buff.db"
 # The prod database a --seed prod instance starts from.
 BRANCH_PROD_HOST = "vps2day-ee"
 BRANCH_PROD_DB = "/var/lib/dope/fest.db"
@@ -321,6 +325,7 @@ PORT={port}
 DOPE_ENV=staging
 DOPE_DB={BRANCH_STATE_DIR}/{name}/fest.db
 DOPE_TRUSTED_ORIGIN_HOSTS={name}.{BRANCH_ZONE}
+DOPE_BUFF_DB={BRANCH_BUFF_DB}
 # No TELEGRAM_BOT_TOKEN on purpose: the bot belongs to production.
 """
 
