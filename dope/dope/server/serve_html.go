@@ -2,16 +2,19 @@ package dopeserver
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"slices"
+	"strconv"
+
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/towns"
+	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
-	"encoding/json"
-	"net/http"
-	"strconv"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 )
@@ -54,6 +57,9 @@ type gameInitPayload struct {
 	// Venue is the venue a Game of a synch fest is played at, whose page
 	// holds its teams and their numbers.
 	Venue *gameVenue `json:"venue,omitempty"`
+	// Sheets are the venues of a Game of the whole synch fest, each with the
+	// sheet the input tab enters it on, and which of them this visitor writes.
+	Sheets []gameSheet `json:"sheets,omitempty"`
 	// Static marks a snapshot served in static (lockdown) mode: the client skips
 	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
 	Static bool `json:"static,omitempty"`
@@ -65,6 +71,12 @@ type gameVenue struct {
 	// GameLabel names the Game by its format, since a venue's Game is
 	// usually titled after the venue.
 	GameLabel string `json:"gameLabel"`
+}
+
+type gameSheet struct {
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Editable bool   `json:"editable,omitempty"`
 }
 
 // staticRoute is what a lockdown snapshot is cached under: one per Game, since
@@ -90,6 +102,37 @@ func (s *server) canEdit(r *http.Request, festID, gameID int64) bool {
 	return err == nil && may
 }
 
+// gameSheets lists the venues of a Game of the whole synch fest, the ones
+// this visitor may write marked: every venue for an organizer or a host the
+// admin did not limit, their own for a host limited to venues.
+func (s *server) gameSheets(r *http.Request, scope festScope) []gameSheet {
+	ctx := r.Context()
+	var gameType string
+	var venue *int64
+	if err := s.eng.DB.QueryRowContext(ctx, `select game_type, multifest_venue_id from games where id = ?`, scope.GameID).Scan(&gameType, &venue); err != nil || venue != nil {
+		return nil
+	}
+	if _, ok := games.As[games.VenueSheets](gameType); !ok {
+		return nil
+	}
+	venues, err := multifest.List(ctx, s.eng.DB, scope.FestID)
+	if err != nil || len(venues) == 0 {
+		return nil
+	}
+	var mine []int64
+	all := false
+	if user, ok := s.eng.LookupSession(r); ok {
+		if role, err := festaccess.FestUserRoleFromQuery(ctx, s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
+			mine, all, _ = festaccess.RosterVenues(ctx, s.eng.DB, scope.FestID, user.UserID, role)
+		}
+	}
+	out := make([]gameSheet, len(venues))
+	for i, v := range venues {
+		out[i] = gameSheet{ID: v.ID, Title: v.Label(), Editable: all || slices.Contains(mine, v.ID)}
+	}
+	return out
+}
+
 // serveGameHTMLWithInit serves od.html or si.html with window.__GAME_INIT__
 // populated with scheme/state/fest, sparing the JS three cold API round trips
 // on first load. Falls back to the plain HTML on any error.
@@ -104,6 +147,7 @@ func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 		return
 	}
 	payload.CanEdit = s.canEdit(r, scope.FestID, scope.GameID)
+	payload.Sheets = s.gameSheets(r, scope)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		s.serveAppHTML(w, r, htmlPath)

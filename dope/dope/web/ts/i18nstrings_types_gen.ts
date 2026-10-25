@@ -1472,6 +1472,9 @@ export type Strings = {
       fallback: (n: string) => string;
     };
     title: () => string;
+    venues: {
+      label: () => string;
+    };
   };
   override: {
     entry: {

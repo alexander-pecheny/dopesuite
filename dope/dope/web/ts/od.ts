@@ -53,6 +53,12 @@ const SCREEN_TABLE_COLS = 4;
 // Columns the results table always has: place, team, total and rating.
 const RESULTS_FIXED_COLS = 4;
 
+interface GameSheet {
+  id: number;
+  title: string;
+  editable?: boolean;
+}
+
 interface ODPageGlobals {
   __GAME_INIT__?: GameInitLike | null;
 }
@@ -140,6 +146,15 @@ const shell = mountGamePage({
 const {viewer, indicator} = shell;
 let scheme!: ODScheme;
 let state!: ODState;
+// The input tab enters entrySheet: the document itself, or in a synch fest
+// one venue's sheet under its numbers (ADR-0033), whose arrays it shares with
+// docState. The standings read state, then the venues flattened into one
+// sheet keyed by the fest's numbers.
+let docState!: ODState;
+let entrySheet!: ODState;
+let sheetVenue = 0;
+let entryStatsCache: QuestionStat[] | null = null;
+let entryIndexCache: Map<number, number> | null = null;
 let fest: FestInfo | null = null;
 let tourLengths: number[] = [];
 let totalQuestions = 0;
@@ -275,8 +290,58 @@ function initFromScheme(): void {
 // The Protocol's arithmetic lives in od-protocol.ts; these read the page's
 // state and cache the question fold between renders.
 function ensureState(): void {
-  state = od.parseState(state, scheme, totalQuestions);
+  docState = od.parseState(state, scheme, totalQuestions);
+  state = docState;
+  entrySheet = docState;
+  if (od.isSynch(docState)) {
+    if (!docState.venues?.[String(sheetVenue)]) sheetVenue = defaultSheetVenue();
+    entrySheet = od.venueSheet(docState, sheetVenue);
+    state = od.flattenVenues(docState);
+  }
+  entryStatsCache = null;
+  entryIndexCache = null;
   lens.adopt();
+}
+
+// The venues of a synch fest's OD the page knows, and the ones this visitor
+// writes, from the init payload.
+const gameSheets: GameSheet[] = Array.isArray(gameInit?.sheets) ? gameInit.sheets as GameSheet[] : [];
+
+// shownSheets are the venues whose sheets the input tab offers: the ones this
+// visitor writes, or all of them for someone who writes none.
+function shownSheets(): GameSheet[] {
+  const editable = gameSheets.filter((venue) => venue.editable);
+  return editable.length ? editable : gameSheets;
+}
+
+// defaultSheetVenue is the venue ?venue= names, else the first one shown.
+function defaultSheetVenue(): number {
+  const asked = Number(new URLSearchParams(location.search).get("venue"));
+  const shown = shownSheets();
+  return shown.find((venue) => venue.id === asked)?.id ?? shown[0]?.id ?? Number(Object.keys(docState.venues || {})[0] || 0);
+}
+
+function entryIndex(): Map<number, number> {
+  if (!entryIndexCache) entryIndexCache = od.numberIndex(entrySheet);
+  return entryIndexCache;
+}
+function entryStats(): QuestionStat[] {
+  if (!entryStatsCache) entryStatsCache = od.questionStats(entrySheet, totalQuestions, entryIndex());
+  return entryStatsCache;
+}
+function entryIndexByNumber(number: number): number {
+  if (!Number.isInteger(number) || number < 1) return -1;
+  return entryIndex().get(number) ?? -1;
+}
+function entryNumbered(): boolean { return od.allTeamsNumbered(entrySheet); }
+function entryTeamNumber(teamIndex: number): number { return od.teamNumber(entrySheet, teamIndex); }
+function entryValidEntries(qIndex: number): number { return od.countValidEntries(entryStats(), qIndex); }
+
+// entryPath is where an edit of the input tab lands: in a synch fest, inside
+// the venue's sheet.
+function entryPath(path: PatchPath): PatchPath {
+  const head = path[0];
+  return od.isSynch(docState) && (head === "entries" || head === "completed") ? ["venues", String(sheetVenue), ...path] : path;
 }
 const normalizeShootoutMark = od.normalizeShootoutMark;
 const syncShootoutAnswersFromEntries = od.syncShootoutAnswersFromEntries;
@@ -318,12 +383,16 @@ function invalidateAllCaches(): void {
   closeEntrySuggest();
   questionStatsCache = null;
   numberToIndexCache = null;
+  entryStatsCache = null;
+  entryIndexCache = null;
   for (const pane of tabCache.values()) pane.remove();
   tabCache.clear();
 }
 
 function invalidateScoreCaches(): void {
   questionStatsCache = null;
+  entryStatsCache = null;
+  if (od.isSynch(docState)) state = od.flattenVenues(docState);
   invalidateTabCache("detailed", "results", "screen", "personal");
 }
 
@@ -369,7 +438,7 @@ function invalidateShootoutCaches(): void {
 
 function numbersPageURL(): string {
   if (!route.festID) return "#";
-  const venue = gameVenue(gameInit);
+  const venue = gameVenue(gameInit) || (od.isSynch(docState) ? {id: sheetVenue, title: "", gameLabel: ""} : null);
   return venue ? venuePageURL(route.festID, venue) : `/host/fest/${route.festID}/numbers`;
 }
 
@@ -406,7 +475,7 @@ function render(): void {
   // sizing — the same class-toggle the grid uses, rather than a :has() the
   // layout silently depends on.
   odRoot.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "players" ||
-    (activeTab === "input" && !allTeamsNumbered()));
+    (activeTab === "input" && !entryNumbered()));
   if (activeTab === "players" && playersDraft) {
     restoreDraft(activePane, playersDraft);
     playersDraft = null;
@@ -502,7 +571,9 @@ function renderTabs(): void {
 function buildInputView(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-input-wrap";
-  if (!allTeamsNumbered()) {
+  const chips = sheetChips();
+  if (chips) wrapper.appendChild(chips);
+  if (!entryNumbered()) {
     // Prose, not an input table: the wrap must fit the frame and wrap.
     wrapper.classList.add("od-input-wrap-guard");
     wrapper.appendChild(buildNumberingGuard());
@@ -516,6 +587,24 @@ function buildInputView(): HTMLElement {
   wrapper.appendChild(tables);
   updateEntrySelectionSoon();
   return wrapper;
+}
+
+// sheetChips switches the input tab between the venues of a synch fest, for
+// someone who enters more than one of them.
+function sheetChips(): HTMLElement | null {
+  const shown = shownSheets();
+  if (!od.isSynch(docState) || shown.length < 2) return null;
+  const row = document.createElement("div");
+  row.className = "match-tabs";
+  row.setAttribute("role", "tablist");
+  row.setAttribute("aria-label", S.od.venues.label());
+  renderTabBar(row, shown.map((venue) => ({key: String(venue.id), label: venue.title})), String(sheetVenue), (key) => {
+    sheetVenue = Number(key);
+    ensureState();
+    invalidateTabCache("input");
+    render();
+  }, {picker: true});
+  return row;
 }
 
 function updateEntrySelectionSoon(): void {
@@ -567,7 +656,7 @@ function positionInvertOverlay(): void {
   const hide = () => { overlay.hidden = true; };
   if (viewer || activeTab !== "input" || !sheet.focus) return hide();
   const q = sheet.focus.col;
-  if (!Number.isInteger(q) || q < 0 || q >= totalQuestions || state.completed[q]) return hide();
+  if (!Number.isInteger(q) || q < 0 || q >= totalQuestions || entrySheet.completed[q]) return hide();
   const head = odRoot.querySelector<HTMLElement>(
     `.entry-table:not(.od-shootout-entry-table) thead tr:first-child th[data-q="${cssEscape(String(q))}"]`);
   const frame = scrollFrame();
@@ -677,10 +766,10 @@ const sheet = createSheetCursor({
   values: "text",
   serialize: (cell) => {
     const pos = entryCellPosition(cell as HTMLElement);
-    const value = pos ? state.entries[pos.q]?.[pos.row] || 0 : 0;
+    const value = pos ? entrySheet.entries[pos.q]?.[pos.row] || 0 : 0;
     return value ? String(value) : "";
   },
-  parse: (text) => entryModel.coerceValue(text, state.teams.map((_, i) => ({label: teamLabel(i), number: teamNumber(i)}))),
+  parse: (text) => entryModel.coerceValue(text, entrySheet.teams.map((_, i) => ({label: teamLabel(i), number: entryTeamNumber(i)}))),
   applyValues: applyEntryEdits,
   onEdit: (cell, text) => {
     if (text === null) openEntryEditor(cell);
@@ -723,8 +812,8 @@ function applyEntryEdits(edits: Array<{cell: Element; value: unknown}>): void {
     const pos = entryCellPosition(cell as HTMLElement);
     if (!pos) continue;
     const next = Number(value) || 0;
-    if ((state.entries[pos.q]?.[pos.row] || 0) === next) continue;
-    state.entries[pos.q][pos.row] = next;
+    if ((entrySheet.entries[pos.q]?.[pos.row] || 0) === next) continue;
+    entrySheet.entries[pos.q][pos.row] = next;
     changed.push([pos.q, pos.row, next]);
   }
   if (changed.length === 0) return;
@@ -742,18 +831,18 @@ function applyEntryEdits(edits: Array<{cell: Element; value: unknown}>): void {
 function invertEntryColumn(qIndex: number): void {
   if (viewer) return;
   if (!Number.isInteger(qIndex) || qIndex < 0 || qIndex >= totalQuestions) return;
-  if (state.completed[qIndex]) return;
-  const allNumbers = state.teams
-    .map((_, i) => teamNumber(i))
+  if (entrySheet.completed[qIndex]) return;
+  const allNumbers = entrySheet.teams
+    .map((_, i) => entryTeamNumber(i))
     .filter((n) => Number.isInteger(n) && n > 0);
-  const current = state.entries[qIndex] || [];
-  const next = entryModel.invertColumn(current, allNumbers, state.teams.length);
+  const current = entrySheet.entries[qIndex] || [];
+  const next = entryModel.invertColumn(current, allNumbers, entrySheet.teams.length);
   if (next === null) return; // invert is a no-op — column already the complement
   const previous = current.slice();
-  while (previous.length < state.teams.length) previous.push(0);
+  while (previous.length < entrySheet.teams.length) previous.push(0);
   closeEntryEditor();
   closeEntrySuggest();
-  state.entries[qIndex] = next;
+  entrySheet.entries[qIndex] = next;
   pushUndoEntry({kind: "entry-column", qIndex, previous});
   invalidateScoreCaches();
   invalidateTabCache("input");
@@ -774,12 +863,12 @@ function performUndo(): boolean {
   if (entry.kind === "entry-column") {
     const {qIndex, previous} = entry;
     if (!Number.isInteger(qIndex) || qIndex < 0 || qIndex >= totalQuestions) return false;
-    if (state.completed[qIndex]) return false;
-    const restored = previous.slice(0, state.teams.length);
-    while (restored.length < state.teams.length) restored.push(0);
+    if (entrySheet.completed[qIndex]) return false;
+    const restored = previous.slice(0, entrySheet.teams.length);
+    while (restored.length < entrySheet.teams.length) restored.push(0);
     closeEntryEditor();
     closeEntrySuggest();
-    state.entries[qIndex] = restored;
+    entrySheet.entries[qIndex] = restored;
     invalidateScoreCaches();
     invalidateTabCache("input");
     saveState(["entries", qIndex], restored);
@@ -788,7 +877,7 @@ function performUndo(): boolean {
       setHashTab("input");
     }
     render();
-    sheet.select({row: 0, col: qIndex}, {row: Math.max(0, state.teams.length - 1), col: qIndex}, {focus: true});
+    sheet.select({row: 0, col: qIndex}, {row: Math.max(0, entrySheet.teams.length - 1), col: qIndex}, {focus: true});
     return true;
   }
   return false;
@@ -842,7 +931,7 @@ function refreshEntryQuestionHead(qIndex: number): void {
   if (!Number.isInteger(qIndex)) return;
   const cell = odRoot.querySelector<HTMLElement>(`.entry-q-head[data-q="${cssEscape(String(qIndex))}"]`);
   if (!cell) return;
-  applyEntryQuestionHeadContent(cell, qIndex + 1, questionStats()[qIndex]);
+  applyEntryQuestionHeadContent(cell, qIndex + 1, entryStats()[qIndex]);
 }
 
 // The entry sheets' head rows: the question numbers (and on the shootout sheet
@@ -851,12 +940,12 @@ const ENTRY_HEAD_ROW = "28px";
 const ENTRY_LOCK_ROW = "22px";
 
 function buildInputTable(): HTMLTableElement {
-  const n = state.teams.length;
+  const n = entrySheet.teams.length;
   if (!viewer) {
     ensureInvertOverlay();
     attachInvertListeners();
   }
-  const showShootoutControls = !viewer && state.shootoutRounds.length === 0;
+  const showShootoutControls = !viewer && entrySheet.shootoutRounds.length === 0;
   const table = document.createElement("table");
   table.className = "entry-table" + (viewer ? " entry-readonly" : "");
   table.addEventListener("click", handleEntryClick);
@@ -883,7 +972,7 @@ function buildInputTable(): HTMLTableElement {
   }
   table.appendChild(colgroup);
 
-  const stats = questionStats();
+  const stats = entryStats();
   const head = document.createElement("tr");
   let q = 1;
   tourLengths.forEach((tourSize, tourIndex) => {
@@ -925,7 +1014,7 @@ function buildInputTable(): HTMLTableElement {
 }
 
 function buildInputShootoutTable(): HTMLElement | null {
-  if (!allTeamsNumbered() || state.shootoutRounds.length === 0) return null;
+  if (!entryNumbered() || entrySheet.shootoutRounds.length === 0) return null;
   const wrap = document.createElement("div");
   wrap.className = "od-shootout-entry-wrap";
   const questions = shootoutInputQuestions();
@@ -987,7 +1076,7 @@ function buildInputShootoutTable(): HTMLElement | null {
   ]));
 
   const tbody = document.createElement("tbody");
-  const validationCounts = state.shootoutRounds.map((_, roundIndex) => buildShootoutInputValidationCounts(roundIndex));
+  const validationCounts = entrySheet.shootoutRounds.map((_, roundIndex) => buildShootoutInputValidationCounts(roundIndex));
   for (const number of teamNumbers) {
     const tr = document.createElement("tr");
     tr.appendChild(shootoutTeamCell(number));
@@ -1025,7 +1114,7 @@ interface ShootoutInputQuestion {
 function shootoutInputQuestions(): ShootoutInputQuestion[] {
   const questions: ShootoutInputQuestion[] = [];
   let number = 1;
-  state.shootoutRounds.forEach((round, roundIndex) => {
+  entrySheet.shootoutRounds.forEach((round, roundIndex) => {
     const count = round.entries?.length || 0;
     for (let questionIndex = 0; questionIndex < count; questionIndex++) {
       questions.push({
@@ -1034,7 +1123,7 @@ function shootoutInputQuestions(): ShootoutInputQuestion[] {
         questionIndex,
         number,
         firstInRound: questionIndex === 0,
-        lastInRound: questionIndex === count - 1 && roundIndex < state.shootoutRounds.length - 1,
+        lastInRound: questionIndex === count - 1 && roundIndex < entrySheet.shootoutRounds.length - 1,
       });
       number++;
     }
@@ -1045,7 +1134,7 @@ function shootoutInputQuestions(): ShootoutInputQuestion[] {
 function shootoutInputTeamNumbers(): number[] {
   const seen = new Set<number>();
   const numbers: number[] = [];
-  for (const round of state.shootoutRounds) {
+  for (const round of entrySheet.shootoutRounds) {
     for (const number of round.teams || []) {
       if (!number || seen.has(number)) continue;
       seen.add(number);
@@ -1070,7 +1159,7 @@ function shootoutMetaCell(): HTMLTableCellElement {
 
 function shootoutThemeHeaders(): ScoreTableTheme[] {
   let questionNumber = 1;
-  return state.shootoutRounds.map((round, roundIndex) => {
+  return entrySheet.shootoutRounds.map((round, roundIndex) => {
     const questionLabels = round.answers.map(() => questionNumber++);
     return {
       label: S.od.shootout.round(String(roundIndex + 1)),
@@ -1095,7 +1184,7 @@ function shootoutControlsHeaderCell(attrs: {rowSpan?: number} = {}, options: {in
     addRound.type = "button";
     addRound.className = "btn";
     addRound.textContent = S.od.shootout.addRound();
-    addRound.disabled = !allTeamsNumbered() || state.teams.length < 2;
+    addRound.disabled = !entryNumbered() || entrySheet.teams.length < 2;
     addRound.title = addRound.disabled ? S.od.shootout.addRoundBlocked() : S.od.shootout.addRound();
     addRound.addEventListener("click", openShootoutRoundDialog);
     panel.appendChild(addRound);
@@ -1103,9 +1192,9 @@ function shootoutControlsHeaderCell(attrs: {rowSpan?: number} = {}, options: {in
 
   const roundIndexes = Number.isInteger(options.roundIndex)
     ? [options.roundIndex as number]
-    : state.shootoutRounds.map((_, index) => index);
+    : entrySheet.shootoutRounds.map((_, index) => index);
   roundIndexes.forEach((roundIndex) => {
-    const round = state.shootoutRounds[roundIndex];
+    const round = entrySheet.shootoutRounds[roundIndex];
     if (!round) return;
     const group = document.createElement("span");
     group.className = "od-shootout-round-controls";
@@ -1143,7 +1232,7 @@ function shootoutControlsBodyCell(): HTMLElement {
 function shootoutTeamCell(number: number): HTMLTableCellElement {
   const cell = document.createElement("td");
   cell.className = "od-shootout-team-cell";
-  const teamIndex = teamIndexByNumber(number);
+  const teamIndex = entryIndexByNumber(number);
   const name = document.createElement("span");
   name.textContent = teamIndex >= 0 ? teamLabel(teamIndex) : String(number || "");
   cell.appendChild(name);
@@ -1193,7 +1282,7 @@ function shootoutEntryCell(roundIndex: number, questionIndex: number, rowIndex: 
   cell.dataset.question = String(questionIndex);
   cell.dataset.row = String(rowIndex);
   cell.setAttribute("role", "gridcell");
-  const round = state.shootoutRounds[roundIndex];
+  const round = entrySheet.shootoutRounds[roundIndex];
   const value = shootoutEntryValue(roundIndex, questionIndex, rowIndex);
   const label = document.createElement("label");
   label.className = "shootout-entry-check-label";
@@ -1210,7 +1299,7 @@ function buildNumberingGuard(): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "od-input-gate";
   const msg = document.createElement("p");
-  const venue = gameVenue(gameInit);
+  const venue = gameVenue(gameInit) || od.isSynch(docState);
   msg.appendChild(document.createTextNode(venue ? S.od.guard.leadVenue() : S.od.guard.lead()));
   const phrase = venue ? S.od.guard.venuePage() : S.od.guard.numbers();
   if (viewer || !route.festID) {
@@ -1238,8 +1327,8 @@ function buildNumberingGuard(): HTMLElement {
 // unnumberedTeamLabels lists the teams the numbering guard is waiting on.
 function unnumberedTeamLabels(): string[] {
   const labels: string[] = [];
-  for (let i = 0; i < state.teams.length; i++) {
-    if (!teamNumber(i)) labels.push(teamLabel(i));
+  for (let i = 0; i < entrySheet.teams.length; i++) {
+    if (!entryTeamNumber(i)) labels.push(teamLabel(i));
   }
   return labels;
 }
@@ -1253,7 +1342,7 @@ function lockCell(qIndex: number, className: string): HTMLTableCellElement {
   cb.type = "checkbox";
   cb.className = "entry-lock-checkbox";
   cb.dataset.q = String(qIndex);
-  cb.checked = Boolean(state.completed[qIndex]);
+  cb.checked = Boolean(entrySheet.completed[qIndex]);
   makeViewerCheckboxReadonly(cb);
   label.appendChild(cb);
   cell.appendChild(label);
@@ -1291,7 +1380,7 @@ function entryCell(qIndex: number, rowIndex: number, tourEnd: boolean, validatio
 }
 
 function entryCellShowsCoffin(qIndex: number, rowIndex: number): boolean {
-  return rowIndex === 0 && Boolean(state.completed[qIndex]) && countValidEntries(qIndex) === 0;
+  return rowIndex === 0 && Boolean(entrySheet.completed[qIndex]) && entryValidEntries(qIndex) === 0;
 }
 
 function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number): void {
@@ -1299,7 +1388,7 @@ function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number
     td.textContent = "⚰️";
     return;
   }
-  const value = state.entries[qIndex]?.[rowIndex] || 0;
+  const value = entrySheet.entries[qIndex]?.[rowIndex] || 0;
   td.textContent = value ? String(value) : "";
 }
 
@@ -1321,7 +1410,7 @@ function buildInputValidationCounts(): Array<Map<number, number>> {
 
 function inputValidationCounts(qIndex: number): Map<number, number> {
   const counts = new Map<number, number>();
-  const list = state.entries[qIndex] || [];
+  const list = entrySheet.entries[qIndex] || [];
   for (const value of list) {
     if (!value) continue;
     counts.set(value, (counts.get(value) || 0) + 1);
@@ -1335,7 +1424,7 @@ function markEntryCellValidity(cell: HTMLElement, qIndex: number, counts: Map<nu
     return;
   }
   const rowIndex = Number(cell.dataset.row);
-  const value = state.entries[qIndex]?.[rowIndex] || 0;
+  const value = entrySheet.entries[qIndex]?.[rowIndex] || 0;
   const raw = value ? String(value) : "";
   if (!raw) {
     cell.classList.remove("entry-input-bad", "entry-input-dup");
@@ -1343,7 +1432,7 @@ function markEntryCellValidity(cell: HTMLElement, qIndex: number, counts: Map<nu
     return;
   }
   const n = Number(raw);
-  const known = teamIndexByNumber(n) >= 0;
+  const known = entryIndexByNumber(n) >= 0;
   const dup = (counts.get(n) || 0) > 1;
   cell.classList.toggle("entry-input-bad", !known);
   cell.classList.toggle("entry-input-dup", known && dup);
@@ -1351,14 +1440,14 @@ function markEntryCellValidity(cell: HTMLElement, qIndex: number, counts: Map<nu
 }
 
 function buildShootoutInputValidationCounts(roundIndex: number): Array<Map<number, number>> {
-  const round = state.shootoutRounds[roundIndex];
+  const round = entrySheet.shootoutRounds[roundIndex];
   if (!round) return [];
   return round.entries.map((_, questionIndex) => shootoutInputValidationCounts(roundIndex, questionIndex));
 }
 
 function shootoutInputValidationCounts(roundIndex: number, questionIndex: number): Map<number, number> {
   const counts = new Map<number, number>();
-  const round = state.shootoutRounds[roundIndex];
+  const round = entrySheet.shootoutRounds[roundIndex];
   const list = round?.entries?.[questionIndex] || [];
   for (const value of list) {
     if (!value) continue;
@@ -1371,7 +1460,7 @@ function markShootoutEntryCellValidity(cell: HTMLElement, counts: Map<number, nu
   const roundIndex = Number(cell.dataset.round);
   const questionIndex = Number(cell.dataset.question);
   const rowIndex = Number(cell.dataset.row);
-  const round = state.shootoutRounds[roundIndex];
+  const round = entrySheet.shootoutRounds[roundIndex];
   const value = round?.entries?.[questionIndex]?.[rowIndex] || 0;
   const raw = value ? String(value) : "";
   if (!raw) {
@@ -1430,11 +1519,11 @@ function isShootoutEntryCell(cell: Element | null | undefined): boolean {
 }
 
 function shootoutEntryValue(roundIndex: number, questionIndex: number, rowIndex: number): number {
-  return state.shootoutRounds[roundIndex]?.entries?.[questionIndex]?.[rowIndex] || 0;
+  return entrySheet.shootoutRounds[roundIndex]?.entries?.[questionIndex]?.[rowIndex] || 0;
 }
 
 function setShootoutEntryValue(roundIndex: number, questionIndex: number, rowIndex: number, value: number): boolean {
-  const round = state.shootoutRounds[roundIndex];
+  const round = entrySheet.shootoutRounds[roundIndex];
   if (!round?.entries?.[questionIndex]) return false;
   round.entries[questionIndex][rowIndex] = value;
   syncShootoutAnswersFromEntries(round, questionIndex);
@@ -1474,7 +1563,7 @@ function handleEntryInput(event: Event): void {
     closeEntrySuggest();
     invalidateTabCache("detailed", "results", "screen", "personal");
     updateShootoutInputValidity(roundIndex, questionIndex);
-    saveState(["shootoutRounds"], state.shootoutRounds);
+    saveState(["shootoutRounds"], entrySheet.shootoutRounds);
     return;
   }
   const qIndex = Number(input.dataset.q);
@@ -1484,12 +1573,12 @@ function handleEntryInput(event: Event): void {
     updateEntrySuggest(input);
     return;
   }
-  state.entries[qIndex][rowIndex] = parsed.value;
+  entrySheet.entries[qIndex][rowIndex] = parsed.value;
   closeEntrySuggest();
   invalidateScoreCaches();
   updateInputValidity(qIndex);
   refreshEntryColumnCoffin(qIndex);
-  if (state.completed[qIndex]) refreshEntryQuestionHead(qIndex);
+  if (entrySheet.completed[qIndex]) refreshEntryQuestionHead(qIndex);
   saveState(["entries", qIndex, rowIndex], parsed.value);
 }
 
@@ -1504,7 +1593,7 @@ function handleEntryKeydown(event: KeyboardEvent): void {
   if (!(input instanceof HTMLInputElement) || !input.classList.contains("entry-input")) return;
   if (handleEntrySuggestKeydown(event, input)) return;
   // Escape leaves edit mode: drop the inline input and return to the cell's
-  // (non-editing) selected state. The value is already committed live on input.
+  // (non-editing) selected entrySheet. The value is already committed live on input.
   if (event.key === "Escape") {
     event.preventDefault();
     closeEntryEditor();
@@ -1675,7 +1764,7 @@ function openEntryEditor(cell: HTMLElement): void {
   input.setAttribute("aria-autocomplete", "list");
   const value = shootout
     ? shootoutEntryValue(Number(cell.dataset.round), Number(cell.dataset.question), rowIndex)
-    : state.entries[qIndex][rowIndex];
+    : entrySheet.entries[qIndex][rowIndex];
   input.value = value ? String(value) : "";
   cell.textContent = "";
   cell.classList.add("entry-editing");
@@ -1738,16 +1827,16 @@ function parseEntryInput(input: HTMLInputElement): {display: string; value: numb
 function entrySuggestOptions(input: HTMLInputElement): EntrySuggestOption[] {
   const shootout = input.dataset.entryKind === "shootout";
   if (shootout) {
-    const round = state.shootoutRounds[Number(input.dataset.round)];
+    const round = entrySheet.shootoutRounds[Number(input.dataset.round)];
     return (round?.teams || []).map(entrySuggestOptionForNumber).filter((option): option is EntrySuggestOption => Boolean(option));
   }
-  return state.teams
-    .map((_, teamIndex) => entrySuggestOptionForNumber(teamNumber(teamIndex)))
+  return entrySheet.teams
+    .map((_, teamIndex) => entrySuggestOptionForNumber(entryTeamNumber(teamIndex)))
     .filter((option): option is EntrySuggestOption => Boolean(option));
 }
 
 function entrySuggestOptionForNumber(number: number): EntrySuggestOption | null {
-  const teamIndex = teamIndexByNumber(number);
+  const teamIndex = entryIndexByNumber(number);
   if (teamIndex < 0) return null;
   return {number, label: teamLabel(teamIndex)};
 }
@@ -1860,12 +1949,12 @@ function handleEntryChange(event: Event): void {
     const roundIndex = Number(shootoutCheckbox.dataset.round);
     const questionIndex = Number(shootoutCheckbox.dataset.question);
     const rowIndex = Number(shootoutCheckbox.dataset.row);
-    const round = state.shootoutRounds[roundIndex];
+    const round = entrySheet.shootoutRounds[roundIndex];
     const value = shootoutCheckbox.checked ? round?.teams?.[rowIndex] || 0 : 0;
     if (!setShootoutEntryValue(roundIndex, questionIndex, rowIndex, value)) return;
     invalidateTabCache("detailed", "results", "screen", "personal");
     updateShootoutInputValidity(roundIndex, questionIndex);
-    saveState(["shootoutRounds"], state.shootoutRounds);
+    saveState(["shootoutRounds"], entrySheet.shootoutRounds);
     return;
   }
   const cb = event.target;
@@ -1873,16 +1962,16 @@ function handleEntryChange(event: Event): void {
   if (cb.dataset.entryKind === "shootout") {
     const roundIndex = Number(cb.dataset.round);
     const questionIndex = Number(cb.dataset.question);
-    const round = state.shootoutRounds[roundIndex];
+    const round = entrySheet.shootoutRounds[roundIndex];
     if (!round?.completed || !Number.isInteger(questionIndex)) return;
     round.completed[questionIndex] = cb.checked;
     invalidateTabCache("detailed", "results", "screen", "personal");
-    saveState(["shootoutRounds"], state.shootoutRounds);
+    saveState(["shootoutRounds"], entrySheet.shootoutRounds);
     return;
   }
   const qIndex = Number(cb.dataset.q);
   if (!Number.isInteger(qIndex)) return;
-  state.completed[qIndex] = cb.checked;
+  entrySheet.completed[qIndex] = cb.checked;
   invalidateScoreCaches();
   updateHeaderProgress();
   refreshEntryColumnCoffin(qIndex);
@@ -1891,26 +1980,26 @@ function handleEntryChange(event: Event): void {
 }
 
 function focusInput(qIndex: number, rowIndex: number): void {
-  if (qIndex === totalQuestions && state.shootoutRounds.length > 0) {
+  if (qIndex === totalQuestions && entrySheet.shootoutRounds.length > 0) {
     focusShootoutInput(0, 0, rowIndex);
     return;
   }
   if (qIndex < 0 || qIndex >= totalQuestions) return;
-  if (rowIndex < 0 || rowIndex >= state.teams.length) return;
+  if (rowIndex < 0 || rowIndex >= entrySheet.teams.length) return;
   const sel = `.entry-cell[data-q="${qIndex}"][data-row="${rowIndex}"]`;
   const cell = odRoot.querySelector<HTMLElement>(sel);
   if (cell) openEntryEditor(cell);
 }
 
 function focusShootoutInput(roundIndex: number, questionIndex: number, rowIndex: number): void {
-  const round = state.shootoutRounds[roundIndex];
+  const round = entrySheet.shootoutRounds[roundIndex];
   if (!round) return;
   if (questionIndex < 0 && roundIndex > 0) {
-    const previous = state.shootoutRounds[roundIndex - 1];
+    const previous = entrySheet.shootoutRounds[roundIndex - 1];
     focusShootoutInput(roundIndex - 1, previous.entries.length - 1, rowIndex);
     return;
   }
-  if (questionIndex >= round.entries.length && roundIndex < state.shootoutRounds.length - 1) {
+  if (questionIndex >= round.entries.length && roundIndex < entrySheet.shootoutRounds.length - 1) {
     focusShootoutInput(roundIndex + 1, 0, rowIndex);
     return;
   }
@@ -1981,7 +2070,11 @@ function buildDetailedScoreTable(): HTMLTableElement {
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const members = lens.members();
   const placeMap = placesFor(totals, members);
-  const rows = lens.order("number", members).map((teamIndex): ScoreTableRow => {
+  // A synch fest's teams have no number its people know: by name.
+  const order = od.isSynch(docState)
+    ? [...lens.order("name", members)].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b), "ru"))
+    : lens.order("number", members);
+  const rows = order.map((teamIndex): ScoreTableRow => {
     const team = state.teams[teamIndex];
     let qIndex = 0;
     return {
@@ -2081,13 +2174,22 @@ function teamLabel(index: number): string {
 
 // teamNameCell is a team's name on the detailed sheet: its number in a column
 // of its own, the name fading in a white pill, the division badges beside it.
+// teamBadges are the Divisions a team's name carries, and in a synch fest the
+// venue it plays at, since its fest number means nothing to anyone there.
+function teamBadges(teamIndex: number): string[] | undefined {
+  const badges = lens.badges(teamIndex);
+  if (!od.isSynch(docState)) return badges;
+  const venue = gameSheets.find((sheet) => sheet.id === state.teams[teamIndex]?.venue);
+  return venue ? [venue.title, ...(badges || [])] : badges;
+}
+
 function teamNameCell(teamIndex: number): HTMLElement {
-  const num = teamNumber(teamIndex);
+  const num = od.isSynch(docState) ? 0 : teamNumber(teamIndex);
   return nameCell(teamLabel(teamIndex), {
     className: "team-name od-detailed-team-cell",
     layout: true,
     number: {text: num ? String(num) : "", className: "od-detailed-team-number"},
-    badges: lens.badges(teamIndex),
+    badges: teamBadges(teamIndex),
   });
 }
 
@@ -2561,7 +2663,7 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
       tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(teamLabel(index), {
         city: screenSettings.showCity ? state.teams[index].city : "",
         flag: screenSettings.showCountry ? teamFlagEmoji(index) : "",
-        badges: lens.badges(index),
+        badges: teamBadges(index),
       }), "name"));
       tr.appendChild(RESULTS_PINS.mark(td(total, "results-num total-cell results-total"), "total"));
       const tourValue = tourStarted ? tourTotals[index][tourIndex] : "·";
@@ -2727,7 +2829,7 @@ function buildResultsTableInner(): HTMLTableElement {
       if (rowIdx === group.rows.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
       tr.appendChild(RESULTS_PINS.mark(td(group.placeText, "results-place"), "place"));
-      tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(teamLabel(index), {city: state.teams[index].city, badges: lens.badges(index)}), "name"));
+      tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(teamLabel(index), {city: state.teams[index].city, badges: teamBadges(index)}), "name"));
       tr.appendChild(RESULTS_PINS.mark(td(total, "results-num total-cell results-total"), "total"));
       for (let t = 0; t < tourLengths.length; t++) {
         if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));
@@ -2875,7 +2977,7 @@ function shootoutQuestionNumber(roundIndex: number, questionIndex: number): numb
 // === persistence ===
 
 function saveState(path: PatchPath, value: unknown): void {
-  doc.save(path, value);
+  doc.save(entryPath(path), value);
   refreshPendingMarkers();
 }
 
@@ -2891,7 +2993,7 @@ function refreshPendingMarkers(): void {
     const q = Number(cell.dataset.q);
     const row = Number(cell.dataset.row);
     const pending = Number.isInteger(q) && Number.isInteger(row) &&
-      doc.isPending(["entries", q, row]);
+      doc.isPending(entryPath(["entries", q, row]));
     cell.classList.toggle("pending", Boolean(pending));
   });
   const shootoutPending = doc.isPending(["shootoutRounds"]);
@@ -2917,7 +3019,7 @@ function repaintEntrySheet(): void {
     if (pos && cell !== editing) applyEntryCellDisplay(cell, pos.q, pos.row);
   });
   odRoot.querySelectorAll<HTMLInputElement>(".entry-lock-checkbox").forEach((box) => {
-    if (box.dataset.entryKind !== "shootout") box.checked = Boolean(state.completed[Number(box.dataset.q)]);
+    if (box.dataset.entryKind !== "shootout") box.checked = Boolean(entrySheet.completed[Number(box.dataset.q)]);
   });
   for (let q = 0; q < totalQuestions; q++) refreshEntryQuestionHead(q);
   updateInputValidity();
@@ -2945,6 +3047,8 @@ function applyRemoteState(nextState: unknown): void {
   if (editingInput || editingShootout || focusedLockCol) {
     questionStatsCache = null;
     numberToIndexCache = null;
+    entryStatsCache = null;
+    entryIndexCache = null;
     // The players tab draws from the state too, and its buttons read the
     // document through a getter, so it is drawn again when next shown.
     invalidateTabCache("detailed", "results", "screen", "personal", "players");

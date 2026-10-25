@@ -17,6 +17,17 @@ export interface ODTeam {
   // never looks at them, because what a question is worth is reckoned over
   // everyone who played it.
   flags?: string[];
+  // Where a team of a synch fest plays and its number there, under which its
+  // venue's sheet records it (ADR-0033).
+  venue?: number;
+  venueNumber?: number;
+}
+
+// ODSheet is one venue's part of a synch fest's OD: for each question the
+// venue numbers of its teams that took it, and which questions it completed.
+export interface ODSheet {
+  entries: number[][];
+  completed: boolean[];
 }
 
 export type ShootoutMark = "right" | "";
@@ -33,6 +44,9 @@ export interface ODState {
   entries: number[][];
   completed: boolean[];
   shootoutRounds: ShootoutRound[];
+  // The sheets of a synch fest's one OD, by venue id; entries and completed
+  // then say nothing until flattenVenues folds the sheets into them.
+  venues?: Record<string, ODSheet>;
   answers?: unknown;
   finished?: unknown;
 }
@@ -118,9 +132,70 @@ export function parseState(raw: unknown, scheme: ODScheme, totalQuestions: numbe
   state.shootoutRounds = state.shootoutRounds
     .map(normalizeShootoutRound)
     .filter((round) => round.teams.length > 0);
+  if (state.venues && typeof state.venues === "object") parseVenueSheets(state, totalQuestions);
   delete state.answers;
   delete state.finished;
   return state;
+}
+
+// parseVenueSheets gives each venue's sheet a column per question with a slot
+// per team of the venue, and a completion per question.
+function parseVenueSheets(state: ODState, totalQuestions: number): void {
+  const counts = new Map<string, number>();
+  for (const team of state.teams) {
+    if (team.venue) counts.set(String(team.venue), (counts.get(String(team.venue)) || 0) + 1);
+  }
+  const venues = state.venues as Record<string, Partial<ODSheet>>;
+  for (const [id, sheet] of Object.entries(venues)) {
+    const n = counts.get(id) || 0;
+    const entries = Array.isArray(sheet.entries) ? sheet.entries : [];
+    const completed = Array.isArray(sheet.completed) ? sheet.completed : [];
+    venues[id] = {
+      entries: Array.from({length: totalQuestions}, (_, q) => {
+        const column = (Array.isArray(entries[q]) ? entries[q] : []).slice(0, n).map((v) => Math.max(0, Math.trunc(Number(v)) || 0));
+        while (column.length < n) column.push(0);
+        return column;
+      }),
+      completed: Array.from({length: totalQuestions}, (_, q) => Boolean(completed[q])),
+    };
+  }
+}
+
+// isSynch says the document keeps a sheet per venue.
+export function isSynch(state: ODState): boolean {
+  return Boolean(state.venues && Object.keys(state.venues).length > 0);
+}
+
+// flattenVenues is the document as one sheet keyed by the teams' fest
+// numbers, for the standings: a team took a question its venue completed with
+// its number entered there, and a question is completed once any venue
+// completed it. The server's FlattenVenues reckons the same.
+export function flattenVenues(state: ODState): ODState {
+  const venues = state.venues || {};
+  const total = state.completed.length;
+  const n = state.teams.length;
+  const entries: number[][] = Array.from({length: total}, () => []);
+  const completed = Array.from({length: total}, (_, q) => Object.values(venues).some((sheet) => sheet.completed[q]));
+  for (const team of state.teams) {
+    const sheet = venues[String(team.venue || 0)];
+    if (!sheet || !team.venueNumber) continue;
+    for (let q = 0; q < total; q++) {
+      if (sheet.completed[q] && sheet.entries[q]?.includes(team.venueNumber)) entries[q].push(team.number || 0);
+    }
+  }
+  for (const column of entries) {
+    while (column.length < n) column.push(0);
+  }
+  return {...state, entries, completed};
+}
+
+// venueSheet is one venue as the input tab enters it: its teams under their
+// numbers there, and its sheet, whose arrays it shares so an edit lands in the
+// document.
+export function venueSheet(state: ODState, venueID: number): ODState {
+  const sheet = state.venues?.[String(venueID)] || {entries: [], completed: []};
+  const teams = state.teams.filter((team) => team.venue === venueID).map((team) => ({...team, number: team.venueNumber || 0}));
+  return {teams, entries: sheet.entries, completed: sheet.completed, shootoutRounds: []};
 }
 
 export function normalizeShootoutRound(round: unknown): ShootoutRound {

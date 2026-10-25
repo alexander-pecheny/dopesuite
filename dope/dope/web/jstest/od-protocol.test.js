@@ -109,3 +109,25 @@ test("a tie inside a Division is shared, the way it is in the whole table", () =
   // The школьный зачёт is A and B alone, and they share first between them.
   assert.deepEqual(od.rows(tied, [2], [0, 1]).map((r) => [r.index, r.place]), [[0, "1–2"], [1, "1–2"]]);
 });
+
+test("a synch fest's venue sheets flatten into one, and a venue's sheet shares the document's arrays", () => {
+  const raw = {
+    teams: [
+      {name: "Альфа", number: 1, venue: 7, venueNumber: 1},
+      {name: "Бета", number: 2, venue: 7, venueNumber: 2},
+      {name: "Гамма", number: 3, venue: 9, venueNumber: 1},
+    ],
+    venues: {"7": {entries: [[2, 0], [1, 0]], completed: [true, false]}, "9": {entries: [[1], [1]], completed: [false, true]}},
+  };
+  const state = od.parseState(raw, {}, 2);
+  assert.ok(od.isSynch(state));
+  const flat = od.flattenVenues(state);
+  assert.deepEqual(flat.completed, [true, true]);
+  assert.deepEqual(flat.entries, [[2, 0, 0], [3, 0, 0]]);
+
+  const minsk = od.venueSheet(state, 7);
+  assert.deepEqual(minsk.teams.map((team) => [team.name, team.number]), [["Альфа", 1], ["Бета", 2]]);
+  minsk.entries[1][1] = 2;
+  assert.equal(state.venues["7"].entries[1][1], 2);
+  assert.equal(od.isSynch(od.parseState({teams: []}, {}, 1)), false);
+});

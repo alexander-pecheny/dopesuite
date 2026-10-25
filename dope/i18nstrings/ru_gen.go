@@ -2031,6 +2031,9 @@ var RU = Strings{
 			Fallback: func(n string) string { return fmt.Sprintf("Команда %s", n) },
 		},
 		Title: func() string { return "ОД" },
+		Venues: OdVenuesStrings{
+			Label: func() string { return "Площадка" },
+		},
 	},
 	Override: OverrideStrings{
 		Entry: OverrideEntryStrings{

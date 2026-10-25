@@ -45,6 +45,10 @@ type FestRosterImportTeam struct {
 	// Venue is where the rating site has the team play a synchronous
 	// tournament, which puts it on that venue in a synch fest (ADR-0031).
 	Venue multifest.RatingVenue
+	// OnVenue and VenueNumber are the fest venue a Game of the whole fest
+	// finds the team on and its number there (OnVenue fills them).
+	OnVenue     int64
+	VenueNumber int64
 }
 
 // FestRosterFlag is one Flag a team carries: the rating site's id when it came
@@ -133,6 +137,12 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 		if err != nil {
 			return nil, fmt.Errorf("game %d: %w", doc.GameID, err)
 		}
+		// A Game of the whole fest keeps a renumbered venue's sheet in step.
+		if sheets, ok := games.As[games.VenueSheets](doc.GameType); ok && doc.MultiFestVenueID == 0 && remap.Venue > 0 {
+			if stateJSON, err = sheets.RemapVenueSheet(stateJSON, remap.Venue, remap.Numbers); err != nil {
+				return nil, fmt.Errorf("game %d: %w", doc.GameID, err)
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `
 update games set scheme_json = ?, updated_at = ?
 where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), doc.GameID, festID); err != nil {
@@ -207,7 +217,14 @@ func gameTitles(ctx context.Context, q store.Queryer, festID int64) (map[int64]s
 // venue's own numbers: all of it, under the fest's, for a Game on none.
 func OnVenue(teams []FestRosterImportTeam, placement multifest.Placement, multiFestVenueID int64) []FestRosterImportTeam {
 	if multiFestVenueID == 0 {
-		return teams
+		// A Game of the whole fest keeps each team's venue and number there.
+		out := make([]FestRosterImportTeam, len(teams))
+		for i, team := range teams {
+			place := placement.Of(team.LocalID, team.RatingID, team.Number)
+			team.OnVenue, team.VenueNumber = place.Venue, place.Number
+			out[i] = team
+		}
+		return out
 	}
 	out := make([]FestRosterImportTeam, 0, len(teams))
 	for _, team := range teams {
@@ -228,6 +245,7 @@ func RosterTeams(teams []FestRosterImportTeam) []games.RosterTeam {
 			City:   team.City,
 			Number: team.Number,
 			Flags:  FlagShortNames(team.Flags),
+			Venue:  team.OnVenue, VenueNumber: team.VenueNumber,
 		})
 	}
 	return out

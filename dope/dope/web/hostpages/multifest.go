@@ -13,7 +13,6 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/multifest"
-	"dope/dope/storage/store"
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 )
@@ -46,39 +45,28 @@ func kindField(current string, festGames []PublicFestGame) *dopeui.Element {
 	return dopeui.Field(field...)
 }
 
-// ensureVenueGames gives every venue of a synch fest that has no Game yet an
-// OD of the tournament's tours (ADR-0031), on every import, so a venue
-// whose Game the host deleted gets a new one.
-func (s *Server) ensureVenueGames(ctx context.Context, festID, ratingID int64) error {
-	type bare struct {
-		id    int64
-		title string
-	}
+// ensureSynchGame gives a synch fest that has no Game of the whole fest one
+// OD of the tournament's tours, which keeps a sheet per venue (ADR-0033), on
+// every import, so a fest whose Game the host deleted gets a new one.
+func (s *Server) ensureSynchGame(ctx context.Context, festID, ratingID int64) error {
 	db := s.h.Engine().DB
-	missing, err := store.CollectRows(ctx, db, `
-select s.id, s.title from multifest_venues s
-where s.fest_id = ? and not exists (select 1 from games g where g.multifest_venue_id = s.id)
-order by s.position, s.id`, []any{festID}, func(rows *sql.Rows) (bare, error) {
-		var b bare
-		return b, rows.Scan(&b.id, &b.title)
-	})
-	if err != nil || len(missing) == 0 {
+	if kind, err := multifest.FestKind(ctx, db, festID); err != nil || kind != multifest.Synch {
+		return err
+	}
+	var exists bool
+	if err := db.QueryRowContext(ctx, `select exists(select 1 from games where fest_id = ? and multifest_venue_id is null)`, festID).Scan(&exists); err != nil || exists {
 		return err
 	}
 	tours, err := imports.FetchRatingTourComp(ctx, ratingID)
 	if err != nil {
 		return err
 	}
-	for _, venue := range missing {
-		spec := gamebuild.Spec{FestID: festID, Type: games.OD, Label: venue.title, TourComp: tours, MultiFestVenueID: venue.id}
-		if _, err := s.commit(ctx, festID, "venue-game", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
-			_, written, err := festops.CreateGameTx(ctx, tx, spec)
-			return written, err
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
+	spec := gamebuild.Spec{FestID: festID, Type: games.OD, Label: games.Get(games.OD).Title, TourComp: tours}
+	_, err = s.commit(ctx, festID, "synch-game", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
+		_, written, err := festops.CreateGameTx(ctx, tx, spec)
+		return written, err
+	})
+	return err
 }
 
 // venueRow is one venue on the dashboard: how many teams play there and

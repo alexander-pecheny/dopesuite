@@ -38,6 +38,7 @@ import (
 type Access struct {
 	level    level
 	numbered bool
+	sheets   bool
 }
 
 type level int
@@ -73,6 +74,11 @@ var (
 // every Participant numbered before the write is allowed (409 otherwise).
 func (a Access) Numbered() Access { a.numbered = true; return a }
 
+// Sheets lets a host limited to venues write a Game of the whole synch fest,
+// in the sheets of their venues alone (ADR-0033): the handler keeps to
+// Scope.SheetVenues.
+func (a Access) Sheets() Access { a.sheets = true; return a }
+
 // Scope is what the dispatcher resolved before calling the handler. GameID is
 // 0 on routes without a {game} segment; User is zero-valued without a session.
 type Scope struct {
@@ -84,6 +90,9 @@ type Scope struct {
 	// AllVenues: every team of the fest.
 	Venues    []int64
 	AllVenues bool
+	// SheetVenues, when set, are the only venues whose sheets a Sheets route
+	// may write in a Game of the whole fest.
+	SheetVenues []int64
 }
 
 // ErrOtherVenue refuses a Roster route a team or venue outside Scope.Venues.
@@ -264,6 +273,12 @@ func (t *Table) admit(r *http.Request, access Access, sc *Scope) (Denial, error)
 		if allow && access.level == levelEditor && sc.GameID > 0 {
 			if allow, err = festaccess.MayRunGame(ctx, t.Eng.DB, sc.FestID, sc.GameID, sc.User.UserID, sc.Role); err != nil {
 				return 0, err
+			}
+			if !allow && access.sheets {
+				if sc.SheetVenues, err = sheetVenues(ctx, t.Eng.DB, *sc); err != nil {
+					return 0, err
+				}
+				allow = len(sc.SheetVenues) > 0
 			}
 		}
 		if !allow {

@@ -1032,7 +1032,7 @@ func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice im
 	if result.Revision > 0 {
 		s.fanOut(festID, result.Revision, core.Broadcast{Views: result.Views})
 	}
-	if err := s.ensureVenueGames(ctx, festID, ratingID); err != nil {
+	if err := s.ensureSynchGame(ctx, festID, ratingID); err != nil {
 		return result, err
 	}
 	return result, s.ensureVenueInvites(ctx, festID)

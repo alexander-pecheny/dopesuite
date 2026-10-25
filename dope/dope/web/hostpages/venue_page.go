@@ -71,9 +71,16 @@ func (s *Server) renderHostVenuePage(w http.ResponseWriter, r *http.Request, sc 
 		if err != nil {
 			return nil, err
 		}
+		// The venue plays its own Games and, in a synch fest, its sheet of the
+		// fest's Games, which open on that sheet.
+		kind, err := multifest.FestKind(r.Context(), s.h.Engine().DB, sc.FestID)
+		if err != nil {
+			return nil, err
+		}
+		synch := kind == multifest.Synch
 		for _, g := range rows {
-			if g.MultiFestVenueID == venue.ID {
-				data.Games = append(data.Games, PublicFestGame{ID: g.ID, Slug: g.Slug, Title: g.Title, Type: g.Type, MultiFestVenueID: venue.ID})
+			if g.MultiFestVenueID == venue.ID || synch && g.MultiFestVenueID == 0 {
+				data.Games = append(data.Games, PublicFestGame{ID: g.ID, Slug: g.Slug, Title: g.Title, Type: g.Type, MultiFestVenueID: g.MultiFestVenueID})
 			}
 		}
 		return hostVenueDoc(data), nil
@@ -116,7 +123,11 @@ func venueGamesSection(data hostVenuePageData, ref string) *dopeui.Element {
 	}
 	rows := make([]dopeui.Item, 0, len(data.Games))
 	for _, g := range data.Games {
-		row := []dopeui.Item{dopeui.Href("/host/fest/" + ref + "/game/" + g.Ref() + "/"), dopeui.Listtitle(dopeui.Text(games.Get(g.Type).Title))}
+		href := "/host/fest/" + ref + "/game/" + g.Ref() + "/"
+		if g.MultiFestVenueID == 0 {
+			href += "?venue=" + idstr.Format(data.Venue.ID) + "#input"
+		}
+		row := []dopeui.Item{dopeui.Href(href), dopeui.Listtitle(dopeui.Text(games.Get(g.Type).Title))}
 		if g.Title != data.Venue.Title {
 			row = append(row, dopeui.Muted(dopeui.Text(g.Title)))
 		}

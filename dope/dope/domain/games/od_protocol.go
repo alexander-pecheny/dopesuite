@@ -65,6 +65,9 @@ func (od) Seats(stateJSON json.RawMessage) []Seat {
 // that took it, so a team carries something entered as soon as its number is
 // written anywhere — on a question of the tours, or in a shootout round.
 func (od) EnteredSeats(stateJSON json.RawMessage) []bool {
+	if out, ok := enteredOnVenues(stateJSON); ok {
+		return out
+	}
 	var state struct {
 		Teams    []ChgkTeamJSON          `json:"teams"`
 		Entries  [][]int64               `json:"entries"`
@@ -165,10 +168,12 @@ func (od) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, entryRema
 // re-import reorders never misattribute scores — the entries stay valid as long
 // as a team keeps its number (sticky across re-import).
 type ChgkTeamJSON struct {
-	Name   string   `json:"name"`
-	City   string   `json:"city,omitempty"`
-	Number int64    `json:"number,omitempty"`
-	Flags  []string `json:"flags,omitempty"`
+	Name        string   `json:"name"`
+	City        string   `json:"city,omitempty"`
+	Number      int64    `json:"number,omitempty"`
+	Flags       []string `json:"flags,omitempty"`
+	Venue       int64    `json:"venue,omitempty"`
+	VenueNumber int64    `json:"venueNumber,omitempty"`
 }
 
 func odRosterScheme(raw string, teams []RosterTeam) ([]byte, error) {
@@ -232,6 +237,13 @@ func odRosterState(raw string, teams []RosterTeam, entryRemap map[int]int) ([]by
 			}
 		}
 	}
+	var completed []bool
+	if raw, ok := obj["completed"]; ok {
+		_ = json.Unmarshal(raw, &completed)
+	}
+	if err := foldVenueSheets(obj, teams, len(completed)); err != nil {
+		return nil, err
+	}
 	delete(obj, "answers")
 	delete(obj, "finished")
 	return json.Marshal(obj)
@@ -269,7 +281,7 @@ type chgkShootoutRoundJSON struct {
 func chgkTeamsFromRoster(teams []RosterTeam) []ChgkTeamJSON {
 	out := make([]ChgkTeamJSON, 0, len(teams))
 	for _, team := range teams {
-		out = append(out, ChgkTeamJSON{Name: team.Name, City: team.City, Number: team.Number, Flags: team.Flags})
+		out = append(out, ChgkTeamJSON{Name: team.Name, City: team.City, Number: team.Number, Flags: team.Flags, Venue: team.Venue, VenueNumber: team.VenueNumber})
 	}
 	return out
 }

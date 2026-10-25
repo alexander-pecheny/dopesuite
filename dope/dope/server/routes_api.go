@@ -81,7 +81,7 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("PUT "+game+"/draw", route.Manager.Numbered(), s.scopedDraw)
 	t.Handle("GET "+game+"/state", route.Read, s.scopedGameState)
 	t.Handle("PUT "+game+"/state", route.Editor.Numbered(), s.scopedGameStatePut)
-	t.Handle("PATCH "+game+"/state", route.Editor.Numbered(), s.scopedGameStatePatch)
+	t.Handle("PATCH "+game+"/state", route.Editor.Numbered().Sheets(), s.scopedGameStatePatch)
 	t.Handle("POST "+game+"/guests", route.Editor.Numbered(), s.scopedMultiGuestAdd)
 	t.Handle("PUT "+game+"/guests/{n}", route.Editor.Numbered(), s.scopedMultiGuestRename)
 	t.Handle("DELETE "+game+"/guests/{n}", route.Editor.Numbered(), s.scopedMultiGuestRemove)
@@ -473,6 +473,9 @@ func (s *server) scopedGameStatePatch(w http.ResponseWriter, r *http.Request, sc
 	tE2E := metrics.NowIf(s.metrics.On)
 	raw, req, err := readPatch(r)
 	if err != nil {
+		return err
+	}
+	if err := sc.KeepToSheets(req); err != nil {
 		return err
 	}
 	next, _, err := s.editor().SubmitEdit(r.Context(), sc.Fest(), req, raw, &sample)

@@ -1494,6 +1494,9 @@ shootout: true
       fallback: (n: string) => `Команда ${n}`,
     },
     title: () => "ОД",
+    venues: {
+      label: () => "Площадка",
+    },
   },
   override: {
     entry: {

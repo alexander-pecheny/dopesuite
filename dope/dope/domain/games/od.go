@@ -15,6 +15,10 @@ type ODTeam struct {
 	Name   string `json:"name"`
 	City   string `json:"city"`
 	Number int64  `json:"number"`
+	// Venue and VenueNumber are where a team of a synch fest plays and its
+	// number there, under which its venue's sheet records it (ADR-0033).
+	Venue       int64 `json:"venue,omitempty"`
+	VenueNumber int64 `json:"venueNumber,omitempty"`
 	// Flags are the team's Divisions by short name, propagated with the roster
 	// (ADR-0020). The page filters and re-ranks on them; nothing here does.
 	Flags []string `json:"flags,omitempty"`
@@ -24,6 +28,10 @@ type ODState struct {
 	Teams     []ODTeam  `json:"teams"`
 	Entries   [][]int64 `json:"entries"`
 	Completed []bool    `json:"completed"`
+	// Venues are the sheets of a synch fest's one OD, by venue id: each venue
+	// enters its own teams under its own numbers and completes its own
+	// questions. Entries and Completed then say nothing until flattened.
+	Venues map[string]ODSheet `json:"venues,omitempty"`
 }
 
 // ODResultsTeam is one ranked row of an OD standings view.
@@ -161,6 +169,7 @@ func ComputeODResults(schemeJSON, stateJSON string) (ODResults, error) {
 			return ODResults{}, fmt.Errorf("parse OD state: %w", err)
 		}
 	}
+	state.FlattenVenues()
 	if len(tours) == 0 {
 		// No tour composition recorded: treat every question as one tour, matching
 		// the export's fallback so the view is never empty.

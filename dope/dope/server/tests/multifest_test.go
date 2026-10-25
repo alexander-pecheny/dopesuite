@@ -449,3 +449,100 @@ func TestTheTeamsPageNumbersAFestWithoutVenues(t *testing.T) {
 		t.Fatalf("the numbers are %d and %d; want 2 and 1", a, b)
 	}
 }
+
+// A synch fest's one OD keeps a sheet per venue: each venue enters its teams
+// under its own numbers and completes its own questions, a venue's host writes
+// their sheet alone, the standings take every venue together, and a venue
+// renumbered keeps its sheet in step.
+func TestASynchFestPlaysOneODWithASheetPerVenue(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, revision, created_at, updated_at, kind) values('Синхрон', 1, '2026-10-25', '2026-10-25', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
+		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
+			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
+	}
+	teams := []roster.FestRosterImportTeam{team(1, "Альфа", minsk), team(2, "Бета", minsk), team(3, "Гамма", brest)}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var minskID, brestID int64
+	db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = 10`, festID).Scan(&minskID)
+	db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = 20`, festID).Scan(&brestID)
+	var gameID int64
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) (err error) {
+		gameID, _, err = festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, Label: "ОД", TourComp: []int{2}})
+		return err
+	})
+	state := func() games.ODState {
+		t.Helper()
+		doc, err := store.LoadGameDoc(t.Context(), db, festID, gameID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var s games.ODState
+		if err := json.Unmarshal([]byte(doc.State), &s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	key := func(id int64) string { return fmt.Sprint(id) }
+	if s := state(); len(s.Venues[key(minskID)].Entries[0]) != 2 || len(s.Venues[key(brestID)].Entries[0]) != 1 {
+		t.Fatalf("the sheets are %+v", s.Venues)
+	}
+
+	hostID, hostToken := createAPITestSession(t, srv, "minsk")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	if _, err := db.Exec(`insert into fest_venue_hosts(fest_id, multifest_venue_id, user_id) values(?, ?, ?)`, festID, minskID, hostID); err != nil {
+		t.Fatal(err)
+	}
+	_, adminToken := func() (int64, string) {
+		id, token := createAPITestSession(t, srv, "boss")
+		addAPITestRole(t, srv, festID, id, roles.Admin)
+		return id, token
+	}()
+	patch := func(token string, path ...any) int {
+		t.Helper()
+		value := any(true)
+		if path[len(path)-1] == "entries" {
+			path = append(path, 0)
+			value = []int{2, 0}
+		}
+		resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/games/%d/state", festID, gameID),
+			map[string]any{"ops": []map[string]any{{"path": path, "value": value}}}, token)
+		return resp.Code
+	}
+	if code := patch(hostToken, "venues", key(minskID), "entries"); code != http.StatusOK {
+		t.Fatalf("the Минск host wrote their sheet: %d", code)
+	}
+	if code := patch(hostToken, "venues", key(minskID), "completed", 0); code != http.StatusOK {
+		t.Fatalf("the Минск host completed a question: %d", code)
+	}
+	if a, b := patch(hostToken, "venues", key(brestID), "completed", 0), patch(hostToken, "completed", 0); a != http.StatusForbidden || b != http.StatusForbidden {
+		t.Fatalf("the Минск host wrote Брест's sheet (%d) or the document's own (%d)", a, b)
+	}
+	if code := patch(adminToken, "venues", key(brestID), "completed", 0); code != http.StatusOK {
+		t.Fatalf("the admin completed Брест's question: %d", code)
+	}
+
+	results := decodeInto[games.ODResults](t, scopedAPIRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/fest/%d/games/%d/results", festID, gameID), nil, adminToken))
+	if len(results.Teams) != 3 || results.Teams[0].Name != "Бета" || results.Teams[0].Total != 1 || results.Teams[1].Total != 0 {
+		t.Fatalf("the standings are %+v", results.Teams)
+	}
+
+	var alfa, beta int64
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Альфа'`, festID).Scan(&alfa)
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Бета'`, festID).Scan(&beta)
+	if err := srv.PageServer().SaveFestNumbers(t.Context(), festID, minskID, map[int64]int{alfa: 1, beta: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if got := state().Venues[key(minskID)].Entries[0]; !slices.Contains(got, 5) {
+		t.Fatalf("Бета's entry did not follow its new number: %v", got)
+	}
+}

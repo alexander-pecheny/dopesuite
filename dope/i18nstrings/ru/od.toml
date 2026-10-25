@@ -136,3 +136,7 @@ card_points = "Баллы"
 card_joker = 'Джокер: весь турнир за столом {{.n}}. Собирает команду, назначает капитана, следит за бланками.'
 # How many tables play, above the players table.
 tables_note = 'Столов: {{.n}}. Листы 1–{{.n}} — джокеры.'
+
+[venues]
+# The chips that switch the input tab between the venues of a synch fest.
+label = "Площадка"

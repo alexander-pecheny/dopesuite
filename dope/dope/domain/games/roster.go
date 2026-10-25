@@ -15,6 +15,17 @@ type RosterTeam struct {
 	// the name and the city: the document carries them so the page can offer a
 	// Division without a second fetch.
 	Flags []string
+	// Venue and VenueNumber place a team of a synch fest, for a document of
+	// the whole fest that keeps a sheet per venue (VenueSheets).
+	Venue       int64
+	VenueNumber int64
+}
+
+// VenueSheets is a flat Protocol whose document of a synch fest keeps a sheet
+// per venue, keyed by the venue's own numbers: a venue renumbered remaps its
+// own sheet alone.
+type VenueSheets interface {
+	RemapVenueSheet(stateJSON []byte, venueID int64, remap map[int]int) ([]byte, error)
 }
 
 // RosterFolder is a flat Protocol whose scheme and document carry the fest
