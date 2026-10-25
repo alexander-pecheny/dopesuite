@@ -156,6 +156,7 @@ func venueTeamsSection(data hostVenuePageData, ref string) *dopeui.Element {
 	return dopeui.Section(append(sect,
 		dopeui.Note(dopeui.Text(s.Host.Venue.TeamsHint())),
 		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(venuePageURL(ref, data.Venue.ID)+"/numbers"), dopeui.Autocomplete("off"),
+			dopeui.Data("dirty-submit", ""),
 			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
 			dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Venue.SaveNumbers()))),
 		))...)

@@ -5,6 +5,8 @@
 //   - [data-confirm-changed] on a <select> inside a <form>: window.confirm()
 //     gate before submit, only when the select's choice differs from the one
 //     the page came with.
+//   - [data-dirty-submit] on a <form>: its submit buttons stay disabled until
+//     a field differs from the value the page came with.
 //   - [data-copy] on a button: copy its text to the clipboard, and show
 //     data-copied on the button for a moment.
 //   - [data-select-all] on a field: select its text on focus/click (copy helper).
@@ -98,6 +100,17 @@ document.addEventListener("click", (event) => {
   });
 });
 
+function syncDirtySubmit(form: HTMLFormElement): void {
+  const dirty = [...form.elements].some((el) =>
+    (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && el.type !== "hidden" && el.value !== el.defaultValue);
+  for (const button of form.querySelectorAll<HTMLButtonElement>("button[type=submit]")) button.disabled = !dirty;
+}
+
+document.addEventListener("input", (event) => {
+  const form = (event.target as FormControl).form;
+  if (form?.hasAttribute("data-dirty-submit")) syncDirtySubmit(form);
+});
+
 function openAutoDialogs(): void {
   for (const el of document.querySelectorAll("dialog[data-dialog-auto]")) {
     const dialog: DialogLike = el as DialogLike;
@@ -105,10 +118,14 @@ function openAutoDialogs(): void {
     else dialog.setAttribute("open", "");
   }
 }
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", openAutoDialogs);
-} else {
+function boot(): void {
+  for (const form of document.querySelectorAll<HTMLFormElement>("form[data-dirty-submit]")) syncDirtySubmit(form);
   openAutoDialogs();
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
 }
 
 export {};
