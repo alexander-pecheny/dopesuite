@@ -2,6 +2,9 @@
 // on* handlers those pages used to carry (CSP-friendly, data-attribute driven):
 //   - [data-confirm] on a <form> or its clicked submit button: window.confirm()
 //     gate before submit.
+//   - [data-confirm-changed] on a <select> inside a <form>: window.confirm()
+//     gate before submit, only when the select's choice differs from the one
+//     the page came with.
 //   - [data-select-all] on a field: select its text on focus/click (copy helper).
 //   - [data-autosubmit] on a control: submit its form on change (the access-role
 //     selects, which saved on change via an inline onchange before).
@@ -24,6 +27,16 @@ document.addEventListener("submit", (event) => {
     (form instanceof HTMLElement && form.getAttribute("data-confirm"));
   if (message && !window.confirm(message)) {
     event.preventDefault();
+    return;
+  }
+  if (!(form instanceof HTMLFormElement)) return;
+  for (const select of form.querySelectorAll("select[data-confirm-changed]")) {
+    const options = [...(select as HTMLSelectElement).options];
+    if (!options.some((o) => o.selected !== o.defaultSelected)) continue;
+    if (!window.confirm(select.getAttribute("data-confirm-changed") ?? "")) {
+      event.preventDefault();
+      return;
+    }
   }
 });
 

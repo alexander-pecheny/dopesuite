@@ -258,3 +258,67 @@ func TestAVenueHostRunsAndEditsTheirVenueAlone(t *testing.T) {
 		}
 	}
 }
+
+// A fest with Games changes its type only when the host agrees to lose them,
+// and leaving a synch fest takes its площадки and the teams' places on them.
+func TestAFestChangesItsTypeByStartingItsGamesAfresh(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	host := srv.HostPageServer()
+	res, err := db.Exec(`insert into fests(title, revision, created_at, updated_at, kind) values('Синхрон', 1, '2026-10-25', '2026-10-25', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	team := roster.FestRosterImportTeam{RatingID: 1, Name: "Альфа", Venue: multifest.RatingVenue{ID: 10, Title: "Минск"},
+		Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "Альфа", LastName: "Капитан"}}}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, []roster.FestRosterImportTeam{team}, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		_, _, err := festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, Label: "ОД", TourComp: []int{3}})
+		return err
+	})
+	count := func(q string) int {
+		t.Helper()
+		var n int
+		if err := db.QueryRow(q, festID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	settings, err := host.LoadFestSettings(t.Context(), festID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Kind = multifest.Regular
+	if err := host.UpdateFest(t.Context(), festID, settings); err == nil {
+		t.Fatal("the type changed without agreeing to delete the Games")
+	}
+	if n := count(`select count(*) from games where fest_id = ?`); n != 1 {
+		t.Fatalf("a refused change left %d Games", n)
+	}
+	settings.ReplaceGames = true
+	if err := host.UpdateFest(t.Context(), festID, settings); err != nil {
+		t.Fatal(err)
+	}
+	if kind, _ := multifest.FestKind(t.Context(), db, festID); kind != multifest.Regular {
+		t.Fatalf("the fest is %s", kind)
+	}
+	if n := count(`select count(*) from games where fest_id = ?`); n != 0 {
+		t.Fatalf("%d Games outlived the change", n)
+	}
+	if n := count(`select count(*) from multifest_venues where fest_id = ?`); n != 0 {
+		t.Fatalf("%d площадки outlived the change", n)
+	}
+	if n := count(`select count(*) from fest_teams where fest_id = ? and deleted = 0 and multifest_venue_id is null and venue_number is null`); n != 1 {
+		t.Fatalf("%d teams are off every площадка", n)
+	}
+
+	settings.Kind, settings.ReplaceGames = multifest.Synch, false
+	if err := host.UpdateFest(t.Context(), festID, settings); err != nil {
+		t.Fatalf("a fest without Games needs no agreement: %v", err)
+	}
+}

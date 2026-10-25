@@ -434,7 +434,9 @@ bulk_done_notice = 'Массовое действие выполнено: {{.n}}
 access_saved_notice = "Доступ сохранён."
 # The fest type (ADR-0031): an unknown one, and a change once Games exist.
 error_kind_invalid = "Такого типа турнира нет."
-error_kind_has_games = "Тип турнира можно поменять, только пока в нём нет игр."
+error_kind_has_games = "Смена типа удалит игры турнира. Подтвердите удаление игр."
+# The type changed to a strict synch, and loading its площадки from the site failed.
+kind_import_failed = 'Тип турнира поменян, но площадки с rating.chgk.info не загрузились: {{.err}} Загрузите команды на странице «Команды».'
 
 [multifest]
 # A fest's type and its площадки (ADR-0031, web/hostpages/multifest.go).
@@ -442,7 +444,9 @@ kind_label = "Тип турнира"
 kind_regular = "Обычный"
 kind_synch = "Строгий синхрон"
 kind_multi = "Несколько очных турниров"
-kind_hint = "В строгом синхроне загрузка команд с rating.chgk.info раскладывает их по площадкам и заводит каждой площадке свою игру. Тип можно поменять, только пока в турнире нет игр."
+# Asked before a new type deletes the fest's Games, which it names.
+kind_replace_confirm = 'Если поменять тип турнира, удалятся его игры: {{.games}}. Поменять тип?'
+kind_hint = "В строгом синхроне загрузка команд с rating.chgk.info раскладывает их по площадкам и заводит каждой площадке свою игру. Если поменять тип, игры турнира удалятся."
 subhead = "Площадки"
 teams = 'команд: {{.n}}'
 # A team put on a venue this fest does not have.

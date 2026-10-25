@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"slices"
 	"strconv"
+	"strings"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/festops"
@@ -17,8 +18,9 @@ import (
 	dopestrings "dope/i18nstrings"
 )
 
-// kindField is the fest type's select, with current chosen.
-func kindField(current string) *dopeui.Element {
+// kindField is the fest type's select, with current chosen. A fest with
+// Games asks before a new type deletes them.
+func kindField(current string, festGames []PublicFestGame) *dopeui.Element {
 	s := dopestrings.Default
 	option := func(kind, label string) *dopeui.Element {
 		items := []dopeui.Item{dopeui.Value(kind), dopeui.Text(label)}
@@ -27,12 +29,21 @@ func kindField(current string) *dopeui.Element {
 		}
 		return dopeui.Option(items...)
 	}
-	return dopeui.Field(dopeui.Label(s.Host.Multifest.KindLabel()),
-		dopeui.Selectfield(dopeui.Name("kind"),
-			option(multifest.Regular, s.Host.Multifest.KindRegular()),
-			option(multifest.Synch, s.Host.Multifest.KindSynch()),
-			option(multifest.Multi, s.Host.Multifest.KindMulti())),
-		dopeui.Hint(dopeui.Text(s.Host.Multifest.KindHint())))
+	selectItems := []dopeui.Item{dopeui.Name("kind"),
+		option(multifest.Regular, s.Host.Multifest.KindRegular()),
+		option(multifest.Synch, s.Host.Multifest.KindSynch()),
+		option(multifest.Multi, s.Host.Multifest.KindMulti())}
+	field := []dopeui.Item{dopeui.Label(s.Host.Multifest.KindLabel())}
+	if len(festGames) > 0 {
+		titles := make([]string, len(festGames))
+		for i, g := range festGames {
+			titles[i] = "«" + g.Title + "»"
+		}
+		selectItems = append(selectItems, dopeui.Data("confirm-changed", s.Host.Multifest.KindReplaceConfirm(strings.Join(titles, ", "))))
+		field = append(field, dopeui.Hiddenfield(dopeui.Name("replace_games"), dopeui.Value("1")))
+	}
+	field = append(field, dopeui.Selectfield(selectItems...), dopeui.Hint(dopeui.Text(s.Host.Multifest.KindHint())))
+	return dopeui.Field(field...)
 }
 
 // ensureVenueGames gives every venue of a synch fest that has no Game yet an

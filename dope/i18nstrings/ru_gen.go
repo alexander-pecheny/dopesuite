@@ -964,18 +964,21 @@ var RU = Strings{
 			EndDateLabel:           func() string { return "Дата окончания" },
 			ErrorDeleteCreatorOnly: func() string { return "Удалить фест может только его создатель." },
 			ErrorKindHasGames: func() string {
-				return "Тип турнира можно поменять, только пока в нём нет игр."
+				return "Смена типа удалит игры турнира. Подтвердите удаление игр."
 			},
-			ErrorKindInvalid:     func() string { return "Такого типа турнира нет." },
-			ErrorSlugInvalid:     func(err string) string { return fmt.Sprintf("Slug: %s", err) },
-			ErrorSlugTaken:       func() string { return "Slug уже занят." },
-			ErrorTitleRequired:   func() string { return "Название обязательно." },
-			GamesEmpty:           func() string { return "Игр пока нет." },
-			GamesEvery:           func() string { return "все игры" },
-			GamesNoneHint:        func() string { return "ничего не отмечено — ведёт все игры" },
-			GamesSubhead:         func() string { return "Игры" },
-			JumpLabel:            func() string { return "Страница зрителя" },
-			JumpTitle:            func() string { return "Открыть зрительскую страницу" },
+			ErrorKindInvalid:   func() string { return "Такого типа турнира нет." },
+			ErrorSlugInvalid:   func(err string) string { return fmt.Sprintf("Slug: %s", err) },
+			ErrorSlugTaken:     func() string { return "Slug уже занят." },
+			ErrorTitleRequired: func() string { return "Название обязательно." },
+			GamesEmpty:         func() string { return "Игр пока нет." },
+			GamesEvery:         func() string { return "все игры" },
+			GamesNoneHint:      func() string { return "ничего не отмечено — ведёт все игры" },
+			GamesSubhead:       func() string { return "Игры" },
+			JumpLabel:          func() string { return "Страница зрителя" },
+			JumpTitle:          func() string { return "Открыть зрительскую страницу" },
+			KindImportFailed: func(err string) string {
+				return fmt.Sprintf("Тип турнира поменян, но площадки с rating.chgk.info не загрузились: %s Загрузите команды на странице «Команды».", err)
+			},
 			NumbersLink:          func() string { return "Номера команд" },
 			NumbersStatusDone:    func() string { return "готово" },
 			NumbersStatusPartial: func(done string, total string) string { return fmt.Sprintf("%s из %s", done, total) },
@@ -1168,12 +1171,15 @@ var RU = Strings{
 		},
 		Multifest: HostMultifestStrings{
 			KindHint: func() string {
-				return "В строгом синхроне загрузка команд с rating.chgk.info раскладывает их по площадкам и заводит каждой площадке свою игру. Тип можно поменять, только пока в турнире нет игр."
+				return "В строгом синхроне загрузка команд с rating.chgk.info раскладывает их по площадкам и заводит каждой площадке свою игру. Если поменять тип, игры турнира удалятся."
 			},
 			KindLabel:   func() string { return "Тип турнира" },
 			KindMulti:   func() string { return "Несколько очных турниров" },
 			KindRegular: func() string { return "Обычный" },
-			KindSynch:   func() string { return "Строгий синхрон" },
+			KindReplaceConfirm: func(games string) string {
+				return fmt.Sprintf("Если поменять тип турнира, удалятся его игры: %s. Поменять тип?", games)
+			},
+			KindSynch: func() string { return "Строгий синхрон" },
 			PlayerElsewhere: func(player string, team string) string {
 				return fmt.Sprintf("%s играет за команду «%s» другой площадки. Перевести игрока могут организаторы феста.", player, team)
 			},

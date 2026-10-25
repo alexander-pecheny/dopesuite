@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/imports"
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/view"
@@ -157,7 +158,7 @@ func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
 		dopeui.Field(dopeui.Label(s.Host.Dash.StartDateLabel()), dopeui.Textfield(dopeui.Name("start_date"), dopeui.Value(data.Fest.StartDate))),
 		dopeui.Field(dopeui.Label(s.Host.Dash.EndDateLabel()), dopeui.Textfield(dopeui.Name("end_date"), dopeui.Value(data.Fest.EndDate))),
 		dopeui.Field(dopeui.Label("rating.chgk.info ID"), dopeui.Textfield(dopeui.Name("rating_id"), dopeui.Value(ratingID), dopeui.Inputmode("numeric"))),
-		kindField(data.Kind),
+		kindField(data.Kind, data.Games),
 		pub,
 		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.SaveSubmit()))),
 	)
@@ -382,6 +383,8 @@ type FestSettings struct {
 	IsPublic    bool   `json:"is_public"`
 	// Kind is the fest's type: regular, synch or multi (ADR-0031).
 	Kind string `json:"kind"`
+	// ReplaceGames agrees to a change of Kind deleting the fest's Games.
+	ReplaceGames bool `json:"replace_games"`
 }
 
 func festSettingsFromForm(form url.Values) FestSettings {
@@ -395,6 +398,8 @@ func festSettingsFromForm(form url.Values) FestSettings {
 		RatingID:    rating,
 		IsPublic:    form.Get("is_public") == "1",
 		Kind:        form.Get("kind"),
+
+		ReplaceGames: form.Get("replace_games") == "1",
 	}
 }
 
@@ -492,8 +497,10 @@ from fests where id = ?`, festID).Scan(&f.Title, &f.Slug, &f.Description, &start
 	return f, err
 }
 
-// UpdateFest writes a fest's whole header. An empty slug clears it. The type
-// changes only while the fest has no Games, which its venues would split.
+// UpdateFest writes a fest's whole header. An empty slug clears it. A new
+// type starts the fest's Games and venues afresh: its Games go, which needs
+// ReplaceGames when there are any, and so do the venues of the old type. A
+// synch fest with a rating id then loads its venues and their Games.
 func (s *Server) UpdateFest(reqCtx context.Context, festID int64, f FestSettings) error {
 	f.Title = strings.TrimSpace(f.Title)
 	if f.Title == "" {
@@ -511,14 +518,27 @@ func (s *Server) UpdateFest(reqCtx context.Context, festID int64, f FestSettings
 		}
 		slugValue = slug
 	}
+	var changed bool
 	_, err = s.commit(reqCtx, festID, "fest-settings", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
-		var changed bool
+		var write core.FestWrite
+		var oldKind string
+		var hasGames bool
 		if err := tx.QueryRowContext(ctx, `
-select kind <> ? and exists (select 1 from games where fest_id = fests.id) from fests where id = ?`, kind, festID).Scan(&changed); err != nil {
-			return core.FestWrite{}, err
+select kind, exists (select 1 from games where fest_id = fests.id) from fests where id = ?`, festID).Scan(&oldKind, &hasGames); err != nil {
+			return write, err
 		}
-		if changed {
-			return core.FestWrite{}, corei18n.User(dopestrings.Default.Host.Dash.ErrorKindHasGames())
+		if changed = kind != oldKind; changed {
+			if hasGames && !f.ReplaceGames {
+				return write, corei18n.User(dopestrings.Default.Host.Dash.ErrorKindHasGames())
+			}
+			if err := resetFestKindTx(ctx, tx, festID); err != nil {
+				return write, err
+			}
+			write.Settled = func(e *core.Engine, _ int64) {
+				if e.FestID == festID {
+					e.ActiveGameID, e.ActiveMatchCode = 0, ""
+				}
+			}
 		}
 		_, err := tx.ExecContext(ctx, `
 update fests
@@ -527,9 +547,34 @@ where id = ?`,
 			f.Title, slugValue, f.Description, f.ratingValue(),
 			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic),
 			kind, util.UtcNow(), festID)
-		return core.FestWrite{}, err
+		return write, err
 	})
-	return err
+	if err != nil || !changed || kind != multifest.Synch || f.RatingID <= 0 {
+		return err
+	}
+	if _, err := s.ImportRatingRoster(reqCtx, festID, imports.RosterChoice{}); err != nil {
+		msg, ok := corei18n.AsUser(err)
+		if !ok {
+			msg = err.Error()
+		}
+		return corei18n.User(dopestrings.Default.Host.Dash.KindImportFailed(msg))
+	}
+	return nil
+}
+
+// resetFestKindTx deletes a fest's Games and its venues, with the teams'
+// places and numbers on them.
+func resetFestKindTx(ctx context.Context, tx *sql.Tx, festID int64) error {
+	for _, q := range []string{
+		`delete from games where fest_id = ?`,
+		`update fest_teams set multifest_venue_id = null, venue_number = null where fest_id = ?`,
+		`delete from multifest_venues where fest_id = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, festID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, festID int64) {

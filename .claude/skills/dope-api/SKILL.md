@@ -55,7 +55,7 @@ in the game has a number.
 | `GET /api/fests` | your fests |
 | `POST /api/fests` | `{title, slug?, description?, start_date?, end_date?, rating_id?, is_public?, kind?}` → the fest. `kind` is `regular` (the default), `synch` or `multi` (ADR-0031) |
 | `GET …/settings` M | header with `kind`, your `role`, `games` (each with its `multifest_venue_id`), roster counts, and a synch fest's `multifest_venues` (площадки) |
-| `PATCH …/settings` A | any header fields; those left out keep their value. `kind` changes only while the fest has no games |
+| `PATCH …/settings` A | any header fields; those left out keep their value. a new `kind` deletes the fest's games and площадки, so a fest with games refuses it unless the body has `replace_games: true` (**ask the user first**); a new synch fest with a `rating_id` then loads its площадки and their games |
 | `DELETE /api/fest/<fest>` C | deletes the fest and everything in it |
 | `GET …/access` A | members and roles; a host limited to some Games carries their ids in `games`, and one limited to площадки theirs in `multifest_venues` |
 | `POST …/access` A | `{changes: [{user, role: "admin"\|"host"}, {user, remove: true}]}` or `{lines: "user:role\n…"}`. A change may carry `games: [<id\|code\|slug>, …]` to limit a host to those Games (`[]` lifts it), and `multifest_venues: [<id\|title>, …]` to limit them to those площадки: their Games, and their teams and numbers to edit; with or without a role |
