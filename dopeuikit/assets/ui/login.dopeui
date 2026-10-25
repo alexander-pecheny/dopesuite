@@ -10,9 +10,9 @@ page title="{{title}}" kind="sheet" classicscripts="login.js"
   section id="step-code" hidden
     hint @login.code.link_hint
     button id="tgDeepLink" href="#" "t.me/…"
+    hint @login.code.bot_hint_lead (strong id="tgBotName" "@…") @login.code.bot_hint_mid (strong id="tgCode" "…") "."
     hint id="tgQrHint" hidden @login.code.qr_hint
     col id="tgQr" hidden
-    hint @login.code.bot_hint_lead (strong id="tgBotName" "@…") @login.code.bot_hint_mid (strong id="tgCode" "…") "."
     hint @login.code.waiting
     message id="codeMessage"
 

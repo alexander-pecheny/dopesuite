@@ -38,7 +38,7 @@ var EN = Strings{
 			BotHintLead: func() string { return "If the link does not open, write to the bot " },
 			BotHintMid:  func() string { return " and send it the code " },
 			LinkHint:    func() string { return "Follow this link to log in:" },
-			QrHint:      func() string { return "If Telegram is only on your phone, point the phone camera at this code:" },
+			QrHint:      func() string { return "Or point your phone camera at the QR code:" },
 			Waiting:     func() string { return "Waiting for the bot to confirm…" },
 		},
 		Field: LoginFieldStrings{
