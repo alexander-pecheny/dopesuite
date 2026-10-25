@@ -52,10 +52,10 @@ export interface FestPlayerChoice {
 // Each answer is cached for the page's lifetime.
 const rosterCache = new Map<string, Promise<RosterTeam[]>>();
 
-export function fetchFestRoster(festID: string | number | null | undefined, gameID?: string): Promise<RosterTeam[]> {
+export function fetchFestRoster(festID: string | number | null | undefined, gameID?: string, venue = 0): Promise<RosterTeam[]> {
   if (!festID) return Promise.resolve([]);
   const fest = `/api/fest/${encodeURIComponent(festID)}`;
-  const url = gameID ? `${fest}/games/${encodeURIComponent(gameID)}/roster` : `${fest}/roster`;
+  const url = (gameID ? `${fest}/games/${encodeURIComponent(gameID)}/roster` : `${fest}/roster`) + (venue ? `?venue=${venue}` : "");
   const cached = rosterCache.get(url);
   if (cached) return cached;
   const promise = fetch(url)
@@ -183,8 +183,8 @@ function troikaLine(team: RosterTeam): string {
 // itself asynchronously: it shows a loading line, fetches the fest roster, then
 // swaps in the table (or an error line on failure). Safe to drop straight into
 // a tab pane by any page — no roster data needs to be threaded through.
-export function buildRosterView(festID: string | number | null | undefined, gameID?: string): HTMLElement {
-  return rosterView(fetchFestRoster(festID, gameID), {});
+export function buildRosterView(festID: string | number | null | undefined, gameID?: string, venue = 0): HTMLElement {
+  return rosterView(fetchFestRoster(festID, gameID, venue), {});
 }
 
 export interface GameRosterOptions {

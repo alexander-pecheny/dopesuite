@@ -27,7 +27,7 @@ import * as od from "./od-protocol.js";
 import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, readCityCountry, teamFlag} from "./screen-board.js";
 import type {ScreenMetrics, ScreenSettings} from "./screen-board.js";
-import {setHashTab, tabFromHash} from "./url-state.js";
+import {param, setHashTab, setParam, tabFromHash} from "./url-state.js";
 import S from "./i18nstrings.js";
 
 // The results sheet and the screen board pin the place, the team and the total.
@@ -148,11 +148,13 @@ let scheme!: ODScheme;
 let state!: ODState;
 // The input tab enters entrySheet: the document itself, or in a synch fest
 // one venue's sheet under its numbers (ADR-0033), whose arrays it shares with
-// docState. The standings read state, then the venues flattened into one
-// sheet keyed by the fest's numbers.
+// docState. Every other tab reads state. On a venue's view (?venue=) that is
+// the venue's sheet, an OD of its own; on the whole fest's, the venues
+// flattened into one sheet under the fest's numbers.
 let docState!: ODState;
 let entrySheet!: ODState;
 let sheetVenue = 0;
+let pageVenue = 0;
 let entryStatsCache: QuestionStat[] | null = null;
 let entryIndexCache: Map<number, number> | null = null;
 let fest: FestInfo | null = null;
@@ -205,6 +207,11 @@ const lens = createTeamLens({
   render: () => render(),
 });
 lens.follow(() => {
+  if (docState && od.isSynch(docState) && askedVenue() !== pageVenue) {
+    projectState();
+    invalidateAllCaches();
+    return true;
+  }
   const next = tabFromHash(TABS);
   if (!next || next === activeTab) return false;
   activeTab = next;
@@ -291,16 +298,22 @@ function initFromScheme(): void {
 // state and cache the question fold between renders.
 function ensureState(): void {
   docState = od.parseState(state, scheme, totalQuestions);
+  projectState();
+  lens.adopt();
+}
+
+// projectState is what the tabs read of docState on the view the URL asks for.
+function projectState(): void {
   state = docState;
   entrySheet = docState;
   if (od.isSynch(docState)) {
-    if (!docState.venues?.[String(sheetVenue)]) sheetVenue = defaultSheetVenue();
+    pageVenue = askedVenue();
+    sheetVenue = pageVenue || defaultSheetVenue();
     entrySheet = od.venueSheet(docState, sheetVenue);
-    state = od.flattenVenues(docState);
+    state = viewedState();
   }
   entryStatsCache = null;
   entryIndexCache = null;
-  lens.adopt();
 }
 
 // The venues of a synch fest's OD the page knows, and the ones this visitor
@@ -314,11 +327,58 @@ function shownSheets(): GameSheet[] {
   return editable.length ? editable : gameSheets;
 }
 
-// defaultSheetVenue is the venue ?venue= names, else the first one shown.
+// askedVenue is the venue whose view ?venue= asks for, 0 for the whole fest's.
+function askedVenue(): number {
+  const asked = Number(param("venue"));
+  return gameSheets.some((venue) => venue.id === asked) ? asked : 0;
+}
+
+// defaultSheetVenue is the sheet the input tab opens on the whole fest's view.
 function defaultSheetVenue(): number {
-  const asked = Number(new URLSearchParams(location.search).get("venue"));
-  const shown = shownSheets();
-  return shown.find((venue) => venue.id === asked)?.id ?? shown[0]?.id ?? Number(Object.keys(docState.venues || {})[0] || 0);
+  return shownSheets()[0]?.id ?? Number(Object.keys(docState.venues || {})[0] || 0);
+}
+
+function viewedState(): ODState {
+  return pageVenue ? entrySheet : od.flattenVenues(docState);
+}
+
+// spansVenues: the tables list the teams of several venues, which share no
+// numbers, so the detailed sheet goes by name.
+function spansVenues(): boolean {
+  return od.isSynch(docState) && !pageVenue;
+}
+
+// teamPlace is the line under a team's name, which tells it from its
+// neighbours: its venue in a table of several venues, its city otherwise.
+function teamPlace(index: number): string {
+  const team = state.teams[index];
+  const venue = spansVenues() && gameSheets.find((sheet) => sheet.id === team.venue);
+  return venue ? venue.title : team.city || "";
+}
+
+// showVenue moves the whole page to one venue's view, or the fest's for 0.
+function showVenue(venue: number): void {
+  setParam("venue", venue ? String(venue) : "");
+  projectState();
+  lens.adopt();
+  invalidateAllCaches();
+  render();
+}
+
+// venueChips switch the page between the venues' views of a synch fest. The
+// input tab enters one venue's sheet at a time, so it offers no whole fest.
+function venueChips(tab: string): HTMLElement | null {
+  const entering = tab === "input";
+  const shown = entering ? shownSheets() : gameSheets;
+  if (!od.isSynch(docState) || shown.length < 2) return null;
+  const row = document.createElement("div");
+  row.className = "match-tabs";
+  row.setAttribute("role", "tablist");
+  row.setAttribute("aria-label", S.od.venues.label());
+  const items = shown.map((venue) => ({key: String(venue.id), label: venue.title}));
+  if (!entering) items.unshift({key: "0", label: S.od.venues.all()});
+  renderTabBar(row, items, String(entering ? sheetVenue : pageVenue), (key) => showVenue(Number(key)), {picker: true});
+  return row;
 }
 
 function entryIndex(): Map<number, number> {
@@ -392,7 +452,7 @@ function invalidateAllCaches(): void {
 function invalidateScoreCaches(): void {
   questionStatsCache = null;
   entryStatsCache = null;
-  if (od.isSynch(docState)) state = od.flattenVenues(docState);
+  if (od.isSynch(docState)) state = viewedState();
   invalidateTabCache("detailed", "results", "screen", "personal");
 }
 
@@ -492,7 +552,7 @@ function getTabPane(tab: string): HTMLElement {
   let node;
   if (tab === "input") node = buildInputView();
   else if (tab === "detailed") node = buildDetailedTable();
-  else if (tab === "roster") node = buildRosterView(route.festID, route.gameID);
+  else if (tab === "roster") node = buildRosterView(route.festID, route.gameID, pageVenue);
   else if (tab === "screen") node = buildScreenView();
   else if (tab === "personal") node = buildPersonalView(kdContext());
   else if (tab === "players") {
@@ -506,6 +566,10 @@ function getTabPane(tab: string): HTMLElement {
   const pane = document.createElement("div");
   pane.className = "od-pane";
   pane.dataset.tab = tab;
+  if (tab !== "input") {
+    const venues = venueChips(tab);
+    if (venues) pane.appendChild(venues);
+  }
   if (tab === "results" || tab === "detailed") {
     const chips = lens.chips();
     if (chips) pane.appendChild(chips);
@@ -571,7 +635,7 @@ function renderTabs(): void {
 function buildInputView(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-input-wrap";
-  const chips = sheetChips();
+  const chips = venueChips("input");
   if (chips) wrapper.appendChild(chips);
   if (!entryNumbered()) {
     // Prose, not an input table: the wrap must fit the frame and wrap.
@@ -587,24 +651,6 @@ function buildInputView(): HTMLElement {
   wrapper.appendChild(tables);
   updateEntrySelectionSoon();
   return wrapper;
-}
-
-// sheetChips switches the input tab between the venues of a synch fest, for
-// someone who enters more than one of them.
-function sheetChips(): HTMLElement | null {
-  const shown = shownSheets();
-  if (!od.isSynch(docState) || shown.length < 2) return null;
-  const row = document.createElement("div");
-  row.className = "match-tabs";
-  row.setAttribute("role", "tablist");
-  row.setAttribute("aria-label", S.od.venues.label());
-  renderTabBar(row, shown.map((venue) => ({key: String(venue.id), label: venue.title})), String(sheetVenue), (key) => {
-    sheetVenue = Number(key);
-    ensureState();
-    invalidateTabCache("input");
-    render();
-  }, {picker: true});
-  return row;
 }
 
 function updateEntrySelectionSoon(): void {
@@ -2070,8 +2116,8 @@ function buildDetailedScoreTable(): HTMLTableElement {
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const members = lens.members();
   const placeMap = placesFor(totals, members);
-  // A synch fest's teams have no number its people know: by name.
-  const order = od.isSynch(docState)
+  // The whole fest's teams have no number its people know: by name.
+  const order = spansVenues()
     ? [...lens.order("name", members)].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b), "ru"))
     : lens.order("number", members);
   const rows = order.map((teamIndex): ScoreTableRow => {
@@ -2174,22 +2220,12 @@ function teamLabel(index: number): string {
 
 // teamNameCell is a team's name on the detailed sheet: its number in a column
 // of its own, the name fading in a white pill, the division badges beside it.
-// teamBadges are the Divisions a team's name carries, and in a synch fest the
-// venue it plays at, since its fest number means nothing to anyone there.
-function teamBadges(teamIndex: number): string[] | undefined {
-  const badges = lens.badges(teamIndex);
-  if (!od.isSynch(docState)) return badges;
-  const venue = gameSheets.find((sheet) => sheet.id === state.teams[teamIndex]?.venue);
-  return venue ? [venue.title, ...(badges || [])] : badges;
-}
-
 function teamNameCell(teamIndex: number): HTMLElement {
-  const num = od.isSynch(docState) ? 0 : teamNumber(teamIndex);
+  const num = spansVenues() ? 0 : teamNumber(teamIndex);
   return nameCell(teamLabel(teamIndex), {
     className: "team-name od-detailed-team-cell",
     layout: true,
     number: {text: num ? String(num) : "", className: "od-detailed-team-number"},
-    // The venue would crowd the name out of this narrow column; Итог shows it.
     badges: lens.badges(teamIndex),
   });
 }
@@ -2662,9 +2698,9 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
       tr.className = classes.join(" ");
       tr.appendChild(RESULTS_PINS.mark(td(placeText, "results-place"), "place"));
       tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(teamLabel(index), {
-        city: screenSettings.showCity ? state.teams[index].city : "",
+        city: screenSettings.showCity ? teamPlace(index) : "",
         flag: screenSettings.showCountry ? teamFlagEmoji(index) : "",
-        badges: teamBadges(index),
+        badges: lens.badges(index),
       }), "name"));
       tr.appendChild(RESULTS_PINS.mark(td(total, "results-num total-cell results-total"), "total"));
       const tourValue = tourStarted ? tourTotals[index][tourIndex] : "·";
@@ -2830,7 +2866,7 @@ function buildResultsTableInner(): HTMLTableElement {
       if (rowIdx === group.rows.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
       tr.appendChild(RESULTS_PINS.mark(td(group.placeText, "results-place"), "place"));
-      tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(teamLabel(index), {city: state.teams[index].city, badges: teamBadges(index)}), "name"));
+      tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(teamLabel(index), {city: teamPlace(index), badges: lens.badges(index)}), "name"));
       tr.appendChild(RESULTS_PINS.mark(td(total, "results-num total-cell results-total"), "total"));
       for (let t = 0; t < tourLengths.length; t++) {
         if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));

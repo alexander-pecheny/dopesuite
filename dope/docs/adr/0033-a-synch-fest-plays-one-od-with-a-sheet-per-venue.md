@@ -31,9 +31,19 @@ marked `route.Editor.Sheets()`, and every op of the patch must lie under the
 sheets of their venues. They cannot replace the document, and the other
 editor routes of the Game stay closed to them.
 
-The page's input tab enters one sheet at a time: a venue's host sees their own,
-and an organizer switches between the venues. The detailed tab lists every team
-by name with its venue, since a fest number means nothing to anyone there.
+The page has a view per venue besides the whole fest's, picked by `?venue=`
+and by a row of chips. A venue's view is that venue's sheet read as an OD of
+its own, its teams under its numbers, on every tab: the standings place the
+venue's teams among themselves, the detailed tab goes by number, and the
+roster tab lists the venue's teams (`/roster?venue=`). The whole fest's view
+flattens the sheets; there a fest number means nothing to anyone, so the
+detailed tab lists the teams by name. The input tab always enters one sheet:
+a venue's host sees their own, and an organizer's chips move the page to
+another venue's view.
+
+The line under a team's name says what tells it from its neighbours: its venue
+in a table of several venues, its city otherwise (`teamPlace`). A venue mostly
+repeats its teams' city, so the table never shows both.
 
 ## Consequences
 

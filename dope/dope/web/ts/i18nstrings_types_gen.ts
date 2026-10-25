@@ -442,6 +442,9 @@ export type Strings = {
       city: () => string;
       delete: () => string;
       deleteConfirm: (team: string) => string;
+      divisions: () => string;
+      divisionsHint: () => string;
+      divisionsOther: () => string;
       failed: () => string;
       games: (n: number) => string;
       hintHand: () => string;
@@ -1474,6 +1477,7 @@ export type Strings = {
     };
     title: () => string;
     venues: {
+      all: () => string;
       label: () => string;
     };
   };

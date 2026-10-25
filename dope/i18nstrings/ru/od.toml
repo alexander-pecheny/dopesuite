@@ -138,5 +138,7 @@ card_joker = 'Джокер: весь турнир за столом {{.n}}. Со
 tables_note = 'Столов: {{.n}}. Листы 1–{{.n}} — джокеры.'
 
 [venues]
-# The chips that switch the input tab between the venues of a synch fest.
+# The chips that switch a synch fest's OD between the venues' views, and the
+# chip of the whole fest's view.
 label = "Площадка"
+all = "Все площадки"

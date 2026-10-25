@@ -147,6 +147,10 @@ func (s *server) scopedFestRoster(w http.ResponseWriter, r *http.Request, sc rou
 	if err != nil {
 		return err
 	}
+	// A Game of the whole synch fest shows one venue's part on that venue's view.
+	if asked, _ := idstr.Parse(r.URL.Query().Get("venue")); multiFestVenueID == 0 && asked > 0 {
+		multiFestVenueID = asked
+	}
 	teams, err := roster.LoadFestRosterView(r.Context(), s.eng.DB, sc.FestID, multiFestVenueID)
 	if err != nil {
 		return err

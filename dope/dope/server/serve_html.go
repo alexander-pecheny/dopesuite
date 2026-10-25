@@ -128,7 +128,7 @@ func (s *server) gameSheets(r *http.Request, scope festScope) []gameSheet {
 	}
 	out := make([]gameSheet, len(venues))
 	for i, v := range venues {
-		out[i] = gameSheet{ID: v.ID, Title: v.Label(), Editable: all || slices.Contains(mine, v.ID)}
+		out[i] = gameSheet{ID: v.ID, Title: v.Title, Editable: all || slices.Contains(mine, v.ID)}
 	}
 	return out
 }

@@ -559,7 +559,12 @@ var RU = Strings{
 			DeleteConfirm: func(team string) string {
 				return fmt.Sprintf("Убрать команду «%s» из составов феста? Если у неё уже есть результаты, убрать её не получится.", team)
 			},
-			Failed: func() string { return "Не удалось сохранить команду." },
+			Divisions: func() string { return "Зачёты" },
+			DivisionsHint: func() string {
+				return "Короткие названия через запятую, например: Студ, МЮ."
+			},
+			DivisionsOther: func() string { return "Другие зачёты" },
+			Failed:         func() string { return "Не удалось сохранить команду." },
 			Games: func(n int) string {
 				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "игра", "игры", "игр"))
 			},
@@ -2035,6 +2040,7 @@ var RU = Strings{
 		},
 		Title: func() string { return "ОД" },
 		Venues: OdVenuesStrings{
+			All:   func() string { return "Все площадки" },
 			Label: func() string { return "Площадка" },
 		},
 	},
