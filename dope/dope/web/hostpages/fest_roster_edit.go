@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 
 	"dope/dope/domain/core"
@@ -149,6 +150,10 @@ type festTeamDetail struct {
 	// MultiFestVenues the venues the editor may put a team the host made on.
 	MultiFestVenueID int64             `json:"multifest_venue_id"`
 	MultiFestVenues  []multifest.Venue `json:"multifest_venues,omitempty"`
+	// Flags is the team's Divisions by short name, and Divisions every one
+	// the fest's teams carry, for the editor to offer.
+	Flags     []string `json:"flags"`
+	Divisions []string `json:"divisions"`
 }
 
 // festTeamPlayer is a person as the editor sends and shows them. Team is the
@@ -177,7 +182,11 @@ func (s *Server) loadFestTeamDetail(ctx context.Context, sc route.Scope, teamID 
 		return festTeamDetail{}, err
 	}
 	edited := editedTeams(state)
-	out := festTeamDetail{Players: []festTeamPlayer{}, Choices: []festTeamPlayer{}}
+	flags, err := roster.LoadFestTeamFlags(ctx, db, festID)
+	if err != nil {
+		return festTeamDetail{}, err
+	}
+	out := festTeamDetail{Players: []festTeamPlayer{}, Choices: []festTeamPlayer{}, Flags: roster.FlagShortNames(flags[teamID]), Divisions: festDivisions(flags)}
 	for _, v := range venues {
 		if sc.MayEditVenue(v.ID) {
 			out.MultiFestVenues = append(out.MultiFestVenues, v)
@@ -208,6 +217,20 @@ func (s *Server) loadFestTeamDetail(ctx context.Context, sc route.Scope, teamID 
 	}
 	sortPlayersByName(out.Choices)
 	return out, nil
+}
+
+// festDivisions is the short names of every Flag the fest's teams carry.
+func festDivisions(flags map[int64][]roster.FestRosterFlag) []string {
+	out := []string{}
+	for _, team := range flags {
+		for _, short := range roster.FlagShortNames(team) {
+			if !slices.Contains(out, short) {
+				out = append(out, short)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 func sortPlayersByName(players []festTeamPlayer) {
@@ -241,10 +264,12 @@ type teamRequest struct {
 	// Venue puts a team the host made on a venue; left out, a new team goes
 	// on the caller's one venue, or none, and a team keeps its own.
 	Venue *int64 `json:"multifest_venue_id"`
+	// Flags is the team's Divisions by short name; left out, they stay.
+	Flags *[]string `json:"flags"`
 }
 
 func (req teamRequest) input() imports.TeamInput {
-	in := imports.TeamInput{RatingID: req.RatingID, Name: req.Name, City: req.City, Venue: req.Venue}
+	in := imports.TeamInput{RatingID: req.RatingID, Name: req.Name, City: req.City, Venue: req.Venue, Flags: req.Flags}
 	for _, p := range req.Players {
 		in.Players = append(in.Players, roster.FestRosterImportPlayer{RatingID: p.RatingID, FirstName: p.FirstName, LastName: p.LastName})
 	}

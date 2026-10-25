@@ -179,6 +179,11 @@ name = "Название"
 # Under the name: a team may play this fest under a one-off name.
 name_hint = "Можно указать разовое название — оно будет только в этом фесте."
 city = "Город"
+# The team's Divisions: a box for each one the fest's teams carry, and a field
+# for the others, typed by short name.
+divisions = "Зачёты"
+divisions_other = "Другие зачёты"
+divisions_hint = "Короткие названия через запятую, например: Студ, МЮ."
 # A new team: the rating site's team it is, found by name as the host types.
 rating_team = "Команда из рейтинга"
 rating_team_placeholder = "Начните вводить название"

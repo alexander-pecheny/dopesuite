@@ -35,6 +35,9 @@ interface TeamDetail {
   multifest_venue_id: number;
   // The venues the host may put a team they made on (ADR-0032).
   multifest_venues?: Array<{id: number; title: string}>;
+  // The team's Divisions, and every one the fest's teams carry.
+  flags: string[] | null;
+  divisions: string[];
 }
 
 interface RatingTeam {
@@ -128,6 +131,40 @@ function field(label: string, value: string): [HTMLElement, HTMLInputElement] {
   return [wrap, input];
 }
 
+// divisionsField picks a team's Divisions: a box for each one the fest's
+// teams carry, and a field for a new one. read gives the picked short names.
+function divisionsField(team: TeamDetail): {node: HTMLElement; read(): string[]} {
+  const own = team.flags || [];
+  const known = team.divisions || [];
+  // A div, not field's label: the boxes have labels of their own.
+  const [label, otherInput] = field(S.fest.teamEdit.divisions(), own.filter((short) => !known.includes(short)).join(", "));
+  const wrap = document.createElement("div");
+  wrap.className = label.className;
+  wrap.append(...label.childNodes);
+  otherInput.setAttribute("aria-label", known.length ? S.fest.teamEdit.divisionsOther() : S.fest.teamEdit.divisions());
+  if (known.length) otherInput.placeholder = S.fest.teamEdit.divisionsOther();
+  const boxes = document.createElement("div");
+  boxes.className = "u-row u-gap-md u-wrap";
+  const checks = known.map((short) => {
+    const label = document.createElement("label");
+    label.className = "checkbox";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = short;
+    box.checked = own.includes(short);
+    label.append(box, short);
+    boxes.appendChild(label);
+    return box;
+  });
+  if (checks.length) otherInput.before(boxes);
+  wrap.appendChild(hintLine(S.fest.teamEdit.divisionsHint()));
+  return {
+    node: wrap,
+    read: () => [...checks.filter((box) => box.checked).map((box) => box.value),
+      ...otherInput.value.split(",").map((short) => short.trim()).filter(Boolean)],
+  };
+}
+
 function hintLine(text: string): HTMLElement {
   const hint = document.createElement("p");
   hint.className = "hint";
@@ -153,6 +190,7 @@ function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void 
   nameInput.required = true;
   nameField.appendChild(hintLine(S.fest.teamEdit.nameHint()));
   const [cityField, cityInput] = field(S.fest.teamEdit.city(), team.city);
+  const divisions = divisionsField(team);
 
   // A team the host made plays at the venue picked here; a new one starts on
   // the venue the page shows. A rating team plays where the site says, and a
@@ -425,6 +463,7 @@ function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void 
       name: nameInput.value, city: cityInput.value,
       players: draft.map((p) => ({rating_id: p.rating_id, first_name: p.first_name, last_name: p.last_name})),
       multifest_venue_id: venueSelect ? Number(venueSelect.value) : undefined,
+      flags: divisions.read(),
     };
     const sent = isNew ? request(`${api}/teams`, "POST", body) : request(`${api}/teams/${team.id}`, "PUT", body);
     void sent.then((answer) => {
@@ -436,6 +475,7 @@ function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void 
 
   form.append(title, hint, ratingBlock, nameField, cityField);
   if (venueSelect) form.appendChild(venueField);
+  form.appendChild(divisions.node);
   form.append(list, addRow, unratedRow, baseRow, error);
   if (deleteRow) form.appendChild(deleteRow);
   form.appendChild(actions);

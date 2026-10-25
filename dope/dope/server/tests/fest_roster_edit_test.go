@@ -371,3 +371,55 @@ where g.fest_id = ? and g.game_type = 'ksi' and m.code = 'main'`, festID).Scan(&
 		t.Fatalf("КСИ after a removal: %v", got)
 	}
 }
+
+// The team editor sets a team's Divisions: the ones the fest knows keep the
+// site's id, a new one is typed, and the games carry them at once. A save that
+// leaves the Divisions out keeps them.
+func TestTheTeamEditorSetsATeamsDivisions(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	festID := newFest(t, db, "divs", "Фест с зачётами", systemUserID(t, db))
+	api := func(method, path string, body any) (int, string) {
+		t.Helper()
+		resp := scopedAPIRequest(t, srv, method, fmt.Sprintf("/api/fest/%d%s", festID, path), body, token)
+		return resp.Code, resp.Body.String()
+	}
+	site := siteTeams(map[int64][]string{1: {"Аня"}})
+	site[0].Flags = []roster.FestRosterFlag{{RatingID: 7, Short: "Студ", Full: "Студенческий"}}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, site, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	odID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "od", "od_tours": "1", "od_questions": "3"})
+
+	code, body := api(http.MethodPost, "/teams", map[string]any{"name": "Сборная", "flags": []string{"Студ", "МЮ"}})
+	if code != http.StatusOK {
+		t.Fatalf("new team: %d %s", code, body)
+	}
+	var teamID int64
+	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Сборная'`, festID).Scan(&teamID); err != nil {
+		t.Fatal(err)
+	}
+	var studID int64
+	if err := db.QueryRow(`select coalesce(rating_flag_id, 0) from fest_team_flags where team_id = ? and short = 'Студ'`, teamID).Scan(&studID); err != nil || studID != 7 {
+		t.Fatalf("Студ of the hand team has rating id %d (%v), want 7", studID, err)
+	}
+	if got := loadODStateFlags(t, db, odID)["Сборная"]; !reflect.DeepEqual(got, []string{"Студ", "МЮ"}) {
+		t.Fatalf("the OD's Сборная carries %v", got)
+	}
+	if code, body := api(http.MethodPut, fmt.Sprintf("/teams/%d", teamID), map[string]any{"name": "Сборная", "city": "Брест"}); code != http.StatusOK {
+		t.Fatalf("rename: %d %s", code, body)
+	}
+	var detail struct {
+		Flags     []string `json:"flags"`
+		Divisions []string `json:"divisions"`
+	}
+	code, body = api(http.MethodGet, fmt.Sprintf("/teams/%d", teamID), nil)
+	if err := json.Unmarshal([]byte(body), &detail); code != http.StatusOK || err != nil {
+		t.Fatalf("detail: %d %s", code, body)
+	}
+	if !reflect.DeepEqual(detail.Flags, []string{"Студ", "МЮ"}) || !reflect.DeepEqual(detail.Divisions, []string{"МЮ", "Студ"}) {
+		t.Fatalf("detail flags %v, divisions %v", detail.Flags, detail.Divisions)
+	}
+}

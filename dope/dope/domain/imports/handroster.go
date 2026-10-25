@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 
@@ -148,6 +149,8 @@ type TeamInput struct {
 	// at, 0 for none, nil to leave it where it is (ADR-0032). A rating team
 	// plays where the site says.
 	Venue *int64
+	// Flags is the short names of the team's Divisions, nil to leave them.
+	Flags *[]string
 }
 
 func (in TeamInput) normalized() (TeamInput, error) {
@@ -235,6 +238,9 @@ insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted
 	if err := saveTeamPlayersTx(ctx, tx, festID, teamID, nil, in.Players); err != nil {
 		return 0, RosterWrite{}, err
 	}
+	if err := setTypedFlagsTx(ctx, tx, festID, teamID, in.Flags); err != nil {
+		return 0, RosterWrite{}, err
+	}
 	written, err := rewriteFromHandTx(ctx, tx, festID, before)
 	return teamID, written, err
 }
@@ -315,7 +321,44 @@ func SaveHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in Te
 	if err := saveTeamPlayersTx(ctx, tx, festID, teamID, row.Players, in.Players); err != nil {
 		return RosterWrite{}, err
 	}
+	if err := setTypedFlagsTx(ctx, tx, festID, teamID, in.Flags); err != nil {
+		return RosterWrite{}, err
+	}
 	return rewriteFromHandTx(ctx, tx, festID, state)
+}
+
+// setTypedFlagsTx sets the Divisions the host picked for a team. A short
+// name another team of the fest carries is that Flag, with the site's id if
+// it has one. Flags left as they were stay the site's.
+func setTypedFlagsTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, shorts *[]string) error {
+	if shorts == nil {
+		return nil
+	}
+	known, err := roster.LoadFestTeamFlags(ctx, tx, festID)
+	if err != nil {
+		return err
+	}
+	byShort := map[string]roster.FestRosterFlag{}
+	for _, flags := range known {
+		for _, flag := range flags {
+			if _, ok := byShort[flag.Short]; !ok {
+				byShort[flag.Short] = flag
+			}
+		}
+	}
+	var flags []roster.FestRosterFlag
+	for _, short := range *shorts {
+		flag, ok := byShort[strings.TrimSpace(short)]
+		if !ok {
+			flag = roster.FestRosterFlag{Short: strings.TrimSpace(short), Full: strings.TrimSpace(short)}
+		}
+		flags = append(flags, flag)
+	}
+	flags = roster.NormalizeFlags(flags)
+	if slices.Equal(roster.FlagShortNames(flags), roster.FlagShortNames(known[teamID])) {
+		return nil
+	}
+	return roster.SetHandFlagsTx(ctx, tx, festID, teamID, flags)
 }
 
 // placeHandTeamTx puts a team the host made on a venue of the fest, under the
