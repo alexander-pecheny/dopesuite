@@ -52,7 +52,7 @@ import { type AnnounceCity, newKey, parseSession, type SessionMeta, serializeSes
 import { type CardSeen, parseCardSeen, seenBy, type SeenPlaying, sessionRef, serializeCardSeen } from "./seen.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
-import { colorField, labelFill, labelInk, LABEL_COLORS } from "./colorpick.js";
+import { byColour, colorField, labelFill, labelInk, LABEL_COLORS } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
 import { xyMass } from "./massaction.js";
 import { xySearchIndex } from "./searchindex.js";
@@ -1018,18 +1018,18 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   }
   // The board card shows the author's own labels; a test's verdict belongs to the
   // card detail, where it can say WHICH test it came from.
-  for (const a of assignmentsOf(card.id, null)) {
-    const lbl = labelById(a.labelId);
-    if (lbl) labelRow.append(labelDot(lbl.color, lbl.name));
-  }
+  const own = assignmentsOf(card.id, null).map((a) => labelById(a.labelId)).filter((l): l is BoardLabel => !!l);
+  for (const lbl of own.sort(byColour)) labelRow.append(labelDot(lbl.color, lbl.name));
   // One flask per test the question was played at, coloured by the verdicts
   // recorded there. The colours are the only signal now, so the tooltip names
-  // them — it used to live on the individual dots.
-  for (const sid of playingsOf(card.id)) {
+  // them — it used to live on the individual dots. They run oldest test first.
+  const num = (sid: number): number => testNumbers.get(sid) || 0;
+  const when = (sid: number): string => { const m = sessionMeta(sid); return m ? `${m.date} ${m.time}` : ""; };
+  for (const sid of playingsOf(card.id).sort((a, b) => when(a).localeCompare(when(b)) || num(a) - num(b))) {
     const verdicts = assignmentsOf(card.id, sid)
       .map((a) => labelById(a.labelId))
       .filter((l): l is BoardLabel => !!l);
-    const n = testNumbers.get(sid) || 0;
+    const n = num(sid);
     const title = S.board.card.testLead(String(n)) + sessionName(sid) +
       (verdicts.length ? S.board.card.testMid() + verdicts.map((l) => l.name).join(", ") : "");
     const test = el("span", { class: "kcard-test", title },

@@ -117,6 +117,13 @@ export function labelName(stored: string): string {
   return LEGACY_LABEL_HEX[hex] || nearestName(hex);
 }
 
+// byColour orders labels as Trello does on a card: by their place in the
+// palette, so the same colours always line up across cards.
+export function byColour(a: { color: string; name: string }, b: { color: string; name: string }): number {
+  const rank = (c: string): number => { const i = LABEL_COLORS.indexOf(labelName(c)); return i < 0 ? LABEL_COLORS.length : i; };
+  return rank(a.color) - rank(b.color) || a.name.localeCompare(b.name, "ru");
+}
+
 // labelFill / labelInk turn what a label stored into what CSS should paint.
 // The value is `var(--label-green)`, never a hex, so the browser re-reads it
 // when the theme flips and nothing has to re-render.

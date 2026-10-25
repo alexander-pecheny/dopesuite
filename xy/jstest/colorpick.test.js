@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LABEL_COLORS, labelFill, labelInk, labelName, normalizeHex, textOn } from "../web/assets/static/dist/colorpick.js";
+import { byColour, LABEL_COLORS, labelFill, labelInk, labelName, normalizeHex, textOn } from "../web/assets/static/dist/colorpick.js";
 
 test("normalizeHex canonicalises what a person types", () => {
   assert.equal(normalizeHex("#4A88CC"), "#4a88cc");
@@ -68,4 +68,12 @@ test("textOn puts dark ink on light fills and light ink on dark ones", () => {
 test("textOn returns nothing for a colour it cannot read", () => {
   assert.equal(textOn(""), "");
   assert.equal(textOn("nope"), "");
+});
+
+test("byColour sorts labels by palette place, then by name", () => {
+  const labels = [
+    { color: "green", name: "б" }, { color: "#123456", name: "x" },
+    { color: "red", name: "я" }, { color: "green", name: "а" },
+  ];
+  assert.deepEqual(labels.sort(byColour).map((l) => l.color + l.name), ["redя", "greenа", "greenб", "#123456x"]);
 });
