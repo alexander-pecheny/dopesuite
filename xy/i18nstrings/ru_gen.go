@@ -351,7 +351,7 @@ var RU = Strings{
 			TabFields:  func() string { return "Поля" },
 			TabPreview: func() string { return "Просмотр" },
 			TabText:    func() string { return "Формат 4s" },
-			TestLead:   func() string { return "Тест: " },
+			TestLead:   func(n string) string { return fmt.Sprintf("Тест %s: ", n) },
 			TestMid:    func() string { return " — " },
 			To4sTitle:  func() string { return "Разобрать простой текст вопроса в формат 4s" },
 			TypoLabel:  func() string { return "типограф" },

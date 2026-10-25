@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { humanDate, inviteLine, parseSession, serializeSession, sessionLabel, whoSaw, partialSeen, formatDate, parseDate, parseTime, zoneOffset, allZones, parseTestCard, serializeTestCard, testerCopyText, testersFromText, testersToText } from "../web/assets/static/dist/sessions.js";
+import { humanDate, inviteLine, parseSession, serializeSession, sessionLabel, sessionNumbers, whoSaw, partialSeen, formatDate, parseDate, parseTime, zoneOffset, allZones, parseTestCard, serializeTestCard, testerCopyText, testersFromText, testersToText } from "../web/assets/static/dist/sessions.js";
 import { TOWNS } from "../web/assets/static/dist/towns.js";
 
 const base = {
@@ -372,4 +372,13 @@ test("a copied line keeps a player's name on one line, and lets a team name wrap
     "Вопросы тестировали: Анна\u00a0Мария\u00a0Петрова, а также команды: Команда мечты");
   assert.equal(partialSeen([{ num: "4", testers: [saw("Анна Петрова"), { text: "Команда мечты", type: "team" }] }], new Set()),
     "Видели отдельные вопросы: Анна\u00a0Петрова: 4; Команда мечты: 4.");
+});
+
+test("sessionNumbers counts tests by creation time, not by id", () => {
+  const n = sessionNumbers([
+    { id: 5, createdAt: "2026-07-21T10:00:00Z" },
+    { id: 9, createdAt: "2026-07-20T10:00:00Z" },
+    { id: 2, createdAt: "2026-07-22T10:00:00Z" },
+  ]);
+  assert.deepEqual([n.get(9), n.get(5), n.get(2)], [1, 2, 3]);
 });

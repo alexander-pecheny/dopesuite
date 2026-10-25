@@ -161,7 +161,7 @@ handout_title = "Раздаточный материал"
 versions_title = 'Версий: {{.n}}'
 # Test-flask tooltip on a kanban card: "Тест: <name>" then, when verdicts
 # exist, the mid fragment followed by the comma-joined verdict names.
-test_lead = "Тест: "
+test_lead = "Тест {{.n}}: "
 test_mid = " — "
 # Tooltip of the badge on a kanban card that some people saw it outside any
 # test: the names, comma-joined.

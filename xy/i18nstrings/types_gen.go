@@ -444,7 +444,7 @@ type BoardCardStrings struct {
 	TabFields           func() string
 	TabPreview          func() string
 	TabText             func() string
-	TestLead            func() string
+	TestLead            func(n string) string
 	TestMid             func() string
 	To4sTitle           func() string
 	TypoLabel           func() string
@@ -3053,8 +3053,6 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Board.Card.TabPreview(), true
 	case "board.card.tab_text":
 		return s.Board.Card.TabText(), true
-	case "board.card.test_lead":
-		return s.Board.Card.TestLead(), true
 	case "board.card.test_mid":
 		return s.Board.Card.TestMid(), true
 	case "board.card.to4s_title":
