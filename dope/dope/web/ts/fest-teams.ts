@@ -12,7 +12,6 @@ import type {Choice} from "../../../../dopeuikit/assets/ts/suggest.js";
 import {icon} from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
-// The rating search waits for a pause in typing this long.
 // Most people the player picker offers at once.
 const PLAYER_CHOICE_LIMIT = 14;
 
@@ -294,10 +293,18 @@ function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void 
     add();
   });
   let picked: TeamPlayer | null = null;
-  const add = () => {
-    const player = picked || typedPlayer(input.value);
+  // add puts the picked suggestion on the team; a typed name alone is refused,
+  // so nobody lands on it without a rating id by accident. unrated adds the
+  // typed name as someone the site does not know yet: id 0, which the
+  // organizer matches on import.
+  const add = (unrated = false) => {
+    const player = unrated ? typedPlayer(input.value) : picked;
     picked = null;
-    if (!fullName(player)) return;
+    if (!player || !fullName(player)) {
+      if (input.value.trim() || unrated) fail(unrated ? S.fest.teamEdit.unratedNeedsName() : S.fest.teamEdit.pickOrUnrated());
+      input.focus();
+      return;
+    }
     if (!push(player)) {
       fail(S.fest.teamEdit.playerTwice(fullName(player)));
       return;
@@ -312,7 +319,7 @@ function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void 
   addButton.type = "button";
   addButton.className = "btn";
   addButton.textContent = S.fest.teamEdit.add();
-  addButton.addEventListener("click", add);
+  addButton.addEventListener("click", () => add());
   input.addEventListener("keydown", (event) => {
     // Enter adds the typed person; the form's own submit is the save button.
     if (event.key === "Enter") {
@@ -323,6 +330,17 @@ function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void 
   const addRow = document.createElement("div");
   addRow.className = "u-row u-gap-sm u-align-center";
   addRow.append(anchor, addButton);
+  const unratedButton = document.createElement("button");
+  unratedButton.type = "button";
+  unratedButton.className = "btn btn-ghost";
+  unratedButton.textContent = S.fest.teamEdit.unratedButton();
+  unratedButton.addEventListener("click", () => add(true));
+  const unratedHint = document.createElement("p");
+  unratedHint.className = "hint";
+  unratedHint.textContent = S.fest.teamEdit.unratedHint();
+  const unratedRow = document.createElement("div");
+  unratedRow.className = "u-col u-gap-xs u-align-start";
+  unratedRow.append(unratedButton, unratedHint);
 
   // The base-roster button: the rating team's base roster, added to the list as a
   // start the host then trims or extends.
@@ -398,7 +416,7 @@ function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     error.hidden = true;
-    // A name left in the field counts as added: the host typed it to have it.
+    // A name left in the field is added if it was picked, and refused if not.
     if (input.value.trim()) add();
     if (!error.hidden) return;
     busy(true);
@@ -418,7 +436,7 @@ function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void 
 
   form.append(title, hint, ratingBlock, nameField, cityField);
   if (venueSelect) form.appendChild(venueField);
-  form.append(list, addRow, baseRow, error);
+  form.append(list, addRow, unratedRow, baseRow, error);
   if (deleteRow) form.appendChild(deleteRow);
   form.appendChild(actions);
   dialog.appendChild(form);
@@ -438,6 +456,12 @@ function playerRow(player: TeamPlayer, remove: () => void): HTMLElement {
   row.className = "u-row u-gap-sm u-align-center u-justify-between";
   const name = document.createElement("span");
   name.textContent = fullName(player);
+  if (player.rating_id <= 0) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = S.fest.teamEdit.noRatingId();
+    name.append(" ", badge);
+  }
   const button = document.createElement("button");
   button.type = "button";
   button.className = "action-icon";

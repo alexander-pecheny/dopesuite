@@ -574,6 +574,10 @@ var RU = Strings{
 			NameHint: func() string {
 				return "Можно указать разовое название — оно будет только в этом фесте."
 			},
+			NoRatingId: func() string { return "без ID" },
+			PickOrUnrated: func() string {
+				return "Выберите игрока из подсказок. Если его нет на турнирном сайте, нажмите «Добавить игрока без ID»."
+			},
 			PlayerTwice: func(player string) string { return fmt.Sprintf("%s уже есть в составе.", player) },
 			RatingId:    func(id string) string { return fmt.Sprintf("ID %s", id) },
 			RatingTeam:  func() string { return "Команда из рейтинга" },
@@ -587,7 +591,12 @@ var RU = Strings{
 			Save:                  func() string { return "Сохранить" },
 			Title:                 func(team string) string { return fmt.Sprintf("Команда «%s»", team) },
 			TitleNew:              func() string { return "Новая команда" },
-			Venue:                 func() string { return "Площадка" },
+			UnratedButton:         func() string { return "Добавить игрока без ID" },
+			UnratedHint: func() string {
+				return "Добавить игрока, у которого ещё нет ID на турнирном сайте"
+			},
+			UnratedNeedsName: func() string { return "Сначала впишите имя и фамилию игрока." },
+			Venue:            func() string { return "Площадка" },
 		},
 	},
 	Festaccess: FestaccessStrings{

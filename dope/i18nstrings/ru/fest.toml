@@ -196,6 +196,15 @@ rating_id = 'ID {{.id}}'
 # The field that adds a player, and its button.
 add_placeholder = "Имя и фамилия"
 add = "Добавить"
+# Adds the typed name as a person the rating site does not know yet, whom the
+# organizer matches on import; the hint under it says so.
+unrated_button = "Добавить игрока без ID"
+unrated_hint = "Добавить игрока, у которого ещё нет ID на турнирном сайте"
+unrated_needs_name = "Сначала впишите имя и фамилию игрока."
+# «Добавить» with a name typed but no suggestion picked.
+pick_or_unrated = "Выберите игрока из подсказок. Если его нет на турнирном сайте, нажмите «Добавить игрока без ID»."
+# Beside a player without a rating id.
+no_rating_id = "без ID"
 # Beside a suggested player who plays for another team: adding moves them.
 moves_from = 'сейчас в «{{.team}}»'
 # The cross beside a player.

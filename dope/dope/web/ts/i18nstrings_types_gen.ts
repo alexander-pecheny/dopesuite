@@ -449,6 +449,8 @@ export type Strings = {
       movesFrom: (team: string) => string;
       name: () => string;
       nameHint: () => string;
+      noRatingId: () => string;
+      pickOrUnrated: () => string;
       playerTwice: (player: string) => string;
       ratingId: (id: string) => string;
       ratingTeam: () => string;
@@ -460,6 +462,9 @@ export type Strings = {
       save: () => string;
       title: (team: string) => string;
       titleNew: () => string;
+      unratedButton: () => string;
+      unratedHint: () => string;
+      unratedNeedsName: () => string;
       venue: () => string;
     };
   };
