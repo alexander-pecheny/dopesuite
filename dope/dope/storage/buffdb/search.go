@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // The rating site's people and teams, for the fest roster editor to suggest
@@ -38,12 +39,12 @@ func (s *Store) SearchPlayers(ctx context.Context, query string, limit int) []Pe
 	var where []string
 	var args []any
 	if len(words) == 1 {
-		where = append(where, `p.surname like ?`)
-		args = append(args, titleFold(words[0])+"%")
+		where = append(where, `p.surname >= ? and p.surname < ?`)
+		args = append(args, prefixRange(titleFold(words[0]))...)
 	} else {
 		a, b := titleFold(words[0]), titleFold(words[1])
-		where = append(where, `(p.surname like ? and p.name like ?) or (p.surname like ? and p.name like ?)`)
-		args = append(args, a+"%", b+"%", b+"%", a+"%")
+		where = append(where, `(p.surname >= ? and p.surname < ? and p.name like ?) or (p.surname >= ? and p.surname < ? and p.name like ?)`)
+		args = append(append(append(append(args, prefixRange(a)...), b+"%"), prefixRange(b)...), a+"%")
 	}
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, `
@@ -65,6 +66,34 @@ limit ?`, args...)
 		out = append(out, p)
 	}
 	return out
+}
+
+// prefixRange bounds the strings that start with prefix. The index on a column
+// answers such a comparison, which it cannot do for a LIKE.
+func prefixRange(prefix string) []any {
+	return []any{prefix, prefix + string(utf8.MaxRune)}
+}
+
+// PlayerByID is one person by their rating id.
+func (s *Store) PlayerByID(ctx context.Context, id int64) (Person, bool) {
+	var p Person
+	if !s.Enabled() {
+		return p, false
+	}
+	err := s.db.QueryRowContext(ctx, `
+select p.id, coalesce(p.name, ''), coalesce(p.patronymic, ''), coalesce(p.surname, ''), coalesce(g.games, 0)
+from players p left join player_games g on g.player_id = p.id where p.id = ?`, id).Scan(&p.ID, &p.Name, &p.Patronymic, &p.Surname, &p.Games)
+	return p, err == nil
+}
+
+// TeamByID is one team by its rating id.
+func (s *Store) TeamByID(ctx context.Context, id int64) (Team, bool) {
+	var t Team
+	if !s.Enabled() {
+		return t, false
+	}
+	err := s.db.QueryRowContext(ctx, `select id, name, town from teams where id = ?`, id).Scan(&t.ID, &t.Name, &t.Town)
+	return t, err == nil
 }
 
 // SearchTeams finds teams whose name, or a word of it, starts with what a host

@@ -36,6 +36,8 @@ type hostVenuePageData struct {
 	Error, Notice string
 	// Numbers holds what the host typed when a save was refused, by team id.
 	Numbers map[int64]string
+	// Instant says the rating search reads buff, which answers every letter.
+	Instant bool
 }
 
 // venueOfRequest is the venue the path names, refused unless the caller may
@@ -54,7 +56,7 @@ func (s *Server) renderHostVenuePage(w http.ResponseWriter, r *http.Request, sc 
 		return err
 	}
 	s.festPage(w, r, sc.FestID, func(fest view.HostFest) (*dopeui.Doc, error) {
-		data := hostVenuePageData{Fest: fest, Venue: venue, Error: errMsg, Notice: notice, Numbers: typed}
+		data := hostVenuePageData{Fest: fest, Venue: venue, Error: errMsg, Notice: notice, Numbers: typed, Instant: s.h.Engine().Buff.Enabled()}
 		teams, err := s.loadHostFestTeams(r.Context(), sc)
 		if err != nil {
 			return nil, err
@@ -132,7 +134,7 @@ func venueTeamsSection(data hostVenuePageData, ref string) *dopeui.Element {
 		dopeui.Subhead(dopeui.Text(s.Host.Venue.TeamsSubhead(strconv.Itoa(len(data.Teams))))),
 		// The editor (fest-teams.ts) reads the fest's API off the add button and
 		// puts a new team on the venue the button names.
-		dopeui.Row(dopeui.Button(dopeui.Data("team-add", "/api/fest/"+ref), dopeui.Data("team-venue", idstr.Format(data.Venue.ID)),
+		dopeui.Row(dopeui.Button(dopeui.Data("team-add", "/api/fest/"+ref), dopeui.Data("team-venue", idstr.Format(data.Venue.ID)), searchMode(data.Instant),
 			dopeui.Text(s.Host.Roster.AddTeamBtn()))),
 	}
 	if len(data.Teams) == 0 {
@@ -236,6 +238,16 @@ func numberCell(t hostFestTeam, number int, typed map[int64]string) *dopeui.Elem
 	return dopeui.Cell(dopeui.Numfield(dopeui.Name(venueNumberField(t.ID)), dopeui.Value(text), dopeui.Narrow(),
 		dopeui.Min("1"), dopeui.Max(strconv.Itoa(numbering.MaxNumber)),
 		dopeui.Aria("label", dopestrings.Default.Host.Venue.NumberLabel(t.Name))))
+}
+
+// searchMode tells the team editor whether to ask the rating search at every
+// letter, which only buff's local mirror can answer, or once typing stops,
+// which spares the rating site.
+func searchMode(instant bool) dopeui.Item {
+	if instant {
+		return dopeui.Data("team-search", "instant")
+	}
+	return dopeui.Data("team-search", "debounced")
 }
 
 // soleVenue is the one venue a host limited to venues edits, or 0 when they

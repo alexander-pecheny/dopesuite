@@ -13,7 +13,6 @@ import {icon} from "./icons_gen.js";
 import S from "./i18nstrings.js";
 
 // The rating search waits for a pause in typing this long.
-const SEARCH_DEBOUNCE_MS = 250;
 // Most people the player picker offers at once.
 const PLAYER_CHOICE_LIMIT = 14;
 
@@ -83,24 +82,35 @@ async function request(url: string, method: string, body?: unknown): Promise<{ok
   }
 }
 
+// How long the editor waits after the last letter before it asks the rating
+// site; the server's mirror of the site (instantSearch) is asked at once.
+const SEARCH_DEBOUNCE_MS = 250;
+let instantSearch = false;
+
 // remoteChoices keeps the rating site's answers per query and asks for a new
-// one a moment after the host stops typing; each answer redraws the list.
+// one once the host stops typing, or at every letter when the server searches
+// its mirror. Until an answer comes the last one stays up, so the list does
+// not blink empty between letters, and each answer redraws it.
 function remoteChoices<T>(url: (q: string) => string, redraw: () => void): (q: string) => T[] {
   const answers = new Map<string, T[]>();
+  let last: T[] = [];
   let timer = 0;
   return (q: string) => {
     const key = q.trim().toLowerCase();
     if (key.length < 2) return [];
     const known = answers.get(key);
-    if (known) return known;
+    if (known) {
+      last = known;
+      return known;
+    }
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
       void request(url(key), "GET").then((answer) => {
         answers.set(key, answer.ok ? answer.data as T[] : []);
         redraw();
       });
-    }, SEARCH_DEBOUNCE_MS);
-    return [];
+    }, instantSearch ? 0 : SEARCH_DEBOUNCE_MS);
+    return last;
   };
 }
 
@@ -446,6 +456,7 @@ function playerRow(player: TeamPlayer, remove: () => void): HTMLElement {
   const api = addButton?.dataset.teamAdd || "";
   if (!addButton || !api) return;
   const pageVenue = Number(addButton.dataset.teamVenue || 0);
+  instantSearch = addButton.dataset.teamSearch === "instant";
   const open = async (id: string) => {
     const answer = await request(`${api}/teams/${id}`, "GET");
     if (answer.ok) openTeamDialog(api, answer.data as TeamDetail, pageVenue);

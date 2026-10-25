@@ -185,3 +185,16 @@ func TestBaseRosterIsTheSeasonOfTheDay(t *testing.T) {
 		t.Fatalf("an unmirrored team = %+v", got)
 	}
 }
+
+func TestAPlayerAndATeamAreFoundByTheirID(t *testing.T) {
+	s := peopleFixture(t)
+	if p, ok := s.PlayerByID(t.Context(), 3); !ok || p.Surname != "Кобзарева" || p.Games != 40 {
+		t.Fatalf("player 3 is %+v, %v", p, ok)
+	}
+	if _, ok := s.PlayerByID(t.Context(), 99); ok {
+		t.Fatal("found a player who is not there")
+	}
+	if team, ok := s.TeamByID(t.Context(), 11); !ok || team.Name != "Мирные байки" {
+		t.Fatalf("team 11 is %+v, %v", team, ok)
+	}
+}

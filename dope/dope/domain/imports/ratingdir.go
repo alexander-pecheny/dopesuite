@@ -12,6 +12,8 @@ import (
 
 	"dope/dope/domain/multifest"
 	"dope/dope/storage/buffdb"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // The rating site's people and teams, for the fest roster editor to suggest
@@ -75,9 +77,30 @@ func fromBuff(p buffdb.Person) RatingPerson {
 	return RatingPerson{RatingID: p.ID, FirstName: p.Name, LastName: p.Surname, Patronymic: p.Patronymic, Games: p.Games}
 }
 
+// ratingIDQuery reads a query of digits alone as a rating id.
+func ratingIDQuery(query string) (int64, bool) {
+	query = strings.TrimSpace(query)
+	if query == "" || strings.TrimLeft(query, "0123456789") != "" {
+		return 0, false
+	}
+	id, err := idstr.Parse(query)
+	return id, err == nil && id > 0
+}
+
 // SearchRatingPlayers finds the rating site's people by a surname, or a
-// surname and a name in either order, each as a word's start.
+// surname and a name in either order, each as a word's start, or one person by
+// their rating id.
 func SearchRatingPlayers(ctx context.Context, buff *buffdb.Store, query string) []RatingPerson {
+	if id, ok := ratingIDQuery(query); ok {
+		if p, ok := buff.PlayerByID(ctx, id); ok {
+			return []RatingPerson{fromBuff(p)}
+		}
+		var p apiPlayer
+		if buff.Enabled() || getRatingJSON(ctx, fmt.Sprintf("/players/%d", id), &p) != nil || p.ID == 0 {
+			return []RatingPerson{}
+		}
+		return []RatingPerson{p.person()}
+	}
 	words := strings.Fields(query)
 	if len(words) == 0 || len([]rune(words[0])) < 2 {
 		return []RatingPerson{}
@@ -144,12 +167,18 @@ func (t apiTeamRef) ref() RatingTeamRef {
 func SearchRatingTeams(ctx context.Context, buff *buffdb.Store, query string) []RatingTeamRef {
 	query = strings.TrimSpace(query)
 	out := []RatingTeamRef{}
+	// A team named with digits is found by its name after the one with that id.
+	if id, ok := ratingIDQuery(query); ok {
+		out = append(out, ratingTeamByID(ctx, buff, id)...)
+	}
 	if len([]rune(query)) < 2 {
 		return out
 	}
 	if buff.Enabled() {
 		for _, t := range buff.SearchTeams(ctx, query, ratingSuggestLimit) {
-			out = append(out, RatingTeamRef{RatingID: t.ID, Name: t.Name, City: t.Town})
+			if len(out) == 0 || out[0].RatingID != t.ID {
+				out = append(out, RatingTeamRef{RatingID: t.ID, Name: t.Name, City: t.Town})
+			}
 		}
 		return out
 	}
@@ -160,11 +189,23 @@ func SearchRatingTeams(ctx context.Context, buff *buffdb.Store, query string) []
 	// The API cannot sort; the newest ids are the teams playing now.
 	sort.SliceStable(found, func(i, j int) bool { return found[i].ID > found[j].ID })
 	for _, t := range found {
-		if len(out) < ratingSuggestLimit {
+		if len(out) < ratingSuggestLimit && (len(out) == 0 || out[0].RatingID != t.ID) {
 			out = append(out, t.ref())
 		}
 	}
 	return out
+}
+
+// ratingTeamByID is the team with this rating id, or none.
+func ratingTeamByID(ctx context.Context, buff *buffdb.Store, id int64) []RatingTeamRef {
+	if t, ok := buff.TeamByID(ctx, id); ok {
+		return []RatingTeamRef{{RatingID: t.ID, Name: t.Name, City: t.Town}}
+	}
+	var team apiTeamRef
+	if buff.Enabled() || getRatingJSON(ctx, fmt.Sprintf("/teams/%d", id), &team) != nil || team.ID == 0 {
+		return nil
+	}
+	return []RatingTeamRef{team.ref()}
 }
 
 // RatingBaseRoster is a team's base roster in the season

@@ -76,6 +76,8 @@ type hostFestRosterData struct {
 	Notice          string
 	// Numbers holds the numbers typed when a save was refused, by team id.
 	Numbers map[int64]string
+	// Instant says the rating search reads buff, which answers every letter.
+	Instant bool
 }
 
 type hostFestImportData struct {
@@ -123,7 +125,7 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 	// each row's team off its pencil (ADR-0024); a new team goes on the venue
 	// the page shows.
 	buttons := []dopeui.Item{dopeui.SpaceSM, dopeui.Wrap(),
-		dopeui.Button(dopeui.Data("team-add", "/api/fest/"+ref), dopeui.Data("team-venue", optionalID(data.Venue)), dopeui.Text(s.Host.Roster.AddTeamBtn()))}
+		dopeui.Button(dopeui.Data("team-add", "/api/fest/"+ref), dopeui.Data("team-venue", optionalID(data.Venue)), searchMode(data.Instant), dopeui.Text(s.Host.Roster.AddTeamBtn()))}
 	if data.AllVenues {
 		buttons = append(buttons,
 			dopeui.Button(dopeui.Href("/api/fest/"+ref+"/teams/export.xlsx"), dopeui.Download(), dopeui.Text(s.Host.Roster.ExportXlsxBtn())),
@@ -638,7 +640,7 @@ func (s *Server) renderHostFestTeamsTyped(w http.ResponseWriter, r *http.Request
 
 func (s *Server) renderHostFestTeamsPage(w http.ResponseWriter, r *http.Request, sc route.Scope, data hostFestRosterData) {
 	s.festPage(w, r, sc.FestID, func(fest view.HostFest) (*dopeui.Doc, error) {
-		data.Fest, data.AllVenues = fest, sc.AllVenues
+		data.Fest, data.AllVenues, data.Instant = fest, sc.AllVenues, s.h.Engine().Buff.Enabled()
 		var err error
 		if data.Teams, data.Venues, data.Venue, err = s.loadShownTeams(r, sc); err != nil {
 			return nil, err
