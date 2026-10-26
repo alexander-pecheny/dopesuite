@@ -612,3 +612,4 @@ games_subhead = "Игры"
 # A multi-site fest's площадки, each with its games: its view of the fest's
 # games, and its own.
 venues_subhead = "Площадки"
+merged_game = '{{.title}} (сводная)'

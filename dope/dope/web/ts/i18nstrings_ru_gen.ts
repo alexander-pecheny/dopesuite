@@ -923,6 +923,7 @@ shootout: true
       landingCrumb: () => "Мои фесты",
       landingTitle: (name: string) => `Мои фесты · ${name}`,
       logoutSubmit: () => "Разлогиниться",
+      mergedGame: (title: string) => `${title} (сводная)`,
       passwordChangeSubmit: () => "Сменить пароль",
       passwordConfirmPlaceholder: () => "Повторите новый пароль",
       passwordCurrentPlaceholder: () => "Текущий пароль",

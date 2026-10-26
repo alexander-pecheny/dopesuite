@@ -1226,6 +1226,7 @@ var RU = Strings{
 			LandingCrumb:               func() string { return "Мои фесты" },
 			LandingTitle:               func(name string) string { return fmt.Sprintf("Мои фесты · %s", name) },
 			LogoutSubmit:               func() string { return "Разлогиниться" },
+			MergedGame:                 func(title string) string { return fmt.Sprintf("%s (сводная)", title) },
 			PasswordChangeSubmit:       func() string { return "Сменить пароль" },
 			PasswordConfirmPlaceholder: func() string { return "Повторите новый пароль" },
 			PasswordCurrentPlaceholder: func() string { return "Текущий пароль" },

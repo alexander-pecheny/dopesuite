@@ -103,7 +103,11 @@ func PublicFestDoc(d PublicFestDetail) *ui.Doc {
 	if len(d.Games) > 0 {
 		rows := make([]ui.Item, 0, len(d.Games))
 		for _, g := range d.Games {
-			row := []ui.Item{ui.Href(g.URL), ui.Listtitle(ui.Text(g.Title))}
+			title := g.Title
+			if g.VenueSheets {
+				title = s.Host.Pages.MergedGame(g.Title)
+			}
+			row := []ui.Item{ui.Href(g.URL), ui.Listtitle(ui.Text(title))}
 			if g.Slug != "" {
 				row = append(row, ui.Muted(ui.Text(g.Slug)))
 			}

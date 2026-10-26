@@ -901,6 +901,7 @@ export type Strings = {
       landingCrumb: () => string;
       landingTitle: (name: string) => string;
       logoutSubmit: () => string;
+      mergedGame: (title: string) => string;
       passwordChangeSubmit: () => string;
       passwordConfirmPlaceholder: () => string;
       passwordCurrentPlaceholder: () => string;
