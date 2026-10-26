@@ -58,6 +58,9 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("GET /api/auth/tokens", route.Session, s.apiTokensList)
 	t.Handle("POST /api/auth/tokens", route.Session, s.apiTokensCreate)
 	t.Handle("DELETE /api/auth/tokens/{id}", route.Session, s.apiTokensRevoke)
+	t.Handle("GET /api/auth/rating-token", route.Session, s.apiRatingTokenShow)
+	t.Handle("PUT /api/auth/rating-token", route.Session, s.apiRatingTokenSave)
+	t.Handle("DELETE /api/auth/rating-token", route.Session, s.apiRatingTokenForget)
 	const fest, game = "/api/fest/{fest}", "/api/fest/{fest}/games/{game}"
 	t.Handle("GET "+fest, route.Read, s.scopedFest)
 	t.Handle("POST "+fest+"/presence", route.Editor, s.hostPresence)

@@ -474,6 +474,13 @@ CREATE TABLE telegram_login_codes(
   consumed_at text
 , telegram_name TEXT, desired_username TEXT);
 
+-- table user_rating_tokens
+CREATE TABLE user_rating_tokens(
+  user_id integer primary key references users(id) on delete cascade,
+  token text not null,
+  saved_at text not null
+);
+
 -- table users
 CREATE TABLE users(
   id integer primary key,

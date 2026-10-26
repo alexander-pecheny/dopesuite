@@ -357,6 +357,8 @@ func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
 	rows = append(rows,
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/rating/import"),
 			dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterImportLink())), dopeui.Muted(dopeui.Text(ratingStatus))),
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/rating/export"),
+			dopeui.Listtitle(dopeui.Text(s.Host.Dash.RatingExportLink())), dopeui.Muted(dopeui.Text(s.Host.Dash.RatingExportMuted()))),
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/audit"),
 			dopeui.Listtitle(dopeui.Text(s.Host.Dash.AuditLink())), dopeui.Muted(dopeui.Text(s.Host.Dash.AuditMuted()))),
 	)

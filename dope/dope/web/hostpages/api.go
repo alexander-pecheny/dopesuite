@@ -107,6 +107,8 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("DELETE "+fest+"/troikas/{id}", route.Manager, s.apiDeleteTroika)
 	t.Handle("POST "+fest+"/rating-import", route.Manager, s.apiRatingImport)
 	t.Handle("POST "+fest+"/rating-import/undo", route.Manager, s.apiUndoRatingImport)
+	t.Handle("GET "+fest+"/rating-export", route.Manager, s.apiRatingExport)
+	t.Handle("POST "+fest+"/rating-export", route.Manager, s.apiRatingExport)
 
 	t.Handle("GET "+fest+"/numbers", route.Roster, s.apiNumbers)
 	t.Handle("POST "+fest+"/numbers/assign", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {

@@ -995,6 +995,8 @@ var RU = Strings{
 			},
 			PageTitle:         func(title string) string { return fmt.Sprintf("%s · ведущий", title) },
 			PublicLabel:       func() string { return "Публичный" },
+			RatingExportLink:  func() string { return "Выгрузить на турнирный сайт" },
+			RatingExportMuted: func() string { return "составы и ответы ОД" },
 			RatingStatusNone:  func() string { return "нет rating ID" },
 			RosterImportLink:  func() string { return "Загрузить команды и игроков" },
 			RosterPlayersLink: func() string { return "Игроки" },
@@ -1239,12 +1241,27 @@ var RU = Strings{
 			PublicIndexTitle:           func() string { return "Фесты" },
 			PublicLabel:                func() string { return "Публичный" },
 			RatingIdLabel:              func() string { return "rating.chgk.info ID (опционально)" },
-			StartDateLabel:             func() string { return "Дата начала (YYYY-MM-DD)" },
-			TitleLabel:                 func() string { return "Название" },
-			TokenCreateSubmit:          func() string { return "Создать токен" },
-			TokenExpired:               func() string { return "срок истёк" },
-			TokenLabelLabel:            func() string { return "Для чего токен" },
-			TokenLabelPlaceholder:      func() string { return "например, агент на ноутбуке" },
+			RatingTokenEmpty:           func() string { return "Вставьте токен." },
+			RatingTokenForget:          func() string { return "Удалить токен" },
+			RatingTokenForgetConfirm: func() string {
+				return "Удалить токен? dope больше не сможет выгружать ваши фесты на турнирный сайт."
+			},
+			RatingTokenLabel: func() string { return "Токен" },
+			RatingTokenLead: func() string {
+				return "С этим токеном dope выгружает составы и результаты ваших фестов на турнирный сайт от вашего имени. Создайте токен с правом записи на rating.chgk.info, на странице пользователя в блоке «API-токены»."
+			},
+			RatingTokenNone: func() string { return "Токен не сохранён." },
+			RatingTokenSave: func() string { return "Сохранить токен" },
+			RatingTokenSaved: func(at string, tail string) string {
+				return fmt.Sprintf("Токен сохранён %s, его последние символы: %s.", at, tail)
+			},
+			RatingTokenSubhead:    func() string { return "Токен турнирного сайта" },
+			StartDateLabel:        func() string { return "Дата начала (YYYY-MM-DD)" },
+			TitleLabel:            func() string { return "Название" },
+			TokenCreateSubmit:     func() string { return "Создать токен" },
+			TokenExpired:          func() string { return "срок истёк" },
+			TokenLabelLabel:       func() string { return "Для чего токен" },
+			TokenLabelPlaceholder: func() string { return "например, агент на ноутбуке" },
 			TokenMeta: func(created string, expires string, used string) string {
 				return fmt.Sprintf("создан %s, действует до %s, %s", created, expires, used)
 			},
@@ -1267,6 +1284,88 @@ var RU = Strings{
 			TokensSubhead:    func() string { return "API-токены" },
 			UsernameFallback: func() string { return "Профиль" },
 			VenuesSubhead:    func() string { return "Площадки" },
+		},
+		RatingExport: HostRatingExportStrings{
+			AllTeams:  func() string { return "Все команды" },
+			Crumb:     func() string { return "Выгрузка на турнирный сайт" },
+			GameLabel: func() string { return "Игра" },
+			Lead: func() string {
+				return "dope отправит на турнирный сайт составы команд и их ответы в ОД от вашего имени. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить». Повторная выгрузка заменит составы и ответы на сайте."
+			},
+			MoveLine: func(team string, venue string) string {
+				return fmt.Sprintf("%s уже есть на сайте в другой заявке. Её перенесут в заявку площадки %s.", team, venue)
+			},
+			MovesSubhead: func() string { return "Перенос в заявку площадки" },
+			MultiFest: func() string {
+				return "Мультитурнир выгружается по турнирам площадок, и dope этого пока не умеет."
+			},
+			NoGame: func() string {
+				return "В фесте нет ОД всех команд, выгружать нечего."
+			},
+			NoPlayerId: func(player string) string {
+				return fmt.Sprintf("У игрока %s нет ID турнирного сайта, в состав он не попадёт.", player)
+			},
+			NoPlayers: func() string {
+				return "В составе нет ни одного игрока с ID турнирного сайта."
+			},
+			NoRepresentative: func(venue string) string {
+				return fmt.Sprintf("У заявки площадки %s на турнирном сайте нет представителя.", venue)
+			},
+			NoRequest: func(venue string) string {
+				return fmt.Sprintf("У площадки %s нет принятой заявки на турнирном сайте.", venue)
+			},
+			NoTeamId: func() string { return "У команды нет ID турнирного сайта." },
+			NoToken: func() string {
+				return "Чтобы выгружать на турнирный сайт, сохраните в профиле свой токен турнирного сайта."
+			},
+			NoTournament: func() string {
+				return "У феста не указан турнир на турнирном сайте. Укажите его ID в настройках феста."
+			},
+			NoVenue: func() string { return "Команда не на площадке." },
+			NotFestOd: func() string {
+				return "Выгрузить можно только ОД всех команд феста."
+			},
+			PlayerFlag: func(name string, flag string) string { return fmt.Sprintf("%s (%s)", name, flag) },
+			QuestionsDiffer: func(dope string, site string) string {
+				return fmt.Sprintf("В игре %s вопросов, а на турнирном сайте %s. Пока число вопросов не совпадёт, результаты не выгрузить.", dope, site)
+			},
+			Representative: func(name string, id string, request string) string {
+				return fmt.Sprintf("Представитель %s (ID %s), заявка %s", name, id, request)
+			},
+			ResultsNote: func(teams string, questions string) string {
+				return fmt.Sprintf("Ответы уйдут для %s команд, по %s вопросов у каждой.", teams, questions)
+			},
+			RostersSubhead: func(tournament string) string { return fmt.Sprintf("Составы, турнир %s", tournament) },
+			Send:           func() string { return "Выгрузить" },
+			SendConfirm: func(teams string) string {
+				return fmt.Sprintf("Выгрузить составы и ответы %s команд на турнирный сайт?", teams)
+			},
+			Sent: func(rosters string, results string, moved string) string {
+				return fmt.Sprintf("Составов отправлено: %s, ответов: %s, команд перенесено в заявки площадок: %s.", rosters, results, moved)
+			},
+			SentSubhead: func() string { return "Выгружено" },
+			SiteRefused: func(message string) string {
+				return fmt.Sprintf("Турнирный сайт отказал: %s", message)
+			},
+			SiteUnreachable: func() string {
+				return "Турнирный сайт не отвечает. Попробуйте позже."
+			},
+			SkippedLine:    func(team string, reason string) string { return fmt.Sprintf("%s: %s", team, reason) },
+			SkippedSubhead: func() string { return "Не уйдёт на сайт" },
+			TeamRemark:     func(team string, message string) string { return fmt.Sprintf("%s: %s", team, message) },
+			Title: func(fest string) string {
+				return fmt.Sprintf("Выгрузка на турнирный сайт · %s", fest)
+			},
+			ToProfile: func() string { return "Открыть профиль" },
+			TokenRefused: func() string {
+				return "Турнирный сайт не принял ваш токен. Сохраните в профиле действующий токен с правом записи."
+			},
+			Unfinished: func(done string, total string) string {
+				return fmt.Sprintf("Закрыто %s вопросов из %s. Незакрытые вопросы уйдут как не взятые.", done, total)
+			},
+			VenueUnfinished: func(venue string, done string, total string) string {
+				return fmt.Sprintf("Площадка %s закрыла %s вопросов из %s. Незакрытые вопросы уйдут как не взятые.", venue, done, total)
+			},
 		},
 		Roster: HostRosterStrings{
 			AddOverrideBtn:      func() string { return "Добавить оверрайд для игры" },

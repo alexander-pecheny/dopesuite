@@ -49,3 +49,37 @@ func (s *server) apiTokensRevoke(w http.ResponseWriter, r *http.Request, sc rout
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
+
+// The caller's token for the rating site, as /profile shows it: when it was
+// saved and how it ends, never the token itself.
+func (s *server) apiRatingTokenShow(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	saved, ok, err := s.eng.LoadRatingToken(r.Context(), sc.User.UserID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return route.NotFound
+	}
+	return route.JSON(w, map[string]string{"saved_at": saved.SavedAt, "tail": saved.Tail()})
+}
+
+func (s *server) apiRatingTokenSave(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	if err := s.hostPageServer().SaveRatingToken(r.Context(), sc.User.UserID, req.Token); err != nil {
+		return err
+	}
+	return s.apiRatingTokenShow(w, r, sc)
+}
+
+func (s *server) apiRatingTokenForget(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	if err := s.eng.ForgetRatingToken(r.Context(), sc.User.UserID); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}

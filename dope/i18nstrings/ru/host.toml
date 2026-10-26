@@ -427,6 +427,8 @@ roster_troikas_link = "Тройки"
 # The rating-import row's status note.
 rating_status_none = "нет rating ID"
 roster_import_link = "Загрузить команды и игроков"
+rating_export_link = "Выгрузить на турнирный сайт"
+rating_export_muted = "составы и ответы ОД"
 # The audit-log row.
 audit_link = "История изменений"
 audit_muted = "откат состояния"
@@ -595,6 +597,17 @@ token_revoked = 'отозван {{.at}}'
 token_expired = "срок истёк"
 token_revoke = "Отозвать"
 token_revoke_confirm = "Отозвать токен? Программа, которая им пользуется, потеряет доступ."
+# The /profile section with the user's token for rating.chgk.info, which the
+# export to the rating site sends as theirs.
+rating_token_subhead = "Токен турнирного сайта"
+rating_token_lead = "С этим токеном dope выгружает составы и результаты ваших фестов на турнирный сайт от вашего имени. Создайте токен с правом записи на rating.chgk.info, на странице пользователя в блоке «API-токены»."
+rating_token_saved = 'Токен сохранён {{.at}}, его последние символы: {{.tail}}.'
+rating_token_none = "Токен не сохранён."
+rating_token_label = "Токен"
+rating_token_save = "Сохранить токен"
+rating_token_forget = "Удалить токен"
+rating_token_forget_confirm = "Удалить токен? dope больше не сможет выгружать ваши фесты на турнирный сайт."
+rating_token_empty = "Вставьте токен."
 # The out-of-range error parsePositiveFormInt/parseNonNegativeFormInt build:
 # "<field> должно быть от <min> до <max>".
 error_int_range = '{{.field}} должно быть от {{.min}} до {{.max}}'
@@ -613,3 +626,44 @@ games_subhead = "Игры"
 # games, and its own.
 venues_subhead = "Площадки"
 merged_game = '{{.title}} (сводная)'
+
+# The export of a fest's rosters and its ОД's results to rating.chgk.info,
+# /host/fest/<fest>/rating/export.
+[rating_export]
+title = 'Выгрузка на турнирный сайт · {{.fest}}'
+crumb = "Выгрузка на турнирный сайт"
+lead = "dope отправит на турнирный сайт составы команд и их ответы в ОД от вашего имени. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить». Повторная выгрузка заменит составы и ответы на сайте."
+game_label = "Игра"
+no_game = "В фесте нет ОД всех команд, выгружать нечего."
+no_token = "Чтобы выгружать на турнирный сайт, сохраните в профиле свой токен турнирного сайта."
+token_refused = "Турнирный сайт не принял ваш токен. Сохраните в профиле действующий токен с правом записи."
+to_profile = "Открыть профиль"
+site_refused = 'Турнирный сайт отказал: {{.message}}'
+site_unreachable = "Турнирный сайт не отвечает. Попробуйте позже."
+no_tournament = "У феста не указан турнир на турнирном сайте. Укажите его ID в настройках феста."
+multi_fest = "Мультитурнир выгружается по турнирам площадок, и dope этого пока не умеет."
+not_fest_od = "Выгрузить можно только ОД всех команд феста."
+questions_differ = 'В игре {{.dope}} вопросов, а на турнирном сайте {{.site}}. Пока число вопросов не совпадёт, результаты не выгрузить.'
+unfinished = 'Закрыто {{.done}} вопросов из {{.total}}. Незакрытые вопросы уйдут как не взятые.'
+venue_unfinished = 'Площадка {{.venue}} закрыла {{.done}} вопросов из {{.total}}. Незакрытые вопросы уйдут как не взятые.'
+all_teams = "Все команды"
+no_request = 'У площадки {{.venue}} нет принятой заявки на турнирном сайте.'
+no_representative = 'У заявки площадки {{.venue}} на турнирном сайте нет представителя.'
+no_team_id = "У команды нет ID турнирного сайта."
+no_venue = "Команда не на площадке."
+no_player_id = 'У игрока {{.player}} нет ID турнирного сайта, в состав он не попадёт.'
+no_players = "В составе нет ни одного игрока с ID турнирного сайта."
+team_remark = '{{.team}}: {{.message}}'
+rosters_subhead = 'Составы, турнир {{.tournament}}'
+representative = 'Представитель {{.name}} (ID {{.id}}), заявка {{.request}}'
+# A player in a roster with the flag the site will get: Б or Л.
+player_flag = '{{.name}} ({{.flag}})'
+moves_subhead = "Перенос в заявку площадки"
+move_line = '{{.team}} уже есть на сайте в другой заявке. Её перенесут в заявку площадки {{.venue}}.'
+skipped_subhead = "Не уйдёт на сайт"
+skipped_line = '{{.team}}: {{.reason}}'
+results_note = 'Ответы уйдут для {{.teams}} команд, по {{.questions}} вопросов у каждой.'
+send = "Выгрузить"
+send_confirm = 'Выгрузить составы и ответы {{.teams}} команд на турнирный сайт?'
+sent_subhead = "Выгружено"
+sent = 'Составов отправлено: {{.rosters}}, ответов: {{.results}}, команд перенесено в заявки площадок: {{.moved}}.'

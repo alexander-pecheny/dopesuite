@@ -216,6 +216,8 @@ func Main() {
 	mux.HandleFunc("/profile/logout", srv.hostPageServer().HandleProfileLogout)
 	mux.HandleFunc("/profile/tokens", srv.hostPageServer().HandleProfileTokens)
 	mux.HandleFunc("/profile/tokens/", srv.hostPageServer().HandleProfileTokens)
+	mux.HandleFunc("/profile/rating-token", srv.hostPageServer().HandleProfileRatingToken)
+	mux.HandleFunc("/profile/rating-token/forget", srv.hostPageServer().HandleProfileRatingToken)
 	mux.HandleFunc("/join/", srv.hostPageServer().HandleJoin)
 	mux.Handle("/api/join/", srv.api().Mux)
 	mux.HandleFunc("/host", srv.hostPageServer().HandleHostLanding)
@@ -334,6 +336,7 @@ func newServer() (*server, error) {
 		eng: core.Engine{
 			DB:              db,
 			Buff:            buff,
+			RatingAPI:       os.Getenv("DOPE_RATING_API"),
 			FestID:          festID,
 			ActiveGameID:    gameID,
 			ActiveMatchCode: matchCode,

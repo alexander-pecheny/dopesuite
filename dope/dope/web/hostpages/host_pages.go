@@ -1,6 +1,7 @@
 package hostpages
 
 import (
+	"context"
 	"database/sql"
 	"dope/dope/domain/core"
 	"dope/dope/domain/multifest"
@@ -94,6 +95,8 @@ type profileData struct {
 	Tokens      []core.APIToken
 	// NewToken is the raw token just made, shown this once.
 	NewToken string
+	// RatingToken is the saved token for the rating site, if any.
+	RatingToken *core.RatingToken
 }
 
 // identitySection renders who you are logged in as. Either identity can be
@@ -146,6 +149,7 @@ func profileDoc(data profileData) *ui.Doc {
 			ui.Message(ui.ID("passwordMessage")),
 		),
 		tokensSection(data),
+		ratingTokenSection(data.RatingToken),
 		ui.Form(ui.Method("post"), ui.Action("/profile/logout"),
 			ui.Button(ui.Submit(), ui.Text(s.Host.Pages.LogoutSubmit())),
 		),
@@ -245,6 +249,30 @@ func tokensSection(data profileData) *ui.Element {
 	return ui.Section(sect...)
 }
 
+// ratingTokenSection is the user's token for the rating site: whether one is
+// saved, the form that replaces it, and the button that removes it.
+func ratingTokenSection(saved *core.RatingToken) *ui.Element {
+	s := dopestrings.Default
+	state := ui.Muted(ui.Text(s.Host.Pages.RatingTokenNone()))
+	if saved != nil {
+		state = ui.Muted(ui.Text(s.Host.Pages.RatingTokenSaved(tokenDate(saved.SavedAt), saved.Tail())))
+	}
+	sect := []ui.Item{ui.ID("rating-token"), ui.Subhead(ui.Text(s.Host.Pages.RatingTokenSubhead())),
+		ui.Hint(ui.Text(s.Host.Pages.RatingTokenLead())), state,
+		ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/profile/rating-token"), ui.Autocomplete("off"),
+			ui.Field(ui.Label(s.Host.Pages.RatingTokenLabel()),
+				ui.Password(ui.Name("token"), ui.Autocomplete("off"), ui.Required())),
+			ui.Row(ui.Button(ui.Submit(), ui.Text(s.Host.Pages.RatingTokenSave()))),
+		),
+	}
+	if saved != nil {
+		sect = append(sect, ui.Form(ui.Method("post"), ui.Action("/profile/rating-token/forget"),
+			ui.Data("confirm", s.Host.Pages.RatingTokenForgetConfirm()),
+			ui.Button(ui.Danger, ui.Submit(), ui.Text(s.Host.Pages.RatingTokenForget()))))
+	}
+	return ui.Section(sect...)
+}
+
 // tokenDate shows an RFC 3339 stamp as the day it names.
 func tokenDate(ts string) string {
 	if t, err := time.Parse(time.RFC3339, ts); err == nil {
@@ -266,13 +294,62 @@ func (s *Server) renderProfile(w http.ResponseWriter, r *http.Request, user sess
 		route.WriteError(w, r, err)
 		return
 	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, profileDoc(profileData{
+	data := profileData{
 		HasPassword: hash.Valid && hash.String != "",
 		Username:    username.String,
 		Telegram:    strings.TrimPrefix(telegram.String, "@"),
 		Tokens:      tokens,
 		NewToken:    newToken,
-	}))
+	}
+	if saved, ok, err := s.h.Engine().LoadRatingToken(r.Context(), user.UserID); err != nil {
+		route.WriteError(w, r, err)
+		return
+	} else if ok {
+		data.RatingToken = &saved
+	}
+	pages.RenderDoc(w, s.h.Engine().AssetETags, profileDoc(data))
+}
+
+// HandleProfileRatingToken serves POST /profile/rating-token, which saves the
+// user's token for the rating site, and POST /profile/rating-token/forget.
+func (s *Server) HandleProfileRatingToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !route.SameOriginUnsafe(w, r) {
+		return
+	}
+	user, ok := s.h.Engine().LookupCookieSession(r)
+	if !ok {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	var err error
+	switch r.URL.Path {
+	case "/profile/rating-token":
+		err = s.SaveRatingToken(r.Context(), user.UserID, r.PostFormValue("token"))
+	case "/profile/rating-token/forget":
+		err = s.h.Engine().ForgetRatingToken(r.Context(), user.UserID)
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		route.WriteError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/profile#rating-token", http.StatusSeeOther)
+}
+
+// SaveRatingToken saves the user's token for the rating site; a blank one is
+// refused.
+func (s *Server) SaveRatingToken(ctx context.Context, userID int64, token string) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return route.BadUser(corei18n.User(dopestrings.Default.Host.Pages.RatingTokenEmpty()))
+	}
+	return s.h.Engine().SaveRatingToken(ctx, userID, token)
 }
 
 // HandleProfileTokens serves POST /profile/tokens, which makes a token and

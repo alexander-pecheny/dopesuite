@@ -1055,6 +1055,18 @@ create table if not exists venue_invite_uses(
 	{Version: 47, Name: "multifest_venues.representative", Up: func(db *sql.DB) error {
 		return store.AddColumnsIfMissing(db, "multifest_venues", []store.ColumnSpec{{Name: "representative", Type: "TEXT NOT NULL DEFAULT ''"}})
 	}},
+	// v48: a user's token for rating.chgk.info, which the export to it sends
+	// as theirs. Unlike an API token it is stored whole, since dope uses it.
+	{Version: 48, Name: "user_rating_tokens", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+create table if not exists user_rating_tokens(
+  user_id integer primary key references users(id) on delete cascade,
+  token text not null,
+  saved_at text not null
+);
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled
