@@ -1386,9 +1386,9 @@ var RU = Strings{
 			UnknownHint: func() string {
 				return "Выберите, кто это на турнирном сайте, или создайте там новую команду или игрока. dope запишет ID в составы феста, и после этого они уйдут при выгрузке. Созданные команды и игроки останутся на турнирном сайте."
 			},
-			UnknownPlayer:  func(player string, team string) string { return fmt.Sprintf("%s, команда %s", player, team) },
+			UnknownPlayer:  func(player string, team string) string { return fmt.Sprintf("%s, команда «%s»", player, team) },
 			UnknownSubhead: func() string { return "Нет ID турнирного сайта" },
-			UnknownTeam:    func(team string) string { return fmt.Sprintf("Команда %s", team) },
+			UnknownTeam:    func(team string) string { return fmt.Sprintf("Команда «%s»", team) },
 			VenueUnfinished: func(venue string, done string, total string) string {
 				return fmt.Sprintf("Площадка %s закрыла %s вопросов из %s. Незакрытые вопросы уйдут как не взятые.", venue, done, total)
 			},

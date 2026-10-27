@@ -25,6 +25,9 @@ type Unknown struct {
 	// town for the team's city or its venue.
 	Town     int64  `json:"town,omitempty"`
 	TownName string `json:"town_name,omitempty"`
+	// Held is a player of a team without an id that has no obvious choice:
+	// the player goes to the site only once a person settles the team.
+	Held bool `json:"held,omitempty"`
 }
 
 // Candidate is a namesake on the site.
@@ -39,6 +42,9 @@ const ChoiceNew = "new"
 // Default is the choice the page starts with: the only namesake, a new one
 // when there is none, and nothing when a person has to pick.
 func (u Unknown) Default() string {
+	if u.Held {
+		return ""
+	}
 	switch len(u.Candidates) {
 	case 0:
 		if u.Player == 0 && u.Town == 0 {

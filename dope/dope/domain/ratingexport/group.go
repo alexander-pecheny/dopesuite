@@ -123,6 +123,7 @@ func (b *builder) add(ctx context.Context, team festTeam, answers string) error 
 // unknown lists the team, when the site has no id for it in dope, and each
 // of its players without one, with their namesakes on the site.
 func (b *builder) unknown(ctx context.Context, team festTeam, venue int64) error {
+	held := false
 	if team.ratingID == 0 {
 		candidates, err := b.site.teamNamesakes(ctx, team.name)
 		if err != nil {
@@ -135,8 +136,10 @@ func (b *builder) unknown(ctx context.Context, team festTeam, venue int64) error
 		if town.ID == 0 {
 			town = b.groups.town[venue]
 		}
-		b.plan.Unknown = append(b.plan.Unknown, Unknown{Ref: "t" + idstr.Format(team.id), Team: team.id, TeamName: team.name,
-			Name: team.name, Candidates: candidates, Town: town.ID, TownName: town.Name})
+		u := Unknown{Ref: "t" + idstr.Format(team.id), Team: team.id, TeamName: team.name,
+			Name: team.name, Candidates: candidates, Town: town.ID, TownName: town.Name}
+		held = u.Default() == ""
+		b.plan.Unknown = append(b.plan.Unknown, u)
 	}
 	for _, p := range team.players {
 		if p.ratingID != 0 {
@@ -147,7 +150,7 @@ func (b *builder) unknown(ctx context.Context, team festTeam, venue int64) error
 			return err
 		}
 		b.plan.Unknown = append(b.plan.Unknown, Unknown{Ref: "p" + idstr.Format(p.id), Team: team.id, TeamName: team.name,
-			Player: p.id, FirstName: p.first, LastName: p.last, Name: p.name(), Candidates: candidates})
+			Player: p.id, FirstName: p.first, LastName: p.last, Name: p.name(), Candidates: candidates, Held: held})
 	}
 	return nil
 }

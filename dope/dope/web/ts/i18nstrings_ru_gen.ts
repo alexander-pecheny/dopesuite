@@ -1015,9 +1015,9 @@ shootout: true
       tokenRefused: () => "Турнирный сайт не принял ваш токен. Сохраните в профиле действующий токен с правом записи.",
       unfinished: (done: string, total: string) => `Закрыто ${done} вопросов из ${total}. Незакрытые вопросы уйдут как не взятые.`,
       unknownHint: () => "Выберите, кто это на турнирном сайте, или создайте там новую команду или игрока. dope запишет ID в составы феста, и после этого они уйдут при выгрузке. Созданные команды и игроки останутся на турнирном сайте.",
-      unknownPlayer: (player: string, team: string) => `${player}, команда ${team}`,
+      unknownPlayer: (player: string, team: string) => `${player}, команда «${team}»`,
       unknownSubhead: () => "Нет ID турнирного сайта",
-      unknownTeam: (team: string) => `Команда ${team}`,
+      unknownTeam: (team: string) => `Команда «${team}»`,
       venueUnfinished: (venue: string, done: string, total: string) => `Площадка ${venue} закрыла ${done} вопросов из ${total}. Незакрытые вопросы уйдут как не взятые.`,
     },
     roster: {
