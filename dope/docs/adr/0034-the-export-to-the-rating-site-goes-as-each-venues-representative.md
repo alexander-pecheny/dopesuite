@@ -32,13 +32,19 @@ season, and Л otherwise. buff answers the base rosters when it mirrors the
 season, and the site answers the rest.
 
 The page shows the whole plan before it sends anything: each площадка's
-representative and rosters, the moves, the teams and players that stay
-behind for want of a site id, and the sheets with questions left open. It
-refuses to send when the ОД has a different number of questions from the
-site's tournament.
+representative and rosters, the moves, the teams and players without a site
+id, and the sheets with questions left open. It refuses to send when the ОД
+has a different number of questions from the site's tournament.
+
+A team or player without a site id gets the choice the site's own «ввод»
+offers: one of its namesakes on the site (the same name, ё folded), a new one
+created there (`results_entry/teams`, `results_entry/players`), or nothing.
+That is a step of its own, «Записать ID», before «Выгрузить», because what it
+creates stays on the site. The id goes into the fest roster through the team
+editor's own write, so an import keeps it.
 
 ## Consequences
 
-The export does not send зачёты, and does not register players or teams the
-site does not know. Those stay on the page as skipped, for the
-representative to add on the site.
+The export does not send зачёты. A new team needs a town the site knows: the
+team's city when the site has exactly one town of that name, else the town of
+its площадка's заявка.

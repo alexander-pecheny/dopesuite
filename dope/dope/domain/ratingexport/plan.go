@@ -26,6 +26,7 @@ type Plan struct {
 	Venues     []Venue   `json:"venues"`
 	Moves      []Move    `json:"moves"`
 	Results    []Result  `json:"results"`
+	Unknown    []Unknown `json:"unknown"`
 	Skipped    []Skipped `json:"skipped"`
 	Warnings   []string  `json:"warnings"`
 	// Blocked says why the plan may not be sent; empty when it may.
@@ -86,20 +87,22 @@ const (
 
 type festTeam struct {
 	id, ratingID, venue, number int64
-	name                        string
+	name, city                  string
 	players                     []festPlayer
 }
 
 type festPlayer struct {
-	ratingID int64
-	name     string
+	id, ratingID int64
+	first, last  string
 }
+
+func (p festPlayer) name() string { return strings.TrimSpace(p.last + " " + p.first) }
 
 // Build reads what the fest's OD gameID would send and asks the site where
 // it would go. It writes nothing anywhere.
 func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site) (Plan, error) {
 	s := dopestrings.Default
-	p := Plan{Venues: []Venue{}, Moves: []Move{}, Results: []Result{}, Skipped: []Skipped{}, Warnings: []string{}}
+	p := Plan{Venues: []Venue{}, Moves: []Move{}, Results: []Result{}, Unknown: []Unknown{}, Skipped: []Skipped{}, Warnings: []string{}}
 	var kind string
 	if err := db.QueryRowContext(ctx, `select coalesce(rating_id, 0), kind from fests where id = ?`, festID).Scan(&p.Tournament, &kind); err != nil {
 		return p, err
@@ -211,10 +214,10 @@ func mask(state games.ODState, number int64, questions int) string {
 
 func loadTeams(ctx context.Context, db *sql.DB, festID int64) ([]festTeam, error) {
 	teams, err := store.CollectRows(ctx, db, `
-select id, coalesce(rating_id, 0), coalesce(multifest_venue_id, 0), coalesce(number, 0), name
+select id, coalesce(rating_id, 0), coalesce(multifest_venue_id, 0), coalesce(number, 0), name, coalesce(city, '')
 from fest_teams where fest_id = ? and deleted = 0 order by coalesce(number, 0), name`, []any{festID}, func(rows *sql.Rows) (festTeam, error) {
 		var t festTeam
-		return t, rows.Scan(&t.id, &t.ratingID, &t.venue, &t.number, &t.name)
+		return t, rows.Scan(&t.id, &t.ratingID, &t.venue, &t.number, &t.name, &t.city)
 	})
 	if err != nil {
 		return nil, err
@@ -224,12 +227,12 @@ from fest_teams where fest_id = ? and deleted = 0 order by coalesce(number, 0), 
 		festPlayer
 	}
 	members, err := store.CollectRows(ctx, db, `
-select tp.team_id, coalesce(p.rating_id, 0), trim(p.last_name || ' ' || p.first_name)
+select tp.team_id, p.id, coalesce(p.rating_id, 0), p.first_name, p.last_name
 from fest_team_players tp join fest_players p on p.id = tp.player_id
 join fest_teams t on t.id = tp.team_id
 where t.fest_id = ? order by tp.team_id, tp.roster_order`, []any{festID}, func(rows *sql.Rows) (member, error) {
 		var m member
-		return m, rows.Scan(&m.team, &m.ratingID, &m.name)
+		return m, rows.Scan(&m.team, &m.id, &m.ratingID, &m.first, &m.last)
 	})
 	if err != nil {
 		return nil, err

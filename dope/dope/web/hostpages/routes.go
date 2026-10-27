@@ -123,6 +123,7 @@ func (s *Server) buildRoutes() *route.Table {
 	t.Handle("POST "+fest+"/rating/undo", route.Manager, page(s.handleHostUndoRatingImport))
 	t.Handle("GET "+fest+"/rating/export", route.Manager, scoped(s.renderRatingExport))
 	t.Handle("POST "+fest+"/rating/export", route.Manager, scoped(s.renderRatingExport))
+	t.Handle("POST "+fest+"/rating/export/identify", route.Manager, scoped(s.renderRatingIdentify))
 	t.Handle("GET "+fest+"/audit", route.Manager, page(func(w http.ResponseWriter, r *http.Request, id int64) {
 		s.pages().RenderHostFestAudit(w, r, id, "", "")
 	}))

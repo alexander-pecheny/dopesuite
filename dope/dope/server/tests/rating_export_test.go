@@ -52,6 +52,11 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		f.posted = append(f.posted, r.URL.Path)
 		f.bodies = append(f.bodies, body)
+		if r.URL.Path == "/tournaments/555/results_entry/players" {
+			w.WriteHeader(http.StatusCreated)
+			fmt.Fprint(w, `{"id": 99, "surname": "Безымянный", "name": "Новичок"}`)
+			return
+		}
 		fmt.Fprint(w, `{"warnings": [], "moved": [3], "request": 200}`)
 		return
 	}
@@ -62,8 +67,14 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `[{"id": 100, "status": "A", "venue": {"id": 10}, "representative": {"id": 7, "name": "Иван", "surname": "Минский"}},
 			{"id": 300, "status": "D", "venue": {"id": 20}, "representative": {"id": 9}},
 			{"id": 200, "status": "A", "venue": {"id": 20}, "representative": {"id": 8, "name": "Пётр", "surname": "Брестский"}}]`)
+	case "/players":
+		if r.URL.Query().Get("surname") == "Капитан" {
+			fmt.Fprint(w, `[{"id": 77, "surname": "Капитан", "name": "Альфа", "patronymic": "Иванович"}]`)
+			return
+		}
+		fmt.Fprint(w, `[{"id": 5, "surname": "Безымянная", "name": "Новичок"}]`)
 	case "/tournaments/555/results_entry":
-		if len(f.posted) == 0 {
+		if len(f.posted) <= 1 {
 			fmt.Fprint(w, `{"teams": [{"team": 3, "name": "Гамма", "request": 100}]}`)
 		} else {
 			fmt.Fprint(w, `{"teams": [{"team": 1, "request": 100}, {"team": 2, "request": 100}, {"team": 3, "request": 200}]}`)
@@ -79,7 +90,8 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // An organizer's export sends each площадка's rosters as its representative,
 // moves the team the site had in the wrong заявка first, and sends every
-// team's answers at once; a player the site does not know stays behind.
+// team's answers at once; a player the site does not know is created there
+// first, and goes in with the id the site gave.
 func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	t.Parallel()
 	site := &fakeRatingSite{t: t}
@@ -158,9 +170,36 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	if masks[1] != "00" || masks[2] != "10" || masks[3] != "00" {
 		t.Fatalf("the masks are %v", masks)
 	}
-	if len(plan.Skipped) != 1 || !strings.Contains(plan.Skipped[0].Reason, "Безымянный") || len(plan.Warnings) != 2 {
-		t.Fatalf("skipped %+v, warnings %v", plan.Skipped, plan.Warnings)
+	if len(plan.Unknown) != 1 || plan.Unknown[0].Name != "Безымянный Новичок" || len(plan.Unknown[0].Candidates) != 0 ||
+		plan.Unknown[0].Default() != ratingexport.ChoiceNew || len(plan.Skipped) != 0 || len(plan.Warnings) != 2 {
+		t.Fatalf("unknown %+v, skipped %+v, warnings %v", plan.Unknown, plan.Skipped, plan.Warnings)
 	}
+
+	identify := map[string]any{"choices": map[string]string{plan.Unknown[0].Ref: ratingexport.ChoiceNew}}
+	identified := decodeInto[answer](t, scopedAPIRequest(t, srv, http.MethodPost, exportURL+"/identify", identify, token))
+	if len(identified.Plan.Unknown) != 0 || site.posted[0] != "/tournaments/555/results_entry/players" ||
+		site.bodies[0]["surname"] != "Безымянный" || site.bodies[0]["name"] != "Новичок" {
+		t.Fatalf("identify posted %v %v, unknown left %+v", site.posted, site.bodies, identified.Plan.Unknown)
+	}
+	var gammaPlayers []int64
+	for _, team := range identified.Plan.Venues {
+		for _, r := range team.Teams {
+			if r.Name == "Гамма" {
+				for _, p := range r.Players {
+					gammaPlayers = append(gammaPlayers, p.Player)
+				}
+			}
+		}
+	}
+	if !slices.Contains(gammaPlayers, 99) {
+		t.Fatalf("Гамма's roster after the identify is %v", gammaPlayers)
+	}
+	var stored int64
+	db.QueryRow(`select coalesce(rating_id, 0) from fest_players where fest_id = ? and last_name = 'Безымянный'`, festID).Scan(&stored)
+	if stored != 99 {
+		t.Fatalf("the fest roster keeps rating id %d for the new player", stored)
+	}
+	site.posted, site.bodies = site.posted[1:], site.bodies[1:]
 
 	sent := decodeInto[answer](t, scopedAPIRequest(t, srv, http.MethodPost, exportURL, nil, token))
 	want := []string{"/tournaments/555/results_entry/move", "/tournaments/555/results_entry/rosters", "/tournaments/555/results_entry/rosters", "/tournaments/555/results_entry"}

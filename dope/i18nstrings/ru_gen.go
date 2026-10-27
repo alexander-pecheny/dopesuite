@@ -1286,9 +1286,26 @@ var RU = Strings{
 			VenuesSubhead:    func() string { return "Площадки" },
 		},
 		RatingExport: HostRatingExportStrings{
-			AllTeams:  func() string { return "Все команды" },
-			Crumb:     func() string { return "Выгрузка на турнирный сайт" },
-			GameLabel: func() string { return "Игра" },
+			AllTeams:      func() string { return "Все команды" },
+			BackToPreview: func() string { return "Вернуться к выгрузке" },
+			BadChoice: func(name string) string {
+				return fmt.Sprintf("Для %s выбран непонятный вариант. Выберите его из списка.", name)
+			},
+			ChoiceCandidate: func(name string, id string) string { return fmt.Sprintf("%s, ID %s", name, id) },
+			ChoiceNewPlayer: func() string { return "Создать игрока на турнирном сайте" },
+			ChoiceNewTeam: func(town string) string {
+				return fmt.Sprintf("Создать команду на турнирном сайте, город %s", town)
+			},
+			ChoiceSkip: func() string { return "Не выгружать" },
+			Crumb:      func() string { return "Выгрузка на турнирный сайт" },
+			GameLabel:  func() string { return "Игра" },
+			Identified: func(n string) string {
+				return fmt.Sprintf("ID турнирного сайта записаны: %s.", n)
+			},
+			Identify: func() string { return "Записать ID" },
+			IdentifyConfirm: func() string {
+				return "Записать выбранные ID в составы? Новые команды и игроки появятся на турнирном сайте."
+			},
 			Lead: func() string {
 				return "dope отправит на турнирный сайт составы команд и их ответы в ОД от вашего имени. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить». Повторная выгрузка заменит составы и ответы на сайте."
 			},
@@ -1302,9 +1319,6 @@ var RU = Strings{
 			NoGame: func() string {
 				return "В фесте нет ОД всех команд, выгружать нечего."
 			},
-			NoPlayerId: func(player string) string {
-				return fmt.Sprintf("У игрока %s нет ID турнирного сайта, в состав он не попадёт.", player)
-			},
 			NoPlayers: func() string {
 				return "В составе нет ни одного игрока с ID турнирного сайта."
 			},
@@ -1314,18 +1328,21 @@ var RU = Strings{
 			NoRequest: func(venue string) string {
 				return fmt.Sprintf("У площадки %s нет принятой заявки на турнирном сайте.", venue)
 			},
-			NoTeamId: func() string { return "У команды нет ID турнирного сайта." },
 			NoToken: func() string {
 				return "Чтобы выгружать на турнирный сайт, сохраните в профиле свой токен турнирного сайта."
 			},
 			NoTournament: func() string {
 				return "У феста не указан турнир на турнирном сайте. Укажите его ID в настройках феста."
 			},
+			NoTown: func(team string) string {
+				return fmt.Sprintf("Чтобы создать команду %s на турнирном сайте, укажите в dope её город так, как он назван на сайте.", team)
+			},
 			NoVenue: func() string { return "Команда не на площадке." },
 			NotFestOd: func() string {
 				return "Выгрузить можно только ОД всех команд феста."
 			},
-			PlayerFlag: func(name string, flag string) string { return fmt.Sprintf("%s (%s)", name, flag) },
+			OpenTournament: func() string { return "Открыть турнир на сайте" },
+			PlayerFlag:     func(name string, flag string) string { return fmt.Sprintf("%s (%s)", name, flag) },
 			QuestionsDiffer: func(dope string, site string) string {
 				return fmt.Sprintf("В игре %s вопросов, а на турнирном сайте %s. Пока число вопросов не совпадёт, результаты не выгрузить.", dope, site)
 			},
@@ -1340,8 +1357,11 @@ var RU = Strings{
 			SendConfirm: func(teams string) string {
 				return fmt.Sprintf("Выгрузить составы и ответы %s команд на турнирный сайт?", teams)
 			},
-			Sent: func(rosters string, results string, moved string) string {
-				return fmt.Sprintf("Составов отправлено: %s, ответов: %s, команд перенесено в заявки площадок: %s.", rosters, results, moved)
+			Sent: func(rosters string, results string) string {
+				return fmt.Sprintf("Отправлено составов: %s, ответов: %s.", rosters, results)
+			},
+			SentMoved: func(moved string) string {
+				return fmt.Sprintf("Команд, перенесённых в заявки своих площадок: %s.", moved)
 			},
 			SentSubhead: func() string { return "Выгружено" },
 			SiteRefused: func(message string) string {
@@ -1363,6 +1383,12 @@ var RU = Strings{
 			Unfinished: func(done string, total string) string {
 				return fmt.Sprintf("Закрыто %s вопросов из %s. Незакрытые вопросы уйдут как не взятые.", done, total)
 			},
+			UnknownHint: func() string {
+				return "Выберите, кто это на турнирном сайте, или создайте там новую команду или игрока. dope запишет ID в составы феста, и после этого они уйдут при выгрузке. Созданные команды и игроки останутся на турнирном сайте."
+			},
+			UnknownPlayer:  func(player string, team string) string { return fmt.Sprintf("%s, команда %s", player, team) },
+			UnknownSubhead: func() string { return "Нет ID турнирного сайта" },
+			UnknownTeam:    func(team string) string { return fmt.Sprintf("Команда %s", team) },
 			VenueUnfinished: func(venue string, done string, total string) string {
 				return fmt.Sprintf("Площадка %s закрыла %s вопросов из %s. Незакрытые вопросы уйдут как не взятые.", venue, done, total)
 			},

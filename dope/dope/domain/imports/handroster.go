@@ -638,3 +638,33 @@ func planRoster(current, desired []roster.FestRosterImportTeam, merged roster.Me
 	sort.SliceStable(plan.Players, func(i, j int) bool { return util.CompareAlpha(plan.Players[i].Team, plan.Players[j].Team) < 0 })
 	return plan
 }
+
+// SetHandTeamRatingTx makes a team the host made the rating site's team
+// ratingID, as when the host had added that team by hand.
+func SetHandTeamRatingTx(ctx context.Context, tx *sql.Tx, festID, teamID, ratingID int64) (RosterWrite, error) {
+	s := dopestrings.Default
+	before, err := roster.LoadHandState(ctx, tx, festID)
+	if err != nil {
+		return RosterWrite{}, err
+	}
+	var hand bool
+	err = tx.QueryRowContext(ctx, `select hand from fest_teams where id = ? and fest_id = ? and deleted = 0`, teamID, festID).Scan(&hand)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !hand) {
+		return RosterWrite{}, corei18n.User(s.Imports.HandRoster.TeamUnknown())
+	}
+	if err != nil {
+		return RosterWrite{}, err
+	}
+	var taken int
+	if err := tx.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ? and rating_id = ? and deleted = 0 and id != ?`,
+		festID, ratingID, teamID).Scan(&taken); err != nil {
+		return RosterWrite{}, err
+	}
+	if taken > 0 {
+		return RosterWrite{}, corei18n.User(s.Imports.HandRoster.RatingTeamTaken())
+	}
+	if _, err := tx.ExecContext(ctx, `update fest_teams set rating_id = ? where id = ?`, ratingID, teamID); err != nil {
+		return RosterWrite{}, err
+	}
+	return rewriteFromHandTx(ctx, tx, festID, before)
+}

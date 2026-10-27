@@ -6,6 +6,8 @@ import (
 
 	"dope/dope/domain/multifest"
 	dopestrings "dope/i18nstrings"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
 // groups is where the fest's teams go on the site: a Venue per venue
@@ -17,6 +19,8 @@ type groups struct {
 	byVenue map[int64]*Venue
 	// refused is why a venue's teams cannot go, by venue.
 	refused map[int64]string
+	// town is the site's town of each venue, for a new team there.
+	town map[int64]siteTown
 }
 
 // requestAccepted is the status of a request the site has accepted.
@@ -24,7 +28,7 @@ const requestAccepted = "A"
 
 func (p *Plan) group(ctx context.Context, site Site, kind string, venues []multifest.Venue) (groups, error) {
 	s := dopestrings.Default
-	g := groups{synch: kind == multifest.Synch, byVenue: map[int64]*Venue{}, refused: map[int64]string{}}
+	g := groups{synch: kind == multifest.Synch, byVenue: map[int64]*Venue{}, refused: map[int64]string{}, town: map[int64]siteTown{}}
 	if !g.synch {
 		g.order = []int64{0}
 		g.byVenue[0] = &Venue{Title: s.Host.RatingExport.AllTeams(), Teams: []Roster{}}
@@ -52,6 +56,9 @@ func (p *Plan) group(ctx context.Context, site Site, kind string, venues []multi
 		case r.Representative == nil:
 			g.refused[v.ID] = s.Host.RatingExport.NoRepresentative(v.Title)
 		default:
+			if r.Venue.Town != nil {
+				g.town[v.ID] = *r.Venue.Town
+			}
 			g.byVenue[v.ID] = &Venue{Title: v.Title, Request: r.ID, Representative: r.Representative.ID,
 				RepresentativeName: r.Representative.fullName(), Teams: []Roster{}}
 		}
@@ -79,15 +86,15 @@ func (b *builder) add(ctx context.Context, team festTeam, answers string) error 
 	}
 	group, ok := b.groups.byVenue[venue]
 	switch {
-	case team.ratingID == 0:
-		b.skip(team.name, s.Host.RatingExport.NoTeamId())
-		return nil
 	case b.groups.refused[venue] != "":
 		b.skip(team.name, b.groups.refused[venue])
 		return nil
 	case !ok:
 		b.skip(team.name, s.Host.RatingExport.NoVenue())
 		return nil
+	}
+	if err := b.unknown(ctx, team, venue); err != nil || team.ratingID == 0 {
+		return err
 	}
 	base, err := b.base(ctx, team.ratingID)
 	if err != nil {
@@ -96,14 +103,13 @@ func (b *builder) add(ctx context.Context, team festTeam, answers string) error 
 	roster := Roster{Team: team.ratingID, Name: team.name, Players: []Player{}}
 	for _, player := range team.players {
 		if player.ratingID == 0 {
-			b.skip(team.name, s.Host.RatingExport.NoPlayerId(player.name))
 			continue
 		}
 		flag := flagLegionary
 		if base[player.ratingID] {
 			flag = flagBase
 		}
-		roster.Players = append(roster.Players, Player{Player: player.ratingID, Flag: flag, Name: player.name})
+		roster.Players = append(roster.Players, Player{Player: player.ratingID, Flag: flag, Name: player.name()})
 	}
 	if len(roster.Players) == 0 {
 		b.skip(team.name, s.Host.RatingExport.NoPlayers())
@@ -111,6 +117,38 @@ func (b *builder) add(ctx context.Context, team festTeam, answers string) error 
 	}
 	group.Teams = append(group.Teams, roster)
 	b.plan.Results = append(b.plan.Results, Result{Team: team.ratingID, Name: team.name, Mask: answers})
+	return nil
+}
+
+// unknown lists the team, when the site has no id for it in dope, and each
+// of its players without one, with their namesakes on the site.
+func (b *builder) unknown(ctx context.Context, team festTeam, venue int64) error {
+	if team.ratingID == 0 {
+		candidates, err := b.site.teamNamesakes(ctx, team.name)
+		if err != nil {
+			return err
+		}
+		town, err := b.site.town(ctx, team.city)
+		if err != nil {
+			return err
+		}
+		if town.ID == 0 {
+			town = b.groups.town[venue]
+		}
+		b.plan.Unknown = append(b.plan.Unknown, Unknown{Ref: "t" + idstr.Format(team.id), Team: team.id, TeamName: team.name,
+			Name: team.name, Candidates: candidates, Town: town.ID, TownName: town.Name})
+	}
+	for _, p := range team.players {
+		if p.ratingID != 0 {
+			continue
+		}
+		candidates, err := b.site.playerNamesakes(ctx, p.first, p.last)
+		if err != nil {
+			return err
+		}
+		b.plan.Unknown = append(b.plan.Unknown, Unknown{Ref: "p" + idstr.Format(p.id), Team: team.id, TeamName: team.name,
+			Player: p.id, FirstName: p.first, LastName: p.last, Name: p.name(), Candidates: candidates})
+	}
 	return nil
 }
 

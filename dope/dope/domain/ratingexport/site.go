@@ -20,6 +20,9 @@ import (
 // DefaultBase is the rating site's API.
 const DefaultBase = "https://api.rating.chgk.info"
 
+// TournamentPage is a tournament's page on the site, for people.
+const TournamentPage = "https://rating.chgk.info/tournament/%d"
+
 const siteTimeout = 30 * time.Second
 
 // Site is the rating site's API as the export uses it, authenticated by the
@@ -125,7 +128,8 @@ type request struct {
 	ID     int64  `json:"id"`
 	Status string `json:"status"`
 	Venue  *struct {
-		ID int64 `json:"id"`
+		ID   int64     `json:"id"`
+		Town *siteTown `json:"town"`
 	} `json:"venue"`
 	Representative *person `json:"representative"`
 }
