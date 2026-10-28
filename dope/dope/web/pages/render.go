@@ -17,6 +17,12 @@ import (
 // additional response headers (e.g. Cache-Control) before calling; RenderDoc only
 // sets Content-Type. On a render error it writes a 500 and returns.
 func RenderDoc(w http.ResponseWriter, etags map[string]string, doc *dopeui.Doc) {
+	RenderDocStatus(w, etags, doc, http.StatusOK)
+}
+
+// RenderDocStatus is RenderDoc answering with code, for a refusal drawn as a
+// page.
+func RenderDocStatus(w http.ResponseWriter, etags map[string]string, doc *dopeui.Doc, code int) {
 	rendered, err := dopeui.Render(doc)
 	if err != nil {
 		msg, _ := corei18n.Reveal(err, dopestrings.Default.Server.Error.Internal())
@@ -25,6 +31,7 @@ func RenderDoc(w http.ResponseWriter, etags map[string]string, doc *dopeui.Doc) 
 	}
 	body := versionAssetRefs(etags, rendered)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(code)
 	_, _ = w.Write(body)
 }
 

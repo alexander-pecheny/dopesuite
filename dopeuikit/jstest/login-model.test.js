@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {claimOutcome, loginMethods, pollTelegram, tgStartView} from "../assets/dist/esm/login-model.js";
+import {claimOutcome, loginMethods, loginRedirect, pollTelegram, tgStartView} from "../assets/dist/esm/login-model.js";
 
 test("tgStartView builds the deep link only when the bot is known", () => {
   const full = tgStartView({code: "AB CD", bot_username: "dope_bot"});
@@ -79,4 +79,24 @@ test("a refused telegram login says which kind of no it is", () => {
   assert.equal(loginMethods({telegram: false}).telegramNote, "");
   // And a working one has nothing to say.
   assert.equal(loginMethods({telegram: true, telegram_status: "ok"}).telegramNote, "");
+});
+
+function memory() {
+  let value = null;
+  return {get: () => value, set: (v) => { value = v; }, clear: () => { value = null; }};
+}
+
+test("loginRedirect keeps an asked-for destination for a later plain /login", () => {
+  const kept = memory();
+  assert.equal(loginRedirect("/join/ABC", true, kept, 0), "/join/ABC");
+  assert.equal(loginRedirect("/host", false, kept, 30 * 60 * 1000), "/join/ABC");
+  assert.equal(loginRedirect("/host", false, kept, 2 * 60 * 60 * 1000), "/host");
+  kept.clear();
+  assert.equal(loginRedirect("/host", false, kept, 0), "/host");
+});
+
+test("loginRedirect ignores a corrupt entry", () => {
+  const kept = memory();
+  kept.set("{not json");
+  assert.equal(loginRedirect("/host", false, kept, 0), "/host");
 });

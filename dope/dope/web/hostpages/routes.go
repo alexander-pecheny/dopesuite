@@ -7,7 +7,9 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/storage/festaccess"
+	"dope/dope/web/pages"
 	"dope/dope/web/route"
+	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 )
 
@@ -27,17 +29,30 @@ func (s *Server) routes() *route.Table {
 	return s.table
 }
 
-func denyHost(w http.ResponseWriter, r *http.Request, d route.Denial) {
+func (s *Server) denyHost(w http.ResponseWriter, r *http.Request, d route.Denial) {
 	switch d {
 	case route.NoSession, route.NoRole:
 		http.Redirect(w, r, "/host", http.StatusSeeOther)
+	case route.Forbidden:
+		s.renderForbidden(w, r, dopestrings.Default.Host.Forbidden.Note())
 	default:
 		route.DenyAPI(w, r, d)
 	}
 }
 
+// renderForbidden is a 403 a person can read, with the way back to the fest.
+func (s *Server) renderForbidden(w http.ResponseWriter, r *http.Request, note string) {
+	str := dopestrings.Default
+	pages.RenderDocStatus(w, s.h.Engine().AssetETags, &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(
+		dopeui.Title(str.Host.Forbidden.Title()), dopeui.PagePublic,
+		dopeui.Publictopbar(pages.Trail(pages.HostCrumbs(), str.Host.Forbidden.Title())),
+		dopeui.Section(dopeui.Subhead(dopeui.Text(str.Host.Forbidden.Heading())), dopeui.Hint(dopeui.Text(note)),
+			dopeui.Row(dopeui.Button(dopeui.Href("/host/fest/"+r.PathValue("fest")), dopeui.Text(str.Host.Forbidden.OpenFest())))),
+	)}}, http.StatusForbidden)
+}
+
 func (s *Server) buildRoutes() *route.Table {
-	t := route.New(s.h.Engine(), denyHost)
+	t := route.New(s.h.Engine(), s.denyHost)
 	const fest, game = "/host/fest/{fest}", "/host/fest/{fest}/game/{game}"
 	page := func(f func(http.ResponseWriter, *http.Request, int64)) route.Handler {
 		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error { f(w, r, sc.FestID); return nil }

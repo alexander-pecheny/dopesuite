@@ -1,6 +1,7 @@
 package hostpages
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"sort"
@@ -52,6 +53,10 @@ func (s *Server) venueOfRequest(r *http.Request, sc route.Scope) (multifest.Venu
 
 func (s *Server) renderHostVenuePage(w http.ResponseWriter, r *http.Request, sc route.Scope, errMsg, notice string, typed map[int64]string) error {
 	venue, err := s.venueOfRequest(r, sc)
+	if errors.Is(err, route.ErrOtherVenue) {
+		s.renderForbidden(w, r, dopestrings.Default.Host.Forbidden.OtherVenue())
+		return nil
+	}
 	if err != nil {
 		return err
 	}

@@ -7,7 +7,7 @@
 // The flow decisions live in login-model.ts; this file only binds the DOM.
 
 import S from "./i18nstrings.js";
-import { claimOutcome, errorMessage, loginMethods, pollTelegram, tgStartView } from "./login-model";
+import { claimOutcome, errorMessage, loginMethods, loginRedirect, pollTelegram, tgStartView, type Remembered } from "./login-model";
 import { qrcodegen } from "./vendor/qrcodegen";
 
 // How long a copied code shows its "copied" mark.
@@ -60,6 +60,19 @@ const passwordMessage = byId("passwordMessage");
 let code = "";
 let username = "";
 let polling = false;
+
+const NEXT_KEY = "login-next";
+const nextMemory: Remembered = {
+  get: () => { try { return localStorage.getItem(NEXT_KEY); } catch { return null; } },
+  set: (value) => { try { localStorage.setItem(NEXT_KEY, value); } catch { /* private mode */ } },
+  clear: () => { try { localStorage.removeItem(NEXT_KEY); } catch { /* private mode */ } },
+};
+const redirectTarget = loginRedirect(
+  document.querySelector("[data-login-redirect]")?.getAttribute("data-login-redirect") || "/",
+  new URLSearchParams(window.location.search).has("next"),
+  nextMemory,
+  Date.now(),
+);
 
 void bootstrap();
 
@@ -284,8 +297,8 @@ function showStep(name: string): void {
 }
 
 function redirectToHost(): void {
-  const marked = document.querySelector("[data-login-redirect]");
-  window.location.replace(marked?.getAttribute("data-login-redirect") || "/");
+  nextMemory.clear();
+  window.location.replace(redirectTarget);
 }
 
 function sleep(ms: number): Promise<void> {

@@ -40,6 +40,8 @@ not_host = 'у {{.name}} роль не «ведущий», а ограничит
 unknown = 'в фесте нет игры «{{.game}}»'
 # A venue named in venues that this fest does not have (by id or title).
 unknown_venue = 'в фесте нет площадки «{{.venue}}»'
+# A host of a synch fest left with no venue: such a host could open nothing.
+synch_host_needs_venue = 'У {{.name}} не выбрана площадка. На синхроне ведущий всегда ведёт площадку, поэтому выберите её или сделайте {{.name}} админом.'
 
 [invite]
 # Host invite links (ADR-0030, storage/festaccess/gameinvites.go): what a
@@ -54,5 +56,7 @@ broken = "Ссылка не работает."
 not_found = "Такой ссылки нет. Возможно, её удалили вместе с игрой."
 label_too_long = "Название ссылки слишком длинное."
 limits_out_of_range = "Число входов и срок не могут быть меньше нуля, а срок не может быть больше года."
+# A link to a Game of a synch fest, whose hosts each lead a venue.
+synch_game = "На синхроне ведущего приглашают на площадку, а не в игру."
 # A link named by id that belongs to another fest, or a game outside this fest.
 other_fest = "В этом фесте нет такой ссылки."

@@ -485,6 +485,7 @@ export type Strings = {
     };
     games: {
       notHost: (name: string) => string;
+      synchHostNeedsVenue: (name: string) => string;
       unknown: (game: string) => string;
       unknownVenue: (venue: string) => string;
     };
@@ -499,6 +500,7 @@ export type Strings = {
       revoked: () => string;
       scopeName: (game: string, fest: string) => string;
       spent: () => string;
+      synchGame: () => string;
       venueScopeName: (venue: string, fest: string) => string;
     };
     manage: {
@@ -742,6 +744,7 @@ export type Strings = {
       jumpLabel: () => string;
       jumpTitle: () => string;
       kindImportFailed: (err: string) => string;
+      newVenueNone: () => string;
       pageTitle: (title: string) => string;
       publicLabel: () => string;
       ratingExportLink: () => string;
@@ -759,6 +762,13 @@ export type Strings = {
       teamsNumbered: (n: string, numbered: string) => string;
       titleLabel: () => string;
       venuesHint: () => string;
+    };
+    forbidden: {
+      heading: () => string;
+      note: () => string;
+      openFest: () => string;
+      otherVenue: () => string;
+      title: () => string;
     };
     games: {
       brainHint: () => string;
@@ -837,6 +847,7 @@ export type Strings = {
       labelLabel: () => string;
       labelPlaceholder: () => string;
       lead: () => string;
+      leadSynch: () => string;
       leadVenues: () => string;
       revoke: () => string;
       revokeConfirm: () => string;
@@ -855,6 +866,7 @@ export type Strings = {
       usage: (n: string) => string;
       usageLeft: (n: string, left: string) => string;
       usesLabel: () => string;
+      venueLabel: () => string;
       venueOrGameLabel: () => string;
     };
     join: {

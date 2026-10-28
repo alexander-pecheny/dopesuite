@@ -3,9 +3,13 @@ package festaccess
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"dope/dope/platform/roles"
 	"dope/dope/storage/store"
+	dopestrings "dope/i18nstrings"
+
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
 // A host limited to venues of a synch or multi fest (ADR-0032) runs the Games
@@ -63,4 +67,24 @@ where h.fest_id = ? and h.user_id = ? order by v.position, v.id`, []any{festID, 
 		return id, rs.Scan(&id)
 	})
 	return venues, false, err
+}
+
+// CheckSynchHostsTx refuses a synch fest's access with a host who has no
+// venue: such a host can open none of the fest's pages.
+func CheckSynchHostsTx(ctx context.Context, tx *sql.Tx, festID int64) error {
+	var nickname string
+	err := tx.QueryRowContext(ctx, `
+select coalesce(nullif(u.username, ''), nullif(u.telegram_username, ''), 'user-' || u.id) from fests f
+join fest_organizers o on o.fest_id = f.id and o.role = ?
+join users u on u.id = o.user_id
+where f.id = ? and f.kind = 'synch'
+  and not exists (select 1 from fest_venue_hosts h where h.fest_id = f.id and h.user_id = o.user_id)
+order by o.user_id limit 1`, roles.Host, festID).Scan(&nickname)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return corei18n.User(dopestrings.Default.Festaccess.Games.SynchHostNeedsVenue(nickname))
 }

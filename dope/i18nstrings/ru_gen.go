@@ -624,6 +624,9 @@ var RU = Strings{
 			NotHost: func(name string) string {
 				return fmt.Sprintf("у %s роль не «ведущий», а ограничить по играм и площадкам можно только ведущего", name)
 			},
+			SynchHostNeedsVenue: func(name string) string {
+				return fmt.Sprintf("У %s не выбрана площадка. На синхроне ведущий всегда ведёт площадку, поэтому выберите её или сделайте %s админом.", name, name)
+			},
 			Unknown:      func(game string) string { return fmt.Sprintf("в фесте нет игры «%s»", game) },
 			UnknownVenue: func(venue string) string { return fmt.Sprintf("в фесте нет площадки «%s»", venue) },
 		},
@@ -649,6 +652,9 @@ var RU = Strings{
 			ScopeName: func(game string, fest string) string { return fmt.Sprintf("«%s» на фесте «%s»", game, fest) },
 			Spent: func() string {
 				return "Вы уже входили по этой ссылке, а потом вас убрали из доступа. Попросите у организаторов новую ссылку."
+			},
+			SynchGame: func() string {
+				return "На синхроне ведущего приглашают на площадку, а не в игру."
 			},
 			VenueScopeName: func(venue string, fest string) string {
 				return fmt.Sprintf("площадку «%s» на фесте «%s»", venue, fest)
@@ -993,6 +999,7 @@ var RU = Strings{
 			KindImportFailed: func(err string) string {
 				return fmt.Sprintf("Тип турнира поменян, но площадки с rating.chgk.info не загрузились: %s Загрузите команды на странице «Команды».", err)
 			},
+			NewVenueNone:      func() string { return "Площадка ведущего" },
 			PageTitle:         func(title string) string { return fmt.Sprintf("%s · ведущий", title) },
 			PublicLabel:       func() string { return "Публичный" },
 			RatingExportLink:  func() string { return "Выгрузить на турнирный сайт" },
@@ -1014,6 +1021,17 @@ var RU = Strings{
 			VenuesHint: func() string {
 				return "Ведущий площадки ведёт её игры и правит её команды и номера."
 			},
+		},
+		Forbidden: HostForbiddenStrings{
+			Heading: func() string { return "У вас нет доступа к этой странице" },
+			Note: func() string {
+				return "Если вы ведёте площадку, откройте ссылку-приглашение от организаторов и нажмите «Стать ведущим». Если вы уже это сделали, попросите организаторов выбрать вам площадку в разделе «Доступ»."
+			},
+			OpenFest: func() string { return "Открыть фест" },
+			OtherVenue: func() string {
+				return "Эту площадку ведёт другой ведущий. Ваша площадка открывается со страницы феста."
+			},
+			Title: func() string { return "Нет доступа" },
 		},
 		Games: HostGamesStrings{
 			BrainHint: func() string {
@@ -1140,6 +1158,9 @@ var RU = Strings{
 			Lead: func() string {
 				return "Кто перейдёт по ссылке, станет ведущим одной игры. Остальные игры феста он будет видеть как зритель. Например, сделайте по ссылке на каждую городскую игру и отправьте их организаторам площадок."
 			},
+			LeadSynch: func() string {
+				return "Кто перейдёт по ссылке на площадку, станет её ведущим: будет вносить ответы её команд и править её команды и номера. Остальное ведущий видит как зритель. У каждой площадки уже есть своя ссылка. Отправьте её ведущему этой площадки."
+			},
 			LeadVenues: func() string {
 				return "Кто перейдёт по ссылке на площадку, станет её ведущим: будет вести её игры и править её команды и номера. По ссылке на игру можно вести только эту игру. Остальное ведущий видит как зритель. У каждой площадки уже есть своя ссылка. Отправьте её организаторам этой площадки."
 			},
@@ -1168,6 +1189,7 @@ var RU = Strings{
 			UsesLabel: func() string {
 				return "Сколько человек может войти (пусто — сколько угодно)"
 			},
+			VenueLabel:       func() string { return "Площадка" },
 			VenueOrGameLabel: func() string { return "Площадка или игра" },
 		},
 		Join: HostJoinStrings{

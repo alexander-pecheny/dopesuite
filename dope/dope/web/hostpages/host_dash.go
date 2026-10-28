@@ -259,9 +259,9 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 	}
 	rows = append(rows, dopeui.Trow(
 		dopeui.Cell(dopeui.Textfield(dopeui.Name("new_nickname"), dopeui.Placeholder("nickname"))),
-		dopeui.Cell(dopeui.Selectfield(dopeui.Name("new_role"),
+		dopeui.Cell(dopeui.Col(dopeui.SpaceSM, dopeui.Selectfield(dopeui.Name("new_role"),
 			dopeui.Option(dopeui.Value("host"), dopeui.Text("host")),
-			dopeui.Option(dopeui.Value("admin"), dopeui.Text("admin")))),
+			dopeui.Option(dopeui.Value("admin"), dopeui.Text("admin"))), newHostVenue(data))),
 		dopeui.Cell(dopeui.Button(dopeui.Submit(), dopeui.Name("add_access"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.AddBtn()))),
 	))
 	sect = append(sect,
@@ -270,6 +270,20 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 		),
 	)
 	return dopeui.Section(sect...)
+}
+
+// newHostVenue picks the venue a host added to a synch fest leads, since
+// such a host without one could open nothing.
+func newHostVenue(data hostFestDashData) dopeui.Item {
+	if data.Kind != multifest.Synch || len(data.MultiFestVenues) == 0 {
+		return dopeui.Col()
+	}
+	options := []dopeui.Item{dopeui.Name("new_venue"),
+		dopeui.Option(dopeui.Value(""), dopeui.Text(dopestrings.Default.Host.Dash.NewVenueNone()))}
+	for _, v := range data.MultiFestVenues {
+		options = append(options, dopeui.Option(dopeui.Value(idstr.Format(v.ID)), dopeui.Text(v.Title)))
+	}
+	return dopeui.Selectfield(options...)
 }
 
 // hostGames is a member's Games and venues: an admin or the creator runs all
@@ -598,7 +612,10 @@ func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, fe
 // recorded as fest:access.
 func (s *Server) saveAccess(ctx context.Context, festID int64, write func(ctx context.Context, tx *sql.Tx) error) error {
 	_, err := s.commit(ctx, festID, "fest-access", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
-		return core.FestWrite{Event: "fest:access"}, write(ctx, tx)
+		if err := write(ctx, tx); err != nil {
+			return core.FestWrite{}, err
+		}
+		return core.FestWrite{Event: "fest:access"}, festaccess.CheckSynchHostsTx(ctx, tx, festID)
 	})
 	return err
 }

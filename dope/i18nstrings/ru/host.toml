@@ -415,6 +415,9 @@ col_venues = "Площадки"
 venues_hint = "Ведущий площадки ведёт её игры и правит её команды и номера."
 delete_access_confirm = 'Удалить доступ для {{.name}}?'
 add_btn = "Добавить"
+# The add row's venue select on a synch fest, where a host needs one; its
+# empty option is for an admin.
+new_venue_none = "Площадка ведущего"
 # The participants links: subhead and list rows.
 roster_subhead = "Участники"
 roster_teams_link = "Команды"
@@ -486,7 +489,10 @@ subhead = "Ссылки для ведущих"
 lead = "Кто перейдёт по ссылке, станет ведущим одной игры. Остальные игры феста он будет видеть как зритель. Например, сделайте по ссылке на каждую городскую игру и отправьте их организаторам площадок."
 # The lead in a fest with venues (ADR-0032).
 lead_venues = "Кто перейдёт по ссылке на площадку, станет её ведущим: будет вести её игры и править её команды и номера. По ссылке на игру можно вести только эту игру. Остальное ведущий видит как зритель. У каждой площадки уже есть своя ссылка. Отправьте её организаторам этой площадки."
+# The lead on a synch fest, whose hosts are invited to a venue only.
+lead_synch = "Кто перейдёт по ссылке на площадку, станет её ведущим: будет вносить ответы её команд и править её команды и номера. Остальное ведущий видит как зритель. У каждой площадки уже есть своя ссылка. Отправьте её ведущему этой площадки."
 game_label = "Игра"
+venue_label = "Площадка"
 venue_or_game_label = "Площадка или игра"
 label_label = "Название"
 label_placeholder = "например, «Минск»"
@@ -531,6 +537,16 @@ member_heading = 'Вы уже ведёте {{.scope}}'
 open_game = "Открыть игру"
 open_fest = "Открыть фест"
 refused_heading = "Ссылка не работает"
+
+[forbidden]
+# The page a /host/ address answers with 403: a member of the fest whose role
+# does not reach it, such as a host of a synch fest without a venue.
+title = "Нет доступа"
+heading = "У вас нет доступа к этой странице"
+note = "Если вы ведёте площадку, откройте ссылку-приглашение от организаторов и нажмите «Стать ведущим». Если вы уже это сделали, попросите организаторов выбрать вам площадку в разделе «Доступ»."
+# A venue host opening another venue's page.
+other_venue = "Эту площадку ведёт другой ведущий. Ваша площадка открывается со страницы феста."
+open_fest = "Открыть фест"
 
 [pages]
 # The host landing (/host), the profile page (/profile) and the two public

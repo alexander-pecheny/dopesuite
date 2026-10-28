@@ -228,6 +228,9 @@ func SaveFestAccessTx(ctx context.Context, tx *sql.Tx, festID, actorID int64, fo
 		if err := applyFestAccessMemberTx(ctx, tx, festID, creatorID, userID, current[userID], role, false, now); err != nil {
 			return err
 		}
+		if venue := formIDs([]string{form.Get("new_venue")}); role == roles.Host && len(venue) > 0 {
+			return setHostVenuesTx(ctx, tx, festID, userID, venue)
+		}
 	}
 	return nil
 }

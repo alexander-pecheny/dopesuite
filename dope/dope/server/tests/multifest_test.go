@@ -383,8 +383,9 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	if !strings.Contains(body, "Альфа") || !strings.Contains(body, "Бета") || strings.Contains(body, "Гамма") {
 		t.Fatalf("the venue page shows the wrong teams: %s", body)
 	}
-	if resp := page(http.MethodGet, fmt.Sprintf("/host/fest/sync/venue/%d", brestID), nil); resp.Code != http.StatusForbidden {
-		t.Fatalf("the venue host opened another venue's page: %d", resp.Code)
+	if resp := page(http.MethodGet, fmt.Sprintf("/host/fest/sync/venue/%d", brestID), nil); resp.Code != http.StatusForbidden ||
+		!strings.Contains(resp.Body.String(), "Эту площадку ведёт другой ведущий") {
+		t.Fatalf("the venue host opened another venue's page: %d %s", resp.Code, resp.Body.String())
 	}
 
 	var alfa, beta int64
@@ -406,6 +407,75 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	db.QueryRow(`select venue_number from fest_teams where id = ?`, beta).Scan(&b)
 	if a.Int64 != 7 || b.Valid {
 		t.Fatalf("the venue numbers are %v and %v; want 7 and none", a, b)
+	}
+}
+
+// A host of a synch fest always leads a venue: access without one is refused,
+// and a host left without one, as before this rule, is told how to get one.
+func TestASynchFestHostAlwaysLeadsAVenue(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, slug, revision, created_at, updated_at, kind) values('Синхрон', 'sync', 1, '2026-10-28', '2026-10-28', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	teams := []roster.FestRosterImportTeam{{RatingID: 1, Name: "Альфа", Venue: multifest.RatingVenue{ID: 10, Title: "Минск"},
+		Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "Альфа", LastName: "Капитан"}}}}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var minskID int64
+	db.QueryRow(`select id from multifest_venues where fest_id = ?`, festID).Scan(&minskID)
+	adminID, adminToken := createAPITestSession(t, srv, "boss")
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	strayID, _ := createAPITestSession(t, srv, "stray")
+	createAPITestSession(t, srv, "minsk")
+	createAPITestSession(t, srv, "helper")
+	access := func(change map[string]any) *httptest.ResponseRecorder {
+		t.Helper()
+		return scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/%d/access", festID), map[string]any{"changes": []any{change}}, adminToken)
+	}
+	if resp := access(map[string]any{"user": "minsk", "role": "host"}); resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), "У minsk не выбрана площадка") {
+		t.Fatalf("a host without a venue was let in: %d %s", resp.Code, resp.Body.String())
+	}
+	if resp := access(map[string]any{"user": "minsk", "role": "host", "multifest_venues": []string{"Минск"}}); resp.Code != http.StatusOK {
+		t.Fatalf("a host with a venue: %d %s", resp.Code, resp.Body.String())
+	}
+	if resp := access(map[string]any{"user": "helper", "role": "admin"}); resp.Code != http.StatusOK {
+		t.Fatalf("an admin: %d %s", resp.Code, resp.Body.String())
+	}
+
+	page := func(userID int64, method, path string, form url.Values) *httptest.ResponseRecorder {
+		t.Helper()
+		var body io.Reader
+		if form != nil {
+			body = strings.NewReader(form.Encode())
+		}
+		req := httptest.NewRequest(method, path, body)
+		if form != nil {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: createTestSession(t, srv, userID)})
+		resp := httptest.NewRecorder()
+		srv.HostPageServer().HandleHostRouter(resp, req)
+		return resp
+	}
+	add := url.Values{"add_access": {"1"}, "new_nickname": {"stray"}, "new_role": {"host"}, "new_venue": {fmt.Sprint(minskID)}}
+	page(adminID, http.MethodPost, "/host/fest/sync/access", add)
+	var venues int
+	db.QueryRow(`select count(*) from fest_venue_hosts where fest_id = ? and user_id = ?`, festID, strayID).Scan(&venues)
+	if venues != 1 {
+		t.Fatalf("the dashboard added a host with %d venues; want 1", venues)
+	}
+
+	if _, err := db.Exec(`delete from fest_venue_hosts where user_id = ?`, strayID); err != nil {
+		t.Fatal(err)
+	}
+	resp := page(strayID, http.MethodGet, fmt.Sprintf("/host/fest/sync/venue/%d", minskID), nil)
+	if resp.Code != http.StatusForbidden || !strings.Contains(resp.Body.String(), "ссылку-приглашение") {
+		t.Fatalf("a host without a venue: %d %s", resp.Code, resp.Body.String())
 	}
 }
 

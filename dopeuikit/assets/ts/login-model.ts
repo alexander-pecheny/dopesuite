@@ -111,3 +111,30 @@ export function claimOutcome(status: string | undefined): ClaimOutcome {
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+// A destination the visitor asked for (/login?next=…) survives a plain /login
+// opened later, for an hour: someone stuck on the username step who starts
+// over from /login still lands on the invite they came from.
+const REMEMBERED_NEXT_MS = 60 * 60 * 1000;
+
+export interface Remembered {
+  get(): string | null;
+  set(value: string): void;
+  clear(): void;
+}
+
+// The page's own destination when the URL asked for one, else a remembered
+// one that is still fresh, else the page's default.
+export function loginRedirect(pageTarget: string, asked: boolean, memory: Remembered, now: number): string {
+  if (asked) {
+    memory.set(JSON.stringify({ to: pageTarget, at: now }));
+    return pageTarget;
+  }
+  try {
+    const kept = JSON.parse(memory.get() || "null") as { to?: string; at?: number } | null;
+    if (kept?.to && typeof kept.at === "number" && now - kept.at < REMEMBERED_NEXT_MS) return kept.to;
+  } catch {
+    // a corrupt entry is as good as none
+  }
+  return pageTarget;
+}

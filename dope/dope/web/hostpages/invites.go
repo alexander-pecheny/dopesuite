@@ -105,6 +105,11 @@ func (s *Server) loadFestInvites(ctx context.Context, festID int64, origin strin
 
 // MintGameInvite makes a link to one Game of the fest.
 func (s *Server) MintGameInvite(ctx context.Context, festID, gameID, userID int64, req invitelink.MintRequest) error {
+	if kind, err := multifest.FestKind(ctx, s.h.Engine().DB, festID); err != nil {
+		return err
+	} else if kind == multifest.Synch {
+		return route.BadRequest(dopestrings.Default.Festaccess.Invite.SynchGame())
+	}
 	return s.mintInvite(ctx, gameInvites, festID, gameID, userID, req)
 }
 
@@ -275,8 +280,12 @@ func (s *Server) renderInviteMessage(w http.ResponseWriter, r *http.Request, fes
 
 func hostDashInvitesSection(data hostFestDashData, ref string) *dopeui.Element {
 	s := dopestrings.Default
+	synch := data.Kind == multifest.Synch
 	lead := s.Host.Invites.Lead()
-	if len(data.MultiFestVenues) > 0 {
+	switch {
+	case synch:
+		lead = s.Host.Invites.LeadSynch()
+	case len(data.MultiFestVenues) > 0:
 		lead = s.Host.Invites.LeadVenues()
 	}
 	sect := []dopeui.Item{dopeui.ID("invites"), dopeui.Subhead(dopeui.Text(s.Host.Invites.Subhead())), dopeui.Hint(dopeui.Text(lead))}
@@ -301,15 +310,18 @@ func hostDashInvitesSection(data hostFestDashData, ref string) *dopeui.Element {
 	}
 	opens := []dopeui.Item{dopeui.Name("opens")}
 	opensLabel := s.Host.Invites.GameLabel()
-	if len(data.MultiFestVenues) > 0 {
+	switch {
+	case synch:
+		opensLabel = s.Host.Invites.VenueLabel()
+	case len(data.MultiFestVenues) > 0:
 		opensLabel = s.Host.Invites.VenueOrGameLabel()
 	}
 	for _, v := range data.MultiFestVenues {
 		opens = append(opens, dopeui.Option(dopeui.Value(opensVenue+idstr.Format(v.ID)), dopeui.Text(v.Label())))
 	}
 	for _, g := range data.Games {
-		if g.MultiFestVenueID > 0 {
-			// A venue's link opens its Games too.
+		if g.MultiFestVenueID > 0 || synch {
+			// A venue's link opens its Games too, and a synch fest invites to venues alone.
 			continue
 		}
 		opens = append(opens, dopeui.Option(dopeui.Value(opensGame+idstr.Format(g.ID)), dopeui.Text(g.Title)))
