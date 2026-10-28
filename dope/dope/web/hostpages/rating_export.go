@@ -384,7 +384,7 @@ func exportReportSection(report ratingexport.Report, tournament int64, back stri
 		items = append(items, dopeui.Muted(dopeui.Text(w)))
 	}
 	items = append(items, dopeui.Row(
-		dopeui.Button(dopeui.Href(fmt.Sprintf(ratingexport.TournamentPage, tournament)), dopeui.Newtab(), dopeui.Text(s.Host.RatingExport.OpenTournament())),
+		dopeui.Button(dopeui.Href(fmt.Sprintf(ratingexport.TournamentPage, tournament)), dopeui.Text(s.Host.RatingExport.OpenTournament())),
 		dopeui.Button(dopeui.Href(back), dopeui.Text(s.Host.RatingExport.BackToPreview()))))
 	return dopeui.Section(items...)
 }

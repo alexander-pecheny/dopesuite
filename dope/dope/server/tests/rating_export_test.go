@@ -218,4 +218,12 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Минский") {
 		t.Fatalf("the page: %d", page.Code)
 	}
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/rating/export", festID), strings.NewReader(fmt.Sprintf("game=%d", gameID)))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+	page = httptest.NewRecorder()
+	srv.HostPageServer().HandleHostRouter(page, req)
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "rating.chgk.info/tournament/555") {
+		t.Fatalf("the page after a send: %d %s", page.Code, page.Body)
+	}
 }
