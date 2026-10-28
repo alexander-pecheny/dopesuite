@@ -381,31 +381,32 @@ function openTeamDialog(api: string, team: TeamDetail, pageVenue: number): void 
   unratedRow.append(unratedButton, unratedHint);
 
   // The base-roster button: the rating team's base roster, added to the list as a
-  // start the host then trims or extends.
+  // start the host then trims or extends. A team without one gets no button.
   const baseRow = document.createElement("div");
   baseRow.className = "u-row";
   const drawBaseButton = () => {
     baseRow.replaceChildren();
     if (!ratingTeam) return;
-    const base = document.createElement("button");
-    base.type = "button";
-    base.className = "btn btn-ghost";
-    base.textContent = S.fest.teamEdit.baseRoster();
-    const teamID = ratingTeam.rating_id;
-    base.addEventListener("click", () => {
-      base.disabled = true;
-      void request(`${api}/rating/teams/${teamID}/base`, "GET").then((answer) => {
-        base.disabled = false;
-        if (!answer.ok) {
-          fail(S.fest.teamEdit.baseRosterFailed());
-          return;
-        }
+    const team = ratingTeam;
+    void request(`${api}/rating/teams/${team.rating_id}/base`, "GET").then((answer) => {
+      if (ratingTeam !== team) return;
+      if (!answer.ok) {
+        fail(S.fest.teamEdit.baseRosterFailed());
+        return;
+      }
+      const players = (answer.data as {players: TeamPlayer[]}).players || [];
+      if (players.length === 0) return;
+      const base = document.createElement("button");
+      base.type = "button";
+      base.className = "btn btn-ghost";
+      base.textContent = S.fest.teamEdit.baseRoster();
+      base.addEventListener("click", () => {
         error.hidden = true;
-        for (const p of (answer.data as {players: TeamPlayer[]}).players || []) push(p);
+        for (const p of players) push(p);
         drawList();
       });
+      baseRow.replaceChildren(base);
     });
-    baseRow.appendChild(base);
   };
   drawBaseButton();
 
