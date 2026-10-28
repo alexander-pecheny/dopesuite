@@ -630,6 +630,12 @@ func (s *Server) renderHostFestTeams(w http.ResponseWriter, r *http.Request, sc 
 		http.Redirect(w, r, venuePageURL(r.PathValue("fest"), venue), http.StatusSeeOther)
 		return
 	}
+	if synch, err := s.isSynch(r, sc); err != nil || synch {
+		if err := s.toVenues(w, r, err); err != nil {
+			route.WriteError(w, r, err)
+		}
+		return
+	}
 	s.renderHostFestTeamsWithMessage(w, r, sc, "", "")
 }
 

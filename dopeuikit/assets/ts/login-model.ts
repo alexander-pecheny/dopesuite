@@ -4,9 +4,9 @@
 
 import S from "./i18nstrings.js";
 
-// The bot gets three minutes to answer: 120 polls, 1.5 s apart.
-const TG_POLL_ATTEMPTS = 120;
+// The bot gets as long to answer as the server keeps the code, ten minutes.
 const TG_POLL_INTERVAL_MS = 1500;
+const TG_POLL_ATTEMPTS = (10 * 60 * 1000) / TG_POLL_INTERVAL_MS;
 
 export type LoginStep = "method" | "code" | "username" | "link" | "password";
 

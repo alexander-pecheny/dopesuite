@@ -408,6 +408,14 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	if a.Int64 != 7 || b.Valid {
 		t.Fatalf("the venue numbers are %v and %v; want 7 and none", a, b)
 	}
+	// A team taken off the roster before removal freed its number keeps it in
+	// the table; its number goes to a team still playing.
+	if _, err := db.Exec(`update fest_teams set deleted = 1, venue_number = 3 where id = ?`, beta); err != nil {
+		t.Fatal(err)
+	}
+	if resp := page(http.MethodPost, minskPage+"/numbers", url.Values{fmt.Sprintf("number_%d", alfa): {"3"}}); resp.Code != http.StatusSeeOther {
+		t.Fatalf("a removed team's number blocked the save: %d %s", resp.Code, resp.Body.String())
+	}
 }
 
 // A host of a synch fest always leads a venue: access without one is refused,
@@ -461,6 +469,12 @@ func TestASynchFestHostAlwaysLeadsAVenue(t *testing.T) {
 		resp := httptest.NewRecorder()
 		srv.HostPageServer().HandleHostRouter(resp, req)
 		return resp
+	}
+	// A synch fest's teams and numbers are on its venues' pages.
+	for _, path := range []string{"/teams", "/players", "/troikas"} {
+		if resp := page(adminID, http.MethodGet, "/host/fest/sync"+path, nil); resp.Code != http.StatusSeeOther || resp.Header().Get("Location") != "/host/fest/sync#venues" {
+			t.Fatalf("%s on a synch fest answers %d to %q", path, resp.Code, resp.Header().Get("Location"))
+		}
 	}
 	add := url.Values{"add_access": {"1"}, "new_nickname": {"stray"}, "new_role": {"host"}, "new_venue": {fmt.Sprint(minskID)}}
 	page(adminID, http.MethodPost, "/host/fest/sync/access", add)

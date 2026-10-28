@@ -6,6 +6,7 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
+	"dope/dope/domain/multifest"
 	"dope/dope/storage/festaccess"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
@@ -40,6 +41,35 @@ func (s *Server) denyHost(w http.ResponseWriter, r *http.Request, d route.Denial
 	}
 }
 
+// isSynch says whether the request's fest is a synch fest, whose teams and
+// numbers live on its venues' pages and which has no use for the regular
+// fest's teams, numbers, players and troikas pages.
+func (s *Server) isSynch(r *http.Request, sc route.Scope) (bool, error) {
+	kind, err := multifest.FestKind(r.Context(), s.h.Engine().DB, sc.FestID)
+	return kind == multifest.Synch, err
+}
+
+// toVenues sends a synch fest's visitor to the dashboard's venues.
+func (s *Server) toVenues(w http.ResponseWriter, r *http.Request, err error) error {
+	if err != nil {
+		return err
+	}
+	http.Redirect(w, r, "/host/fest/"+r.PathValue("fest")+"#venues", http.StatusSeeOther)
+	return nil
+}
+
+// notSynch serves a regular fest's page, and sends a synch fest's visitor to
+// its venues.
+func (s *Server) notSynch(f func(http.ResponseWriter, *http.Request, route.Scope)) route.Handler {
+	return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+		if synch, err := s.isSynch(r, sc); err != nil || synch {
+			return s.toVenues(w, r, err)
+		}
+		f(w, r, sc)
+		return nil
+	}
+}
+
 // renderForbidden is a 403 a person can read, with the way back to the fest.
 func (s *Server) renderForbidden(w http.ResponseWriter, r *http.Request, note string) {
 	str := dopestrings.Default
@@ -56,6 +86,9 @@ func (s *Server) buildRoutes() *route.Table {
 	const fest, game = "/host/fest/{fest}", "/host/fest/{fest}/game/{game}"
 	page := func(f func(http.ResponseWriter, *http.Request, int64)) route.Handler {
 		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error { f(w, r, sc.FestID); return nil }
+	}
+	pageScoped := func(f func(http.ResponseWriter, *http.Request, int64)) func(http.ResponseWriter, *http.Request, route.Scope) {
+		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) { f(w, r, sc.FestID) }
 	}
 	scoped := func(f func(http.ResponseWriter, *http.Request, route.Scope)) route.Handler {
 		return func(w http.ResponseWriter, r *http.Request, sc route.Scope) error { f(w, r, sc); return nil }
@@ -92,8 +125,8 @@ func (s *Server) buildRoutes() *route.Table {
 		return s.renderHostVenuePage(w, r, sc, "", notice, nil)
 	})
 	t.Handle("POST "+fest+"/venue/{venue}/numbers", route.Roster, s.handleHostSaveVenueNumbers)
-	t.Handle("GET "+fest+"/players", route.Manager, page(s.renderHostFestPlayers))
-	t.Handle("GET "+fest+"/troikas", route.Manager, page(s.renderHostFestTroikas))
+	t.Handle("GET "+fest+"/players", route.Manager, s.notSynch(pageScoped(s.renderHostFestPlayers)))
+	t.Handle("GET "+fest+"/troikas", route.Manager, s.notSynch(pageScoped(s.renderHostFestTroikas)))
 	t.Handle("POST "+fest+"/troikas", route.Manager, page(s.handleHostSaveTroikas))
 	t.Handle("POST "+fest+"/players/overrides", route.Manager, page(s.handleHostAddPlayerOverride))
 	t.Handle("POST "+fest+"/access", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -125,14 +158,17 @@ func (s *Server) buildRoutes() *route.Table {
 			http.Redirect(w, r, venuePageURL(r.PathValue("fest"), venue), http.StatusSeeOther)
 			return nil
 		}
+		if synch, err := s.isSynch(r, sc); err != nil || synch {
+			return s.toVenues(w, r, err)
+		}
 		s.pages().RenderHostFestNumbers(w, r, sc, "", "", nil)
 		return nil
 	})
-	t.Handle("POST "+fest+"/numbers", route.Roster, scoped(s.pages().HandleHostSaveFestNumbers))
-	t.Handle("POST "+fest+"/numbers/auto", route.Roster, scoped(s.pages().HandleHostAutoFestNumbers))
-	t.Handle("POST "+fest+"/numbers/clear", route.Roster, scoped(s.pages().HandleHostClearFestNumbers))
-	t.Handle("POST "+fest+"/numbers/import/match", route.Roster, scoped(s.pages().HandleHostFestNumbersImportMatch))
-	t.Handle("POST "+fest+"/numbers/import/apply", route.Roster, scoped(s.pages().HandleHostFestNumbersImportApply))
+	t.Handle("POST "+fest+"/numbers", route.Roster, s.notSynch(s.pages().HandleHostSaveFestNumbers))
+	t.Handle("POST "+fest+"/numbers/auto", route.Roster, s.notSynch(s.pages().HandleHostAutoFestNumbers))
+	t.Handle("POST "+fest+"/numbers/clear", route.Roster, s.notSynch(s.pages().HandleHostClearFestNumbers))
+	t.Handle("POST "+fest+"/numbers/import/match", route.Roster, s.notSynch(s.pages().HandleHostFestNumbersImportMatch))
+	t.Handle("POST "+fest+"/numbers/import/apply", route.Roster, s.notSynch(s.pages().HandleHostFestNumbersImportApply))
 	t.Handle("GET "+fest+"/rating/import", route.Manager, page(func(w http.ResponseWriter, r *http.Request, id int64) { s.renderHostRatingImportPage(w, r, id, "", "") }))
 	t.Handle("POST "+fest+"/rating/import", route.Manager, page(s.handleHostImportRatingRoster))
 	t.Handle("POST "+fest+"/rating/undo", route.Manager, page(s.handleHostUndoRatingImport))

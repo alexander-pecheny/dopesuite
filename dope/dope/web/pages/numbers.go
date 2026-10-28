@@ -426,7 +426,7 @@ func (s *Server) SaveFestNumbers(reqCtx context.Context, festID, multiFestVenueI
 			}
 		}
 
-		if _, err := tx.ExecContext(ctx, `update fest_teams set `+column+` = null where `+scope+` and deleted = 0`, args...); err != nil {
+		if _, err := tx.ExecContext(ctx, `update fest_teams set `+column+` = null where `+scope, args...); err != nil {
 			return core.FestWrite{}, err
 		}
 		for teamID, number := range assignments {

@@ -35,7 +35,7 @@ export const EN: Strings = {
       botHintLead: () => "If the link does not open, write to the bot ",
       botHintMid: () => " and send it the code ",
       linkHint: () => "Follow this link to log in:",
-      qrHint: () => "Or point your phone camera at the QR code:",
+      qrHint: () => "Or point your phone's regular camera at the QR code. The scanner inside Telegram cannot read it.",
       waiting: () => "Waiting for the bot to confirm…",
     },
     field: {

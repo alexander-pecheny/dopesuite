@@ -42,12 +42,12 @@ test("a restarted code goes stale without a message", async () => {
   assert.deepEqual(outcome, {kind: "stale"});
 });
 
-test("poll times out after 120 attempts with a message", async () => {
-  const statuses = Array.from({length: 200}, () => "pending");
+test("poll times out after ten minutes of attempts with a message", async () => {
+  const statuses = Array.from({length: 500}, () => "pending");
   const outcome = await pollTelegram("c", () => true, pollDeps(statuses));
   assert.equal(outcome.kind, "message");
   assert.match(outcome.text, /Время ожидания/);
-  assert.equal(statuses.length, 200 - 120);
+  assert.equal(statuses.length, 500 - 400);
 });
 
 test("claim outcomes map every server status", () => {

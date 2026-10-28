@@ -359,10 +359,14 @@ func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
 	if data.TeamCount > 0 && len(data.MultiFestVenues) == 0 {
 		teams = s.Host.Dash.TeamsNumbered(teams, strconv.Itoa(data.NumbersAssigned))
 	}
-	rows := []dopeui.Item{
-		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTeamsLink())), dopeui.Muted(dopeui.Text(teams))),
-		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/players"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterPlayersLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.PlayerCount)))),
-		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/troikas"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTroikasLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TroikaCount)))),
+	var rows []dopeui.Item
+	// A synch fest's teams and numbers are on its venues' pages.
+	if data.Kind != multifest.Synch {
+		rows = append(rows,
+			dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTeamsLink())), dopeui.Muted(dopeui.Text(teams))),
+			dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/players"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterPlayersLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.PlayerCount)))),
+			dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/troikas"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTroikasLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TroikaCount)))),
+		)
 	}
 	ratingStatus := s.Host.Dash.RatingStatusNone()
 	if data.RatingID != 0 {

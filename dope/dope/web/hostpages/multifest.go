@@ -132,8 +132,11 @@ func hostDashVenuesSection(data hostFestDashData, ref string) *dopeui.Element {
 		}
 		rows = append(rows, dopeui.Actionrow(dopeui.Rowlink(dopeui.Href(venuePageURL(ref, venue.ID)),
 			dopeui.Listtitle(dopeui.Text(venue.Label())), dopeui.Muted(dopeui.Text(facts)))))
+		// A synch fest plays its Games across the venues, none on one.
 		for _, g := range venue.Games {
-			rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames, g.Type))
+			if data.Kind != multifest.Synch {
+				rows = append(rows, hostDashGameRow(g, ref, data.CanManageGames, g.Type))
+			}
 		}
 	}
 	return dopeui.Section(dopeui.ID("venues"), dopeui.Subhead(dopeui.Text(s.Host.Multifest.Subhead())), dopeui.Actionlist(rows...))

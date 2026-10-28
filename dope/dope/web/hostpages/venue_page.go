@@ -76,15 +76,15 @@ func (s *Server) renderHostVenuePage(w http.ResponseWriter, r *http.Request, sc 
 		if err != nil {
 			return nil, err
 		}
-		// The venue plays its own Games and, in a synch fest, its sheet of the
-		// fest's Games, which open on that sheet.
+		// A venue of a synch fest plays its sheet of the fest's Games, which
+		// open on that sheet; a venue of a multi fest plays its own Games.
 		kind, err := multifest.FestKind(r.Context(), s.h.Engine().DB, sc.FestID)
 		if err != nil {
 			return nil, err
 		}
 		synch := kind == multifest.Synch
 		for _, g := range rows {
-			if g.MultiFestVenueID == venue.ID || synch && g.MultiFestVenueID == 0 {
+			if synch && g.MultiFestVenueID == 0 || !synch && g.MultiFestVenueID == venue.ID {
 				data.Games = append(data.Games, PublicFestGame{ID: g.ID, Slug: g.Slug, Title: g.Title, Type: g.Type, MultiFestVenueID: g.MultiFestVenueID})
 			}
 		}

@@ -15,8 +15,10 @@ const (
 	CookieName = "session"
 	// Lifetime is how long a session (and its cookie) stays valid.
 	Lifetime = 30 * 24 * time.Hour
-	// TelegramAuthLifetime bounds a telegram login/register code's validity.
-	TelegramAuthLifetime = time.Minute
+	// TelegramAuthLifetime bounds a telegram login/register code's validity,
+	// through the username step: a minute was too short to find a phone's
+	// camera for the QR and then pick a username.
+	TelegramAuthLifetime = 10 * time.Minute
 )
 
 // ProdEnvVar names the environment variable consulted by SecureCookies. Each app

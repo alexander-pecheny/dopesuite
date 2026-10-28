@@ -11,6 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // memUsers is an app's users table in a map: enough to drive the state machine
@@ -241,9 +242,9 @@ func TestResolveStates(t *testing.T) {
 		if consumed {
 			f.bot(code, 555, "tg_alice")
 		}
-		f.now = f.now.Add(2 * time.Minute)
+		f.now = f.now.Add(session.TelegramAuthLifetime + time.Minute)
 		want(t, f.resolve(code), Expired, "")
-		f.now = f.now.Add(-2 * time.Minute)
+		f.now = f.now.Add(-session.TelegramAuthLifetime - time.Minute)
 	}
 }
 
@@ -264,7 +265,7 @@ func TestClaimRefusesAnExpiredConsumedCode(t *testing.T) {
 	f := newFixture(t)
 	code := f.start()
 	f.bot(code, 710, "tg")
-	f.now = f.now.Add(2 * time.Minute)
+	f.now = f.now.Add(session.TelegramAuthLifetime + time.Minute)
 	if _, err := f.claim(strings.ToLower(code), "late", ""); !errors.Is(err, ErrCodeNotFound) {
 		t.Fatalf("err = %v", err)
 	}
@@ -276,7 +277,7 @@ func TestClaimRefusesAnExpiredConsumedCode(t *testing.T) {
 func TestStartReapsLapsedCodes(t *testing.T) {
 	f := newFixture(t)
 	old := f.start()
-	f.now = f.now.Add(2 * time.Minute)
+	f.now = f.now.Add(session.TelegramAuthLifetime + time.Minute)
 	f.start()
 	var n int
 	f.db.QueryRow(`select count(*) from telegram_login_codes where code = ?`, old).Scan(&n)
@@ -473,7 +474,7 @@ func TestLinkRefusesALapsedCodeEvenOnceTheBotHasAnswered(t *testing.T) {
 	uid := f.users.add("pecheny", "hash")
 	code := f.start()
 	f.bot(code, 904, "late_tg")
-	f.now = f.now.Add(2 * time.Minute)
+	f.now = f.now.Add(session.TelegramAuthLifetime + time.Minute)
 
 	out, err := f.link(code, uid)
 	if err != nil {
