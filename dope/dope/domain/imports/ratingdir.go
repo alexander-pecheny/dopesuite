@@ -297,6 +297,7 @@ const requestAccepted = "A"
 // the site has accepted. They are known well before the teams are.
 func FetchRatingVenues(ctx context.Context, ratingID int64) ([]multifest.RatingVenue, error) {
 	var requests []struct {
+		ID     int64  `json:"id"`
 		Status string `json:"status"`
 		Venue  struct {
 			ID   int64       `json:"id"`
@@ -313,8 +314,8 @@ func FetchRatingVenues(ctx context.Context, ratingID int64) ([]multifest.RatingV
 	}
 	var venues []multifest.RatingVenue
 	for _, r := range requests {
-		if r.Status == requestAccepted && r.Venue.ID > 0 {
-			venue := multifest.RatingVenue{ID: r.Venue.ID, Title: strings.TrimSpace(r.Venue.Name), Town: ratingTownName(r.Venue.Town)}
+		if r.Status == requestAccepted && r.ID > 0 && r.Venue.ID > 0 {
+			venue := multifest.RatingVenue{ID: r.Venue.ID, Request: r.ID, Title: strings.TrimSpace(r.Venue.Name), Town: ratingTownName(r.Venue.Town)}
 			if p := r.Representative; p != nil {
 				venue.Representative = strings.TrimSpace(strings.TrimSpace(p.Surname) + " " + strings.TrimSpace(p.Name))
 			}

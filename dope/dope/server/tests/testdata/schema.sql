@@ -37,8 +37,8 @@ CREATE INDEX journal_game_seq on journal(game_id, seq);
 -- index journal_request_id
 CREATE INDEX journal_request_id on journal(request_id);
 
--- index multifest_venues_rating_idx
-CREATE UNIQUE INDEX multifest_venues_rating_idx on multifest_venues(fest_id, rating_venue_id) where rating_venue_id is not null;
+-- index multifest_venues_request_idx
+CREATE UNIQUE INDEX multifest_venues_request_idx on multifest_venues(fest_id, rating_request_id) where rating_request_id is not null;
 
 -- index participants_fest_roster_number_idx
 CREATE UNIQUE INDEX participants_fest_roster_number_idx
@@ -369,7 +369,7 @@ CREATE TABLE multifest_venues(
   rating_venue_id integer,
   rating_id integer,
   position integer not null default 0
-, representative TEXT NOT NULL DEFAULT '');
+, representative TEXT NOT NULL DEFAULT '', rating_request_id INTEGER);
 
 -- table participant_players
 CREATE TABLE participant_players(

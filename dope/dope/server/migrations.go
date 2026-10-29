@@ -1067,6 +1067,19 @@ create table if not exists user_rating_tokens(
 `)
 		return err
 	}},
+	// v49: a venue is the site's request to play there, since two requests
+	// may name one site venue. A venue imported before this finds its request
+	// on the next import.
+	{Version: 49, Name: "multifest_venues.rating_request_id", Up: func(db *sql.DB) error {
+		if err := store.AddColumnsIfMissing(db, "multifest_venues", []store.ColumnSpec{{Name: "rating_request_id", Type: "INTEGER"}}); err != nil {
+			return err
+		}
+		_, err := db.Exec(`
+drop index if exists multifest_venues_rating_idx;
+create unique index if not exists multifest_venues_request_idx on multifest_venues(fest_id, rating_request_id) where rating_request_id is not null;
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

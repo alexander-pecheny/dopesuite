@@ -38,18 +38,22 @@ func (p *Plan) group(ctx context.Context, site Site, kind string, venues []multi
 	if err != nil {
 		return g, err
 	}
-	byRatingVenue := map[int64]request{}
+	byRequest, byRatingVenue := map[int64]request{}, map[int64]request{}
 	for _, r := range requests {
 		if r.Status != requestAccepted || r.Venue == nil {
 			continue
 		}
+		byRequest[r.ID] = r
 		if _, seen := byRatingVenue[r.Venue.ID]; !seen {
 			byRatingVenue[r.Venue.ID] = r
 		}
 	}
 	for _, v := range venues {
 		g.order = append(g.order, v.ID)
-		r, ok := byRatingVenue[v.RatingVenueID]
+		r, ok := byRequest[v.RatingRequestID]
+		if v.RatingRequestID == 0 {
+			r, ok = byRatingVenue[v.RatingVenueID]
+		}
 		switch {
 		case !ok || v.RatingVenueID == 0:
 			g.refused[v.ID] = s.Host.RatingExport.NoRequest(v.Title)

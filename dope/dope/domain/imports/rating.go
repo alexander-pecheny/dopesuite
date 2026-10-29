@@ -64,6 +64,7 @@ type ratingFestResult struct {
 	// SynchRequest names the venue a team played a synchronous
 	// tournament at.
 	SynchRequest *struct {
+		ID    int64 `json:"id"`
 		Venue struct {
 			ID   int64  `json:"id"`
 			Name string `json:"name"`
@@ -250,8 +251,8 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 			})
 		}
 		team.Flags = roster.NormalizeFlags(team.Flags)
-		if r := result.SynchRequest; r != nil && r.Venue.ID > 0 {
-			team.Venue = multifest.RatingVenue{ID: r.Venue.ID, Title: strings.TrimSpace(r.Venue.Name)}
+		if r := result.SynchRequest; r != nil && r.ID > 0 && r.Venue.ID > 0 {
+			team.Venue = multifest.RatingVenue{ID: r.Venue.ID, Request: r.ID, Title: strings.TrimSpace(r.Venue.Name)}
 		}
 		if len(team.Players) > roster.MaxSquad {
 			return nil, corei18n.User(dopestrings.Default.Imports.Rating.SquadTooBig(name))
@@ -447,7 +448,7 @@ func synchVenues(ctx context.Context, q store.Queryer, festID int64, teams []ros
 	}
 	venueOf := map[int64]multifest.RatingVenue{}
 	for _, team := range teams {
-		if team.RatingID > 0 && team.Venue.ID > 0 {
+		if team.RatingID > 0 && team.Venue.Request > 0 {
 			venueOf[team.RatingID] = team.Venue
 		}
 	}

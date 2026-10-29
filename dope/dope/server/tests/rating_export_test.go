@@ -105,7 +105,7 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 		t.Fatal(err)
 	}
 	festID, _ := res.LastInsertId()
-	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	minsk, brest := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}, multifest.RatingVenue{ID: 20, Request: 200, Title: "Брест"}
 	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
 		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
 			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
