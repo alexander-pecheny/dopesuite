@@ -221,6 +221,10 @@ rating_import_crumb = "Импорт участников"
 rating_source = 'Источник: rating.chgk.info ID {{.id}}'
 # Note above the rating-import form.
 rating_import_note = "Импорт обновит списки команд и игроков феста и список команд в ЧГК, КСИ и Мультииграх. Правки, которые вы сделали на странице команд, сохранятся. Сначала импорт покажет, что изменится, и только потом запишет. В ЭК и ЭС команды приходят из посева, поэтому их составы обновятся, когда вы снова импортируете посев. Оверрайды игроков сохранятся."
+# The same page on a synch fest.
+synch_import_title = '{{.title}} · импорт площадок'
+synch_import_crumb = "Импорт площадок"
+synch_import_note = "Импорт загрузит с турнирного сайта площадки, заявленные на них команды и их составы. Если общей игры турнира ещё нет, импорт её создаст. Сначала он покажет, что изменится, и только потом запишет."
 # Submit button of the rating-import form.
 import_submit = "Показать, что изменится"
 # The preview of an import (ADR-0024): what it would change, before it writes.
@@ -430,6 +434,8 @@ roster_troikas_link = "Тройки"
 # The rating-import row's status note.
 rating_status_none = "нет rating ID"
 roster_import_link = "Загрузить команды и игроков"
+# The same row on a synch fest, whose import brings in the venues and their teams.
+synch_import_link = "Загрузить площадки"
 rating_export_link = "Выгрузить на турнирный сайт"
 rating_export_muted = "составы и ответы ОД"
 # The audit-log row.

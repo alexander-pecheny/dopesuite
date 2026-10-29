@@ -84,8 +84,10 @@ type hostFestRosterData struct {
 type hostFestImportData struct {
 	Fest     view.HostFest
 	RatingID int64
-	Error    string
-	Notice   string
+	// Synch is set on a synch fest, whose import brings in its venues.
+	Synch  bool
+	Error  string
+	Notice string
 	// Conflict is set when the import stopped to ask what to do with teams that
 	// are leaving the roster while they still carry results.
 	Conflict *imports.RosterConflict
@@ -374,10 +376,14 @@ func hostOverrideEditDialog(data hostFestRosterData, ref string, o overrides.Hos
 func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 	s := dopestrings.Default
 	festRef := data.Fest.Ref()
+	title, crumb, note := s.Host.Roster.RatingImportTitle(data.Fest.Title), s.Host.Roster.RatingImportCrumb(), s.Host.Roster.RatingImportNote()
+	if data.Synch {
+		title, crumb, note = s.Host.Roster.SynchImportTitle(data.Fest.Title), s.Host.Roster.SynchImportCrumb(), s.Host.Roster.SynchImportNote()
+	}
 	page := []dopeui.Item{
-		dopeui.Title(s.Host.Roster.RatingImportTitle(data.Fest.Title)), dopeui.PagePublic,
+		dopeui.Title(title), dopeui.PagePublic,
 		dopeui.Classicscripts("dist/pageforms.js"),
-		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(festRef, data.Fest.Title), s.Host.Roster.RatingImportCrumb())),
+		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(festRef, data.Fest.Title), crumb)),
 	}
 	page = append(page, importMessages(data.Error, data.Notice)...)
 
@@ -386,7 +392,7 @@ func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 		sect = []dopeui.Item{
 			dopeui.Note(dopeui.Text(s.Host.Roster.RatingSource(idstr.Format(data.RatingID)))),
 			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+festRef+"/rating/import"), dopeui.Autocomplete("off"),
-				dopeui.Note(dopeui.Text(s.Host.Roster.RatingImportNote())),
+				dopeui.Note(dopeui.Text(note)),
 				dopeui.Hiddenfield(dopeui.Name("preview"), dopeui.Value("1")),
 				dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.ImportSubmit()))),
 			),
@@ -913,7 +919,11 @@ func (s *Server) renderHostRatingImport(w http.ResponseWriter, r *http.Request, 
 		if err != nil {
 			return nil, err
 		}
-		return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Error: errMsg, Notice: notice, Conflict: conflict, UndoAt: undoAt}), nil
+		kind, err := multifest.FestKind(r.Context(), s.h.Engine().DB, festID)
+		if err != nil {
+			return nil, err
+		}
+		return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Synch: kind == multifest.Synch, Error: errMsg, Notice: notice, Conflict: conflict, UndoAt: undoAt}), nil
 	})
 }
 
@@ -1118,7 +1128,11 @@ func (s *Server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 	}
 	if choice.Preview {
 		s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
-			return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Plan: result.Plan, Choice: choice}), nil
+			kind, err := multifest.FestKind(r.Context(), s.h.Engine().DB, festID)
+			if err != nil {
+				return nil, err
+			}
+			return hostRatingImportDoc(hostFestImportData{Fest: fest, RatingID: ratingID, Synch: kind == multifest.Synch, Plan: result.Plan, Choice: choice}), nil
 		})
 		return
 	}

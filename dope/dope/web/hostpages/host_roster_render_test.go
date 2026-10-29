@@ -216,3 +216,19 @@ func TestAVenueHostsTeamsPageHasNoImportOrFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestASynchFestImportsVenues(t *testing.T) {
+	out, err := dopeui.Render(hostRatingImportDoc(hostFestImportData{Fest: view.HostFest{ID: 5, Title: "Кубок"}, RatingID: 13711, Synch: true}))
+	html := string(out)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	for _, want := range []string{"Кубок · импорт площадок", "Импорт площадок", "заявленные на них команды"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("synch import page lacks %q", want)
+		}
+	}
+	if strings.Contains(html, "импорт участников") {
+		t.Error("synch import page still says it imports the participants")
+	}
+}

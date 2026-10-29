@@ -1015,9 +1015,10 @@ var RU = Strings{
 			SlugLabel: func() string {
 				return "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"
 			},
-			StartDateLabel: func() string { return "Дата начала" },
-			TeamsNumbered:  func(n string, numbered string) string { return fmt.Sprintf("%s, с номером: %s", n, numbered) },
-			TitleLabel:     func() string { return "Название" },
+			StartDateLabel:  func() string { return "Дата начала" },
+			SynchImportLink: func() string { return "Загрузить площадки" },
+			TeamsNumbered:   func(n string, numbered string) string { return fmt.Sprintf("%s, с номером: %s", n, numbered) },
+			TitleLabel:      func() string { return "Название" },
 			VenuesHint: func() string {
 				return "Ведущий площадки ведёт её игры и правит её команды и номера."
 			},
@@ -1533,8 +1534,13 @@ var RU = Strings{
 			RatingSource:      func(id string) string { return fmt.Sprintf("Источник: rating.chgk.info ID %s", id) },
 			SaveSubmit:        func() string { return "Сохранить" },
 			SavedNotice:       func() string { return "Номера и зачёты сохранены." },
-			TeamLabel:         func() string { return "Команда" },
-			TeamsCrumb:        func() string { return "Команды" },
+			SynchImportCrumb:  func() string { return "Импорт площадок" },
+			SynchImportNote: func() string {
+				return "Импорт загрузит с турнирного сайта площадки, заявленные на них команды и их составы. Если общей игры турнира ещё нет, импорт её создаст. Сначала он покажет, что изменится, и только потом запишет."
+			},
+			SynchImportTitle: func(title string) string { return fmt.Sprintf("%s · импорт площадок", title) },
+			TeamLabel:        func() string { return "Команда" },
+			TeamsCrumb:       func() string { return "Команды" },
 			TeamsEditHint: func() string {
 				return "Команду можно добавить, переименовать и поменять её состав прямо здесь. Повторный импорт из rating.chgk.info эти правки сохранит и перед записью покажет, что изменится."
 			},
