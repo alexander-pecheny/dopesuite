@@ -13,6 +13,9 @@ CREATE INDEX fest_roster_snapshots_fest_idx on fest_roster_snapshots(fest_id, id
 -- index fest_team_flags_team_idx
 CREATE INDEX fest_team_flags_team_idx on fest_team_flags(team_id, position);
 
+-- index fest_teams_client_idx
+CREATE UNIQUE INDEX fest_teams_client_idx on fest_teams(fest_id, client_id) where client_id is not null;
+
 -- index fest_teams_fest_number_idx
 CREATE UNIQUE INDEX fest_teams_fest_number_idx on fest_teams(fest_id, number) where number is not null;
 
@@ -150,7 +153,7 @@ CREATE TABLE fest_teams(
   position real not null,
   number integer,
   deleted integer not null default 0
-, country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0, multifest_venue_id INTEGER REFERENCES multifest_venues(id) ON DELETE SET NULL, venue_number INTEGER);
+, country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0, multifest_venue_id INTEGER REFERENCES multifest_venues(id) ON DELETE SET NULL, venue_number INTEGER, client_id TEXT);
 
 -- table fest_venue_hosts
 CREATE TABLE fest_venue_hosts(

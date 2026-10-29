@@ -580,6 +580,9 @@ var RU = Strings{
 				return "Можно указать разовое название — оно будет только в этом фесте."
 			},
 			NoRatingId: func() string { return "без ID" },
+			OfflineHint: func() string {
+				return "Нет сети, поэтому поиск по турнирному сайту не работает. Добавьте игроков кнопкой «Добавить игрока без ID», организатор найдёт их потом."
+			},
 			PickOrUnrated: func() string {
 				return "Выберите игрока из подсказок. Если его нет на турнирном сайте, нажмите «Добавить игрока без ID»."
 			},
@@ -602,6 +605,11 @@ var RU = Strings{
 			},
 			UnratedNeedsName: func() string { return "Сначала впишите имя и фамилию игрока." },
 			Venue:            func() string { return "Площадка" },
+			VenueNumber:      func() string { return "Номер на площадке" },
+			VenueNumberRange: func(max string) string { return fmt.Sprintf("Номер должен быть от 1 до %s.", max) },
+			VenueNumberTaken: func(n string) string {
+				return fmt.Sprintf("Номер %s уже у другой команды площадки.", n)
+			},
 		},
 	},
 	Festaccess: FestaccessStrings{
@@ -1226,6 +1234,45 @@ var RU = Strings{
 			Teams:        func(n string) string { return fmt.Sprintf("команд: %s", n) },
 			VenueUnknown: func() string { return "В фесте нет такой площадки." },
 		},
+		Offline: HostOfflineStrings{
+			Dismiss: func() string { return "Понятно" },
+			LogoutConfirm: func() string {
+				return "На этом устройстве есть изменения, которые ещё не дошли до сервера. После выхода они пропадут. Всё равно выйти?"
+			},
+			NoNetwork: func() string {
+				return "Нет сети. Изменения сохранятся на этом устройстве и уйдут на сервер, когда сеть появится."
+			},
+			NotPrepared: func() string {
+				return "Без сети команду не открыть: эту страницу не готовили к работе без сети."
+			},
+			Prepare: func() string { return "Подготовить к работе без сети" },
+			PrepareFailed: func() string {
+				return "Не удалось сохранить страницы. Нажмите ещё раз, пока есть сеть."
+			},
+			PrepareHint: func() string {
+				return "Нажмите кнопку, пока есть сеть. Телефон сохранит эту страницу, игры площадки и составы команд. Без сети откройте этот же адрес в том же браузере. Ответы и изменения команд останутся на телефоне и уйдут на сервер, когда сеть появится."
+			},
+			Prepared: func(at string) string {
+				return fmt.Sprintf("Страницы сохранены на этом устройстве %s. Без сети откройте этот же адрес в том же браузере.", at)
+			},
+			Preparing: func() string { return "Сохраняем страницы…" },
+			Refused: func(message string) string {
+				return fmt.Sprintf("Сервер не принял изменение. %s", message)
+			},
+			RefusedTeam: func(team string, message string) string {
+				return fmt.Sprintf("Команда «%s»: %s", team, message)
+			},
+			Sending: func(n string) string {
+				return fmt.Sprintf("Отправляем изменения на сервер: %s.", n)
+			},
+			Subhead: func() string { return "Работа без сети" },
+			Unsupported: func() string {
+				return "Этот браузер не умеет открывать страницы без сети."
+			},
+			Waiting: func(n string) string {
+				return fmt.Sprintf("Нет сети. Изменений ждут отправки: %s. Они сохранены на этом устройстве и уйдут на сервер, когда сеть появится.", n)
+			},
+		},
 		Pages: HostPagesStrings{
 			CreateFestSummary: func() string { return "Создать фест" },
 			CreateSubmit:      func() string { return "Создать" },
@@ -1687,6 +1734,12 @@ var RU = Strings{
 				return fmt.Sprintf("Команду «%s» нельзя убрать: у неё есть результаты в играх %s.", team, games)
 			},
 			TeamUnknown: func() string { return "Такой команды нет в составах феста." },
+			VenueNumberRange: func(max string) string {
+				return fmt.Sprintf("Номер команды должен быть от 1 до %s.", max)
+			},
+			VenueNumberTaken: func(number string, team string, name string) string {
+				return fmt.Sprintf("Номер %s на площадке уже у команды «%s». Выберите для команды «%s» другой номер.", number, team, name)
+			},
 		},
 		Rating: ImportsRatingStrings{
 			ApiError: func(detail string) string { return fmt.Sprintf("рейтинг вернул ошибку: %s", detail) },

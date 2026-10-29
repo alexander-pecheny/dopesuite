@@ -352,7 +352,7 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	var minskID, brestID int64
 	db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = 10`, festID).Scan(&minskID)
 	db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = 20`, festID).Scan(&brestID)
-	hostID, _ := createAPITestSession(t, srv, "minsk")
+	hostID, hostToken := createAPITestSession(t, srv, "minsk")
 	addAPITestRole(t, srv, festID, hostID, roles.Host)
 	if _, err := db.Exec(`insert into fest_venue_hosts(fest_id, multifest_venue_id, user_id) values(?, ?, ?)`, festID, minskID, hostID); err != nil {
 		t.Fatal(err)
@@ -391,15 +391,17 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	var alfa, beta int64
 	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Альфа'`, festID).Scan(&alfa)
 	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Бета'`, festID).Scan(&beta)
-	numbers := func(a, b string) url.Values {
-		return url.Values{fmt.Sprintf("number_%d", alfa): {a}, fmt.Sprintf("number_%d", beta): {b}}
+	// The venue's page saves its numbers through the API, as the device's
+	// outbox sends them: every team of the venue, 0 for none.
+	numbers := func(a, b int) *httptest.ResponseRecorder {
+		t.Helper()
+		assignments := []map[string]any{{"team_id": alfa, "number": a}}
+		if b >= 0 {
+			assignments = append(assignments, map[string]any{"team_id": beta, "number": b})
+		}
+		return scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/sync/numbers/assign?venue=%d", minskID), map[string]any{"assignments": assignments}, hostToken)
 	}
-	// The refused page shows what was typed, and its save stays enabled.
-	if resp := page(http.MethodPost, minskPage+"/numbers", numbers("5", "5")); resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "Номер 5 стоит у двух команд") ||
-		!strings.Contains(resp.Body.String(), `data-refused="yes"`) {
-		t.Fatalf("a shared number was not refused: %d %s", resp.Code, resp.Body.String())
-	}
-	if resp := page(http.MethodPost, minskPage+"/numbers", numbers("7", "")); resp.Code != http.StatusSeeOther {
+	if resp := numbers(7, 0); resp.Code != http.StatusOK {
 		t.Fatalf("save: %d %s", resp.Code, resp.Body.String())
 	}
 	var a, b sql.NullInt64
@@ -413,8 +415,58 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	if _, err := db.Exec(`update fest_teams set deleted = 1, venue_number = 3 where id = ?`, beta); err != nil {
 		t.Fatal(err)
 	}
-	if resp := page(http.MethodPost, minskPage+"/numbers", url.Values{fmt.Sprintf("number_%d", alfa): {"3"}}); resp.Code != http.StatusSeeOther {
+	if resp := numbers(3, -1); resp.Code != http.StatusOK {
 		t.Fatalf("a removed team's number blocked the save: %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+// A team a venue's host made offline arrives with the id the device gave it
+// and the number it chose there: sent twice, it is one team, and a number
+// another team of the venue has is refused.
+func TestATeamMadeOfflineArrivesOnce(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, slug, revision, created_at, updated_at, kind) values('Синхрон', 'sync', 1, '2026-10-29', '2026-10-29', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	minsk := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}
+	teams := []roster.FestRosterImportTeam{{RatingID: 1, Name: "Альфа", Venue: minsk,
+		Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "А", LastName: "Капитан"}}}}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var minskID int64
+	db.QueryRow(`select id from multifest_venues where fest_id = ?`, festID).Scan(&minskID)
+	hostID, token := createAPITestSession(t, srv, "minsk")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	if _, err := db.Exec(`insert into fest_venue_hosts(fest_id, multifest_venue_id, user_id) values(?, ?, ?)`, festID, minskID, hostID); err != nil {
+		t.Fatal(err)
+	}
+	create := func(clientID, name string, number int) *httptest.ResponseRecorder {
+		t.Helper()
+		return scopedAPIRequest(t, srv, http.MethodPost, "/api/fest/sync/teams", map[string]any{
+			"client_id": clientID, "name": name, "city": "Минск", "venue_number": number, "multifest_venue_id": minskID,
+			"players": []map[string]any{{"rating_id": 0, "first_name": "Новый", "last_name": name}},
+		}, token)
+	}
+	first := create("c-1", "Бета", 5)
+	again := create("c-1", "Бета", 5)
+	if first.Code != http.StatusOK || again.Code != http.StatusOK {
+		t.Fatalf("create: %d %s / %d %s", first.Code, first.Body.String(), again.Code, again.Body.String())
+	}
+	var made, number int
+	db.QueryRow(`select count(*), max(venue_number) from fest_teams where fest_id = ? and name = 'Бета' and deleted = 0`, festID).Scan(&made, &number)
+	if made != 1 || number != 5 {
+		t.Fatalf("the team was made %d times with number %d; want once with 5", made, number)
+	}
+	if !strings.Contains(again.Body.String(), `"name":"Бета"`) {
+		t.Fatalf("the second create does not answer with the team: %s", again.Body.String())
+	}
+	if resp := create("c-2", "Гамма", 5); resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), "Номер 5 на площадке уже у команды «Бета»") {
+		t.Fatalf("a taken number was not refused: %d %s", resp.Code, resp.Body.String())
 	}
 }
 

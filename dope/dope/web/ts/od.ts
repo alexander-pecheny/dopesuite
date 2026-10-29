@@ -28,6 +28,7 @@ import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, Sho
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, readCityCountry, teamFlag} from "./screen-board.js";
 import type {ScreenMetrics, ScreenSettings} from "./screen-board.js";
 import {param, setHashTab, setParam, tabFromHash} from "./url-state.js";
+import {flushOutbox, mountOfflineBar, OFFLINE_PENDING_TTL_MS, projectODState, readOutbox} from "./offline.js";
 import S from "./i18nstrings.js";
 
 // The results sheet and the screen board pin the place, the team and the total.
@@ -259,13 +260,22 @@ document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement && chromeHidden) setChromeHidden(false);
 });
 
+// A venue of a synch fest works without a network: its changes to its
+// teams wait in the fest's outbox, and its answers wait for them (offline.ts).
+const offlineFest = Number((gameInit as {festID?: number} | null)?.festID || 0);
+const offlineAPI = `/api/fest/${offlineFest}`;
+
 const doc = mountGameDocument({
   route,
   cachePrefix: "od",
   shell,
   adopt: adoptGameSnapshot,
   apply: applyRemoteState,
-  current: () => ({scheme, state, fest}),
+  // The live base is the document, not the view a venue's page shows.
+  current: () => ({scheme, state: docState ?? state, fest}),
+  base: (raw) => offlineFest ? projectODState(raw, readOutbox(offlineFest)) : raw,
+  pendingTTLMs: () => docState && od.isSynch(docState) ? OFFLINE_PENDING_TTL_MS : undefined,
+  before: async () => !offlineFest || readOutbox(offlineFest).ops.length === 0 || (await flushOutbox(offlineFest, offlineAPI)).empty,
   // A friendship cup's registration can be refused (another host took the
   // card a moment ago): the players tab says why, and the document is fetched
   // again, which takes back the player the page already showed.
@@ -3100,6 +3110,23 @@ function applyRemoteState(nextState: unknown): void {
   render();
   refreshPendingMarkers();
   if (focusedCell) focusEntrySelection();
+}
+
+// The bar counts what this device has not sent: the outbox's team changes and
+// the answers the page keeps unsent.
+if (!viewer && gameSheets.some((sheet) => sheet.editable)) {
+  mountOfflineBar(() => {
+    let answers = 0;
+    try {
+      answers = (JSON.parse(localStorage.getItem(`dope.pending.v2:game-state:${shell.scopeGameID}`) || "[]") as unknown[]).length;
+    } catch (_) {
+      answers = 0;
+    }
+    return readOutbox(offlineFest).ops.length + answers;
+  }, {
+    offline: (n) => n ? S.host.offline.waiting(String(n)) : S.host.offline.noNetwork(),
+    sending: (n) => S.host.offline.sending(String(n)),
+  });
 }
 
 doc.load().catch((error: unknown) => {

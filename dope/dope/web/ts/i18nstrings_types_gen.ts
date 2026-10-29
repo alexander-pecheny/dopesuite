@@ -453,6 +453,7 @@ export type Strings = {
       name: () => string;
       nameHint: () => string;
       noRatingId: () => string;
+      offlineHint: () => string;
       pickOrUnrated: () => string;
       playerTwice: (player: string) => string;
       ratingId: (id: string) => string;
@@ -469,6 +470,9 @@ export type Strings = {
       unratedHint: () => string;
       unratedNeedsName: () => string;
       venue: () => string;
+      venueNumber: () => string;
+      venueNumberRange: (max: string) => string;
+      venueNumberTaken: (n: string) => string;
     };
   };
   festaccess: {
@@ -893,6 +897,23 @@ export type Strings = {
       teams: (n: string) => string;
       venueUnknown: () => string;
     };
+    offline: {
+      dismiss: () => string;
+      logoutConfirm: () => string;
+      noNetwork: () => string;
+      notPrepared: () => string;
+      prepare: () => string;
+      prepareFailed: () => string;
+      prepareHint: () => string;
+      prepared: (at: string) => string;
+      preparing: () => string;
+      refused: (message: string) => string;
+      refusedTeam: (team: string, message: string) => string;
+      sending: (n: string) => string;
+      subhead: () => string;
+      unsupported: () => string;
+      waiting: (n: string) => string;
+    };
     pages: {
       createFestSummary: () => string;
       createSubmit: () => string;
@@ -1178,6 +1199,8 @@ export type Strings = {
       ratingTeamTaken: () => string;
       teamScored: (team: string, games: string) => string;
       teamUnknown: () => string;
+      venueNumberRange: (max: string) => string;
+      venueNumberTaken: (number: string, team: string, name: string) => string;
     };
     rating: {
       apiError: (detail: string) => string;

@@ -2,6 +2,9 @@
 // on* handlers those pages used to carry (CSP-friendly, data-attribute driven):
 //   - [data-confirm] on a <form> or its clicked submit button: window.confirm()
 //     gate before submit.
+//   - [data-confirm-unsent] on a <form>: window.confirm() gate before submit,
+//     only while this device keeps changes the server has not seen (the
+//     logout, which drops them).
 //   - [data-confirm-changed] on a <select> inside a <form>: window.confirm()
 //     gate before submit, only when the select's choice differs from the one
 //     the page came with.
@@ -23,6 +26,8 @@
 //     is for the dialog a server-rendered page opens with, because asking it is
 //     why the page was rendered — the roster import's reconcile is one.
 
+import {unsentEverywhere} from "./offline.js";
+
 type SelectableField = HTMLElement & { select?: () => void };
 type FormControl = HTMLElement & {
   form?: (HTMLFormElement & { requestSubmit?: () => void }) | null;
@@ -39,6 +44,11 @@ document.addEventListener("submit", (event) => {
     return;
   }
   if (!(form instanceof HTMLFormElement)) return;
+  const unsent = form.getAttribute("data-confirm-unsent");
+  if (unsent && unsentEverywhere() && !window.confirm(unsent)) {
+    event.preventDefault();
+    return;
+  }
   for (const select of form.querySelectorAll("select[data-confirm-changed]")) {
     const options = [...(select as HTMLSelectElement).options];
     if (!options.some((o) => o.selected !== o.defaultSelected)) continue;

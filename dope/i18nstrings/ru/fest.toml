@@ -172,6 +172,13 @@ title_new = "Новая команда"
 # (ADR-0032).
 venue = "Площадка"
 title = 'Команда «{{.team}}»'
+# A new team on a площадка's page takes its number there in the dialog, so its
+# answers can be entered before the server has seen it.
+venue_number = "Номер на площадке"
+venue_number_range = 'Номер должен быть от 1 до {{.max}}.'
+venue_number_taken = 'Номер {{.n}} уже у другой команды площадки.'
+# Without a network the rating site cannot be searched.
+offline_hint = "Нет сети, поэтому поиск по турнирному сайту не работает. Добавьте игроков кнопкой «Добавить игрока без ID», организатор найдёт их потом."
 # What the dialog says about a rating team's edits and an import.
 hint_rating = "Правки сохранятся при повторном импорте из rating.chgk.info."
 hint_hand = "Эта команда добавлена вручную, импорт её не трогает."

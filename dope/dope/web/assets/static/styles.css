@@ -4988,3 +4988,18 @@ body.is-fullscreen.od-page .match-main {
 .manual-warn { background: var(--warn-bg); }
 
 .manual-warn strong { color: var(--warn-text); }
+
+/* A game page of a площадка working without a network (offline.ts): what
+   waits for the server, above everything. */
+.offline-bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-toast);
+  padding: var(--space-2) var(--space-3);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.offline-bar[hidden] { display: none; }

@@ -472,6 +472,29 @@ number_range = 'Номер команды «{{.team}}» должен быть о
 number_duplicate = "Этот номер уже стоит у другой команды."
 number_taken = 'Номер {{.n}} стоит у двух команд: «{{.first}}» и «{{.second}}».'
 
+[offline]
+# Work without a network on a площадка of a synch fest (venue-page.ts,
+# offline.ts, od.ts): the section that saves the pages on the device, and the
+# line that says what waits for the server.
+subhead = "Работа без сети"
+prepare = "Подготовить к работе без сети"
+prepare_hint = "Нажмите кнопку, пока есть сеть. Телефон сохранит эту страницу, игры площадки и составы команд. Без сети откройте этот же адрес в том же браузере. Ответы и изменения команд останутся на телефоне и уйдут на сервер, когда сеть появится."
+preparing = "Сохраняем страницы…"
+prepared = 'Страницы сохранены на этом устройстве {{.at}}. Без сети откройте этот же адрес в том же браузере.'
+prepare_failed = "Не удалось сохранить страницы. Нажмите ещё раз, пока есть сеть."
+unsupported = "Этот браузер не умеет открывать страницы без сети."
+# A pencil pressed offline on a page that was never prepared.
+not_prepared = "Без сети команду не открыть: эту страницу не готовили к работе без сети."
+no_network = "Нет сети. Изменения сохранятся на этом устройстве и уйдут на сервер, когда сеть появится."
+waiting = 'Нет сети. Изменений ждут отправки: {{.n}}. Они сохранены на этом устройстве и уйдут на сервер, когда сеть появится.'
+sending = 'Отправляем изменения на сервер: {{.n}}.'
+# A change the server refused when it arrived, and the team it was about.
+refused = 'Сервер не принял изменение. {{.message}}'
+refused_team = 'Команда «{{.team}}»: {{.message}}'
+dismiss = "Понятно"
+# Asked at logout while this device keeps changes the server has not seen.
+logout_confirm = "На этом устройстве есть изменения, которые ещё не дошли до сервера. После выхода они пропадут. Всё равно выйти?"
+
 [multifest]
 # A fest's type and its площадки (ADR-0031, web/hostpages/multifest.go).
 kind_label = "Тип турнира"

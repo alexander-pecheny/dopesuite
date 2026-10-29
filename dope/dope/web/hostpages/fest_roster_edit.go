@@ -266,10 +266,15 @@ type teamRequest struct {
 	Venue *int64 `json:"multifest_venue_id"`
 	// Flags is the team's Divisions by short name; left out, they stay.
 	Flags *[]string `json:"flags"`
+	// ClientID and VenueNumber are a new team as a host's device made it,
+	// perhaps offline: the id it gave the team and the number it chose.
+	ClientID    string `json:"client_id"`
+	VenueNumber int    `json:"venue_number"`
 }
 
 func (req teamRequest) input() imports.TeamInput {
-	in := imports.TeamInput{RatingID: req.RatingID, Name: req.Name, City: req.City, Venue: req.Venue, Flags: req.Flags}
+	in := imports.TeamInput{RatingID: req.RatingID, Name: req.Name, City: req.City, Venue: req.Venue, Flags: req.Flags,
+		ClientID: req.ClientID, VenueNumber: req.VenueNumber}
 	for _, p := range req.Players {
 		in.Players = append(in.Players, roster.FestRosterImportPlayer{RatingID: p.RatingID, FirstName: p.FirstName, LastName: p.LastName})
 	}
@@ -311,7 +316,11 @@ func (s *Server) apiCreateTeam(w http.ResponseWriter, r *http.Request, sc route.
 	if err := checkVenueChoice(sc, req.Venue, 0); err != nil {
 		return err
 	}
-	id, err := s.CreateFestTeam(r.Context(), sc, req.input())
+	// A create sent again answers with the team the first one made.
+	id, err := imports.FindClientTeam(r.Context(), s.h.Engine().DB, sc.FestID, req.ClientID)
+	if err == nil && id == 0 {
+		id, err = s.CreateFestTeam(r.Context(), sc, req.input())
+	}
 	if err != nil {
 		return err
 	}

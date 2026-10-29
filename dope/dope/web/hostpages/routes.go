@@ -117,14 +117,7 @@ func (s *Server) buildRoutes() *route.Table {
 	t.Handle("POST "+fest, route.Manager, page(s.handleHostUpdateFest))
 	t.Handle("GET "+fest+"/teams", route.Roster, scoped(s.renderHostFestTeams))
 	t.Handle("POST "+fest+"/teams", route.Roster, scoped(s.handleHostSaveFestTeamFlags))
-	t.Handle("GET "+fest+"/venue/{venue}", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-		notice := ""
-		if r.URL.Query().Get("saved") != "" {
-			notice = dopestrings.Default.Host.Venue.NumbersSaved()
-		}
-		return s.renderHostVenuePage(w, r, sc, "", notice, nil)
-	})
-	t.Handle("POST "+fest+"/venue/{venue}/numbers", route.Roster, s.handleHostSaveVenueNumbers)
+	t.Handle("GET "+fest+"/venue/{venue}", route.Roster, s.renderHostVenuePage)
 	t.Handle("GET "+fest+"/players", route.Manager, s.notSynch(pageScoped(s.renderHostFestPlayers)))
 	t.Handle("GET "+fest+"/troikas", route.Manager, s.notSynch(pageScoped(s.renderHostFestTroikas)))
 	t.Handle("POST "+fest+"/troikas", route.Manager, page(s.handleHostSaveTroikas))

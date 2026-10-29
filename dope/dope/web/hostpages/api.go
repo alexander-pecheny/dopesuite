@@ -506,8 +506,10 @@ type apiTeam struct {
 	// any way (ADR-0024), which an import keeps.
 	Hand   bool `json:"hand"`
 	Edited bool `json:"edited"`
-	// MultiFestVenueID is the venue the team plays at (ADR-0032).
+	// MultiFestVenueID is the venue the team plays at (ADR-0032), and
+	// VenueNumber its number there.
 	MultiFestVenueID int64 `json:"multifest_venue_id,omitempty"`
+	VenueNumber      int   `json:"venue_number,omitempty"`
 }
 
 func (s *Server) apiTeams(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -517,7 +519,7 @@ func (s *Server) apiTeams(w http.ResponseWriter, r *http.Request, sc route.Scope
 	}
 	out := make([]apiTeam, len(teams))
 	for i, t := range teams {
-		out[i] = apiTeam{ID: t.ID, RatingID: t.RatingID, Name: t.Name, City: t.City, Players: t.Players, Flags: t.Flags, Hand: t.Hand, Edited: t.Edited, MultiFestVenueID: t.Venue}
+		out[i] = apiTeam{ID: t.ID, RatingID: t.RatingID, Name: t.Name, City: t.City, Players: t.Players, Flags: t.Flags, Hand: t.Hand, Edited: t.Edited, MultiFestVenueID: t.Venue, VenueNumber: t.VenueNumber}
 	}
 	return route.JSON(w, out)
 }

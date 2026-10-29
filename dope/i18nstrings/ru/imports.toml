@@ -118,6 +118,11 @@ name_taken = 'Команда «{{.name}}» уже есть в составах �
 rating_team_taken = "Эта команда рейтинга уже есть в составах феста."
 # The team is not on the fest roster (removed, or of another fest).
 team_unknown = "Такой команды нет в составах феста."
+# A team made with a number its venue already gives another team: a host made
+# it offline, choosing the number on the device.
+venue_number_taken = 'Номер {{.number}} на площадке уже у команды «{{.team}}». Выберите для команды «{{.name}}» другой номер.'
+# A team made with a number out of range.
+venue_number_range = 'Номер команды должен быть от 1 до {{.max}}.'
 # Removing a team that already has results.
 team_scored = 'Команду «{{.team}}» нельзя убрать: у неё есть результаты в играх {{.games}}.'
 # The rating site did not answer for a team's base roster.

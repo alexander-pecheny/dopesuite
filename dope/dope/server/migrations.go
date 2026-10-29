@@ -1080,6 +1080,15 @@ create unique index if not exists multifest_venues_request_idx on multifest_venu
 `)
 		return err
 	}},
+	// v50: the id a host's device gave a team it made offline, so that the
+	// create it sends again on a flaky network finds the team it already made.
+	{Version: 50, Name: "fest_teams.client_id", Up: func(db *sql.DB) error {
+		if err := store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{{Name: "client_id", Type: "TEXT"}}); err != nil {
+			return err
+		}
+		_, err := db.Exec(`create unique index if not exists fest_teams_client_idx on fest_teams(fest_id, client_id) where client_id is not null`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

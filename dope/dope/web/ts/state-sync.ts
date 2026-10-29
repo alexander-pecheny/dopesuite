@@ -23,6 +23,9 @@ const WAKE_RETRY_MS = [3000, 6000, 12000, 30000];
 const PENDING_OP_TTL_MS = 15 * 60 * 1000;
 // Default pause before a scoped writer flushes its batch.
 const WRITE_DEBOUNCE_MS = 150;
+// How long a writer waits before it asks `before` again, and before it
+// retries a write the network lost.
+const WAIT_RETRY_MS = 2000;
 // First HTTP status that counts as a server error worth retrying.
 const SERVER_ERROR_STATUS = 500;
 // A static-mode reload waits this long plus a random spread, so tabs do not
@@ -448,6 +451,12 @@ export interface ScopedWriterOptions {
   recorder?: () => ClientRecorder | null | undefined;
   onRejected?: (info: WriteRejected) => void;
   storagePrefix?: string;
+  // How long an unsent edit a reload finds is still sent, asked when the
+  // scope first writes: a page that works offline keeps its edits longer.
+  pendingTTLMs?: () => number | undefined;
+  // Whether the scope may send now; while it answers false, its edits wait
+  // and it asks again (a venue's answers wait for its teams, offline.ts).
+  before?: () => Promise<boolean>;
 }
 
 export interface ScopedWriter {
@@ -491,7 +500,7 @@ export function createScopedWriter(options: ScopedWriterOptions): ScopedWriter {
   function entry(scope: string): Entry {
     let e = entries.get(scope);
     if (!e) {
-      e = {ops: createPendingOps({storageKey: options.readonly ? null : `${storagePrefix}:${scope}`}), inFlight: false, timer: null};
+      e = {ops: createPendingOps({storageKey: options.readonly ? null : `${storagePrefix}:${scope}`, ttlMs: options.pendingTTLMs?.()}), inFlight: false, timer: null};
       entries.set(scope, e);
     }
     return e;
@@ -528,9 +537,21 @@ export function createScopedWriter(options: ScopedWriterOptions): ScopedWriter {
     }, delay);
   }
 
+  // mayFlush asks `before` whether the scope may send now, and asks again
+  // later when it may not.
+  async function mayFlush(scope: string, e: Entry): Promise<boolean> {
+    if (!options.before) return true;
+    e.inFlight = true;
+    const ready = await options.before().catch(() => false);
+    e.inFlight = false;
+    if (!ready && !e.timer) schedule(scope, WAIT_RETRY_MS);
+    return ready;
+  }
+
   async function flushScope(scope: string): Promise<void> {
     const e = entry(scope);
     if (options.readonly || e.inFlight || e.ops.queued() === 0) return;
+    if (!(await mayFlush(scope, e))) return;
     const ops = e.ops.take();
     const wire = options.encode ? options.encode(scope, ops) : ops.map((op) => ({path: op.path, value: op.value}));
     if (wire === null) {
@@ -576,7 +597,7 @@ export function createScopedWriter(options: ScopedWriterOptions): ScopedWriter {
     } finally {
       e.inFlight = false;
       if (e.ops.queued() > 0) {
-        if (!e.timer) schedule(scope, saved ? 0 : 2000);
+        if (!e.timer) schedule(scope, saved ? 0 : WAIT_RETRY_MS);
       } else {
         indicator.idle(scope, saved);
       }
