@@ -41,7 +41,7 @@ export type NamedAttachment = Attachment & { name: string };
 // gatherTargets maps wanted image names to the first attachment bearing each
 // name, in card order — shared by resolveImages (object URLs for previews) and
 // the handouts request assembly (multipart blobs). Names are compared in NFC,
-// because macOS and iOS hand over file names with й and ё decomposed while the
+// because macOS and iOS hand over file names with letters such as a short i decomposed while the
 // text has them composed; the key is the text's spelling, which is what the
 // server looks the picture up by.
 export function gatherTargets(lists: ReadonlyArray<ReadonlyArray<NamedAttachment>>, wanted: ReadonlySet<string>): Map<string, NamedAttachment> {

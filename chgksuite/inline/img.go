@@ -19,7 +19,7 @@ const (
 
 // Img is a parsed (img …) directive: leading options, then the file name, which
 // may contain spaces. chgksuite's parseimg takes only the last word, which broke
-// every attachment named like "Раздатка орудия.png".
+// every attachment named like "gun handout.png".
 type Img struct {
 	Name   string
 	Width  float64 // px; -1 = unset
