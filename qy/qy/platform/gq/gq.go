@@ -1,7 +1,7 @@
 // Package gq is gotquestions.online, the database most published questions
-// live in. Its API is down as of October 2026, so the only Source here is
-// Unavailable: a nomination by link waits for its text from the nominator or
-// an admin. A client that fetches goes behind the same interface.
+// live in. Its API is down as of October 2026, so DB reads a copy made from the
+// dump its owner sent. Without one, Unavailable makes a nomination by link wait
+// for its text from the nominator or an admin.
 package gq
 
 import (

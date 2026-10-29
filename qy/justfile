@@ -55,3 +55,7 @@ deploy *args: build-web
 
 deploy-staging *args: build-web
     python3 ../deploy.py --target qytest {{args}}
+
+# Turn gotquestions' pg_dump into the SQLite copy QY_GQ_DB points at.
+import-gq dump out: build-web
+    go run ./qy/cmd/qy-server import-gq {{dump}} {{out}}

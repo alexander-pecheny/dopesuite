@@ -33,6 +33,8 @@ Everything below is done by hand once; `deploy.py` only ships the binary.
   from `deploy/qy.service.example`.
 - A bot from @BotFather for telegram login (`QY_BOT_TOKEN`, `QY_BOT_USERNAME`),
   and an OpenRouter key for the model (`QY_OPENROUTER_KEY`).
+- A copy of gotquestions for nominations by link, while its API is down:
+  `just import-gq <dump.sql.gz> /var/lib/qy/gq.db`, then `QY_GQ_DB` names it.
 - Caddy:
 
   ```

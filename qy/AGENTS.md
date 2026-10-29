@@ -16,7 +16,7 @@ qy/                     module root (go.mod: module "qy")
     tally/              the shortlist cut and the final count
     question/           parsing a pasted question (chgksuite's textparse)
     anon/               the rule pass, the model prompt, applying a redaction
-  qy/platform/          gotquestions (stubbed: its API is down), rating.chgk.info,
+  qy/platform/          gotquestions (a SQLite copy of its dump: the API is down), rating.chgk.info,
                         OpenRouter, Markdown
   qy/storage/store/     the schema and the queries several handlers share
   qy/web/               route (the dispatcher), ui (the overlay), ts, assets

@@ -23,3 +23,12 @@ var (
 	authorSplitRe    = regexp.MustCompile(`\s*,\s*|\s+и\s+`)
 	yo               = strings.NewReplacer("ё", "е")
 )
+
+// WithHandout puts a handout in front of the question text, the way a
+// chgksuite paste carries it.
+func WithHandout(text, handout string) string {
+	if handout == "" {
+		return text
+	}
+	return "[Раздаточный материал: " + handout + "]\n" + text
+}

@@ -7,6 +7,7 @@ package qyserver
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -64,6 +65,11 @@ func newServer() (*server, error) {
 		return nil, err
 	}
 	s := &server{db: db, gq: gq.Unavailable{}, rating: rating.NewClient(), wake: make(chan struct{}, 1), now: time.Now}
+	if gqPath := os.Getenv("QY_GQ_DB"); gqPath != "" {
+		if s.gq, err = gq.Open(gqPath); err != nil {
+			return nil, fmt.Errorf("QY_GQ_DB %s: %w", gqPath, err)
+		}
+	}
 	if key := strings.TrimSpace(os.Getenv("QY_OPENROUTER_KEY")); key != "" {
 		s.llm = openrouter.New(key, llmModel())
 	}
