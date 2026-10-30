@@ -1504,6 +1504,7 @@ export type Strings = {
       colQuestion: () => string;
       delete: () => string;
       dialogTitle: (n: string) => string;
+      edit: () => string;
       empty: () => string;
       given: (n: number) => string;
       noSuchNumber: () => string;

@@ -2163,6 +2163,7 @@ var RU = Strings{
 			ColQuestion:    func() string { return "Вопрос" },
 			Delete:         func() string { return "Удалить" },
 			DialogTitle:    func(n string) string { return fmt.Sprintf("Спорный ответ на вопрос %s", n) },
+			Edit:           func() string { return "Редактировать спорный" },
 			Empty:          func() string { return "Спорных ответов пока нет." },
 			Given: func(n int) string {
 				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "команда", "команды", "команд"))

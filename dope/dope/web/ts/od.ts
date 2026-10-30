@@ -208,6 +208,8 @@ const contestedJudge = !viewer && Boolean(contestedRights?.judge);
 let contestedTexts: ContestedText[] = [];
 let contestedSeen: string | null = null;
 let contestedRowsCache: Array<Map<number, ODContested>> | null = null;
+// The entry tab's button for contested answers, renamed when the selected cell holds one.
+let contestedButton: HTMLButtonElement | null = null;
 const TABS = gameTabs([], {game: kdGame ? "kd" : "od", viewer, contested: contestedJudge});
 
 let activeTab = tabFromHash(TABS) || (viewer ? (kdGame ? "personal" : "results") : "input");
@@ -698,8 +700,10 @@ function buildInputView(): HTMLElement {
     const add = document.createElement("button");
     add.type = "button";
     add.className = "match-tab";
-    add.textContent = S.od.contested.add();
     add.addEventListener("click", () => openContested(sheet.focus?.col ?? 0, sheet.focus?.row ?? -1));
+    // Named for the selected cell by syncContestedButton, once the cursor exists.
+    add.textContent = S.od.contested.add();
+    contestedButton = add;
     const group = document.createElement("div");
     group.className = "match-tabs tabs-segmented";
     group.appendChild(add);
@@ -725,6 +729,15 @@ function updateEntrySelectionSoon(): void {
 function refreshEntrySelection(): void {
   sheet.refresh();
   positionInvertOverlay();
+}
+
+// syncContestedButton names the button for the selected cell: it edits the contested
+// answer already there, or adds one.
+function syncContestedButton(): void {
+  if (!contestedButton) return;
+  const focus = sheet.focus;
+  const there = focus && contestedAtEntryCell(focus.col, focus.row);
+  contestedButton.textContent = there ? S.od.contested.edit() : S.od.contested.add();
 }
 
 // ensureInvertOverlay lazily creates the floating yin-yang button. It lives on
@@ -894,6 +907,7 @@ const sheet = createSheetCursor({
   onSelectionChange: () => {
     closeEntryEditor();
     positionInvertOverlay();
+    syncContestedButton();
   },
   onActive: (cell) => markActiveEntryRow(cell),
   classes: {selected: "entry-selected", anchor: "", top: "entry-selection-top", bottom: "entry-selection-bottom", left: "entry-selection-left", right: "entry-selection-right", active: "", row: ""},
@@ -923,6 +937,10 @@ function applyEntryEdits(edits: Array<{cell: Element; value: unknown}>): void {
     const pos = entryCellPosition(cell as HTMLElement);
     if (!pos) continue;
     const next = Number(value) || 0;
+    // A contested answer sits in a free row of its column; clearing its cell takes
+    // it back, like clearing any other entry.
+    const contested = next === 0 && contestedEnter ? contestedAtEntryCell(pos.q, pos.row) : undefined;
+    if (contested) void writeContested("DELETE", "", {question: pos.q, number: entryDocNumber(contested.number)});
     if ((entrySheet.entries[pos.q]?.[pos.row] || 0) === next) continue;
     entrySheet.entries[pos.q][pos.row] = next;
     changed.push([pos.q, pos.row, next]);
@@ -3256,6 +3274,7 @@ function repaintEntrySheet(): void {
   });
   for (let q = 0; q < totalQuestions; q++) refreshEntryQuestionHead(q);
   updateInputValidity();
+  syncContestedButton();
 }
 
 function applyRemoteState(nextState: unknown): void {

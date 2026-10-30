@@ -153,6 +153,8 @@ status_invalid = "Решение бывает только «принят», «�
 save_failed = "Не удалось сохранить спорный ответ"
 # The button over the entry sheet, and the dialog it opens.
 add = "Добавить спорный"
+# The same button when the selected cell already holds one.
+edit = "Редактировать спорный"
 dialog_title = 'Спорный ответ на вопрос {{.n}}'
 team_label = "Номера команд"
 # Several teams that gave the same answer go in one save.
