@@ -383,6 +383,9 @@ delete_note = "Удаление убирает фест со всеми игра
 delete_submit = "Удалить фест"
 # The fest-edit form: fields and submit.
 public_label = "Публичный"
+# The fest's switch for спорные in its ОД, with the hint under it.
+contested_label = "Спорные ответы в ОД"
+contested_hint = "Ведущие отмечают спорные ответы, жюри игры их принимает или отклоняет. На синхроне включено сразу."
 title_label = "Название"
 description_label = "Описание (markdown)"
 slug_label = "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"

@@ -489,7 +489,7 @@ export const RU: Strings = {
       userNotFound: (n: string, name: string) => `строка ${n}: пользователь "${name}" не найден`,
     },
     games: {
-      notHost: (name: string) => `у ${name} роль не «ведущий», а ограничить по играм и площадкам можно только ведущего`,
+      notHost: (name: string) => `пользователя ${name} нельзя так ограничить. По играм ограничивают ведущего или жюри игры, по площадкам только ведущего`,
       synchHostNeedsVenue: (name: string) => `У ${name} не выбрана площадка. На синхроне ведущий всегда ведёт площадку, поэтому выберите её или сделайте ${name} админом.`,
       unknown: (game: string) => `в фесте нет игры «${game}»`,
       unknownVenue: (venue: string) => `в фесте нет площадки «${venue}»`,
@@ -513,7 +513,7 @@ export const RU: Strings = {
     },
     member: {
       creatorProtected: () => "создателя нельзя удалить или изменить",
-      roleInvalid: () => "роль должна быть admin или host",
+      roleInvalid: () => "роль должна быть admin, host или game_jury",
     },
   },
   gallery: {
@@ -727,6 +727,8 @@ export const RU: Strings = {
       colNickname: () => "Никнейм",
       colRole: () => "Роль",
       colVenues: () => "Площадки",
+      contestedHint: () => "Ведущие отмечают спорные ответы, жюри игры их принимает или отклоняет. На синхроне включено сразу.",
+      contestedLabel: () => "Спорные ответы в ОД",
       deleteAccessConfirm: (name: string) => `Удалить доступ для ${name}?`,
       deleteBtn: () => "Удалить",
       deleteConfirm: () => "Удалить турнир? Все игры, команды и результаты будут удалены.",
@@ -1513,6 +1515,30 @@ shootout: true
     },
   },
   od: {
+    contested: {
+      accepted: () => "Принят",
+      add: () => "Добавить спорный",
+      answerHint: () => "Такой же ответ другой команды выберите из списка: жюри решает по нему один раз.",
+      answerLabel: () => "Ответ команды",
+      answerRequired: () => "Нужны номер вопроса и текст ответа",
+      cancel: () => "Отмена",
+      colAnswer: () => "Ответ",
+      colQuestion: () => "Вопрос",
+      delete: () => "Удалить",
+      dialogTitle: (n: string) => `Спорный ответ на вопрос ${n}`,
+      empty: () => "Спорных ответов пока нет.",
+      given: (n: number) => `${n} ${plural("ru", n, "команда", "команды", "команд")}`,
+      noSuchNumber: () => "В игре нет команды с таким номером",
+      noTeam: () => "Нет такой команды",
+      pending: () => "Не рассмотрен",
+      pendingTotal: (n: number) => `${n} ${plural("ru", n, "спорный ответ ждёт", "спорных ответа ждут", "спорных ответов ждут")} решения жюри`,
+      rejected: () => "Отклонён",
+      save: () => "Сохранить",
+      saveFailed: () => "Не удалось сохранить спорный ответ",
+      statusInvalid: () => "Решение бывает только «принят», «отклонён» или «не рассмотрен»",
+      tab: () => "Спорные",
+      teamLabel: () => "Номер команды",
+    },
     detailed: {
       tour: (n: string) => `Т${n}`,
     },
@@ -1769,7 +1795,7 @@ shootout: true
   },
   roles: {
     bulk: {
-      actionUnknown: (n: string) => `строка ${n}: действие должно быть host, admin или remove`,
+      actionUnknown: (n: string) => `строка ${n}: действие должно быть host, admin, game_jury или remove`,
       formatExpected: (n: string) => `строка ${n}: нужен формат username:role`,
     },
   },

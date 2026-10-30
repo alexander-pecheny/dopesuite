@@ -1089,6 +1089,48 @@ create unique index if not exists multifest_venues_request_idx on multifest_venu
 		_, err := db.Exec(`create unique index if not exists fest_teams_client_idx on fest_teams(fest_id, client_id) where client_id is not null`)
 		return err
 	}},
+	// v51: contested answers. A host records a team's contested answer to an OD question;
+	// the jury rules on each distinct answer to a question once, so a ruling is
+	// keyed by the question and the answer, not by the team. The fest decides
+	// whether its OD takes them (NULL: only a synch fest does), and the new
+	// game_jury role is the one that rules besides the admins.
+	{Version: 51, Name: "contested answers and game_jury", Up: func(db *sql.DB) error {
+		if err := store.AddColumnsIfMissing(db, "fests", []store.ColumnSpec{{Name: "contested", Type: "INTEGER"}}); err != nil {
+			return err
+		}
+		_, err := db.Exec(`
+create table fest_organizers_v51(
+  fest_id integer not null references fests(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  role text not null default 'admin' check (role in ('creator','admin','host','game_jury')),
+  added_at text not null,
+  primary key(fest_id, user_id)
+);
+insert into fest_organizers_v51(fest_id, user_id, role, added_at)
+select fest_id, user_id, role, added_at from fest_organizers;
+drop table fest_organizers;
+alter table fest_organizers_v51 rename to fest_organizers;
+create table if not exists od_contested(
+  game_id integer not null references games(id) on delete cascade,
+  question integer not null,
+  fest_team_id integer not null references fest_teams(id) on delete cascade,
+  answer text not null,
+  created_by integer references users(id),
+  created_at text not null,
+  primary key(game_id, question, fest_team_id)
+);
+create table if not exists od_contested_rulings(
+  game_id integer not null references games(id) on delete cascade,
+  question integer not null,
+  answer_key text not null,
+  accepted integer not null,
+  ruled_by integer references users(id),
+  ruled_at text not null,
+  primary key(game_id, question, answer_key)
+);
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

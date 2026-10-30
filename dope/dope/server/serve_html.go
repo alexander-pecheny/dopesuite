@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 
+	"dope/dope/domain/contested"
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/multifest"
@@ -60,6 +61,9 @@ type gameInitPayload struct {
 	// Sheets are the venues of a Game of the whole synch fest, each with the
 	// sheet the input tab enters it on, and which of them this visitor writes.
 	Sheets []gameSheet `json:"sheets,omitempty"`
+	// Contested is set when the Game takes contested answers: whether this visitor
+	// records them and whether they rule on them.
+	Contested *gameContested `json:"contested,omitempty"`
 	// Static marks a snapshot served in static (lockdown) mode: the client skips
 	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
 	Static bool `json:"static,omitempty"`
@@ -71,6 +75,11 @@ type gameVenue struct {
 	// GameLabel names the Game by its format, since a venue's Game is
 	// usually titled after the venue.
 	GameLabel string `json:"gameLabel"`
+}
+
+type gameContested struct {
+	Enter bool `json:"enter,omitempty"`
+	Judge bool `json:"judge,omitempty"`
 }
 
 type gameSheet struct {
@@ -100,6 +109,29 @@ func (s *server) canEdit(r *http.Request, festID, gameID int64) bool {
 	}
 	may, err := festaccess.MayRunGame(r.Context(), s.eng.DB, festID, gameID, user.UserID, role)
 	return err == nil && may
+}
+
+// gameContested is what the visitor may do with the Game's contested answers, nil for a
+// Game that takes none.
+func (s *server) gameContested(r *http.Request, scope festScope, enter bool) *gameContested {
+	ctx := r.Context()
+	var gameType string
+	if err := s.eng.DB.QueryRowContext(ctx, `select game_type from games where id = ?`, scope.GameID).Scan(&gameType); err != nil {
+		return nil
+	}
+	if _, ok := games.As[games.Contestable](gameType); !ok {
+		return nil
+	}
+	if on, err := contested.Enabled(ctx, s.eng.DB, scope.FestID); err != nil || !on {
+		return nil
+	}
+	out := &gameContested{Enter: enter}
+	if user, ok := s.eng.LookupSession(r); ok {
+		if role, err := festaccess.FestUserRoleFromQuery(ctx, s.eng.DB, scope.FestID, user.UserID); err == nil {
+			out.Judge, _ = festaccess.MayJudgeGame(ctx, s.eng.DB, scope.FestID, scope.GameID, user.UserID, role)
+		}
+	}
+	return out
 }
 
 // gameSheets lists the venues of a Game of the whole synch fest, the ones
@@ -148,6 +180,7 @@ func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 	}
 	payload.CanEdit = s.canEdit(r, scope.FestID, scope.GameID)
 	payload.Sheets = s.gameSheets(r, scope)
+	payload.Contested = s.gameContested(r, scope, payload.CanEdit || slices.ContainsFunc(payload.Sheets, func(g gameSheet) bool { return g.Editable }))
 	data, err := json.Marshal(payload)
 	if err != nil {
 		s.serveAppHTML(w, r, htmlPath)

@@ -86,10 +86,10 @@ CREATE TABLE fest_game_hosts(
 );
 
 -- table fest_organizers
-CREATE TABLE fest_organizers(
+CREATE TABLE "fest_organizers"(
   fest_id integer not null references fests(id) on delete cascade,
   user_id integer not null references users(id) on delete cascade,
-  role text not null default 'admin' check (role in ('creator','admin','host')),
+  role text not null default 'admin' check (role in ('creator','admin','host','game_jury')),
   added_at text not null,
   primary key(fest_id, user_id)
 );
@@ -177,7 +177,7 @@ CREATE TABLE fests(
   start_date text,
   end_date text,
   is_public integer not null default 0
-, kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind in ('regular','synch','multi')));
+, kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind in ('regular','synch','multi')), contested INTEGER);
 
 -- table game_assignments
 CREATE TABLE game_assignments(
@@ -373,6 +373,28 @@ CREATE TABLE multifest_venues(
   rating_id integer,
   position integer not null default 0
 , representative TEXT NOT NULL DEFAULT '', rating_request_id INTEGER);
+
+-- table od_contested
+CREATE TABLE od_contested(
+  game_id integer not null references games(id) on delete cascade,
+  question integer not null,
+  fest_team_id integer not null references fest_teams(id) on delete cascade,
+  answer text not null,
+  created_by integer references users(id),
+  created_at text not null,
+  primary key(game_id, question, fest_team_id)
+);
+
+-- table od_contested_rulings
+CREATE TABLE od_contested_rulings(
+  game_id integer not null references games(id) on delete cascade,
+  question integer not null,
+  answer_key text not null,
+  accepted integer not null,
+  ruled_by integer references users(id),
+  ruled_at text not null,
+  primary key(game_id, question, answer_key)
+);
 
 -- table participant_players
 CREATE TABLE participant_players(

@@ -133,7 +133,7 @@ func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site) (Pl
 		questions += n
 	}
 	p.Warnings = append(p.Warnings, unfinished(state, venues, questions)...)
-	state.FlattenVenues()
+	state.Scored()
 
 	if p.Questions, err = site.questions(ctx, p.Tournament); err != nil {
 		return p, err

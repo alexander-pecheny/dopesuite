@@ -2696,6 +2696,30 @@ body:not(.embedded-match) .grid-match {
   --cell-fill: var(--green);
 }
 
+/* A спорный waiting for the jury is yellow wherever its cell shows. Once ruled
+   on, the standings show it as an ordinary taken or missed question; the input
+   sheet keeps the number, green or struck out, so the host sees what became of
+   it. */
+.answer-cell.od-contested,
+.results-answer.od-contested .results-answer-mark {
+  --cell-fill: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.entry-cell.od-contested {
+  background-color: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.entry-cell.od-contested-accepted {
+  color: var(--green-dark);
+}
+
+.entry-cell.od-contested-rejected {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 
 
 .ksi-results-table tbody tr + tr td {

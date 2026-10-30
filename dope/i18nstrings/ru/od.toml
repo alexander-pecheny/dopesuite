@@ -142,3 +142,34 @@ tables_note = 'Столов: {{.n}}. Листы 1–{{.n}} — джокеры.'
 # chip of the whole fest's view.
 label = "Площадка"
 all = "Все площадки"
+
+[contested]
+# Спорные: a team's disputed answer, which the game's jury accepts or rejects
+# after the game (dope/dope/domain/contested and od.ts).
+# The errors a host or the jury reads under a refused save.
+no_such_number = "В игре нет команды с таким номером"
+answer_required = "Нужны номер вопроса и текст ответа"
+status_invalid = "Решение бывает только «принят», «отклонён» или «не рассмотрен»"
+save_failed = "Не удалось сохранить спорный ответ"
+# The button over the entry sheet, and the dialog it opens.
+add = "Добавить спорный"
+dialog_title = 'Спорный ответ на вопрос {{.n}}'
+team_label = "Номер команды"
+no_team = "Нет такой команды"
+answer_label = "Ответ команды"
+answer_hint = "Такой же ответ другой команды выберите из списка: жюри решает по нему один раз."
+# How often an answer was given, in the suggest list under the answer field.
+given = '{{.n}} {{plural .n "команда" "команды" "команд"}}'
+delete = "Удалить"
+cancel = "Отмена"
+save = "Сохранить"
+# The tab that lists them for the jury and the admins.
+tab = "Спорные"
+empty = "Спорных ответов пока нет."
+col_question = "Вопрос"
+col_answer = "Ответ"
+pending = "Не рассмотрен"
+accepted = "Принят"
+rejected = "Отклонён"
+# The tooltip on a total that carries спорные still waiting for the jury.
+pending_total = '{{.n}} {{plural .n "спорный ответ ждёт" "спорных ответа ждут" "спорных ответов ждут"}} решения жюри'
