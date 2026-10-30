@@ -2229,10 +2229,14 @@ body:not(.embedded-match) .grid-match {
   min-width: max-content;
 }
 
+/* The gap above the entry table is where the yin-yang of the active column
+   floats (positionInvertOverlay), so whatever row sits over the table stays
+   clear of it. */
 .od-input-wrap {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: var(--space-5);
   min-width: max-content;
 }
 

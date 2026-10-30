@@ -1507,7 +1507,7 @@ export type Strings = {
       empty: () => string;
       given: (n: number) => string;
       noSuchNumber: () => string;
-      noTeam: () => string;
+      noTeam: (n: string) => string;
       pending: () => string;
       pendingTotal: (n: number) => string;
       rejected: () => string;
@@ -1516,6 +1516,7 @@ export type Strings = {
       statusInvalid: () => string;
       tab: () => string;
       teamLabel: () => string;
+      teamPlaceholder: () => string;
     };
     detailed: {
       tour: (n: string) => string;

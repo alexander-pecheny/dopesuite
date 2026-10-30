@@ -18,7 +18,7 @@ import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {gameVenue, parseGameRoute, venuePageURL} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
+import {fitScrollFade, installVirtualKeypad, renderTabBar, tabPicker} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
@@ -200,10 +200,11 @@ const UNDO_LIMIT = 100;
 const kdGame = (gameInit?.scheme as {gameType?: unknown} | null | undefined)?.gameType === "kd";
 // What this visitor may do with the Game's contested answers (the init payload): record
 // them, rule on them. Only they read the answers' text, which the document
-// leaves out.
+// leaves out. The spectator view offers neither, even to an organizer or a
+// juror who is logged in: contested answers are worked on the /host page.
 const contestedRights = (gameInit as {contested?: {enter?: boolean; judge?: boolean}} | null | undefined)?.contested;
 const contestedEnter = !viewer && Boolean(contestedRights?.enter);
-const contestedJudge = Boolean(contestedRights?.judge);
+const contestedJudge = !viewer && Boolean(contestedRights?.judge);
 let contestedTexts: ContestedText[] = [];
 let contestedSeen: string | null = null;
 let contestedRowsCache: Array<Map<number, ODContested>> | null = null;
@@ -407,19 +408,19 @@ function showVenue(venue: number): void {
   render();
 }
 
-// venueChips switch the page between the venues' views of a synch fest. The
-// input tab enters one venue's sheet at a time, so it offers no whole fest.
+// venueChips switch the page between the venues' views of a synch fest: a
+// dropdown, since a fest has dozens of venues. The input tab enters one venue's
+// sheet at a time, so it offers no whole fest.
 function venueChips(tab: string): HTMLElement | null {
   const entering = tab === "input";
   const shown = entering ? shownSheets() : gameSheets;
   if (!od.isSynch(docState) || shown.length < 2) return null;
   const row = document.createElement("div");
-  row.className = "match-tabs";
-  row.setAttribute("role", "tablist");
+  row.className = "match-tabs tabs-segmented";
   row.setAttribute("aria-label", S.od.venues.label());
   const items = shown.map((venue) => ({key: String(venue.id), label: venue.title}));
   if (!entering) items.unshift({key: "0", label: S.od.venues.all()});
-  renderTabBar(row, items, String(entering ? sheetVenue : pageVenue), (key) => showVenue(Number(key)), {picker: true});
+  row.appendChild(tabPicker(items, String(entering ? sheetVenue : pageVenue), (key) => showVenue(Number(key))));
   return row;
 }
 
@@ -680,8 +681,13 @@ function renderTabs(): void {
 function buildInputView(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-input-wrap";
+  // The venue tabs and the contested answers' button share one row; the button is a
+  // segmented group of its own, so it reads at the tabs' size.
+  const toolbar = document.createElement("div");
+  toolbar.className = "u-row u-gap-sm u-align-center";
   const chips = venueChips("input");
-  if (chips) wrapper.appendChild(chips);
+  if (chips) toolbar.appendChild(chips);
+  if (toolbar.childElementCount) wrapper.appendChild(toolbar);
   if (!entryNumbered()) {
     // Prose, not an input table: the wrap must fit the frame and wrap.
     wrapper.classList.add("od-input-wrap-guard");
@@ -691,13 +697,14 @@ function buildInputView(): HTMLElement {
   if (contestedEnter) {
     const add = document.createElement("button");
     add.type = "button";
-    add.className = "btn";
+    add.className = "match-tab";
     add.textContent = S.od.contested.add();
     add.addEventListener("click", () => openContested(sheet.focus?.col ?? 0, sheet.focus?.row ?? -1));
-    const toolbar = document.createElement("div");
-    toolbar.className = "u-row u-gap-sm";
-    toolbar.appendChild(add);
-    wrapper.appendChild(toolbar);
+    const group = document.createElement("div");
+    group.className = "match-tabs tabs-segmented";
+    group.appendChild(add);
+    toolbar.appendChild(group);
+    if (toolbar.parentNode !== wrapper) wrapper.appendChild(toolbar);
   }
   const tables = document.createElement("div");
   tables.className = "od-input-tables";
@@ -2222,12 +2229,12 @@ function openContested(qIndex: number, rowIndex: number): void {
   });
 }
 
-// saveContested records the answer; a contested answer moved to another team leaves
-// the first one first, since the server keys them by the team.
-async function saveContested(qIndex: number, typed: number, answer: string, existing: ContestedText | undefined): Promise<void> {
-  const number = entryDocNumber(typed);
-  if (existing && existing.number !== number && !await writeContested("DELETE", "", {question: qIndex, number: existing.number})) return;
-  await writeContested("POST", "", {question: qIndex, number, answer});
+// saveContested records the answer for every team typed; a contested answer moved
+// off its team leaves that team first, since the server keys them by the team.
+async function saveContested(qIndex: number, typed: number[], answer: string, existing: ContestedText | undefined): Promise<void> {
+  const numbers = typed.map(entryDocNumber);
+  if (existing && !numbers.includes(existing.number) && !await writeContested("DELETE", "", {question: qIndex, number: existing.number})) return;
+  await writeContested("POST", "", {question: qIndex, numbers, answer});
 }
 
 function ruleContested(group: {question: number; answer: string}, status: string): void {

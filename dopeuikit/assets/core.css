@@ -884,6 +884,13 @@ a.list-row:hover { background: var(--hover-bg); }
   font-weight: var(--fw-semibold);
 }
 
+/* A column as narrow as its widest cell, such as a number under a one-word
+   caption; the other columns share the rest of the table. */
+.data-table .col-fit {
+  width: 0;
+  white-space: nowrap;
+}
+
 .data-table input:not([type="checkbox"]),
 .data-table select {
   width: 100%;
@@ -2488,7 +2495,10 @@ input[type="radio"]:focus-visible {
     0 0;
 }
 
-.game-host-top .match-tabs {
+/* The segmented skin: the game page's tab bar, and any other row of tabs
+   that opts in with .tabs-segmented (a synch ОД's площадка picker and its «Добавить спорный»). */
+.game-host-top .match-tabs,
+.match-tabs.tabs-segmented {
   display: flex;
   align-items: stretch;
   gap: 0;
@@ -2499,7 +2509,7 @@ input[type="radio"]:focus-visible {
   background: transparent;
 }
 
-.game-host-top .match-tab {
+:is(.game-host-top, .tabs-segmented) .match-tab {
   position: relative;
   height: 24px;
   padding: 0 8px;
@@ -2512,33 +2522,34 @@ input[type="radio"]:focus-visible {
   line-height: 22px;
 }
 
-.game-host-top a.match-tab {
+:is(.game-host-top, .tabs-segmented) a.match-tab {
   display: flex;
   align-items: center;
   text-decoration: none;
 }
 
-.game-host-top .match-tab:first-child,
+:is(.game-host-top, .tabs-segmented) .match-tab:first-child,
+.tabs-segmented .tab-picker + .match-tab,
 .game-host-top .tab-picker + .match-tab {
   margin-left: 0;
   border-top-left-radius: var(--cell-radius);
   border-bottom-left-radius: var(--cell-radius);
 }
 
-.game-host-top .match-tab:last-child {
+:is(.game-host-top, .tabs-segmented) .match-tab:last-child {
   border-top-right-radius: var(--cell-radius);
   border-bottom-right-radius: var(--cell-radius);
 }
 
-.game-host-top .match-tab + .match-tab {
+:is(.game-host-top, .tabs-segmented) .match-tab + .match-tab {
   border-left-color: var(--structure);
 }
 
-.game-host-top .match-tab:hover {
+:is(.game-host-top, .tabs-segmented) .match-tab:hover {
   background: var(--wash-emphasis);
 }
 
-.game-host-top .match-tab.active {
+:is(.game-host-top, .tabs-segmented) .match-tab.active {
   z-index: 1;
   border-color: var(--text);
   background: var(--paper);

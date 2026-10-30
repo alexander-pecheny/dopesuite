@@ -154,8 +154,10 @@ save_failed = "Не удалось сохранить спорный ответ"
 # The button over the entry sheet, and the dialog it opens.
 add = "Добавить спорный"
 dialog_title = 'Спорный ответ на вопрос {{.n}}'
-team_label = "Номер команды"
-no_team = "Нет такой команды"
+team_label = "Номера команд"
+# Several teams that gave the same answer go in one save.
+team_placeholder = "Через запятую: 3, 7, 12"
+no_team = 'Нет команды с номером {{.n}}'
 answer_label = "Ответ команды"
 answer_hint = "Такой же ответ другой команды выберите из списка: жюри решает по нему один раз."
 # How often an answer was given, in the suggest list under the answer field.

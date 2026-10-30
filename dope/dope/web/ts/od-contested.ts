@@ -48,7 +48,8 @@ export interface ContestedDialogSpec {
   // Everything recorded so far, for the suggest list.
   known: readonly ContestedText[];
   teamName: (number: number) => string | null;
-  save: (number: number, answer: string) => void;
+  // save gets every team the host typed, in the order typed.
+  save: (numbers: number[], answer: string) => void;
   remove: () => void;
 }
 
@@ -65,7 +66,7 @@ export function openContestedDialog(spec: ContestedDialogSpec): void {
   title.textContent = S.od.contested.dialogTitle(String(spec.question + 1));
 
   const [numberField, numberInput] = field(S.od.contested.teamLabel());
-  numberInput.inputMode = "numeric";
+  numberInput.placeholder = S.od.contested.teamPlaceholder();
   numberInput.value = spec.number ? String(spec.number) : "";
   const teamHint = document.createElement("p");
   teamHint.className = "hint";
@@ -102,13 +103,16 @@ export function openContestedDialog(spec: ContestedDialogSpec): void {
   submit.type = "submit";
   actions.append(cancel, submit);
 
-  const typedNumber = () => Number(numberInput.value.trim());
+  // The hint names every team typed, or the first number that is no team.
   const sync = () => {
-    const name = spec.teamName(typedNumber());
-    teamHint.hidden = numberInput.value.trim() === "";
-    teamHint.textContent = name ?? S.od.contested.noTeam();
-    teamHint.classList.toggle("hint-danger", name === null);
-    submit.disabled = name === null || answerInput.value.trim() === "";
+    const parts = numberParts(numberInput.value);
+    const unknown = parts.find((part) => !/^\d+$/.test(part) || spec.teamName(Number(part)) === null);
+    teamHint.hidden = parts.length === 0;
+    teamHint.textContent = unknown === undefined
+      ? typedNumbers(numberInput.value).map((number) => spec.teamName(number)).join(", ")
+      : S.od.contested.noTeam(unknown);
+    teamHint.classList.toggle("hint-danger", unknown !== undefined);
+    submit.disabled = parts.length === 0 || unknown !== undefined || answerInput.value.trim() === "";
   };
   numberInput.addEventListener("input", sync);
   answerInput.addEventListener("input", sync);
@@ -116,7 +120,7 @@ export function openContestedDialog(spec: ContestedDialogSpec): void {
     event.preventDefault();
     if (submit.disabled) return;
     dialog.close();
-    spec.save(typedNumber(), answerInput.value.trim());
+    spec.save(typedNumbers(numberInput.value), answerInput.value.trim());
   });
   sync();
 
@@ -126,6 +130,17 @@ export function openContestedDialog(spec: ContestedDialogSpec): void {
   document.body.appendChild(dialog);
   dialog.showModal();
   (spec.number ? answerInput : numberInput).focus();
+}
+
+// numberParts splits "3, 7 12" at commas, semicolons and spaces.
+function numberParts(text: string): string[] {
+  return text.split(/[\s,;]+/).filter(Boolean);
+}
+
+// typedNumbers reads "3, 7 12" as the teams 3, 7 and 12, each once, leaving
+// out whatever is not a whole number.
+export function typedNumbers(text: string): number[] {
+  return [...new Set(numberParts(text).filter((part) => /^\d+$/.test(part)).map(Number))];
 }
 
 // field is a labelled text input. It sits in a suggest anchor, so a list
@@ -179,8 +194,10 @@ export function buildContestedView(spec: ContestedViewSpec): HTMLElement {
   const table = document.createElement("table");
   table.className = "data-table";
   const head = document.createElement("tr");
-  for (const caption of [S.od.contested.colQuestion(), S.od.contested.colAnswer()]) {
+  // The question column is as wide as its caption; the answer takes the rest.
+  for (const [caption, className] of [[S.od.contested.colQuestion(), "col-fit"], [S.od.contested.colAnswer(), ""]]) {
     const cell = document.createElement("th");
+    cell.className = className;
     cell.textContent = caption;
     head.appendChild(cell);
   }
@@ -188,11 +205,14 @@ export function buildContestedView(spec: ContestedViewSpec): HTMLElement {
   const body = table.createTBody();
   for (const group of groups) {
     const row = body.insertRow();
-    row.insertCell().textContent = String(group.question + 1);
+    const number = row.insertCell();
+    number.className = "col-fit";
+    number.textContent = String(group.question + 1);
     // The answer, who gave it and the ruling stack in one cell, so the switch
-    // stays on a phone's screen.
+    // stays on a phone's screen. The stack keeps each line to its own width,
+    // so the switch is no wider than its three choices.
     const cell = document.createElement("div");
-    cell.className = "u-col u-gap-sm";
+    cell.className = "u-col u-gap-sm u-align-start";
     row.insertCell().appendChild(cell);
     const answer = document.createElement("strong");
     answer.textContent = group.answer;

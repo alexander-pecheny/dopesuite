@@ -30,17 +30,28 @@ func (s *server) scopedContested(w http.ResponseWriter, r *http.Request, sc rout
 
 // contestedRequest is one contested answer: the question (from 0) and the team's
 // number in this Game for a host's write, the question and the answer for a
-// ruling.
+// ruling. A save may name several teams in Numbers, since teams often give
+// the same answer; they are written together or not at all.
 type contestedRequest struct {
-	Question int    `json:"question"`
-	Number   int64  `json:"number"`
-	Answer   string `json:"answer"`
-	Status   string `json:"status"`
+	Question int     `json:"question"`
+	Number   int64   `json:"number"`
+	Numbers  []int64 `json:"numbers"`
+	Answer   string  `json:"answer"`
+	Status   string  `json:"status"`
 }
 
 func (s *server) scopedContestedSave(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, req contestedRequest) error {
-		return contested.SaveTx(ctx, tx, sc.FestID, sc.GameID, sc.User.UserID, sc.SheetVenues, req.Question, req.Number, req.Answer)
+		numbers := req.Numbers
+		if len(numbers) == 0 {
+			numbers = []int64{req.Number}
+		}
+		for _, number := range numbers {
+			if err := contested.SaveTx(ctx, tx, sc.FestID, sc.GameID, sc.User.UserID, sc.SheetVenues, req.Question, number, req.Answer); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

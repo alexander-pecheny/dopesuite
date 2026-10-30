@@ -91,6 +91,13 @@ func TestContestedAreRuledOnPerAnswer(t *testing.T) {
 		t.Fatalf("a rejected спорный is kept: %+v", got)
 	}
 
+	// Several teams with the same answer go in one save, all of them or none.
+	call(http.MethodPost, "/contested", map[string]any{"question": 1, "numbers": []int{1, 3}, "answer": "Гоголь"}, host, http.StatusOK)
+	call(http.MethodPost, "/contested", map[string]any{"question": 1, "numbers": []int{2, 9}, "answer": "Гоголь"}, host, http.StatusBadRequest)
+	if got := contestedOf(); len(got) != 4 {
+		t.Fatalf("after a save of two teams and a refused one: %+v", got)
+	}
+
 	if resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/settings", festID), map[string]any{"contested": false}, admin); resp.Code != http.StatusOK {
 		t.Fatalf("switch off: %d %s", resp.Code, resp.Body.String())
 	}

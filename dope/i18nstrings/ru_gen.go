@@ -2168,7 +2168,7 @@ var RU = Strings{
 				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "команда", "команды", "команд"))
 			},
 			NoSuchNumber: func() string { return "В игре нет команды с таким номером" },
-			NoTeam:       func() string { return "Нет такой команды" },
+			NoTeam:       func(n string) string { return fmt.Sprintf("Нет команды с номером %s", n) },
 			Pending:      func() string { return "Не рассмотрен" },
 			PendingTotal: func(n int) string {
 				return fmt.Sprintf("%d %s решения жюри", n, core.Plural("ru", n, "спорный ответ ждёт", "спорных ответа ждут", "спорных ответов ждут"))
@@ -2179,8 +2179,9 @@ var RU = Strings{
 			StatusInvalid: func() string {
 				return "Решение бывает только «принят», «отклонён» или «не рассмотрен»"
 			},
-			Tab:       func() string { return "Спорные" },
-			TeamLabel: func() string { return "Номер команды" },
+			Tab:             func() string { return "Спорные" },
+			TeamLabel:       func() string { return "Номера команд" },
+			TeamPlaceholder: func() string { return "Через запятую: 3, 7, 12" },
 		},
 		Detailed: OdDetailedStrings{
 			Tour: func(n string) string { return fmt.Sprintf("Т%s", n) },
