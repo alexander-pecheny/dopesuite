@@ -615,7 +615,8 @@ function getTabPane(tab: string): HTMLElement {
   const pane = document.createElement("div");
   pane.className = "od-pane";
   pane.dataset.tab = tab;
-  if (tab !== "input") {
+  // The contested answers are the whole fest's at once, so that tab has no venue to pick.
+  if (tab !== "input" && tab !== "contested") {
     const venues = venueChips(tab);
     if (venues) {
       const bar = document.createElement("div");
