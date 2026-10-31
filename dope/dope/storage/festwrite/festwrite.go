@@ -46,7 +46,13 @@ const (
 // so a starved pool can never pin s.mu and freeze the whole site (the write fails
 // and releases the lock instead). On 2026-06-13 a single match-update write hung
 // ~55 min on exactly this, jamming every other write behind it.
-const WriteTxTimeout = 5 * time.Second
+//
+// It is a variable for the tests alone: a whole studchr replay settles bouts
+// that hold the lock for a second or two, and on a box running every
+// package's tests at once one of them can pass 5 s.
+var WriteTxTimeout = writeTxTimeout
+
+const writeTxTimeout = 5 * time.Second
 
 func WithAuditGameID(ctx context.Context, gameID int64) context.Context {
 	if gameID <= 0 {

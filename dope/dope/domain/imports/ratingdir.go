@@ -20,7 +20,9 @@ import (
 // (ADR-0024). buff's mirror answers when dope can read it; otherwise the site's
 // API is asked, so the editor works on a box without the mirror.
 
-const ratingAPI = "https://api.rating.chgk.info"
+// RatingAPI is the site's API. Tests point it at a fake, so none of them
+// reaches the network.
+var RatingAPI = "https://api.rating.chgk.info"
 
 // RatingPerson is one player of the rating site as the editor offers them.
 type RatingPerson struct {
@@ -46,7 +48,7 @@ const ratingAPIPage = 50
 var ratingClient = &http.Client{Timeout: 6 * time.Second}
 
 func getRatingJSON(ctx context.Context, path string, into any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ratingAPI+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, RatingAPI+path, nil)
 	if err != nil {
 		return err
 	}
