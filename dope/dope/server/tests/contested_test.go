@@ -90,6 +90,12 @@ func TestContestedAreRuledOnPerAnswer(t *testing.T) {
 	if got := contestedOf(); len(got) != 2 || got[1].Status != games.ContestedRejected {
 		t.Fatalf("a rejected спорный is kept: %+v", got)
 	}
+	// An answer the jury has already ruled on takes that ruling as it is recorded.
+	call(http.MethodPost, "/contested", map[string]any{"question": 0, "number": 3, "answer": "Пушкин "}, host, http.StatusOK)
+	if got := contestedOf(); len(got) != 3 || got[2].Status != games.ContestedRejected {
+		t.Fatalf("a late спорный is not ruled: %+v", got)
+	}
+	call(http.MethodDelete, "/contested", map[string]any{"question": 0, "number": 3}, host, http.StatusOK)
 
 	// Several teams with the same answer go in one save, all of them or none.
 	call(http.MethodPost, "/contested", map[string]any{"question": 1, "numbers": []int{1, 3}, "answer": "Гоголь"}, host, http.StatusOK)

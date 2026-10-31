@@ -418,7 +418,8 @@ function venueChips(tab: string): HTMLElement | null {
   const shown = entering ? shownSheets() : gameSheets;
   if (!od.isSynch(docState) || shown.length < 2) return null;
   const row = document.createElement("div");
-  row.className = "match-tabs tabs-segmented";
+  // Always collapsed: the strip shows only its picker, never every venue.
+  row.className = "match-tabs tabs-segmented tabs-collapsed";
   row.setAttribute("aria-label", S.od.venues.label());
   const items = shown.map((venue) => ({key: String(venue.id), label: venue.title}));
   if (!entering) items.unshift({key: "0", label: S.od.venues.all()});
