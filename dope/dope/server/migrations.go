@@ -1131,6 +1131,34 @@ create table if not exists od_contested_rulings(
 `)
 		return err
 	}},
+	// v52: links that make whoever follows them the fest's jury.
+	{Version: 52, Name: "jury invite links", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+create table if not exists jury_invites(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  code text not null unique,
+  label text,
+  created_by integer not null references users(id),
+  created_at text not null,
+  expires_at text,
+  max_uses integer,
+  requires_approval integer not null default 0,
+  revoked_at text
+);
+create index if not exists jury_invites_fest_idx on jury_invites(fest_id);
+create table if not exists jury_invite_uses(
+  id integer primary key,
+  invite_id integer not null references jury_invites(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null check (status in ('joined','pending','declined')),
+  requested_at text not null,
+  decided_at text,
+  unique(invite_id, user_id)
+);
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

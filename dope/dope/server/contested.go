@@ -11,11 +11,14 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
 	"dope/dope/domain/games"
+	"dope/dope/platform/roles"
 	"dope/dope/web/route"
 )
 
 // A Game's contested answers, with their text: what the hosts' suggest list and the
-// jury's tab read. Without the fest's switch on there are none.
+// jury's tab read. Without the fest's switch on there are none. The jury rules
+// on an answer without knowing who gave it, so it gets each answer once and
+// no team.
 func (s *server) scopedContested(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	list := []contested.Answer{}
 	if on, err := contested.Enabled(r.Context(), s.eng.DB, sc.FestID); err != nil {
@@ -24,6 +27,9 @@ func (s *server) scopedContested(w http.ResponseWriter, r *http.Request, sc rout
 		if list, err = contested.List(r.Context(), s.eng.DB, sc.FestID, sc.GameID); err != nil {
 			return err
 		}
+	}
+	if !roles.CanEditGameTables(sc.Role) {
+		list = contested.Anonymous(list)
 	}
 	return route.JSON(w, list)
 }

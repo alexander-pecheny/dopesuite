@@ -646,7 +646,8 @@ var RU = Strings{
 			Expired: func() string {
 				return "Срок действия ссылки истёк. Попросите у организаторов новую."
 			},
-			LabelTooLong: func() string { return "Название ссылки слишком длинное." },
+			JuryScopeName: func(fest string) string { return fmt.Sprintf("жюри феста «%s»", fest) },
+			LabelTooLong:  func() string { return "Название ссылки слишком длинное." },
 			LimitsOutOfRange: func() string {
 				return "Число входов и срок не могут быть меньше нуля, а срок не может быть больше года."
 			},
@@ -1162,10 +1163,14 @@ var RU = Strings{
 			DeleteConfirm: func() string {
 				return "Удалить ссылку вместе с историей входов? Те, кто вошёл по ней, останутся ведущими."
 			},
-			Empty:            func() string { return "Ссылок пока нет." },
-			Expires:          func(date string) string { return fmt.Sprintf("действует до %s", date) },
-			GameLabel:        func() string { return "Игра" },
-			Joined:           func(names string) string { return fmt.Sprintf("Вошли: %s", names) },
+			Empty:     func() string { return "Ссылок пока нет." },
+			Expires:   func(date string) string { return fmt.Sprintf("действует до %s", date) },
+			GameLabel: func() string { return "Игра" },
+			Joined:    func(names string) string { return fmt.Sprintf("Вошли: %s", names) },
+			JuryHint: func() string {
+				return "Кто перейдёт по ссылке «Жюри феста», станет жюри: будет принимать и отклонять спорные ответы. Какие команды их дали, жюри не видит."
+			},
+			JuryOption:       func() string { return "Жюри феста" },
 			LabelLabel:       func() string { return "Название" },
 			LabelPlaceholder: func() string { return "например, «Минск»" },
 			Lead: func() string {
@@ -1206,19 +1211,25 @@ var RU = Strings{
 			VenueOrGameLabel: func() string { return "Площадка или игра" },
 		},
 		Join: HostJoinStrings{
-			ActiveHeading: func(scope string) string { return fmt.Sprintf("Вас приглашают вести %s", scope) },
+			ActiveHeading:     func(scope string) string { return fmt.Sprintf("Вас приглашают вести %s", scope) },
+			ActiveHeadingJury: func(scope string) string { return fmt.Sprintf("Вас приглашают в %s", scope) },
 			ActiveNote: func() string {
 				return "Вы станете ведущим этой игры и сможете вносить в неё результаты. Остальные игры феста будут видны вам как зрителю."
+			},
+			ActiveNoteJury: func() string {
+				return "Вы станете жюри этого феста и будете принимать и отклонять спорные ответы. Остальное будет видно вам как зрителю."
 			},
 			ActiveNoteVenue: func() string {
 				return "Вы станете ведущим игр этой площадки, сможете вносить в них результаты и править команды площадки и их номера. Остальные игры феста будут видны вам как зрителю."
 			},
-			JoinSubmit:     func() string { return "Стать ведущим" },
-			MemberHeading:  func(scope string) string { return fmt.Sprintf("Вы уже ведёте %s", scope) },
-			OpenFest:       func() string { return "Открыть фест" },
-			OpenGame:       func() string { return "Открыть игру" },
-			RefusedHeading: func() string { return "Ссылка не работает" },
-			Title:          func() string { return "Приглашение" },
+			JoinSubmit:        func() string { return "Стать ведущим" },
+			JoinSubmitJury:    func() string { return "Стать жюри" },
+			MemberHeading:     func(scope string) string { return fmt.Sprintf("Вы уже ведёте %s", scope) },
+			MemberHeadingJury: func() string { return "У вас уже есть доступ к этому фесту" },
+			OpenFest:          func() string { return "Открыть фест" },
+			OpenGame:          func() string { return "Открыть игру" },
+			RefusedHeading:    func() string { return "Ссылка не работает" },
+			Title:             func() string { return "Приглашение" },
 		},
 		Multifest: HostMultifestStrings{
 			KindHint: func() string {

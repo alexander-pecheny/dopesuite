@@ -132,3 +132,59 @@ func TestAHostInviteLinkMakesAHostOfOneGame(t *testing.T) {
 		t.Fatalf("the dashboard does not list the link and who came in")
 	}
 }
+
+// A jury link names the fest. A stranger who follows it becomes its jury, and
+// someone who already has a role keeps it.
+func TestAJuryInviteLinkMakesTheFestsJury(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	adminID, adminToken := createAPITestSession(t, srv, "boss")
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	hostID, hostToken := createAPITestSession(t, srv, "host")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	strangerID, strangerToken := createAPITestSession(t, srv, "judge")
+
+	mint := fmt.Sprintf("/api/fest/%d/jury-invites", festID)
+	if resp := scopedAPIRequest(t, srv, http.MethodPost, mint, map[string]any{}, hostToken); resp.Code != http.StatusForbidden {
+		t.Fatalf("a host minted a jury link: %d", resp.Code)
+	}
+	resp := scopedAPIRequest(t, srv, http.MethodPost, mint, map[string]any{"label": "Жюри"}, adminToken)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("mint: %d %s", resp.Code, resp.Body.String())
+	}
+	type link struct {
+		ID   int64  `json:"id"`
+		Code string `json:"code"`
+		Jury bool   `json:"jury"`
+	}
+	links := decodeInto[[]link](t, resp)
+	if len(links) != 1 || !links[0].Jury {
+		t.Fatalf("links after minting: %+v", links)
+	}
+	join := func(token string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/join/"+links[0].Code, nil)
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+		rec := httptest.NewRecorder()
+		srv.HostPageServer().HandleJoin(rec, req)
+		srv.Settle()
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("join: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	join(strangerToken)
+	join(hostToken)
+	role := func(userID int64) string {
+		t.Helper()
+		var r string
+		srv.Eng().DB.QueryRow(`select role from fest_organizers where fest_id = ? and user_id = ?`, festID, userID).Scan(&r)
+		return r
+	}
+	if got := role(strangerID); got != roles.GameJury {
+		t.Fatalf("the stranger's role: %q", got)
+	}
+	if got := role(hostID); got != roles.Host {
+		t.Fatalf("the host's role after a jury link: %q", got)
+	}
+}

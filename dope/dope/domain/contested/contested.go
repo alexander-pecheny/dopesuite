@@ -111,6 +111,27 @@ func List(ctx context.Context, q store.Queryer, festID, gameID int64) ([]Answer,
 	return out, nil
 }
 
+// Anonymous is the list with every team taken out: each answer to a question
+// once, with its ruling and number 0.
+func Anonymous(list []Answer) []Answer {
+	type answered struct {
+		question int
+		key      string
+	}
+	seen := map[answered]bool{}
+	out := make([]Answer, 0, len(list))
+	for _, a := range list {
+		k := answered{a.Question, Key(a.Answer)}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		a.Number = 0
+		out = append(out, a)
+	}
+	return out
+}
+
 // teamNumbers maps the fest teams the Game seats to the numbers it gives them.
 func teamNumbers(ctx context.Context, q store.Queryer, festID, gameID int64) (map[int64]int64, error) {
 	byNumber, err := gameTeams(ctx, q, festID, gameID)

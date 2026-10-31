@@ -40,6 +40,9 @@ CREATE INDEX journal_game_seq on journal(game_id, seq);
 -- index journal_request_id
 CREATE INDEX journal_request_id on journal(request_id);
 
+-- index jury_invites_fest_idx
+CREATE INDEX jury_invites_fest_idx on jury_invites(fest_id);
+
 -- index multifest_venues_request_idx
 CREATE UNIQUE INDEX multifest_venues_request_idx on multifest_venues(fest_id, rating_request_id) where rating_request_id is not null;
 
@@ -319,6 +322,31 @@ CREATE TABLE journal_segment(
 CREATE TABLE journal_trigger_state(
   id integer primary key check(id = 1),
   fingerprint text not null default ''
+);
+
+-- table jury_invite_uses
+CREATE TABLE jury_invite_uses(
+  id integer primary key,
+  invite_id integer not null references jury_invites(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null check (status in ('joined','pending','declined')),
+  requested_at text not null,
+  decided_at text,
+  unique(invite_id, user_id)
+);
+
+-- table jury_invites
+CREATE TABLE jury_invites(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  code text not null unique,
+  label text,
+  created_by integer not null references users(id),
+  created_at text not null,
+  expires_at text,
+  max_uses integer,
+  requires_approval integer not null default 0,
+  revoked_at text
 );
 
 -- table match_results

@@ -47,7 +47,8 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("GET "+fest+"/invites", route.Manager, s.apiInvites)
 	t.Handle("POST "+game+"/invites", route.Manager, s.apiCreateInvite)
 	t.Handle("POST "+fest+"/multifest-venues/{venue}/invites", route.Manager, s.apiCreateVenueInvite)
-	for _, kind := range []inviteKind{gameInvites, venueInvites} {
+	t.Handle("POST "+fest+"/jury-invites", route.Manager, s.apiCreateJuryInvite)
+	for _, kind := range inviteKinds {
 		t.Handle("POST "+fest+"/"+kind.path+"/{id}/revoke", route.Manager, s.apiChangeInvite(kind, false))
 		t.Handle("DELETE "+fest+"/"+kind.path+"/{id}", route.Manager, s.apiChangeInvite(kind, true))
 	}

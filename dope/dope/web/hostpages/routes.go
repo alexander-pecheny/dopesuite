@@ -127,7 +127,7 @@ func (s *Server) buildRoutes() *route.Table {
 		return nil
 	})
 	t.Handle("POST "+fest+"/invites", route.Manager, s.handleHostCreateInvite)
-	for _, kind := range []inviteKind{gameInvites, venueInvites} {
+	for _, kind := range inviteKinds {
 		t.Handle("POST "+fest+"/"+kind.path+"/{id}/revoke", route.Manager, s.handleHostChangeInvite(kind, false))
 		t.Handle("POST "+fest+"/"+kind.path+"/{id}/delete", route.Manager, s.handleHostChangeInvite(kind, true))
 	}

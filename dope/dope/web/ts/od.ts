@@ -617,7 +617,12 @@ function getTabPane(tab: string): HTMLElement {
   pane.dataset.tab = tab;
   if (tab !== "input") {
     const venues = venueChips(tab);
-    if (venues) pane.appendChild(venues);
+    if (venues) {
+      const bar = document.createElement("div");
+      bar.className = "sheet-bar u-row u-gap-sm u-align-center";
+      bar.appendChild(venues);
+      pane.appendChild(bar);
+    }
   }
   if (tab === "results" || tab === "detailed") {
     const chips = lens.chips();
@@ -684,10 +689,11 @@ function renderTabs(): void {
 function buildInputView(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-input-wrap";
-  // The venue tabs and the contested answers' button share one row; the button is a
-  // segmented group of its own, so it reads at the tabs' size.
+  // The venue picker and the contested answers' button share one bar, which stays at
+  // the frame's left edge while the sheet scrolls sideways; the button is a
+  // segmented group of its own, so it reads at the picker's size.
   const toolbar = document.createElement("div");
-  toolbar.className = "u-row u-gap-sm u-align-center";
+  toolbar.className = "sheet-bar u-row u-gap-sm u-align-center";
   const chips = venueChips("input");
   if (chips) toolbar.appendChild(chips);
   if (toolbar.childElementCount) wrapper.appendChild(toolbar);

@@ -1797,8 +1797,10 @@ body:not(.embedded-match) .grid-match {
    tab strip's own .match-tab — one chip per Division is the same gesture one
    tab per pane is — in a row of their own at the top of the sheet, which is
    what they filter. The sheet scrolls sideways under them, so the row is only
-   as wide as its chips and sticks to the frame's left edge. */
-.division-chips {
+   as wide as its chips and sticks to the frame's left edge. An ОД sheet's
+   venue picker and buttons (.sheet-bar) stay put the same way. */
+.division-chips,
+.sheet-bar {
   position: sticky;
   left: 0;
   width: max-content;
@@ -3112,6 +3114,10 @@ body:not(.embedded-match) .grid-match {
      .venues-results-table, .hamsa-table, …) — which come after core.css in
      the cascade. */
   .match-tabs { padding: 2px 0; }
+
+  /* The frame sits closer to the screen's edge than the header does, so the
+     bar steps in to line up with the header's tab picker. */
+  .sheet-bar { padding-left: var(--space-3); }
 
   .match-tab { padding: 4px 10px; font-size: var(--text-xs); }
 

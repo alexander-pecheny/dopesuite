@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"dope/dope/domain/contested"
 	"dope/dope/domain/games"
 	"dope/dope/platform/roles"
 )
@@ -72,8 +73,16 @@ func TestContestedAreRuledOnPerAnswer(t *testing.T) {
 		t.Fatalf("the document's спорные: %+v", got)
 	}
 	call(http.MethodGet, "/contested", nil, "", http.StatusUnauthorized)
-	if texts := call(http.MethodGet, "/contested", nil, jury, http.StatusOK); !strings.Contains(texts, "Пушкин") {
-		t.Fatalf("the jury cannot read the answers: %s", texts)
+	var juryTexts []contested.Answer
+	if err := json.Unmarshal([]byte(call(http.MethodGet, "/contested", nil, jury, http.StatusOK)), &juryTexts); err != nil {
+		t.Fatal(err)
+	}
+	// Two teams gave it, and the jury reads it once, from no team.
+	if len(juryTexts) != 1 || juryTexts[0].Answer != "Пушкин" || juryTexts[0].Number != 0 {
+		t.Fatalf("the jury's answers: %+v", juryTexts)
+	}
+	if texts := call(http.MethodGet, "/contested", nil, host, http.StatusOK); !strings.Contains(texts, `"number":2`) {
+		t.Fatalf("a host does not see who gave the answer: %s", texts)
 	}
 	call(http.MethodPatch, "/state", map[string]any{"ops": []map[string]any{{"path": []any{"completed", 1}, "value": true}}}, jury, http.StatusForbidden)
 	call(http.MethodPatch, "/state", map[string]any{"ops": []map[string]any{{"path": []any{"contested"}, "value": []any{}}}}, host, http.StatusBadRequest)

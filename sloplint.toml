@@ -6,4 +6,4 @@
 # sloplint branch and 0.523 after it. When a change lowers the score, lower this
 # line to match, so the gain is kept. It is 0.502 since the migration lists
 # vouched for their version numbers (sloplint 3ab0283 leaves those out).
-max-slop-score = 0.5008
+max-slop-score = 0.5007

@@ -48,6 +48,7 @@ synch_host_needs_venue = 'У {{.name}} не выбрана площадка. Н�
 # link is called on its join page, and why one does not work.
 scope_name = '«{{.game}}» на фесте «{{.fest}}»'
 venue_scope_name = 'площадку «{{.venue}}» на фесте «{{.fest}}»'
+jury_scope_name = 'жюри феста «{{.fest}}»'
 revoked = "Ссылку отозвали. Попросите у организаторов новую."
 expired = "Срок действия ссылки истёк. Попросите у организаторов новую."
 exhausted = "По этой ссылке уже вошло столько людей, сколько было можно. Попросите у организаторов новую."

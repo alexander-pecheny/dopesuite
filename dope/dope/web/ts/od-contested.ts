@@ -216,9 +216,11 @@ export function buildContestedView(spec: ContestedViewSpec): HTMLElement {
     row.insertCell().appendChild(cell);
     const answer = document.createElement("strong");
     answer.textContent = group.answer;
+    // The jury gets no teams (number 0): it rules on the answer alone.
     const teams = document.createElement("span");
     teams.className = "hint";
-    teams.textContent = group.numbers.map(spec.teamLabel).join(", ");
+    teams.textContent = group.numbers.filter((n) => n > 0).map(spec.teamLabel).join(", ");
+    teams.hidden = teams.textContent === "";
     const seg = document.createElement("div");
     seg.className = "seg";
     seg.setAttribute("role", "group");
