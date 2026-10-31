@@ -726,6 +726,8 @@ export type Strings = {
       colNickname: () => string;
       colRole: () => string;
       colVenues: () => string;
+      contestedHint: () => string;
+      contestedLabel: () => string;
       deleteAccessConfirm: (name: string) => string;
       deleteBtn: () => string;
       deleteConfirm: () => string;
@@ -1491,6 +1493,30 @@ export type Strings = {
     };
   };
   od: {
+    contested: {
+      accepted: () => string;
+      add: () => string;
+      answerHint: () => string;
+      answerLabel: () => string;
+      answerRequired: () => string;
+      cancel: () => string;
+      colAnswer: () => string;
+      colQuestion: () => string;
+      delete: () => string;
+      dialogTitle: (n: string) => string;
+      empty: () => string;
+      given: (n: number) => string;
+      noSuchNumber: () => string;
+      noTeam: () => string;
+      pending: () => string;
+      pendingTotal: (n: number) => string;
+      rejected: () => string;
+      save: () => string;
+      saveFailed: () => string;
+      statusInvalid: () => string;
+      tab: () => string;
+      teamLabel: () => string;
+    };
     detailed: {
       tour: (n: string) => string;
     };

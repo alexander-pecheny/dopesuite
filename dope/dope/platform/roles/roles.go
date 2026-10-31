@@ -16,23 +16,21 @@ import (
 )
 
 // Canonical fest roles, ordered creator > admin > host. Stored verbatim in the
-// fest_organizers.role column.
+// fest_organizers.role column. GameJury stands apart: it rules on a Game's
+// contested answers and edits nothing.
 const (
-	Creator = "creator"
-	Admin   = "admin"
-	Host    = "host"
+	Creator  = "creator"
+	Admin    = "admin"
+	Host     = "host"
+	GameJury = "game_jury"
 )
 
 // Normalize trims and validates a role string, returning "" for anything that
-// is not one of the three canonical roles.
+// is not one of the canonical roles.
 func Normalize(role string) string {
-	switch strings.TrimSpace(role) {
-	case Creator:
-		return Creator
-	case Admin:
-		return Admin
-	case Host:
-		return Host
+	switch role = strings.TrimSpace(role); role {
+	case Creator, Admin, Host, GameJury:
+		return role
 	default:
 		return ""
 	}
@@ -54,16 +52,24 @@ func CanDeleteFest(role string) bool {
 	return Normalize(role) == Creator
 }
 
-// CanEditGameTables reports whether the role may edit game tables (any role).
+// CanEditGameTables reports whether the role may edit game tables (any role
+// but the jury's).
 func CanEditGameTables(role string) bool {
-	return Normalize(role) != ""
+	role = Normalize(role)
+	return role != "" && role != GameJury
+}
+
+// CanJudge reports whether the role may rule on contested answers: an admin's, the
+// creator's, or the jury's in the Games it is not limited away from.
+func CanJudge(role string) bool {
+	return CanManageFest(role) || Normalize(role) == GameJury
 }
 
 // Assignable reports whether the role may be granted via the access UI; the
 // creator role is implicit (fest ownership) and never hand-assigned.
 func Assignable(role string) bool {
 	role = Normalize(role)
-	return role == Admin || role == Host
+	return role == Admin || role == Host || role == GameJury
 }
 
 // BulkAccessLine is one parsed line of the bulk access-grant textarea.
@@ -107,7 +113,7 @@ func parseBulkLine(line string, lineNo int) (BulkAccessLine, error) {
 	}
 	change := BulkAccessLine{Line: lineNo, Nickname: nickname}
 	switch action {
-	case Admin, Host:
+	case Admin, Host, GameJury:
 		change.Role = action
 	case "remove":
 		change.Delete = true

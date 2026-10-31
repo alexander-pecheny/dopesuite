@@ -317,8 +317,11 @@ func (s *Server) apiAccess(w http.ResponseWriter, r *http.Request, sc route.Scop
 	out := make([]apiMember, len(members))
 	for i, m := range members {
 		out[i] = apiMember{UserID: m.UserID, Nickname: m.Nickname, Role: m.Role}
-		if m.Role == "host" {
+		switch m.Role {
+		case roles.Host:
 			out[i].Games, out[i].MultiFestVenues = limits[m.UserID], venues[m.UserID]
+		case roles.GameJury:
+			out[i].Games = limits[m.UserID]
 		}
 	}
 	return route.JSON(w, out)

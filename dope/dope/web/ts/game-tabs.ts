@@ -10,7 +10,7 @@ export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
   | "stats" | "roster" | "venues" | "entrants"
   | "results" | "detailed" | "input" | "screen" | "refusals"
-  | "personal" | "players";
+  | "personal" | "players" | "contested";
 
 export interface GameTab {
   key: string;
@@ -24,6 +24,8 @@ export interface GameTab {
 export interface GameTabsOptions {
   game: GameKind;
   viewer: boolean;
+  // The visitor rules on the Game's contested answers (OD).
+  contested?: boolean;
 }
 
 export const RESEED_TAB_CODE = "reseeds";
@@ -58,7 +60,8 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "ksi":
     return fixedTabs(["detailed", S.screen.tabs.detailed()], ["results", S.screen.tabs.results()], ...when(host, ["refusals", S.screen.tabs.refusals()]), ["roster", S.screen.tabs.roster()]);
   case "od":
-    return fixedTabs(["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()], ["input", S.screen.tabs.input()], ...when(host, ["screen", S.screen.tabs.screen()]), ["roster", S.screen.tabs.roster()]);
+    return fixedTabs(["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()], ["input", S.screen.tabs.input()],
+      ...when(Boolean(options.contested), ["contested", S.od.contested.tab()]), ...when(host, ["screen", S.screen.tabs.screen()]), ["roster", S.screen.tabs.roster()]);
   // The friendship cup is OD's sheet over tables: the personal standings come
   // first, the tables' own results next, and its players replace the fest
   // roster, which it does not seat (ADR-0026).

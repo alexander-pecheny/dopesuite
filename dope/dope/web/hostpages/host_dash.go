@@ -3,6 +3,7 @@ package hostpages
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/contested"
 	"errors"
 	"fmt"
 	"net/http"
@@ -36,8 +37,10 @@ import (
 )
 
 type hostFestDashData struct {
-	Fest            view.HostFest
-	Kind            string
+	Fest view.HostFest
+	Kind string
+	// Contested says whether the fest's OD takes contested answers.
+	Contested       bool
 	MultiFestVenues []venueRow
 	Description     string
 	Slug            string
@@ -159,8 +162,21 @@ func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
 		dopeui.Field(dopeui.Label("rating.chgk.info ID"), dopeui.Textfield(dopeui.Name("rating_id"), dopeui.Value(ratingID), dopeui.Inputmode("numeric"))),
 		kindField(data.Kind, data.Games),
 		pub,
+		contestedField(data.Contested),
 		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.SaveSubmit()))),
 	)
+}
+
+// contestedField is the fest's switch for contested answers. The hidden field tells the
+// box left unticked apart from a form that has no box, like the landing's.
+func contestedField(on bool) *dopeui.Element {
+	s := dopestrings.Default
+	box := []dopeui.Item{dopeui.Name("contested"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.ContestedLabel())}
+	if on {
+		box = append(box, dopeui.Checked())
+	}
+	return dopeui.Col(dopeui.Hiddenfield(dopeui.Name("contested_present"), dopeui.Value("1")),
+		dopeui.Checkbox(box...), dopeui.Hint(dopeui.Text(s.Host.Dash.ContestedHint())))
 }
 
 // hostDashGameRow links to one game and, for a host who manages games, offers
@@ -249,7 +265,7 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 			actionCell = dopeui.Cell()
 		} else {
 			roleCell = dopeui.Cell(dopeui.Selectfield(dopeui.Name("role_"+uid), dopeui.Data("autosubmit", ""),
-				roleOption("admin", m.Role), roleOption("host", m.Role)))
+				roleOption(roles.Admin, m.Role), roleOption(roles.Host, m.Role), roleOption(roles.GameJury, m.Role)))
 			actionCell = dopeui.Cell(dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Name("delete_"+uid), dopeui.Value("1"),
 				dopeui.Data("confirm", s.Host.Dash.DeleteAccessConfirm(m.Nickname)), dopeui.Text(s.Host.Dash.DeleteBtn())))
 		}
@@ -260,8 +276,9 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 	rows = append(rows, dopeui.Trow(
 		dopeui.Cell(dopeui.Textfield(dopeui.Name("new_nickname"), dopeui.Placeholder("nickname"))),
 		dopeui.Cell(dopeui.Col(dopeui.SpaceSM, dopeui.Selectfield(dopeui.Name("new_role"),
-			dopeui.Option(dopeui.Value("host"), dopeui.Text("host")),
-			dopeui.Option(dopeui.Value("admin"), dopeui.Text("admin"))), newHostVenue(data))),
+			dopeui.Option(dopeui.Value(roles.Host), dopeui.Text(roles.Host)),
+			dopeui.Option(dopeui.Value(roles.Admin), dopeui.Text(roles.Admin)),
+			dopeui.Option(dopeui.Value(roles.GameJury), dopeui.Text(roles.GameJury))), newHostVenue(data))),
 		dopeui.Cell(dopeui.Button(dopeui.Submit(), dopeui.Name("add_access"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.AddBtn()))),
 	))
 	sect = append(sect,
@@ -287,11 +304,11 @@ func newHostVenue(data hostFestDashData) dopeui.Item {
 }
 
 // hostGames is a member's Games and venues: an admin or the creator runs all
-// of them; a host gets a box per venue and per Game. Ticking some limits them
-// to those, ticking none leaves them every Game.
+// of them; a host gets a box per venue and per Game, the jury a box per Game.
+// Ticking some limits them to those, ticking none leaves them every Game.
 func hostGames(data hostFestDashData, m festaccess.HostAccessMember) *dopeui.Element {
 	s := dopestrings.Default
-	if m.Role != roles.Host || len(data.Games)+len(data.MultiFestVenues) == 0 {
+	if m.Role != roles.Host && m.Role != roles.GameJury || len(data.Games)+len(data.MultiFestVenues) == 0 {
 		return dopeui.Col()
 	}
 	uid := idstr.Format(m.UserID)
@@ -315,7 +332,7 @@ func hostGames(data hostFestDashData, m festaccess.HostAccessMember) *dopeui.Ele
 			summary = append(summary, label+": "+strings.Join(names, ", "))
 		}
 	}
-	if len(data.MultiFestVenues) > 0 {
+	if len(data.MultiFestVenues) > 0 && m.Role == roles.Host {
 		ids, titles := make([]int64, len(data.MultiFestVenues)), make([]string, len(data.MultiFestVenues))
 		for i, v := range data.MultiFestVenues {
 			ids[i], titles[i] = v.ID, v.Title
@@ -402,6 +419,9 @@ type FestSettings struct {
 	Kind string `json:"kind"`
 	// ReplaceGames agrees to a change of Kind deleting the fest's Games.
 	ReplaceGames bool `json:"replace_games"`
+	// Contested says whether the fest's OD takes contested answers; nil leaves it to
+	// the fest's type, which turns them on for a synch fest alone.
+	Contested *bool `json:"contested,omitempty"`
 }
 
 func festSettingsFromForm(form url.Values) FestSettings {
@@ -417,7 +437,16 @@ func festSettingsFromForm(form url.Values) FestSettings {
 		Kind:        form.Get("kind"),
 
 		ReplaceGames: form.Get("replace_games") == "1",
+		Contested:    formContested(form),
 	}
+}
+
+func formContested(form url.Values) *bool {
+	if form.Get("contested_present") != "1" {
+		return nil
+	}
+	on := form.Get("contested") == "1"
+	return &on
 }
 
 // kindValue is the fest's type, regular when none is given.
@@ -429,6 +458,13 @@ func (f FestSettings) kindValue() (string, error) {
 		return "", corei18n.User(dopestrings.Default.Host.Dash.ErrorKindInvalid())
 	}
 	return f.Kind, nil
+}
+
+func (f FestSettings) contestedValue() any {
+	if f.Contested == nil {
+		return nil
+	}
+	return util.BoolToInt(*f.Contested)
 }
 
 func (f FestSettings) ratingValue() any {
@@ -462,10 +498,11 @@ func (s *Server) CreateFest(reqCtx context.Context, userID int64, f FestSettings
 		now := util.UtcNow()
 		var err error
 		festID, err = store.InsertReturningID(ctx, tx, `
-insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public, kind)
-values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
+insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public, kind, contested)
+values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
 			slugValue, f.Title, f.Description, f.ratingValue(), userID, now, now,
-			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic), kind)
+			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic), kind,
+			f.contestedValue())
 		if util.IsUniqueViolation(err) {
 			// Another fest took the slug between the check and the insert.
 			return core.FestWrite{}, corei18n.User(dopestrings.Default.Host.Dash.ErrorSlugTaken())
@@ -506,11 +543,15 @@ func (s *Server) LoadFestSettings(ctx context.Context, festID int64) (FestSettin
 		endDate   sql.NullString
 		ratingID  sql.NullInt64
 		isPublic  int
+		contested sql.NullBool
 	)
 	err := s.h.Engine().DB.QueryRowContext(ctx, `
-select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind
-from fests where id = ?`, festID).Scan(&f.Title, &f.Slug, &f.Description, &startDate, &endDate, &ratingID, &isPublic, &f.Kind)
+select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind, contested
+from fests where id = ?`, festID).Scan(&f.Title, &f.Slug, &f.Description, &startDate, &endDate, &ratingID, &isPublic, &f.Kind, &contested)
 	f.StartDate, f.EndDate, f.RatingID, f.IsPublic = startDate.String, endDate.String, ratingID.Int64, isPublic == 1
+	if contested.Valid {
+		f.Contested = &contested.Bool
+	}
 	return f, err
 }
 
@@ -564,6 +605,10 @@ where id = ?`,
 			f.Title, slugValue, f.Description, f.ratingValue(),
 			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic),
 			kind, util.UtcNow(), festID)
+		if err != nil || f.Contested == nil {
+			return write, err
+		}
+		write.Broadcast.States, err = setContestedTx(ctx, tx, festID, *f.Contested)
 		return write, err
 	})
 	if err != nil || !changed || kind != multifest.Synch || f.RatingID <= 0 {
@@ -577,6 +622,33 @@ where id = ?`,
 		return corei18n.User(dopestrings.Default.Host.Dash.KindImportFailed(msg))
 	}
 	return nil
+}
+
+// setContestedTx turns the fest's contested answers on or off, and gives every Game
+// that takes them its list again: a fest that turns them off drops the
+// accepted ones from its standings.
+func setContestedTx(ctx context.Context, tx *sql.Tx, festID int64, on bool) ([]core.GameState, error) {
+	if _, err := tx.ExecContext(ctx, `update fests set contested = ? where id = ?`, util.BoolToInt(on), festID); err != nil {
+		return nil, err
+	}
+	ids, err := store.CollectRows(ctx, tx, `select id from games where fest_id = ?`, []any{festID}, func(rows *sql.Rows) (int64, error) {
+		var id int64
+		return id, rows.Scan(&id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	var states []core.GameState
+	for _, id := range ids {
+		state, err := contested.RefreshTx(ctx, tx, festID, id)
+		if err != nil {
+			return nil, err
+		}
+		if state != nil {
+			states = append(states, core.GameState{GameID: id, StateJSON: state})
+		}
+	}
+	return states, nil
 }
 
 // resetFestKindTx deletes a fest's Games and its venues, with the teams'
@@ -725,10 +797,11 @@ func (s *Server) renderHostFestDashboard(w http.ResponseWriter, r *http.Request,
 		ratingID    sql.NullInt64
 		isPublic    int
 		kind        string
+		contestedOn bool
 	)
 	if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind
-from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, &endDate, &ratingID, &isPublic, &kind); err != nil {
+select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind, coalesce(contested, kind = 'synch')
+from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, &endDate, &ratingID, &isPublic, &kind, &contestedOn); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -756,11 +829,15 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 	}
 	hostGames := make([]PublicFestGame, 0, len(gameRows))
 	for _, g := range gameRows {
-		// A host an admin limited to some Games sees those alone.
-		if may, err := festaccess.MayRunGame(r.Context(), s.h.Engine().DB, festID, g.ID, userID, currentRole); err != nil {
+		// A host or a jury an admin limited to some Games sees those alone.
+		mayRun := festaccess.MayRunGame
+		if currentRole == roles.GameJury {
+			mayRun = festaccess.MayJudgeGame
+		}
+		if may, err := mayRun(r.Context(), s.h.Engine().DB, festID, g.ID, userID, currentRole); err != nil {
 			route.WriteError(w, r, err)
 			return
-		} else if !may && roles.CanEditGameTables(currentRole) {
+		} else if !may && currentRole != "" {
 			continue
 		}
 		hostGames = append(hostGames, PublicFestGame{
@@ -837,6 +914,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 			IsPublic:  isPublic == 1,
 		},
 		Kind:            kind,
+		Contested:       contestedOn,
 		Description:     description,
 		Slug:            slug,
 		Games:           hostGames,

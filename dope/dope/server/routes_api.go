@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"dope/dope/domain/contested"
 	"dope/dope/domain/core"
 	"dope/dope/domain/edit"
 	"dope/dope/domain/entrants"
@@ -85,6 +86,10 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("GET "+game+"/state", route.Read, s.scopedGameState)
 	t.Handle("PUT "+game+"/state", route.Editor.Numbered(), s.scopedGameStatePut)
 	t.Handle("PATCH "+game+"/state", route.Editor.Numbered().Sheets(), s.scopedGameStatePatch)
+	t.Handle("GET "+game+"/contested", route.Editor.Sheets().Jury(), s.scopedContested)
+	t.Handle("POST "+game+"/contested", route.Editor.Numbered().Sheets(), s.scopedContestedSave)
+	t.Handle("DELETE "+game+"/contested", route.Editor.Numbered().Sheets(), s.scopedContestedDelete)
+	t.Handle("PUT "+game+"/contested/ruling", route.Manager.Jury(), s.scopedContestedRule)
 	t.Handle("POST "+game+"/guests", route.Editor.Numbered(), s.scopedMultiGuestAdd)
 	t.Handle("PUT "+game+"/guests/{n}", route.Editor.Numbered(), s.scopedMultiGuestRename)
 	t.Handle("DELETE "+game+"/guests/{n}", route.Editor.Numbered(), s.scopedMultiGuestRemove)
@@ -459,6 +464,11 @@ func (s *server) scopedGameStatePut(w http.ResponseWriter, r *http.Request, sc r
 	// Canonicalize so a wholesale PUT stores the same byte representation a
 	// PATCH would: the stored state, the SSE payload and the response stay
 	// identical whichever path produced them, which replay/diff rely on.
+	doc, err := store.LoadGameDoc(r.Context(), s.eng.DB, sc.FestID, sc.GameID)
+	if err != nil {
+		return err
+	}
+	raw = contested.CarryOver(raw, []byte(doc.State))
 	if canon, err := core.CanonicalJSON(raw); err == nil {
 		raw = canon
 	}
@@ -483,6 +493,9 @@ func (s *server) scopedGameStatePatch(w http.ResponseWriter, r *http.Request, sc
 		return err
 	}
 	if err := sc.KeepToSheets(req); err != nil {
+		return err
+	}
+	if err := keepContested(req); err != nil {
 		return err
 	}
 	next, _, err := s.editor().SubmitEdit(r.Context(), sc.Fest(), req, raw, &sample)

@@ -21,6 +21,9 @@ export interface ODTeam {
   // venue's sheet records it (ADR-0033).
   venue?: number;
   venueNumber?: number;
+  // On a venue's sheet, which numbers the team by venueNumber, the number the
+  // document knows it by.
+  festNumber?: number;
 }
 
 // ODSheet is one venue's part of a synch fest's OD: for each question the
@@ -39,6 +42,22 @@ export interface ShootoutRound {
   answers: ShootoutMark[][];
 }
 
+// A contested answer: a team's disputed answer to a question, and the jury's ruling.
+// The server writes the list from its own tables and leaves the text out,
+// which only the hosts and the jury may read (ContestedText).
+export type ContestedStatus = "pending" | "accepted" | "rejected";
+
+export interface ODContested {
+  question: number;
+  number: number;
+  status: ContestedStatus;
+}
+
+// ContestedText is a contested answer as the hosts and the jury read it.
+export interface ContestedText extends ODContested {
+  answer: string;
+}
+
 export interface ODState {
   teams: ODTeam[];
   entries: number[][];
@@ -47,6 +66,7 @@ export interface ODState {
   // The sheets of a synch fest's one OD, by venue id; entries and completed
   // then say nothing until flattenVenues folds the sheets into them.
   venues?: Record<string, ODSheet>;
+  contested?: ODContested[];
   answers?: unknown;
   finished?: unknown;
 }
@@ -133,6 +153,7 @@ export function parseState(raw: unknown, scheme: ODScheme, totalQuestions: numbe
     .map(normalizeShootoutRound)
     .filter((round) => round.teams.length > 0);
   if (state.venues && typeof state.venues === "object") parseVenueSheets(state, totalQuestions);
+  state.contested = parseContested(state.contested);
   delete state.answers;
   delete state.finished;
   return state;
@@ -159,6 +180,22 @@ function parseVenueSheets(state: ODState, totalQuestions: number): void {
       completed: Array.from({length: totalQuestions}, (_, q) => Boolean(completed[q])),
     };
   }
+}
+
+const CONTESTED_STATUSES: readonly ContestedStatus[] = ["pending", "accepted", "rejected"];
+
+export function parseContested(raw: unknown): ODContested[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ODContested[] = [];
+  for (const item of raw) {
+    const row = (item && typeof item === "object" ? item : {}) as Partial<ODContested>;
+    const question = Number(row.question);
+    const number = Number(row.number);
+    if (!Number.isInteger(question) || question < 0 || !Number.isInteger(number) || number <= 0) continue;
+    const status = CONTESTED_STATUSES.includes(row.status as ContestedStatus) ? row.status as ContestedStatus : "pending";
+    out.push({question, number, status});
+  }
+  return out;
 }
 
 // isSynch says the document keeps a sheet per venue.
@@ -194,8 +231,13 @@ export function flattenVenues(state: ODState): ODState {
 // document.
 export function venueSheet(state: ODState, venueID: number): ODState {
   const sheet = state.venues?.[String(venueID)] || {entries: [], completed: []};
-  const teams = state.teams.filter((team) => team.venue === venueID).map((team) => ({...team, number: team.venueNumber || 0}));
-  return {teams, entries: sheet.entries, completed: sheet.completed, shootoutRounds: []};
+  const here = state.teams.filter((team) => team.venue === venueID);
+  const teams = here.map((team) => ({...team, number: team.venueNumber || 0, festNumber: team.number}));
+  const venueNumber = new Map(here.map((team) => [team.number || 0, team.venueNumber || 0]));
+  const contested = (state.contested || [])
+    .filter((item) => venueNumber.get(item.number))
+    .map((item) => ({...item, number: venueNumber.get(item.number) || 0}));
+  return {teams, entries: sheet.entries, completed: sheet.completed, shootoutRounds: [], contested};
 }
 
 export function normalizeShootoutRound(round: unknown): ShootoutRound {
@@ -323,6 +365,8 @@ export function numberIndex(state: ODState): Map<number, number> {
 
 // questionStats folds the entries grid once: per question, who took it (by
 // team row) and how many did — what every total and rating reads.
+// A contested answer the jury accepted counts as taken; the server's Scored reckons
+// the same.
 export function questionStats(state: ODState, totalQuestions: number, index: Map<number, number> = numberIndex(state)): QuestionStat[] {
   const stats: QuestionStat[] = [];
   for (let q = 0; q < totalQuestions; q++) {
@@ -336,7 +380,61 @@ export function questionStats(state: ODState, totalQuestions: number, index: Map
     }
     stats.push({completed: Boolean(state.completed[q]), counts, validCount: counts.size});
   }
+  for (const item of state.contested || []) {
+    const stat = stats[item.question];
+    const teamIndex = index.get(item.number);
+    if (item.status !== "accepted" || !stat?.completed || teamIndex === undefined || stat.counts.has(teamIndex)) continue;
+    stat.counts.set(teamIndex, 1);
+    stat.validCount = stat.counts.size;
+  }
   return stats;
+}
+
+// === contested answers ===
+
+export function contestedAt(state: ODState, teamIndex: number, qIndex: number): ODContested | undefined {
+  const number = teamNumber(state, teamIndex);
+  return number ? (state.contested || []).find((item) => item.question === qIndex && item.number === number) : undefined;
+}
+
+// pendingCount is how many of the team's contested answers on questions [from, to) wait
+// for the jury, on questions it has not taken anyway.
+export function pendingCount(state: ODState, teamIndex: number, from = 0, to = Infinity): number {
+  const number = teamNumber(state, teamIndex);
+  if (!number) return 0;
+  return (state.contested || []).filter((item) => item.number === number && item.status === "pending" &&
+    item.question >= from && item.question < to && !state.entries[item.question]?.includes(number)).length;
+}
+
+// withPending is a score as it reads while contested answers wait on the jury: "10+2".
+export function withPending(value: number | string, pending: number): string {
+  return pending > 0 ? `${value}+${pending}` : String(value);
+}
+
+// ContestedGroup is one answer to one question, as the jury rules on it: every
+// team that gave it and the ruling they share.
+export interface ContestedGroup {
+  question: number;
+  answer: string;
+  numbers: number[];
+  status: ContestedStatus;
+}
+
+// contestedKey is what makes two answers one for a ruling: case and spacing
+// aside. The server's contested.Key folds them the same way.
+export function contestedKey(answer: string): string {
+  return answer.trim().split(/\s+/).join(" ").toLowerCase();
+}
+
+export function groupContested(list: readonly ContestedText[]): ContestedGroup[] {
+  const groups = new Map<string, ContestedGroup>();
+  for (const item of list) {
+    const key = `${item.question}\u0000${contestedKey(item.answer)}`;
+    const group = groups.get(key);
+    if (group) group.numbers.push(item.number);
+    else groups.set(key, {question: item.question, answer: item.answer, numbers: [item.number], status: item.status});
+  }
+  return [...groups.values()].sort((a, b) => a.question - b.question || a.answer.localeCompare(b.answer, "ru"));
 }
 
 export function teamTookQuestion(stats: QuestionStat[], teamIndex: number, qIndex: number): boolean {

@@ -630,7 +630,7 @@ var RU = Strings{
 		},
 		Games: FestaccessGamesStrings{
 			NotHost: func(name string) string {
-				return fmt.Sprintf("у %s роль не «ведущий», а ограничить по играм и площадкам можно только ведущего", name)
+				return fmt.Sprintf("пользователя %s нельзя так ограничить. По играм ограничивают ведущего или жюри игры, по площадкам только ведущего", name)
 			},
 			SynchHostNeedsVenue: func(name string) string {
 				return fmt.Sprintf("У %s не выбрана площадка. На синхроне ведущий всегда ведёт площадку, поэтому выберите её или сделайте %s админом.", name, name)
@@ -673,7 +673,7 @@ var RU = Strings{
 		},
 		Member: FestaccessMemberStrings{
 			CreatorProtected: func() string { return "создателя нельзя удалить или изменить" },
-			RoleInvalid:      func() string { return "роль должна быть admin или host" },
+			RoleInvalid:      func() string { return "роль должна быть admin, host или game_jury" },
 		},
 	},
 	Gallery: GalleryStrings{
@@ -971,10 +971,14 @@ var RU = Strings{
 			ClearConfirm: func() string {
 				return "Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся."
 			},
-			ColGames:            func() string { return "Игры" },
-			ColNickname:         func() string { return "Никнейм" },
-			ColRole:             func() string { return "Роль" },
-			ColVenues:           func() string { return "Площадки" },
+			ColGames:    func() string { return "Игры" },
+			ColNickname: func() string { return "Никнейм" },
+			ColRole:     func() string { return "Роль" },
+			ColVenues:   func() string { return "Площадки" },
+			ContestedHint: func() string {
+				return "Ведущие отмечают спорные ответы, жюри игры их принимает или отклоняет. На синхроне включено сразу."
+			},
+			ContestedLabel:      func() string { return "Спорные ответы в ОД" },
 			DeleteAccessConfirm: func(name string) string { return fmt.Sprintf("Удалить доступ для %s?", name) },
 			DeleteBtn:           func() string { return "Удалить" },
 			DeleteConfirm: func() string {
@@ -2146,6 +2150,38 @@ var RU = Strings{
 		},
 	},
 	Od: OdStrings{
+		Contested: OdContestedStrings{
+			Accepted: func() string { return "Принят" },
+			Add:      func() string { return "Добавить спорный" },
+			AnswerHint: func() string {
+				return "Такой же ответ другой команды выберите из списка: жюри решает по нему один раз."
+			},
+			AnswerLabel:    func() string { return "Ответ команды" },
+			AnswerRequired: func() string { return "Нужны номер вопроса и текст ответа" },
+			Cancel:         func() string { return "Отмена" },
+			ColAnswer:      func() string { return "Ответ" },
+			ColQuestion:    func() string { return "Вопрос" },
+			Delete:         func() string { return "Удалить" },
+			DialogTitle:    func(n string) string { return fmt.Sprintf("Спорный ответ на вопрос %s", n) },
+			Empty:          func() string { return "Спорных ответов пока нет." },
+			Given: func(n int) string {
+				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "команда", "команды", "команд"))
+			},
+			NoSuchNumber: func() string { return "В игре нет команды с таким номером" },
+			NoTeam:       func() string { return "Нет такой команды" },
+			Pending:      func() string { return "Не рассмотрен" },
+			PendingTotal: func(n int) string {
+				return fmt.Sprintf("%d %s решения жюри", n, core.Plural("ru", n, "спорный ответ ждёт", "спорных ответа ждут", "спорных ответов ждут"))
+			},
+			Rejected:   func() string { return "Отклонён" },
+			Save:       func() string { return "Сохранить" },
+			SaveFailed: func() string { return "Не удалось сохранить спорный ответ" },
+			StatusInvalid: func() string {
+				return "Решение бывает только «принят», «отклонён» или «не рассмотрен»"
+			},
+			Tab:       func() string { return "Спорные" },
+			TeamLabel: func() string { return "Номер команды" },
+		},
 		Detailed: OdDetailedStrings{
 			Tour: func(n string) string { return fmt.Sprintf("Т%s", n) },
 		},
@@ -2557,7 +2593,7 @@ var RU = Strings{
 	Roles: RolesStrings{
 		Bulk: RolesBulkStrings{
 			ActionUnknown: func(n string) string {
-				return fmt.Sprintf("строка %s: действие должно быть host, admin или remove", n)
+				return fmt.Sprintf("строка %s: действие должно быть host, admin, game_jury или remove", n)
 			},
 			FormatExpected: func(n string) string { return fmt.Sprintf("строка %s: нужен формат username:role", n) },
 		},

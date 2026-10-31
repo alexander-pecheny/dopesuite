@@ -8,6 +8,7 @@ package roster
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/contested"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -150,6 +151,12 @@ where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), doc.GameID, fe
 		}
 		if err := flatgame.SetStateTx(ctx, tx, festID, doc.GameID, string(stateJSON)); err != nil {
 			return nil, err
+		}
+		// A renumbered team's contested answers follow it.
+		if refreshed, err := contested.RefreshTx(ctx, tx, festID, doc.GameID); err != nil {
+			return nil, err
+		} else if refreshed != nil {
+			stateJSON = refreshed
 		}
 		updates = append(updates, GameStateBroadcast{GameID: doc.GameID, GameType: doc.GameType, StateJSON: stateJSON})
 	}
