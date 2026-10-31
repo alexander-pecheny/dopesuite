@@ -170,6 +170,9 @@ messages, code comments and test names, in Russian and in English.
   Bundling itself is written in Go (`just build-web [target...]`, in
   `scripts/webbuild/`, using esbuild as a library — see `docs/adr/0001`), so
   neither building nor running the server needs a JS runtime.
+- **Arial** (`ttf-mscorefonts-installer` on Debian/Ubuntu). chgksuite's pptx
+  parity tests measure text with it, because the oracles were shrunk to fit
+  with Arial.
 - **Rust** with the `wasm32-wasip1` target. Only chgksuite needs it, and only
   to build typst into `chgksuite/typstwasm/typst.wasm` (`cd chgksuite && just
   build-wasm`). That file is 30 MB, it is embedded with `//go:embed`, and it is
