@@ -290,12 +290,13 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 }
 
 // newHostVenue picks the venue a host added to a synch fest leads, since
-// such a host without one could open nothing.
+// such a host without one could open nothing. It shows only while the role
+// picked is host: an admin and the jury lead no venue.
 func newHostVenue(data hostFestDashData) dopeui.Item {
 	if data.Kind != multifest.Synch || len(data.MultiFestVenues) == 0 {
 		return dopeui.Col()
 	}
-	options := []dopeui.Item{dopeui.Name("new_venue"),
+	options := []dopeui.Item{dopeui.Name("new_venue"), dopeui.Data("shown-for", "new_role="+roles.Host),
 		dopeui.Option(dopeui.Value(""), dopeui.Text(dopestrings.Default.Host.Dash.NewVenueNone()))}
 	for _, v := range data.MultiFestVenues {
 		options = append(options, dopeui.Option(dopeui.Value(idstr.Format(v.ID)), dopeui.Text(v.Title)))

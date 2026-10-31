@@ -22,6 +22,9 @@
 //     selects, which saved on change via an inline onchange before).
 //   - [data-dialog-open="id"] on a button: showModal() that <dialog>.
 //   - [data-dialog-close] on a button inside a <dialog>: close it.
+//   - [data-shown-for="field=value"] on a control inside a <form>: hidden
+//     unless the form's named field holds that value (the access form's venue,
+//     which only a host leads).
 //   - [data-dialog-auto] on a <dialog>: showModal() it as the page loads. This
 //     is for the dialog a server-rendered page opens with, because asking it is
 //     why the page was rendered — the roster import's reconcile is one.
@@ -69,8 +72,18 @@ function selectAll(event: Event): void {
 document.addEventListener("focus", selectAll, true);
 document.addEventListener("click", selectAll, true);
 
+function syncShownFor(form: HTMLFormElement): void {
+  for (const el of form.querySelectorAll<HTMLElement>("[data-shown-for]")) {
+    const [name, value] = (el.dataset.shownFor || "").split("=");
+    const field = form.elements.namedItem(name);
+    el.hidden = !(field instanceof HTMLSelectElement || field instanceof HTMLInputElement) || field.value !== value;
+  }
+}
+
 document.addEventListener("change", (event) => {
   const el = event.target;
+  const form = (el as FormControl).form;
+  if (form) syncShownFor(form);
   if (el instanceof HTMLElement && el.hasAttribute("data-autosubmit")) {
     const form = (el as FormControl).form;
     if (form) form.requestSubmit ? form.requestSubmit() : form.submit();
@@ -152,6 +165,7 @@ function openAutoDialogs(): void {
 function boot(): void {
   for (const form of document.querySelectorAll<HTMLFormElement>("form[data-unique-values]")) syncUnique(form);
   for (const form of document.querySelectorAll<HTMLFormElement>("form[data-dirty-submit]")) syncDirtySubmit(form);
+  for (const el of document.querySelectorAll<FormControl>("[data-shown-for]")) if (el.form) syncShownFor(el.form);
   openAutoDialogs();
 }
 if (document.readyState === "loading") {
