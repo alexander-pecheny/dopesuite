@@ -40,22 +40,39 @@ saying so.
 
 ## Decision
 
-The export compares, fact by fact and team by team, what dope has with what
-the site has. Each fact is the same on both, only in dope, only on the site,
-or different. Its four facts are the site ID, the roster with each player's
-flag, the зачёты and the answers.
+The export compares three versions of each fact of each team: dope's now,
+the site's now, and the base, which is the last version both sides agreed
+on. Its four facts are the site ID, the roster with each player's flag, the
+зачёты and the answers.
 
-- A fact that is the same is not sent.
-- A fact only in dope is sent.
-- A fact only on the site stays there, and the page offers to take it into
-  dope.
-- A fact that differs blocks the send until the organizer picks a side for
-  it. Nothing is preselected. A hint says which side changed since dope's
-  last import, from the hand edits ADR-0024 keeps apart, and a button picks
-  the site's side for every conflict in one go. Picking dope's side sends
-  it. Picking the site's side writes the site's version into the fest
-  roster as an import of that one team, which drops that team's hand edits,
-  so the next export finds the two equal.
+dope keeps the base in a table of its own, a row per team and fact. An
+import writes the site's version there, and so does a send, for what it
+sent. Taking the site's version also writes it. The base cannot be derived
+from the hand edits that ADR-0024 keeps apart: after a send those edits are
+still in dope while the site already has them, so a base derived from them
+would make every later edit on the site look like a change on both sides.
+
+| dope vs base | site vs base | The export |
+|---|---|---|
+| same | same | sends nothing |
+| same | changed | takes the site's version into dope |
+| changed | same | sends dope's version |
+| changed | changed, now equal | sends nothing, and moves the base |
+| changed | changed, now different | asks |
+
+A fact with no base (a team dope never imported or sent, or answers before
+the first send) counts as changed on both sides when both have it, so a
+difference there is asked about too.
+
+Only the last row blocks the send, until the organizer picks a side for
+each such fact. Nothing is preselected, and one button picks the site's side
+for every question at once. Picking the site's side writes the site's
+version into the fest roster as an import of that one team, which drops
+that team's hand edits for that fact.
+
+The page lists every fact it settled by itself, with the side it took and
+why, so a wrong edit on the site that won by the second row is visible
+before the send.
 
 The page lists everything it will not send, each with its reason: a team
 without a site ID, a площадка without an accepted request, a зачёт the site
@@ -83,10 +100,14 @@ An export after a correct import of an unchanged tournament sends nothing,
 and says so. An export can no longer overwrite what someone typed on the
 site without a click that says it should.
 
-The export now reads one more endpoint per run and asks the organizer
-something whenever the two sides disagree. On a tournament where many
-representatives typed their own rosters, that may be dozens of choices,
-which the bulk button keeps to one.
+At Нулевой километр the export would have asked nothing: the rosters came
+from the import, nobody edited them in dope, and the representatives'
+rosters on the site would have stayed and come back into dope.
+
+The export reads one more endpoint per run. A wrong edit on the site made
+after the last agreement wins without a question; the page names it, but
+only a reader of the page will catch it. A roster edited for one Game
+(ADR-0022) is outside the fest roster, and the export does not see it.
 
 A зачёт dope made by hand goes to the site only when the tournament's flags
 include one with the same short name.
