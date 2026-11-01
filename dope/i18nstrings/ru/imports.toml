@@ -116,6 +116,7 @@ player_twice = '{{.name}} записан в команду дважды.'
 name_taken = 'Команда «{{.name}}» уже есть в составах феста.'
 # A new team picked from the rating site that the fest already has.
 rating_team_taken = "Эта команда рейтинга уже есть в составах феста."
+rating_team_fixed = "У команды из импорта ID задаёт турнирный сайт."
 # The team is not on the fest roster (removed, or of another fest).
 team_unknown = "Такой команды нет в составах феста."
 # A team made with a number its venue already gives another team: a host made

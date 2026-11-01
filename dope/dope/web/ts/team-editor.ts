@@ -102,6 +102,7 @@ export interface TeamSave {
   city: string;
   players: Array<{rating_id: number; first_name: string; last_name: string}>;
   multifest_venue_id?: number;
+  rating_team?: number;
   flags: string[];
   venue_number?: number;
 }
@@ -357,8 +358,9 @@ export function openTeamDialog(api: string, team: TeamDetail, pageVenue: number,
     error.hidden = false;
   };
 
-  // A new team: the rating site's team it is, if any.
-  const rating = isNew && !actions.offline ? ratingTeamPicker(api, ratingTeam, (picked) => {
+  // A team the host makes or made: the rating site's team it is, if any.
+  // An import's team shows the site's id, which only the site changes.
+  const rating = (isNew || team.hand) && !actions.offline ? ratingTeamPicker(api, ratingTeam, (picked) => {
     ratingTeam = picked;
     if (picked && !nameInput.value.trim()) nameInput.value = picked.name;
     if (picked && !cityInput.value.trim()) cityInput.value = picked.city;
@@ -514,6 +516,7 @@ export function openTeamDialog(api: string, team: TeamDetail, pageVenue: number,
       name: nameInput.value, city: cityInput.value,
       players: draft.map((p) => ({rating_id: p.rating_id, first_name: p.first_name, last_name: p.last_name})),
       multifest_venue_id: venueSelect ? Number(venueSelect.value) : undefined,
+      rating_team: !isNew && rating ? ratingTeam?.rating_id ?? 0 : undefined,
       flags: divisions.read(),
     };
     if (number) {
@@ -531,6 +534,7 @@ export function openTeamDialog(api: string, team: TeamDetail, pageVenue: number,
   form.append(title, hint);
   if (actions.offline) form.appendChild(hintLine(S.fest.teamEdit.offlineHint()));
   if (rating) form.appendChild(rating.node);
+  else if (team.rating_id > 0) form.appendChild(hintLine(S.fest.teamEdit.ratingTeamOf(String(team.rating_id))));
   form.append(nameField, cityField);
   if (number) form.appendChild(number.node);
   if (venueSelect) form.appendChild(venueSelect.closest("label")!);

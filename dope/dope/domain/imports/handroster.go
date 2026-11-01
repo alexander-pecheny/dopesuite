@@ -144,9 +144,13 @@ type TeamInput struct {
 	// RatingID, for a new team, is the rating site's team it is: its name
 	// may still be a one-off for this fest.
 	RatingID int64
-	Name     string
-	City     string
-	Players  []roster.FestRosterImportPlayer
+	// RatingTeam, for a team the host made, is the rating site's team it is
+	// from now on, 0 for none; nil leaves it. An import's team keeps the
+	// site's id.
+	RatingTeam *int64
+	Name       string
+	City       string
+	Players    []roster.FestRosterImportPlayer
 	// Venue is the venue of a synch or multi fest a team the host made plays
 	// at, 0 for none, nil to leave it where it is (ADR-0032). A rating team
 	// plays where the site says.
@@ -281,6 +285,14 @@ func SaveHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in Te
 	}
 	if err := checkNameFree(ctx, tx, festID, teamID, in.Name, in.City); err != nil {
 		return RosterWrite{}, err
+	}
+	if in.RatingTeam != nil && *in.RatingTeam != row.RatingID {
+		if !row.Hand {
+			return RosterWrite{}, corei18n.User(dopestrings.Default.Imports.HandRoster.RatingTeamFixed())
+		}
+		if err := linkRatingTx(ctx, tx, festID, teamID, *in.RatingTeam); err != nil {
+			return RosterWrite{}, err
+		}
 	}
 	switch {
 	case row.Hand:
@@ -710,16 +722,23 @@ func SetHandTeamRatingTx(ctx context.Context, tx *sql.Tx, festID, teamID, rating
 	if err != nil {
 		return RosterWrite{}, err
 	}
-	var taken int
-	if err := tx.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ? and rating_id = ? and deleted = 0 and id != ?`,
-		festID, ratingID, teamID).Scan(&taken); err != nil {
-		return RosterWrite{}, err
-	}
-	if taken > 0 {
-		return RosterWrite{}, corei18n.User(s.Imports.HandRoster.RatingTeamTaken())
-	}
-	if _, err := tx.ExecContext(ctx, `update fest_teams set rating_id = ? where id = ?`, ratingID, teamID); err != nil {
+	if err := linkRatingTx(ctx, tx, festID, teamID, ratingID); err != nil {
 		return RosterWrite{}, err
 	}
 	return rewriteFromHandTx(ctx, tx, festID, before)
+}
+
+// linkRatingTx makes a team the host made the rating site's team, or none
+// for 0, unless another team of the fest is that team already.
+func linkRatingTx(ctx context.Context, tx *sql.Tx, festID, teamID, ratingID int64) error {
+	var taken int
+	if err := tx.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ? and rating_id = ? and deleted = 0 and id != ?`,
+		festID, ratingID, teamID).Scan(&taken); err != nil {
+		return err
+	}
+	if ratingID > 0 && taken > 0 {
+		return corei18n.User(dopestrings.Default.Imports.HandRoster.RatingTeamTaken())
+	}
+	_, err := tx.ExecContext(ctx, `update fest_teams set rating_id = ? where id = ?`, util.NullableInt64(ratingID), teamID)
+	return err
 }

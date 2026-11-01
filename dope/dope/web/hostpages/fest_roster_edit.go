@@ -257,10 +257,13 @@ func editedTeams(state roster.HandState) map[int64]bool {
 
 type teamRequest struct {
 	// RatingID, for a new team, is the rating site's team it is.
-	RatingID int64            `json:"rating_id"`
-	Name     string           `json:"name"`
-	City     string           `json:"city"`
-	Players  []festTeamPlayer `json:"players"`
+	RatingID int64 `json:"rating_id"`
+	// RatingTeam, for a team the host made, links it to the rating site's
+	// team, 0 unlinks it; left out, the link stays.
+	RatingTeam *int64           `json:"rating_team"`
+	Name       string           `json:"name"`
+	City       string           `json:"city"`
+	Players    []festTeamPlayer `json:"players"`
 	// Venue puts a team the host made on a venue; left out, a new team goes
 	// on the caller's one venue, or none, and a team keeps its own.
 	Venue *int64 `json:"multifest_venue_id"`
@@ -273,7 +276,7 @@ type teamRequest struct {
 }
 
 func (req teamRequest) input() imports.TeamInput {
-	in := imports.TeamInput{RatingID: req.RatingID, Name: req.Name, City: req.City, Venue: req.Venue, Flags: req.Flags,
+	in := imports.TeamInput{RatingID: req.RatingID, RatingTeam: req.RatingTeam, Name: req.Name, City: req.City, Venue: req.Venue, Flags: req.Flags,
 		ClientID: req.ClientID, VenueNumber: req.VenueNumber}
 	for _, p := range req.Players {
 		in.Players = append(in.Players, roster.FestRosterImportPlayer{RatingID: p.RatingID, FirstName: p.FirstName, LastName: p.LastName})

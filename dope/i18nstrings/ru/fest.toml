@@ -198,6 +198,9 @@ rating_team_hint = "Необязательно. Если команды нет �
 # The picked rating team, and the button that unpicks it.
 rating_team_picked = '{{.team}}, ID {{.id}}'
 rating_team_unpick = "Не из рейтинга"
+# A team an import brought: its id on the site, which only the site changes.
+rating_team_of = 'ID на турнирном сайте: {{.id}}'
+
 # Adds the team's base roster from the rating site to the list.
 base_roster = "Добавить БС"
 base_roster_failed = "Не удалось получить базовый состав с rating.chgk.info."

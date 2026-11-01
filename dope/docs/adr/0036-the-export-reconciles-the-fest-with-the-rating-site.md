@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-01
 ---
 
@@ -65,10 +65,13 @@ the first send) counts as changed on both sides when both have it, so a
 difference there is asked about too.
 
 Only the last row blocks the send, until the organizer picks a side for
-each such fact. Nothing is preselected, and one button picks the site's side
-for every question at once. Picking the site's side writes the site's
-version into the fest roster as an import of that one team, which drops
-that team's hand edits for that fact.
+each such fact. Nothing is preselected, and one button preselects the site's
+side for every question, which the organizer still confirms by sending.
+Taking the site's roster or зачёты writes them into the fest roster through
+the team editor's own save. dope cannot write the site's answers into its
+ОД sheet, so taking them only leaves them on the site, and the base records
+dope's answers as agreed: the export asks again only once dope's answers
+change.
 
 The page lists every fact it settled by itself, with the side it took and
 why, so a wrong edit on the site that won by the second row is visible
@@ -81,18 +84,20 @@ has no flag for.
 A captain the site marks keeps the mark when dope sends a roster that still
 holds that player.
 
-The site ID becomes an ordinary field of every team in the team editor,
-linked or unlinked by the editor's search. A team without an ID is one more
-difference on the export's page, resolved by the same search, and the
-export's own namesake search (`identify.go`) goes.
+The team editor shows the site ID of every team. A team the host made is
+linked or unlinked by the editor's search; an import's team keeps the ID the
+site gave it, because the import finds the team by it. The export's own step
+for a team or player without an ID stays, since it can also create them on
+the site, which the editor cannot.
 
 dope talks to the site through one package that both the import and the
 export use. It reads the public results, «ввод» and the requests, and writes
 through «ввод». The two packages' separate clients and response types merge
 into it.
 
-The export's tests serve recorded answers of the real site, cut down to a
-few teams, instead of answers written from the code's own assumptions.
+The export's tests serve a fake site that keeps what dope writes and
+answers in the shapes of the site's published API, so a test can say what the
+site holds after an export, not only what dope sent.
 
 ## Consequences
 

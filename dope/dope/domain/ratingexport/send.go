@@ -14,10 +14,12 @@ import (
 // Report is what the site did with a sent Plan: how many teams it moved, how
 // many rosters and results it took, and its remarks.
 type Report struct {
-	Moved    int      `json:"moved"`
-	Rosters  int      `json:"rosters"`
-	Flags    int      `json:"flags"`
-	Results  int      `json:"results"`
+	Moved   int `json:"moved"`
+	Rosters int `json:"rosters"`
+	Flags   int `json:"flags"`
+	Results int `json:"results"`
+	// Taken is how many rosters and зачёты dope took from the site.
+	Taken    int      `json:"taken"`
 	Warnings []string `json:"warnings"`
 	// Sent is each fact the site took, for the base, even when a later call
 	// failed.

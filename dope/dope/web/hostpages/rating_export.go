@@ -318,6 +318,11 @@ func (s *Server) exportRun(ctx context.Context, sc route.Scope, gameID int64, se
 		return &plan, nil, err
 	}
 	report, sendErr := ratingexport.Send(ctx, plan, site)
+	for _, b := range taken {
+		if b.Fact != ratingsync.Answers {
+			report.Taken++
+		}
+	}
 	bases := append(append(taken, plan.Agreed...), report.Sent...)
 	err = s.h.Engine().WithWriteTx(ctx, sc.FestID, "rating-sync-base", func(ctx context.Context, tx *sql.Tx) error {
 		return ratingsync.SaveTx(ctx, tx, sc.FestID, bases)
@@ -486,6 +491,9 @@ func exportReportSection(report ratingexport.Report, tournament int64, back stri
 	s := dopestrings.Default
 	items := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.RatingExport.SentSubhead())),
 		dopeui.Note(dopeui.Text(s.Host.RatingExport.Sent(strconv.Itoa(report.Rosters), strconv.Itoa(report.Flags), strconv.Itoa(report.Results))))}
+	if report.Taken > 0 {
+		items = append(items, dopeui.Muted(dopeui.Text(s.Host.RatingExport.SentTaken(strconv.Itoa(report.Taken)))))
+	}
 	if report.Moved > 0 {
 		items = append(items, dopeui.Muted(dopeui.Text(s.Host.RatingExport.SentMoved(strconv.Itoa(report.Moved)))))
 	}
@@ -560,54 +568,42 @@ func factValue(v string) string {
 	return v
 }
 
-// exportTakenSection lists the facts whose site version stands without a
-// person's choice: only the site changed since the two last agreed.
-func exportTakenSection(plan ratingexport.Plan, all string) *dopeui.Element {
+// exportFactItems shows how the export settles each fact where dope and the
+// site differ: the site's versions that stand because only the site changed,
+// and a choice for each fact both sides changed.
+func exportFactItems(plan ratingexport.Plan, all string, choices map[string]string) []dopeui.Item {
 	s := dopestrings.Default
-	items := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.RatingExport.FactsSubhead())), dopeui.Hint(dopeui.Text(s.Host.RatingExport.FactsHint()))}
-	asks := 0
+	var taken, asked []dopeui.Item
 	for _, f := range plan.Facts {
 		switch {
 		case f.Action == ratingsync.Ask || f.Chosen:
-			asks++
-		case f.Action == ratingsync.Take:
-			line := []dopeui.Item{dopeui.Muted(dopeui.Text(s.Host.RatingExport.TakeLine(f.Name, factName(f.Fact), factValue(f.Site))))}
-			if f.Fact != ratingsync.Answers {
-				line = append(line, dopeui.Muted(dopeui.Text(s.Host.RatingExport.TakeIntoDope())))
+			option := func(value, text string) dopeui.Item {
+				items := []dopeui.Item{dopeui.Value(value), dopeui.Text(text)}
+				if choices[f.Key] == value {
+					items = append(items, dopeui.Selected())
+				}
+				return dopeui.Option(items...)
 			}
-			items = append(items, dopeui.Col(line...))
+			asked = append(asked, dopeui.Field(dopeui.Label(s.Host.RatingExport.AskLabel(f.Name, factName(f.Fact))), dopeui.Selectfield(
+				dopeui.Name(choiceField+f.Key), option("", s.Host.RatingExport.ChoiceNone()),
+				option("dope", s.Host.RatingExport.ChoiceDope(factValue(f.Dope))), option(choiceSite, s.Host.RatingExport.ChoiceSite(factValue(f.Site))))))
+		case f.Action == ratingsync.Take:
+			line := s.Host.RatingExport.TakeLine(f.Name, factName(f.Fact), factValue(f.Site))
+			if f.Fact != ratingsync.Answers {
+				line += ". " + s.Host.RatingExport.TakeIntoDope()
+			}
+			taken = append(taken, dopeui.Muted(dopeui.Text(line)))
 		}
 	}
-	if len(items) == 2 && asks == 0 {
+	if len(taken)+len(asked) == 0 {
 		return nil
 	}
-	if asks > 0 {
-		items = append(items, dopeui.Row(dopeui.Button(dopeui.Href(all), dopeui.Text(s.Host.RatingExport.AllSite()))))
+	items := append([]dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.RatingExport.FactsSubhead())),
+		dopeui.Hint(dopeui.Text(s.Host.RatingExport.FactsHint()))}, taken...)
+	if len(asked) > 0 {
+		items = append(append(items, asked...), dopeui.Row(dopeui.Button(dopeui.Href(all), dopeui.Text(s.Host.RatingExport.AllSite()))))
 	}
-	return dopeui.Section(items...)
-}
-
-// exportAskFields asks which side's version is right for each fact both
-// sides changed.
-func exportAskFields(plan ratingexport.Plan, choices map[string]string) []dopeui.Item {
-	s := dopestrings.Default
-	var out []dopeui.Item
-	for _, f := range plan.Facts {
-		if f.Action != ratingsync.Ask && !f.Chosen {
-			continue
-		}
-		option := func(value, text string) dopeui.Item {
-			items := []dopeui.Item{dopeui.Value(value), dopeui.Text(text)}
-			if choices[f.Key] == value {
-				items = append(items, dopeui.Selected())
-			}
-			return dopeui.Option(items...)
-		}
-		out = append(out, dopeui.Field(dopeui.Label(s.Host.RatingExport.AskLabel(f.Name, factName(f.Fact))), dopeui.Selectfield(
-			dopeui.Name(choiceField+f.Key), option("", s.Host.RatingExport.ChoiceNone()),
-			option("dope", s.Host.RatingExport.ChoiceDope(factValue(f.Dope))), option(choiceSite, s.Host.RatingExport.ChoiceSite(factValue(f.Site))))))
-	}
-	return out
+	return items
 }
 
 // exportHasWork reports whether carrying out the plan changes anything.
@@ -635,9 +631,6 @@ func exportPlanSections(plan ratingexport.Plan, action string, gameID int64, cho
 	}
 	if len(notes) > 0 {
 		out = append(out, dopeui.Section(notes...))
-	}
-	if taken := exportTakenSection(plan, action+"?game="+idstr.Format(gameID)+"&all="+choiceSite); taken != nil {
-		out = append(out, taken)
 	}
 	venues := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.RatingExport.RostersSubhead(idstr.Format(plan.Tournament))))}
 	for _, v := range plan.Venues {
@@ -685,15 +678,17 @@ func exportPlanSections(plan ratingexport.Plan, action string, gameID int64, cho
 		}
 		out = append(out, dopeui.Section(skipped...))
 	}
+	facts := exportFactItems(plan, action+"?game="+idstr.Format(gameID)+"&all="+choiceSite, choices)
 	switch {
+	case plan.Blocked != "" && facts != nil:
+		out = append(out, dopeui.Section(facts...))
 	case plan.Blocked != "":
 	case !exportHasWork(plan):
 		out = append(out, dopeui.Section(dopeui.Note(dopeui.Text(s.Host.RatingExport.NothingToSend()))))
 	default:
-		form := []dopeui.Item{dopeui.DirCol, dopeui.Method("post"), dopeui.Action(action),
+		form := append([]dopeui.Item{dopeui.DirCol, dopeui.Method("post"), dopeui.Action(action),
 			dopeui.Data("confirm", s.Host.RatingExport.SendConfirm(strconv.Itoa(len(plan.Results)))),
-			dopeui.Hiddenfield(dopeui.Name("game"), dopeui.Value(idstr.Format(gameID)))}
-		form = append(form, exportAskFields(plan, choices)...)
+			dopeui.Hiddenfield(dopeui.Name("game"), dopeui.Value(idstr.Format(gameID)))}, facts...)
 		if len(plan.Results) > 0 {
 			form = append(form, dopeui.Note(dopeui.Text(s.Host.RatingExport.ResultsNote(strconv.Itoa(len(plan.Results)), strconv.Itoa(plan.Questions)))))
 		}

@@ -592,6 +592,7 @@ var RU = Strings{
 			RatingTeamHint: func() string {
 				return "Необязательно. Если команды нет в рейтинге, просто заполните название ниже."
 			},
+			RatingTeamOf:          func(id string) string { return fmt.Sprintf("ID на турнирном сайте: %s", id) },
 			RatingTeamPicked:      func(team string, id string) string { return fmt.Sprintf("%s, ID %s", team, id) },
 			RatingTeamPlaceholder: func() string { return "Начните вводить название" },
 			RatingTeamUnpick:      func() string { return "Не из рейтинга" },
@@ -1479,6 +1480,9 @@ var RU = Strings{
 				return fmt.Sprintf("Команд, перенесённых в заявки своих площадок: %s.", moved)
 			},
 			SentSubhead: func() string { return "Выгружено" },
+			SentTaken: func(n string) string {
+				return fmt.Sprintf("Составов и зачётов, которые dope взял с турнирного сайта: %s.", n)
+			},
 			SiteRefused: func(message string) string {
 				return fmt.Sprintf("Турнирный сайт отказал: %s", message)
 			},
@@ -1779,6 +1783,9 @@ var RU = Strings{
 			},
 			PlayerTwice: func(name string) string {
 				return fmt.Sprintf("%s записан в команду дважды.", name)
+			},
+			RatingTeamFixed: func() string {
+				return "У команды из импорта ID задаёт турнирный сайт."
 			},
 			RatingTeamTaken: func() string {
 				return "Эта команда рейтинга уже есть в составах феста."
