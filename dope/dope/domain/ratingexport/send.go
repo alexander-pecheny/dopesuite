@@ -3,6 +3,7 @@ package ratingexport
 import (
 	"context"
 
+	"dope/dope/domain/ratingsync"
 	"dope/dope/storage/ratingsite"
 	dopestrings "dope/i18nstrings"
 
@@ -16,6 +17,9 @@ type Report struct {
 	Rosters  int      `json:"rosters"`
 	Results  int      `json:"results"`
 	Warnings []string `json:"warnings"`
+	// Sent is each fact the site took, for the base, even when a later call
+	// failed.
+	Sent []ratingsync.Base `json:"-"`
 }
 
 // Send sends the Plan: the moves it found, each venue's rosters under its
@@ -53,6 +57,9 @@ func Send(ctx context.Context, p Plan, site Site) (Report, error) {
 		return r, err
 	}
 	r.Results = len(p.Results)
+	for _, res := range p.Results {
+		r.Sent = append(r.Sent, ratingsync.AnswersBase(res.Team, res.Mask))
+	}
 	r.Warnings = append(r.Warnings, warnings...)
 	return r, nil
 }
@@ -95,6 +102,13 @@ func (r *Report) rosters(ctx context.Context, site Site, tournament int64, v Ven
 		return err
 	}
 	r.Rosters += len(v.Teams)
+	for _, t := range teams {
+		ids := make([]int64, len(t.Players))
+		for i, p := range t.Players {
+			ids[i] = p.Player
+		}
+		r.Sent = append(r.Sent, ratingsync.RosterBase(t.Team, ids))
+	}
 	for _, w := range remarks {
 		r.Warnings = append(r.Warnings, dopestrings.Default.Host.RatingExport.TeamRemark(names[w.Team], w.Message))
 	}

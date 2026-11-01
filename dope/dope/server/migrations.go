@@ -1159,6 +1159,20 @@ create table if not exists jury_invite_uses(
 `)
 		return err
 	}},
+	// The last version of each fact of a team, by its site id, that the fest
+	// and rating.chgk.info agreed on (ADR-0036).
+	{Version: 53, Name: "rating_sync_base", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+create table if not exists rating_sync_base(
+  fest_id integer not null references fests(id) on delete cascade,
+  rating_team integer not null,
+  fact text not null check (fact in ('roster','flags','answers')),
+  value text not null,
+  primary key (fest_id, rating_team, fact)
+);
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

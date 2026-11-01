@@ -12,6 +12,7 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/ratingexport"
+	"dope/dope/domain/ratingsync"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
 	"dope/dope/storage/ratingsite"
@@ -278,8 +279,14 @@ func (s *Server) exportRun(ctx context.Context, sc route.Scope, gameID int64, se
 	if !send {
 		return &plan, nil, nil
 	}
-	report, err := ratingexport.Send(ctx, plan, site)
-	return &plan, &report, siteError(err)
+	report, sendErr := ratingexport.Send(ctx, plan, site)
+	err = s.h.Engine().WithWriteTx(ctx, sc.FestID, "rating-sync-base", func(ctx context.Context, tx *sql.Tx) error {
+		return ratingsync.SaveTx(ctx, tx, sc.FestID, report.Sent)
+	})
+	if sendErr != nil {
+		return &plan, &report, siteError(sendErr)
+	}
+	return &plan, &report, err
 }
 
 // apiRatingExport is the page's twin: GET answers the plan, POST sends it

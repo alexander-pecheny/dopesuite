@@ -213,6 +213,12 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	if strings.Join(site.posted, " ") != strings.Join(want, " ") || sent.Report == nil || sent.Report.Results != 5 {
 		t.Fatalf("sent %v, report %+v", site.posted, sent.Report)
 	}
+	var gammaBase, betaAnswers string
+	db.QueryRow(`select value from rating_sync_base where fest_id = ? and rating_team = 3 and fact = 'roster'`, festID).Scan(&gammaBase)
+	db.QueryRow(`select value from rating_sync_base where fest_id = ? and rating_team = 2 and fact = 'answers'`, festID).Scan(&betaAnswers)
+	if gammaBase != "[30,99]" || betaAnswers != "10" {
+		t.Fatalf("the base after the send: Гамма's roster %s, Бета's answers %s", gammaBase, betaAnswers)
+	}
 	reps := []any{site.bodies[1]["representative"], site.bodies[2]["representative"]}
 	if !slices.Contains(reps, any(float64(7))) || !slices.Contains(reps, any(float64(8))) {
 		t.Fatalf("the rosters went as %v", reps)

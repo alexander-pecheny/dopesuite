@@ -462,6 +462,15 @@ CREATE TABLE players(
   last_name text not null default ''
 );
 
+-- table rating_sync_base
+CREATE TABLE rating_sync_base(
+  fest_id integer not null references fests(id) on delete cascade,
+  rating_team integer not null,
+  fact text not null check (fact in ('roster','flags','answers')),
+  value text not null,
+  primary key (fest_id, rating_team, fact)
+);
+
 -- table schema_versions
 CREATE TABLE schema_versions(
   version integer primary key,

@@ -12,6 +12,7 @@ import (
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"dope/dope/domain/core"
 	"dope/dope/domain/multifest"
+	"dope/dope/domain/ratingsync"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/towns"
 	"dope/dope/platform/util"
@@ -192,6 +193,23 @@ func ratingResultsToFestRoster(results []ratingsite.Result) ([]roster.FestRoster
 	return roster.SortedFestRosterImportTeams(teams), nil
 }
 
+// saveBase records what an import that changed nothing read from the site,
+// when the base does not have it yet.
+func saveBase(ctx context.Context, eng *core.Engine, conn *sql.Conn, festID int64, base []ratingsync.Base) error {
+	if stale, err := ratingsync.Stale(ctx, conn, festID, base); err != nil || !stale {
+		return err
+	}
+	tx, err := eng.BeginWriteTxConn(ctx, conn)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := ratingsync.SaveTx(ctx, tx, festID, base); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func ratingTownID(town *ratingsite.Town) int64 {
 	if town == nil {
 		return 0
@@ -292,9 +310,10 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		if err != nil {
 			return RatingRosterImportResult{}, err
 		}
+		base := ratingsync.FromImport(teams)
 		if festRostersEqual(sortedCurrent, stripLocal(desired)) && len(merged.Settle)+len(merged.Drop)+len(venueOf) == 0 {
 			result.Unchanged = true
-			return result, nil
+			return result, saveBase(ctx, eng, conn, festID, base)
 		}
 
 		tx, err := eng.BeginWriteTxConn(ctx, conn)
@@ -324,6 +343,9 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 			return RatingRosterImportResult{}, err
 		}
 		updates, ekOverrideGameIDs = written.Updates, written.EKGameIDs
+		if err := ratingsync.SaveTx(ctx, tx, festID, base); err != nil {
+			return RatingRosterImportResult{}, err
+		}
 		if _, err := tx.ExecContext(ctx, `update fests set rating_id = ?, updated_at = ? where id = ?`, ratingID, util.UtcNow(), festID); err != nil {
 			return RatingRosterImportResult{}, err
 		}
