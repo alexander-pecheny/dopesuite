@@ -72,10 +72,11 @@ func (p *Plan) group(ctx context.Context, site Site, kind string, venues []multi
 
 // builder adds the fest's teams to a Plan one by one.
 type builder struct {
-	plan   *Plan
-	site   Site
-	groups groups
-	season int64
+	plan    *Plan
+	site    Site
+	groups  groups
+	season  int64
+	entered map[int64]bool
 }
 
 func (b *builder) skip(team, reason string) {
@@ -115,13 +116,30 @@ func (b *builder) add(ctx context.Context, team festTeam, answers string) error 
 		}
 		roster.Players = append(roster.Players, Player{Player: player.ratingID, Flag: flag, Name: player.name()})
 	}
+	b.plan.Results = append(b.plan.Results, Result{Team: team.ratingID, Name: team.name, Mask: answers})
+	// Sent for a team the site has, an empty roster drops the one entered there.
 	if len(roster.Players) == 0 {
-		b.skip(team.name, s.Host.RatingExport.NoPlayers())
-		return nil
+		onSite, err := b.onSite(ctx, team.ratingID)
+		if err != nil || onSite {
+			return err
+		}
 	}
 	group.Teams = append(group.Teams, roster)
-	b.plan.Results = append(b.plan.Results, Result{Team: team.ratingID, Name: team.name, Mask: answers})
 	return nil
+}
+
+func (b *builder) onSite(ctx context.Context, team int64) (bool, error) {
+	if b.entered == nil {
+		teams, err := b.site.entered(ctx, b.plan.Tournament)
+		if err != nil {
+			return false, err
+		}
+		b.entered = map[int64]bool{}
+		for _, t := range teams {
+			b.entered[t.Team] = true
+		}
+	}
+	return b.entered[team], nil
 }
 
 // unknown lists the team, when the site has no id for it in dope, and each

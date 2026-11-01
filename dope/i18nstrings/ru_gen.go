@@ -1413,9 +1413,6 @@ var RU = Strings{
 			NoGame: func() string {
 				return "В фесте нет ОД всех команд, выгружать нечего."
 			},
-			NoPlayers: func() string {
-				return "В составе нет ни одного игрока с ID турнирного сайта."
-			},
 			NoRepresentative: func(venue string) string {
 				return fmt.Sprintf("У заявки площадки %s на турнирном сайте нет представителя.", venue)
 			},

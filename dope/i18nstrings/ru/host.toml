@@ -712,7 +712,6 @@ all_teams = "Все команды"
 no_request = 'У площадки {{.venue}} нет принятой заявки на турнирном сайте.'
 no_representative = 'У заявки площадки {{.venue}} на турнирном сайте нет представителя.'
 no_venue = "Команда не на площадке."
-no_players = "В составе нет ни одного игрока с ID турнирного сайта."
 team_remark = '{{.team}}: {{.message}}'
 rosters_subhead = 'Составы, турнир {{.tournament}}'
 representative = 'Представитель {{.name}} (ID {{.id}}), заявка {{.request}}'

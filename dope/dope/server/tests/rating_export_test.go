@@ -29,7 +29,7 @@ import (
 // fakeRatingSite is the rating site's «ввод» API with one synch tournament,
 // 555, of two площадки: Минск (заявка 100, representative 7) and Брест
 // (заявка 200, representative 8). Before any roster arrives the tournament
-// has Гамма, in Минск's заявка by mistake.
+// has Гамма, in Минск's заявка by mistake, and Эпсилон.
 type fakeRatingSite struct {
 	t      *testing.T
 	mu     sync.Mutex
@@ -75,9 +75,9 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `[{"id": 5, "surname": "Безымянная", "name": "Новичок"}]`)
 	case "/tournaments/555/results_entry":
 		if len(f.posted) <= 1 {
-			fmt.Fprint(w, `{"teams": [{"team": 3, "name": "Гамма", "request": 100}]}`)
+			fmt.Fprint(w, `{"teams": [{"team": 3, "name": "Гамма", "request": 100}, {"team": 5, "name": "Эпсилон", "request": 100}]}`)
 		} else {
-			fmt.Fprint(w, `{"teams": [{"team": 1, "request": 100}, {"team": 2, "request": 100}, {"team": 3, "request": 200}]}`)
+			fmt.Fprint(w, `{"teams": [{"team": 1, "request": 100}, {"team": 2, "request": 100}, {"team": 3, "request": 200}, {"team": 5, "request": 100}]}`)
 		}
 	case "/seasons":
 		fmt.Fprint(w, `[{"id": 60, "dateStart": "2000-01-01T00:00:00+03:00", "dateEnd": "2100-01-01T00:00:00+03:00"}]`)
@@ -91,7 +91,9 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // An organizer's export sends each площадка's rosters as its representative,
 // moves the team the site had in the wrong заявка first, and sends every
 // team's answers at once; a player the site does not know is created there
-// first, and goes in with the id the site gave.
+// first, and goes in with the id the site gave. A team with nobody the site
+// knows goes with its answers, and with an empty roster only when the site
+// lacks it, so a roster entered there stays.
 func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	t.Parallel()
 	site := &fakeRatingSite{t: t}
@@ -112,7 +114,9 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	}
 	gamma := team(3, "Гамма", brest)
 	gamma.Players = append(gamma.Players, roster.FestRosterImportPlayer{FirstName: "Новичок", LastName: "Безымянный"})
-	teams := []roster.FestRosterImportTeam{team(1, "Альфа", minsk), team(2, "Бета", minsk), gamma}
+	delta, epsilon := team(4, "Дельта", minsk), team(5, "Эпсилон", minsk)
+	delta.Players, epsilon.Players = nil, nil
+	teams := []roster.FestRosterImportTeam{team(1, "Альфа", minsk), team(2, "Бета", minsk), gamma, delta, epsilon}
 	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 555, teams, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
@@ -157,6 +161,9 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	if len(plan.Venues) != 2 || venues["Минск"].Representative != 7 || venues["Брест"].Representative != 8 || venues["Брест"].Request != 200 {
 		t.Fatalf("the площадки are %+v", plan.Venues)
 	}
+	if minskTeams := venues["Минск"].Teams; len(minskTeams) != 3 || minskTeams[2].Name != "Дельта" || len(minskTeams[2].Players) != 0 {
+		t.Fatalf("Минск's rosters are %+v", minskTeams)
+	}
 	if got := venues["Минск"].Teams[0].Players[0].Flag + venues["Минск"].Teams[1].Players[0].Flag; got != "БЛ" {
 		t.Fatalf("Альфа's and Бета's flags are %s", got)
 	}
@@ -167,7 +174,7 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	for _, r := range plan.Results {
 		masks[r.Team] = r.Mask
 	}
-	if masks[1] != "00" || masks[2] != "10" || masks[3] != "00" {
+	if masks[1] != "00" || masks[2] != "10" || masks[3] != "00" || masks[4] != "00" || masks[5] != "00" {
 		t.Fatalf("the masks are %v", masks)
 	}
 	if len(plan.Unknown) != 1 || plan.Unknown[0].Name != "Безымянный Новичок" || len(plan.Unknown[0].Candidates) != 0 ||
@@ -203,7 +210,7 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 
 	sent := decodeInto[answer](t, scopedAPIRequest(t, srv, http.MethodPost, exportURL, nil, token))
 	want := []string{"/tournaments/555/results_entry/move", "/tournaments/555/results_entry/rosters", "/tournaments/555/results_entry/rosters", "/tournaments/555/results_entry"}
-	if strings.Join(site.posted, " ") != strings.Join(want, " ") || sent.Report == nil || sent.Report.Results != 3 {
+	if strings.Join(site.posted, " ") != strings.Join(want, " ") || sent.Report == nil || sent.Report.Results != 5 {
 		t.Fatalf("sent %v, report %+v", site.posted, sent.Report)
 	}
 	reps := []any{site.bodies[1]["representative"], site.bodies[2]["representative"]}

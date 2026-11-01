@@ -1010,7 +1010,6 @@ export type Strings = {
       movesSubhead: () => string;
       multiFest: () => string;
       noGame: () => string;
-      noPlayers: () => string;
       noRepresentative: (venue: string) => string;
       noRequest: (venue: string) => string;
       noSuchId: (id: string, name: string) => string;
