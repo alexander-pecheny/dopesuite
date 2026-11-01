@@ -387,8 +387,10 @@ func FindClientTeam(ctx context.Context, q store.Queryer, festID int64, clientID
 }
 
 // claimVenueNumberTx gives a new team the number its venue was asked for,
-// refused when another team of the venue has it. The venue then numbers
-// only the teams that still have none.
+// refused when another team of the venue has it. A removed team keeps its
+// row and its number, so it gives the number up here: the venue's unique
+// index counts removed rows too. The venue then numbers only the teams that
+// still have none.
 func claimVenueNumberTx(ctx context.Context, tx *sql.Tx, teamID, venueID int64, in TeamInput) error {
 	s := dopestrings.Default
 	if in.VenueNumber == 0 || venueID == 0 {
@@ -396,6 +398,10 @@ func claimVenueNumberTx(ctx context.Context, tx *sql.Tx, teamID, venueID int64, 
 	}
 	if in.VenueNumber < 0 || in.VenueNumber > numbering.MaxNumber {
 		return corei18n.User(s.Imports.HandRoster.VenueNumberRange(strconv.Itoa(numbering.MaxNumber)))
+	}
+	if _, err := tx.ExecContext(ctx, `
+update fest_teams set venue_number = null where multifest_venue_id = ? and venue_number = ? and deleted = 1`, venueID, in.VenueNumber); err != nil {
+		return err
 	}
 	var holder string
 	err := tx.QueryRowContext(ctx, `

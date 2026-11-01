@@ -494,6 +494,10 @@ sending = 'Отправляем изменения на сервер: {{.n}}.'
 # A change the server refused when it arrived, and the team it was about.
 refused = 'Сервер не принял изменение. {{.message}}'
 refused_team = 'Команда «{{.team}}»: {{.message}}'
+# The change at the head of the outbox that dope itself failed on (a 5xx that
+# is not the proxy's). It is sent again, and everything after it waits.
+failing = "Сервер не смог принять изменение из-за своей ошибки. Телефон отправляет его снова. Пока оно не пройдёт, остальные изменения и ответы ждут на этом устройстве. Сообщите организатору."
+failing_team = 'Сервер не смог принять изменение команды «{{.team}}» из-за своей ошибки. Телефон отправляет его снова. Пока оно не пройдёт, остальные изменения и ответы ждут на этом устройстве. Сообщите организатору.'
 dismiss = "Понятно"
 # Asked at logout while this device keeps changes the server has not seen.
 logout_confirm = "На этом устройстве есть изменения, которые ещё не дошли до сервера. После выхода они пропадут. Всё равно выйти?"

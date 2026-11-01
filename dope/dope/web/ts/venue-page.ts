@@ -101,6 +101,7 @@ function drawStatus(page: Page): void {
   const box = readOutbox(page.config.fest);
   const text = waitingText(page, pendingCount(box, page.config.venue));
   const lines = text ? [statusLine(text)] : [];
+  if (box.failing) lines.push(statusLine(box.failing.team ? S.host.offline.failingTeam(box.failing.team) : S.host.offline.failing(), true));
   lines.push(...box.refused.map((r) => statusLine(r.team ? S.host.offline.refusedTeam(r.team, r.message) : S.host.offline.refused(r.message), true)));
   if (box.refused.length) {
     const dismiss = document.createElement("button");

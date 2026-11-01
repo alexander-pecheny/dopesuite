@@ -21,6 +21,9 @@ export const OFFLINE_PENDING_TTL_MS = 604_800_000;
 // First HTTP status that counts as a server error worth retrying, and the
 // first that is a refusal.
 const SERVER_ERROR_STATUS = 500;
+// What the proxy answers while dope restarts or is down: the same as no
+// network. Any other 5xx is dope itself failing on the change.
+const PROXY_STATUSES = new Set([502, 503, 504]);
 const HTTP_CLIENT_ERROR = 400;
 // How often a page with unsent changes tries the network again.
 export const RETRY_MS = 10000;
@@ -71,6 +74,10 @@ export interface Outbox {
   // What the server refused, as it said it, and the team it was about, for
   // the page to show once.
   refused: Refusal[];
+  // The change at the head that dope itself failed on (a 5xx that is not the
+  // proxy's) when it was last sent. It stays and is sent again, but the page
+  // says so, since everything after it waits.
+  failing?: Refusal;
 }
 
 export interface Refusal {
@@ -114,7 +121,9 @@ function writeJSON(key: string, value: unknown): void {
 
 export function readOutbox(festID: number): Outbox {
   const saved = readJSON<Partial<Outbox>>(`${OUTBOX_PREFIX}:${festID}`);
-  return {ops: saved?.ops || [], ids: saved?.ids || {}, refused: saved?.refused || []};
+  const box: Outbox = {ops: saved?.ops || [], ids: saved?.ids || {}, refused: saved?.refused || []};
+  if (saved?.failing && box.ops.length) box.failing = saved.failing;
+  return box;
 }
 
 export function writeOutbox(festID: number, box: Outbox): void {
@@ -351,17 +360,19 @@ async function sendOne(wire: Wire): Promise<{status: number; text: string}> {
 
 let flushing: Promise<FlushResult> | null = null;
 
-type Sent = {status: number; text: string} | "offline";
+type Sent = {status: number; text: string} | "offline" | {failed: string};
 
-// sendHead sends the outbox's first change: what the server answered, or
-// "offline" when it could not be asked. A change that needs a team the server
-// never made is not sent and counts as done.
+// sendHead sends the outbox's first change: what the server answered,
+// "offline" when it could not be asked, or what dope said when it failed on
+// the change. A change that needs a team the server never made is not sent
+// and counts as done.
 async function sendHead(api: string, op: RosterOp, ids: Record<string, number>): Promise<Sent> {
   const wire = wireOf(api, op, ids);
   if (!wire) return {status: 0, text: ""};
   try {
     const sent = await sendOne(wire);
-    return sent.status >= SERVER_ERROR_STATUS ? "offline" : sent;
+    if (sent.status < SERVER_ERROR_STATUS) return sent;
+    return PROXY_STATUSES.has(sent.status) ? "offline" : {failed: sent.text};
   } catch (_) {
     return "offline";
   }
@@ -405,6 +416,12 @@ export function flushOutbox(festID: number, api: string): Promise<FlushResult> {
       const sent = await sendHead(api, op, box.ids);
       if (sent === "offline") return {empty: false, offline: true};
       const now = readOutbox(festID);
+      if ("failed" in sent) {
+        now.failing = {team: labelOf(op), message: sent.failed};
+        writeOutbox(festID, now);
+        return {empty: false, offline: false};
+      }
+      delete now.failing;
       settle(now, op, sent);
       // Once all is sent, the page draws from the server's ids again.
       if (now.ops.length === 0) now.ids = {};
@@ -468,7 +485,7 @@ export function keepWorker(): void {
 
 // mountOfflineBar shows, at the top of a game page, that the network is gone
 // or that changes wait for it, and redraws when either changes.
-export function mountOfflineBar(waiting: () => number, texts: {offline: (n: number) => string; sending: (n: number) => string}): () => void {
+export function mountOfflineBar(waiting: () => number, texts: {offline: (n: number) => string; sending: (n: number) => string; failing: () => string}): () => void {
   const bar = document.createElement("div");
   bar.className = "offline-bar";
   bar.hidden = true;
@@ -477,7 +494,7 @@ export function mountOfflineBar(waiting: () => number, texts: {offline: (n: numb
     const n = waiting();
     let text = "";
     if (!navigator.onLine) text = texts.offline(n);
-    else if (n > 0) text = texts.sending(n);
+    else text = texts.failing() || (n > 0 ? texts.sending(n) : "");
     bar.textContent = text;
     bar.hidden = !text;
   };

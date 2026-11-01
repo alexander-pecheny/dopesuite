@@ -178,7 +178,31 @@ const STATUSES: Array<[ContestedStatus, () => string]> = [
 export interface ContestedViewSpec {
   known: readonly ContestedText[];
   teamLabel: (number: number) => string;
-  rule: (group: ContestedGroup, status: ContestedStatus) => void;
+  // rule is the jury's; without it the ruling is text, with nothing to press.
+  rule?: (group: ContestedGroup, status: ContestedStatus) => void;
+}
+
+// rulingSwitch is the jury's switch of three for one answer.
+function rulingSwitch(group: ContestedGroup, rule: (group: ContestedGroup, status: ContestedStatus) => void): HTMLElement {
+  const seg = document.createElement("div");
+  seg.className = "seg";
+  seg.setAttribute("role", "group");
+  for (const [status, label] of STATUSES) {
+    const choice = button(label(), "seg-btn" + (status === group.status ? " active" : ""));
+    choice.setAttribute("aria-pressed", String(status === group.status));
+    choice.addEventListener("click", () => {
+      if (status !== group.status) rule(group, status);
+    });
+    seg.appendChild(choice);
+  }
+  return seg;
+}
+
+// rulingText is the ruling as a host reads it, with nothing to press.
+function rulingText(status: ContestedStatus): HTMLElement {
+  const text = document.createElement("span");
+  text.textContent = STATUSES.find(([s]) => s === status)?.[1]() || "";
+  return text;
 }
 
 // buildContestedView is the jury's tab: one row per answer to a question,
@@ -221,18 +245,7 @@ export function buildContestedView(spec: ContestedViewSpec): HTMLElement {
     teams.className = "hint";
     teams.textContent = group.numbers.filter((n) => n > 0).map(spec.teamLabel).join(", ");
     teams.hidden = teams.textContent === "";
-    const seg = document.createElement("div");
-    seg.className = "seg";
-    seg.setAttribute("role", "group");
-    for (const [status, label] of STATUSES) {
-      const choice = button(label(), "seg-btn" + (status === group.status ? " active" : ""));
-      choice.setAttribute("aria-pressed", String(status === group.status));
-      choice.addEventListener("click", () => {
-        if (status !== group.status) spec.rule(group, status);
-      });
-      seg.appendChild(choice);
-    }
-    cell.append(answer, teams, seg);
+    cell.append(answer, teams, spec.rule ? rulingSwitch(group, spec.rule) : rulingText(group.status));
   }
   const wrap = document.createElement("div");
   wrap.className = "table-scroll";

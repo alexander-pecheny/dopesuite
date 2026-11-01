@@ -200,17 +200,18 @@ const UNDO_LIMIT = 100;
 const kdGame = (gameInit?.scheme as {gameType?: unknown} | null | undefined)?.gameType === "kd";
 // What this visitor may do with the Game's contested answers (the init payload): record
 // them, rule on them. Only they read the answers' text, which the document
-// leaves out. The spectator view offers neither, even to an organizer or a
-// juror who is logged in: contested answers are worked on the /host page.
+// leaves out. Answers are recorded on the /host page only. The jury rules on
+// either page: a juror runs no Game, so /host sends them to /fest.
 const contestedRights = (gameInit as {contested?: {enter?: boolean; judge?: boolean}} | null | undefined)?.contested;
 const contestedEnter = !viewer && Boolean(contestedRights?.enter);
-const contestedJudge = !viewer && Boolean(contestedRights?.judge);
+const contestedJudge = Boolean(contestedRights?.judge);
 let contestedTexts: ContestedText[] = [];
 let contestedSeen: string | null = null;
 let contestedRowsCache: Array<Map<number, ODContested>> | null = null;
 // The entry tab's button for contested answers, renamed when the selected cell holds one.
 let contestedButton: HTMLButtonElement | null = null;
-const TABS = gameTabs([], {game: kdGame ? "kd" : "od", viewer, contested: contestedJudge});
+// A host who records contested answers reads the tab too; only the jury rules.
+const TABS = gameTabs([], {game: kdGame ? "kd" : "od", viewer, contested: contestedEnter || contestedJudge});
 
 let activeTab = tabFromHash(TABS) || (viewer ? (kdGame ? "personal" : "results") : "input");
 // The teams as the viewer looks at them: the Division chosen in the URL
@@ -602,7 +603,7 @@ function getTabPane(tab: string): HTMLElement {
   else if (tab === "detailed") node = buildDetailedTable();
   else if (tab === "roster") node = buildRosterView(route.festID, route.gameID, pageVenue);
   else if (tab === "screen") node = buildScreenView();
-  else if (tab === "contested") node = buildContestedView({known: contestedTexts, teamLabel: docTeamLabel, rule: ruleContested});
+  else if (tab === "contested") node = buildContestedView({known: contestedTexts, teamLabel: docTeamLabel, rule: contestedJudge ? ruleContested : undefined});
   else if (tab === "personal") node = buildPersonalView(kdContext());
   else if (tab === "players") {
     node = buildPlayersView({
@@ -3339,6 +3340,11 @@ if (!viewer && gameSheets.some((sheet) => sheet.editable)) {
   }, {
     offline: (n) => n ? S.host.offline.waiting(String(n)) : S.host.offline.noNetwork(),
     sending: (n) => S.host.offline.sending(String(n)),
+    failing: () => {
+      const failing = readOutbox(offlineFest).failing;
+      if (!failing) return "";
+      return failing.team ? S.host.offline.failingTeam(failing.team) : S.host.offline.failing();
+    },
   });
 }
 

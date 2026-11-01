@@ -24,7 +24,7 @@ export interface GameTab {
 export interface GameTabsOptions {
   game: GameKind;
   viewer: boolean;
-  // The visitor rules on the Game's contested answers (OD).
+  // The visitor records or rules on the Game's contested answers (OD).
   contested?: boolean;
 }
 

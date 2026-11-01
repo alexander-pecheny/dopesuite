@@ -120,3 +120,17 @@ test("without a network the outbox keeps everything, and a refusal takes the cha
   assert.deepEqual(await flushOutbox(2, "/api/fest/2"), {empty: true, offline: false});
   assert.deepEqual(readOutbox(2).refused, [{team: "Дельта", message: "Номер 1 на площадке уже у команды «Альфа»."}]);
 });
+
+test("a change dope fails on stays at the head and is named; the proxy's 502 is no network", async () => {
+  writeOutbox(3, enqueue(empty(), {kind: "create", cid: "c3", venue: 7, body: body("Эпсилон", 10)}));
+  fakeFetch([{status: 502, text: "Bad Gateway"}]);
+  assert.deepEqual(await flushOutbox(3, "/api/fest/3"), {empty: false, offline: true});
+  assert.equal(readOutbox(3).failing, undefined);
+  fakeFetch([{status: 500, text: "ошибка сервера"}]);
+  assert.deepEqual(await flushOutbox(3, "/api/fest/3"), {empty: false, offline: false});
+  assert.equal(readOutbox(3).ops.length, 1, "the change is kept, to be sent again");
+  assert.deepEqual(readOutbox(3).failing, {team: "Эпсилон", message: "ошибка сервера"});
+  fakeFetch([{status: 200, text: JSON.stringify({id: 50})}]);
+  assert.deepEqual(await flushOutbox(3, "/api/fest/3"), {empty: true, offline: false});
+  assert.deepEqual(readOutbox(3), {ops: [], ids: {}, refused: []});
+});

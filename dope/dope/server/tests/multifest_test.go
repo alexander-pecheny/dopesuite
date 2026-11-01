@@ -468,6 +468,20 @@ func TestATeamMadeOfflineArrivesOnce(t *testing.T) {
 	if resp := create("c-2", "Гамма", 5); resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), "Номер 5 на площадке уже у команды «Бета»") {
 		t.Fatalf("a taken number was not refused: %d %s", resp.Code, resp.Body.String())
 	}
+	// A removed team keeps its row, and its number goes to the next team that
+	// asks for it (fest 25 on 2026-11-01: a 500 the device retried all day).
+	var beta int64
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Бета'`, festID).Scan(&beta)
+	if resp := scopedAPIRequest(t, srv, http.MethodDelete, fmt.Sprintf("/api/fest/sync/teams/%d", beta), nil, token); resp.Code != http.StatusOK {
+		t.Fatalf("remove: %d %s", resp.Code, resp.Body.String())
+	}
+	if resp := create("c-3", "Дельта", 5); resp.Code != http.StatusOK {
+		t.Fatalf("the number of a removed team was not given out again: %d %s", resp.Code, resp.Body.String())
+	}
+	db.QueryRow(`select venue_number from fest_teams where fest_id = ? and name = 'Дельта' and deleted = 0`, festID).Scan(&number)
+	if number != 5 {
+		t.Fatalf("Дельта has number %d; want 5", number)
+	}
 }
 
 // A host of a synch fest always leads a venue: access without one is refused,

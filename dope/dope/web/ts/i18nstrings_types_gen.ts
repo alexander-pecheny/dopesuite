@@ -908,6 +908,8 @@ export type Strings = {
     };
     offline: {
       dismiss: () => string;
+      failing: () => string;
+      failingTeam: (team: string) => string;
       logoutConfirm: () => string;
       noNetwork: () => string;
       notPrepared: () => string;
