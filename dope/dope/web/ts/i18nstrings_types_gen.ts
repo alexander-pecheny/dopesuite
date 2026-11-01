@@ -921,6 +921,7 @@ export type Strings = {
       refused: (message: string) => string;
       refusedTeam: (team: string, message: string) => string;
       sending: (n: string) => string;
+      storageFull: () => string;
       subhead: () => string;
       unsupported: () => string;
       waiting: (n: string) => string;

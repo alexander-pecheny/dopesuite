@@ -111,12 +111,27 @@ function readJSON<T>(key: string): T | null {
   }
 }
 
-function writeJSON(key: string, value: unknown): void {
-  try {
-    storage()?.setItem(key, JSON.stringify(value));
-  } catch (_) {
-    // A full storage loses the copy, never the page.
+// EXPENDABLE is what the browser keeps only to be quicker or to debug: a
+// game's last snapshot and the client recorder. A full storage gives it up
+// before it loses a change.
+const EXPENDABLE = /^(od|si|multi):game:|^dope\.rec\./;
+
+// writeJSON answers whether the value was kept, giving up the expendable
+// keys when the storage is full.
+function writeJSON(key: string, value: unknown): boolean {
+  const raw = JSON.stringify(value);
+  const store = storage();
+  if (!store) return false;
+  for (const freed of [false, true]) {
+    try {
+      store.setItem(key, raw);
+      return true;
+    } catch (_) {
+      if (freed) return false;
+      for (const k of Object.keys(store)) if (EXPENDABLE.test(k)) store.removeItem(k);
+    }
   }
+  return false;
 }
 
 export function readOutbox(festID: number): Outbox {
@@ -126,10 +141,12 @@ export function readOutbox(festID: number): Outbox {
   return box;
 }
 
-export function writeOutbox(festID: number, box: Outbox): void {
+// writeOutbox answers whether the device kept the outbox.
+export function writeOutbox(festID: number, box: Outbox): boolean {
   const key = `${OUTBOX_PREFIX}:${festID}`;
-  if (box.ops.length || box.refused.length || Object.keys(box.ids).length) writeJSON(key, box);
-  else storage()?.removeItem(key);
+  if (box.ops.length || box.refused.length || Object.keys(box.ids).length) return writeJSON(key, box);
+  storage()?.removeItem(key);
+  return true;
 }
 
 export function newClientID(): string {

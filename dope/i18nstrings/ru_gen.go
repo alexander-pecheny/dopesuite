@@ -1286,6 +1286,9 @@ var RU = Strings{
 			Sending: func(n string) string {
 				return fmt.Sprintf("Отправляем изменения на сервер: %s.", n)
 			},
+			StorageFull: func() string {
+				return "Браузеру не хватило места, чтобы сохранить изменение, и оно не отправлено. Очистите данные сайта в настройках браузера и попробуйте снова."
+			},
 			Subhead: func() string { return "Работа без сети" },
 			Unsupported: func() string {
 				return "Этот браузер не умеет открывать страницы без сети."

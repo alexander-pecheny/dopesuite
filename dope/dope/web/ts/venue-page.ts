@@ -142,7 +142,7 @@ async function keep(page: Page, op: RosterOp): Promise<Answer> {
   const {fest} = page.config;
   page.notice = "";
   const before = readOutbox(fest).refused.length;
-  writeOutbox(fest, enqueue(readOutbox(fest), op));
+  if (!writeOutbox(fest, enqueue(readOutbox(fest), op))) return {ok: false, message: S.host.offline.storageFull()};
   drawRows(page);
   drawStatus(page);
   await sync(page);
