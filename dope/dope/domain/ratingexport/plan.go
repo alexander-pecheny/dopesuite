@@ -161,9 +161,10 @@ func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site) (Pl
 			}
 		}
 	}
+	// A venue the site refused has no group: its teams went to Skipped.
 	for _, v := range groups.order {
-		if len(groups.byVenue[v].Teams) > 0 {
-			p.Venues = append(p.Venues, *groups.byVenue[v])
+		if group := groups.byVenue[v]; group != nil && len(group.Teams) > 0 {
+			p.Venues = append(p.Venues, *group)
 		}
 	}
 	return p, b.planMoves(ctx)

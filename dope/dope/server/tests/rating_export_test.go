@@ -227,3 +227,46 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 		t.Fatalf("the page after a send: %d %s", page.Code, page.Body)
 	}
 }
+
+// A площадка whose заявка the site has not accepted stays out of the export:
+// its teams are skipped with the reason, and the other площадки still go.
+func TestTheExportSkipsAVenueTheSiteRefused(t *testing.T) {
+	t.Parallel()
+	fake := httptest.NewServer(&fakeRatingSite{t: t})
+	t.Cleanup(fake.Close)
+	srv := newAuthTestServer(t)
+	srv.Eng().RatingAPI = fake.URL
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, rating_id, revision, created_at, updated_at, kind) values('Синхрон', 555, 1, '2026-10-25', '2026-10-25', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	minsk, gomel := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}, multifest.RatingVenue{ID: 30, Request: 400, Title: "Гомель"}
+	teams := []roster.FestRosterImportTeam{
+		{RatingID: 1, Name: "Альфа", Venue: minsk, Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "Альфа", LastName: "Капитан"}}},
+		{RatingID: 4, Name: "Дельта", Venue: gomel, Players: []roster.FestRosterImportPlayer{{RatingID: 40, FirstName: "Дельта", LastName: "Капитан"}}},
+	}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 555, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		_, _, err := festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, Label: "ОД", TourComp: []int{2}})
+		return err
+	})
+	adminID, token := createAPITestSession(t, srv, "boss")
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	if resp := scopedAPIRequest(t, srv, http.MethodPut, "/api/auth/rating-token", map[string]string{"token": "rt_secret"}, token); resp.Code != http.StatusOK {
+		t.Fatalf("save the token: %d %s", resp.Code, resp.Body)
+	}
+	resp := scopedAPIRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/fest/%d/rating-export", festID), nil, token)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("the preview: %d %s", resp.Code, resp.Body)
+	}
+	plan := decodeInto[struct {
+		Plan ratingexport.Plan `json:"plan"`
+	}](t, resp).Plan
+	if len(plan.Venues) != 1 || plan.Venues[0].Title != "Минск" || len(plan.Skipped) != 1 || plan.Skipped[0].Team != "Дельта" {
+		t.Fatalf("the площадки are %+v, the skipped %+v", plan.Venues, plan.Skipped)
+	}
+}
