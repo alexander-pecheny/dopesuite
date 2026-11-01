@@ -2,11 +2,16 @@ package ratingexport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode"
 
+	dopestrings "dope/i18nstrings"
+
+	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
@@ -62,7 +67,7 @@ func (u Unknown) Default() string {
 // or that of a team or player it creates.
 func Identify(ctx context.Context, site Site, tournament int64, u Unknown, choice string) (int64, error) {
 	if choice != ChoiceNew {
-		return idstr.Parse(choice)
+		return site.existing(ctx, u, choice)
 	}
 	var created struct {
 		ID int64 `json:"id"`
@@ -77,9 +82,42 @@ func Identify(ctx context.Context, site Site, tournament int64, u Unknown, choic
 	return created.ID, err
 }
 
-// fold is a name as the site compares names: case and the letter yo aside.
+// existing is the id a person chose or typed, once the site confirms it
+// has a team or a player under it.
+func (s Site) existing(ctx context.Context, u Unknown, choice string) (int64, error) {
+	id, err := idstr.Parse(strings.TrimSpace(choice))
+	if err != nil || id <= 0 {
+		return 0, corei18n.User(dopestrings.Default.Host.RatingExport.BadChoice(u.Name))
+	}
+	kind := "teams"
+	if u.Player != 0 {
+		kind = "players"
+	}
+	var siteErr *Error
+	err = s.do(ctx, http.MethodGet, fmt.Sprintf("/%s/%d", kind, id), nil, nil)
+	if errors.As(err, &siteErr) && siteErr.Status == http.StatusNotFound {
+		return 0, corei18n.User(dopestrings.Default.Host.RatingExport.NoSuchId(idstr.Format(id), u.Name))
+	}
+	return id, err
+}
+
+// fold is a name as dope compares it with the site's: case, the letter yo
+// and the punctuation between words aside, so «Джерси М» is «Джерси-М».
 func fold(s string) string {
-	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s)), "\u0451", "\u0435")
+	words := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	return strings.ReplaceAll(strings.Join(words, " "), "\u0451", "\u0435")
+}
+
+// longestWord is what the site is asked for when the whole name finds
+// nothing, since the site's search keeps the punctuation.
+func longestWord(name string) string {
+	longest := ""
+	for _, w := range strings.Fields(fold(name)) {
+		if len([]rune(w)) > len([]rune(longest)) {
+			longest = w
+		}
+	}
+	return longest
 }
 
 // namesakesPage is more than any name has namesakes.
@@ -116,12 +154,25 @@ type siteTown struct {
 }
 
 func (s Site) teamNamesakes(ctx context.Context, name string) ([]Candidate, error) {
+	out, err := s.teamsNamed(ctx, name, name)
+	if err != nil || len(out) > 0 {
+		return out, err
+	}
+	if word := longestWord(name); word != "" && word != fold(name) {
+		return s.teamsNamed(ctx, word, name)
+	}
+	return out, nil
+}
+
+// teamsNamed is the site's answer to the query, kept to the teams called
+// name.
+func (s Site) teamsNamed(ctx context.Context, query, name string) ([]Candidate, error) {
 	var teams []struct {
 		ID   int64     `json:"id"`
 		Name string    `json:"name"`
 		Town *siteTown `json:"town"`
 	}
-	q := url.Values{"name": {name}, "itemsPerPage": {fmt.Sprint(namesakesPage)}}
+	q := url.Values{"name": {query}, "itemsPerPage": {fmt.Sprint(namesakesPage)}}
 	if err := s.do(ctx, http.MethodGet, "/teams?"+q.Encode(), nil, &teams); err != nil {
 		return nil, err
 	}

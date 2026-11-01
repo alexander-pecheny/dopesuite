@@ -1098,11 +1098,17 @@ input[type="radio"]:focus-visible {
   font-size: var(--text-lg);
 }
 
-/* the right-aligned button row a dialog ends with */
+/* the right-aligned button row a dialog ends with; a dialog taller than the
+   screen keeps it in sight at its bottom edge */
 .modal-actions {
+  position: sticky;
+  bottom: calc(var(--space-4) * -1);
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
+  margin-bottom: calc(var(--space-4) * -1);
+  padding-block: var(--space-2) var(--space-4);
+  background-color: var(--surface);
 }
 
 /* ── design system: buttons & links ───────────────────────────────────────────

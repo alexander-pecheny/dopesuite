@@ -142,7 +142,10 @@ func (s *Server) ratingIdentify(r *http.Request, sc route.Scope) (ratingExportDa
 	}
 	choices := map[string]string{}
 	for key, values := range r.PostForm {
-		if ref, ok := strings.CutPrefix(key, identifyField); ok && len(values) > 0 {
+		if ref, ok := strings.CutPrefix(key, identifyField); ok && len(values) > 0 && choices[ref] == "" {
+			choices[ref] = values[0]
+		}
+		if ref, ok := strings.CutPrefix(key, typedIDField); ok && len(values) > 0 && strings.TrimSpace(values[0]) != "" {
 			choices[ref] = values[0]
 		}
 	}
@@ -170,6 +173,10 @@ func (s *Server) ratingIdentify(r *http.Request, sc route.Scope) (ratingExportDa
 // identifyField starts the name of a choice's form field; the Unknown's Ref
 // ends it.
 const identifyField = "u."
+
+// typedIDField starts the name of the field where a person types a site id
+// the choices lack; it wins over the choice.
+const typedIDField = "id."
 
 // exportIdentify gives each Unknown of the plan that choices name its site
 // id: a namesake's, or that of the team or player it creates on the site.
@@ -422,7 +429,8 @@ func exportUnknownSection(plan ratingexport.Plan, action string, gameID int64) *
 		default:
 			field = append(field, dopeui.Muted(dopeui.Text(s.Host.RatingExport.NoTown(u.Name))))
 		}
-		form = append(form, dopeui.Field(append(field, dopeui.Selectfield(options...))...))
+		typed := dopeui.Textfield(dopeui.Name(typedIDField+u.Ref), dopeui.Inputmode("numeric"), dopeui.Placeholder(s.Host.RatingExport.TypedId()))
+		form = append(form, dopeui.Field(append(field, dopeui.Selectfield(options...), typed)...))
 	}
 	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.RatingExport.Identify()))))
 	return dopeui.Section(dopeui.Subhead(dopeui.Text(s.Host.RatingExport.UnknownSubhead())),

@@ -1419,6 +1419,9 @@ var RU = Strings{
 			NoRequest: func(venue string) string {
 				return fmt.Sprintf("У площадки %s нет принятой заявки на турнирном сайте.", venue)
 			},
+			NoSuchId: func(id string, name string) string {
+				return fmt.Sprintf("На турнирном сайте нет ID %s, который указан для %s.", id, name)
+			},
 			NoToken: func() string {
 				return "Чтобы выгружать на турнирный сайт, сохраните в профиле свой токен турнирного сайта."
 			},
@@ -1471,6 +1474,7 @@ var RU = Strings{
 			TokenRefused: func() string {
 				return "Турнирный сайт не принял ваш токен. Сохраните в профиле действующий токен с правом записи."
 			},
+			TypedId: func() string { return "или ID на турнирном сайте" },
 			Unfinished: func(done string, total string) string {
 				return fmt.Sprintf("Закрыто %s вопросов из %s. Незакрытые вопросы уйдут как не взятые.", done, total)
 			},
