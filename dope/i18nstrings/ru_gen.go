@@ -1380,19 +1380,37 @@ var RU = Strings{
 			VenuesSubhead:    func() string { return "Площадки" },
 		},
 		RatingExport: HostRatingExportStrings{
+			AllSite:       func() string { return "Везде выбрать версию сайта" },
 			AllTeams:      func() string { return "Все команды" },
+			AskLabel:      func(team string, fact string) string { return fmt.Sprintf("%s, %s", team, fact) },
 			BackToPreview: func() string { return "Вернуться к выгрузке" },
 			BadChoice: func(name string) string {
 				return fmt.Sprintf("Для %s выбран непонятный вариант. Выберите его из списка.", name)
 			},
 			ChoiceCandidate: func(name string, id string) string { return fmt.Sprintf("%s, ID %s", name, id) },
+			ChoiceDope:      func(value string) string { return fmt.Sprintf("Версия dope: %s", value) },
 			ChoiceNewPlayer: func() string { return "Создать игрока на турнирном сайте" },
 			ChoiceNewTeam: func(town string) string {
 				return fmt.Sprintf("Создать команду на турнирном сайте, город %s", town)
 			},
-			ChoiceSkip: func() string { return "Не выгружать" },
-			Crumb:      func() string { return "Выгрузка на турнирный сайт" },
-			GameLabel:  func() string { return "Игра" },
+			ChoiceNone:  func() string { return "Выберите версию" },
+			ChoiceSite:  func(value string) string { return fmt.Sprintf("Версия сайта: %s", value) },
+			ChoiceSkip:  func() string { return "Не выгружать" },
+			Crumb:       func() string { return "Выгрузка на турнирный сайт" },
+			EmptyValue:  func() string { return "пусто" },
+			FactAnswers: func() string { return "ответы" },
+			FactFlags:   func() string { return "зачёты" },
+			FactRoster:  func() string { return "состав" },
+			FactsHint: func() string {
+				return "Где с прошлой сверки поменялась только одна сторона, dope решил сам. Где поменялись обе, выберите версию."
+			},
+			FactsSubhead: func() string { return "Расхождения с турнирным сайтом" },
+			FlagUnknown: func(flag string) string {
+				return fmt.Sprintf("на турнирном сайте нет зачёта «%s»", flag)
+			},
+			FlagsLine:    func(team string, flags string) string { return fmt.Sprintf("%s: %s", team, flags) },
+			FlagsSubhead: func() string { return "Зачёты" },
+			GameLabel:    func() string { return "Игра" },
 			Identified: func(n string) string {
 				return fmt.Sprintf("ID турнирного сайта записаны: %s.", n)
 			},
@@ -1401,7 +1419,7 @@ var RU = Strings{
 				return "Записать выбранные ID в составы? Новые команды и игроки появятся на турнирном сайте."
 			},
 			Lead: func() string {
-				return "dope отправит на турнирный сайт составы команд и их ответы в ОД от вашего имени. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить». Повторная выгрузка заменит составы и ответы на сайте."
+				return "dope сравнит составы, зачёты и ответы в ОД каждой команды с турнирным сайтом и отправит туда только то, что поменялось в dope. Что поменяли только на сайте, там и останется, а составы и зачёты dope возьмёт себе. Если команду поменяли и в dope, и на сайте, выберите, чья версия верна. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить»."
 			},
 			MoveLine: func(team string, venue string) string {
 				return fmt.Sprintf("%s уже есть на сайте в другой заявке. Её перенесут в заявку площадки %s.", team, venue)
@@ -1435,6 +1453,9 @@ var RU = Strings{
 			NotFestOd: func() string {
 				return "Выгрузить можно только ОД всех команд феста."
 			},
+			NothingToSend: func() string {
+				return "Турнирный сайт уже совпадает с dope. Выгружать нечего."
+			},
 			OpenTournament: func() string { return "Открыть турнир на сайте" },
 			PlayerFlag:     func(name string, flag string) string { return fmt.Sprintf("%s (%s)", name, flag) },
 			QuestionsDiffer: func(dope string, site string) string {
@@ -1451,8 +1472,8 @@ var RU = Strings{
 			SendConfirm: func(teams string) string {
 				return fmt.Sprintf("Выгрузить составы и ответы %s команд на турнирный сайт?", teams)
 			},
-			Sent: func(rosters string, results string) string {
-				return fmt.Sprintf("Отправлено составов: %s, ответов: %s.", rosters, results)
+			Sent: func(rosters string, flags string, results string) string {
+				return fmt.Sprintf("Отправлено составов: %s, зачётов: %s, ответов: %s.", rosters, flags, results)
 			},
 			SentMoved: func(moved string) string {
 				return fmt.Sprintf("Команд, перенесённых в заявки своих площадок: %s.", moved)
@@ -1466,7 +1487,11 @@ var RU = Strings{
 			},
 			SkippedLine:    func(team string, reason string) string { return fmt.Sprintf("%s: %s", team, reason) },
 			SkippedSubhead: func() string { return "Не уйдёт на сайт" },
-			TeamRemark:     func(team string, message string) string { return fmt.Sprintf("%s: %s", team, message) },
+			TakeIntoDope:   func() string { return "dope возьмёт её себе." },
+			TakeLine: func(team string, fact string, site string) string {
+				return fmt.Sprintf("%s, %s. Останется версия сайта: %s", team, fact, site)
+			},
+			TeamRemark: func(team string, message string) string { return fmt.Sprintf("%s: %s", team, message) },
 			Title: func(fest string) string {
 				return fmt.Sprintf("Выгрузка на турнирный сайт · %s", fest)
 			},
@@ -1475,6 +1500,9 @@ var RU = Strings{
 				return "Турнирный сайт не принял ваш токен. Сохраните в профиле действующий токен с правом записи."
 			},
 			TypedId: func() string { return "или ID на турнирном сайте" },
+			Undecided: func(n string) string {
+				return fmt.Sprintf("Выберите версию во всех расхождениях: осталось %s.", n)
+			},
 			Unfinished: func(done string, total string) string {
 				return fmt.Sprintf("Закрыто %s вопросов из %s. Незакрытые вопросы уйдут как не взятые.", done, total)
 			},

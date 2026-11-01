@@ -10,8 +10,9 @@ import (
 // team it sends.
 
 type RosterPlayer struct {
-	Player int64  `json:"player"`
-	Flag   string `json:"flag"`
+	Player  int64  `json:"player"`
+	Flag    string `json:"flag"`
+	Captain bool   `json:"captain,omitempty"`
 }
 
 type RosterTeam struct {
@@ -38,6 +39,17 @@ func (c Client) SaveRosters(ctx context.Context, tournament, representative int6
 	}
 	err := c.post(ctx, fmt.Sprintf("/tournaments/%d/results_entry/rosters", tournament), body, &saved)
 	return saved.Warnings, err
+}
+
+// TeamFlags is a team's зачёты on the tournament, by the site's ids.
+type TeamFlags struct {
+	Team  int64   `json:"team"`
+	Flags []int64 `json:"flags"`
+}
+
+// SaveFlags sets each team's зачёты.
+func (c Client) SaveFlags(ctx context.Context, tournament int64, teams []TeamFlags) error {
+	return c.post(ctx, fmt.Sprintf("/tournaments/%d/results_entry/flags", tournament), map[string]any{"teams": teams}, nil)
 }
 
 // TeamAnswers is a team's answers, a character per question of the

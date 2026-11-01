@@ -55,8 +55,9 @@ type Flag struct {
 // Member is a player of a team's roster on a tournament, with the roster's
 // flag: Б, Л or К.
 type Member struct {
-	Player Player `json:"player"`
-	Flag   string `json:"flag"`
+	Player  Player `json:"player"`
+	Flag    string `json:"flag"`
+	Captain bool   `json:"captain"`
 }
 
 type Venue struct {
@@ -118,11 +119,13 @@ func (c Client) Requests(ctx context.Context, tournament int64) ([]Request, erro
 	return out, err
 }
 
-// EntryTeam is a team on the tournament's «ввод», with its request.
+// EntryTeam is a team on the tournament's «ввод», with its request and its
+// answers: nil when it has none yet.
 type EntryTeam struct {
-	Team    int64  `json:"team"`
-	Name    string `json:"name"`
-	Request *int64 `json:"request"`
+	Team    int64   `json:"team"`
+	Name    string  `json:"name"`
+	Request *int64  `json:"request"`
+	Mask    *string `json:"mask"`
 }
 
 // Entry is the tournament's «ввод» as the token's user sees it.
@@ -208,6 +211,13 @@ func (c Client) Players(ctx context.Context, surname, name string, limit int) ([
 func (c Client) Teams(ctx context.Context, name string, limit int) ([]Team, error) {
 	var out []Team
 	err := c.get(ctx, "/teams?"+url.Values{"name": {name}, "itemsPerPage": {fmt.Sprint(limit)}}.Encode(), &out)
+	return out, err
+}
+
+// TeamFlags is every зачёт the site knows: its own and those organizers made.
+func (c Client) TeamFlags(ctx context.Context) ([]Flag, error) {
+	var out []Flag
+	err := c.get(ctx, "/tournament_team_flags", &out)
 	return out, err
 }
 

@@ -29,12 +29,37 @@ import (
 // fakeRatingSite is the rating site's «ввод» API with one synch tournament,
 // 555, of two площадки: Минск (заявка 100, representative 7) and Брест
 // (заявка 200, representative 8). Before any roster arrives the tournament
-// has Гамма, in Минск's заявка by mistake, and Эпсилон.
+// has Гамма, with its captain 30, in Минск's заявка by mistake, and Эпсилон
+// with nobody. What dope writes, the site then holds.
 type fakeRatingSite struct {
 	t      *testing.T
 	mu     sync.Mutex
 	posted []string
 	bodies []map[string]any
+	// rosters, requests and masks are the tournament's teams, by id.
+	rosters  map[int64][]int64
+	requests map[int64]int64
+	masks    map[int64]string
+	flags    map[int64][]int64
+}
+
+// flagNames is the short name of each зачёт the fake knows.
+var flagNames = map[int64]string{59: "ЧР"}
+
+// requestOf is each representative's заявка.
+var requestOf = map[int64]int64{7: 100, 8: 200}
+
+type fakeBody struct {
+	Representative int64 `json:"representative"`
+	Request        int64 `json:"request"`
+	Teams          []struct {
+		Team    int64   `json:"team"`
+		Mask    string  `json:"mask"`
+		Flags   []int64 `json:"flags"`
+		Players []struct {
+			Player int64 `json:"player"`
+		} `json:"players"`
+	} `json:"teams"`
 }
 
 func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -44,20 +69,16 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.rosters == nil {
+		f.rosters = map[int64][]int64{3: {30}, 5: {}}
+		f.requests = map[int64]int64{3: 100, 5: 100}
+		f.masks = map[int64]string{}
+	}
+	if f.flags == nil {
+		f.flags = map[int64][]int64{}
+	}
 	if r.Method == http.MethodPost {
-		raw, _ := io.ReadAll(r.Body)
-		var body map[string]any
-		if err := json.Unmarshal(raw, &body); err != nil {
-			f.t.Errorf("%s: %v", r.URL.Path, err)
-		}
-		f.posted = append(f.posted, r.URL.Path)
-		f.bodies = append(f.bodies, body)
-		if r.URL.Path == "/tournaments/555/results_entry/players" {
-			w.WriteHeader(http.StatusCreated)
-			fmt.Fprint(w, `{"id": 99, "surname": "Безымянный", "name": "Новичок"}`)
-			return
-		}
-		fmt.Fprint(w, `{"warnings": [], "moved": [3], "request": 200}`)
+		f.post(w, r)
 		return
 	}
 	switch r.URL.Path {
@@ -67,18 +88,36 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `[{"id": 100, "status": "A", "venue": {"id": 10}, "representative": {"id": 7, "name": "Иван", "surname": "Минский"}},
 			{"id": 300, "status": "D", "venue": {"id": 20}, "representative": {"id": 9}},
 			{"id": 200, "status": "A", "venue": {"id": 20}, "representative": {"id": 8, "name": "Пётр", "surname": "Брестский"}}]`)
+	case "/tournaments/555/results":
+		var out []map[string]any
+		for team, players := range f.rosters {
+			members := []map[string]any{}
+			for _, p := range players {
+				members = append(members, map[string]any{"player": map[string]any{"id": p, "name": "Игрок", "surname": fmt.Sprint("Номер", p)}, "flag": "Б"})
+			}
+			flags := []map[string]any{}
+			for _, id := range f.flags[team] {
+				flags = append(flags, map[string]any{"id": id, "shortName": flagNames[id]})
+			}
+			out = append(out, map[string]any{"team": map[string]any{"id": team}, "teamMembers": members, "flags": flags})
+		}
+		json.NewEncoder(w).Encode(out)
+	case "/tournaments/555/results_entry":
+		var teams []map[string]any
+		for team, request := range f.requests {
+			entry := map[string]any{"team": team, "name": fmt.Sprint("team ", team), "request": request}
+			if mask, ok := f.masks[team]; ok {
+				entry["mask"] = mask
+			}
+			teams = append(teams, entry)
+		}
+		json.NewEncoder(w).Encode(map[string]any{"teams": teams})
 	case "/players":
 		if r.URL.Query().Get("surname") == "Капитан" {
 			fmt.Fprint(w, `[{"id": 77, "surname": "Капитан", "name": "Альфа", "patronymic": "Иванович"}]`)
 			return
 		}
 		fmt.Fprint(w, `[{"id": 5, "surname": "Безымянная", "name": "Новичок"}]`)
-	case "/tournaments/555/results_entry":
-		if len(f.posted) <= 1 {
-			fmt.Fprint(w, `{"teams": [{"team": 3, "name": "Гамма", "request": 100}, {"team": 5, "name": "Эпсилон", "request": 100}]}`)
-		} else {
-			fmt.Fprint(w, `{"teams": [{"team": 1, "request": 100}, {"team": 2, "request": 100}, {"team": 3, "request": 200}, {"team": 5, "request": 100}]}`)
-		}
 	case "/seasons":
 		fmt.Fprint(w, `[{"id": 60, "dateStart": "2000-01-01T00:00:00+03:00", "dateEnd": "2100-01-01T00:00:00+03:00"}]`)
 	case "/teams/1/seasons":
@@ -86,6 +125,54 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		fmt.Fprint(w, `[]`)
 	}
+}
+
+// post takes a write, as the site would.
+func (f *fakeRatingSite) post(w http.ResponseWriter, r *http.Request) {
+	raw, _ := io.ReadAll(r.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		f.t.Errorf("%s: %v", r.URL.Path, err)
+	}
+	f.posted = append(f.posted, r.URL.Path)
+	f.bodies = append(f.bodies, body)
+	var in fakeBody
+	json.Unmarshal(raw, &in)
+	switch r.URL.Path {
+	case "/tournaments/555/results_entry/players":
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"id": 99, "surname": "Безымянный", "name": "Новичок"}`)
+		return
+	case "/tournaments/555/results_entry/rosters":
+		for _, t := range in.Teams {
+			ids := []int64{}
+			for _, p := range t.Players {
+				ids = append(ids, p.Player)
+			}
+			f.rosters[t.Team] = ids
+			if _, ok := f.requests[t.Team]; !ok {
+				f.requests[t.Team] = requestOf[in.Representative]
+			}
+		}
+	case "/tournaments/555/results_entry/move":
+		var moved []int64
+		for _, t := range body["teams"].([]any) {
+			team := int64(t.(float64))
+			f.requests[team] = in.Request
+			moved = append(moved, team)
+		}
+		json.NewEncoder(w).Encode(map[string]any{"moved": moved, "warnings": []string{}})
+		return
+	case "/tournaments/555/results_entry":
+		for _, t := range in.Teams {
+			f.masks[t.Team] = t.Mask
+		}
+	case "/tournaments/555/results_entry/flags":
+		for _, t := range in.Teams {
+			f.flags[t.Team] = t.Flags
+		}
+	}
+	fmt.Fprint(w, `{"warnings": []}`)
 }
 
 // An organizer's export sends each площадка's rosters as its representative,
@@ -228,8 +315,8 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
 	page := httptest.NewRecorder()
 	srv.HostPageServer().HandleHostRouter(page, req)
-	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Минский") {
-		t.Fatalf("the page: %d", page.Code)
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Выгружать нечего") {
+		t.Fatalf("the page once the site has it all: %d %s", page.Code, page.Body)
 	}
 	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/rating/export", festID), strings.NewReader(fmt.Sprintf("game=%d", gameID)))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

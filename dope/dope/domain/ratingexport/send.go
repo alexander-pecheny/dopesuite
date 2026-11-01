@@ -2,6 +2,7 @@ package ratingexport
 
 import (
 	"context"
+	"strconv"
 
 	"dope/dope/domain/ratingsync"
 	"dope/dope/storage/ratingsite"
@@ -15,6 +16,7 @@ import (
 type Report struct {
 	Moved    int      `json:"moved"`
 	Rosters  int      `json:"rosters"`
+	Flags    int      `json:"flags"`
 	Results  int      `json:"results"`
 	Warnings []string `json:"warnings"`
 	// Sent is each fact the site took, for the base, even when a later call
@@ -25,13 +27,16 @@ type Report struct {
 // Send sends the Plan: the moves it found, each venue's rosters under its
 // representative, the moves those rosters turned out to need (a
 // representative of several venues gets new teams in their first request),
-// and then every team's answers at once. It stops at the site's first
+// the зачёты, and then the answers at once. It stops at the site's first
 // refusal; what went before stays on the site, and sending again repeats it
 // harmlessly.
 func Send(ctx context.Context, p Plan, site Site) (Report, error) {
 	r := Report{Warnings: []string{}}
 	if p.Blocked != "" {
 		return r, corei18n.User(p.Blocked)
+	}
+	if p.Undecided > 0 {
+		return r, corei18n.User(dopestrings.Default.Host.RatingExport.Undecided(strconv.Itoa(p.Undecided)))
 	}
 	if err := r.move(ctx, site, p.Tournament, p.Moves); err != nil {
 		return r, err
@@ -48,6 +53,12 @@ func Send(ctx context.Context, p Plan, site Site) (Report, error) {
 	if err := r.move(ctx, site, p.Tournament, moves); err != nil {
 		return r, err
 	}
+	if err := r.flags(ctx, site, p.Tournament, p.Flags); err != nil {
+		return r, err
+	}
+	if len(p.Results) == 0 {
+		return r, nil
+	}
 	answers := make([]ratingsite.TeamAnswers, len(p.Results))
 	for i, res := range p.Results {
 		answers[i] = ratingsite.TeamAnswers{Team: res.Team, Mask: res.Mask}
@@ -62,6 +73,25 @@ func Send(ctx context.Context, p Plan, site Site) (Report, error) {
 	}
 	r.Warnings = append(r.Warnings, warnings...)
 	return r, nil
+}
+
+// flags sends every team's зачёты at once.
+func (r *Report) flags(ctx context.Context, site Site, tournament int64, flags []TeamFlags) error {
+	if len(flags) == 0 {
+		return nil
+	}
+	teams := make([]ratingsite.TeamFlags, len(flags))
+	for i, f := range flags {
+		teams[i] = ratingsite.TeamFlags{Team: f.Team, Flags: f.IDs}
+	}
+	if err := site.SaveFlags(ctx, tournament, teams); err != nil {
+		return err
+	}
+	r.Flags = len(flags)
+	for _, f := range flags {
+		r.Sent = append(r.Sent, ratingsync.FlagsBase(f.Team, f.Shorts))
+	}
+	return nil
 }
 
 // move puts each team into its venue's request, a request per request.
@@ -87,13 +117,16 @@ func (r *Report) move(ctx context.Context, site Site, tournament int64, moves []
 
 // rosters sends one venue's rosters, as its representative when it has one.
 func (r *Report) rosters(ctx context.Context, site Site, tournament int64, v Venue) error {
+	if len(v.Teams) == 0 {
+		return nil
+	}
 	names := map[int64]string{}
 	teams := make([]ratingsite.RosterTeam, 0, len(v.Teams))
 	for _, t := range v.Teams {
 		names[t.Team] = t.Name
 		players := make([]ratingsite.RosterPlayer, len(t.Players))
 		for i, p := range t.Players {
-			players[i] = ratingsite.RosterPlayer{Player: p.Player, Flag: p.Flag}
+			players[i] = ratingsite.RosterPlayer{Player: p.Player, Flag: p.Flag, Captain: p.Captain}
 		}
 		teams = append(teams, ratingsite.RosterTeam{Team: t.Team, Players: players})
 	}

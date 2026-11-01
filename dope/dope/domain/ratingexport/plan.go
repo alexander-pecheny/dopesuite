@@ -10,6 +10,8 @@ import (
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/multifest"
+	"dope/dope/domain/ratingsync"
+	"dope/dope/domain/roster"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
@@ -17,30 +19,69 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
-// Plan is what an export sends: each venue's rosters under its
-// representative, the teams to move to their venue's request, and every
-// team's answers. Skipped and Warnings are for the person to read first.
+// Plan is what an export does (ADR-0036): the facts where dope and the site
+// differ, and of them what goes to the site — each venue's rosters under its
+// representative, the teams to move to their venue's request, the зачёты and
+// the answers — and what dope takes from the site. Skipped and Warnings are
+// for the person to read first.
 type Plan struct {
-	Tournament int64     `json:"tournament"`
-	Questions  int       `json:"questions"`
-	Venues     []Venue   `json:"venues"`
-	Moves      []Move    `json:"moves"`
-	Results    []Result  `json:"results"`
-	Unknown    []Unknown `json:"unknown"`
-	Skipped    []Skipped `json:"skipped"`
-	Warnings   []string  `json:"warnings"`
+	Tournament int64       `json:"tournament"`
+	Questions  int         `json:"questions"`
+	Facts      []Fact      `json:"facts"`
+	Venues     []Venue     `json:"venues"`
+	Moves      []Move      `json:"moves"`
+	Flags      []TeamFlags `json:"flags"`
+	Results    []Result    `json:"results"`
+	Unknown    []Unknown   `json:"unknown"`
+	Skipped    []Skipped   `json:"skipped"`
+	Warnings   []string    `json:"warnings"`
+	// Undecided is how many facts wait for a person to pick a side.
+	Undecided int `json:"undecided"`
 	// Blocked says why the plan may not be sent; empty when it may.
 	Blocked string `json:"blocked,omitempty"`
+	// Agreed is the facts dope and the site hold alike, for the base.
+	Agreed []ratingsync.Base `json:"-"`
 }
 
-// Venue is one venue's rosters. Request and Representative are 0 on a
-// tournament without requests, where the organizer enters every team.
+// Fact is a fact of a team where dope and the site differ, each side's
+// version as a person reads it, and what the export does about it.
+type Fact struct {
+	// Key names the fact in a person's choice.
+	Key    string            `json:"key"`
+	Team   int64             `json:"team"`
+	TeamID int64             `json:"team_id"`
+	Name   string            `json:"name"`
+	Fact   ratingsync.Fact   `json:"fact"`
+	Action ratingsync.Action `json:"action"`
+	// Chosen is set when a person picked the side.
+	Chosen bool   `json:"chosen,omitempty"`
+	Dope   string `json:"dope"`
+	Site   string `json:"site"`
+	// Base is what the base becomes once a Take is done.
+	Base ratingsync.Base `json:"-"`
+	// Players and Flags are the site's version, for dope to take.
+	Players []roster.FestRosterImportPlayer `json:"-"`
+	Flags   []string                        `json:"-"`
+}
+
+// TeamFlags is a team's зачёты to send, by short name and by the site's id.
+type TeamFlags struct {
+	Team   int64    `json:"team"`
+	Name   string   `json:"name"`
+	Shorts []string `json:"shorts"`
+	IDs    []int64  `json:"ids"`
+}
+
+// Venue is one venue's rosters to send, and every team it has on the site,
+// for the moves. Request and Representative are 0 on a tournament without
+// requests, where the organizer enters every team.
 type Venue struct {
 	Title              string   `json:"title"`
 	Request            int64    `json:"request,omitempty"`
 	Representative     int64    `json:"representative,omitempty"`
 	RepresentativeName string   `json:"representative_name,omitempty"`
 	Teams              []Roster `json:"teams"`
+	Members            []int64  `json:"members"`
 }
 
 // Roster is a team and its players with their flags: the site's letters for
@@ -51,10 +92,12 @@ type Roster struct {
 	Players []Player `json:"players"`
 }
 
+// Player keeps the captain the site marks.
 type Player struct {
-	Player int64  `json:"player"`
-	Flag   string `json:"flag"`
-	Name   string `json:"name"`
+	Player  int64  `json:"player"`
+	Flag    string `json:"flag"`
+	Captain bool   `json:"captain,omitempty"`
+	Name    string `json:"name"`
 }
 
 // Move puts a team the tournament already has into its venue's request.
@@ -79,16 +122,19 @@ type Skipped struct {
 	Reason string `json:"reason"`
 }
 
-// Base and legionnaire, as the site spells a roster flag.
+// Base, legionnaire and a captain outside the base roster, as the site
+// spells a roster flag.
 const (
 	flagBase      = "\u0411"
 	flagLegionary = "\u041b"
+	flagCaptain   = "\u041a"
 )
 
 type festTeam struct {
 	id, ratingID, venue, number int64
 	name, city                  string
 	players                     []festPlayer
+	flags                       []roster.FestRosterFlag
 }
 
 type festPlayer struct {
@@ -98,11 +144,13 @@ type festPlayer struct {
 
 func (p festPlayer) name() string { return strings.TrimSpace(p.last + " " + p.first) }
 
-// Build reads what the fest's OD gameID would send and asks the site where
-// it would go. It writes nothing anywhere.
-func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site) (Plan, error) {
+// Build compares the fest's teams and its OD gameID with the site, fact by
+// fact, under the person's choices by Fact.Key ("dope" or "site"). It writes
+// nothing anywhere.
+func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site, choices map[string]string) (Plan, error) {
 	s := dopestrings.Default
-	p := Plan{Venues: []Venue{}, Moves: []Move{}, Results: []Result{}, Unknown: []Unknown{}, Skipped: []Skipped{}, Warnings: []string{}}
+	p := Plan{Facts: []Fact{}, Venues: []Venue{}, Moves: []Move{}, Flags: []TeamFlags{}, Results: []Result{},
+		Unknown: []Unknown{}, Skipped: []Skipped{}, Warnings: []string{}}
 	var kind string
 	if err := db.QueryRowContext(ctx, `select coalesce(rating_id, 0), kind from fests where id = ?`, festID).Scan(&p.Tournament, &kind); err != nil {
 		return p, err
@@ -153,7 +201,10 @@ func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site) (Pl
 	if err != nil {
 		return p, err
 	}
-	b := builder{plan: &p, site: site, groups: groups}
+	b := builder{plan: &p, site: site, groups: groups, choices: choices}
+	if err := b.read(ctx, db, festID); err != nil {
+		return p, err
+	}
 	seated := map[int64]bool{}
 	for _, team := range state.Teams {
 		seated[team.Number] = true
@@ -167,7 +218,7 @@ func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site) (Pl
 	}
 	// A venue the site refused has no group: its teams went to Skipped.
 	for _, v := range groups.order {
-		if group := groups.byVenue[v]; group != nil && len(group.Teams) > 0 {
+		if group := groups.byVenue[v]; group != nil && len(group.Members) > 0 {
 			p.Venues = append(p.Venues, *group)
 		}
 	}
@@ -218,11 +269,17 @@ func mask(state games.ODState, number int64, questions int) string {
 }
 
 func loadTeams(ctx context.Context, db *sql.DB, festID int64) ([]festTeam, error) {
+	flags, err := roster.LoadFestTeamFlags(ctx, db, festID)
+	if err != nil {
+		return nil, err
+	}
 	teams, err := store.CollectRows(ctx, db, `
 select id, coalesce(rating_id, 0), coalesce(multifest_venue_id, 0), coalesce(number, 0), name, coalesce(city, '')
 from fest_teams where fest_id = ? and deleted = 0 order by coalesce(number, 0), name`, []any{festID}, func(rows *sql.Rows) (festTeam, error) {
 		var t festTeam
-		return t, rows.Scan(&t.id, &t.ratingID, &t.venue, &t.number, &t.name, &t.city)
+		err := rows.Scan(&t.id, &t.ratingID, &t.venue, &t.number, &t.name, &t.city)
+		t.flags = flags[t.id]
+		return t, err
 	})
 	if err != nil {
 		return nil, err
