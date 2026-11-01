@@ -135,8 +135,12 @@ func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site) (Pl
 	p.Warnings = append(p.Warnings, unfinished(state, venues, questions)...)
 	state.Scored()
 
-	if p.Questions, err = site.questions(ctx, p.Tournament); err != nil {
+	tours, err := site.Tours(ctx, p.Tournament)
+	if err != nil {
 		return p, err
+	}
+	for _, n := range tours {
+		p.Questions += n
 	}
 	if p.Questions != questions {
 		p.Blocked = s.Host.RatingExport.QuestionsDiffer(strconv.Itoa(questions), strconv.Itoa(p.Questions))

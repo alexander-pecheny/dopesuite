@@ -198,6 +198,9 @@ here when it needs type metadata.
 - `buffdb` — buff's mirror of rating.chgk.info (`DOPE_BUFF_DB`), opened
   read-only and failing soft: a missing file, table or query gives an empty
   answer rather than an error (ADR-0020).
+- `ratingsite` — rating.chgk.info's API: the reads the import, the team
+  editor and the export share, and the export's writes through «ввод». No
+  other package talks to the site (ADR-0036).
 
 ### `export/` — output generation
 

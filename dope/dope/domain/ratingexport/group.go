@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"dope/dope/domain/multifest"
+	"dope/dope/storage/ratingsite"
 	dopestrings "dope/i18nstrings"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
@@ -20,27 +21,24 @@ type groups struct {
 	// refused is why a venue's teams cannot go, by venue.
 	refused map[int64]string
 	// town is the site's town of each venue, for a new team there.
-	town map[int64]siteTown
+	town map[int64]ratingsite.Town
 }
-
-// requestAccepted is the status of a request the site has accepted.
-const requestAccepted = "A"
 
 func (p *Plan) group(ctx context.Context, site Site, kind string, venues []multifest.Venue) (groups, error) {
 	s := dopestrings.Default
-	g := groups{synch: kind == multifest.Synch, byVenue: map[int64]*Venue{}, refused: map[int64]string{}, town: map[int64]siteTown{}}
+	g := groups{synch: kind == multifest.Synch, byVenue: map[int64]*Venue{}, refused: map[int64]string{}, town: map[int64]ratingsite.Town{}}
 	if !g.synch {
 		g.order = []int64{0}
 		g.byVenue[0] = &Venue{Title: s.Host.RatingExport.AllTeams(), Teams: []Roster{}}
 		return g, nil
 	}
-	requests, err := site.requests(ctx, p.Tournament)
+	requests, err := site.Requests(ctx, p.Tournament)
 	if err != nil {
 		return g, err
 	}
-	byRequest, byRatingVenue := map[int64]request{}, map[int64]request{}
+	byRequest, byRatingVenue := map[int64]ratingsite.Request{}, map[int64]ratingsite.Request{}
 	for _, r := range requests {
-		if r.Status != requestAccepted || r.Venue == nil {
+		if r.Status != ratingsite.RequestAccepted || r.Venue == nil {
 			continue
 		}
 		byRequest[r.ID] = r
@@ -64,7 +62,7 @@ func (p *Plan) group(ctx context.Context, site Site, kind string, venues []multi
 				g.town[v.ID] = *r.Venue.Town
 			}
 			g.byVenue[v.ID] = &Venue{Title: v.Title, Request: r.ID, Representative: r.Representative.ID,
-				RepresentativeName: r.Representative.fullName(), Teams: []Roster{}}
+				RepresentativeName: r.Representative.FullName(), Teams: []Roster{}}
 		}
 	}
 	return g, nil
@@ -130,7 +128,7 @@ func (b *builder) add(ctx context.Context, team festTeam, answers string) error 
 
 func (b *builder) onSite(ctx context.Context, team int64) (bool, error) {
 	if b.entered == nil {
-		teams, err := b.site.entered(ctx, b.plan.Tournament)
+		teams, err := b.site.Entry(ctx, b.plan.Tournament)
 		if err != nil {
 			return false, err
 		}
@@ -188,13 +186,18 @@ func (b *builder) base(ctx context.Context, team int64) (map[int64]bool, error) 
 		return out, nil
 	}
 	if b.season == 0 {
-		season, err := b.site.season(ctx)
+		season, err := b.site.Season(ctx, time.Now())
 		if err != nil {
 			return nil, err
 		}
 		b.season = season
 	}
-	return b.site.seasonRoster(ctx, team, b.season)
+	ids, err := b.site.BaseRoster(ctx, team, b.season)
+	out := map[int64]bool{}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, err
 }
 
 // planMoves lists the teams the tournament already has in another request
@@ -206,7 +209,7 @@ func (b *builder) planMoves(ctx context.Context) error {
 }
 
 func misplaced(ctx context.Context, site Site, p *Plan) ([]Move, error) {
-	have, err := site.entered(ctx, p.Tournament)
+	have, err := site.Entry(ctx, p.Tournament)
 	if err != nil {
 		return nil, err
 	}

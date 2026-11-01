@@ -5,7 +5,15 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"dope/dope/storage/ratingsite"
 )
+
+// RatingSite is the rating site's API, as the token's user when token is not
+// empty.
+func (e *Engine) RatingSite(token string) ratingsite.Client {
+	return ratingsite.Client{Base: e.RatingAPI, Token: token}
+}
 
 // A user's token for rating.chgk.info (its API's `rt_…`), saved on /profile.
 // dope sends it as the user when it exports a fest's rosters and results

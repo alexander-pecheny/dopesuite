@@ -50,8 +50,8 @@ type Engine struct {
 	// soft (ADR-0020). It answers which country a town is in; with no mirror
 	// configured the screen falls back to its own list of cities.
 	Buff *buffdb.Store
-	// RatingAPI is rating.chgk.info's API the export writes to; empty is the
-	// site itself, and a test points it at a fake.
+	// RatingAPI is rating.chgk.info's API; empty is ratingsite.DefaultBase,
+	// and a test points it at a fake of its own.
 	RatingAPI string
 	// Assets is the embedded (or disk, in dev) static asset filesystem.
 	Assets fs.FS

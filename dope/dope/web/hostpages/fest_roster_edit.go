@@ -453,12 +453,12 @@ func conflictField(key string) string {
 
 // apiRatingPlayers suggests the rating site's people for what the host typed.
 func (s *Server) apiRatingPlayers(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	return route.JSON(w, imports.SearchRatingPlayers(r.Context(), s.h.Engine().Buff, r.URL.Query().Get("q")))
+	return route.JSON(w, imports.SearchRatingPlayers(r.Context(), s.h.Engine().Buff, s.h.Engine().RatingSite(""), r.URL.Query().Get("q")))
 }
 
 // apiRatingTeams suggests the rating site's teams for what the host typed.
 func (s *Server) apiRatingTeams(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	return route.JSON(w, imports.SearchRatingTeams(r.Context(), s.h.Engine().Buff, r.URL.Query().Get("q")))
+	return route.JSON(w, imports.SearchRatingTeams(r.Context(), s.h.Engine().Buff, s.h.Engine().RatingSite(""), r.URL.Query().Get("q")))
 }
 
 // apiRatingBaseRoster is a rating team's base roster now.
@@ -467,7 +467,7 @@ func (s *Server) apiRatingBaseRoster(w http.ResponseWriter, r *http.Request, sc 
 	if err != nil {
 		return err
 	}
-	team, people, err := imports.RatingBaseRoster(r.Context(), s.h.Engine().Buff, id)
+	team, people, err := imports.RatingBaseRoster(r.Context(), s.h.Engine().Buff, s.h.Engine().RatingSite(""), id)
 	if err != nil {
 		return route.BadUser(corei18n.User(dopestrings.Default.Imports.HandRoster.BaseRosterFailed()))
 	}

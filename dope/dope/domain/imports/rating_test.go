@@ -1,6 +1,7 @@
 package imports
 
 import (
+	"dope/dope/storage/ratingsite"
 	"dope/dope/storage/store"
 	"encoding/json"
 	"os"
@@ -17,7 +18,7 @@ func TestRatingResultsCarryTeamFlags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var results []ratingFestResult
+	var results []ratingsite.Result
 	if err := json.Unmarshal(raw, &results); err != nil {
 		t.Fatalf("decode rating json: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestRatingResultsToFestRoster(t *testing.T) {
 			"teamMembers":[{"player":{"id":100,"name":"Анна","surname":"Сидорова"}}]
 		}
 	]`
-	var results []ratingFestResult
+	var results []ratingsite.Result
 	if err := json.Unmarshal([]byte(raw), &results); err != nil {
 		t.Fatalf("decode rating json: %v", err)
 	}

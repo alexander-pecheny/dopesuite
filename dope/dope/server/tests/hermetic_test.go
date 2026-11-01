@@ -4,12 +4,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
-	"dope/dope/domain/imports"
 	"dope/dope/storage/festwrite"
+	"dope/dope/storage/ratingsite"
 )
 
 // serverEnv is every variable the server reads at request time.
@@ -38,20 +39,23 @@ func TestMain(m *testing.M) {
 	}
 	rating := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/requests"):
+		case strings.HasSuffix(r.URL.Path, "/requests"), strings.HasSuffix(r.URL.Path, "/results"):
 			_, _ = w.Write([]byte("[]"))
-		case strings.HasSuffix(r.URL.Path, ".json"):
+		case tournament.MatchString(r.URL.Path):
 			_, _ = w.Write([]byte("{}"))
 		default:
 			http.NotFound(w, r)
 		}
 	}))
-	imports.RatingAPI = rating.URL
+	ratingsite.DefaultBase = rating.URL
 	festwrite.WriteTxTimeout = loadedWriteTimeout
 	code := m.Run()
 	rating.Close()
 	os.Exit(code)
 }
+
+// tournament is the path of a tournament on the site.
+var tournament = regexp.MustCompile(`^/tournaments/\d+$`)
 
 // loadedWriteTimeout is the write deadline the tests run under.
 const loadedWriteTimeout = time.Minute

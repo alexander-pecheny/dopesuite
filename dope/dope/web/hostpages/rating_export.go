@@ -14,6 +14,7 @@ import (
 	"dope/dope/domain/ratingexport"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
+	"dope/dope/storage/ratingsite"
 	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
@@ -68,13 +69,13 @@ func (s *Server) exportSite(ctx context.Context, userID int64) (ratingexport.Sit
 	if !ok {
 		return ratingexport.Site{}, corei18n.User(dopestrings.Default.Host.RatingExport.NoToken())
 	}
-	return ratingexport.Site{Base: s.h.Engine().RatingAPI, Token: token.Token, Buff: s.h.Engine().Buff}, nil
+	return ratingexport.Site{Client: s.h.Engine().RatingSite(token.Token), Buff: s.h.Engine().Buff}, nil
 }
 
 // siteError says in words what went wrong between dope and the site.
 func siteError(err error) error {
 	s := dopestrings.Default
-	var refused *ratingexport.Error
+	var refused *ratingsite.Error
 	switch {
 	case err == nil || isUserError(err):
 		return err
@@ -201,7 +202,7 @@ func (s *Server) exportIdentify(ctx context.Context, sc route.Scope, gameID int6
 		}
 		id, err := ratingexport.Identify(ctx, site, plan.Tournament, u, choice)
 		if err != nil || id <= 0 {
-			if err == nil || !errors.As(err, new(*ratingexport.Error)) {
+			if err == nil || !errors.As(err, new(*ratingsite.Error)) {
 				err = corei18n.User(dopestrings.Default.Host.RatingExport.BadChoice(u.Name))
 			}
 			return done, siteError(err)
@@ -391,7 +392,7 @@ func exportReportSection(report ratingexport.Report, tournament int64, back stri
 		items = append(items, dopeui.Muted(dopeui.Text(w)))
 	}
 	items = append(items, dopeui.Row(
-		dopeui.Button(dopeui.Href(fmt.Sprintf(ratingexport.TournamentPage, tournament)), dopeui.Text(s.Host.RatingExport.OpenTournament())),
+		dopeui.Button(dopeui.Href(fmt.Sprintf(ratingsite.TournamentPage, tournament)), dopeui.Text(s.Host.RatingExport.OpenTournament())),
 		dopeui.Button(dopeui.Href(back), dopeui.Text(s.Host.RatingExport.BackToPreview()))))
 	return dopeui.Section(items...)
 }

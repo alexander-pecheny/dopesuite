@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"dope/dope/storage/ratingsite"
 )
 
 // The site's search keeps punctuation, so «Джерси М» finds «Джерси-М» only
@@ -24,7 +26,7 @@ func TestANamesakeDiffersOnlyInPunctuation(t *testing.T) {
 		}
 	}))
 	t.Cleanup(site.Close)
-	s := Site{Base: site.URL}
+	s := Site{Client: ratingsite.Client{Base: site.URL}}
 	got, err := s.teamNamesakes(t.Context(), "Джерси М")
 	if err != nil || len(got) != 1 || got[0].ID != 5379 {
 		t.Fatalf("namesakes %+v, %v", got, err)

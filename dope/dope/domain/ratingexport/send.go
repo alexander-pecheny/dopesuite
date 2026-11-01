@@ -2,9 +2,8 @@ package ratingexport
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 
+	"dope/dope/storage/ratingsite"
 	dopestrings "dope/i18nstrings"
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
@@ -45,14 +44,16 @@ func Send(ctx context.Context, p Plan, site Site) (Report, error) {
 	if err := r.move(ctx, site, p.Tournament, moves); err != nil {
 		return r, err
 	}
-	var saved struct {
-		Warnings []string `json:"warnings"`
+	answers := make([]ratingsite.TeamAnswers, len(p.Results))
+	for i, res := range p.Results {
+		answers[i] = ratingsite.TeamAnswers{Team: res.Team, Mask: res.Mask}
 	}
-	if err := site.do(ctx, http.MethodPost, fmt.Sprintf("/tournaments/%d/results_entry", p.Tournament), map[string]any{"teams": p.Results}, &saved); err != nil {
+	warnings, err := site.SaveAnswers(ctx, p.Tournament, answers)
+	if err != nil {
 		return r, err
 	}
 	r.Results = len(p.Results)
-	r.Warnings = append(r.Warnings, saved.Warnings...)
+	r.Warnings = append(r.Warnings, warnings...)
 	return r, nil
 }
 
@@ -67,54 +68,34 @@ func (r *Report) move(ctx context.Context, site Site, tournament int64, moves []
 		byRequest[m.Request] = append(byRequest[m.Request], m.Team)
 	}
 	for _, request := range order {
-		var moved struct {
-			Moved    []int64  `json:"moved"`
-			Warnings []string `json:"warnings"`
-		}
-		body := map[string]any{"teams": byRequest[request], "request": request}
-		if err := site.do(ctx, http.MethodPost, fmt.Sprintf("/tournaments/%d/results_entry/move", tournament), body, &moved); err != nil {
+		moved, warnings, err := site.Move(ctx, tournament, request, byRequest[request])
+		if err != nil {
 			return err
 		}
-		r.Moved += len(moved.Moved)
-		r.Warnings = append(r.Warnings, moved.Warnings...)
+		r.Moved += moved
+		r.Warnings = append(r.Warnings, warnings...)
 	}
 	return nil
 }
 
 // rosters sends one venue's rosters, as its representative when it has one.
 func (r *Report) rosters(ctx context.Context, site Site, tournament int64, v Venue) error {
-	type row struct {
-		Player int64  `json:"player"`
-		Flag   string `json:"flag"`
-	}
-	type team struct {
-		Team    int64 `json:"team"`
-		Players []row `json:"players"`
-	}
-	body := struct {
-		Representative int64  `json:"representative,omitempty"`
-		Teams          []team `json:"teams"`
-	}{Representative: v.Representative}
 	names := map[int64]string{}
+	teams := make([]ratingsite.RosterTeam, 0, len(v.Teams))
 	for _, t := range v.Teams {
 		names[t.Team] = t.Name
-		rows := make([]row, len(t.Players))
+		players := make([]ratingsite.RosterPlayer, len(t.Players))
 		for i, p := range t.Players {
-			rows[i] = row{Player: p.Player, Flag: p.Flag}
+			players[i] = ratingsite.RosterPlayer{Player: p.Player, Flag: p.Flag}
 		}
-		body.Teams = append(body.Teams, team{Team: t.Team, Players: rows})
+		teams = append(teams, ratingsite.RosterTeam{Team: t.Team, Players: players})
 	}
-	var saved struct {
-		Warnings []struct {
-			Team    int64  `json:"team"`
-			Message string `json:"message"`
-		} `json:"warnings"`
-	}
-	if err := site.do(ctx, http.MethodPost, fmt.Sprintf("/tournaments/%d/results_entry/rosters", tournament), body, &saved); err != nil {
+	remarks, err := site.SaveRosters(ctx, tournament, v.Representative, teams)
+	if err != nil {
 		return err
 	}
 	r.Rosters += len(v.Teams)
-	for _, w := range saved.Warnings {
+	for _, w := range remarks {
 		r.Warnings = append(r.Warnings, dopestrings.Default.Host.RatingExport.TeamRemark(names[w.Team], w.Message))
 	}
 	return nil
