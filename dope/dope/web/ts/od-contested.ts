@@ -5,6 +5,8 @@
 import {autocomplete} from "../../../../dopeuikit/assets/ts/suggest.js";
 import {contestedKey, groupContested} from "./od-protocol.js";
 import {sheetHead} from "./sheet-pins.js";
+import {icon} from "./icons_gen.js";
+import type {IconName} from "./icons_gen.js";
 import type {ContestedGroup, ContestedStatus, ContestedText} from "./od-protocol.js";
 import S from "./i18nstrings.js";
 
@@ -40,7 +42,12 @@ export async function sendContested(apiBase: string, method: string, path: strin
 }
 
 export interface ContestedDialogSpec {
-  question: number;
+  // The question (from 0) of the selected cell, null when no cell is selected;
+  // questions is how many the Game has.
+  question: number | null;
+  questions: number;
+  // The venue whose numbers the team field takes, in a synch fest.
+  venue?: string;
   // The team's number as the sheet shows it, and the contested answer already on that
   // cell, if any.
   number: number;
@@ -48,45 +55,41 @@ export interface ContestedDialogSpec {
   // Everything recorded so far, for the suggest list.
   known: readonly ContestedText[];
   teamName: (number: number) => string | null;
-  // save gets every team the host typed, in the order typed.
-  save: (numbers: number[], answer: string) => void;
+  // save gets the question and every team the host typed, in the order typed.
+  save: (question: number, numbers: number[], answer: string) => void;
   remove: () => void;
 }
 
-// openContestedDialog asks for the team and its answer. The answer field
-// offers the answers other teams gave to the question, because the jury rules
-// on each answer once.
+// openContestedDialog asks for the question, the team and its answer. The
+// answer field offers the answers other teams gave to the question, because
+// the jury rules on each answer once.
 export function openContestedDialog(spec: ContestedDialogSpec): void {
-  const dialog = document.createElement("dialog");
-  dialog.className = "modal-dialog";
-  const form = document.createElement("form");
-  form.className = "u-col u-gap-md";
+  const {dialog, form, actions, submit} = modal(spec.venue ? S.od.contested.dialogTitleVenue(spec.venue) : S.od.contested.dialogTitle());
 
-  const title = document.createElement("h2");
-  title.textContent = S.od.contested.dialogTitle(String(spec.question + 1));
+  const [questionField, questionInput] = field(S.od.contested.questionLabel());
+  questionInput.inputMode = "numeric";
+  questionInput.value = spec.question === null ? "" : String(spec.question + 1);
+  const questionHint = hint();
+  questionHint.classList.add("hint-danger");
 
   const [numberField, numberInput] = field(S.od.contested.teamLabel());
   numberInput.placeholder = S.od.contested.teamPlaceholder();
   numberInput.value = spec.number ? String(spec.number) : "";
-  const teamHint = document.createElement("p");
-  teamHint.className = "hint";
+  const teamHint = hint();
 
   const [answerField, answerInput] = field(S.od.contested.answerLabel());
   answerInput.value = spec.existing?.answer || "";
-  const answerHint = document.createElement("p");
-  answerHint.className = "hint";
+  const answerHint = hint();
   answerHint.textContent = S.od.contested.answerHint();
-  const groups = groupContested(spec.known.filter((item) => item.question === spec.question));
   autocomplete(answerInput, (typed) => {
+    const question = questionOf(questionInput.value, spec.questions);
     const needle = contestedKey(typed);
-    return groups
+    return groupContested(spec.known.filter((item) => item.question === question))
       .filter((group) => contestedKey(group.answer).includes(needle))
       .slice(0, SUGGEST_LIMIT)
       .map((group) => ({value: group.answer, label: group.answer, hint: S.od.contested.given(group.numbers.length)}));
   });
 
-  const actions = document.createElement("div");
-  actions.className = "modal-actions";
   if (spec.existing) {
     const remove = button(S.od.contested.delete(), "btn btn-danger");
     remove.addEventListener("click", () => {
@@ -95,16 +98,16 @@ export function openContestedDialog(spec: ContestedDialogSpec): void {
     });
     const spacer = document.createElement("span");
     spacer.className = "u-grow";
-    actions.append(remove, spacer);
+    actions.prepend(remove, spacer);
   }
-  const cancel = button(S.od.contested.cancel(), "btn");
-  cancel.addEventListener("click", () => dialog.close());
-  const submit = button(S.od.contested.save(), "btn btn-primary");
-  submit.type = "submit";
-  actions.append(cancel, submit);
 
-  // The hint names every team typed, or the first number that is no team.
+  // The hints name every team typed, or the first number that is no team,
+  // and a question the Game does not have.
   const sync = () => {
+    const question = questionOf(questionInput.value, spec.questions);
+    const typedQuestion = questionInput.value.trim();
+    questionHint.hidden = typedQuestion === "" || question !== null;
+    questionHint.textContent = S.od.contested.noQuestion(typedQuestion);
     const parts = numberParts(numberInput.value);
     const unknown = parts.find((part) => !/^\d+$/.test(part) || spec.teamName(Number(part)) === null);
     teamHint.hidden = parts.length === 0;
@@ -112,24 +115,101 @@ export function openContestedDialog(spec: ContestedDialogSpec): void {
       ? typedNumbers(numberInput.value).map((number) => spec.teamName(number)).join(", ")
       : S.od.contested.noTeam(unknown);
     teamHint.classList.toggle("hint-danger", unknown !== undefined);
-    submit.disabled = parts.length === 0 || unknown !== undefined || answerInput.value.trim() === "";
+    submit.disabled = question === null || parts.length === 0 || unknown !== undefined || answerInput.value.trim() === "";
   };
-  numberInput.addEventListener("input", sync);
-  answerInput.addEventListener("input", sync);
+  for (const input of [questionInput, numberInput, answerInput]) input.addEventListener("input", sync);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (submit.disabled) return;
+    const question = questionOf(questionInput.value, spec.questions);
+    if (submit.disabled || question === null) return;
     dialog.close();
-    spec.save(typedNumbers(numberInput.value), answerInput.value.trim());
+    spec.save(question, typedNumbers(numberInput.value), answerInput.value.trim());
   });
   sync();
 
-  form.append(title, numberField, teamHint, answerField, answerHint, actions);
+  form.insertBefore(fields(questionField, questionHint, numberField, teamHint, answerField, answerHint), actions);
+  show(dialog);
+  (spec.question === null ? questionInput : spec.number ? answerInput : numberInput).focus();
+}
+
+// openMoveDialog asks an organizer which question an answer moves to.
+export function openMoveDialog(group: ContestedGroup, questions: number, move: (to: number) => void): void {
+  const {dialog, form, actions, submit} = modal(S.od.contested.moveTitle(group.answer, String(group.question + 1)));
+  submit.textContent = S.od.contested.move();
+  const [questionField, questionInput] = field(S.od.contested.questionLabel());
+  questionInput.inputMode = "numeric";
+  const questionHint = hint();
+  questionHint.classList.add("hint-danger");
+  const target = () => {
+    const to = questionOf(questionInput.value, questions);
+    return to === group.question ? null : to;
+  };
+  const sync = () => {
+    const typed = questionInput.value.trim();
+    questionHint.hidden = typed === "" || questionOf(typed, questions) !== null;
+    questionHint.textContent = S.od.contested.noQuestion(typed);
+    submit.disabled = target() === null;
+  };
+  questionInput.addEventListener("input", sync);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const to = target();
+    if (to === null) return;
+    dialog.close();
+    move(to);
+  });
+  sync();
+  form.insertBefore(fields(questionField, questionHint), actions);
+  show(dialog);
+  questionInput.focus();
+}
+
+// questionOf reads a question's number as the hosts call it (from 1) and
+// answers its index, or null for no question of the Game.
+function questionOf(text: string, questions: number): number | null {
+  const typed = text.trim();
+  if (!/^\d+$/.test(typed)) return null;
+  const n = Number(typed);
+  return n >= 1 && n <= questions ? n - 1 : null;
+}
+
+// modal is a dialog's frame: the title, and the actions Cancel and Save,
+// which a caller puts its fields above.
+function modal(caption: string) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "modal-dialog";
+  const form = document.createElement("form");
+  form.className = "u-col u-gap-md";
+  const title = document.createElement("h2");
+  title.textContent = caption;
+  const actions = document.createElement("div");
+  actions.className = "modal-actions";
+  const cancel = button(S.od.contested.cancel(), "btn");
+  cancel.addEventListener("click", () => dialog.close());
+  const submit = button(S.od.contested.save(), "btn btn-primary");
+  submit.type = "submit";
+  actions.append(cancel, submit);
+  form.append(title, actions);
   dialog.appendChild(form);
   dialog.addEventListener("close", () => dialog.remove(), {once: true});
+  return {dialog, form, actions, submit};
+}
+
+function show(dialog: HTMLDialogElement): void {
   document.body.appendChild(dialog);
   dialog.showModal();
-  (spec.number ? answerInput : numberInput).focus();
+}
+
+function fields(...nodes: HTMLElement[]): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  fragment.append(...nodes);
+  return fragment;
+}
+
+function hint(): HTMLParagraphElement {
+  const node = document.createElement("p");
+  node.className = "hint";
+  return node;
 }
 
 // numberParts splits "3, 7 12" at commas, semicolons and spaces.
@@ -180,6 +260,12 @@ export interface ContestedViewSpec {
   teamLabel: (number: number) => string;
   // rule is the jury's; without it the ruling is text, with nothing to press.
   rule?: (group: ContestedGroup, status: ContestedStatus) => void;
+  // manage is an organizer's: each answer can go, or move to another question.
+  manage?: {
+    questions: number;
+    move: (group: ContestedGroup, to: number) => void;
+    remove: (group: ContestedGroup) => void;
+  };
 }
 
 // rulingSwitch is the jury's switch of three for one answer.
@@ -203,6 +289,27 @@ function rulingText(status: ContestedStatus): HTMLElement {
   const text = document.createElement("span");
   text.textContent = STATUSES.find(([s]) => s === status)?.[1]() || "";
   return text;
+}
+
+function manageButtons(group: ContestedGroup, manage: NonNullable<ContestedViewSpec["manage"]>): HTMLElement {
+  const wrap = document.createElement("span");
+  wrap.className = "u-row u-gap-xs";
+  wrap.append(
+    actionButton("arrow-up-down", S.od.contested.move(), () => openMoveDialog(group, manage.questions, (to) => manage.move(group, to))),
+    actionButton("trash-2", S.od.contested.delete(), () => {
+      if (window.confirm(S.od.contested.deleteConfirm(group.answer, String(group.question + 1)))) manage.remove(group);
+    }),
+  );
+  return wrap;
+}
+
+function actionButton(name: IconName, label: string, onClick: () => void): HTMLButtonElement {
+  const node = button("", "action-icon");
+  node.title = label;
+  node.setAttribute("aria-label", label);
+  node.appendChild(icon(name));
+  node.addEventListener("click", onClick);
+  return node;
 }
 
 // buildContestedView is the jury's tab: one row per answer to a question,
@@ -245,7 +352,12 @@ export function buildContestedView(spec: ContestedViewSpec): HTMLElement {
     teams.className = "hint";
     teams.textContent = group.numbers.filter((n) => n > 0).map(spec.teamLabel).join(", ");
     teams.hidden = teams.textContent === "";
-    cell.append(answer, teams, spec.rule ? rulingSwitch(group, spec.rule) : rulingText(group.status));
+    // An organizer's buttons ride the answer's line, which a phone keeps on screen.
+    const line = document.createElement("div");
+    line.className = "u-row u-gap-sm u-align-center";
+    line.appendChild(answer);
+    if (spec.manage) line.appendChild(manageButtons(group, spec.manage));
+    cell.append(line, teams, spec.rule ? rulingSwitch(group, spec.rule) : rulingText(group.status));
   }
   const wrap = document.createElement("div");
   wrap.className = "table-scroll";

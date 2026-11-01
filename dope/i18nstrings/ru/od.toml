@@ -155,7 +155,11 @@ save_failed = "Не удалось сохранить спорный ответ"
 add = "Добавить спорный"
 # The same button when the selected cell already holds one.
 edit = "Редактировать спорный"
-dialog_title = 'Спорный ответ на вопрос {{.n}}'
+dialog_title = "Спорный ответ"
+# In a synch fest the team numbers are the venue's.
+dialog_title_venue = 'Спорный ответ, {{.venue}}'
+question_label = "Номер вопроса"
+no_question = 'В игре нет вопроса {{.n}}'
 team_label = "Номера команд"
 # Several teams that gave the same answer go in one save.
 team_placeholder = "Через запятую: 3, 7, 12"
@@ -176,4 +180,10 @@ pending = "Не рассмотрен"
 accepted = "Принят"
 rejected = "Отклонён"
 # The tooltip on a total that carries спорные still waiting for the jury.
+# An organizer's actions on a row of the tab: the answer goes from every team
+# that gave it.
+move = "Перенести"
+move_title = 'Перенести ответ «{{.answer}}» с вопроса {{.n}}'
+delete_confirm = 'Удалить ответ «{{.answer}}» на вопрос {{.n}} у всех команд?'
+taken = 'У команды {{.n}} уже есть спорный ответ на вопрос {{.q}}'
 pending_total = '{{.n}} {{plural .n "спорный ответ ждёт" "спорных ответа ждут" "спорных ответов ждут"}} решения жюри'

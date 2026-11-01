@@ -90,6 +90,9 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("POST "+game+"/contested", route.Editor.Numbered().Sheets(), s.scopedContestedSave)
 	t.Handle("DELETE "+game+"/contested", route.Editor.Numbered().Sheets(), s.scopedContestedDelete)
 	t.Handle("PUT "+game+"/contested/ruling", route.Manager.Jury(), s.scopedContestedRule)
+	// An organizer takes an answer back from every team, or moves it to another question.
+	t.Handle("DELETE "+game+"/contested/answer", route.Manager, s.scopedContestedAnswerDelete)
+	t.Handle("PUT "+game+"/contested/answer", route.Manager, s.scopedContestedAnswerMove)
 	t.Handle("POST "+game+"/guests", route.Editor.Numbered(), s.scopedMultiGuestAdd)
 	t.Handle("PUT "+game+"/guests/{n}", route.Editor.Numbered(), s.scopedMultiGuestRename)
 	t.Handle("DELETE "+game+"/guests/{n}", route.Editor.Numbered(), s.scopedMultiGuestRemove)

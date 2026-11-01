@@ -15,6 +15,7 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"dope/dope/domain/flatgame"
@@ -208,6 +209,90 @@ func DeleteTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, venues []in
 	_, err = tx.ExecContext(ctx, `delete from od_contested where game_id = ? and question = ? and fest_team_id = ?`,
 		gameID, question, team.ID)
 	return err
+}
+
+// DeleteAnswerTx takes an answer to a question back from every team that gave
+// it, and the jury's ruling on it with them.
+func DeleteAnswerTx(ctx context.Context, tx *sql.Tx, gameID int64, question int, answer string) error {
+	teams, err := answerTeams(ctx, tx, gameID, question, answer)
+	if err != nil {
+		return err
+	}
+	for _, team := range teams {
+		if _, err := tx.ExecContext(ctx, `delete from od_contested where game_id = ? and question = ? and fest_team_id = ?`,
+			gameID, question, team); err != nil {
+			return err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `delete from od_contested_rulings where game_id = ? and question = ? and answer_key = ?`,
+		gameID, question, Key(answer))
+	return err
+}
+
+// MoveAnswerTx moves an answer, every team that gave it and the jury's ruling
+// on it, to another question. A team that already has a contested answer
+// there stops the move, so nothing is overwritten.
+func MoveAnswerTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, question int, answer string, to int) error {
+	if to < 0 || to == question {
+		return corei18n.User(dopestrings.Default.Od.Contested.AnswerRequired())
+	}
+	teams, err := answerTeams(ctx, tx, gameID, question, answer)
+	if err != nil {
+		return err
+	}
+	numbers, err := teamNumbers(ctx, tx, festID, gameID)
+	if err != nil {
+		return err
+	}
+	for _, team := range teams {
+		var taken int
+		if err := tx.QueryRowContext(ctx, `select count(*) from od_contested where game_id = ? and question = ? and fest_team_id = ?`,
+			gameID, to, team).Scan(&taken); err != nil {
+			return err
+		}
+		if taken > 0 {
+			return corei18n.User(dopestrings.Default.Od.Contested.Taken(strconv.FormatInt(numbers[team], 10), strconv.Itoa(to+1)))
+		}
+		if _, err := tx.ExecContext(ctx, `update od_contested set question = ? where game_id = ? and question = ? and fest_team_id = ?`,
+			to, gameID, question, team); err != nil {
+			return err
+		}
+	}
+	key := Key(answer)
+	if _, err := tx.ExecContext(ctx, `
+insert into od_contested_rulings(game_id, question, answer_key, accepted, ruled_by, ruled_at)
+select game_id, ?, answer_key, accepted, ruled_by, ruled_at from od_contested_rulings
+where game_id = ? and question = ? and answer_key = ?
+on conflict(game_id, question, answer_key) do nothing`, to, gameID, question, key); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `delete from od_contested_rulings where game_id = ? and question = ? and answer_key = ?`,
+		gameID, question, key)
+	return err
+}
+
+// answerTeams are the fest teams that gave the answer to the question.
+func answerTeams(ctx context.Context, tx *sql.Tx, gameID int64, question int, answer string) ([]int64, error) {
+	type row struct {
+		team   int64
+		answer string
+	}
+	rows, err := store.CollectRows(ctx, tx, `select fest_team_id, answer from od_contested where game_id = ? and question = ?`,
+		[]any{gameID, question}, func(rs *sql.Rows) (row, error) {
+			var r row
+			return r, rs.Scan(&r.team, &r.answer)
+		})
+	if err != nil {
+		return nil, err
+	}
+	key := Key(answer)
+	var teams []int64
+	for _, r := range rows {
+		if Key(r.answer) == key {
+			teams = append(teams, r.team)
+		}
+	}
+	return teams, nil
 }
 
 // RuleTx sets the jury's ruling on an answer to a question: accepted,

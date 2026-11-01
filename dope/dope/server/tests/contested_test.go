@@ -121,3 +121,66 @@ func TestContestedAreRuledOnPerAnswer(t *testing.T) {
 	}
 	call(http.MethodPost, "/contested", map[string]any{"question": 0, "number": 3, "answer": "Гоголь"}, host, http.StatusNotFound)
 }
+
+// An organizer moves an answer to another question with its ruling, unless a
+// team already has a спорный there, and takes it back from every team at once.
+func TestContestedAnswerMovesAndGoes(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	seedFestTeams(t, db, festID, 3)
+	gameID := createSchemeGame(t, db, festID, "od", "od", "")
+	if _, err := db.Exec(`update fests set contested = 1, is_public = 1 where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	adminID, admin := createAPITestSession(t, srv, "boss")
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	hostID, host := createAPITestSession(t, srv, "host")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	base := fmt.Sprintf("/api/fest/%d/games/%d", festID, gameID)
+	call := func(method, path string, body any, token string, want int) string {
+		t.Helper()
+		resp := scopedAPIRequest(t, srv, method, base+path, body, token)
+		if resp.Code != want {
+			t.Fatalf("%s %s: %d %s, want %d", method, path, resp.Code, resp.Body.String(), want)
+		}
+		return resp.Body.String()
+	}
+	contestedOf := func() []games.ODContested {
+		t.Helper()
+		var doc games.ODState
+		if err := json.Unmarshal([]byte(call(http.MethodGet, "/state", nil, "", http.StatusOK)), &doc); err != nil {
+			t.Fatal(err)
+		}
+		return doc.Contested
+	}
+
+	call(http.MethodPost, "/contested", map[string]any{"question": 0, "numbers": []int{1, 2}, "answer": "Пушкин"}, host, http.StatusOK)
+	call(http.MethodPut, "/contested/ruling", map[string]any{"question": 0, "answer": "Пушкин", "status": "accepted"}, admin, http.StatusOK)
+	call(http.MethodPost, "/contested", map[string]any{"question": 2, "number": 2, "answer": "Гоголь"}, host, http.StatusOK)
+
+	call(http.MethodPut, "/contested/answer", map[string]any{"question": 0, "answer": "Пушкин", "to": 1}, host, http.StatusForbidden)
+	call(http.MethodPut, "/contested/answer", map[string]any{"question": 0, "answer": "пушкин", "to": 2}, admin, http.StatusBadRequest)
+	if got := contestedOf(); len(got) != 3 || got[0].Question != 0 {
+		t.Fatalf("a refused move moved something: %+v", got)
+	}
+	call(http.MethodPut, "/contested/answer", map[string]any{"question": 0, "answer": "пушкин", "to": 1}, admin, http.StatusOK)
+	got := contestedOf()
+	if len(got) != 3 || got[0].Question != 1 || got[1].Question != 1 || got[0].Status != games.ContestedAccepted {
+		t.Fatalf("after the move: %+v", got)
+	}
+
+	call(http.MethodDelete, "/contested/answer", map[string]any{"question": 1, "answer": "Пушкин"}, host, http.StatusForbidden)
+	call(http.MethodDelete, "/contested/answer", map[string]any{"question": 1, "answer": "Пушкин"}, admin, http.StatusOK)
+	if got := contestedOf(); len(got) != 1 || got[0].Question != 2 {
+		t.Fatalf("after the delete: %+v", got)
+	}
+	// The ruling went with the answer: the same answer recorded again waits for the jury.
+	call(http.MethodPost, "/contested", map[string]any{"question": 1, "number": 3, "answer": "Пушкин"}, host, http.StatusOK)
+	for _, item := range contestedOf() {
+		if item.Question == 1 && item.Status != games.ContestedPending {
+			t.Fatalf("a deleted answer kept its ruling: %+v", item)
+		}
+	}
+}

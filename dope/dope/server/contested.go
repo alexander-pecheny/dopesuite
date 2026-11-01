@@ -44,6 +44,7 @@ type contestedRequest struct {
 	Numbers  []int64 `json:"numbers"`
 	Answer   string  `json:"answer"`
 	Status   string  `json:"status"`
+	To       int     `json:"to"`
 }
 
 func (s *server) scopedContestedSave(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -70,6 +71,18 @@ func (s *server) scopedContestedDelete(w http.ResponseWriter, r *http.Request, s
 func (s *server) scopedContestedRule(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, req contestedRequest) error {
 		return contested.RuleTx(ctx, tx, sc.GameID, sc.User.UserID, req.Question, req.Answer, req.Status)
+	})
+}
+
+func (s *server) scopedContestedAnswerDelete(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, req contestedRequest) error {
+		return contested.DeleteAnswerTx(ctx, tx, sc.GameID, req.Question, req.Answer)
+	})
+}
+
+func (s *server) scopedContestedAnswerMove(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	return s.contestedWrite(w, r, sc, func(ctx context.Context, tx *sql.Tx, req contestedRequest) error {
+		return contested.MoveAnswerTx(ctx, tx, sc.FestID, sc.GameID, req.Question, req.Answer, req.To)
 	})
 }
 

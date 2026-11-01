@@ -2179,25 +2179,38 @@ var RU = Strings{
 			ColAnswer:      func() string { return "Ответ" },
 			ColQuestion:    func() string { return "Вопрос" },
 			Delete:         func() string { return "Удалить" },
-			DialogTitle:    func(n string) string { return fmt.Sprintf("Спорный ответ на вопрос %s", n) },
-			Edit:           func() string { return "Редактировать спорный" },
-			Empty:          func() string { return "Спорных ответов пока нет." },
+			DeleteConfirm: func(answer string, n string) string {
+				return fmt.Sprintf("Удалить ответ «%s» на вопрос %s у всех команд?", answer, n)
+			},
+			DialogTitle:      func() string { return "Спорный ответ" },
+			DialogTitleVenue: func(venue string) string { return fmt.Sprintf("Спорный ответ, %s", venue) },
+			Edit:             func() string { return "Редактировать спорный" },
+			Empty:            func() string { return "Спорных ответов пока нет." },
 			Given: func(n int) string {
 				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "команда", "команды", "команд"))
 			},
+			Move: func() string { return "Перенести" },
+			MoveTitle: func(answer string, n string) string {
+				return fmt.Sprintf("Перенести ответ «%s» с вопроса %s", answer, n)
+			},
+			NoQuestion:   func(n string) string { return fmt.Sprintf("В игре нет вопроса %s", n) },
 			NoSuchNumber: func() string { return "В игре нет команды с таким номером" },
 			NoTeam:       func(n string) string { return fmt.Sprintf("Нет команды с номером %s", n) },
 			Pending:      func() string { return "Не рассмотрен" },
 			PendingTotal: func(n int) string {
 				return fmt.Sprintf("%d %s решения жюри", n, core.Plural("ru", n, "спорный ответ ждёт", "спорных ответа ждут", "спорных ответов ждут"))
 			},
-			Rejected:   func() string { return "Отклонён" },
-			Save:       func() string { return "Сохранить" },
-			SaveFailed: func() string { return "Не удалось сохранить спорный ответ" },
+			QuestionLabel: func() string { return "Номер вопроса" },
+			Rejected:      func() string { return "Отклонён" },
+			Save:          func() string { return "Сохранить" },
+			SaveFailed:    func() string { return "Не удалось сохранить спорный ответ" },
 			StatusInvalid: func() string {
 				return "Решение бывает только «принят», «отклонён» или «не рассмотрен»"
 			},
-			Tab:             func() string { return "Спорные" },
+			Tab: func() string { return "Спорные" },
+			Taken: func(n string, q string) string {
+				return fmt.Sprintf("У команды %s уже есть спорный ответ на вопрос %s", n, q)
+			},
 			TeamLabel:       func() string { return "Номера команд" },
 			TeamPlaceholder: func() string { return "Через запятую: 3, 7, 12" },
 		},

@@ -80,6 +80,8 @@ type gameVenue struct {
 type gameContested struct {
 	Enter bool `json:"enter,omitempty"`
 	Judge bool `json:"judge,omitempty"`
+	// Manage: an organizer deletes an answer or moves it to another question.
+	Manage bool `json:"manage,omitempty"`
 }
 
 type gameSheet struct {
@@ -129,6 +131,7 @@ func (s *server) gameContested(r *http.Request, scope festScope, enter bool) *ga
 	if user, ok := s.eng.LookupSession(r); ok {
 		if role, err := festaccess.FestUserRoleFromQuery(ctx, s.eng.DB, scope.FestID, user.UserID); err == nil {
 			out.Judge, _ = festaccess.MayJudgeGame(ctx, s.eng.DB, scope.FestID, scope.GameID, user.UserID, role)
+			out.Manage = roles.CanManageFest(role)
 		}
 	}
 	return out
