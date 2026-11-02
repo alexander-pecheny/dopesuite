@@ -1,8 +1,10 @@
 package qyserver
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -166,4 +168,32 @@ func (c *Client) Get(target string) *httptest.ResponseRecorder {
 // Post sends a form the way a page's form does.
 func (c *Client) Post(target string, form url.Values) *httptest.ResponseRecorder {
 	return c.request(http.MethodPost, target, form.Encode(), "application/x-www-form-urlencoded")
+}
+
+// File is one file a multipart post attaches.
+type File struct {
+	Field, Name string
+	Data        []byte
+}
+
+// PostMultipart sends a form with files, the way a form with a file field does.
+func (c *Client) PostMultipart(target string, form url.Values, files ...File) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, vs := range form {
+		for _, v := range vs {
+			_ = mw.WriteField(k, v)
+		}
+	}
+	for _, f := range files {
+		fw, _ := mw.CreateFormFile(f.Field, f.Name)
+		_, _ = fw.Write(f.Data)
+	}
+	_ = mw.Close()
+	return c.request(http.MethodPost, target, buf.String(), mw.FormDataContentType())
+}
+
+// PostJSON sends a JSON body, the way a page's script does.
+func (c *Client) PostJSON(target, body string) *httptest.ResponseRecorder {
+	return c.request(http.MethodPost, target, body, "application/json")
 }

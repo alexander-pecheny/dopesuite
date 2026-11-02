@@ -32,3 +32,15 @@ func WithHandout(text, handout string) string {
 	}
 	return "[Раздаточный материал: " + handout + "]\n" + text
 }
+
+var handoutRe = regexp.MustCompile(`(?is)^\s*\[\s*раздаточный\s+материал\s*:?\s*(.*?)\]\s*\n?`)
+
+// SplitHandout takes the handout WithHandout put in front of a question's
+// text back out. A text that does not open with one is returned as it is.
+func SplitHandout(text string) (handout, rest string) {
+	m := handoutRe.FindStringSubmatchIndex(text)
+	if m == nil {
+		return "", text
+	}
+	return strings.TrimSpace(text[m[2]:m[3]]), strings.TrimSpace(text[m[1]:])
+}

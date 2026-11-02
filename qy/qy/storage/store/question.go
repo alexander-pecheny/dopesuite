@@ -34,6 +34,7 @@ type Question struct {
 	SourceText      string
 	Orig, Clean     question.Question
 	TournamentID    int64
+	TournamentLink  string
 	TournamentTitle string
 	TournamentStart string
 	TournamentEnd   string
@@ -47,14 +48,14 @@ type Question struct {
 
 const questionColumns = `id, year, coalesce(qy, 0), status, coalesce(merged_into, 0), coalesce(gq_id, 0), link,
   published, source_text, orig, clean, coalesce(tournament_id, 0), tournament_title, tournament_start,
-  tournament_end, factcheck, extra_context, author_declined, coalesce(shortlist_pin, ''), ai_status, ai_error`
+  tournament_end, factcheck, extra_context, author_declined, coalesce(shortlist_pin, ''), ai_status, ai_error, tournament_link`
 
 func scanQuestion(row interface{ Scan(...any) error }) (Question, error) {
 	var q Question
 	var orig, clean string
 	err := row.Scan(&q.ID, &q.Year, &q.QY, &q.Status, &q.MergedInto, &q.GQID, &q.Link,
 		&q.Published, &q.SourceText, &orig, &clean, &q.TournamentID, &q.TournamentTitle, &q.TournamentStart,
-		&q.TournamentEnd, &q.Factcheck, &q.ExtraContext, &q.AuthorDeclined, &q.Pin, &q.AIStatus, &q.AIError)
+		&q.TournamentEnd, &q.Factcheck, &q.ExtraContext, &q.AuthorDeclined, &q.Pin, &q.AIStatus, &q.AIError, &q.TournamentLink)
 	q.Orig, q.Clean = question.FromJSON(orig), question.FromJSON(clean)
 	return q, err
 }
@@ -94,10 +95,10 @@ func nullStr(v string) any {
 func InsertQuestion(ctx context.Context, q Querier, qq Question, now string) (int64, error) {
 	res, err := q.ExecContext(ctx, `
 insert into questions(year, gq_id, link, published, source_text, orig, clean, tournament_id, tournament_title,
-  ai_status, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  tournament_link, ai_status, created_at, updated_at)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		qq.Year, nullInt(qq.GQID), qq.Link, qq.Published, qq.SourceText, qq.Orig.JSON(), qq.Clean.JSON(),
-		nullInt(qq.TournamentID), qq.TournamentTitle, AIPending, now, now)
+		nullInt(qq.TournamentID), qq.TournamentTitle, qq.TournamentLink, AIPending, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -159,4 +160,50 @@ select ?, ?, ?, ?, ?, ?, ? where not exists (
 		}
 	}
 	return nil
+}
+
+// File is a handout file attached to a question, without its bytes.
+type File struct {
+	ID          int64
+	QuestionID  int64
+	Name        string
+	ContentType string
+}
+
+// Files lists a question's handout files.
+func Files(ctx context.Context, q Querier, questionID int64) ([]File, error) {
+	return Collect(ctx, q, func(r *sql.Rows) (File, error) {
+		var f File
+		err := r.Scan(&f.ID, &f.QuestionID, &f.Name, &f.ContentType)
+		return f, err
+	}, `select id, question_id, name, content_type from question_files where question_id = ? order by id`, questionID)
+}
+
+// AddFile attaches f to the question f.QuestionID names.
+func AddFile(ctx context.Context, q Querier, f File, data []byte, now string) error {
+	_, err := q.ExecContext(ctx, `insert into question_files(question_id, name, content_type, data, created_at) values(?, ?, ?, ?, ?)`,
+		f.QuestionID, f.Name, f.ContentType, data, now)
+	return err
+}
+
+// CopyFiles gives question to the files question from has.
+func CopyFiles(ctx context.Context, q Querier, from, to int64) error {
+	_, err := q.ExecContext(ctx, `
+insert into question_files(question_id, name, content_type, data, created_at)
+select ?, name, content_type, data, created_at from question_files where question_id = ? order by id`, to, from)
+	return err
+}
+
+var ErrNoFile = errors.New("no such file")
+
+// FileData is one file with its bytes.
+func FileData(ctx context.Context, q Querier, id int64) (File, []byte, error) {
+	var f File
+	var data []byte
+	err := q.QueryRowContext(ctx, `select id, question_id, name, content_type, data from question_files where id = ?`, id).
+		Scan(&f.ID, &f.QuestionID, &f.Name, &f.ContentType, &data)
+	if errors.Is(err, sql.ErrNoRows) {
+		return f, nil, ErrNoFile
+	}
+	return f, data, err
 }

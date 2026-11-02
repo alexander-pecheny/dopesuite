@@ -334,6 +334,16 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 	if q.Link != "" {
 		about = append(about, ui.Row(ui.Button(ui.Href(q.Link), ui.Ghost, ui.Small(), ui.IconLink, text(str.Admin.Question.OpenLink()))))
 	}
+	if q.TournamentLink != "" {
+		about = append(about, ui.Row(ui.Button(ui.Href(q.TournamentLink), ui.Ghost, ui.Small(), ui.IconLink, text(str.Admin.Question.OpenTournament()))))
+	}
+	files, err := store.Files(ctx, s.db, q.ID)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		about = append(about, ui.Row(ui.Button(ui.Href("/nominate/file/"+idstr.Format(f.ID)), ui.Ghost, ui.Small(), ui.IconPaperclip, text(f.Name))))
+	}
 	if q.AIStatus == store.AIFailed {
 		about = append(about, dangerHint(str.Admin.Question.AiFailed(q.AIError)))
 	}

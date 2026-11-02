@@ -171,6 +171,7 @@ type AdminQuestionStrings struct {
 	NoText          func() string
 	NominatedBy     func(who string, rating string, slot string) string
 	OpenLink        func() string
+	OpenTournament  func() string
 	Parse           func() string
 	ParseFailed     func() string
 	PasteHint       func() string
@@ -279,7 +280,6 @@ type AuthUsernameStrings struct {
 type BannerStrings struct {
 	Before     func(date string) string
 	Nomination func(date string) string
-	Rules      func() string
 }
 
 // BotStrings is the bot Surface.
@@ -439,26 +439,65 @@ type FormsStrings struct {
 
 // NominateStrings is the nominate Surface.
 type NominateStrings struct {
-	Page NominatePageStrings
-	Slot NominateSlotStrings
+	Error NominateErrorStrings
+	Field NominateFieldStrings
+	Page  NominatePageStrings
+	Slot  NominateSlotStrings
+}
+
+type NominateErrorStrings struct {
+	BadLink       func() string
+	BadTournament func() string
+	FileTooBig    func() string
+	Missing       func(fields string) string
+	NoLink        func() string
+	NoTournament  func() string
+}
+
+type NominateFieldStrings struct {
+	Answer      func() string
+	Author      func() string
+	Comment     func() string
+	Handout     func() string
+	HandoutHint func() string
+	Nezachet    func() string
+	Source      func() string
+	Text        func() string
+	Zachet      func() string
 }
 
 type NominatePageStrings struct {
-	Closed   func(from string, to string) string
-	Eligible func(from string, to string) string
-	HowTo    func() string
-	Lead     func(main string, reserves string, until string) string
-	Reserves func() string
-	Submit   func() string
-	Title    func() string
+	AdminPreview func() string
+	Closed       func(from string, to string) string
+	Eligible     func(from string, to string) string
+	FilesLost    func() string
+	HowTo        func() string
+	Lead         func(main string, reserves string, until string) string
+	NotSaved     func() string
+	Reserves     func() string
+	Submit       func() string
+	Title        func() string
 }
 
 type NominateSlotStrings struct {
-	LinkOnly func() string
-	Main     func(n string) string
-	Parsed   func(answer string) string
-	Reserve  func(n string) string
-	Unparsed func() string
+	DropFile    func() string
+	File        func() string
+	FileHint    func() string
+	Link        func() string
+	LinkHint    func() string
+	LinkOnly    func() string
+	Main        func(n string) string
+	Parse       func() string
+	ParseFailed func() string
+	Parsed      func(answer string) string
+	Paste       func() string
+	PasteHint   func() string
+	Published   func() string
+	Reserve     func(n string) string
+	TabFields   func() string
+	TabText     func() string
+	Tournament  func() string
+	Unpublished func() string
 }
 
 // ProfileStrings is the profile Surface.
@@ -692,6 +731,8 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Admin.Question.NoText(), true
 	case "admin.question.open_link":
 		return s.Admin.Question.OpenLink(), true
+	case "admin.question.open_tournament":
+		return s.Admin.Question.OpenTournament(), true
 	case "admin.question.parse":
 		return s.Admin.Question.Parse(), true
 	case "admin.question.parse_failed":
@@ -808,8 +849,6 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Auth.Username.Format(), true
 	case "auth.username.reserved":
 		return s.Auth.Username.Reserved(), true
-	case "banner.rules":
-		return s.Banner.Rules(), true
 	case "bot.register.done":
 		return s.Bot.Register.Done(), true
 	case "bot.register.expired":
@@ -984,18 +1023,78 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Forms.Saving(), true
 	case "forms.show_answers":
 		return s.Forms.ShowAnswers(), true
+	case "nominate.error.bad_link":
+		return s.Nominate.Error.BadLink(), true
+	case "nominate.error.bad_tournament":
+		return s.Nominate.Error.BadTournament(), true
+	case "nominate.error.file_too_big":
+		return s.Nominate.Error.FileTooBig(), true
+	case "nominate.error.no_link":
+		return s.Nominate.Error.NoLink(), true
+	case "nominate.error.no_tournament":
+		return s.Nominate.Error.NoTournament(), true
+	case "nominate.field.answer":
+		return s.Nominate.Field.Answer(), true
+	case "nominate.field.author":
+		return s.Nominate.Field.Author(), true
+	case "nominate.field.comment":
+		return s.Nominate.Field.Comment(), true
+	case "nominate.field.handout":
+		return s.Nominate.Field.Handout(), true
+	case "nominate.field.handout_hint":
+		return s.Nominate.Field.HandoutHint(), true
+	case "nominate.field.nezachet":
+		return s.Nominate.Field.Nezachet(), true
+	case "nominate.field.source":
+		return s.Nominate.Field.Source(), true
+	case "nominate.field.text":
+		return s.Nominate.Field.Text(), true
+	case "nominate.field.zachet":
+		return s.Nominate.Field.Zachet(), true
+	case "nominate.page.admin_preview":
+		return s.Nominate.Page.AdminPreview(), true
+	case "nominate.page.files_lost":
+		return s.Nominate.Page.FilesLost(), true
 	case "nominate.page.how_to":
 		return s.Nominate.Page.HowTo(), true
+	case "nominate.page.not_saved":
+		return s.Nominate.Page.NotSaved(), true
 	case "nominate.page.reserves":
 		return s.Nominate.Page.Reserves(), true
 	case "nominate.page.submit":
 		return s.Nominate.Page.Submit(), true
 	case "nominate.page.title":
 		return s.Nominate.Page.Title(), true
+	case "nominate.slot.drop_file":
+		return s.Nominate.Slot.DropFile(), true
+	case "nominate.slot.file":
+		return s.Nominate.Slot.File(), true
+	case "nominate.slot.file_hint":
+		return s.Nominate.Slot.FileHint(), true
+	case "nominate.slot.link":
+		return s.Nominate.Slot.Link(), true
+	case "nominate.slot.link_hint":
+		return s.Nominate.Slot.LinkHint(), true
 	case "nominate.slot.link_only":
 		return s.Nominate.Slot.LinkOnly(), true
-	case "nominate.slot.unparsed":
-		return s.Nominate.Slot.Unparsed(), true
+	case "nominate.slot.parse":
+		return s.Nominate.Slot.Parse(), true
+	case "nominate.slot.parse_failed":
+		return s.Nominate.Slot.ParseFailed(), true
+	case "nominate.slot.paste":
+		return s.Nominate.Slot.Paste(), true
+	case "nominate.slot.paste_hint":
+		return s.Nominate.Slot.PasteHint(), true
+	case "nominate.slot.published":
+		return s.Nominate.Slot.Published(), true
+	case "nominate.slot.tab_fields":
+		return s.Nominate.Slot.TabFields(), true
+	case "nominate.slot.tab_text":
+		return s.Nominate.Slot.TabText(), true
+	case "nominate.slot.tournament":
+		return s.Nominate.Slot.Tournament(), true
+	case "nominate.slot.unpublished":
+		return s.Nominate.Slot.Unpublished(), true
 	case "profile.logout":
 		return s.Profile.Logout(), true
 	case "profile.rating_hint":
@@ -1053,7 +1152,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "admin.admins.empty", "admin.admins.hint", "admin.admins.not_yourself", "admin.admins.placeholder", "admin.admins.title", "admin.contest.final", "admin.contest.questions", "admin.contest.settings", "admin.contest.settings_hint", "admin.contest.stage1", "admin.contests.create", "admin.contests.row", "admin.contests.title", "admin.create_users.title", "admin.dates.factcheck_end", "admin.dates.factcheck_start", "admin.dates.final_end", "admin.dates.final_start", "admin.dates.invalid", "admin.dates.nomination_end", "admin.dates.nomination_start", "admin.dates.placeholder", "admin.dates.prelim_end", "admin.dates.prelim_start", "admin.dates.questions_from", "admin.dates.questions_to", "admin.dates.results", "admin.fields.answer", "admin.fields.author", "admin.fields.comment", "admin.fields.nezachet", "admin.fields.source", "admin.fields.text", "admin.fields.zachet", "admin.final.ballots", "admin.final.jury_place", "admin.final.points", "admin.final.popular_place", "admin.final.popular_points", "admin.final.publish", "admin.final.publish_confirm", "admin.final.publish_hint", "admin.final.publish_title", "admin.final.published", "admin.final.rank_sum", "admin.final.unpublish", "admin.final.voters", "admin.jury.expert", "admin.jury.hint", "admin.jury.incomplete", "admin.jury.kind", "admin.jury.name", "admin.jury.people", "admin.jury.telegram", "admin.jury.title", "admin.numbering.after_nomination", "admin.numbering.already_done", "admin.numbering.confirm", "admin.numbering.deal", "admin.numbering.done", "admin.numbering.pending", "admin.numbering.title", "admin.numbers.expert_cutoff", "admin.numbers.invalid", "admin.numbers.main_slots", "admin.numbers.people_cutoff", "admin.numbers.portion_days", "admin.numbers.portion_size", "admin.numbers.reserve_slots", "admin.page.title", "admin.question.ai_failed", "admin.question.approve_empty", "admin.question.approved", "admin.question.author_declined", "admin.question.dates_off", "admin.question.dates_ok", "admin.question.dates_unknown", "admin.question.duplicates", "admin.question.duplicates_hint", "admin.question.edit", "admin.question.edit_hint", "admin.question.extra", "admin.question.factcheck", "admin.question.link", "admin.question.merge_confirm", "admin.question.merge_into", "admin.question.merge_refused", "admin.question.merged", "admin.question.missing", "admin.question.new", "admin.question.no_text", "admin.question.nominated_by", "admin.question.open_link", "admin.question.parse", "admin.question.parse_failed", "admin.question.paste_hint", "admin.question.paste_title", "admin.question.pin", "admin.question.pin_add", "admin.question.pin_none", "admin.question.pin_remove", "admin.question.preview", "admin.question.published", "admin.question.rejected", "admin.question.source_text", "admin.question.status", "admin.question.status_line", "admin.question.tournament", "admin.question.tournament_id", "admin.question.tournament_start", "admin.question.unnumbered", "admin.questions.answer", "admin.questions.count", "admin.questions.dates", "admin.questions.number", "admin.questions.status", "admin.questions.suggestions", "admin.site.files", "admin.site.pages", "admin.site.title", "admin.stage1.by_expert", "admin.stage1.by_people", "admin.stage1.by_pin", "admin.stage1.expert", "admin.stage1.freeze", "admin.stage1.freeze_confirm", "admin.stage1.freeze_hint", "admin.stage1.freeze_title", "admin.stage1.frozen", "admin.stage1.lead", "admin.stage1.people", "admin.stage1.shortlist", "admin.stage1.unfreeze", "admin.stage1.unfreeze_confirm", "admin.stage1.unfreeze_published", "admin.suggestions.accept", "admin.suggestions.accepted", "admin.suggestions.author_name", "admin.suggestions.by_ai", "admin.suggestions.by_rule", "admin.suggestions.change", "admin.suggestions.delete", "admin.suggestions.link", "admin.suggestions.none", "admin.suggestions.reject", "admin.suggestions.rejected", "admin.suggestions.rerun", "admin.suggestions.stale", "admin.suggestions.title", "admin.suggestions.why", "anon.placeholder", "auth.login.fields_required", "auth.login.invalid", "auth.page.title", "auth.tg.code_missing", "auth.tg.not_configured", "auth.tg.telegram_taken", "auth.username.format", "auth.username.reserved", "banner.before", "banner.nomination", "banner.rules", "bot.login.hint", "bot.register.done", "bot.register.expired", "bot.texts.down", "bot.texts.help", "cms.bad_file_name", "cms.bad_path", "cms.body", "cms.by_shell", "cms.bytes", "cms.conflict", "cms.delete", "cms.delete_confirm", "cms.delete_file_confirm", "cms.deleted", "cms.edit_this", "cms.file", "cms.files_hint", "cms.folder", "cms.format", "cms.history", "cms.history_hint", "cms.html", "cms.markdown", "cms.moved_to", "cms.new_page", "cms.no_title", "cms.not_found", "cms.not_yet", "cms.open", "cms.pages", "cms.path", "cms.path_placeholder", "cms.preview", "cms.restore", "cms.restored", "cms.revision", "cms.size", "cms.taken", "cms.title", "cms.type", "cms.upload", "cms.upload_failed", "cms.vars_hint", "common.add", "common.error_title", "common.home", "common.rating_id", "common.rating_id_invalid", "common.remove", "common.save", "common.saved", "common.site_name", "common.title_suffix", "common.to_home", "contest.name", "contest.none", "contest.stage.before", "contest.stage.counting", "contest.stage.done", "contest.stage.factcheck", "contest.stage.final", "contest.stage.nomination", "contest.stage.prelim", "contest.stage.review", "dates.and", "dates.from_to", "dates.months.april", "dates.months.august", "dates.months.december", "dates.months.february", "dates.months.january", "dates.months.july", "dates.months.june", "dates.months.march", "dates.months.may", "dates.months.november", "dates.months.october", "dates.months.september", "final.closed", "final.jury.lead", "final.jury.not_expert", "final.jury.progress", "final.jury.scale", "final.jury.title", "final.no_shortlist", "final.popular.choose", "final.popular.counted", "final.popular.first", "final.popular.invalid", "final.popular.lead", "final.popular.second", "final.popular.submit", "final.popular.third", "final.popular.title", "forms.failed", "forms.hide_answers", "forms.saving", "forms.show_answers", "nominate.page.closed", "nominate.page.eligible", "nominate.page.how_to", "nominate.page.lead", "nominate.page.reserves", "nominate.page.submit", "nominate.page.title", "nominate.slot.link_only", "nominate.slot.main", "nominate.slot.parsed", "nominate.slot.reserve", "nominate.slot.unparsed", "profile.logged_in_as", "profile.logout", "profile.rating_hint", "profile.title", "question.answer", "question.author", "question.comment", "question.factcheck", "question.label", "question.nezachet", "question.show_answer", "question.source", "question.tournament", "question.unnumbered", "question.zachet", "results.places", "results.shortlist", "results.title", "server.error.bad_request", "server.error.internal", "vote.factcheck.lead", "vote.factcheck.nothing", "vote.like", "vote.page.closed", "vote.page.not_juror", "vote.page.nothing_yet", "vote.page.title", "vote.portion.empty", "vote.portion.lead", "vote.portion.next", "vote.portion.not_open", "vote.portion.tabs", "vote.portion.title":
+	case "admin.admins.empty", "admin.admins.hint", "admin.admins.not_yourself", "admin.admins.placeholder", "admin.admins.title", "admin.contest.final", "admin.contest.questions", "admin.contest.settings", "admin.contest.settings_hint", "admin.contest.stage1", "admin.contests.create", "admin.contests.row", "admin.contests.title", "admin.create_users.title", "admin.dates.factcheck_end", "admin.dates.factcheck_start", "admin.dates.final_end", "admin.dates.final_start", "admin.dates.invalid", "admin.dates.nomination_end", "admin.dates.nomination_start", "admin.dates.placeholder", "admin.dates.prelim_end", "admin.dates.prelim_start", "admin.dates.questions_from", "admin.dates.questions_to", "admin.dates.results", "admin.fields.answer", "admin.fields.author", "admin.fields.comment", "admin.fields.nezachet", "admin.fields.source", "admin.fields.text", "admin.fields.zachet", "admin.final.ballots", "admin.final.jury_place", "admin.final.points", "admin.final.popular_place", "admin.final.popular_points", "admin.final.publish", "admin.final.publish_confirm", "admin.final.publish_hint", "admin.final.publish_title", "admin.final.published", "admin.final.rank_sum", "admin.final.unpublish", "admin.final.voters", "admin.jury.expert", "admin.jury.hint", "admin.jury.incomplete", "admin.jury.kind", "admin.jury.name", "admin.jury.people", "admin.jury.telegram", "admin.jury.title", "admin.numbering.after_nomination", "admin.numbering.already_done", "admin.numbering.confirm", "admin.numbering.deal", "admin.numbering.done", "admin.numbering.pending", "admin.numbering.title", "admin.numbers.expert_cutoff", "admin.numbers.invalid", "admin.numbers.main_slots", "admin.numbers.people_cutoff", "admin.numbers.portion_days", "admin.numbers.portion_size", "admin.numbers.reserve_slots", "admin.page.title", "admin.question.ai_failed", "admin.question.approve_empty", "admin.question.approved", "admin.question.author_declined", "admin.question.dates_off", "admin.question.dates_ok", "admin.question.dates_unknown", "admin.question.duplicates", "admin.question.duplicates_hint", "admin.question.edit", "admin.question.edit_hint", "admin.question.extra", "admin.question.factcheck", "admin.question.link", "admin.question.merge_confirm", "admin.question.merge_into", "admin.question.merge_refused", "admin.question.merged", "admin.question.missing", "admin.question.new", "admin.question.no_text", "admin.question.nominated_by", "admin.question.open_link", "admin.question.open_tournament", "admin.question.parse", "admin.question.parse_failed", "admin.question.paste_hint", "admin.question.paste_title", "admin.question.pin", "admin.question.pin_add", "admin.question.pin_none", "admin.question.pin_remove", "admin.question.preview", "admin.question.published", "admin.question.rejected", "admin.question.source_text", "admin.question.status", "admin.question.status_line", "admin.question.tournament", "admin.question.tournament_id", "admin.question.tournament_start", "admin.question.unnumbered", "admin.questions.answer", "admin.questions.count", "admin.questions.dates", "admin.questions.number", "admin.questions.status", "admin.questions.suggestions", "admin.site.files", "admin.site.pages", "admin.site.title", "admin.stage1.by_expert", "admin.stage1.by_people", "admin.stage1.by_pin", "admin.stage1.expert", "admin.stage1.freeze", "admin.stage1.freeze_confirm", "admin.stage1.freeze_hint", "admin.stage1.freeze_title", "admin.stage1.frozen", "admin.stage1.lead", "admin.stage1.people", "admin.stage1.shortlist", "admin.stage1.unfreeze", "admin.stage1.unfreeze_confirm", "admin.stage1.unfreeze_published", "admin.suggestions.accept", "admin.suggestions.accepted", "admin.suggestions.author_name", "admin.suggestions.by_ai", "admin.suggestions.by_rule", "admin.suggestions.change", "admin.suggestions.delete", "admin.suggestions.link", "admin.suggestions.none", "admin.suggestions.reject", "admin.suggestions.rejected", "admin.suggestions.rerun", "admin.suggestions.stale", "admin.suggestions.title", "admin.suggestions.why", "anon.placeholder", "auth.login.fields_required", "auth.login.invalid", "auth.page.title", "auth.tg.code_missing", "auth.tg.not_configured", "auth.tg.telegram_taken", "auth.username.format", "auth.username.reserved", "banner.before", "banner.nomination", "bot.login.hint", "bot.register.done", "bot.register.expired", "bot.texts.down", "bot.texts.help", "cms.bad_file_name", "cms.bad_path", "cms.body", "cms.by_shell", "cms.bytes", "cms.conflict", "cms.delete", "cms.delete_confirm", "cms.delete_file_confirm", "cms.deleted", "cms.edit_this", "cms.file", "cms.files_hint", "cms.folder", "cms.format", "cms.history", "cms.history_hint", "cms.html", "cms.markdown", "cms.moved_to", "cms.new_page", "cms.no_title", "cms.not_found", "cms.not_yet", "cms.open", "cms.pages", "cms.path", "cms.path_placeholder", "cms.preview", "cms.restore", "cms.restored", "cms.revision", "cms.size", "cms.taken", "cms.title", "cms.type", "cms.upload", "cms.upload_failed", "cms.vars_hint", "common.add", "common.error_title", "common.home", "common.rating_id", "common.rating_id_invalid", "common.remove", "common.save", "common.saved", "common.site_name", "common.title_suffix", "common.to_home", "contest.name", "contest.none", "contest.stage.before", "contest.stage.counting", "contest.stage.done", "contest.stage.factcheck", "contest.stage.final", "contest.stage.nomination", "contest.stage.prelim", "contest.stage.review", "dates.and", "dates.from_to", "dates.months.april", "dates.months.august", "dates.months.december", "dates.months.february", "dates.months.january", "dates.months.july", "dates.months.june", "dates.months.march", "dates.months.may", "dates.months.november", "dates.months.october", "dates.months.september", "final.closed", "final.jury.lead", "final.jury.not_expert", "final.jury.progress", "final.jury.scale", "final.jury.title", "final.no_shortlist", "final.popular.choose", "final.popular.counted", "final.popular.first", "final.popular.invalid", "final.popular.lead", "final.popular.second", "final.popular.submit", "final.popular.third", "final.popular.title", "forms.failed", "forms.hide_answers", "forms.saving", "forms.show_answers", "nominate.error.bad_link", "nominate.error.bad_tournament", "nominate.error.file_too_big", "nominate.error.missing", "nominate.error.no_link", "nominate.error.no_tournament", "nominate.field.answer", "nominate.field.author", "nominate.field.comment", "nominate.field.handout", "nominate.field.handout_hint", "nominate.field.nezachet", "nominate.field.source", "nominate.field.text", "nominate.field.zachet", "nominate.page.admin_preview", "nominate.page.closed", "nominate.page.eligible", "nominate.page.files_lost", "nominate.page.how_to", "nominate.page.lead", "nominate.page.not_saved", "nominate.page.reserves", "nominate.page.submit", "nominate.page.title", "nominate.slot.drop_file", "nominate.slot.file", "nominate.slot.file_hint", "nominate.slot.link", "nominate.slot.link_hint", "nominate.slot.link_only", "nominate.slot.main", "nominate.slot.parse", "nominate.slot.parse_failed", "nominate.slot.parsed", "nominate.slot.paste", "nominate.slot.paste_hint", "nominate.slot.published", "nominate.slot.reserve", "nominate.slot.tab_fields", "nominate.slot.tab_text", "nominate.slot.tournament", "nominate.slot.unpublished", "profile.logged_in_as", "profile.logout", "profile.rating_hint", "profile.title", "question.answer", "question.author", "question.comment", "question.factcheck", "question.label", "question.nezachet", "question.show_answer", "question.source", "question.tournament", "question.unnumbered", "question.zachet", "results.places", "results.shortlist", "results.title", "server.error.bad_request", "server.error.internal", "vote.factcheck.lead", "vote.factcheck.nothing", "vote.like", "vote.page.closed", "vote.page.not_juror", "vote.page.nothing_yet", "vote.page.title", "vote.portion.empty", "vote.portion.lead", "vote.portion.next", "vote.portion.not_open", "vote.portion.tabs", "vote.portion.title":
 		return true
 	}
 	return false

@@ -1,6 +1,9 @@
 -- index page_revisions_path
 CREATE INDEX page_revisions_path on page_revisions(path, id);
 
+-- index question_files_question
+CREATE INDEX question_files_question on question_files(question_id, id);
+
 -- index questions_gq
 CREATE UNIQUE INDEX questions_gq on questions(year, gq_id) where gq_id is not null;
 
@@ -107,6 +110,16 @@ CREATE TABLE popular_votes(
   primary key(year, user_id)
 );
 
+-- table question_files
+CREATE TABLE question_files(
+  id integer primary key,
+  question_id integer not null references questions(id) on delete cascade,
+  name text not null,
+  content_type text not null,
+  data blob not null,
+  created_at text not null
+);
+
 -- table questions
 CREATE TABLE questions(
   id integer primary key,
@@ -131,7 +144,7 @@ CREATE TABLE questions(
   ai_status text not null default 'pending' check (ai_status in ('pending','done','failed')),
   ai_error text not null default '',
   created_at text not null,
-  updated_at text not null,
+  updated_at text not null, tournament_link text not null default '',
   unique(year, qy)
 );
 

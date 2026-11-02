@@ -215,6 +215,22 @@ create table if not exists assets(
   updated_by integer references users(id)
 );
 `)},
+	{Version: 2, Name: "nomination fields and handout files", Up: schema.Exec(`
+-- An unpublished question is nominated with a link to its tournament, which
+-- need not be on rating.chgk.info.
+alter table questions add column tournament_link text not null default '';
+
+-- A file a nominator attached to an unpublished question as its handout.
+create table if not exists question_files(
+  id integer primary key,
+  question_id integer not null references questions(id) on delete cascade,
+  name text not null,
+  content_type text not null,
+  data blob not null,
+  created_at text not null
+);
+create index if not exists question_files_question on question_files(question_id, id);
+`)},
 }
 
 func Migrate(db *sql.DB) error { return schema.Apply(db, Migrations) }

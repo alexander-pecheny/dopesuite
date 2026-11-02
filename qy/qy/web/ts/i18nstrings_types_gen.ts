@@ -120,6 +120,7 @@ export type Strings = {
       noText: () => string;
       nominatedBy: (who: string, rating: string, slot: string) => string;
       openLink: () => string;
+      openTournament: () => string;
       parse: () => string;
       parseFailed: () => string;
       pasteHint: () => string;
@@ -211,7 +212,6 @@ export type Strings = {
   banner: {
     before: (date: string) => string;
     nomination: (date: string) => string;
-    rules: () => string;
   };
   bot: {
     login: {
@@ -341,21 +341,56 @@ export type Strings = {
     showAnswers: () => string;
   };
   nominate: {
+    error: {
+      badLink: () => string;
+      badTournament: () => string;
+      fileTooBig: () => string;
+      missing: (fields: string) => string;
+      noLink: () => string;
+      noTournament: () => string;
+    };
+    field: {
+      answer: () => string;
+      author: () => string;
+      comment: () => string;
+      handout: () => string;
+      handoutHint: () => string;
+      nezachet: () => string;
+      source: () => string;
+      text: () => string;
+      zachet: () => string;
+    };
     page: {
+      adminPreview: () => string;
       closed: (from: string, to: string) => string;
       eligible: (from: string, to: string) => string;
+      filesLost: () => string;
       howTo: () => string;
       lead: (main: string, reserves: string, until: string) => string;
+      notSaved: () => string;
       reserves: () => string;
       submit: () => string;
       title: () => string;
     };
     slot: {
+      dropFile: () => string;
+      file: () => string;
+      fileHint: () => string;
+      link: () => string;
+      linkHint: () => string;
       linkOnly: () => string;
       main: (n: string) => string;
+      parse: () => string;
+      parseFailed: () => string;
       parsed: (answer: string) => string;
+      paste: () => string;
+      pasteHint: () => string;
+      published: () => string;
       reserve: (n: string) => string;
-      unparsed: () => string;
+      tabFields: () => string;
+      tabText: () => string;
+      tournament: () => string;
+      unpublished: () => string;
     };
   };
   profile: {

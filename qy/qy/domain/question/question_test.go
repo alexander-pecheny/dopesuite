@@ -75,3 +75,23 @@ func TestJSONRoundTrip(t *testing.T) {
 		t.Error("anonymous copy kept the author")
 	}
 }
+
+func TestSplitHandoutUndoesWithHandout(t *testing.T) {
+	handout, rest := SplitHandout(WithHandout("Назовите ИКС.", "Картинка с яблоком"))
+	if handout != "Картинка с яблоком" || rest != "Назовите ИКС." {
+		t.Fatalf("got %q, %q", handout, rest)
+	}
+	if h, r := SplitHandout("Назовите ИКС."); h != "" || r != "Назовите ИКС." {
+		t.Fatalf("a text without a handout changed: %q, %q", h, r)
+	}
+}
+
+func TestParseKeepsTheHandoutInTheText(t *testing.T) {
+	q, ok := Parse("Вопрос 1. [Раздаточный материал: яблоко]\nНазовите ИКС.\nОтвет: груша.\nИсточник: книга.\nАвтор: Анна Иванова")
+	if !ok {
+		t.Fatal("no answer found")
+	}
+	if h, rest := SplitHandout(q.Text); h != "яблоко" || rest != "Назовите ИКС." {
+		t.Fatalf("got %q / %q from %q", h, rest, q.Text)
+	}
+}

@@ -98,5 +98,7 @@ func (s *server) rulesVars(ctx context.Context, c contest.Contest) (map[string]s
 		"dates_final_voting":           dashRange(day(c.FinalStart), day(c.FinalEnd), y),
 		"date_results":                 dayMonth(day(c.ResultsDate)),
 		"jury":                         joinNames(expert),
+		"main_slots":                   strconv.Itoa(c.MainSlots),
+		"reserve_slots":                strconv.Itoa(c.ReserveSlots),
 	}, nil
 }

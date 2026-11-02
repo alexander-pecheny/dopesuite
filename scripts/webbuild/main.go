@@ -260,7 +260,7 @@ func targets() []target {
 					Outdir:              "qy/qy/web/assets/static/dist",
 				},
 				{
-					EntryPointsAdvanced: entries("qy/qy/web/ts/", "forms-model"),
+					EntryPointsAdvanced: entries("qy/qy/web/ts/", "forms-model", "nominate-model"),
 					Format:              api.FormatESModule,
 					Outdir:              "qy/qy/web/jstest/dist",
 				},

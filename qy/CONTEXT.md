@@ -8,7 +8,10 @@ dates moved 52 weeks on, so each stage falls on the same weekday.
 
 **Nomination.** A logged-in person's pick, in one of their slots. The first
 five slots are main picks and the next three are reserves. A slot holds a
-gotquestions link or a question's full text.
+question published on gotquestions as its link alone. Any other question,
+published elsewhere (a telegram post) or not at all, is held as its fields,
+with its tournament's link (required when it is unpublished) and an optional
+handout file.
 
 **Question.** A nominated question. `orig` is what the nominator gave, parsed,
 with its credits. `clean` is the anonymised copy the jury reads. Two

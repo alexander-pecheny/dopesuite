@@ -158,8 +158,9 @@ var RU = Strings{
 			NominatedBy: func(who string, rating string, slot string) string {
 				return fmt.Sprintf("Номинировал(а) %s, ID на рейтинге %s, %s.", who, rating, slot)
 			},
-			OpenLink: func() string { return "Открыть ссылку" },
-			Parse:    func() string { return "Распознать" },
+			OpenLink:       func() string { return "Открыть ссылку" },
+			OpenTournament: func() string { return "Открыть турнир" },
+			Parse:          func() string { return "Распознать" },
 			ParseFailed: func() string {
 				return "Не нашли в тексте ответ. Проверьте, что в нём есть строка «Ответ:»."
 			},
@@ -284,7 +285,6 @@ var RU = Strings{
 		Nomination: func(date string) string {
 			return fmt.Sprintf("Номинировать вопросы можно до %s включительно.", date)
 		},
-		Rules: func() string { return "Регламент" },
 	},
 	Bot: BotStrings{
 		Login: BotLoginStrings{
@@ -450,35 +450,88 @@ var RU = Strings{
 		ShowAnswers: func() string { return "Показать все ответы" },
 	},
 	Nominate: NominateStrings{
+		Error: NominateErrorStrings{
+			BadLink: func() string {
+				return "Ссылка на публикацию должна начинаться с https://."
+			},
+			BadTournament: func() string { return "Ссылка на турнир должна начинаться с https://." },
+			FileTooBig:    func() string { return "Файл больше 20 МБ." },
+			Missing: func(fields string) string {
+				return fmt.Sprintf("Заполните обязательные поля: %s.", fields)
+			},
+			NoLink:       func() string { return "Укажите ссылку на публикацию." },
+			NoTournament: func() string { return "Укажите ссылку на турнир." },
+		},
+		Field: NominateFieldStrings{
+			Answer:  func() string { return "Ответ" },
+			Author:  func() string { return "Автор" },
+			Comment: func() string { return "Комментарий" },
+			Handout: func() string { return "Раздаточный материал" },
+			HandoutHint: func() string {
+				return "Текст раздатки. Если раздатка — картинка или другой файл, прикрепите его ниже."
+			},
+			Nezachet: func() string { return "Незачёт" },
+			Source:   func() string { return "Источник" },
+			Text:     func() string { return "Текст вопроса" },
+			Zachet:   func() string { return "Зачёт" },
+		},
 		Page: NominatePageStrings{
+			AdminPreview: func() string {
+				return "Номинация ещё не открыта. Вы видите форму, потому что вы админ. Сохранённые сейчас вопросы попадут в конкурс, поэтому после проверки очистите их."
+			},
 			Closed: func(from string, to string) string {
 				return fmt.Sprintf("Номинация вопросов идёт с %s по %s.", from, to)
 			},
 			Eligible: func(from string, to string) string {
 				return fmt.Sprintf("Подходят вопросы турниров, отыгрыш которых начался с %s по %s.", from, to)
 			},
+			FilesLost: func() string {
+				return "Прикреплённые файлы не сохранились, их нужно выбрать заново."
+			},
 			HowTo: func() string {
-				return "В каждое поле вставьте ссылку на вопрос в базе gotquestions или полный текст вопроса с ответом, комментарием, источниками и авторами. Если у вопроса есть страница турнира на rating.chgk.info, добавьте и её."
+				return "Если вопрос опубликован в базе gotquestions, достаточно ссылки на него. Если вопрос опубликован в другом месте или не опубликован, вставьте вопрос целиком и нажмите «Распарсить». Потом проверьте поля: текст вопроса, ответ, источник и автор обязательны. Для неопубликованного вопроса нужна ещё ссылка на турнир."
 			},
 			Lead: func(main string, reserves string, until string) string {
 				return fmt.Sprintf("Можно номинировать до %s вопросов и %s запасных. Форму можно менять до %s включительно.", main, reserves, until)
+			},
+			NotSaved: func() string {
+				return "Номинация не сохранена. Исправьте отмеченные вопросы и сохраните ещё раз."
 			},
 			Reserves: func() string { return "Запасные вопросы" },
 			Submit:   func() string { return "Сохранить номинацию" },
 			Title:    func() string { return "Номинация вопросов" },
 		},
 		Slot: NominateSlotStrings{
+			DropFile: func() string { return "Убрать прикреплённый файл" },
+			File:     func() string { return "Файл для раздатки" },
+			FileHint: func() string {
+				return "Картинка или другой файл, до 20 МБ. Новый файл заменит прикреплённый."
+			},
+			Link: func() string { return "Ссылка на публикацию" },
+			LinkHint: func() string {
+				return "Ссылка на вопрос в базе gotquestions или на пост, где вопрос опубликован."
+			},
 			LinkOnly: func() string {
 				return "Сохранили ссылку. Текст вопроса оргкомитет заберёт из базы сам."
 			},
-			Main: func(n string) string { return fmt.Sprintf("Вопрос %s", n) },
+			Main:  func(n string) string { return fmt.Sprintf("Вопрос %s", n) },
+			Parse: func() string { return "Распарсить" },
+			ParseFailed: func() string {
+				return "Не нашли в тексте ответ. Проверьте, что в нём есть строка «Ответ:», или заполните поля сами."
+			},
 			Parsed: func(answer string) string {
 				return fmt.Sprintf("Распознали вопрос с ответом «%s».", answer)
 			},
-			Reserve: func(n string) string { return fmt.Sprintf("Запасной вопрос %s", n) },
-			Unparsed: func() string {
-				return "Не нашли в тексте ответ. Проверьте, что в нём есть строка «Ответ:», или вставьте ссылку на вопрос."
+			Paste: func() string { return "Вопрос целиком" },
+			PasteHint: func() string {
+				return "Вставьте вопрос с ответом, источником и автором. «Распарсить» разложит его по полям."
 			},
+			Published:   func() string { return "Вопрос опубликован" },
+			Reserve:     func(n string) string { return fmt.Sprintf("Запасной вопрос %s", n) },
+			TabFields:   func() string { return "Поля" },
+			TabText:     func() string { return "Текст" },
+			Tournament:  func() string { return "Ссылка на турнир" },
+			Unpublished: func() string { return "Вопрос не опубликован" },
 		},
 	},
 	Profile: ProfileStrings{

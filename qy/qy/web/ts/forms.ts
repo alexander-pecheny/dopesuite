@@ -52,3 +52,4 @@ if (toggleAll) {
     toggleAll.textContent = open ? S.forms.hideAnswers() : S.forms.showAnswers();
   });
 }
+import "./nominate.js";

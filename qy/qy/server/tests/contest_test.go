@@ -80,13 +80,23 @@ func (w *world) questionID(answer string) int64 {
 }
 
 func pasted(text, answer, author string) string {
-	return "Вопрос 1.\n" + text + "\nОтвет: " + answer + "\nКомментарий: так вышло.\nАвтор: " + author
+	return "Вопрос 1.\n" + text + "\nОтвет: " + answer + "\nКомментарий: так вышло.\nИсточник: книга.\nАвтор: " + author
 }
 
+// slots fills the nomination form: a text that is a link is a published
+// question, anything else an unpublished one pasted whole.
 func slots(rating string, texts map[int]string) url.Values {
 	f := url.Values{"rating_id": {rating}}
 	for i, t := range texts {
-		f.Set("slot"+strconv.Itoa(i), t)
+		key := "slot" + strconv.Itoa(i) + "_"
+		if strings.HasPrefix(t, "https://") {
+			f.Set(key+"kind", "published")
+			f.Set(key+"link", t)
+			continue
+		}
+		f.Set(key+"kind", "unpublished")
+		f.Set(key+"tournament", "https://rating.chgk.info/tournament/12345")
+		f.Set(key+"raw", t)
 	}
 	return f
 }
@@ -108,12 +118,12 @@ func TestNominationIsOpenOnlyDuringItsStage(t *testing.T) {
 	w := newWorld(t)
 	alice := w.user("alice")
 	w.ts.SetNow(day(t, "2026-11-08", 12))
-	if body := w.get(alice, "/nominate", http.StatusOK); strings.Contains(body, `name="slot1"`) {
+	if body := w.get(alice, "/nominate", http.StatusOK); strings.Contains(body, `name="slot1_kind"`) {
 		t.Error("the form is open before the stage")
 	}
 	w.post(alice, "/nominate", slots("1", map[int]string{1: pasted("Текст.", "ответ", "Кто-то")}), http.StatusBadRequest)
 	w.ts.SetNow(day(t, "2026-11-09", 0))
-	if body := w.get(alice, "/nominate", http.StatusOK); !strings.Contains(body, `name="slot8"`) {
+	if body := w.get(alice, "/nominate", http.StatusOK); !strings.Contains(body, `name="slot8_kind"`) {
 		t.Error("the form should have five slots and three reserves")
 	}
 	w.post(alice, "/nominate", slots("abc", map[int]string{1: pasted("Текст.", "ответ", "Кто-то")}), http.StatusBadRequest)

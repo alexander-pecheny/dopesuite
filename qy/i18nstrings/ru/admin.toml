@@ -94,6 +94,7 @@ dates_off = "Даты не подходят"
 status_line = '{{.status}}. {{.dates}}.'
 nominated_by = 'Номинировал(а) {{.who}}, ID на рейтинге {{.rating}}, {{.slot}}.'
 open_link = "Открыть ссылку"
+open_tournament = "Открыть турнир"
 ai_failed = 'Модель не ответила: {{.error}}'
 source_text = "Что прислал номинатор"
 paste_title = "Текст вопроса"
