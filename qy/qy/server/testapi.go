@@ -18,6 +18,7 @@ import (
 
 	"qy/qy/platform/gq"
 	"qy/qy/platform/rating"
+	"qy/qy/platform/telegram"
 	"qy/qy/storage/store"
 )
 
@@ -37,7 +38,7 @@ func NewTestServer(t *testing.T, dir string) *TestServer {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	s := &server{db: db, gq: gq.Unavailable{}, rating: noRating{}, wake: make(chan struct{}, 1), now: time.Now}
+	s := &server{db: db, gq: gq.Unavailable{}, rating: noRating{}, tg: telegram.Unavailable{}, wake: make(chan struct{}, 1), now: time.Now}
 	s.assets, s.pages = newAssets()
 	if err := s.pages.Warm(pagePaths...); err != nil {
 		t.Fatalf("warm pages: %v", err)
@@ -52,8 +53,9 @@ func (noRating) Tournament(context.Context, int64) (rating.Tournament, error) {
 	return rating.Tournament{}, context.Canceled
 }
 
-func (ts *TestServer) SetNow(t time.Time)            { ts.s.now = func() time.Time { return t } }
-func (ts *TestServer) SetGotQuestions(src gq.Source) { ts.s.gq = src }
+func (ts *TestServer) SetNow(t time.Time)              { ts.s.now = func() time.Time { return t } }
+func (ts *TestServer) SetGotQuestions(src gq.Source)   { ts.s.gq = src }
+func (ts *TestServer) SetTelegram(src telegram.Source) { ts.s.tg = src }
 
 // Model is a stand-in language model that answers every prompt with Reply.
 type Model struct{ Reply string }

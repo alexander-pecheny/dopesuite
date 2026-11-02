@@ -7,6 +7,7 @@ import (
 
 	"qy/qy/domain/question"
 	"qy/qy/platform/gq"
+	"qy/qy/platform/telegram"
 	qyserver "qy/qy/server"
 )
 
@@ -125,12 +126,12 @@ func TestAGotQuestionsLinkLoadsIntoTheFields(t *testing.T) {
 	}, Tournament: "Кубок", TournamentID: 12345}})
 	alice, bob := w.user("alice"), w.user("bob")
 
-	res := alice.PostJSON("/api/nominate/gq", `{"link": "https://gotquestions.online/question/777"}`)
+	res := alice.PostJSON("/api/nominate/load", `{"link": "https://gotquestions.online/question/777"}`)
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"handout":"яблоко"`) ||
 		!strings.Contains(res.Body.String(), `"tournament":"https://rating.chgk.info/tournament/12345"`) {
 		t.Errorf("load endpoint: %d %s", res.Code, res.Body.String())
 	}
-	if res := alice.PostJSON("/api/nominate/gq", `{"link": "https://gotquestions.online/question/1"}`); res.Code != http.StatusBadRequest {
+	if res := alice.PostJSON("/api/nominate/load", `{"link": "https://gotquestions.online/question/1"}`); res.Code != http.StatusBadRequest {
 		t.Errorf("an unknown question: %d", res.Code)
 	}
 
@@ -154,5 +155,21 @@ func TestAGotQuestionsLinkLoadsIntoTheFields(t *testing.T) {
 	w.post(bob, "/nominate", slots("202", map[int]string{1: "https://gotquestions.online/question/777"}), http.StatusSeeOther)
 	if w.count(`select count(*) from questions`) != 1 {
 		t.Error("a second nominator of the link should share the question")
+	}
+}
+
+func TestATelegramPostLoadsLikeAPastedQuestion(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.ts.SetTelegram(telegram.Fixed{"https://t.me/omps2026/30": {
+		Text:   "Вопрос 12\nНазовите ЕГО.\n\nОтвет: стекольщик.\nИсточник: Жан Кокто. Орфей\nАвтор: Сергей Спешков\n2/42 Сборная; Коллаген",
+		Photos: []string{"https://cdn.example/pic.jpg"},
+	}})
+	alice := w.user("alice")
+	res := alice.PostJSON("/api/nominate/load", `{"link": "https://t.me/omps2026/30"}`)
+	body := res.Body.String()
+	if res.Code != http.StatusOK || !strings.Contains(body, `"answer":"стекольщик."`) || !strings.Contains(body, `"author":"Сергей Спешков"`) ||
+		!strings.Contains(body, `"handout":"https://cdn.example/pic.jpg"`) {
+		t.Errorf("load: %d %s", res.Code, body)
 	}
 }

@@ -453,14 +453,14 @@ var RU = Strings{
 	Nominate: NominateStrings{
 		Error: NominateErrorStrings{
 			BadLink: func() string {
-				return "Ссылка на публикацию должна начинаться с https://."
+				return "Ссылка на опубликованный вопрос должна начинаться с https://."
 			},
 			BadTournament: func() string { return "Ссылка на турнир должна начинаться с https://." },
 			FileTooBig:    func() string { return "Файл больше 20 МБ." },
 			Missing: func(fields string) string {
 				return fmt.Sprintf("Заполните обязательные поля: %s.", fields)
 			},
-			NoLink:       func() string { return "Укажите ссылку на публикацию." },
+			NoLink:       func() string { return "Укажите ссылку на опубликованный вопрос." },
 			NoTournament: func() string { return "Укажите ссылку на турнир." },
 		},
 		Field: NominateFieldStrings{
@@ -508,12 +508,16 @@ var RU = Strings{
 			FileHint: func() string {
 				return "Картинка или другой файл, до 20 МБ. Новый файл заменит прикреплённый."
 			},
-			Link: func() string { return "Ссылка на публикацию" },
+			Link: func() string { return "Ссылка на опубликованный вопрос" },
 			LinkHint: func() string {
-				return "Ссылка на вопрос в базе gotquestions или на пост, где вопрос опубликован."
+				return "Ссылка на вопрос в базе gotquestions или на пост, где вопрос опубликован. Вопрос из базы или из телеграм-канала можно загрузить кнопкой «Загрузить»."
 			},
 			LinkOnly: func() string {
 				return "Сохранили ссылку. Текст вопроса оргкомитет заберёт из базы сам."
+			},
+			Load: func() string { return "Загрузить" },
+			LoadFailed: func() string {
+				return "Не получилось загрузить вопрос по этой ссылке. Вставьте его текст во вкладке «Текст»."
 			},
 			Main:  func(n string) string { return fmt.Sprintf("Вопрос %s", n) },
 			Parse: func() string { return "Распарсить" },

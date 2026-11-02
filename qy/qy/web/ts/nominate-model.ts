@@ -6,6 +6,14 @@ export function isGotQuestions(link: string): boolean {
   return gotQuestionsRe.test(link.trim());
 }
 
+// A post in a public telegram channel, as platform/telegram reads it.
+const telegramPostRe = /^https?:\/\/(?:www\.)?(?:t\.me|telegram\.me)\/(?:s\/)?[A-Za-z0-9_]{4,}\/\d+/;
+
+// isLoadable says the form can load the question by its link.
+export function isLoadable(link: string): boolean {
+  return isGotQuestions(link) || telegramPostRe.test(link.trim());
+}
+
 // needsFields says whether a slot's question is typed in: it is unpublished,
 // or published somewhere gotquestions cannot read it from. A published slot
 // shows no fields until its link says which.

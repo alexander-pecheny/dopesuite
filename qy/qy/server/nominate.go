@@ -12,6 +12,7 @@ import (
 	"qy/qy/domain/anon"
 	"qy/qy/domain/contest"
 	"qy/qy/domain/question"
+	"qy/qy/platform/telegram"
 	"qy/qy/storage/store"
 	"qy/qy/web/route"
 )
@@ -206,18 +207,56 @@ func (s *server) fieldsQuestion(ctx context.Context, year int, in slotInput) sto
 	return q
 }
 
-// loadSlot fills a slot's fields from gotquestions, the form's load button
-// when the page's script does not run.
+// loaded is a question read by its link, its handout taken out of the text.
+type loaded struct {
+	q          question.Question
+	handout    string
+	tournament string
+}
+
+var errNotLoadable = errors.New("no question at this link")
+
+// loadQuestion reads a published question by its link: from the gotquestions
+// dump, or from a telegram post, which is parsed like a pasted question. A
+// post's pictures go into the handout as their addresses.
+func (s *server) loadQuestion(ctx context.Context, link string) (loaded, error) {
+	if id := question.FindLinks(link).GotQuestionsID; id != 0 {
+		found, err := s.gq.Question(ctx, id)
+		if err != nil {
+			return loaded{}, err
+		}
+		l := loaded{q: found.Question, tournament: tournamentLink(found.TournamentID)}
+		l.handout, l.q.Text = question.SplitHandout(found.Question.Text)
+		return l, nil
+	}
+	if !telegram.IsPost(link) {
+		return loaded{}, errNotLoadable
+	}
+	post, err := s.tg.Post(ctx, link)
+	if err != nil {
+		return loaded{}, err
+	}
+	q, ok := question.Parse(post.Text)
+	if !ok {
+		return loaded{}, errNotLoadable
+	}
+	l := loaded{q: q}
+	l.handout, l.q.Text = question.SplitHandout(q.Text)
+	l.handout = strings.TrimSpace(strings.Join(append([]string{l.handout}, post.Photos...), "\n"))
+	return l, nil
+}
+
+// loadSlot fills a slot's fields by its link, the form's load button when the
+// page's script does not run.
 func (s *server) loadSlot(ctx context.Context, v *slotView) {
-	found, err := s.gq.Question(ctx, question.FindLinks(v.in.link).GotQuestionsID)
+	l, err := s.loadQuestion(ctx, v.in.link)
 	if err != nil {
 		v.loadMiss = true
 		return
 	}
-	v.in.fields = found.Question
-	v.in.handout, v.in.fields.Text = question.SplitHandout(found.Question.Text)
+	v.in.fields, v.in.handout = l.q, l.handout
 	if v.in.tournament == "" {
-		v.in.tournament = tournamentLink(found.TournamentID)
+		v.in.tournament = l.tournament
 	}
 	v.view = viewFields
 }
@@ -337,7 +376,7 @@ func (s *server) handleParseQuestion(w http.ResponseWriter, r *http.Request, _ r
 }
 
 // handleLoadQuestion is the form's load button when the page's script runs:
-// a gotquestions link in, the question's fields out, nothing saved.
+// a published question's link in, its fields out, nothing saved.
 func (s *server) handleLoadQuestion(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	var req struct {
 		Link string `json:"link"`
@@ -345,17 +384,15 @@ func (s *server) handleLoadQuestion(w http.ResponseWriter, r *http.Request, _ ro
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	id := question.FindLinks(req.Link).GotQuestionsID
-	found, err := s.gq.Question(r.Context(), id)
-	if id == 0 || err != nil {
+	l, err := s.loadQuestion(r.Context(), strings.TrimSpace(req.Link))
+	if err != nil {
 		return userError(str.Nominate.Slot.LoadFailed())
 	}
-	q := found.Question
-	handout, rest := question.SplitHandout(q.Text)
+	q := l.q
 	return writeJSON(w, map[string]any{
-		"ok": true, "text": rest, "handout": handout, "answer": q.Answer, "zachet": q.Zachet,
+		"ok": true, "text": q.Text, "handout": l.handout, "answer": q.Answer, "zachet": q.Zachet,
 		"nezachet": q.Nezachet, "comment": q.Comment, "source": q.Source, "author": q.Author,
-		"tournament": tournamentLink(found.TournamentID),
+		"tournament": l.tournament,
 	})
 }
 

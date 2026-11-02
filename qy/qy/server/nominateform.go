@@ -16,6 +16,7 @@ import (
 
 	"qy/qy/domain/contest"
 	"qy/qy/domain/question"
+	"qy/qy/platform/telegram"
 	"qy/qy/storage/store"
 	"qy/qy/web/route"
 	"qy/qy/web/ui"
@@ -65,10 +66,10 @@ func (in slotInput) needsFields() bool {
 	return !in.published || question.FindLinks(in.link).GotQuestionsID == 0
 }
 
-// isGotQuestions says the question is published on gotquestions, which the
-// form can load it from.
-func (in slotInput) isGotQuestions() bool {
-	return in.published && question.FindLinks(in.link).GotQuestionsID != 0
+// loadable says the form can load the question by its link: from
+// gotquestions or from a telegram post.
+func (in slotInput) loadable() bool {
+	return in.published && (question.FindLinks(in.link).GotQuestionsID != 0 || telegram.IsPost(in.link))
 }
 
 // fieldsGiven says the slot carries fields: typed in, or loaded from
@@ -435,12 +436,12 @@ func slotCard(c contest.Contest, slot int, v slotView) ui.Item {
 	return ui.Card(items...)
 }
 
-// linkRow is the publication's link and, for a gotquestions link, the button
-// that loads the question into the fields.
+// linkRow is the publication's link and, for a link the form can read, the
+// button that loads the question into the fields.
 func linkRow(slot int, v slotView) ui.Item {
 	load := []ui.Item{ui.Submit(), ui.Formnovalidate(), ui.Name("load"), ui.Value(strconv.Itoa(slot)),
 		ui.IconCloudDownload, ui.Data("load", ""), text(str.Nominate.Slot.Load())}
-	if !v.in.isGotQuestions() {
+	if !v.in.loadable() {
 		load = append(load, ui.Hidden())
 	}
 	row := []ui.Item{ui.Row(ui.SpaceSM,

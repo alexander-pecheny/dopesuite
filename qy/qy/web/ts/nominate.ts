@@ -4,11 +4,11 @@
 // between the pasted text and its fields with tabs, and remembers the view
 // in a hidden slotN_view input, so a form shown again opens where it was.
 // The parse button asks /api/nominate/parse, and the load button beside a
-// gotquestions link (or Enter in it) asks /api/nominate/gq; either fills the
+// gotquestions or telegram link (or Enter in it) asks /api/nominate/load; either fills the
 // fields without leaving the page. Without this script both post the form,
 // which does the same and comes back unsaved.
 import S from "./i18nstrings.js";
-import { isGotQuestions, needsFields, PARSED_FIELDS, type Parsed } from "./nominate-model.js";
+import { isLoadable, needsFields, PARSED_FIELDS, type Parsed } from "./nominate-model.js";
 
 function field(card: HTMLElement, name: string): HTMLInputElement | HTMLTextAreaElement | null {
   return card.querySelector(`[name="slot${card.dataset.slot}_${name}"]`);
@@ -37,7 +37,7 @@ function syncParts(card: HTMLElement): void {
   const fieldsPart = card.querySelector<HTMLElement>("[data-part=fields]");
   const load = card.querySelector<HTMLElement>("[data-load]");
   if (linkPart) linkPart.hidden = !published;
-  if (load) load.hidden = !(published && isGotQuestions(link));
+  if (load) load.hidden = !(published && isLoadable(link));
   if (fieldsPart) fieldsPart.hidden = !(needsFields(published, link) || hasFields(card));
 }
 
@@ -93,12 +93,13 @@ async function parse(card: HTMLElement, block: HTMLElement): Promise<void> {
   showView(block, "fields");
 }
 
-// load reads a gotquestions question into the fields. When it is not found,
-// the fields open on the text view, for the nominator to paste it.
+// load reads a published question into the fields, from gotquestions or a
+// telegram post. When that fails, the fields open on the text view, for the
+// nominator to paste it.
 async function load(card: HTMLElement, block: HTMLElement): Promise<void> {
   const link = field(card, "link");
-  if (!link || !isGotQuestions(link.value)) return;
-  const loaded = await ask("/api/nominate/gq", { link: link.value.trim() });
+  if (!link || !isLoadable(link.value)) return;
+  const loaded = await ask("/api/nominate/load", { link: link.value.trim() });
   const where = card.querySelector("[data-part=published]");
   block.hidden = false;
   if (typeof loaded === "string") {

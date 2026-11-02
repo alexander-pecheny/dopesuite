@@ -12,8 +12,12 @@ import (
 // gotquestions opens with, which say where it came from.
 var metaLineRe = regexp.MustCompile(`(?i)^\s*(название турнира|турнир|ссылка на турнир|ссылка на вопрос)\s*:`)
 
+// statsLineRe is the line a channel closes a played question with: how many
+// teams took it, "2/42", then who.
+var statsLineRe = regexp.MustCompile(`^\s*\d+\s*/\s*\d+(\s|$)`)
+
 func isMetaLine(line string) bool {
-	return metaLineRe.MatchString(line) || gqLinkRe.MatchString(strings.TrimSpace(line)) && len(strings.Fields(line)) == 1
+	return metaLineRe.MatchString(line) || statsLineRe.MatchString(line) || gqLinkRe.MatchString(strings.TrimSpace(line)) && len(strings.Fields(line)) == 1
 }
 
 var (
