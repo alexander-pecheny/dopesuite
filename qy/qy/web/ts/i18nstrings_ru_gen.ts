@@ -282,6 +282,7 @@ export const RU: Strings = {
     toHome: () => "На главную",
   },
   contest: {
+    juryPending: () => "<состав жюри будет вписан позже>",
     name: (year: string) => `Вопрос года — ${year}`,
     none: () => "Конкурс ещё не объявлен.",
     stage: {

@@ -378,8 +378,9 @@ var RU = Strings{
 		ToHome:      func() string { return "На главную" },
 	},
 	Contest: ContestStrings{
-		Name: func(year string) string { return fmt.Sprintf("Вопрос года — %s", year) },
-		None: func() string { return "Конкурс ещё не объявлен." },
+		JuryPending: func() string { return "<состав жюри будет вписан позже>" },
+		Name:        func(year string) string { return fmt.Sprintf("Вопрос года — %s", year) },
+		None:        func() string { return "Конкурс ещё не объявлен." },
 		Stage: ContestStageStrings{
 			Before: func() string { return "Конкурс скоро начнётся." },
 			Counting: func() string {

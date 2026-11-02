@@ -123,3 +123,15 @@ func TestAnAdminEditsAPageAndRestoresIt(t *testing.T) {
 		t.Errorf("the CMS is open to anybody: %d", res.Code)
 	}
 }
+
+func TestTheRulesSayTheJuryIsComingUntilItIsEntered(t *testing.T) {
+	w := newWorld(t)
+	w.ts.Exec(`insert into pages(path, title, format, body, updated_at) values('2026/jurytest', 'x', 'markdown', 'В жюри входят {{jury}}.', '2026-11-03T00:00:00Z')`)
+	if body := w.get(w.admin, "/2026/jurytest/", http.StatusOK); !strings.Contains(body, "В жюри входят &lt;состав жюри будет вписан позже&gt;.") {
+		t.Error("an empty jury should read as the placeholder")
+	}
+	w.ts.Exec(`insert into jurors(year, telegram_username, kind, name) values(2026, 'anna', 'expert', 'Анна Свирина')`)
+	if body := w.get(w.admin, "/2026/jurytest/", http.StatusOK); !strings.Contains(body, "В жюри входят Анна Свирина.") {
+		t.Error("the jury should replace the placeholder")
+	}
+}

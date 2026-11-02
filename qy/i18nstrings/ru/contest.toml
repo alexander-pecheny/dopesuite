@@ -1,6 +1,8 @@
 # The contest as a whole.
 name = 'Вопрос года — {{.year}}'
 none = "Конкурс ещё не объявлен."
+# What {{jury}} says in the rules until the expert jury is entered.
+jury_pending = "<состав жюри будет вписан позже>"
 
 [stage]
 before = "Конкурс скоро начнётся."

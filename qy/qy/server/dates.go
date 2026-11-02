@@ -2,6 +2,7 @@ package qyserver
 
 import (
 	"context"
+	"html"
 	"strconv"
 	"strings"
 	"time"
@@ -84,6 +85,12 @@ func (s *server) rulesVars(ctx context.Context, c contest.Contest) (map[string]s
 			expert = append(expert, j.Name)
 		}
 	}
+	// The placeholder is escaped: the page is Markdown or HTML, where its
+	// angle brackets would read as a tag.
+	jury := joinNames(expert)
+	if jury == "" {
+		jury = html.EscapeString(str.Contest.JuryPending())
+	}
 	y := c.Year
 	return map[string]string{
 		"year":                         strconv.Itoa(y),
@@ -97,7 +104,7 @@ func (s *server) rulesVars(ctx context.Context, c contest.Contest) (map[string]s
 		"date_final_voting_start":      inYear(day(c.FinalStart), y),
 		"dates_final_voting":           dashRange(day(c.FinalStart), day(c.FinalEnd), y),
 		"date_results":                 dayMonth(day(c.ResultsDate)),
-		"jury":                         joinNames(expert),
+		"jury":                         jury,
 		"main_slots":                   strconv.Itoa(c.MainSlots),
 		"reserve_slots":                strconv.Itoa(c.ReserveSlots),
 	}, nil

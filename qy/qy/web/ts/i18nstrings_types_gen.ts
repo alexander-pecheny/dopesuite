@@ -281,6 +281,7 @@ export type Strings = {
     toHome: () => string;
   };
   contest: {
+    juryPending: () => string;
     name: (year: string) => string;
     none: () => string;
     stage: {
