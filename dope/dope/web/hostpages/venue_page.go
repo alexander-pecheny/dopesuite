@@ -1,6 +1,7 @@
 package hostpages
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -30,15 +31,15 @@ func venuePageURL(festRef string, venueID int64) string {
 }
 
 type hostVenuePageData struct {
-	Fest          view.HostFest
-	Venue         multifest.Venue
-	Teams         []hostFestTeam
-	Games         []PublicFestGame
-	Error, Notice string
-	// Numbers holds what the host typed when a save was refused, by team id.
-	Numbers map[int64]string
+	Fest  view.HostFest
+	Venue multifest.Venue
+	Teams []hostFestTeam
+	Games []PublicFestGame
 	// Instant says the rating search reads buff, which answers every letter.
 	Instant bool
+	// Synch says the venue's sheet of the fest's Games can be worked on
+	// without a network.
+	Synch bool
 }
 
 // venueOfRequest is the venue the path names, refused unless the caller may
@@ -51,7 +52,7 @@ func (s *Server) venueOfRequest(r *http.Request, sc route.Scope) (multifest.Venu
 	return multifest.VenueOf(r.Context(), s.h.Engine().DB, sc.FestID, id)
 }
 
-func (s *Server) renderHostVenuePage(w http.ResponseWriter, r *http.Request, sc route.Scope, errMsg, notice string, typed map[int64]string) error {
+func (s *Server) renderHostVenuePage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	venue, err := s.venueOfRequest(r, sc)
 	if errors.Is(err, route.ErrOtherVenue) {
 		s.renderForbidden(w, r, dopestrings.Default.Host.Forbidden.OtherVenue())
@@ -61,7 +62,7 @@ func (s *Server) renderHostVenuePage(w http.ResponseWriter, r *http.Request, sc 
 		return err
 	}
 	s.festPage(w, r, sc.FestID, func(fest view.HostFest) (*dopeui.Doc, error) {
-		data := hostVenuePageData{Fest: fest, Venue: venue, Error: errMsg, Notice: notice, Numbers: typed, Instant: s.h.Engine().Buff.Enabled()}
+		data := hostVenuePageData{Fest: fest, Venue: venue, Instant: s.h.Engine().Buff.Enabled()}
 		teams, err := s.loadHostFestTeams(r.Context(), sc)
 		if err != nil {
 			return nil, err
@@ -72,25 +73,35 @@ func (s *Server) renderHostVenuePage(w http.ResponseWriter, r *http.Request, sc 
 			}
 		}
 		sortByVenueNumber(data.Teams)
-		rows, err := LoadFestGames(r.Context(), s.h.Engine().DB, sc.FestID)
+		data.Synch, data.Games, err = s.venueGames(r, sc.FestID, venue.ID)
 		if err != nil {
 			return nil, err
-		}
-		// A venue of a synch fest plays its sheet of the fest's Games, which
-		// open on that sheet; a venue of a multi fest plays its own Games.
-		kind, err := multifest.FestKind(r.Context(), s.h.Engine().DB, sc.FestID)
-		if err != nil {
-			return nil, err
-		}
-		synch := kind == multifest.Synch
-		for _, g := range rows {
-			if synch && g.MultiFestVenueID == 0 || !synch && g.MultiFestVenueID == venue.ID {
-				data.Games = append(data.Games, PublicFestGame{ID: g.ID, Slug: g.Slug, Title: g.Title, Type: g.Type, MultiFestVenueID: g.MultiFestVenueID})
-			}
 		}
 		return hostVenueDoc(data), nil
 	})
 	return nil
+}
+
+// venueGames is what a venue plays: a venue of a synch fest its sheet of the
+// fest's Games, which open on that sheet, a venue of a multi fest its own
+// Games.
+func (s *Server) venueGames(r *http.Request, festID, venueID int64) (bool, []PublicFestGame, error) {
+	rows, err := LoadFestGames(r.Context(), s.h.Engine().DB, festID)
+	if err != nil {
+		return false, nil, err
+	}
+	kind, err := multifest.FestKind(r.Context(), s.h.Engine().DB, festID)
+	if err != nil {
+		return false, nil, err
+	}
+	synch := kind == multifest.Synch
+	var out []PublicFestGame
+	for _, g := range rows {
+		if synch && g.MultiFestVenueID == 0 || !synch && g.MultiFestVenueID == venueID {
+			out = append(out, PublicFestGame{ID: g.ID, Slug: g.Slug, Title: g.Title, Type: g.Type, MultiFestVenueID: g.MultiFestVenueID})
+		}
+	}
+	return synch, out, nil
 }
 
 // sortByVenueNumber puts the numbered teams first, in their numbers' order,
@@ -110,14 +121,84 @@ func hostVenueDoc(data hostVenuePageData) *dopeui.Doc {
 	ref := data.Fest.Ref()
 	page := []dopeui.Item{
 		dopeui.Title(s.Host.Venue.Title(data.Venue.Label(), data.Fest.Title)), dopeui.PagePublic,
-		dopeui.Classicscripts("dist/pageforms.js dist/fest-teams.js"),
+		dopeui.Classicscripts("dist/pageforms.js dist/venue-page.js"),
 		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), data.Venue.Label())),
 	}
-	if data.Notice != "" {
-		page = append(page, dopeui.Note(dopeui.Text(data.Notice)))
+	// venue-page.ts draws the teams from the page's copy and the device's
+	// unsent changes, and keeps both when the network is gone.
+	work := []dopeui.Item{dopeui.SpaceLG, dopeui.Data("venue-page", venuePageConfig(data, ref)), dopeui.Data("venue-teams", venueTeamsJSON(data.Teams)),
+		dopeui.Note(dopeui.Hidden(), dopeui.Data("offline-status", ""))}
+	work = append(work, venueGamesSection(data, ref), venueTeamsSection(data))
+	if data.Synch {
+		work = append(work, venueOfflineSection())
 	}
-	page = append(page, venueGamesSection(data, ref), venueTeamsSection(data, ref))
-	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(append(page, dopeui.Col(work...))...)}}
+}
+
+// venueGame is a Game of the venue as its page's script knows it: the id its
+// unsent answers are kept under, and the page to save for work offline.
+type venueGame struct {
+	ID  int64  `json:"id"`
+	URL string `json:"url"`
+}
+
+func venuePageConfig(data hostVenuePageData, ref string) string {
+	config := struct {
+		Fest  int64       `json:"fest"`
+		Venue int64       `json:"venue"`
+		API   string      `json:"api"`
+		Max   int         `json:"max"`
+		Games []venueGame `json:"games"`
+	}{Fest: data.Fest.ID, Venue: data.Venue.ID, API: "/api/fest/" + ref, Max: numbering.MaxNumber, Games: []venueGame{}}
+	for _, g := range data.Games {
+		config.Games = append(config.Games, venueGame{ID: g.ID, URL: venueGameURL(g, data.Venue.ID, ref)})
+	}
+	return mustJSON(config)
+}
+
+// venueTeamsJSON is the venue's teams as venue-page.ts draws them.
+func venueTeamsJSON(teams []hostFestTeam) string {
+	type row struct {
+		Ref     int64  `json:"ref"`
+		Name    string `json:"name"`
+		City    string `json:"city"`
+		Players int    `json:"players"`
+		Number  int    `json:"number"`
+	}
+	rows := make([]row, len(teams))
+	for i, t := range teams {
+		rows[i] = row{Ref: t.ID, Name: t.Name, City: t.City, Players: t.Players, Number: t.VenueNumber}
+	}
+	return mustJSON(rows)
+}
+
+func mustJSON(v any) string {
+	out, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return string(out)
+}
+
+// venueGameURL is a Game's page as the venue plays it: a Game of the whole
+// synch fest opens on the venue's sheet.
+func venueGameURL(g PublicFestGame, venueID int64, ref string) string {
+	href := "/host/fest/" + ref + "/game/" + g.Ref() + "/"
+	if g.MultiFestVenueID == 0 {
+		href += "?venue=" + idstr.Format(venueID)
+	}
+	return href
+}
+
+// venueOfflineSection saves the venue's page and its Games on the device, so
+// they open without a network.
+func venueOfflineSection() *dopeui.Element {
+	s := dopestrings.Default
+	return dopeui.Section(
+		dopeui.Subhead(dopeui.Text(s.Host.Offline.Subhead())),
+		dopeui.Note(dopeui.Data("offline-prepared", ""), dopeui.Text(s.Host.Offline.PrepareHint())),
+		dopeui.Row(dopeui.Button(dopeui.Data("offline-prepare", ""), dopeui.Text(s.Host.Offline.Prepare()))),
+	)
 }
 
 func venueGamesSection(data hostVenuePageData, ref string) *dopeui.Element {
@@ -128,9 +209,9 @@ func venueGamesSection(data hostVenuePageData, ref string) *dopeui.Element {
 	}
 	rows := make([]dopeui.Item, 0, len(data.Games))
 	for _, g := range data.Games {
-		href := "/host/fest/" + ref + "/game/" + g.Ref() + "/"
+		href := venueGameURL(g, data.Venue.ID, ref)
 		if g.MultiFestVenueID == 0 {
-			href += "?venue=" + idstr.Format(data.Venue.ID) + "#input"
+			href += "#input"
 		}
 		kind := games.Get(g.Type).Title
 		row := []dopeui.Item{dopeui.Href(href), dopeui.Listtitle(dopeui.Text(kind))}
@@ -142,81 +223,37 @@ func venueGamesSection(data hostVenuePageData, ref string) *dopeui.Element {
 	return dopeui.Section(append(sect, dopeui.List(rows...))...)
 }
 
-func venueTeamsSection(data hostVenuePageData, ref string) *dopeui.Element {
+func venueTeamsSection(data hostVenuePageData) *dopeui.Element {
 	s := dopestrings.Default
-	sect := []dopeui.Item{
-		dopeui.Subhead(dopeui.Text(s.Host.Venue.TeamsSubhead(strconv.Itoa(len(data.Teams))))),
-		// The editor (fest-teams.ts) reads the fest's API off the add button and
-		// puts a new team on the venue the button names.
-		dopeui.Row(dopeui.Button(dopeui.Data("team-add", "/api/fest/"+ref), dopeui.Data("team-venue", idstr.Format(data.Venue.ID)), searchMode(data.Instant),
-			dopeui.Text(s.Host.Roster.AddTeamBtn()))),
-	}
-	if len(data.Teams) == 0 {
-		return dopeui.Section(append(sect, dopeui.Empty(dopeui.Text(s.Host.Roster.TeamsEmptyVenue())))...)
-	}
-	rows := []dopeui.Item{dopeui.Trow(
-		dopeui.Hcell(dopeui.Text(s.Host.Venue.ColNumber())), dopeui.Hcell(),
-		dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())),
-		dopeui.Hcell(dopeui.Text(s.Host.Roster.ColCity())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColPlayers())),
-	)}
-	for _, t := range data.Teams {
-		rows = append(rows, dopeui.Trow(
-			numberCell(t, t.VenueNumber, data.Numbers),
-			dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditTeamLabel(t.Name)),
-				dopeui.Data("team-edit", idstr.Format(t.ID)))),
-			dopeui.Cell(dopeui.Text(t.Name)),
-			dopeui.Cell(dopeui.Text(t.City)),
-			dopeui.Cell(dopeui.Text(strconv.Itoa(t.Players))),
-		))
-	}
-	sect = append(sect, dopeui.Note(dopeui.Text(s.Host.Venue.TeamsHint())))
-	// A refusal is about the table, so it stands right above it.
-	if data.Error != "" {
-		sect = append(sect, dopeui.Empty(dopeui.Text(data.Error)))
-	}
-	return dopeui.Section(append(sect,
-		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(venuePageURL(ref, data.Venue.ID)+"/numbers"), dopeui.Autocomplete("off"),
-			dopeui.Data("dirty-submit", ""), dopeui.Data("unique-values", s.Host.Venue.NumberDuplicate()), refusedForm(data.Numbers != nil),
-			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
+	// The rows are venue-page.ts's: it fills a copy of the hidden one per team.
+	template := dopeui.Trow(dopeui.Hidden(), dopeui.Data("team-row", ""),
+		dopeui.Cell(dopeui.Numfield(dopeui.Narrow(), dopeui.Data("unique", ""), dopeui.Min("1"), dopeui.Max(strconv.Itoa(numbering.MaxNumber)))),
+		dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditTeamLabel("")), dopeui.Data("team-edit", ""))),
+		dopeui.Cell(dopeui.Data("team-name", "")),
+		dopeui.Cell(dopeui.Data("team-city", "")),
+		dopeui.Cell(dopeui.Data("team-players", "")),
+	)
+	return dopeui.Section(
+		dopeui.Subhead(dopeui.Data("teams-count", ""), dopeui.Text(s.Host.Venue.TeamsSubhead(strconv.Itoa(len(data.Teams))))),
+		dopeui.Row(dopeui.Button(dopeui.Data("team-add", ""), searchMode(data.Instant), dopeui.Text(s.Host.Roster.AddTeamBtn()))),
+		dopeui.Empty(dopeui.Data("teams-empty", ""), dopeui.Text(s.Host.Roster.TeamsEmptyVenue())),
+		dopeui.Form(dopeui.DirCol, dopeui.Autocomplete("off"), dopeui.Data("venue-numbers", ""),
+			dopeui.Data("dirty-submit", ""), dopeui.Data("unique-values", s.Host.Venue.NumberDuplicate()),
+			dopeui.Note(dopeui.Text(s.Host.Venue.TeamsHint())),
+			dopeui.Table(dopeui.Scroll(), dopeui.Trow(
+				dopeui.Hcell(dopeui.Text(s.Host.Venue.ColNumber())), dopeui.Hcell(),
+				dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())),
+				dopeui.Hcell(dopeui.Text(s.Host.Roster.ColCity())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColPlayers())),
+			), template),
 			dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Venue.SaveNumbers()))),
-		))...)
+		),
+	)
 }
 
 // venueNumberField names one team's number input; the save reads the team id
 // back off the name.
 func venueNumberField(teamID int64) string {
 	return "number_" + idstr.Format(teamID)
-}
-
-// handleHostSaveVenueNumbers saves the numbers typed on a venue's page: a
-// blank leaves a team without one, and two teams may not share a number.
-func (s *Server) handleHostSaveVenueNumbers(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	venue, err := s.venueOfRequest(r, sc)
-	if err != nil {
-		return err
-	}
-	if err := r.ParseForm(); err != nil {
-		return route.BadRequest(err.Error())
-	}
-	teams, err := s.loadHostFestTeams(r.Context(), sc)
-	if err != nil {
-		return err
-	}
-	var own []hostFestTeam
-	for _, t := range teams {
-		if t.Venue == venue.ID {
-			own = append(own, t)
-		}
-	}
-	typed, assignments, refusal := typedNumbers(r.PostForm, own)
-	if refusal != "" {
-		return s.renderHostVenuePage(w, r, sc, refusal, "", typed)
-	}
-	if err := s.pages().SaveFestNumbers(r.Context(), sc.FestID, venue.ID, assignments); err != nil {
-		return s.renderHostVenuePage(w, r, sc, err.Error(), "", typed)
-	}
-	http.Redirect(w, r, venuePageURL(r.PathValue("fest"), venue.ID)+"?saved=1", http.StatusSeeOther)
-	return nil
 }
 
 // typedNumbers reads the teams' number fields. typed keeps what was typed,

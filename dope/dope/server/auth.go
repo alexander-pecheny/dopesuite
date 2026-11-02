@@ -343,6 +343,7 @@ func (s *server) authMe(w http.ResponseWriter, r *http.Request, sc route.Scope) 
 func (s *server) authLogout(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	s.logoutSession(r)
 	session.ClearCookie(w)
+	session.ClearSiteData(w)
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

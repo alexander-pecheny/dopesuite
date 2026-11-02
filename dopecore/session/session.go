@@ -78,6 +78,13 @@ func ClearCookie(w http.ResponseWriter) {
 	})
 }
 
+// ClearSiteData tells the browser to drop what the site keeps on the device
+// when its user logs out: the pages a service worker saved for offline work
+// and the edits and copies kept in storage, which belong to that user.
+func ClearSiteData(w http.ResponseWriter) {
+	w.Header().Set("Clear-Site-Data", `"cache", "storage"`)
+}
+
 // HasCookie reports whether a non-empty session cookie is present. Cheap probe
 // used on hot read paths before any DB lookup.
 func HasCookie(r *http.Request) bool {

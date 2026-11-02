@@ -4,13 +4,14 @@ import "testing"
 
 func TestNormalize(t *testing.T) {
 	cases := map[string]string{
-		"creator":  Creator,
-		" admin ":  Admin,
-		"host":     Host,
-		"viewer":   "",
-		"":         "",
-		"CREATOR":  "", // case-sensitive: stored values are lowercase
-		"creator ": Creator,
+		"creator":   Creator,
+		" admin ":   Admin,
+		"host":      Host,
+		"game_jury": GameJury,
+		"viewer":    "",
+		"":          "",
+		"CREATOR":   "", // case-sensitive: stored values are lowercase
+		"creator ":  Creator,
 	}
 	for in, want := range cases {
 		if got := Normalize(in); got != want {
@@ -27,6 +28,7 @@ func TestPredicates(t *testing.T) {
 		Creator:  {manage: true, access: true, del: true, edit: true, assign: false},
 		Admin:    {manage: true, access: true, del: false, edit: true, assign: true},
 		Host:     {manage: false, access: false, del: false, edit: true, assign: true},
+		GameJury: {manage: false, access: false, del: false, edit: false, assign: true},
 		"viewer": {},
 		"":       {},
 	}

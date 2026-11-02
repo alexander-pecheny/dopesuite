@@ -28,12 +28,12 @@ func TestVenueSectionsRender(t *testing.T) {
 		}
 	}
 	page := hostVenueDoc(hostVenuePageData{Fest: view.HostFest{ID: 1, Title: "Километр"}, Venue: venue, Games: []PublicFestGame{game},
-		Teams: []hostFestTeam{{ID: 5, Name: "Альфа", Venue: 7, VenueNumber: 1}}, Error: "нет", Numbers: map[int64]string{5: "1"}})
+		Teams: []hostFestTeam{{ID: 5, Name: "Альфа", Venue: 7, VenueNumber: 1}}, Synch: true})
 	html, err := dopeui.Render(page)
 	if err != nil {
 		t.Fatalf("venue page: %v", err)
 	}
-	for _, want := range []string{`name="number_5"`, `data-unique`, `data-refused="yes"`, `href="/host/fest/1/game/3/"`} {
+	for _, want := range []string{`&quot;ref&quot;:5`, `data-team-row`, `data-unique`, `href="/host/fest/1/game/3/"`, `data-offline-prepare`} {
 		if !strings.Contains(string(html), want) {
 			t.Fatalf("the venue page lacks %s: %s", want, html)
 		}

@@ -257,19 +257,27 @@ func editedTeams(state roster.HandState) map[int64]bool {
 
 type teamRequest struct {
 	// RatingID, for a new team, is the rating site's team it is.
-	RatingID int64            `json:"rating_id"`
-	Name     string           `json:"name"`
-	City     string           `json:"city"`
-	Players  []festTeamPlayer `json:"players"`
+	RatingID int64 `json:"rating_id"`
+	// RatingTeam, for a team the host made, links it to the rating site's
+	// team, 0 unlinks it; left out, the link stays.
+	RatingTeam *int64           `json:"rating_team"`
+	Name       string           `json:"name"`
+	City       string           `json:"city"`
+	Players    []festTeamPlayer `json:"players"`
 	// Venue puts a team the host made on a venue; left out, a new team goes
 	// on the caller's one venue, or none, and a team keeps its own.
 	Venue *int64 `json:"multifest_venue_id"`
 	// Flags is the team's Divisions by short name; left out, they stay.
 	Flags *[]string `json:"flags"`
+	// ClientID and VenueNumber are a new team as a host's device made it,
+	// perhaps offline: the id it gave the team and the number it chose.
+	ClientID    string `json:"client_id"`
+	VenueNumber int    `json:"venue_number"`
 }
 
 func (req teamRequest) input() imports.TeamInput {
-	in := imports.TeamInput{RatingID: req.RatingID, Name: req.Name, City: req.City, Venue: req.Venue, Flags: req.Flags}
+	in := imports.TeamInput{RatingID: req.RatingID, RatingTeam: req.RatingTeam, Name: req.Name, City: req.City, Venue: req.Venue, Flags: req.Flags,
+		ClientID: req.ClientID, VenueNumber: req.VenueNumber}
 	for _, p := range req.Players {
 		in.Players = append(in.Players, roster.FestRosterImportPlayer{RatingID: p.RatingID, FirstName: p.FirstName, LastName: p.LastName})
 	}
@@ -311,7 +319,11 @@ func (s *Server) apiCreateTeam(w http.ResponseWriter, r *http.Request, sc route.
 	if err := checkVenueChoice(sc, req.Venue, 0); err != nil {
 		return err
 	}
-	id, err := s.CreateFestTeam(r.Context(), sc, req.input())
+	// A create sent again answers with the team the first one made.
+	id, err := imports.FindClientTeam(r.Context(), s.h.Engine().DB, sc.FestID, req.ClientID)
+	if err == nil && id == 0 {
+		id, err = s.CreateFestTeam(r.Context(), sc, req.input())
+	}
 	if err != nil {
 		return err
 	}
@@ -444,12 +456,12 @@ func conflictField(key string) string {
 
 // apiRatingPlayers suggests the rating site's people for what the host typed.
 func (s *Server) apiRatingPlayers(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	return route.JSON(w, imports.SearchRatingPlayers(r.Context(), s.h.Engine().Buff, r.URL.Query().Get("q")))
+	return route.JSON(w, imports.SearchRatingPlayers(r.Context(), s.h.Engine().Buff, s.h.Engine().RatingSite(""), r.URL.Query().Get("q")))
 }
 
 // apiRatingTeams suggests the rating site's teams for what the host typed.
 func (s *Server) apiRatingTeams(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	return route.JSON(w, imports.SearchRatingTeams(r.Context(), s.h.Engine().Buff, r.URL.Query().Get("q")))
+	return route.JSON(w, imports.SearchRatingTeams(r.Context(), s.h.Engine().Buff, s.h.Engine().RatingSite(""), r.URL.Query().Get("q")))
 }
 
 // apiRatingBaseRoster is a rating team's base roster now.
@@ -458,7 +470,7 @@ func (s *Server) apiRatingBaseRoster(w http.ResponseWriter, r *http.Request, sc 
 	if err != nil {
 		return err
 	}
-	team, people, err := imports.RatingBaseRoster(r.Context(), s.h.Engine().Buff, id)
+	team, people, err := imports.RatingBaseRoster(r.Context(), s.h.Engine().Buff, s.h.Engine().RatingSite(""), id)
 	if err != nil {
 		return route.BadUser(corei18n.User(dopestrings.Default.Imports.HandRoster.BaseRosterFailed()))
 	}

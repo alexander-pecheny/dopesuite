@@ -37,6 +37,9 @@ type Venue struct {
 	Title         string `json:"title"`
 	Town          string `json:"town"`
 	RatingVenueID int64  `json:"rating_venue_id,omitempty"`
+	// RatingRequestID is the site's request to play at this venue. Two
+	// requests may name one site venue, and each is its own venue here.
+	RatingRequestID int64 `json:"rating_request_id,omitempty"`
 	// Representative is the venue's representative on the rating site,
 	// surname first.
 	Representative string `json:"representative,omitempty"`
@@ -52,9 +55,21 @@ func (v Venue) Label() string {
 	return v.Title + " / " + v.Representative
 }
 
-// RatingVenue is a venue as rating.chgk.info names it.
+// Holds says whether the venue is the one of the site's request r. A venue
+// imported before venues kept their request is matched by its site venue and
+// its representative.
+func (v Venue) Holds(r RatingVenue) bool {
+	if v.RatingRequestID != 0 {
+		return v.RatingRequestID == r.Request
+	}
+	return v.RatingVenueID == r.ID && (r.Representative == "" || v.Representative == r.Representative)
+}
+
+// RatingVenue is a venue as rating.chgk.info names it, by the request to play
+// there: ID is the site's venue, Request the request.
 type RatingVenue struct {
 	ID             int64
+	Request        int64
 	Title          string
 	Town           string
 	Representative string
@@ -70,10 +85,10 @@ func FestKind(ctx context.Context, q store.Queryer, festID int64) (string, error
 // List is the fest's venues in their order.
 func List(ctx context.Context, q store.Queryer, festID int64) ([]Venue, error) {
 	return store.CollectRows(ctx, q, `
-select id, title, town, coalesce(rating_venue_id, 0), representative from multifest_venues
+select id, title, town, coalesce(rating_venue_id, 0), coalesce(rating_request_id, 0), representative from multifest_venues
 where fest_id = ? order by position, id`, []any{festID}, func(rows *sql.Rows) (Venue, error) {
 		var s Venue
-		return s, rows.Scan(&s.ID, &s.Title, &s.Town, &s.RatingVenueID, &s.Representative)
+		return s, rows.Scan(&s.ID, &s.Title, &s.Town, &s.RatingVenueID, &s.RatingRequestID, &s.Representative)
 	})
 }
 
@@ -82,7 +97,7 @@ where fest_id = ? order by position, id`, []any{festID}, func(rows *sql.Rows) (V
 func VenueOf(ctx context.Context, q store.Queryer, festID, venueID int64) (Venue, error) {
 	var v Venue
 	err := q.QueryRowContext(ctx, `
-select id, title, town, coalesce(rating_venue_id, 0), representative from multifest_venues where id = ? and fest_id = ?`, venueID, festID).Scan(&v.ID, &v.Title, &v.Town, &v.RatingVenueID, &v.Representative)
+select id, title, town, coalesce(rating_venue_id, 0), coalesce(rating_request_id, 0), representative from multifest_venues where id = ? and fest_id = ?`, venueID, festID).Scan(&v.ID, &v.Title, &v.Town, &v.RatingVenueID, &v.RatingRequestID, &v.Representative)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, corei18n.User(dopestrings.Default.Host.Multifest.VenueUnknown())
 	}
@@ -115,7 +130,7 @@ func PlaceTeamsTx(ctx context.Context, tx *sql.Tx, festID int64, venueOf map[int
 	for ratingID, venue := range venueOf {
 		res, err := tx.ExecContext(ctx, `
 update fest_teams set multifest_venue_id = ?, venue_number = null
-where fest_id = ? and rating_id = ? and hand = 0 and multifest_venue_id is not ?`, festVenue[venue.ID], festID, ratingID, festVenue[venue.ID])
+where fest_id = ? and rating_id = ? and hand = 0 and multifest_venue_id is not ?`, festVenue[venue.Request], festID, ratingID, festVenue[venue.Request])
 		if err != nil {
 			return false, err
 		}
@@ -170,20 +185,20 @@ select coalesce(max(venue_number), 0) from fest_teams where multifest_venue_id =
 }
 
 // AddVenuesTx makes the fest venues of the rating venues it has not seen yet,
-// in the order of their names, and answers the fest venue of each.
+// in the order of their names, and answers the fest venue of each request.
 func AddVenuesTx(ctx context.Context, tx *sql.Tx, festID int64, venues []RatingVenue) (map[int64]int64, error) {
 	sorted := slices.Clone(venues)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Title < sorted[j].Title })
 	festVenue := map[int64]int64{}
 	for _, venue := range sorted {
-		if _, done := festVenue[venue.ID]; done {
+		if _, done := festVenue[venue.Request]; done {
 			continue
 		}
 		id, err := ratingVenueTx(ctx, tx, festID, venue)
 		if err != nil {
 			return nil, err
 		}
-		festVenue[venue.ID] = id
+		festVenue[venue.Request] = id
 	}
 	return festVenue, nil
 }
@@ -194,14 +209,10 @@ func NewVenues(ctx context.Context, q store.Queryer, festID int64, venues []Rati
 	if err != nil {
 		return nil, err
 	}
-	known := map[int64]bool{}
-	for _, v := range have {
-		known[v.RatingVenueID] = true
-	}
 	var fresh []RatingVenue
-	for _, v := range venues {
-		if !known[v.ID] {
-			fresh = append(fresh, v)
+	for _, r := range venues {
+		if !slices.ContainsFunc(have, func(v Venue) bool { return v.Holds(r) }) {
+			fresh = append(fresh, r)
 		}
 	}
 	return fresh, nil
@@ -209,7 +220,13 @@ func NewVenues(ctx context.Context, q store.Queryer, festID int64, venues []Rati
 
 func ratingVenueTx(ctx context.Context, tx *sql.Tx, festID int64, venue RatingVenue) (int64, error) {
 	var id int64
-	err := tx.QueryRowContext(ctx, `select id from multifest_venues where fest_id = ? and rating_venue_id = ?`, festID, venue.ID).Scan(&id)
+	err := tx.QueryRowContext(ctx, `
+select id from multifest_venues where fest_id = ? and (rating_request_id = ?
+  or rating_request_id is null and rating_venue_id = ? and (? = '' or representative = ?))
+order by rating_request_id is null limit 1`, festID, venue.Request, venue.ID, venue.Representative, venue.Representative).Scan(&id)
+	if err == nil {
+		_, err = tx.ExecContext(ctx, `update multifest_venues set rating_request_id = ? where id = ?`, venue.Request, id)
+	}
 	if err == nil && venue.Town != "" {
 		_, err = tx.ExecContext(ctx, `update multifest_venues set town = ? where id = ? and town = ''`, venue.Town, id)
 	}
@@ -220,9 +237,9 @@ func ratingVenueTx(ctx context.Context, tx *sql.Tx, festID int64, venue RatingVe
 		return id, err
 	}
 	res, err := tx.ExecContext(ctx, `
-insert into multifest_venues(fest_id, title, town, rating_venue_id, representative, position)
-values(?, ?, ?, ?, ?, (select coalesce(max(position), 0) + 1 from multifest_venues where fest_id = ?))`,
-		festID, venue.Title, venue.Town, venue.ID, venue.Representative, festID)
+insert into multifest_venues(fest_id, title, town, rating_venue_id, rating_request_id, representative, position)
+values(?, ?, ?, ?, ?, ?, (select coalesce(max(position), 0) + 1 from multifest_venues where fest_id = ?))`,
+		festID, venue.Title, venue.Town, venue.ID, venue.Request, venue.Representative, festID)
 	if err != nil {
 		return 0, err
 	}

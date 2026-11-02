@@ -217,6 +217,13 @@ export interface GameDocumentSpec {
   onRejected?: (message: string) => void;
   // Test seam: the stream constructor the engine opens (an EventSource).
   newEventSource?: (url: string) => EventSource;
+  // What the page lays over every document the server sends, once, as it
+  // arrives: a synch fest's venue lays its unsent team changes (offline.ts).
+  base?: (state: unknown) => unknown;
+  // How long a reload keeps the page's unsent edits, and whether they may be
+  // sent now (ScopedWriterOptions).
+  pendingTTLMs?: () => number | undefined;
+  before?: () => Promise<boolean>;
 }
 
 export interface GameDocument {
@@ -243,6 +250,7 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
   let live: LiveEvents | null = null;
   let writer: ScopedWriter | null = null;
 
+  const base = (state: unknown) => spec.base ? spec.base(state) : state;
   const loader = createGameDataLoader({
     route,
     cachePrefix: spec.cachePrefix,
@@ -251,14 +259,15 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
         if (snapshot.init.seq != null) stateSeq = Number(snapshot.init.seq) || 0;
         if (snapshot.init.epoch != null) epoch = String(snapshot.init.epoch);
       }
-      spec.adopt(snapshot);
+      spec.adopt({...snapshot, state: base(snapshot.state)});
     },
     revalidate: async () => {
       const before = JSON.stringify(spec.current());
       const fresh = await fetchGameData(route);
       loader.writeSnapshot(fresh);
-      if (JSON.stringify({scheme: fresh.scheme, state: fresh.state, fest: fresh.fest ?? null}) === before) return;
-      spec.adopt(fresh);
+      const based = {...fresh, state: base(fresh.state)};
+      if (JSON.stringify({scheme: based.scheme, state: based.state, fest: based.fest ?? null}) === before) return;
+      spec.adopt(based);
     },
   });
 
@@ -267,7 +276,9 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
     writer = createScopedWriter({
       readonly: shell.viewer,
       urlOf: () => `${route.apiBase}/state`,
-      adopt: (_scope, response) => spec.apply(overlay(response)),
+      adopt: (_scope, response) => spec.apply(overlay(base(response))),
+      pendingTTLMs: spec.pendingTTLMs,
+      before: spec.before,
       indicator: shell.indicator,
       recorder: () => shell.recorder,
       onRejected: (info) => {
@@ -286,7 +297,7 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
         base: () => ({data: spec.current().state, seq: stateSeq}),
         adopt: (_scope, view) => {
           stateSeq = view.seq;
-          spec.apply(overlay(view.data));
+          spec.apply(overlay(base(view.data)));
         },
         stateURL: () => `${route.apiBase}/state`,
       }],

@@ -39,6 +39,7 @@ type Access struct {
 	level    level
 	numbered bool
 	sheets   bool
+	jury     bool
 }
 
 type level int
@@ -78,6 +79,10 @@ func (a Access) Numbered() Access { a.numbered = true; return a }
 // in the sheets of their venues alone (ADR-0033): the handler keeps to
 // Scope.SheetVenues.
 func (a Access) Sheets() Access { a.sheets = true; return a }
+
+// Jury lets in, besides those the level admits, whoever may rule on the
+// Game's contested answers (festaccess.MayJudgeGame).
+func (a Access) Jury() Access { a.jury = true; return a }
 
 // Scope is what the dispatcher resolved before calling the handler. GameID is
 // 0 on routes without a {game} segment; User is zero-valued without a session.
@@ -279,6 +284,11 @@ func (t *Table) admit(r *http.Request, access Access, sc *Scope) (Denial, error)
 					return 0, err
 				}
 				allow = len(sc.SheetVenues) > 0
+			}
+		}
+		if !allow && access.jury && sc.GameID > 0 {
+			if allow, err = festaccess.MayJudgeGame(ctx, t.Eng.DB, sc.FestID, sc.GameID, sc.User.UserID, sc.Role); err != nil {
+				return 0, err
 			}
 		}
 		if !allow {

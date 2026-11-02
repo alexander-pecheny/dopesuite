@@ -6,30 +6,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"dope/dope/domain/core"
 	"dope/dope/domain/multifest"
+	"dope/dope/domain/ratingsync"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/towns"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
+	"dope/dope/storage/ratingsite"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 )
-
-const (
-	ratingResultsTimeout = 20 * time.Second
-	// errorBodyLimit is how much of a failed response is read for the message.
-	errorBodyLimit = 512
-)
-
-const ratingResultsURL = "https://api.rating.chgk.info/tournaments/%d/results.json?includeTeamMembers=1&includeTeamFlags=1"
 
 type RatingRosterImportResult struct {
 	TeamCount    int
@@ -53,55 +44,10 @@ type RatingRosterImportResult struct {
 	Views []int64
 }
 
-type ratingFestResult struct {
-	Team        ratingTeam         `json:"team"`
-	Current     ratingTeam         `json:"current"`
-	TeamMembers []ratingTeamMember `json:"teamMembers"`
-	// Flags are the team's Divisions as the rating site marks them: an id, a
-	// full name and the short name everything shows. Every one is kept — the app
-	// does not judge which Flags deserve a Division (ADR-0020).
-	Flags []ratingTeamFlag `json:"flags"`
-	// SynchRequest names the venue a team played a synchronous
-	// tournament at.
-	SynchRequest *struct {
-		Venue struct {
-			ID   int64  `json:"id"`
-			Name string `json:"name"`
-		} `json:"venue"`
-	} `json:"synchRequest"`
-}
-
-type ratingTeamFlag struct {
-	ID        int64  `json:"id"`
-	FullName  string `json:"fullName"`
-	ShortName string `json:"shortName"`
-}
-
-type ratingTeam struct {
-	ID   int64       `json:"id"`
-	Name string      `json:"name"`
-	Town *ratingTown `json:"town"`
-}
-
-type ratingTown struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
-}
-
-type ratingTeamMember struct {
-	Player ratingPlayer `json:"player"`
-}
-
-type ratingPlayer struct {
-	ID      int64  `json:"id"`
-	Name    string `json:"name"`
-	Surname string `json:"surname"`
-}
-
 // FetchRatingRoster reads a tournament's roster from rating.chgk.info, with
 // each team's country, ready for ImportFestRoster.
 func FetchRatingRoster(eng *core.Engine, ctx context.Context, ratingID int64) ([]roster.FestRosterImportTeam, error) {
-	teams, err := fetchRatingFestRoster(ctx, ratingID)
+	teams, err := fetchRatingFestRoster(ctx, eng.RatingSite(""), ratingID)
 	if err != nil {
 		return nil, err
 	}
@@ -170,46 +116,32 @@ func resolveTeamCountries(ctx context.Context, eng *core.Engine, teams []roster.
 	for _, team := range teams {
 		townIDs = append(townIDs, team.TownID)
 	}
-	countries := towns.NewResolver(eng.Buff).Countries(ctx, townIDs)
+	countries := towns.NewResolver(eng.Buff, eng.RatingSite("")).Countries(ctx, townIDs)
 	for i := range teams {
 		teams[i].Country = countries[teams[i].TownID]
 	}
 }
 
-func fetchRatingFestRoster(ctx context.Context, ratingID int64) ([]roster.FestRosterImportTeam, error) {
+func fetchRatingFestRoster(ctx context.Context, site ratingsite.Client, ratingID int64) ([]roster.FestRosterImportTeam, error) {
 	if ratingID <= 0 {
 		return nil, errors.New("rating fest id must be positive")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(ratingResultsURL, ratingID), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-
-	client := &http.Client{Timeout: ratingResultsTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, corei18n.User(dopestrings.Default.Imports.Rating.FetchFailed(err.Error()))
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyLimit))
-		detail := strings.TrimSpace(string(body))
-		if detail == "" {
-			detail = resp.Status
-		}
-		return nil, corei18n.User(dopestrings.Default.Imports.Rating.ApiError(detail))
-	}
-
-	var results []ratingFestResult
-	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+	results, err := site.Results(ctx, ratingID)
+	var refused *ratingsite.Error
+	var syntax *json.SyntaxError
+	var mistyped *json.UnmarshalTypeError
+	switch {
+	case errors.As(err, &refused):
+		return nil, corei18n.User(dopestrings.Default.Imports.Rating.ApiError(refused.Message))
+	case errors.As(err, &syntax) || errors.As(err, &mistyped):
 		return nil, corei18n.User(dopestrings.Default.Imports.Rating.DecodeFailed(err.Error()))
+	case err != nil:
+		return nil, corei18n.User(dopestrings.Default.Imports.Rating.FetchFailed(err.Error()))
 	}
 	return ratingResultsToFestRoster(results)
 }
 
-func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterImportTeam, error) {
+func ratingResultsToFestRoster(results []ratingsite.Result) ([]roster.FestRosterImportTeam, error) {
 	teams := make([]roster.FestRosterImportTeam, 0, len(results))
 	for index, result := range results {
 		name := strings.TrimSpace(result.Current.Name)
@@ -220,13 +152,13 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 			return nil, fmt.Errorf("team %d has no name", index+1)
 		}
 		town := result.Current.Town
-		if ratingTownName(town) == "" {
+		if ratingsite.TownName(town) == "" {
 			town = result.Team.Town
 		}
 		team := roster.FestRosterImportTeam{
 			RatingID: result.Team.ID,
 			Name:     name,
-			City:     ratingTownName(town),
+			City:     ratingsite.TownName(town),
 			TownID:   ratingTownID(town),
 			Players:  make([]roster.FestRosterImportPlayer, 0, len(result.TeamMembers)),
 		}
@@ -250,8 +182,8 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 			})
 		}
 		team.Flags = roster.NormalizeFlags(team.Flags)
-		if r := result.SynchRequest; r != nil && r.Venue.ID > 0 {
-			team.Venue = multifest.RatingVenue{ID: r.Venue.ID, Title: strings.TrimSpace(r.Venue.Name)}
+		if r := result.SynchRequest; r != nil && r.ID > 0 && r.Venue != nil && r.Venue.ID > 0 {
+			team.Venue = multifest.RatingVenue{ID: r.Venue.ID, Request: r.ID, Title: strings.TrimSpace(r.Venue.Name)}
 		}
 		if len(team.Players) > roster.MaxSquad {
 			return nil, corei18n.User(dopestrings.Default.Imports.Rating.SquadTooBig(name))
@@ -261,14 +193,24 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]roster.FestRosterI
 	return roster.SortedFestRosterImportTeams(teams), nil
 }
 
-func ratingTownName(town *ratingTown) string {
-	if town == nil {
-		return ""
+// saveBase records what an import that changed nothing read from the site,
+// when the base does not have it yet.
+func saveBase(ctx context.Context, eng *core.Engine, conn *sql.Conn, festID int64, base []ratingsync.Base) error {
+	if stale, err := ratingsync.Stale(ctx, conn, festID, base); err != nil || !stale {
+		return err
 	}
-	return strings.TrimSpace(town.Name)
+	tx, err := eng.BeginWriteTxConn(ctx, conn)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := ratingsync.SaveTx(ctx, tx, festID, base); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
-func ratingTownID(town *ratingTown) int64 {
+func ratingTownID(town *ratingsite.Town) int64 {
 	if town == nil {
 		return 0
 	}
@@ -368,9 +310,10 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		if err != nil {
 			return RatingRosterImportResult{}, err
 		}
+		base := ratingsync.FromImport(teams)
 		if festRostersEqual(sortedCurrent, stripLocal(desired)) && len(merged.Settle)+len(merged.Drop)+len(venueOf) == 0 {
 			result.Unchanged = true
-			return result, nil
+			return result, saveBase(ctx, eng, conn, festID, base)
 		}
 
 		tx, err := eng.BeginWriteTxConn(ctx, conn)
@@ -400,6 +343,9 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 			return RatingRosterImportResult{}, err
 		}
 		updates, ekOverrideGameIDs = written.Updates, written.EKGameIDs
+		if err := ratingsync.SaveTx(ctx, tx, festID, base); err != nil {
+			return RatingRosterImportResult{}, err
+		}
 		if _, err := tx.ExecContext(ctx, `update fests set rating_id = ?, updated_at = ? where id = ?`, ratingID, util.UtcNow(), festID); err != nil {
 			return RatingRosterImportResult{}, err
 		}
@@ -447,7 +393,7 @@ func synchVenues(ctx context.Context, q store.Queryer, festID int64, teams []ros
 	}
 	venueOf := map[int64]multifest.RatingVenue{}
 	for _, team := range teams {
-		if team.RatingID > 0 && team.Venue.ID > 0 {
+		if team.RatingID > 0 && team.Venue.Request > 0 {
 			venueOf[team.RatingID] = team.Venue
 		}
 	}

@@ -423,3 +423,49 @@ func TestTheTeamEditorSetsATeamsDivisions(t *testing.T) {
 		t.Fatalf("detail flags %v, divisions %v", detail.Flags, detail.Divisions)
 	}
 }
+
+// The team editor links a team the host made to the rating site's team, and
+// unlinks it, while an import's team keeps the site's id (ADR-0036).
+func TestTheTeamEditorLinksAHandTeamToTheSite(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	festID := newFest(t, db, "link", "Фест со ссылками", systemUserID(t, db))
+	api := func(method, path string, body any) (int, string) {
+		t.Helper()
+		resp := scopedAPIRequest(t, srv, method, fmt.Sprintf("/api/fest/%d%s", festID, path), body, token)
+		return resp.Code, resp.Body.String()
+	}
+	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, siteTeams(map[int64][]string{1: {"Аня"}}), imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if code, body := api(http.MethodPost, "/teams", map[string]any{"name": "Сборная"}); code != http.StatusOK {
+		t.Fatalf("new team: %d %s", code, body)
+	}
+	var hand, imported int64
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Сборная'`, festID).Scan(&hand)
+	db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = 1`, festID).Scan(&imported)
+	ratingOf := func(team int64) int64 {
+		var id int64
+		db.QueryRow(`select coalesce(rating_id, 0) from fest_teams where id = ?`, team).Scan(&id)
+		return id
+	}
+	if code, body := api(http.MethodPut, fmt.Sprintf("/teams/%d", hand), map[string]any{"name": "Сборная", "rating_team": 777}); code != http.StatusOK || ratingOf(hand) != 777 {
+		t.Fatalf("link: %d %s, rating id %d", code, body, ratingOf(hand))
+	}
+	if code, _ := api(http.MethodPut, fmt.Sprintf("/teams/%d", hand), map[string]any{"name": "Сборная"}); code != http.StatusOK || ratingOf(hand) != 777 {
+		t.Fatalf("a save without the field: %d, rating id %d", code, ratingOf(hand))
+	}
+	if code, body := api(http.MethodPut, fmt.Sprintf("/teams/%d", hand), map[string]any{"name": "Сборная", "rating_team": 1}); code != http.StatusBadRequest {
+		t.Fatalf("link to the import's team: %d %s", code, body)
+	}
+	if code, _ := api(http.MethodPut, fmt.Sprintf("/teams/%d", hand), map[string]any{"name": "Сборная", "rating_team": 0}); code != http.StatusOK || ratingOf(hand) != 0 {
+		t.Fatalf("unlink: %d, rating id %d", code, ratingOf(hand))
+	}
+	name := ""
+	db.QueryRow(`select name from fest_teams where id = ?`, imported).Scan(&name)
+	if code, body := api(http.MethodPut, fmt.Sprintf("/teams/%d", imported), map[string]any{"name": name, "rating_team": 5}); code != http.StatusBadRequest || ratingOf(imported) != 1 {
+		t.Fatalf("relink the import's team: %d %s", code, body)
+	}
+}

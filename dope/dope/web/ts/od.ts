@@ -2,6 +2,7 @@
 // entry-cell navigation, shootout rounds, the Screen projector board, SSE state
 // sync. Converted from the legacy od.js; boots itself on import (ADR-0001).
 import {cssEscape, questionNumberNode, td, th} from "./cells.js";
+import type {CellAttrs} from "./cells.js";
 import {buildFlatScoreTable, computePlaces, scoreSheetPins} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
 import {nameCell} from "./name-cell.js";
@@ -17,17 +18,19 @@ import type {PatchPath} from "./state-sync.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {gameVenue, parseGameRoute, venuePageURL} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
-import {fitScrollFade, installVirtualKeypad, renderTabBar} from "./widgets.js";
+import {fitScrollFade, installVirtualKeypad, renderTabBar, tabPicker} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
 import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
 import * as od from "./od-protocol.js";
-import type {ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
+import type {ContestedText, ODContested, ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
+import {buildContestedView, fetchContested, openContestedDialog, sendContested} from "./od-contested.js";
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, readCityCountry, teamFlag} from "./screen-board.js";
 import type {ScreenMetrics, ScreenSettings} from "./screen-board.js";
 import {param, setHashTab, setParam, tabFromHash} from "./url-state.js";
+import {flushOutbox, mountOfflineBar, OFFLINE_PENDING_TTL_MS, projectODState, readOutbox} from "./offline.js";
 import S from "./i18nstrings.js";
 
 // The results sheet and the screen board pin the place, the team and the total.
@@ -84,6 +87,7 @@ interface EntrySuggestState {
 
 interface UndoEntry {
   kind: "entry-column";
+  venue: number;
   qIndex: number;
   previous: number[];
 }
@@ -137,7 +141,7 @@ const shell = mountGamePage({
   chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme?.title || S.od.title()}),
   cursorKinds: {
     "shootout-entry": {selector: '.entry-cell[data-entry-kind="shootout"], .shootout-entry-checkbox', keys: ["round", "question", "row"]},
-    entry: {selector: '.entry-cell:not([data-entry-kind]), .entry-input', keys: ["q", "row"]},
+    entry: {selector: '.entry-cell:not([data-entry-kind]), .entry-input', keys: ["venue", "q", "row"]},
     "team-name": {selector: ".venue-input", keys: ["team"]},
   },
   activeCursorElement: () => sheet.activeCell,
@@ -195,7 +199,21 @@ const UNDO_LIMIT = 100;
 // A friendship cup (ADR-0026) rides this page: its document is an OD one whose
 // teams are the tables, and it adds the personal standings and its players.
 const kdGame = (gameInit?.scheme as {gameType?: unknown} | null | undefined)?.gameType === "kd";
-const TABS = gameTabs([], {game: kdGame ? "kd" : "od", viewer});
+// What this visitor may do with the Game's contested answers (the init payload): record
+// them, rule on them. Only they read the answers' text, which the document
+// leaves out. Answers are recorded on the /host page only. The jury rules on
+// either page: a juror runs no Game, so /host sends them to /fest.
+const contestedRights = (gameInit as {contested?: {enter?: boolean; judge?: boolean; manage?: boolean}} | null | undefined)?.contested;
+const contestedEnter = !viewer && Boolean(contestedRights?.enter);
+const contestedJudge = Boolean(contestedRights?.judge);
+const contestedManage = !viewer && Boolean(contestedRights?.manage);
+let contestedTexts: ContestedText[] = [];
+let contestedSeen: string | null = null;
+let contestedRowsCache: Array<Map<number, ODContested>> | null = null;
+// The entry tab's button for contested answers, renamed when the selected cell holds one.
+let contestedButton: HTMLButtonElement | null = null;
+// A host who records contested answers reads the tab too; only the jury rules.
+const TABS = gameTabs([], {game: kdGame ? "kd" : "od", viewer, contested: contestedEnter || contestedJudge});
 
 let activeTab = tabFromHash(TABS) || (viewer ? (kdGame ? "personal" : "results") : "input");
 // The teams as the viewer looks at them: the Division chosen in the URL
@@ -210,6 +228,7 @@ lens.follow(() => {
   if (docState && od.isSynch(docState) && askedVenue() !== pageVenue) {
     projectState();
     invalidateAllCaches();
+    invalidateTabCache("roster");
     return true;
   }
   const next = tabFromHash(TABS);
@@ -259,13 +278,22 @@ document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement && chromeHidden) setChromeHidden(false);
 });
 
+// A venue of a synch fest works without a network: its changes to its
+// teams wait in the fest's outbox, and its answers wait for them (offline.ts).
+const offlineFest = Number((gameInit as {festID?: number} | null)?.festID || 0);
+const offlineAPI = `/api/fest/${offlineFest}`;
+
 const doc = mountGameDocument({
   route,
   cachePrefix: "od",
   shell,
   adopt: adoptGameSnapshot,
   apply: applyRemoteState,
-  current: () => ({scheme, state, fest}),
+  // The live base is the document, not the view a venue's page shows.
+  current: () => ({scheme, state: docState ?? state, fest}),
+  base: (raw) => offlineFest ? projectODState(raw, readOutbox(offlineFest)) : raw,
+  pendingTTLMs: () => docState && od.isSynch(docState) ? OFFLINE_PENDING_TTL_MS : undefined,
+  before: async () => !offlineFest || readOutbox(offlineFest).ops.length === 0 || (await flushOutbox(offlineFest, offlineAPI)).empty,
   // A friendship cup's registration can be refused (another host took the
   // card a moment ago): the players tab says why, and the document is fetched
   // again, which takes back the player the page already showed.
@@ -300,6 +328,26 @@ function ensureState(): void {
   docState = od.parseState(state, scheme, totalQuestions);
   projectState();
   lens.adopt();
+  const seen = JSON.stringify(docState.contested);
+  if (seen !== contestedSeen) {
+    contestedSeen = seen;
+    void loadContestedTexts();
+  }
+}
+
+// loadContestedTexts reads the contested answers with their text, for whoever may read
+// it, each time the document's list of them changes.
+async function loadContestedTexts(): Promise<void> {
+  if (!(contestedEnter || contestedJudge) || !route.apiBase) return;
+  const list = await fetchContested(route.apiBase);
+  if (list) adoptContestedTexts(list);
+}
+
+function adoptContestedTexts(list: ContestedText[]): void {
+  contestedTexts = list;
+  invalidateTabCache("contested", "detailed", "results");
+  if (activeTab === "input") repaintEntrySheet();
+  render();
 }
 
 // projectState is what the tabs read of docState on the view the URL asks for.
@@ -308,12 +356,14 @@ function projectState(): void {
   entrySheet = docState;
   if (od.isSynch(docState)) {
     pageVenue = askedVenue();
-    sheetVenue = pageVenue || defaultSheetVenue();
+    const keep = shownSheets().some((venue) => venue.id === sheetVenue);
+    sheetVenue = pageVenue || (keep ? sheetVenue : defaultSheetVenue());
     entrySheet = od.venueSheet(docState, sheetVenue);
     state = viewedState();
   }
   entryStatsCache = null;
   entryIndexCache = null;
+  contestedRowsCache = null;
 }
 
 // The venues of a synch fest's OD the page knows, and the ones this visitor
@@ -326,6 +376,55 @@ function shownSheets(): GameSheet[] {
   const editable = gameSheets.filter((venue) => venue.editable);
   return editable.length ? editable : gameSheets;
 }
+
+// stackedSheets are the venues the input tab draws one under another on the
+// whole fest's view; none when it enters one venue's sheet. Each is drawn
+// live, and the one a host clicks into becomes the sheet the tab enters
+// (useSheet).
+function stackedSheets(): GameSheet[] {
+  const shown = shownSheets();
+  return od.isSynch(docState) && !pageVenue && shown.length > 1 ? shown : [];
+}
+
+// useSheet makes a venue's sheet the one the input tab enters.
+function useSheet(venue: number): void {
+  sheetVenue = venue;
+  entrySheet = od.venueSheet(docState, venue);
+  entryStatsCache = null;
+  entryIndexCache = null;
+  contestedRowsCache = null;
+}
+
+// eachSheet runs fn with every drawn sheet entered in turn, and leaves the
+// active one entered.
+function eachSheet(fn: () => void): void {
+  const stacked = stackedSheets();
+  if (stacked.length === 0) return fn();
+  const active = sheetVenue;
+  for (const venue of stacked) {
+    useSheet(venue.id);
+    fn();
+  }
+  useSheet(active);
+}
+
+// entryRoot holds the entered sheet's cells: its venue's block when the
+// input tab stacks several.
+function entryRoot(): ParentNode {
+  return odRoot.querySelector(`.od-venue-sheet[data-venue="${cssEscape(String(sheetVenue))}"]`) || odRoot;
+}
+
+// A click or a focus in another venue's block enters its sheet before the
+// cursor reads the cell.
+function enterSheetOf(event: Event): void {
+  const block = event.target instanceof Element ? event.target.closest<HTMLElement>(".od-venue-sheet") : null;
+  const venue = Number(block?.dataset.venue);
+  if (!block || venue === sheetVenue) return;
+  sheet.clear();
+  useSheet(venue);
+  syncContestedButton();
+}
+for (const type of ["pointerdown", "mousedown", "focusin"]) odRoot.addEventListener(type, enterSheetOf, true);
 
 // askedVenue is the venue whose view ?venue= asks for, 0 for the whole fest's.
 function askedVenue(): number {
@@ -362,22 +461,24 @@ function showVenue(venue: number): void {
   projectState();
   lens.adopt();
   invalidateAllCaches();
+  invalidateTabCache("roster");
   render();
 }
 
-// venueChips switch the page between the venues' views of a synch fest. The
-// input tab enters one venue's sheet at a time, so it offers no whole fest.
+// venueChips switch the page between the venues' views of a synch fest: a
+// dropdown, since a fest has dozens of venues. On the input tab the whole
+// fest's view stacks the venues' sheets.
 function venueChips(tab: string): HTMLElement | null {
   const entering = tab === "input";
   const shown = entering ? shownSheets() : gameSheets;
   if (!od.isSynch(docState) || shown.length < 2) return null;
   const row = document.createElement("div");
-  row.className = "match-tabs";
-  row.setAttribute("role", "tablist");
+  // Always collapsed: the strip shows only its picker, never every venue.
+  row.className = "match-tabs tabs-segmented tabs-collapsed";
   row.setAttribute("aria-label", S.od.venues.label());
   const items = shown.map((venue) => ({key: String(venue.id), label: venue.title}));
-  if (!entering) items.unshift({key: "0", label: S.od.venues.all()});
-  renderTabBar(row, items, String(entering ? sheetVenue : pageVenue), (key) => showVenue(Number(key)), {picker: true});
+  items.unshift({key: "0", label: S.od.venues.all()});
+  row.appendChild(tabPicker(items, String(pageVenue), (key) => showVenue(Number(key))));
   return row;
 }
 
@@ -437,6 +538,10 @@ function shootoutQuestionCompleted(roundIndex: number, questionIndex: number): b
 
 
 
+// invalidateAllCaches drops every tab drawn from the document. The roster
+// tab draws the fest's teams, not the document, so it stays: a synch fest's
+// document changes every few seconds, and a roster drawn again would lose
+// its loaded table and its scroll each time.
 function invalidateAllCaches(): void {
   rememberTabScroll(activeTab);
   activeEntryEditor = null;
@@ -445,13 +550,18 @@ function invalidateAllCaches(): void {
   numberToIndexCache = null;
   entryStatsCache = null;
   entryIndexCache = null;
-  for (const pane of tabCache.values()) pane.remove();
-  tabCache.clear();
+  contestedRowsCache = null;
+  for (const [tab, pane] of tabCache) {
+    if (tab === "roster") continue;
+    pane.remove();
+    tabCache.delete(tab);
+  }
 }
 
 function invalidateScoreCaches(): void {
   questionStatsCache = null;
   entryStatsCache = null;
+  contestedRowsCache = null;
   if (od.isSynch(docState)) state = viewedState();
   invalidateTabCache("detailed", "results", "screen", "personal");
 }
@@ -554,6 +664,18 @@ function getTabPane(tab: string): HTMLElement {
   else if (tab === "detailed") node = buildDetailedTable();
   else if (tab === "roster") node = buildRosterView(route.festID, route.gameID, pageVenue);
   else if (tab === "screen") node = buildScreenView();
+  else if (tab === "contested") {
+    node = buildContestedView({
+      known: contestedTexts,
+      teamLabel: docTeamLabel,
+      rule: contestedJudge ? ruleContested : undefined,
+      manage: contestedManage ? {
+        questions: totalQuestions,
+        move: (group, to) => void writeContested("PUT", "/answer", {question: group.question, answer: group.answer, to}),
+        remove: (group) => void writeContested("DELETE", "/answer", {question: group.question, answer: group.answer}),
+      } : undefined,
+    });
+  }
   else if (tab === "personal") node = buildPersonalView(kdContext());
   else if (tab === "players") {
     node = buildPlayersView({
@@ -566,9 +688,15 @@ function getTabPane(tab: string): HTMLElement {
   const pane = document.createElement("div");
   pane.className = "od-pane";
   pane.dataset.tab = tab;
-  if (tab !== "input") {
+  // The contested answers are the whole fest's at once, so that tab has no venue to pick.
+  if (tab !== "input" && tab !== "contested") {
     const venues = venueChips(tab);
-    if (venues) pane.appendChild(venues);
+    if (venues) {
+      const bar = document.createElement("div");
+      bar.className = "sheet-bar u-row u-gap-sm u-align-center";
+      bar.appendChild(venues);
+      pane.appendChild(bar);
+    }
   }
   if (tab === "results" || tab === "detailed") {
     const chips = lens.chips();
@@ -635,22 +763,71 @@ function renderTabs(): void {
 function buildInputView(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-input-wrap";
+  // The venue picker and the contested answers' button share one bar, which stays at
+  // the frame's left edge while the sheet scrolls sideways; the button is a
+  // segmented group of its own, so it reads at the picker's size.
+  const toolbar = document.createElement("div");
+  toolbar.className = "sheet-bar u-row u-gap-sm u-align-center";
   const chips = venueChips("input");
-  if (chips) wrapper.appendChild(chips);
-  if (!entryNumbered()) {
+  if (chips) toolbar.appendChild(chips);
+  if (toolbar.childElementCount) wrapper.appendChild(toolbar);
+  const stacked = stackedSheets();
+  if (stacked.length === 0 && !entryNumbered()) {
     // Prose, not an input table: the wrap must fit the frame and wrap.
     wrapper.classList.add("od-input-wrap-guard");
     wrapper.appendChild(buildNumberingGuard());
     return wrapper;
   }
+  if (contestedEnter) {
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "match-tab";
+    add.addEventListener("click", () => openContested(sheet.focus?.col ?? null, sheet.focus?.row ?? -1));
+    // Named for the selected cell by syncContestedButton, once the cursor exists.
+    add.textContent = S.od.contested.add();
+    contestedButton = add;
+    const group = document.createElement("div");
+    group.className = "match-tabs tabs-segmented";
+    group.appendChild(add);
+    toolbar.appendChild(group);
+    if (toolbar.parentNode !== wrapper) wrapper.appendChild(toolbar);
+  }
+  if (stacked.length) {
+    eachSheet(() => wrapper.appendChild(venueSheetBlock(stacked.find((venue) => venue.id === sheetVenue)!)));
+  } else {
+    const tables = document.createElement("div");
+    tables.className = "od-input-tables";
+    tables.appendChild(buildInputTable());
+    const shootout = buildInputShootoutTable();
+    if (shootout) tables.appendChild(shootout);
+    wrapper.appendChild(tables);
+  }
+  updateEntrySelectionSoon();
+  return wrapper;
+}
+
+// venueSheetBlock is the entered venue's sheet under its title, on the whole
+// fest's input tab.
+function venueSheetBlock(venue: GameSheet): HTMLElement {
+  const block = document.createElement("section");
+  block.className = "od-venue-sheet u-col";
+  block.dataset.venue = String(venue.id);
+  const bar = document.createElement("div");
+  bar.className = "sheet-bar";
+  const title = document.createElement("h3");
+  title.className = "subhead";
+  title.textContent = venue.title;
+  bar.appendChild(title);
+  block.appendChild(bar);
+  if (!entryNumbered()) {
+    block.appendChild(buildNumberingGuard());
+    return block;
+  }
   const tables = document.createElement("div");
   tables.className = "od-input-tables";
   tables.appendChild(buildInputTable());
-  const shootout = buildInputShootoutTable();
-  if (shootout) tables.appendChild(shootout);
-  wrapper.appendChild(tables);
-  updateEntrySelectionSoon();
-  return wrapper;
+  block.appendChild(tables);
+  return block;
 }
 
 function updateEntrySelectionSoon(): void {
@@ -662,6 +839,15 @@ function updateEntrySelectionSoon(): void {
 function refreshEntrySelection(): void {
   sheet.refresh();
   positionInvertOverlay();
+}
+
+// syncContestedButton names the button for the selected cell: it edits the contested
+// answer already there, or adds one.
+function syncContestedButton(): void {
+  if (!contestedButton) return;
+  const focus = sheet.focus;
+  const there = focus && contestedAtEntryCell(focus.col, focus.row);
+  contestedButton.textContent = there ? S.od.contested.edit() : S.od.contested.add();
 }
 
 // ensureInvertOverlay lazily creates the floating yin-yang button. It lives on
@@ -703,7 +889,7 @@ function positionInvertOverlay(): void {
   if (viewer || activeTab !== "input" || !sheet.focus) return hide();
   const q = sheet.focus.col;
   if (!Number.isInteger(q) || q < 0 || q >= totalQuestions || entrySheet.completed[q]) return hide();
-  const head = odRoot.querySelector<HTMLElement>(
+  const head = entryRoot().querySelector<HTMLElement>(
     `.entry-table:not(.od-shootout-entry-table) thead tr:first-child th[data-q="${cssEscape(String(q))}"]`);
   const frame = scrollFrame();
   if (!head || !frame) return hide();
@@ -800,7 +986,7 @@ function attachInvertListeners(): void {
 const sheet = createSheetCursor({
   root: odRoot,
   cellSelector: '.entry-cell:not([data-entry-kind="shootout"])',
-  rows: () => state?.teams.length || 0,
+  rows: () => entrySheet?.teams.length || 0,
   cols: () => totalQuestions,
   readonly: () => viewer,
   active: () => !viewer && activeTab === "input",
@@ -818,7 +1004,9 @@ const sheet = createSheetCursor({
   parse: (text) => entryModel.coerceValue(text, entrySheet.teams.map((_, i) => ({label: teamLabel(i), number: entryTeamNumber(i)}))),
   applyValues: applyEntryEdits,
   onEdit: (cell, text) => {
-    if (text === null) openEntryEditor(cell);
+    const pos = entryCellPosition(cell as HTMLElement);
+    if (text === "?" && contestedEnter && pos) openContested(pos.q, pos.row);
+    else if (text === null) openEntryEditor(cell);
     else startEntryEditWithText(cell, text);
   },
   // From the top row, ArrowUp steps onto the column's tickbox so the operator
@@ -829,6 +1017,7 @@ const sheet = createSheetCursor({
   onSelectionChange: () => {
     closeEntryEditor();
     positionInvertOverlay();
+    syncContestedButton();
   },
   onActive: (cell) => markActiveEntryRow(cell),
   classes: {selected: "entry-selected", anchor: "", top: "entry-selection-top", bottom: "entry-selection-bottom", left: "entry-selection-left", right: "entry-selection-right", active: "", row: ""},
@@ -836,7 +1025,7 @@ const sheet = createSheetCursor({
 sheet.bind();
 
 function entryCellNode(qIndex: number, rowIndex: number): HTMLElement | null {
-  return odRoot.querySelector<HTMLElement>(`.entry-cell[data-q="${cssEscape(String(qIndex))}"][data-row="${cssEscape(String(rowIndex))}"]:not([data-entry-kind="shootout"])`);
+  return entryRoot().querySelector<HTMLElement>(`.entry-cell[data-q="${cssEscape(String(qIndex))}"][data-row="${cssEscape(String(rowIndex))}"]:not([data-entry-kind="shootout"])`);
 }
 
 function entryCellPosition(cell: HTMLElement | null | undefined): {q: number; row: number} | null {
@@ -858,6 +1047,10 @@ function applyEntryEdits(edits: Array<{cell: Element; value: unknown}>): void {
     const pos = entryCellPosition(cell as HTMLElement);
     if (!pos) continue;
     const next = Number(value) || 0;
+    // A contested answer sits in a free row of its column; clearing its cell takes
+    // it back, like clearing any other entry.
+    const contested = next === 0 && contestedEnter ? contestedAtEntryCell(pos.q, pos.row) : undefined;
+    if (contested) void writeContested("DELETE", "", {question: pos.q, number: entryDocNumber(contested.number)});
     if ((entrySheet.entries[pos.q]?.[pos.row] || 0) === next) continue;
     entrySheet.entries[pos.q][pos.row] = next;
     changed.push([pos.q, pos.row, next]);
@@ -889,7 +1082,7 @@ function invertEntryColumn(qIndex: number): void {
   closeEntryEditor();
   closeEntrySuggest();
   entrySheet.entries[qIndex] = next;
-  pushUndoEntry({kind: "entry-column", qIndex, previous});
+  pushUndoEntry({kind: "entry-column", venue: sheetVenue, qIndex, previous});
   invalidateScoreCaches();
   invalidateTabCache("input");
   saveState(["entries", qIndex], next);
@@ -907,7 +1100,13 @@ function performUndo(): boolean {
   const entry = undoStack.pop();
   if (!entry) return false;
   if (entry.kind === "entry-column") {
-    const {qIndex, previous} = entry;
+    const {venue, qIndex, previous} = entry;
+    // A column of a venue the tab no longer draws stays as it is.
+    if (venue !== sheetVenue) {
+      if (!stackedSheets().some((sheetOf) => sheetOf.id === venue)) return false;
+      sheet.clear();
+      useSheet(venue);
+    }
     if (!Number.isInteger(qIndex) || qIndex < 0 || qIndex >= totalQuestions) return false;
     if (entrySheet.completed[qIndex]) return false;
     const restored = previous.slice(0, entrySheet.teams.length);
@@ -975,7 +1174,7 @@ function applyEntryQuestionHeadContent(cell: HTMLElement, displayNumber: number,
 // pane is cached and not rebuilt when a column is ticked or its entries change).
 function refreshEntryQuestionHead(qIndex: number): void {
   if (!Number.isInteger(qIndex)) return;
-  const cell = odRoot.querySelector<HTMLElement>(`.entry-q-head[data-q="${cssEscape(String(qIndex))}"]`);
+  const cell = entryRoot().querySelector<HTMLElement>(`.entry-q-head[data-q="${cssEscape(String(qIndex))}"]`);
   if (!cell) return;
   applyEntryQuestionHeadContent(cell, qIndex + 1, entryStats()[qIndex]);
 }
@@ -1416,6 +1615,7 @@ function preventViewerCheckboxKeydown(event: KeyboardEvent): void {
 function entryCell(qIndex: number, rowIndex: number, tourEnd: boolean, validationCounts: Map<number, number>): HTMLTableCellElement {
   const td = document.createElement("td");
   td.className = "entry-cell" + (tourEnd ? " entry-tour-end" : "");
+  td.dataset.venue = String(sheetVenue);
   td.dataset.q = String(qIndex);
   td.dataset.row = String(rowIndex);
   if (!viewer) td.tabIndex = 0;
@@ -1430,6 +1630,15 @@ function entryCellShowsCoffin(qIndex: number, rowIndex: number): boolean {
 }
 
 function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number): void {
+  const contested = contestedAtEntryCell(qIndex, rowIndex);
+  td.classList.toggle("od-contested", contested?.status === "pending");
+  td.classList.toggle("od-contested-accepted", contested?.status === "accepted");
+  td.classList.toggle("od-contested-rejected", contested?.status === "rejected");
+  td.title = contested ? contestedText(qIndex, entryDocNumber(contested.number)) : "";
+  if (contested) {
+    td.textContent = String(contested.number);
+    return;
+  }
   if (entryCellShowsCoffin(qIndex, rowIndex)) {
     td.textContent = "⚰️";
     return;
@@ -1438,14 +1647,40 @@ function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number
   td.textContent = value ? String(value) : "";
 }
 
-function refreshEntryColumnCoffin(qIndex: number): void {
-  if (!Number.isInteger(qIndex)) return;
-  if (activeEntryEditor) {
-    const editorCell = activeEntryEditor.cell;
-    if (Number(editorCell?.dataset.q) === qIndex && Number(editorCell?.dataset.row) === 0) return;
+// A contested answer is not an entry and has no row of its own: a column's contested answers
+// take its free rows, in team number order.
+function contestedRows(): Array<Map<number, ODContested>> {
+  if (contestedRowsCache) return contestedRowsCache;
+  const byQuestion = Array.from({length: totalQuestions}, () => new Map<number, ODContested>());
+  const sorted = (entrySheet.contested || []).slice().sort((a, b) => a.number - b.number);
+  for (const item of sorted) {
+    const rows = byQuestion[item.question];
+    const values = entrySheet.entries[item.question] || [];
+    if (!rows || values.includes(item.number)) continue;
+    let row = 0;
+    while (row < entrySheet.teams.length && (values[row] || rows.has(row))) row++;
+    if (row < entrySheet.teams.length) rows.set(row, item);
   }
-  const cell = entryCellNode(qIndex, 0);
-  if (cell) applyEntryCellDisplay(cell, qIndex, 0);
+  contestedRowsCache = byQuestion;
+  return byQuestion;
+}
+
+function contestedAtEntryCell(qIndex: number, rowIndex: number): ODContested | undefined {
+  return contestedRows()[qIndex]?.get(rowIndex);
+}
+
+// refreshEntryColumn repaints a column in place (the input pane is cached,
+// not rebuilt): the coffin on its first row, and every row when contested answers share
+// the column, since an entry typed into a free row moves them down.
+function refreshEntryColumn(qIndex: number): void {
+  if (!Number.isInteger(qIndex)) return;
+  const lastRow = contestedRows()[qIndex]?.size ? entrySheet.teams.length - 1 : 0;
+  for (let row = 0; row <= lastRow; row++) {
+    const editorCell = activeEntryEditor?.cell;
+    if (editorCell && Number(editorCell.dataset.q) === qIndex && Number(editorCell.dataset.row) === row) continue;
+    const cell = entryCellNode(qIndex, row);
+    if (cell) applyEntryCellDisplay(cell, qIndex, row);
+  }
 }
 
 function buildInputValidationCounts(): Array<Map<number, number>> {
@@ -1540,7 +1775,7 @@ function syncShootoutCheckValidity(cell: Element): void {
 
 function updateInputValidity(qIndex: number | null = null): void {
   const selector = qIndex === null ? ".entry-cell" : `.entry-cell[data-q="${qIndex}"]`;
-  const cells = odRoot.querySelectorAll<HTMLElement>(selector);
+  const cells = entryRoot().querySelectorAll<HTMLElement>(selector);
   const counts = qIndex === null ? buildInputValidationCounts() : inputValidationCounts(qIndex);
   for (const cell of cells) {
     if (isShootoutEntryCell(cell)) {
@@ -1623,7 +1858,7 @@ function handleEntryInput(event: Event): void {
   closeEntrySuggest();
   invalidateScoreCaches();
   updateInputValidity(qIndex);
-  refreshEntryColumnCoffin(qIndex);
+  refreshEntryColumn(qIndex);
   if (entrySheet.completed[qIndex]) refreshEntryQuestionHead(qIndex);
   saveState(["entries", qIndex, rowIndex], parsed.value);
 }
@@ -1644,6 +1879,13 @@ function handleEntryKeydown(event: KeyboardEvent): void {
     event.preventDefault();
     closeEntryEditor();
     cell?.focus({preventScroll: true});
+    return;
+  }
+  const pos = entryCellPosition(cell);
+  if (event.key === "?" && contestedEnter && pos) {
+    event.preventDefault();
+    closeEntryEditor();
+    openContested(pos.q, pos.row);
     return;
   }
   if (input.dataset.entryKind === "shootout") {
@@ -1719,7 +1961,7 @@ function handleEntryLockKeydown(event: KeyboardEvent, checkbox: HTMLInputElement
 
 // focusLockCheckbox moves keyboard focus to a (non-shootout) column's tickbox.
 function focusLockCheckbox(qIndex: number): boolean {
-  const cb = odRoot.querySelector<HTMLInputElement>(
+  const cb = entryRoot().querySelector<HTMLInputElement>(
     `.entry-lock-checkbox[data-q="${cssEscape(String(qIndex))}"]:not([data-entry-kind="shootout"])`);
   if (!cb) return false;
   // Moving onto the tickbox is a move, not a copy: drop the cell cursor so it
@@ -1801,6 +2043,7 @@ function openEntryEditor(cell: HTMLElement): void {
     input.dataset.round = cell.dataset.round;
     input.dataset.question = cell.dataset.question;
   } else {
+    input.dataset.venue = cell.dataset.venue;
     input.dataset.q = String(qIndex);
   }
   input.dataset.row = String(rowIndex);
@@ -2020,7 +2263,7 @@ function handleEntryChange(event: Event): void {
   entrySheet.completed[qIndex] = cb.checked;
   invalidateScoreCaches();
   updateHeaderProgress();
-  refreshEntryColumnCoffin(qIndex);
+  refreshEntryColumn(qIndex);
   refreshEntryQuestionHead(qIndex);
   saveState(["completed", qIndex], cb.checked);
 }
@@ -2033,7 +2276,7 @@ function focusInput(qIndex: number, rowIndex: number): void {
   if (qIndex < 0 || qIndex >= totalQuestions) return;
   if (rowIndex < 0 || rowIndex >= entrySheet.teams.length) return;
   const sel = `.entry-cell[data-q="${qIndex}"][data-row="${rowIndex}"]`;
-  const cell = odRoot.querySelector<HTMLElement>(sel);
+  const cell = entryRoot().querySelector<HTMLElement>(sel);
   if (cell) openEntryEditor(cell);
 }
 
@@ -2073,6 +2316,95 @@ function markActiveEntryRow(cell: Element | null): void {
   if (!row) return;
   row.classList.add("active-entry-row");
   activeEntryRows = [row];
+}
+
+// === contested answers ===
+//
+// The texts come from the server's own endpoint, never from the document, so
+// a viewer never has them. Numbers: the dialog and the input sheet speak the
+// sheet's (a venue's own in a synch fest), the server and the document the
+// Game's.
+
+function entryDocNumber(number: number): number {
+  const team = entrySheet.teams[entryIndexByNumber(number)];
+  return team?.festNumber ?? team?.number ?? 0;
+}
+
+function docNumberOf(teamIndex: number): number {
+  const team = state.teams[teamIndex];
+  return team?.festNumber ?? team?.number ?? 0;
+}
+
+function contestedText(qIndex: number, docNumber: number): string {
+  return contestedTexts.find((item) => item.question === qIndex && item.number === docNumber)?.answer || "";
+}
+
+// docTeamLabel names a team as its hosts know it: in a synch fest by its
+// number at its venue, with the venue.
+function docTeamLabel(number: number): string {
+  const team = docState.teams.find((item) => item.number === number);
+  if (!team) return String(number);
+  const venue = gameSheets.find((sheet) => sheet.id === team.venue);
+  return venue && team.venueNumber ? `${team.venueNumber}. ${team.name} (${venue.title})` : `${number}. ${team.name}`;
+}
+
+// openContested opens the dialog on a question, for the team whose contested answer
+// (or entry) is in the row, or for a team still to be typed.
+function openContested(qIndex: number | null, rowIndex: number): void {
+  const shown = qIndex === null ? undefined : contestedAtEntryCell(qIndex, rowIndex);
+  const number = shown?.number || (qIndex === null ? 0 : entrySheet.entries[qIndex]?.[rowIndex] || 0);
+  const docNumber = shown ? entryDocNumber(shown.number) : 0;
+  const existing = shown && contestedTexts.find((item) => item.question === qIndex && item.number === docNumber);
+  openContestedDialog({
+    question: qIndex,
+    questions: totalQuestions,
+    venue: gameSheets.find((venue) => venue.id === sheetVenue)?.title,
+    number,
+    existing,
+    known: contestedTexts,
+    teamName: (typed) => {
+      const index = entryIndexByNumber(typed);
+      return index >= 0 ? entrySheet.teams[index].name : null;
+    },
+    save: (question, typed, answer) => void saveContested(question, typed, answer, existing),
+    remove: () => void writeContested("DELETE", "", {question: qIndex, number: docNumber}),
+  });
+}
+
+// saveContested records the answer for every team typed; a contested answer moved
+// off its team or its question leaves them first, since the server keys them
+// by both.
+async function saveContested(qIndex: number, typed: number[], answer: string, existing: ContestedText | undefined): Promise<void> {
+  const numbers = typed.map(entryDocNumber);
+  const moved = existing && (existing.question !== qIndex || !numbers.includes(existing.number));
+  if (existing && moved && !await writeContested("DELETE", "", {question: existing.question, number: existing.number})) return;
+  await writeContested("POST", "", {question: qIndex, numbers, answer});
+}
+
+function ruleContested(group: {question: number; answer: string}, status: string): void {
+  void writeContested("PUT", "/ruling", {question: group.question, answer: group.answer, status});
+}
+
+async function writeContested(method: string, path: string, body: object): Promise<boolean> {
+  if (!route.apiBase) return false;
+  const list = await sendContested(route.apiBase, method, path, body);
+  if (list) adoptContestedTexts(list);
+  return list !== null;
+}
+
+// contestedMark is a contested answer on the standings' cells: a pending one is
+// yellow with a question mark, an accepted one a taken question like any
+// other, a rejected one a miss.
+function contestedMark(teamIndex: number, qIndex: number, answered: boolean): {pending: boolean; title: string} {
+  const contested = od.contestedAt(state, teamIndex, qIndex);
+  return {pending: !answered && contested?.status === "pending", title: contested ? contestedText(qIndex, docNumberOf(teamIndex)) : ""};
+}
+
+// pendingScore is a total with the contested answers still waiting for the jury beside
+// it, "10+2", over questions [from, to).
+function pendingScore(value: number, teamIndex: number, from = 0, to = Infinity): {content: string; attrs: CellAttrs} {
+  const pending = od.pendingCount(state, teamIndex, from, to);
+  return {content: od.withPending(value, pending), attrs: pending ? {title: S.od.contested.pendingTotal(pending)} : {}};
 }
 
 // === Detailed ===
@@ -2133,12 +2465,15 @@ function buildDetailedScoreTable(): HTMLTableElement {
         for (let i = 0; i < tourSize; i++) {
           const answered = teamTookQuestion(teamIndex, qIndex, stats);
           if (answered) tourSum += 1;
+          const contested = contestedMark(teamIndex, qIndex, answered);
           const classes = ["answer-cell", "theme-block", "readonly"];
           if (answered) classes.push("right");
+          if (contested.pending) classes.push("od-contested");
           if (i === 0) classes.push("theme-block-top-left", "theme-block-bottom-left");
           answers.push({
-            content: answered ? String(qIndex + 1) : "",
+            content: answered ? String(qIndex + 1) : contested.pending ? "?" : "",
             className: classes.join(" "),
+            attrs: contested.title ? {title: contested.title} : null,
           });
           qIndex++;
         }
@@ -2867,9 +3202,11 @@ function buildResultsTableInner(): HTMLTableElement {
       tr.className = classes.join(" ");
       tr.appendChild(RESULTS_PINS.mark(td(group.placeText, "results-place"), "place"));
       tr.appendChild(RESULTS_PINS.mark(resultsTeamCell(teamLabel(index), {city: teamPlace(index), badges: lens.badges(index)}), "name"));
-      tr.appendChild(RESULTS_PINS.mark(td(total, "results-num total-cell results-total"), "total"));
+      const score = pendingScore(total, index);
+      tr.appendChild(RESULTS_PINS.mark(td(score.content, "results-num total-cell results-total", score.attrs), "total"));
       for (let t = 0; t < tourLengths.length; t++) {
-        if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));
+        const tourScore = pendingScore(tourTotals[index][t], index, tourStarts[t], tourStarts[t] + tourLengths[t]);
+        if (tourStarted[t]) tr.appendChild(td(tourScore.content, "results-tour", tourScore.attrs));
         else tr.appendChild(td("·", "results-tour results-tour-pending"));
         if (resultsExpandedTours.has(t)) {
           for (let q = 0; q < tourLengths[t]; q++) {
@@ -2921,13 +3258,16 @@ function resultsShootoutHeader(roundIndex: number): HTMLElement {
 
 function resultsAnswerCell(teamIndex: number, qIndex: number, stats: QuestionStat[], tourQuestionIndex: number, tourSize: number): HTMLElement {
   const answered = teamTookQuestion(teamIndex, qIndex, stats);
+  const contested = contestedMark(teamIndex, qIndex, answered);
   const classes = ["results-answer"];
   if (tourQuestionIndex === 0) classes.push("results-answer-left");
   if (tourQuestionIndex === tourSize - 1) classes.push("results-answer-right");
+  if (contested.pending) classes.push("od-contested");
   const cell = td("", classes.join(" "));
+  if (contested.title) cell.title = contested.title;
   const mark = document.createElement("span");
   mark.className = "results-answer-mark";
-  mark.textContent = answered ? String(qIndex + 1) : "";
+  mark.textContent = answered ? String(qIndex + 1) : contested.pending ? "?" : "";
   cell.appendChild(mark);
   if (answered) cell.classList.add("right");
   return cell;
@@ -3026,13 +3366,13 @@ function saveState(path: PatchPath, value: unknown): void {
 // and applyRemoteState (ack / any remote update, incl. after a full rebuild).
 function refreshPendingMarkers(): void {
   if (viewer) return;
-  odRoot.querySelectorAll<HTMLElement>(".entry-cell").forEach((cell) => {
+  eachSheet(() => entryRoot().querySelectorAll<HTMLElement>(".entry-cell").forEach((cell) => {
     const q = Number(cell.dataset.q);
     const row = Number(cell.dataset.row);
     const pending = Number.isInteger(q) && Number.isInteger(row) &&
       doc.isPending(entryPath(["entries", q, row]));
     cell.classList.toggle("pending", Boolean(pending));
-  });
+  }));
   const shootoutPending = doc.isPending(["shootoutRounds"]);
   odRoot.querySelectorAll(".od-shootout-cell").forEach((cell) => {
     cell.classList.toggle("pending", shootoutPending);
@@ -3051,15 +3391,19 @@ function setHeading(text: string): void {
 // host's numbers, ticks and column heads, all but the cell being typed into.
 function repaintEntrySheet(): void {
   const editing = activeEntryEditor?.cell;
-  odRoot.querySelectorAll<HTMLElement>(".entry-cell").forEach((cell) => {
-    const pos = entryCellPosition(cell);
-    if (pos && cell !== editing) applyEntryCellDisplay(cell, pos.q, pos.row);
+  eachSheet(() => {
+    const root = entryRoot();
+    root.querySelectorAll<HTMLElement>(".entry-cell").forEach((cell) => {
+      const pos = entryCellPosition(cell);
+      if (pos && cell !== editing) applyEntryCellDisplay(cell, pos.q, pos.row);
+    });
+    root.querySelectorAll<HTMLInputElement>(".entry-lock-checkbox").forEach((box) => {
+      if (box.dataset.entryKind !== "shootout") box.checked = Boolean(entrySheet.completed[Number(box.dataset.q)]);
+    });
+    for (let q = 0; q < totalQuestions; q++) refreshEntryQuestionHead(q);
+    updateInputValidity();
   });
-  odRoot.querySelectorAll<HTMLInputElement>(".entry-lock-checkbox").forEach((box) => {
-    if (box.dataset.entryKind !== "shootout") box.checked = Boolean(entrySheet.completed[Number(box.dataset.q)]);
-  });
-  for (let q = 0; q < totalQuestions; q++) refreshEntryQuestionHead(q);
-  updateInputValidity();
+  syncContestedButton();
 }
 
 function applyRemoteState(nextState: unknown): void {
@@ -3088,7 +3432,7 @@ function applyRemoteState(nextState: unknown): void {
     entryIndexCache = null;
     // The players tab draws from the state too, and its buttons read the
     // document through a getter, so it is drawn again when next shown.
-    invalidateTabCache("detailed", "results", "screen", "personal", "players");
+    invalidateTabCache("detailed", "results", "screen", "personal", "players", "contested");
     repaintEntrySheet();
     refreshPendingMarkers();
     return;
@@ -3100,6 +3444,28 @@ function applyRemoteState(nextState: unknown): void {
   render();
   refreshPendingMarkers();
   if (focusedCell) focusEntrySelection();
+}
+
+// The bar counts what this device has not sent: the outbox's team changes and
+// the answers the page keeps unsent.
+if (!viewer && gameSheets.some((sheet) => sheet.editable)) {
+  mountOfflineBar(() => {
+    let answers = 0;
+    try {
+      answers = (JSON.parse(localStorage.getItem(`dope.pending.v2:game-state:${shell.scopeGameID}`) || "[]") as unknown[]).length;
+    } catch (_) {
+      answers = 0;
+    }
+    return readOutbox(offlineFest).ops.length + answers;
+  }, {
+    offline: (n) => n ? S.host.offline.waiting(String(n)) : S.host.offline.noNetwork(),
+    sending: (n) => S.host.offline.sending(String(n)),
+    failing: () => {
+      const failing = readOutbox(offlineFest).failing;
+      if (!failing) return "";
+      return failing.team ? S.host.offline.failingTeam(failing.team) : S.host.offline.failing();
+    },
+  });
 }
 
 doc.load().catch((error: unknown) => {

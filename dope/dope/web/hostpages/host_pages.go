@@ -150,7 +150,7 @@ func profileDoc(data profileData) *ui.Doc {
 		),
 		tokensSection(data),
 		ratingTokenSection(data.RatingToken),
-		ui.Form(ui.Method("post"), ui.Action("/profile/logout"),
+		ui.Form(ui.Method("post"), ui.Action("/profile/logout"), ui.Data("confirm-unsent", s.Host.Offline.LogoutConfirm()),
 			ui.Button(ui.Submit(), ui.Text(s.Host.Pages.LogoutSubmit())),
 		),
 	)
@@ -426,6 +426,7 @@ func (s *Server) HandleProfileLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	s.h.LogoutSession(r)
 	session.ClearCookie(w)
+	session.ClearSiteData(w)
 	http.Redirect(w, r, "/host", http.StatusSeeOther)
 }
 

@@ -85,6 +85,8 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		`delete from game_participants where game_id = ?`,
 		`delete from game_team_players where game_id = ?`,
 		`delete from game_player_team_overrides where game_id = ?`,
+		`delete from od_contested where game_id = ?`,
+		`delete from od_contested_rulings where game_id = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, gameID); err != nil {
 			return "", err

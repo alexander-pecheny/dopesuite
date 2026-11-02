@@ -6,19 +6,13 @@ package towns
 
 import (
 	"context"
-	"encoding/json"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
-	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
-
 	"dope/dope/storage/buffdb"
+	"dope/dope/storage/ratingsite"
 	"dope/dope/storage/store"
 )
-
-const townURL = "https://api.rating.chgk.info/towns/"
 
 // fetchLimit is how many towns one import will ask the rating site about. buff
 // knows all but the newest, so a roster that goes over this is a sign that buff
@@ -26,22 +20,18 @@ const townURL = "https://api.rating.chgk.info/towns/"
 // fix that.
 const fetchLimit = 25
 
-const (
-	fetchTimeout = 10 * time.Second
-	// drainLimit is how much of a failed response is read before closing it.
-	drainLimit = 512
-)
+const fetchTimeout = 10 * time.Second
 
 // Resolver reads buff and, for what buff lacks, the rating site. With buff
 // disabled it resolves nothing at all: every town would count as new, and a
 // roster import would turn into a few hundred API calls.
 type Resolver struct {
-	buff   *buffdb.Store
-	client *http.Client
+	buff *buffdb.Store
+	site ratingsite.Client
 }
 
-func NewResolver(buff *buffdb.Store) *Resolver {
-	return &Resolver{buff: buff, client: &http.Client{Timeout: fetchTimeout}}
+func NewResolver(buff *buffdb.Store, site ratingsite.Client) *Resolver {
+	return &Resolver{buff: buff, site: site}
 }
 
 // Countries maps each town id to its country's ISO code. A town the rating site
@@ -125,31 +115,11 @@ where fest_id = ? and deleted = 0 and trim(city) <> ''`, festID)
 	return out, unresolved, true
 }
 
-type ratingTown struct {
-	ID      int64 `json:"id"`
-	Country *struct {
-		ID   int64  `json:"id"`
-		Name string `json:"name"`
-	} `json:"country"`
-}
-
 func (r *Resolver) fetch(ctx context.Context, townID int64) (string, bool) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, townURL+idstr.Format(townID), nil)
+	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	defer cancel()
+	town, err := r.site.Town(ctx, townID)
 	if err != nil {
-		return "", false
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return "", false
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, drainLimit))
-		return "", false
-	}
-	var town ratingTown
-	if err := json.NewDecoder(resp.Body).Decode(&town); err != nil {
 		return "", false
 	}
 	if town.Country == nil {

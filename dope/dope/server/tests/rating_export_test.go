@@ -29,12 +29,37 @@ import (
 // fakeRatingSite is the rating site's «ввод» API with one synch tournament,
 // 555, of two площадки: Минск (заявка 100, representative 7) and Брест
 // (заявка 200, representative 8). Before any roster arrives the tournament
-// has Гамма, in Минск's заявка by mistake.
+// has Гамма, with its captain 30, in Минск's заявка by mistake, and Эпсилон
+// with nobody. What dope writes, the site then holds.
 type fakeRatingSite struct {
 	t      *testing.T
 	mu     sync.Mutex
 	posted []string
 	bodies []map[string]any
+	// rosters, requests and masks are the tournament's teams, by id.
+	rosters  map[int64][]int64
+	requests map[int64]int64
+	masks    map[int64]string
+	flags    map[int64][]int64
+}
+
+// flagNames is the short name of each зачёт the fake knows.
+var flagNames = map[int64]string{59: "ЧР"}
+
+// requestOf is each representative's заявка.
+var requestOf = map[int64]int64{7: 100, 8: 200}
+
+type fakeBody struct {
+	Representative int64 `json:"representative"`
+	Request        int64 `json:"request"`
+	Teams          []struct {
+		Team    int64   `json:"team"`
+		Mask    string  `json:"mask"`
+		Flags   []int64 `json:"flags"`
+		Players []struct {
+			Player int64 `json:"player"`
+		} `json:"players"`
+	} `json:"teams"`
 }
 
 func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -44,20 +69,16 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.rosters == nil {
+		f.rosters = map[int64][]int64{3: {30}, 5: {}}
+		f.requests = map[int64]int64{3: 100, 5: 100}
+		f.masks = map[int64]string{}
+	}
+	if f.flags == nil {
+		f.flags = map[int64][]int64{}
+	}
 	if r.Method == http.MethodPost {
-		raw, _ := io.ReadAll(r.Body)
-		var body map[string]any
-		if err := json.Unmarshal(raw, &body); err != nil {
-			f.t.Errorf("%s: %v", r.URL.Path, err)
-		}
-		f.posted = append(f.posted, r.URL.Path)
-		f.bodies = append(f.bodies, body)
-		if r.URL.Path == "/tournaments/555/results_entry/players" {
-			w.WriteHeader(http.StatusCreated)
-			fmt.Fprint(w, `{"id": 99, "surname": "Безымянный", "name": "Новичок"}`)
-			return
-		}
-		fmt.Fprint(w, `{"warnings": [], "moved": [3], "request": 200}`)
+		f.post(w, r)
 		return
 	}
 	switch r.URL.Path {
@@ -67,18 +88,36 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `[{"id": 100, "status": "A", "venue": {"id": 10}, "representative": {"id": 7, "name": "Иван", "surname": "Минский"}},
 			{"id": 300, "status": "D", "venue": {"id": 20}, "representative": {"id": 9}},
 			{"id": 200, "status": "A", "venue": {"id": 20}, "representative": {"id": 8, "name": "Пётр", "surname": "Брестский"}}]`)
+	case "/tournaments/555/results":
+		var out []map[string]any
+		for team, players := range f.rosters {
+			members := []map[string]any{}
+			for _, p := range players {
+				members = append(members, map[string]any{"player": map[string]any{"id": p, "name": "Игрок", "surname": fmt.Sprint("Номер", p)}, "flag": "Б"})
+			}
+			flags := []map[string]any{}
+			for _, id := range f.flags[team] {
+				flags = append(flags, map[string]any{"id": id, "shortName": flagNames[id]})
+			}
+			out = append(out, map[string]any{"team": map[string]any{"id": team}, "teamMembers": members, "flags": flags})
+		}
+		json.NewEncoder(w).Encode(out)
+	case "/tournaments/555/results_entry":
+		var teams []map[string]any
+		for team, request := range f.requests {
+			entry := map[string]any{"team": team, "name": fmt.Sprint("team ", team), "request": request}
+			if mask, ok := f.masks[team]; ok {
+				entry["mask"] = mask
+			}
+			teams = append(teams, entry)
+		}
+		json.NewEncoder(w).Encode(map[string]any{"teams": teams})
 	case "/players":
 		if r.URL.Query().Get("surname") == "Капитан" {
 			fmt.Fprint(w, `[{"id": 77, "surname": "Капитан", "name": "Альфа", "patronymic": "Иванович"}]`)
 			return
 		}
 		fmt.Fprint(w, `[{"id": 5, "surname": "Безымянная", "name": "Новичок"}]`)
-	case "/tournaments/555/results_entry":
-		if len(f.posted) <= 1 {
-			fmt.Fprint(w, `{"teams": [{"team": 3, "name": "Гамма", "request": 100}]}`)
-		} else {
-			fmt.Fprint(w, `{"teams": [{"team": 1, "request": 100}, {"team": 2, "request": 100}, {"team": 3, "request": 200}]}`)
-		}
 	case "/seasons":
 		fmt.Fprint(w, `[{"id": 60, "dateStart": "2000-01-01T00:00:00+03:00", "dateEnd": "2100-01-01T00:00:00+03:00"}]`)
 	case "/teams/1/seasons":
@@ -88,10 +127,60 @@ func (f *fakeRatingSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// post takes a write, as the site would.
+func (f *fakeRatingSite) post(w http.ResponseWriter, r *http.Request) {
+	raw, _ := io.ReadAll(r.Body)
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		f.t.Errorf("%s: %v", r.URL.Path, err)
+	}
+	f.posted = append(f.posted, r.URL.Path)
+	f.bodies = append(f.bodies, body)
+	var in fakeBody
+	json.Unmarshal(raw, &in)
+	switch r.URL.Path {
+	case "/tournaments/555/results_entry/players":
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"id": 99, "surname": "Безымянный", "name": "Новичок"}`)
+		return
+	case "/tournaments/555/results_entry/rosters":
+		for _, t := range in.Teams {
+			ids := []int64{}
+			for _, p := range t.Players {
+				ids = append(ids, p.Player)
+			}
+			f.rosters[t.Team] = ids
+			if _, ok := f.requests[t.Team]; !ok {
+				f.requests[t.Team] = requestOf[in.Representative]
+			}
+		}
+	case "/tournaments/555/results_entry/move":
+		var moved []int64
+		for _, t := range body["teams"].([]any) {
+			team := int64(t.(float64))
+			f.requests[team] = in.Request
+			moved = append(moved, team)
+		}
+		json.NewEncoder(w).Encode(map[string]any{"moved": moved, "warnings": []string{}})
+		return
+	case "/tournaments/555/results_entry":
+		for _, t := range in.Teams {
+			f.masks[t.Team] = t.Mask
+		}
+	case "/tournaments/555/results_entry/flags":
+		for _, t := range in.Teams {
+			f.flags[t.Team] = t.Flags
+		}
+	}
+	fmt.Fprint(w, `{"warnings": []}`)
+}
+
 // An organizer's export sends each площадка's rosters as its representative,
 // moves the team the site had in the wrong заявка first, and sends every
 // team's answers at once; a player the site does not know is created there
-// first, and goes in with the id the site gave.
+// first, and goes in with the id the site gave. A team with nobody the site
+// knows goes with its answers, and with an empty roster only when the site
+// lacks it, so a roster entered there stays.
 func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	t.Parallel()
 	site := &fakeRatingSite{t: t}
@@ -105,14 +194,16 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 		t.Fatal(err)
 	}
 	festID, _ := res.LastInsertId()
-	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	minsk, brest := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}, multifest.RatingVenue{ID: 20, Request: 200, Title: "Брест"}
 	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
 		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
 			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
 	}
 	gamma := team(3, "Гамма", brest)
 	gamma.Players = append(gamma.Players, roster.FestRosterImportPlayer{FirstName: "Новичок", LastName: "Безымянный"})
-	teams := []roster.FestRosterImportTeam{team(1, "Альфа", minsk), team(2, "Бета", minsk), gamma}
+	delta, epsilon := team(4, "Дельта", minsk), team(5, "Эпсилон", minsk)
+	delta.Players, epsilon.Players = nil, nil
+	teams := []roster.FestRosterImportTeam{team(1, "Альфа", minsk), team(2, "Бета", minsk), gamma, delta, epsilon}
 	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 555, teams, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import: %v", err)
 	}
@@ -157,6 +248,9 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	if len(plan.Venues) != 2 || venues["Минск"].Representative != 7 || venues["Брест"].Representative != 8 || venues["Брест"].Request != 200 {
 		t.Fatalf("the площадки are %+v", plan.Venues)
 	}
+	if minskTeams := venues["Минск"].Teams; len(minskTeams) != 3 || minskTeams[2].Name != "Дельта" || len(minskTeams[2].Players) != 0 {
+		t.Fatalf("Минск's rosters are %+v", minskTeams)
+	}
 	if got := venues["Минск"].Teams[0].Players[0].Flag + venues["Минск"].Teams[1].Players[0].Flag; got != "БЛ" {
 		t.Fatalf("Альфа's and Бета's flags are %s", got)
 	}
@@ -167,7 +261,7 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	for _, r := range plan.Results {
 		masks[r.Team] = r.Mask
 	}
-	if masks[1] != "00" || masks[2] != "10" || masks[3] != "00" {
+	if masks[1] != "00" || masks[2] != "10" || masks[3] != "00" || masks[4] != "00" || masks[5] != "00" {
 		t.Fatalf("the masks are %v", masks)
 	}
 	if len(plan.Unknown) != 1 || plan.Unknown[0].Name != "Безымянный Новичок" || len(plan.Unknown[0].Candidates) != 0 ||
@@ -203,8 +297,14 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 
 	sent := decodeInto[answer](t, scopedAPIRequest(t, srv, http.MethodPost, exportURL, nil, token))
 	want := []string{"/tournaments/555/results_entry/move", "/tournaments/555/results_entry/rosters", "/tournaments/555/results_entry/rosters", "/tournaments/555/results_entry"}
-	if strings.Join(site.posted, " ") != strings.Join(want, " ") || sent.Report == nil || sent.Report.Results != 3 {
+	if strings.Join(site.posted, " ") != strings.Join(want, " ") || sent.Report == nil || sent.Report.Results != 5 {
 		t.Fatalf("sent %v, report %+v", site.posted, sent.Report)
+	}
+	var gammaBase, betaAnswers string
+	db.QueryRow(`select value from rating_sync_base where fest_id = ? and rating_team = 3 and fact = 'roster'`, festID).Scan(&gammaBase)
+	db.QueryRow(`select value from rating_sync_base where fest_id = ? and rating_team = 2 and fact = 'answers'`, festID).Scan(&betaAnswers)
+	if gammaBase != "[30,99]" || betaAnswers != "10" {
+		t.Fatalf("the base after the send: Гамма's roster %s, Бета's answers %s", gammaBase, betaAnswers)
 	}
 	reps := []any{site.bodies[1]["representative"], site.bodies[2]["representative"]}
 	if !slices.Contains(reps, any(float64(7))) || !slices.Contains(reps, any(float64(8))) {
@@ -215,8 +315,8 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
 	page := httptest.NewRecorder()
 	srv.HostPageServer().HandleHostRouter(page, req)
-	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Минский") {
-		t.Fatalf("the page: %d", page.Code)
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Выгружать нечего") {
+		t.Fatalf("the page once the site has it all: %d %s", page.Code, page.Body)
 	}
 	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/rating/export", festID), strings.NewReader(fmt.Sprintf("game=%d", gameID)))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -225,5 +325,48 @@ func TestTheExportSendsEachVenuesRostersAsItsRepresentative(t *testing.T) {
 	srv.HostPageServer().HandleHostRouter(page, req)
 	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "rating.chgk.info/tournament/555") {
 		t.Fatalf("the page after a send: %d %s", page.Code, page.Body)
+	}
+}
+
+// A площадка whose заявка the site has not accepted stays out of the export:
+// its teams are skipped with the reason, and the other площадки still go.
+func TestTheExportSkipsAVenueTheSiteRefused(t *testing.T) {
+	t.Parallel()
+	fake := httptest.NewServer(&fakeRatingSite{t: t})
+	t.Cleanup(fake.Close)
+	srv := newAuthTestServer(t)
+	srv.Eng().RatingAPI = fake.URL
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, rating_id, revision, created_at, updated_at, kind) values('Синхрон', 555, 1, '2026-10-25', '2026-10-25', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	minsk, gomel := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}, multifest.RatingVenue{ID: 30, Request: 400, Title: "Гомель"}
+	teams := []roster.FestRosterImportTeam{
+		{RatingID: 1, Name: "Альфа", Venue: minsk, Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "Альфа", LastName: "Капитан"}}},
+		{RatingID: 4, Name: "Дельта", Venue: gomel, Players: []roster.FestRosterImportPlayer{{RatingID: 40, FirstName: "Дельта", LastName: "Капитан"}}},
+	}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 555, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		_, _, err := festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, Label: "ОД", TourComp: []int{2}})
+		return err
+	})
+	adminID, token := createAPITestSession(t, srv, "boss")
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	if resp := scopedAPIRequest(t, srv, http.MethodPut, "/api/auth/rating-token", map[string]string{"token": "rt_secret"}, token); resp.Code != http.StatusOK {
+		t.Fatalf("save the token: %d %s", resp.Code, resp.Body)
+	}
+	resp := scopedAPIRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/fest/%d/rating-export", festID), nil, token)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("the preview: %d %s", resp.Code, resp.Body)
+	}
+	plan := decodeInto[struct {
+		Plan ratingexport.Plan `json:"plan"`
+	}](t, resp).Plan
+	if len(plan.Venues) != 1 || plan.Venues[0].Title != "Минск" || len(plan.Skipped) != 1 || plan.Skipped[0].Team != "Дельта" {
+		t.Fatalf("the площадки are %+v, the skipped %+v", plan.Venues, plan.Skipped)
 	}
 }

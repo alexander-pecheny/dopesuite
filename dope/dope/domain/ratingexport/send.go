@@ -2,9 +2,10 @@ package ratingexport
 
 import (
 	"context"
-	"fmt"
-	"net/http"
+	"strconv"
 
+	"dope/dope/domain/ratingsync"
+	"dope/dope/storage/ratingsite"
 	dopestrings "dope/i18nstrings"
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
@@ -13,22 +14,31 @@ import (
 // Report is what the site did with a sent Plan: how many teams it moved, how
 // many rosters and results it took, and its remarks.
 type Report struct {
-	Moved    int      `json:"moved"`
-	Rosters  int      `json:"rosters"`
-	Results  int      `json:"results"`
+	Moved   int `json:"moved"`
+	Rosters int `json:"rosters"`
+	Flags   int `json:"flags"`
+	Results int `json:"results"`
+	// Taken is how many rosters and зачёты dope took from the site.
+	Taken    int      `json:"taken"`
 	Warnings []string `json:"warnings"`
+	// Sent is each fact the site took, for the base, even when a later call
+	// failed.
+	Sent []ratingsync.Base `json:"-"`
 }
 
 // Send sends the Plan: the moves it found, each venue's rosters under its
 // representative, the moves those rosters turned out to need (a
 // representative of several venues gets new teams in their first request),
-// and then every team's answers at once. It stops at the site's first
+// the зачёты, and then the answers at once. It stops at the site's first
 // refusal; what went before stays on the site, and sending again repeats it
 // harmlessly.
 func Send(ctx context.Context, p Plan, site Site) (Report, error) {
 	r := Report{Warnings: []string{}}
 	if p.Blocked != "" {
 		return r, corei18n.User(p.Blocked)
+	}
+	if p.Undecided > 0 {
+		return r, corei18n.User(dopestrings.Default.Host.RatingExport.Undecided(strconv.Itoa(p.Undecided)))
 	}
 	if err := r.move(ctx, site, p.Tournament, p.Moves); err != nil {
 		return r, err
@@ -45,15 +55,45 @@ func Send(ctx context.Context, p Plan, site Site) (Report, error) {
 	if err := r.move(ctx, site, p.Tournament, moves); err != nil {
 		return r, err
 	}
-	var saved struct {
-		Warnings []string `json:"warnings"`
+	if err := r.flags(ctx, site, p.Tournament, p.Flags); err != nil {
+		return r, err
 	}
-	if err := site.do(ctx, http.MethodPost, fmt.Sprintf("/tournaments/%d/results_entry", p.Tournament), map[string]any{"teams": p.Results}, &saved); err != nil {
+	if len(p.Results) == 0 {
+		return r, nil
+	}
+	answers := make([]ratingsite.TeamAnswers, len(p.Results))
+	for i, res := range p.Results {
+		answers[i] = ratingsite.TeamAnswers{Team: res.Team, Mask: res.Mask}
+	}
+	warnings, err := site.SaveAnswers(ctx, p.Tournament, answers)
+	if err != nil {
 		return r, err
 	}
 	r.Results = len(p.Results)
-	r.Warnings = append(r.Warnings, saved.Warnings...)
+	for _, res := range p.Results {
+		r.Sent = append(r.Sent, ratingsync.AnswersBase(res.Team, res.Mask))
+	}
+	r.Warnings = append(r.Warnings, warnings...)
 	return r, nil
+}
+
+// flags sends every team's зачёты at once.
+func (r *Report) flags(ctx context.Context, site Site, tournament int64, flags []TeamFlags) error {
+	if len(flags) == 0 {
+		return nil
+	}
+	teams := make([]ratingsite.TeamFlags, len(flags))
+	for i, f := range flags {
+		teams[i] = ratingsite.TeamFlags{Team: f.Team, Flags: f.IDs}
+	}
+	if err := site.SaveFlags(ctx, tournament, teams); err != nil {
+		return err
+	}
+	r.Flags = len(flags)
+	for _, f := range flags {
+		r.Sent = append(r.Sent, ratingsync.FlagsBase(f.Team, f.Shorts))
+	}
+	return nil
 }
 
 // move puts each team into its venue's request, a request per request.
@@ -67,54 +107,44 @@ func (r *Report) move(ctx context.Context, site Site, tournament int64, moves []
 		byRequest[m.Request] = append(byRequest[m.Request], m.Team)
 	}
 	for _, request := range order {
-		var moved struct {
-			Moved    []int64  `json:"moved"`
-			Warnings []string `json:"warnings"`
-		}
-		body := map[string]any{"teams": byRequest[request], "request": request}
-		if err := site.do(ctx, http.MethodPost, fmt.Sprintf("/tournaments/%d/results_entry/move", tournament), body, &moved); err != nil {
+		moved, warnings, err := site.Move(ctx, tournament, request, byRequest[request])
+		if err != nil {
 			return err
 		}
-		r.Moved += len(moved.Moved)
-		r.Warnings = append(r.Warnings, moved.Warnings...)
+		r.Moved += moved
+		r.Warnings = append(r.Warnings, warnings...)
 	}
 	return nil
 }
 
 // rosters sends one venue's rosters, as its representative when it has one.
 func (r *Report) rosters(ctx context.Context, site Site, tournament int64, v Venue) error {
-	type row struct {
-		Player int64  `json:"player"`
-		Flag   string `json:"flag"`
+	if len(v.Teams) == 0 {
+		return nil
 	}
-	type team struct {
-		Team    int64 `json:"team"`
-		Players []row `json:"players"`
-	}
-	body := struct {
-		Representative int64  `json:"representative,omitempty"`
-		Teams          []team `json:"teams"`
-	}{Representative: v.Representative}
 	names := map[int64]string{}
+	teams := make([]ratingsite.RosterTeam, 0, len(v.Teams))
 	for _, t := range v.Teams {
 		names[t.Team] = t.Name
-		rows := make([]row, len(t.Players))
+		players := make([]ratingsite.RosterPlayer, len(t.Players))
 		for i, p := range t.Players {
-			rows[i] = row{Player: p.Player, Flag: p.Flag}
+			players[i] = ratingsite.RosterPlayer{Player: p.Player, Flag: p.Flag, Captain: p.Captain}
 		}
-		body.Teams = append(body.Teams, team{Team: t.Team, Players: rows})
+		teams = append(teams, ratingsite.RosterTeam{Team: t.Team, Players: players})
 	}
-	var saved struct {
-		Warnings []struct {
-			Team    int64  `json:"team"`
-			Message string `json:"message"`
-		} `json:"warnings"`
-	}
-	if err := site.do(ctx, http.MethodPost, fmt.Sprintf("/tournaments/%d/results_entry/rosters", tournament), body, &saved); err != nil {
+	remarks, err := site.SaveRosters(ctx, tournament, v.Representative, teams)
+	if err != nil {
 		return err
 	}
 	r.Rosters += len(v.Teams)
-	for _, w := range saved.Warnings {
+	for _, t := range teams {
+		ids := make([]int64, len(t.Players))
+		for i, p := range t.Players {
+			ids[i] = p.Player
+		}
+		r.Sent = append(r.Sent, ratingsync.RosterBase(t.Team, ids))
+	}
+	for _, w := range remarks {
 		r.Warnings = append(r.Warnings, dopestrings.Default.Host.RatingExport.TeamRemark(names[w.Team], w.Message))
 	}
 	return nil

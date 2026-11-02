@@ -687,7 +687,7 @@ function positionAnchoredPanel(): void {
 // tabPicker is what a tab strip becomes when its tabs do not all fit: one
 // button naming the open tab, which drops a list of every tab. A strip shows
 // either all its tabs or this button, never a scrolled part of the tabs.
-function tabPicker(tabs: Array<{key: string; label: string}>, activeKey: string, onSelect: (key: string) => void): HTMLElement {
+export function tabPicker(tabs: Array<{key: string; label: string}>, activeKey: string, onSelect: (key: string) => void): HTMLElement {
   const trigger = document.createElement("button");
   trigger.type = "button";
   trigger.className = "match-tab active tab-picker";

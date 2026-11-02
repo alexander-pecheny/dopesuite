@@ -235,6 +235,9 @@ func Main() {
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.HandleFunc("/favicon.ico", srv.assets.ServeRoot("favicon.ico", "image/x-icon"))
 	mux.HandleFunc("/manifest.webmanifest", srv.assets.ServeRoot("manifest.webmanifest", "application/manifest+json; charset=utf-8"))
+	// The worker sits at the root so its scope is the whole site; browsers check
+	// it for updates past the HTTP cache.
+	mux.HandleFunc("/sw.js", srv.assets.ServeRoot("dist/sw.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("/static/styles.css", srv.assets.ServeStylesheet())
 	mux.HandleFunc("/static/login.js", srv.assets.ServeShared("/static/login.js"))
 	mux.HandleFunc("/static/menu.js", srv.assets.ServeShared("/static/menu.js"))

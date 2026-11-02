@@ -7,7 +7,11 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 )
+
+// coalesceWindow is wide enough for a loaded box to start six requests in it.
+const coalesceWindow = 2 * time.Second
 
 func festRevision(t *testing.T, srv *dopeserver.Server, festID int64) int64 {
 	t.Helper()
@@ -25,9 +29,11 @@ func festRevision(t *testing.T, srv *dopeserver.Server, festID int64) int64 {
 // seq bump) rather than one broadcast per edit, and the final state reflects
 // every edit.
 func TestEditBatchCoalescesConcurrentEdits(t *testing.T) {
-	// Serial: its six requests must land in one 150 ms window, which a loaded
-	// box running the parallel tests cannot promise.
+	t.Parallel()
 	srv := newAuthTestServer(t)
+	// Its six requests must land in one window, which 150 ms does not promise
+	// on a box busy with the other packages' tests.
+	srv.SetEditBatchWindow(coalesceWindow)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "batch-editor")
 	addAPITestOrganizer(t, srv, festID, organizerID)

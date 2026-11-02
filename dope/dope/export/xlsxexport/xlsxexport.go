@@ -56,6 +56,7 @@ func BuildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber
 			return fmt.Errorf("parse OD state: %w", err)
 		}
 	}
+	state.Scored()
 	if len(tours) == 0 {
 		// No tour composition recorded: fall back to a single tour holding every
 		// completed question so the export is never empty.

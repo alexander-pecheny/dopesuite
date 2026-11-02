@@ -13,6 +13,9 @@ CREATE INDEX fest_roster_snapshots_fest_idx on fest_roster_snapshots(fest_id, id
 -- index fest_team_flags_team_idx
 CREATE INDEX fest_team_flags_team_idx on fest_team_flags(team_id, position);
 
+-- index fest_teams_client_idx
+CREATE UNIQUE INDEX fest_teams_client_idx on fest_teams(fest_id, client_id) where client_id is not null;
+
 -- index fest_teams_fest_number_idx
 CREATE UNIQUE INDEX fest_teams_fest_number_idx on fest_teams(fest_id, number) where number is not null;
 
@@ -37,8 +40,11 @@ CREATE INDEX journal_game_seq on journal(game_id, seq);
 -- index journal_request_id
 CREATE INDEX journal_request_id on journal(request_id);
 
--- index multifest_venues_rating_idx
-CREATE UNIQUE INDEX multifest_venues_rating_idx on multifest_venues(fest_id, rating_venue_id) where rating_venue_id is not null;
+-- index jury_invites_fest_idx
+CREATE INDEX jury_invites_fest_idx on jury_invites(fest_id);
+
+-- index multifest_venues_request_idx
+CREATE UNIQUE INDEX multifest_venues_request_idx on multifest_venues(fest_id, rating_request_id) where rating_request_id is not null;
 
 -- index participants_fest_roster_number_idx
 CREATE UNIQUE INDEX participants_fest_roster_number_idx
@@ -83,10 +89,10 @@ CREATE TABLE fest_game_hosts(
 );
 
 -- table fest_organizers
-CREATE TABLE fest_organizers(
+CREATE TABLE "fest_organizers"(
   fest_id integer not null references fests(id) on delete cascade,
   user_id integer not null references users(id) on delete cascade,
-  role text not null default 'admin' check (role in ('creator','admin','host')),
+  role text not null default 'admin' check (role in ('creator','admin','host','game_jury')),
   added_at text not null,
   primary key(fest_id, user_id)
 );
@@ -150,7 +156,7 @@ CREATE TABLE fest_teams(
   position real not null,
   number integer,
   deleted integer not null default 0
-, country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0, multifest_venue_id INTEGER REFERENCES multifest_venues(id) ON DELETE SET NULL, venue_number INTEGER);
+, country TEXT, hand INTEGER NOT NULL DEFAULT 0, hand_name TEXT, hand_city TEXT, hand_flags INTEGER NOT NULL DEFAULT 0, hand_removed INTEGER NOT NULL DEFAULT 0, multifest_venue_id INTEGER REFERENCES multifest_venues(id) ON DELETE SET NULL, venue_number INTEGER, client_id TEXT);
 
 -- table fest_venue_hosts
 CREATE TABLE fest_venue_hosts(
@@ -174,7 +180,7 @@ CREATE TABLE fests(
   start_date text,
   end_date text,
   is_public integer not null default 0
-, kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind in ('regular','synch','multi')));
+, kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind in ('regular','synch','multi')), contested INTEGER);
 
 -- table game_assignments
 CREATE TABLE game_assignments(
@@ -318,6 +324,31 @@ CREATE TABLE journal_trigger_state(
   fingerprint text not null default ''
 );
 
+-- table jury_invite_uses
+CREATE TABLE jury_invite_uses(
+  id integer primary key,
+  invite_id integer not null references jury_invites(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  status text not null check (status in ('joined','pending','declined')),
+  requested_at text not null,
+  decided_at text,
+  unique(invite_id, user_id)
+);
+
+-- table jury_invites
+CREATE TABLE jury_invites(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  code text not null unique,
+  label text,
+  created_by integer not null references users(id),
+  created_at text not null,
+  expires_at text,
+  max_uses integer,
+  requires_approval integer not null default 0,
+  revoked_at text
+);
+
 -- table match_results
 CREATE TABLE match_results(
   match_id integer not null references matches(id) on delete cascade,
@@ -369,7 +400,29 @@ CREATE TABLE multifest_venues(
   rating_venue_id integer,
   rating_id integer,
   position integer not null default 0
-, representative TEXT NOT NULL DEFAULT '');
+, representative TEXT NOT NULL DEFAULT '', rating_request_id INTEGER);
+
+-- table od_contested
+CREATE TABLE od_contested(
+  game_id integer not null references games(id) on delete cascade,
+  question integer not null,
+  fest_team_id integer not null references fest_teams(id) on delete cascade,
+  answer text not null,
+  created_by integer references users(id),
+  created_at text not null,
+  primary key(game_id, question, fest_team_id)
+);
+
+-- table od_contested_rulings
+CREATE TABLE od_contested_rulings(
+  game_id integer not null references games(id) on delete cascade,
+  question integer not null,
+  answer_key text not null,
+  accepted integer not null,
+  ruled_by integer references users(id),
+  ruled_at text not null,
+  primary key(game_id, question, answer_key)
+);
 
 -- table participant_players
 CREATE TABLE participant_players(
@@ -407,6 +460,15 @@ CREATE TABLE players(
   fest_id integer not null references fests(id) on delete cascade,
   first_name text not null,
   last_name text not null default ''
+);
+
+-- table rating_sync_base
+CREATE TABLE rating_sync_base(
+  fest_id integer not null references fests(id) on delete cascade,
+  rating_team integer not null,
+  fact text not null check (fact in ('roster','flags','answers')),
+  value text not null,
+  primary key (fest_id, rating_team, fact)
 );
 
 -- table schema_versions

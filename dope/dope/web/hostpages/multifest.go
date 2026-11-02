@@ -11,7 +11,6 @@ import (
 	"dope/dope/domain/festops"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
-	"dope/dope/domain/imports"
 	"dope/dope/domain/multifest"
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
@@ -52,7 +51,7 @@ func (s *Server) ensureSynchGame(ctx context.Context, festID, ratingID int64) er
 	if missing, err := s.synchGameMissing(ctx, festID); err != nil || !missing {
 		return err
 	}
-	tours, err := imports.FetchRatingTourComp(ctx, ratingID)
+	tours, err := s.h.Engine().RatingSite("").Tours(ctx, ratingID)
 	if err != nil {
 		return err
 	}

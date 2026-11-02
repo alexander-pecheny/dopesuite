@@ -191,10 +191,17 @@ func targets() []target {
 				// Builder-page classic scripts: self-contained IIFE bundles, one per script.
 				{
 					EntryPointsAdvanced: entries("dope/dope/web/ts/",
-						"pageforms", "menu-config", "gamecreate", "numbers", "profile", "roster", "fest-teams"),
+						"pageforms", "menu-config", "gamecreate", "numbers", "profile", "roster", "fest-teams", "venue-page"),
 					Bundle: true,
 					Format: api.FormatIIFE,
 					Outdir: "dope/dope/web/assets/static/dist",
+				},
+				// The service worker, served at /sw.js so its scope is the site.
+				{
+					EntryPoints: []string{"dope/dope/web/ts/sw.ts"},
+					Bundle:      true,
+					Format:      api.FormatIIFE,
+					Outdir:      "dope/dope/web/assets/static/dist",
 				},
 				// Library modules as ESM for the test runner (not embedded, not served).
 				{
@@ -203,6 +210,8 @@ func targets() []target {
 						"od-protocol", "kd-protocol", "ksi-protocol", "brain-protocol", "ek-protocol", "screen-board", "url-state", "divisions", "team-lens", "sheet-pins", "seat-picker",
 						// the bout page and what it mounts
 						"bout-page", "entrants", "steady-redraw", "undo", "stacked-sheet",
+						// a venue offline
+						"offline",
 						// game-page draws the 🏠 crumb through it
 						"icons_gen",
 						// the TS Catalog: the screens import i18nstrings, it the rest

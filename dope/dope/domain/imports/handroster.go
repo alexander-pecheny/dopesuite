@@ -7,10 +7,12 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/multifest"
+	"dope/dope/domain/numbering"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
@@ -142,15 +144,25 @@ type TeamInput struct {
 	// RatingID, for a new team, is the rating site's team it is: its name
 	// may still be a one-off for this fest.
 	RatingID int64
-	Name     string
-	City     string
-	Players  []roster.FestRosterImportPlayer
+	// RatingTeam, for a team the host made, is the rating site's team it is
+	// from now on, 0 for none; nil leaves it. An import's team keeps the
+	// site's id.
+	RatingTeam *int64
+	Name       string
+	City       string
+	Players    []roster.FestRosterImportPlayer
 	// Venue is the venue of a synch or multi fest a team the host made plays
 	// at, 0 for none, nil to leave it where it is (ADR-0032). A rating team
 	// plays where the site says.
 	Venue *int64
 	// Flags is the short names of the team's Divisions, nil to leave them.
 	Flags *[]string
+	// ClientID, for a new team, is the id the host's device gave it, so a
+	// create sent twice makes one team (FindClientTeam).
+	ClientID string
+	// VenueNumber, for a new team on a venue, is its number there as the
+	// host's device chose it; 0 takes the venue's next.
+	VenueNumber int
 }
 
 func (in TeamInput) normalized() (TeamInput, error) {
@@ -225,12 +237,15 @@ select coalesce(max(number), 0) + 1, coalesce(max(position), 0) + 1 from fest_te
 		}
 	}
 	teamID, err := store.InsertReturningID(ctx, tx, `
-insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted, hand) values(?, ?, ?, ?, ?, ?, 0, 1)`,
-		festID, util.NullableInt64(in.RatingID), in.Name, in.City, position, number)
+insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted, hand, client_id) values(?, ?, ?, ?, ?, ?, 0, 1, ?)`,
+		festID, util.NullableInt64(in.RatingID), in.Name, in.City, position, number, util.NullableString(in.ClientID))
 	if err != nil {
 		return 0, RosterWrite{}, err
 	}
 	if in.Venue != nil {
+		if err := claimVenueNumberTx(ctx, tx, teamID, *in.Venue, in); err != nil {
+			return 0, RosterWrite{}, err
+		}
 		if err := placeHandTeamTx(ctx, tx, festID, teamID, *in.Venue); err != nil {
 			return 0, RosterWrite{}, err
 		}
@@ -270,6 +285,14 @@ func SaveHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in Te
 	}
 	if err := checkNameFree(ctx, tx, festID, teamID, in.Name, in.City); err != nil {
 		return RosterWrite{}, err
+	}
+	if in.RatingTeam != nil && *in.RatingTeam != row.RatingID {
+		if !row.Hand {
+			return RosterWrite{}, corei18n.User(dopestrings.Default.Imports.HandRoster.RatingTeamFixed())
+		}
+		if err := linkRatingTx(ctx, tx, festID, teamID, *in.RatingTeam); err != nil {
+			return RosterWrite{}, err
+		}
 	}
 	switch {
 	case row.Hand:
@@ -359,6 +382,50 @@ func setTypedFlagsTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, shor
 		return nil
 	}
 	return roster.SetHandFlagsTx(ctx, tx, festID, teamID, flags)
+}
+
+// FindClientTeam is the team of the fest a host's device made under clientID,
+// 0 when there is none.
+func FindClientTeam(ctx context.Context, q store.Queryer, festID int64, clientID string) (int64, error) {
+	var id int64
+	if clientID == "" {
+		return 0, nil
+	}
+	err := q.QueryRowContext(ctx, `select id from fest_teams where fest_id = ? and client_id = ?`, festID, clientID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
+}
+
+// claimVenueNumberTx gives a new team the number its venue was asked for,
+// refused when another team of the venue has it. A removed team keeps its
+// row and its number, so it gives the number up here: the venue's unique
+// index counts removed rows too. The venue then numbers only the teams that
+// still have none.
+func claimVenueNumberTx(ctx context.Context, tx *sql.Tx, teamID, venueID int64, in TeamInput) error {
+	s := dopestrings.Default
+	if in.VenueNumber == 0 || venueID == 0 {
+		return nil
+	}
+	if in.VenueNumber < 0 || in.VenueNumber > numbering.MaxNumber {
+		return corei18n.User(s.Imports.HandRoster.VenueNumberRange(strconv.Itoa(numbering.MaxNumber)))
+	}
+	if _, err := tx.ExecContext(ctx, `
+update fest_teams set venue_number = null where multifest_venue_id = ? and venue_number = ? and deleted = 1`, venueID, in.VenueNumber); err != nil {
+		return err
+	}
+	var holder string
+	err := tx.QueryRowContext(ctx, `
+select name from fest_teams where multifest_venue_id = ? and venue_number = ? and deleted = 0 and id != ?`, venueID, in.VenueNumber, teamID).Scan(&holder)
+	if err == nil {
+		return corei18n.User(s.Imports.HandRoster.VenueNumberTaken(strconv.Itoa(in.VenueNumber), holder, in.Name))
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `update fest_teams set multifest_venue_id = ?, venue_number = ? where id = ?`, venueID, in.VenueNumber, teamID)
+	return err
 }
 
 // placeHandTeamTx puts a team the host made on a venue of the fest, under the
@@ -655,16 +722,23 @@ func SetHandTeamRatingTx(ctx context.Context, tx *sql.Tx, festID, teamID, rating
 	if err != nil {
 		return RosterWrite{}, err
 	}
-	var taken int
-	if err := tx.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ? and rating_id = ? and deleted = 0 and id != ?`,
-		festID, ratingID, teamID).Scan(&taken); err != nil {
-		return RosterWrite{}, err
-	}
-	if taken > 0 {
-		return RosterWrite{}, corei18n.User(s.Imports.HandRoster.RatingTeamTaken())
-	}
-	if _, err := tx.ExecContext(ctx, `update fest_teams set rating_id = ? where id = ?`, ratingID, teamID); err != nil {
+	if err := linkRatingTx(ctx, tx, festID, teamID, ratingID); err != nil {
 		return RosterWrite{}, err
 	}
 	return rewriteFromHandTx(ctx, tx, festID, before)
+}
+
+// linkRatingTx makes a team the host made the rating site's team, or none
+// for 0, unless another team of the fest is that team already.
+func linkRatingTx(ctx context.Context, tx *sql.Tx, festID, teamID, ratingID int64) error {
+	var taken int
+	if err := tx.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ? and rating_id = ? and deleted = 0 and id != ?`,
+		festID, ratingID, teamID).Scan(&taken); err != nil {
+		return err
+	}
+	if ratingID > 0 && taken > 0 {
+		return corei18n.User(dopestrings.Default.Imports.HandRoster.RatingTeamTaken())
+	}
+	_, err := tx.ExecContext(ctx, `update fest_teams set rating_id = ? where id = ?`, util.NullableInt64(ratingID), teamID)
+	return err
 }

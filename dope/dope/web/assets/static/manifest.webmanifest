@@ -2,9 +2,9 @@
   "name": "dope — фесты ЧГК",
   "short_name": "dope",
   "lang": "ru",
-  "start_url": "/",
+  "start_url": "/host",
   "scope": "/",
-  "display": "browser",
+  "display": "standalone",
   "background_color": "#262a31",
   "theme_color": "#262a31",
   "icons": [

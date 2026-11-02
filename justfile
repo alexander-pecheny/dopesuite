@@ -153,7 +153,7 @@ typecheck:
     tsc=$(find node_modules -path '*@typescript/typescript-*/lib/tsc' -type f | head -1)
     [ -n "$tsc" ] || { echo "native tsc not found — run 'bun install'" >&2; exit 1; }
     pids=()
-    for p in dopeuikit dope xy spliff qy xy/tsconfig.sw.json xy/tsconfig.worker.json; do "$tsc" -p "$p" & pids+=($!); done
+    for p in dopeuikit dope xy spliff qy dope/tsconfig.sw.json xy/tsconfig.sw.json xy/tsconfig.worker.json; do "$tsc" -p "$p" & pids+=($!); done
     rc=0
     for pid in "${pids[@]}"; do wait "$pid" || rc=1; done
     exit $rc

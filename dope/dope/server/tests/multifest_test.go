@@ -41,7 +41,7 @@ func TestASynchFestSeatsEachVenueApart(t *testing.T) {
 		t.Fatal(err)
 	}
 	festID, _ := res.LastInsertId()
-	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	minsk, brest := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}, multifest.RatingVenue{ID: 20, Request: 200, Title: "Брест"}
 	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
 		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
 			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
@@ -149,7 +149,7 @@ func TestAVenueHostRunsAndEditsTheirVenueAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	festID, _ := res.LastInsertId()
-	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	minsk, brest := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}, multifest.RatingVenue{ID: 20, Request: 200, Title: "Брест"}
 	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
 		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
 			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
@@ -276,7 +276,7 @@ func TestAFestChangesItsTypeByStartingItsGamesAfresh(t *testing.T) {
 		t.Fatal(err)
 	}
 	festID, _ := res.LastInsertId()
-	team := roster.FestRosterImportTeam{RatingID: 1, Name: "Альфа", Venue: multifest.RatingVenue{ID: 10, Title: "Минск"},
+	team := roster.FestRosterImportTeam{RatingID: 1, Name: "Альфа", Venue: multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"},
 		Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "Альфа", LastName: "Капитан"}}}
 	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, []roster.FestRosterImportTeam{team}, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import: %v", err)
@@ -340,7 +340,7 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 		t.Fatal(err)
 	}
 	festID, _ := res.LastInsertId()
-	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	minsk, brest := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}, multifest.RatingVenue{ID: 20, Request: 200, Title: "Брест"}
 	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
 		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
 			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
@@ -352,7 +352,7 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	var minskID, brestID int64
 	db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = 10`, festID).Scan(&minskID)
 	db.QueryRow(`select id from multifest_venues where fest_id = ? and rating_venue_id = 20`, festID).Scan(&brestID)
-	hostID, _ := createAPITestSession(t, srv, "minsk")
+	hostID, hostToken := createAPITestSession(t, srv, "minsk")
 	addAPITestRole(t, srv, festID, hostID, roles.Host)
 	if _, err := db.Exec(`insert into fest_venue_hosts(fest_id, multifest_venue_id, user_id) values(?, ?, ?)`, festID, minskID, hostID); err != nil {
 		t.Fatal(err)
@@ -391,15 +391,17 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	var alfa, beta int64
 	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Альфа'`, festID).Scan(&alfa)
 	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Бета'`, festID).Scan(&beta)
-	numbers := func(a, b string) url.Values {
-		return url.Values{fmt.Sprintf("number_%d", alfa): {a}, fmt.Sprintf("number_%d", beta): {b}}
+	// The venue's page saves its numbers through the API, as the device's
+	// outbox sends them: every team of the venue, 0 for none.
+	numbers := func(a, b int) *httptest.ResponseRecorder {
+		t.Helper()
+		assignments := []map[string]any{{"team_id": alfa, "number": a}}
+		if b >= 0 {
+			assignments = append(assignments, map[string]any{"team_id": beta, "number": b})
+		}
+		return scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/sync/numbers/assign?venue=%d", minskID), map[string]any{"assignments": assignments}, hostToken)
 	}
-	// The refused page shows what was typed, and its save stays enabled.
-	if resp := page(http.MethodPost, minskPage+"/numbers", numbers("5", "5")); resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "Номер 5 стоит у двух команд") ||
-		!strings.Contains(resp.Body.String(), `data-refused="yes"`) {
-		t.Fatalf("a shared number was not refused: %d %s", resp.Code, resp.Body.String())
-	}
-	if resp := page(http.MethodPost, minskPage+"/numbers", numbers("7", "")); resp.Code != http.StatusSeeOther {
+	if resp := numbers(7, 0); resp.Code != http.StatusOK {
 		t.Fatalf("save: %d %s", resp.Code, resp.Body.String())
 	}
 	var a, b sql.NullInt64
@@ -413,8 +415,72 @@ func TestAVenueHostWorksOnTheVenuePage(t *testing.T) {
 	if _, err := db.Exec(`update fest_teams set deleted = 1, venue_number = 3 where id = ?`, beta); err != nil {
 		t.Fatal(err)
 	}
-	if resp := page(http.MethodPost, minskPage+"/numbers", url.Values{fmt.Sprintf("number_%d", alfa): {"3"}}); resp.Code != http.StatusSeeOther {
+	if resp := numbers(3, -1); resp.Code != http.StatusOK {
 		t.Fatalf("a removed team's number blocked the save: %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+// A team a venue's host made offline arrives with the id the device gave it
+// and the number it chose there: sent twice, it is one team, and a number
+// another team of the venue has is refused.
+func TestATeamMadeOfflineArrivesOnce(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, slug, revision, created_at, updated_at, kind) values('Синхрон', 'sync', 1, '2026-10-29', '2026-10-29', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	minsk := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}
+	teams := []roster.FestRosterImportTeam{{RatingID: 1, Name: "Альфа", Venue: minsk,
+		Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "А", LastName: "Капитан"}}}}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, teams, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var minskID int64
+	db.QueryRow(`select id from multifest_venues where fest_id = ?`, festID).Scan(&minskID)
+	hostID, token := createAPITestSession(t, srv, "minsk")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	if _, err := db.Exec(`insert into fest_venue_hosts(fest_id, multifest_venue_id, user_id) values(?, ?, ?)`, festID, minskID, hostID); err != nil {
+		t.Fatal(err)
+	}
+	create := func(clientID, name string, number int) *httptest.ResponseRecorder {
+		t.Helper()
+		return scopedAPIRequest(t, srv, http.MethodPost, "/api/fest/sync/teams", map[string]any{
+			"client_id": clientID, "name": name, "city": "Минск", "venue_number": number, "multifest_venue_id": minskID,
+			"players": []map[string]any{{"rating_id": 0, "first_name": "Новый", "last_name": name}},
+		}, token)
+	}
+	first := create("c-1", "Бета", 5)
+	again := create("c-1", "Бета", 5)
+	if first.Code != http.StatusOK || again.Code != http.StatusOK {
+		t.Fatalf("create: %d %s / %d %s", first.Code, first.Body.String(), again.Code, again.Body.String())
+	}
+	var made, number int
+	db.QueryRow(`select count(*), max(venue_number) from fest_teams where fest_id = ? and name = 'Бета' and deleted = 0`, festID).Scan(&made, &number)
+	if made != 1 || number != 5 {
+		t.Fatalf("the team was made %d times with number %d; want once with 5", made, number)
+	}
+	if !strings.Contains(again.Body.String(), `"name":"Бета"`) {
+		t.Fatalf("the second create does not answer with the team: %s", again.Body.String())
+	}
+	if resp := create("c-2", "Гамма", 5); resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), "Номер 5 на площадке уже у команды «Бета»") {
+		t.Fatalf("a taken number was not refused: %d %s", resp.Code, resp.Body.String())
+	}
+	// A removed team keeps its row, and its number goes to the next team that
+	// asks for it (fest 25 on 2026-11-01: a 500 the device retried all day).
+	var beta int64
+	db.QueryRow(`select id from fest_teams where fest_id = ? and name = 'Бета'`, festID).Scan(&beta)
+	if resp := scopedAPIRequest(t, srv, http.MethodDelete, fmt.Sprintf("/api/fest/sync/teams/%d", beta), nil, token); resp.Code != http.StatusOK {
+		t.Fatalf("remove: %d %s", resp.Code, resp.Body.String())
+	}
+	if resp := create("c-3", "Дельта", 5); resp.Code != http.StatusOK {
+		t.Fatalf("the number of a removed team was not given out again: %d %s", resp.Code, resp.Body.String())
+	}
+	db.QueryRow(`select venue_number from fest_teams where fest_id = ? and name = 'Дельта' and deleted = 0`, festID).Scan(&number)
+	if number != 5 {
+		t.Fatalf("Дельта has number %d; want 5", number)
 	}
 }
 
@@ -429,7 +495,7 @@ func TestASynchFestHostAlwaysLeadsAVenue(t *testing.T) {
 		t.Fatal(err)
 	}
 	festID, _ := res.LastInsertId()
-	teams := []roster.FestRosterImportTeam{{RatingID: 1, Name: "Альфа", Venue: multifest.RatingVenue{ID: 10, Title: "Минск"},
+	teams := []roster.FestRosterImportTeam{{RatingID: 1, Name: "Альфа", Venue: multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"},
 		Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "Альфа", LastName: "Капитан"}}}}
 	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, teams, imports.RosterChoice{}); err != nil {
 		t.Fatalf("import: %v", err)
@@ -547,7 +613,7 @@ func TestASynchFestPlaysOneODWithASheetPerVenue(t *testing.T) {
 		t.Fatal(err)
 	}
 	festID, _ := res.LastInsertId()
-	minsk, brest := multifest.RatingVenue{ID: 10, Title: "Минск"}, multifest.RatingVenue{ID: 20, Title: "Брест"}
+	minsk, brest := multifest.RatingVenue{ID: 10, Request: 100, Title: "Минск"}, multifest.RatingVenue{ID: 20, Request: 200, Title: "Брест"}
 	team := func(id int64, name string, venue multifest.RatingVenue) roster.FestRosterImportTeam {
 		return roster.FestRosterImportTeam{RatingID: id, Name: name, Venue: venue,
 			Players: []roster.FestRosterImportPlayer{{RatingID: id * 10, FirstName: name, LastName: "Капитан"}}}
@@ -628,5 +694,56 @@ func TestASynchFestPlaysOneODWithASheetPerVenue(t *testing.T) {
 	}
 	if got := state().Venues[key(minskID)].Entries[0]; !slices.Contains(got, 5) {
 		t.Fatalf("Бета's entry did not follow its new number: %v", got)
+	}
+}
+
+// Two requests the site accepted at one of its venues are two площадки, each
+// with its own teams. A площадка imported before площадки kept their request
+// takes the request of its representative.
+func TestTwoRequestsAtOneSiteVenueAreTwoVenues(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, revision, created_at, updated_at, kind) values('Синхрон', 1, '2026-10-29', '2026-10-29', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	res, err = db.Exec(`insert into multifest_venues(fest_id, title, town, rating_venue_id, representative, position) values(?, 'Иркутск', 'Иркутск', 3103, 'Ходырев Дмитрий', 1)`, festID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, _ := res.LastInsertId()
+	khodyrev := multifest.RatingVenue{ID: 3103, Request: 192592, Title: "Иркутск", Town: "Иркутск", Representative: "Ходырев Дмитрий"}
+	grushina := multifest.RatingVenue{ID: 3103, Request: 192846, Title: "Иркутск", Town: "Иркутск", Representative: "Грушина Александра"}
+	accepted := []multifest.RatingVenue{khodyrev, grushina}
+
+	fresh, err := multifest.NewVenues(t.Context(), db, festID, accepted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fresh) != 1 || fresh[0].Request != grushina.Request {
+		t.Fatalf("new площадки %+v, want Грушина's alone", fresh)
+	}
+	var festVenue map[int64]int64
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) (err error) {
+		festVenue, err = multifest.AddVenuesTx(ctx, tx, festID, accepted)
+		return err
+	})
+	if festVenue[khodyrev.Request] != legacy || festVenue[grushina.Request] == legacy || festVenue[grushina.Request] == 0 {
+		t.Fatalf("площадки by request %v, the old one is %d", festVenue, legacy)
+	}
+
+	team := roster.FestRosterImportTeam{RatingID: 1, Name: "Альфа", Venue: grushina,
+		Players: []roster.FestRosterImportPlayer{{RatingID: 10, FirstName: "Альфа", LastName: "Капитан"}}}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 1, []roster.FestRosterImportTeam{team}, imports.RosterChoice{}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var venue int64
+	if err := db.QueryRow(`select multifest_venue_id from fest_teams where fest_id = ? and rating_id = 1`, festID).Scan(&venue); err != nil {
+		t.Fatal(err)
+	}
+	if venue != festVenue[grushina.Request] {
+		t.Fatalf("the team plays at площадка %d, want Грушина's %d", venue, festVenue[grushina.Request])
 	}
 }

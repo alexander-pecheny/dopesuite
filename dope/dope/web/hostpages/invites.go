@@ -25,7 +25,7 @@ import (
 
 // Host invite links (ADR-0030): an admin mints a link for one Game, or for one
 // venue of a synch or multi fest (ADR-0032), and whoever follows it becomes a
-// host limited to it. The link's machine is dopecore/invitelink; this file is
+// host limited to it. A jury link names the fest and makes its jury. The link's machine is dopecore/invitelink; this file is
 // the dashboard section, the /join page and the writes both they and the API
 // make.
 
@@ -41,11 +41,12 @@ type festInvite struct {
 	invitelink.View
 	GameID           int64  `json:"game_id,omitempty"`
 	MultiFestVenueID int64  `json:"multifest_venue_id,omitempty"`
+	Jury             bool   `json:"jury,omitempty"`
 	Opens            string `json:"opens"`
 	URL              string `json:"url"`
 }
 
-// inviteKind is one of the two sorts of link: what it opens, how a link's
+// inviteKind is one of the three sorts of link: what it opens, how a link's
 // scope finds its fest, and the paths that revoke and delete one, since the
 // two tables number their links apart.
 type inviteKind struct {
@@ -57,7 +58,11 @@ type inviteKind struct {
 var (
 	gameInvites  = inviteKind{festaccess.GameInvites(), festaccess.GameFestID, "invites"}
 	venueInvites = inviteKind{festaccess.VenueInvites(), festaccess.VenueFestID, "venue-invites"}
+	juryInvites  = inviteKind{festaccess.JuryInvites(), festaccess.JuryFestID, "jury-invites"}
 )
+
+// inviteKinds are every sort, in the order a code is looked up.
+var inviteKinds = []inviteKind{gameInvites, venueInvites, juryInvites}
 
 // inviteError words one of invitelink's errors for a person; any other error
 // passes through as itself.
@@ -68,8 +73,8 @@ func inviteError(err error) error {
 	return err
 }
 
-// loadFestInvites lists every link of the fest's venues and then of its
-// Games, each one's newest first.
+// loadFestInvites lists every link of the fest's venues, then of its Games,
+// then its jury links, each one's newest first.
 func (s *Server) loadFestInvites(ctx context.Context, festID int64, origin string) ([]festInvite, error) {
 	db := s.h.Engine().DB
 	festGames, err := LoadFestGames(ctx, db, festID)
@@ -100,6 +105,9 @@ func (s *Server) loadFestInvites(ctx context.Context, festID int64, origin strin
 			return nil, err
 		}
 	}
+	if err := add(juryInvites, festID, festInvite{Jury: true, Opens: dopestrings.Default.Host.Invites.JuryOption()}); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -116,6 +124,11 @@ func (s *Server) MintGameInvite(ctx context.Context, festID, gameID, userID int6
 // MintVenueInvite makes a link to one venue of the fest.
 func (s *Server) MintVenueInvite(ctx context.Context, festID, venueID, userID int64, req invitelink.MintRequest) error {
 	return s.mintInvite(ctx, venueInvites, festID, venueID, userID, req)
+}
+
+// MintJuryInvite makes a link to the fest's jury.
+func (s *Server) MintJuryInvite(ctx context.Context, festID, userID int64, req invitelink.MintRequest) error {
+	return s.mintInvite(ctx, juryInvites, festID, festID, userID, req)
 }
 
 // mintInvite makes a link to a Game or venue of the fest. Nobody approves a
@@ -185,21 +198,23 @@ func (s *Server) changeInvite(ctx context.Context, kind inviteKind, festID, id i
 	})
 }
 
-// joined is what following a link opened: a Game, or a venue.
+// joined is what following a link opened: a Game, a venue, or the jury.
 type joined struct {
 	FestID           int64 `json:"fest_id"`
 	GameID           int64 `json:"game_id,omitempty"`
 	MultiFestVenueID int64 `json:"multifest_venue_id,omitempty"`
+	Jury             bool  `json:"jury,omitempty"`
 }
 
-// inviteByCode finds the link a code names among both sorts.
+// inviteByCode finds the link a code names among every sort.
 func (s *Server) inviteByCode(ctx context.Context, code string) (inviteKind, invitelink.Link, error) {
-	lk, err := gameInvites.links.ByCode(ctx, s.h.Engine().DB, code)
-	if !errors.Is(err, invitelink.ErrNotFound) {
-		return gameInvites, lk, err
+	for _, kind := range inviteKinds {
+		lk, err := kind.links.ByCode(ctx, s.h.Engine().DB, code)
+		if !errors.Is(err, invitelink.ErrNotFound) {
+			return kind, lk, err
+		}
 	}
-	lk, err = venueInvites.links.ByCode(ctx, s.h.Engine().DB, code)
-	return venueInvites, lk, err
+	return juryInvites, invitelink.Link{}, invitelink.ErrNotFound
 }
 
 // JoinInvite follows a link for this user, as one write to the link's fest,
@@ -210,8 +225,11 @@ func (s *Server) JoinInvite(ctx context.Context, code string, userID int64) (joi
 		return joined{}, inviteError(err)
 	}
 	out := joined{GameID: lk.ScopeID}
-	if kind.path == venueInvites.path {
+	switch kind.path {
+	case venueInvites.path:
 		out = joined{MultiFestVenueID: lk.ScopeID}
+	case juryInvites.path:
+		out = joined{Jury: true}
 	}
 	if out.FestID, err = kind.fest(ctx, s.h.Engine().DB, lk.ScopeID); err != nil {
 		return joined{}, inviteError(err)
@@ -223,29 +241,38 @@ func (s *Server) JoinInvite(ctx context.Context, code string, userID int64) (joi
 	return out, inviteError(err)
 }
 
-// openURL is the page a followed link leads to: its Game, or its venue's page.
+// openURL is the page a followed link leads to: its Game, its venue's page,
+// or for the jury the fest's.
 func (s *Server) openURL(ctx context.Context, j joined) string {
 	if j.GameID > 0 {
 		return s.hostGameURL(ctx, j.FestID, j.GameID)
+	}
+	if j.Jury {
+		return "/host/fest/" + s.festRefOrID(ctx, j.FestID)
 	}
 	return venuePageURL(s.festRefOrID(ctx, j.FestID), j.MultiFestVenueID)
 }
 
 // ---- the dashboard ----
 
-// The dashboard's select names what a link opens as g<id> or v<id>.
+// The dashboard's select names what a link opens as g<id> or v<id>, or j
+// for the fest's jury.
 const (
 	opensGame  = "g"
 	opensVenue = "v"
+	opensJury  = "j"
 )
 
 func (s *Server) handleHostCreateInvite(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	opens := r.FormValue("opens")
 	kind := gameInvites
-	if strings.HasPrefix(opens, opensVenue) {
-		kind = venueInvites
-	}
 	scopeID, _ := idstr.Parse(opens[min(1, len(opens)):])
+	switch {
+	case strings.HasPrefix(opens, opensVenue):
+		kind = venueInvites
+	case opens == opensJury:
+		kind, scopeID = juryInvites, sc.FestID
+	}
 	maxUses, _ := idstr.Parse(strings.TrimSpace(r.FormValue("max_uses")))
 	ttl, _ := idstr.Parse(r.FormValue("ttl_hours"))
 	req := invitelink.MintRequest{Label: r.FormValue("label"), MaxUses: maxUses, TTLHours: ttl}
@@ -326,6 +353,10 @@ func hostDashInvitesSection(data hostFestDashData, ref string) *dopeui.Element {
 		}
 		opens = append(opens, dopeui.Option(dopeui.Value(opensGame+idstr.Format(g.ID)), dopeui.Text(g.Title)))
 	}
+	if data.Contested {
+		opens = append(opens, dopeui.Option(dopeui.Value(opensJury), dopeui.Text(s.Host.Invites.JuryOption())))
+		sect = append(sect, dopeui.Hint(dopeui.Text(s.Host.Invites.JuryHint())))
+	}
 	ttl := func(hours int, label string) *dopeui.Element {
 		return dopeui.Option(dopeui.Value(strconv.Itoa(hours)), dopeui.Text(label))
 	}
@@ -388,8 +419,11 @@ func inviteRow(inv festInvite, ref string) *dopeui.Element {
 		facts = append(facts, dopeui.Hint(dopeui.Text(s.Host.Invites.Joined(strings.Join(names, ", ")))))
 	}
 	kind := gameInvites
-	if inv.MultiFestVenueID > 0 {
+	switch {
+	case inv.MultiFestVenueID > 0:
 		kind = venueInvites
+	case inv.Jury:
+		kind = juryInvites
 	}
 	base := "/host/fest/" + ref + "/" + kind.path + "/" + idstr.Format(inv.ID)
 	var buttons []dopeui.Item
@@ -465,7 +499,7 @@ func (s *Server) renderJoin(w http.ResponseWriter, r *http.Request, code string,
 	if err == nil {
 		peek, err = kind.links.PeekCode(r.Context(), s.h.Engine().DB, code, userID, time.Now())
 	}
-	venue := kind.path == venueInvites.path
+	venue, jury := kind.path == venueInvites.path, kind.path == juryInvites.path
 	var status *route.Status
 	if err := inviteError(err); errors.As(err, &status) {
 		refusal = status.Msg
@@ -484,19 +518,27 @@ func (s *Server) renderJoin(w http.ResponseWriter, r *http.Request, code string,
 			return
 		}
 		open, label := s.openURL(r.Context(), joined{FestID: festID, GameID: peek.ScopeID}), str.Host.Join.OpenGame()
-		if venue {
+		heading := str.Host.Join.MemberHeading(peek.ScopeName)
+		switch {
+		case venue:
 			open, label = s.openURL(r.Context(), joined{FestID: festID}), str.Host.Join.OpenFest()
+		case jury:
+			open, label = s.openURL(r.Context(), joined{FestID: festID, Jury: true}), str.Host.Join.OpenFest()
+			heading = str.Host.Join.MemberHeadingJury()
 		}
-		body = []dopeui.Item{dopeui.Subhead(dopeui.Text(str.Host.Join.MemberHeading(peek.ScopeName))),
+		body = []dopeui.Item{dopeui.Subhead(dopeui.Text(heading)),
 			dopeui.Row(dopeui.Button(dopeui.Href(open), dopeui.Text(label)))}
 	case peek.State == invitelink.Active:
-		note := str.Host.Join.ActiveNote()
-		if venue {
+		heading, note, submit := str.Host.Join.ActiveHeading(peek.ScopeName), str.Host.Join.ActiveNote(), str.Host.Join.JoinSubmit()
+		switch {
+		case venue:
 			note = str.Host.Join.ActiveNoteVenue()
+		case jury:
+			heading, note, submit = str.Host.Join.ActiveHeadingJury(peek.ScopeName), str.Host.Join.ActiveNoteJury(), str.Host.Join.JoinSubmitJury()
 		}
-		body = []dopeui.Item{dopeui.Subhead(dopeui.Text(str.Host.Join.ActiveHeading(peek.ScopeName))), dopeui.Hint(dopeui.Text(note)),
+		body = []dopeui.Item{dopeui.Subhead(dopeui.Text(heading)), dopeui.Hint(dopeui.Text(note)),
 			dopeui.Form(dopeui.Method("post"), dopeui.Action("/join/"+code),
-				dopeui.Button(dopeui.Submit(), dopeui.Text(str.Host.Join.JoinSubmit())))}
+				dopeui.Button(dopeui.Submit(), dopeui.Text(submit)))}
 	default:
 		body = []dopeui.Item{dopeui.Subhead(dopeui.Text(str.Host.Join.RefusedHeading())),
 			dopeui.Hint(dopeui.Text(festaccess.InviteTexts().Refusal(peek.State)))}
@@ -536,6 +578,17 @@ func (s *Server) apiCreateVenueInvite(w http.ResponseWriter, r *http.Request, sc
 	}
 	venueID, _ := idstr.Parse(r.PathValue("venue"))
 	if err := s.MintVenueInvite(r.Context(), sc.FestID, venueID, sc.User.UserID, req); err != nil {
+		return err
+	}
+	return s.apiInvites(w, r, sc)
+}
+
+func (s *Server) apiCreateJuryInvite(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req invitelink.MintRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	if err := s.MintJuryInvite(r.Context(), sc.FestID, sc.User.UserID, req); err != nil {
 		return err
 	}
 	return s.apiInvites(w, r, sc)

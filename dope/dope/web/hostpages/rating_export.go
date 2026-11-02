@@ -12,8 +12,10 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/ratingexport"
+	"dope/dope/domain/ratingsync"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
+	"dope/dope/storage/ratingsite"
 	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	"dope/dope/web/route"
@@ -68,13 +70,13 @@ func (s *Server) exportSite(ctx context.Context, userID int64) (ratingexport.Sit
 	if !ok {
 		return ratingexport.Site{}, corei18n.User(dopestrings.Default.Host.RatingExport.NoToken())
 	}
-	return ratingexport.Site{Base: s.h.Engine().RatingAPI, Token: token.Token, Buff: s.h.Engine().Buff}, nil
+	return ratingexport.Site{Client: s.h.Engine().RatingSite(token.Token), Buff: s.h.Engine().Buff}, nil
 }
 
 // siteError says in words what went wrong between dope and the site.
 func siteError(err error) error {
 	s := dopestrings.Default
-	var refused *ratingexport.Error
+	var refused *ratingsite.Error
 	switch {
 	case err == nil || isUserError(err):
 		return err
@@ -115,7 +117,9 @@ type ratingExportData struct {
 	// Identified is how many teams and players the page just linked to the
 	// site, nil when it linked none.
 	Identified *int
-	Error      string
+	// Choices is the side picked for each fact both sides changed.
+	Choices map[string]string
+	Error   string
 }
 
 func (s *Server) renderRatingExport(w http.ResponseWriter, r *http.Request, sc route.Scope) {
@@ -142,7 +146,10 @@ func (s *Server) ratingIdentify(r *http.Request, sc route.Scope) (ratingExportDa
 	}
 	choices := map[string]string{}
 	for key, values := range r.PostForm {
-		if ref, ok := strings.CutPrefix(key, identifyField); ok && len(values) > 0 {
+		if ref, ok := strings.CutPrefix(key, identifyField); ok && len(values) > 0 && choices[ref] == "" {
+			choices[ref] = values[0]
+		}
+		if ref, ok := strings.CutPrefix(key, typedIDField); ok && len(values) > 0 && strings.TrimSpace(values[0]) != "" {
 			choices[ref] = values[0]
 		}
 	}
@@ -171,6 +178,10 @@ func (s *Server) ratingIdentify(r *http.Request, sc route.Scope) (ratingExportDa
 // ends it.
 const identifyField = "u."
 
+// typedIDField starts the name of the field where a person types a site id
+// the choices lack; it wins over the choice.
+const typedIDField = "id."
+
 // exportIdentify gives each Unknown of the plan that choices name its site
 // id: a namesake's, or that of the team or player it creates on the site.
 // It writes each id into the fest roster as the team editor would, and
@@ -180,7 +191,7 @@ func (s *Server) exportIdentify(ctx context.Context, sc route.Scope, gameID int6
 	if err != nil {
 		return 0, err
 	}
-	plan, err := ratingexport.Build(ctx, s.h.Engine().DB, sc.FestID, gameID, site)
+	plan, err := ratingexport.Build(ctx, s.h.Engine().DB, sc.FestID, gameID, site, nil)
 	if err != nil {
 		return 0, siteError(err)
 	}
@@ -194,7 +205,7 @@ func (s *Server) exportIdentify(ctx context.Context, sc route.Scope, gameID int6
 		}
 		id, err := ratingexport.Identify(ctx, site, plan.Tournament, u, choice)
 		if err != nil || id <= 0 {
-			if err == nil || !errors.As(err, new(*ratingexport.Error)) {
+			if err == nil || !errors.As(err, new(*ratingsite.Error)) {
 				err = corei18n.User(dopestrings.Default.Host.RatingExport.BadChoice(u.Name))
 			}
 			return done, siteError(err)
@@ -247,8 +258,16 @@ func (s *Server) ratingExport(r *http.Request, sc route.Scope) (ratingExportData
 		return data, nil
 	}
 	data.Game = game
-	plan, report, err := s.exportRun(r.Context(), sc, game.ID, r.Method == http.MethodPost)
-	data.Plan, data.Report = plan, report
+	choices := formChoices(r)
+	plan, report, err := s.exportRun(r.Context(), sc, game.ID, r.Method == http.MethodPost, choices)
+	data.Plan, data.Report, data.Choices = plan, report, choices
+	if r.Method == http.MethodGet && r.FormValue("all") == choiceSite && plan != nil {
+		for _, f := range plan.Facts {
+			if f.Action == ratingsync.Ask {
+				data.Choices[f.Key] = choiceSite
+			}
+		}
+	}
 	if isUserError(err) {
 		data.Error = err.Error()
 		return data, nil
@@ -256,26 +275,113 @@ func (s *Server) ratingExport(r *http.Request, sc route.Scope) (ratingExportData
 	return data, err
 }
 
-// exportRun builds the plan of the Game's export, and sends it when send is
-// set. The plan comes back even when the send fails.
-func (s *Server) exportRun(ctx context.Context, sc route.Scope, gameID int64, send bool) (*ratingexport.Plan, *ratingexport.Report, error) {
+// formChoices is the side a person picked for each fact both sides
+// changed, by its Fact.Key.
+func formChoices(r *http.Request) map[string]string {
+	choices := map[string]string{}
+	_ = r.ParseForm()
+	for key, values := range r.Form {
+		if ref, ok := strings.CutPrefix(key, choiceField); ok && len(values) > 0 && values[0] != "" {
+			choices[ref] = values[0]
+		}
+	}
+	return choices
+}
+
+// choiceField starts the name of a fact's choice field; its Fact.Key ends it.
+const choiceField = "c."
+
+// choiceSite is the choice of the site's version.
+const choiceSite = "site"
+
+// exportRun builds the plan of the Game's export under the person's
+// choices, and carries it out when send is set: dope takes the site's
+// versions it should, the rest goes to the site, and the base records what
+// both now hold. The plan comes back even when the send fails.
+func (s *Server) exportRun(ctx context.Context, sc route.Scope, gameID int64, send bool, choices map[string]string) (*ratingexport.Plan, *ratingexport.Report, error) {
 	site, err := s.exportSite(ctx, sc.User.UserID)
 	if err != nil {
 		return nil, nil, err
 	}
-	plan, err := ratingexport.Build(ctx, s.h.Engine().DB, sc.FestID, gameID, site)
+	plan, err := ratingexport.Build(ctx, s.h.Engine().DB, sc.FestID, gameID, site, choices)
 	if err != nil {
 		return nil, nil, siteError(err)
 	}
 	if !send {
 		return &plan, nil, nil
 	}
-	report, err := ratingexport.Send(ctx, plan, site)
-	return &plan, &report, siteError(err)
+	if plan.Undecided > 0 {
+		return &plan, nil, corei18n.User(dopestrings.Default.Host.RatingExport.Undecided(strconv.Itoa(plan.Undecided)))
+	}
+	taken, err := s.takeFromSite(ctx, sc, plan)
+	if err != nil {
+		return &plan, nil, err
+	}
+	report, sendErr := ratingexport.Send(ctx, plan, site)
+	for _, b := range taken {
+		if b.Fact != ratingsync.Answers {
+			report.Taken++
+		}
+	}
+	bases := append(append(taken, plan.Agreed...), report.Sent...)
+	err = s.h.Engine().WithWriteTx(ctx, sc.FestID, "rating-sync-base", func(ctx context.Context, tx *sql.Tx) error {
+		return ratingsync.SaveTx(ctx, tx, sc.FestID, bases)
+	})
+	if sendErr != nil {
+		return &plan, &report, siteError(sendErr)
+	}
+	return &plan, &report, err
 }
 
-// apiRatingExport is the page's twin: GET answers the plan, POST sends it
-// and answers the plan with the site's report.
+// takeFromSite writes into the fest roster each roster and зачёты whose
+// site version stands, as the team editor would, and answers the base
+// every taken fact now has.
+func (s *Server) takeFromSite(ctx context.Context, sc route.Scope, plan ratingexport.Plan) ([]ratingsync.Base, error) {
+	// The export is a Manager's, who edits every team of the fest.
+	sc.AllVenues = true
+	var bases []ratingsync.Base
+	var order []int64
+	byTeam := map[int64][]ratingexport.Fact{}
+	for _, f := range plan.Facts {
+		if f.Action != ratingsync.Take {
+			continue
+		}
+		bases = append(bases, f.Base)
+		if f.Fact == ratingsync.Answers {
+			continue
+		}
+		if byTeam[f.TeamID] == nil {
+			order = append(order, f.TeamID)
+		}
+		byTeam[f.TeamID] = append(byTeam[f.TeamID], f)
+	}
+	for _, teamID := range order {
+		team, err := s.loadFestTeamDetail(ctx, sc, teamID)
+		if err != nil {
+			return nil, err
+		}
+		in := imports.TeamInput{Name: team.Name, City: team.City}
+		for _, p := range team.Players {
+			in.Players = append(in.Players, roster.FestRosterImportPlayer{RatingID: p.RatingID, FirstName: p.FirstName, LastName: p.LastName})
+		}
+		for _, f := range byTeam[teamID] {
+			if f.Fact == ratingsync.Roster {
+				in.Players = f.Players
+			} else {
+				flags := append([]string{}, f.Flags...)
+				in.Flags = &flags
+			}
+		}
+		if err := s.SaveFestTeam(ctx, sc, teamID, in); err != nil {
+			return nil, err
+		}
+	}
+	return bases, nil
+}
+
+// apiRatingExport is the page's twin: GET answers the plan, POST {choices:
+// {key: "dope" | "site"}} carries it out and answers it with the site's
+// report.
 func (s *Server) apiRatingExport(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	list, err := s.exportGames(r.Context(), sc.FestID)
 	if err != nil {
@@ -285,7 +391,15 @@ func (s *Server) apiRatingExport(w http.ResponseWriter, r *http.Request, sc rout
 	if !ok {
 		return route.BadUser(corei18n.User(dopestrings.Default.Host.RatingExport.NoGame()))
 	}
-	plan, report, err := s.exportRun(r.Context(), sc, game.ID, r.Method == http.MethodPost)
+	var req struct {
+		Choices map[string]string `json:"choices"`
+	}
+	if r.Method == http.MethodPost && r.ContentLength != 0 {
+		if err := route.DecodeJSON(r, &req); err != nil {
+			return err
+		}
+	}
+	plan, report, err := s.exportRun(r.Context(), sc, game.ID, r.Method == http.MethodPost, req.Choices)
 	if err != nil {
 		return route.BadUser(err)
 	}
@@ -319,7 +433,7 @@ func (s *Server) apiRatingIdentify(w http.ResponseWriter, r *http.Request, sc ro
 	if err != nil {
 		return route.BadUser(err)
 	}
-	plan, _, err := s.exportRun(r.Context(), sc, game.ID, false)
+	plan, _, err := s.exportRun(r.Context(), sc, game.ID, false, nil)
 	if err != nil {
 		return route.BadUser(err)
 	}
@@ -359,7 +473,7 @@ func ratingExportDoc(data ratingExportData) *dopeui.Doc {
 		page = append(page, exportReportSection(*data.Report, data.Plan.Tournament, action+"?game="+idstr.Format(data.Game.ID)))
 	}
 	if data.Plan != nil && data.Report == nil {
-		page = append(page, exportPlanSections(*data.Plan, action, data.Game.ID)...)
+		page = append(page, exportPlanSections(*data.Plan, action, data.Game.ID, data.Choices)...)
 	}
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
@@ -376,7 +490,10 @@ func exportTokenLink(message string) dopeui.Item {
 func exportReportSection(report ratingexport.Report, tournament int64, back string) *dopeui.Element {
 	s := dopestrings.Default
 	items := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.RatingExport.SentSubhead())),
-		dopeui.Note(dopeui.Text(s.Host.RatingExport.Sent(strconv.Itoa(report.Rosters), strconv.Itoa(report.Results))))}
+		dopeui.Note(dopeui.Text(s.Host.RatingExport.Sent(strconv.Itoa(report.Rosters), strconv.Itoa(report.Flags), strconv.Itoa(report.Results))))}
+	if report.Taken > 0 {
+		items = append(items, dopeui.Muted(dopeui.Text(s.Host.RatingExport.SentTaken(strconv.Itoa(report.Taken)))))
+	}
 	if report.Moved > 0 {
 		items = append(items, dopeui.Muted(dopeui.Text(s.Host.RatingExport.SentMoved(strconv.Itoa(report.Moved)))))
 	}
@@ -384,7 +501,7 @@ func exportReportSection(report ratingexport.Report, tournament int64, back stri
 		items = append(items, dopeui.Muted(dopeui.Text(w)))
 	}
 	items = append(items, dopeui.Row(
-		dopeui.Button(dopeui.Href(fmt.Sprintf(ratingexport.TournamentPage, tournament)), dopeui.Text(s.Host.RatingExport.OpenTournament())),
+		dopeui.Button(dopeui.Href(fmt.Sprintf(ratingsite.TournamentPage, tournament)), dopeui.Text(s.Host.RatingExport.OpenTournament())),
 		dopeui.Button(dopeui.Href(back), dopeui.Text(s.Host.RatingExport.BackToPreview()))))
 	return dopeui.Section(items...)
 }
@@ -422,14 +539,87 @@ func exportUnknownSection(plan ratingexport.Plan, action string, gameID int64) *
 		default:
 			field = append(field, dopeui.Muted(dopeui.Text(s.Host.RatingExport.NoTown(u.Name))))
 		}
-		form = append(form, dopeui.Field(append(field, dopeui.Selectfield(options...))...))
+		typed := dopeui.Textfield(dopeui.Name(typedIDField+u.Ref), dopeui.Inputmode("numeric"), dopeui.Placeholder(s.Host.RatingExport.TypedId()))
+		form = append(form, dopeui.Field(append(field, dopeui.Selectfield(options...), typed)...))
 	}
 	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.RatingExport.Identify()))))
 	return dopeui.Section(dopeui.Subhead(dopeui.Text(s.Host.RatingExport.UnknownSubhead())),
 		dopeui.Hint(dopeui.Text(s.Host.RatingExport.UnknownHint())), dopeui.Form(form...))
 }
 
-func exportPlanSections(plan ratingexport.Plan, action string, gameID int64) []dopeui.Item {
+// factName is what a person calls the fact.
+func factName(f ratingsync.Fact) string {
+	s := dopestrings.Default
+	switch f {
+	case ratingsync.Roster:
+		return s.Host.RatingExport.FactRoster()
+	case ratingsync.Flags:
+		return s.Host.RatingExport.FactFlags()
+	default:
+		return s.Host.RatingExport.FactAnswers()
+	}
+}
+
+// factValue is a side's version as the page shows it.
+func factValue(v string) string {
+	if v == "" {
+		return dopestrings.Default.Host.RatingExport.EmptyValue()
+	}
+	return v
+}
+
+// exportFactItems shows how the export settles each fact where dope and the
+// site differ: the site's versions that stand because only the site changed,
+// and a choice for each fact both sides changed.
+func exportFactItems(plan ratingexport.Plan, all string, choices map[string]string) []dopeui.Item {
+	s := dopestrings.Default
+	var taken, asked []dopeui.Item
+	for _, f := range plan.Facts {
+		switch {
+		case f.Action == ratingsync.Ask || f.Chosen:
+			option := func(value, text string) dopeui.Item {
+				items := []dopeui.Item{dopeui.Value(value), dopeui.Text(text)}
+				if choices[f.Key] == value {
+					items = append(items, dopeui.Selected())
+				}
+				return dopeui.Option(items...)
+			}
+			asked = append(asked, dopeui.Field(dopeui.Label(s.Host.RatingExport.AskLabel(f.Name, factName(f.Fact))), dopeui.Selectfield(
+				dopeui.Name(choiceField+f.Key), option("", s.Host.RatingExport.ChoiceNone()),
+				option("dope", s.Host.RatingExport.ChoiceDope(factValue(f.Dope))), option(choiceSite, s.Host.RatingExport.ChoiceSite(factValue(f.Site))))))
+		case f.Action == ratingsync.Take:
+			line := s.Host.RatingExport.TakeLine(f.Name, factName(f.Fact), factValue(f.Site))
+			if f.Fact != ratingsync.Answers {
+				line += ". " + s.Host.RatingExport.TakeIntoDope()
+			}
+			taken = append(taken, dopeui.Muted(dopeui.Text(line)))
+		}
+	}
+	if len(taken)+len(asked) == 0 {
+		return nil
+	}
+	items := append([]dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.RatingExport.FactsSubhead())),
+		dopeui.Hint(dopeui.Text(s.Host.RatingExport.FactsHint()))}, taken...)
+	if len(asked) > 0 {
+		items = append(append(items, asked...), dopeui.Row(dopeui.Button(dopeui.Href(all), dopeui.Text(s.Host.RatingExport.AllSite()))))
+	}
+	return items
+}
+
+// exportHasWork reports whether carrying out the plan changes anything.
+func exportHasWork(plan ratingexport.Plan) bool {
+	if len(plan.Moves)+len(plan.Flags)+len(plan.Results)+len(plan.Facts) > 0 {
+		return true
+	}
+	for _, v := range plan.Venues {
+		if len(v.Teams) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func exportPlanSections(plan ratingexport.Plan, action string, gameID int64, choices map[string]string) []dopeui.Item {
 	s := dopestrings.Default
 	var out []dopeui.Item
 	notes := []dopeui.Item{}
@@ -444,6 +634,9 @@ func exportPlanSections(plan ratingexport.Plan, action string, gameID int64) []d
 	}
 	venues := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.RatingExport.RostersSubhead(idstr.Format(plan.Tournament))))}
 	for _, v := range plan.Venues {
+		if len(v.Teams) == 0 {
+			continue
+		}
 		head := []dopeui.Item{dopeui.SpaceXS, dopeui.Strong(dopeui.Text(v.Title))}
 		if v.Representative != 0 {
 			head = append(head, dopeui.Muted(dopeui.Text(s.Host.RatingExport.Representative(v.RepresentativeName, idstr.Format(v.Representative), idstr.Format(v.Request)))))
@@ -458,7 +651,16 @@ func exportPlanSections(plan ratingexport.Plan, action string, gameID int64) []d
 		}
 		venues = append(venues, dopeui.Col(append(head, dopeui.List(rows...))...))
 	}
-	out = append(out, dopeui.Section(venues...))
+	if len(venues) > 1 {
+		out = append(out, dopeui.Section(venues...))
+	}
+	if len(plan.Flags) > 0 {
+		flags := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.RatingExport.FlagsSubhead()))}
+		for _, f := range plan.Flags {
+			flags = append(flags, dopeui.Muted(dopeui.Text(s.Host.RatingExport.FlagsLine(f.Name, factValue(strings.Join(f.Shorts, ", "))))))
+		}
+		out = append(out, dopeui.Section(flags...))
+	}
 	if len(plan.Moves) > 0 {
 		moves := []dopeui.Item{dopeui.Subhead(dopeui.Text(s.Host.RatingExport.MovesSubhead()))}
 		for _, m := range plan.Moves {
@@ -476,12 +678,22 @@ func exportPlanSections(plan ratingexport.Plan, action string, gameID int64) []d
 		}
 		out = append(out, dopeui.Section(skipped...))
 	}
-	if plan.Blocked == "" {
-		out = append(out, dopeui.Section(dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(action),
+	facts := exportFactItems(plan, action+"?game="+idstr.Format(gameID)+"&all="+choiceSite, choices)
+	switch {
+	case plan.Blocked != "" && facts != nil:
+		out = append(out, dopeui.Section(facts...))
+	case plan.Blocked != "":
+	case !exportHasWork(plan):
+		out = append(out, dopeui.Section(dopeui.Note(dopeui.Text(s.Host.RatingExport.NothingToSend()))))
+	default:
+		form := append([]dopeui.Item{dopeui.DirCol, dopeui.Method("post"), dopeui.Action(action),
 			dopeui.Data("confirm", s.Host.RatingExport.SendConfirm(strconv.Itoa(len(plan.Results)))),
-			dopeui.Hiddenfield(dopeui.Name("game"), dopeui.Value(idstr.Format(gameID))),
-			dopeui.Note(dopeui.Text(s.Host.RatingExport.ResultsNote(strconv.Itoa(len(plan.Results)), strconv.Itoa(plan.Questions)))),
-			dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.RatingExport.Send()))))))
+			dopeui.Hiddenfield(dopeui.Name("game"), dopeui.Value(idstr.Format(gameID)))}, facts...)
+		if len(plan.Results) > 0 {
+			form = append(form, dopeui.Note(dopeui.Text(s.Host.RatingExport.ResultsNote(strconv.Itoa(len(plan.Results)), strconv.Itoa(plan.Questions)))))
+		}
+		form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.RatingExport.Send()))))
+		out = append(out, dopeui.Section(dopeui.Form(form...)))
 	}
 	return out
 }

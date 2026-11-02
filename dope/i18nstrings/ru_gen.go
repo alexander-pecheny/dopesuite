@@ -580,6 +580,9 @@ var RU = Strings{
 				return "Можно указать разовое название — оно будет только в этом фесте."
 			},
 			NoRatingId: func() string { return "без ID" },
+			OfflineHint: func() string {
+				return "Нет сети, поэтому поиск по турнирному сайту не работает. Добавьте игроков кнопкой «Добавить игрока без ID», организатор найдёт их потом."
+			},
 			PickOrUnrated: func() string {
 				return "Выберите игрока из подсказок. Если его нет на турнирном сайте, нажмите «Добавить игрока без ID»."
 			},
@@ -589,6 +592,7 @@ var RU = Strings{
 			RatingTeamHint: func() string {
 				return "Необязательно. Если команды нет в рейтинге, просто заполните название ниже."
 			},
+			RatingTeamOf:          func(id string) string { return fmt.Sprintf("ID на турнирном сайте: %s", id) },
 			RatingTeamPicked:      func(team string, id string) string { return fmt.Sprintf("%s, ID %s", team, id) },
 			RatingTeamPlaceholder: func() string { return "Начните вводить название" },
 			RatingTeamUnpick:      func() string { return "Не из рейтинга" },
@@ -602,6 +606,11 @@ var RU = Strings{
 			},
 			UnratedNeedsName: func() string { return "Сначала впишите имя и фамилию игрока." },
 			Venue:            func() string { return "Площадка" },
+			VenueNumber:      func() string { return "Номер на площадке" },
+			VenueNumberRange: func(max string) string { return fmt.Sprintf("Номер должен быть от 1 до %s.", max) },
+			VenueNumberTaken: func(n string) string {
+				return fmt.Sprintf("Номер %s уже у другой команды площадки.", n)
+			},
 		},
 	},
 	Festaccess: FestaccessStrings{
@@ -622,7 +631,7 @@ var RU = Strings{
 		},
 		Games: FestaccessGamesStrings{
 			NotHost: func(name string) string {
-				return fmt.Sprintf("у %s роль не «ведущий», а ограничить по играм и площадкам можно только ведущего", name)
+				return fmt.Sprintf("пользователя %s нельзя так ограничить. По играм ограничивают ведущего или жюри игры, по площадкам только ведущего", name)
 			},
 			SynchHostNeedsVenue: func(name string) string {
 				return fmt.Sprintf("У %s не выбрана площадка. На синхроне ведущий всегда ведёт площадку, поэтому выберите её или сделайте %s админом.", name, name)
@@ -638,7 +647,8 @@ var RU = Strings{
 			Expired: func() string {
 				return "Срок действия ссылки истёк. Попросите у организаторов новую."
 			},
-			LabelTooLong: func() string { return "Название ссылки слишком длинное." },
+			JuryScopeName: func(fest string) string { return fmt.Sprintf("жюри феста «%s»", fest) },
+			LabelTooLong:  func() string { return "Название ссылки слишком длинное." },
 			LimitsOutOfRange: func() string {
 				return "Число входов и срок не могут быть меньше нуля, а срок не может быть больше года."
 			},
@@ -665,7 +675,7 @@ var RU = Strings{
 		},
 		Member: FestaccessMemberStrings{
 			CreatorProtected: func() string { return "создателя нельзя удалить или изменить" },
-			RoleInvalid:      func() string { return "роль должна быть admin или host" },
+			RoleInvalid:      func() string { return "роль должна быть admin, host или game_jury" },
 		},
 	},
 	Gallery: GalleryStrings{
@@ -963,10 +973,14 @@ var RU = Strings{
 			ClearConfirm: func() string {
 				return "Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся."
 			},
-			ColGames:            func() string { return "Игры" },
-			ColNickname:         func() string { return "Никнейм" },
-			ColRole:             func() string { return "Роль" },
-			ColVenues:           func() string { return "Площадки" },
+			ColGames:    func() string { return "Игры" },
+			ColNickname: func() string { return "Никнейм" },
+			ColRole:     func() string { return "Роль" },
+			ColVenues:   func() string { return "Площадки" },
+			ContestedHint: func() string {
+				return "Ведущие отмечают спорные ответы, жюри игры их принимает или отклоняет. На синхроне включено сразу."
+			},
+			ContestedLabel:      func() string { return "Спорные ответы в ОД" },
 			DeleteAccessConfirm: func(name string) string { return fmt.Sprintf("Удалить доступ для %s?", name) },
 			DeleteBtn:           func() string { return "Удалить" },
 			DeleteConfirm: func() string {
@@ -1150,10 +1164,14 @@ var RU = Strings{
 			DeleteConfirm: func() string {
 				return "Удалить ссылку вместе с историей входов? Те, кто вошёл по ней, останутся ведущими."
 			},
-			Empty:            func() string { return "Ссылок пока нет." },
-			Expires:          func(date string) string { return fmt.Sprintf("действует до %s", date) },
-			GameLabel:        func() string { return "Игра" },
-			Joined:           func(names string) string { return fmt.Sprintf("Вошли: %s", names) },
+			Empty:     func() string { return "Ссылок пока нет." },
+			Expires:   func(date string) string { return fmt.Sprintf("действует до %s", date) },
+			GameLabel: func() string { return "Игра" },
+			Joined:    func(names string) string { return fmt.Sprintf("Вошли: %s", names) },
+			JuryHint: func() string {
+				return "Кто перейдёт по ссылке «Жюри феста», станет жюри: будет принимать и отклонять спорные ответы. Какие команды их дали, жюри не видит."
+			},
+			JuryOption:       func() string { return "Жюри феста" },
 			LabelLabel:       func() string { return "Название" },
 			LabelPlaceholder: func() string { return "например, «Минск»" },
 			Lead: func() string {
@@ -1194,19 +1212,25 @@ var RU = Strings{
 			VenueOrGameLabel: func() string { return "Площадка или игра" },
 		},
 		Join: HostJoinStrings{
-			ActiveHeading: func(scope string) string { return fmt.Sprintf("Вас приглашают вести %s", scope) },
+			ActiveHeading:     func(scope string) string { return fmt.Sprintf("Вас приглашают вести %s", scope) },
+			ActiveHeadingJury: func(scope string) string { return fmt.Sprintf("Вас приглашают в %s", scope) },
 			ActiveNote: func() string {
 				return "Вы станете ведущим этой игры и сможете вносить в неё результаты. Остальные игры феста будут видны вам как зрителю."
+			},
+			ActiveNoteJury: func() string {
+				return "Вы станете жюри этого феста и будете принимать и отклонять спорные ответы. Остальное будет видно вам как зрителю."
 			},
 			ActiveNoteVenue: func() string {
 				return "Вы станете ведущим игр этой площадки, сможете вносить в них результаты и править команды площадки и их номера. Остальные игры феста будут видны вам как зрителю."
 			},
-			JoinSubmit:     func() string { return "Стать ведущим" },
-			MemberHeading:  func(scope string) string { return fmt.Sprintf("Вы уже ведёте %s", scope) },
-			OpenFest:       func() string { return "Открыть фест" },
-			OpenGame:       func() string { return "Открыть игру" },
-			RefusedHeading: func() string { return "Ссылка не работает" },
-			Title:          func() string { return "Приглашение" },
+			JoinSubmit:        func() string { return "Стать ведущим" },
+			JoinSubmitJury:    func() string { return "Стать жюри" },
+			MemberHeading:     func(scope string) string { return fmt.Sprintf("Вы уже ведёте %s", scope) },
+			MemberHeadingJury: func() string { return "У вас уже есть доступ к этому фесту" },
+			OpenFest:          func() string { return "Открыть фест" },
+			OpenGame:          func() string { return "Открыть игру" },
+			RefusedHeading:    func() string { return "Ссылка не работает" },
+			Title:             func() string { return "Приглашение" },
 		},
 		Multifest: HostMultifestStrings{
 			KindHint: func() string {
@@ -1225,6 +1249,54 @@ var RU = Strings{
 			Subhead:      func() string { return "Площадки" },
 			Teams:        func(n string) string { return fmt.Sprintf("команд: %s", n) },
 			VenueUnknown: func() string { return "В фесте нет такой площадки." },
+		},
+		Offline: HostOfflineStrings{
+			Dismiss: func() string { return "Понятно" },
+			Failing: func() string {
+				return "Сервер не смог принять изменение из-за своей ошибки. Телефон отправляет его снова. Пока оно не пройдёт, остальные изменения и ответы ждут на этом устройстве. Сообщите организатору."
+			},
+			FailingTeam: func(team string) string {
+				return fmt.Sprintf("Сервер не смог принять изменение команды «%s» из-за своей ошибки. Телефон отправляет его снова. Пока оно не пройдёт, остальные изменения и ответы ждут на этом устройстве. Сообщите организатору.", team)
+			},
+			LogoutConfirm: func() string {
+				return "На этом устройстве есть изменения, которые ещё не дошли до сервера. После выхода они пропадут. Всё равно выйти?"
+			},
+			NoNetwork: func() string {
+				return "Нет сети. Изменения сохранятся на этом устройстве и уйдут на сервер, когда сеть появится."
+			},
+			NotPrepared: func() string {
+				return "Без сети команду не открыть: эту страницу не готовили к работе без сети."
+			},
+			Prepare: func() string { return "Подготовить к работе без сети" },
+			PrepareFailed: func() string {
+				return "Не удалось сохранить страницы. Нажмите ещё раз, пока есть сеть."
+			},
+			PrepareHint: func() string {
+				return "Нажмите кнопку, пока есть сеть. Телефон сохранит эту страницу, игры площадки и составы команд. Без сети откройте этот же адрес в том же браузере. Ответы и изменения команд останутся на телефоне и уйдут на сервер, когда сеть появится."
+			},
+			Prepared: func(at string) string {
+				return fmt.Sprintf("Страницы сохранены на этом устройстве %s. Без сети откройте этот же адрес в том же браузере.", at)
+			},
+			Preparing: func() string { return "Сохраняем страницы…" },
+			Refused: func(message string) string {
+				return fmt.Sprintf("Сервер не принял изменение. %s", message)
+			},
+			RefusedTeam: func(team string, message string) string {
+				return fmt.Sprintf("Команда «%s»: %s", team, message)
+			},
+			Sending: func(n string) string {
+				return fmt.Sprintf("Отправляем изменения на сервер: %s.", n)
+			},
+			StorageFull: func() string {
+				return "Браузеру не хватило места, чтобы сохранить изменение, и оно не отправлено. Очистите данные сайта в настройках браузера и попробуйте снова."
+			},
+			Subhead: func() string { return "Работа без сети" },
+			Unsupported: func() string {
+				return "Этот браузер не умеет открывать страницы без сети."
+			},
+			Waiting: func(n string) string {
+				return fmt.Sprintf("Нет сети. Изменений ждут отправки: %s. Они сохранены на этом устройстве и уйдут на сервер, когда сеть появится.", n)
+			},
 		},
 		Pages: HostPagesStrings{
 			CreateFestSummary: func() string { return "Создать фест" },
@@ -1309,19 +1381,37 @@ var RU = Strings{
 			VenuesSubhead:    func() string { return "Площадки" },
 		},
 		RatingExport: HostRatingExportStrings{
+			AllSite:       func() string { return "Везде выбрать версию сайта" },
 			AllTeams:      func() string { return "Все команды" },
+			AskLabel:      func(team string, fact string) string { return fmt.Sprintf("%s, %s", team, fact) },
 			BackToPreview: func() string { return "Вернуться к выгрузке" },
 			BadChoice: func(name string) string {
 				return fmt.Sprintf("Для %s выбран непонятный вариант. Выберите его из списка.", name)
 			},
 			ChoiceCandidate: func(name string, id string) string { return fmt.Sprintf("%s, ID %s", name, id) },
+			ChoiceDope:      func(value string) string { return fmt.Sprintf("Версия dope: %s", value) },
 			ChoiceNewPlayer: func() string { return "Создать игрока на турнирном сайте" },
 			ChoiceNewTeam: func(town string) string {
 				return fmt.Sprintf("Создать команду на турнирном сайте, город %s", town)
 			},
-			ChoiceSkip: func() string { return "Не выгружать" },
-			Crumb:      func() string { return "Выгрузка на турнирный сайт" },
-			GameLabel:  func() string { return "Игра" },
+			ChoiceNone:  func() string { return "Выберите версию" },
+			ChoiceSite:  func(value string) string { return fmt.Sprintf("Версия сайта: %s", value) },
+			ChoiceSkip:  func() string { return "Не выгружать" },
+			Crumb:       func() string { return "Выгрузка на турнирный сайт" },
+			EmptyValue:  func() string { return "пусто" },
+			FactAnswers: func() string { return "ответы" },
+			FactFlags:   func() string { return "зачёты" },
+			FactRoster:  func() string { return "состав" },
+			FactsHint: func() string {
+				return "Где с прошлой сверки поменялась только одна сторона, dope решил сам. Где поменялись обе, выберите версию."
+			},
+			FactsSubhead: func() string { return "Расхождения с турнирным сайтом" },
+			FlagUnknown: func(flag string) string {
+				return fmt.Sprintf("на турнирном сайте нет зачёта «%s»", flag)
+			},
+			FlagsLine:    func(team string, flags string) string { return fmt.Sprintf("%s: %s", team, flags) },
+			FlagsSubhead: func() string { return "Зачёты" },
+			GameLabel:    func() string { return "Игра" },
 			Identified: func(n string) string {
 				return fmt.Sprintf("ID турнирного сайта записаны: %s.", n)
 			},
@@ -1330,7 +1420,7 @@ var RU = Strings{
 				return "Записать выбранные ID в составы? Новые команды и игроки появятся на турнирном сайте."
 			},
 			Lead: func() string {
-				return "dope отправит на турнирный сайт составы команд и их ответы в ОД от вашего имени. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить». Повторная выгрузка заменит составы и ответы на сайте."
+				return "dope сравнит составы, зачёты и ответы в ОД каждой команды с турнирным сайтом и отправит туда только то, что поменялось в dope. Что поменяли только на сайте, там и останется, а составы и зачёты dope возьмёт себе. Если команду поменяли и в dope, и на сайте, выберите, чья версия верна. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить»."
 			},
 			MoveLine: func(team string, venue string) string {
 				return fmt.Sprintf("%s уже есть на сайте в другой заявке. Её перенесут в заявку площадки %s.", team, venue)
@@ -1342,14 +1432,14 @@ var RU = Strings{
 			NoGame: func() string {
 				return "В фесте нет ОД всех команд, выгружать нечего."
 			},
-			NoPlayers: func() string {
-				return "В составе нет ни одного игрока с ID турнирного сайта."
-			},
 			NoRepresentative: func(venue string) string {
 				return fmt.Sprintf("У заявки площадки %s на турнирном сайте нет представителя.", venue)
 			},
 			NoRequest: func(venue string) string {
 				return fmt.Sprintf("У площадки %s нет принятой заявки на турнирном сайте.", venue)
+			},
+			NoSuchId: func(id string, name string) string {
+				return fmt.Sprintf("На турнирном сайте нет ID %s, который указан для %s.", id, name)
 			},
 			NoToken: func() string {
 				return "Чтобы выгружать на турнирный сайт, сохраните в профиле свой токен турнирного сайта."
@@ -1363,6 +1453,9 @@ var RU = Strings{
 			NoVenue: func() string { return "Команда не на площадке." },
 			NotFestOd: func() string {
 				return "Выгрузить можно только ОД всех команд феста."
+			},
+			NothingToSend: func() string {
+				return "Турнирный сайт уже совпадает с dope. Выгружать нечего."
 			},
 			OpenTournament: func() string { return "Открыть турнир на сайте" },
 			PlayerFlag:     func(name string, flag string) string { return fmt.Sprintf("%s (%s)", name, flag) },
@@ -1380,13 +1473,16 @@ var RU = Strings{
 			SendConfirm: func(teams string) string {
 				return fmt.Sprintf("Выгрузить составы и ответы %s команд на турнирный сайт?", teams)
 			},
-			Sent: func(rosters string, results string) string {
-				return fmt.Sprintf("Отправлено составов: %s, ответов: %s.", rosters, results)
+			Sent: func(rosters string, flags string, results string) string {
+				return fmt.Sprintf("Отправлено составов: %s, зачётов: %s, ответов: %s.", rosters, flags, results)
 			},
 			SentMoved: func(moved string) string {
 				return fmt.Sprintf("Команд, перенесённых в заявки своих площадок: %s.", moved)
 			},
 			SentSubhead: func() string { return "Выгружено" },
+			SentTaken: func(n string) string {
+				return fmt.Sprintf("Составов и зачётов, которые dope взял с турнирного сайта: %s.", n)
+			},
 			SiteRefused: func(message string) string {
 				return fmt.Sprintf("Турнирный сайт отказал: %s", message)
 			},
@@ -1395,13 +1491,21 @@ var RU = Strings{
 			},
 			SkippedLine:    func(team string, reason string) string { return fmt.Sprintf("%s: %s", team, reason) },
 			SkippedSubhead: func() string { return "Не уйдёт на сайт" },
-			TeamRemark:     func(team string, message string) string { return fmt.Sprintf("%s: %s", team, message) },
+			TakeIntoDope:   func() string { return "dope возьмёт её себе." },
+			TakeLine: func(team string, fact string, site string) string {
+				return fmt.Sprintf("%s, %s. Останется версия сайта: %s", team, fact, site)
+			},
+			TeamRemark: func(team string, message string) string { return fmt.Sprintf("%s: %s", team, message) },
 			Title: func(fest string) string {
 				return fmt.Sprintf("Выгрузка на турнирный сайт · %s", fest)
 			},
 			ToProfile: func() string { return "Открыть профиль" },
 			TokenRefused: func() string {
 				return "Турнирный сайт не принял ваш токен. Сохраните в профиле действующий токен с правом записи."
+			},
+			TypedId: func() string { return "или ID на турнирном сайте" },
+			Undecided: func(n string) string {
+				return fmt.Sprintf("Выберите версию во всех расхождениях: осталось %s.", n)
 			},
 			Unfinished: func(done string, total string) string {
 				return fmt.Sprintf("Закрыто %s вопросов из %s. Незакрытые вопросы уйдут как не взятые.", done, total)
@@ -1680,6 +1784,9 @@ var RU = Strings{
 			PlayerTwice: func(name string) string {
 				return fmt.Sprintf("%s записан в команду дважды.", name)
 			},
+			RatingTeamFixed: func() string {
+				return "У команды из импорта ID задаёт турнирный сайт."
+			},
 			RatingTeamTaken: func() string {
 				return "Эта команда рейтинга уже есть в составах феста."
 			},
@@ -1687,6 +1794,12 @@ var RU = Strings{
 				return fmt.Sprintf("Команду «%s» нельзя убрать: у неё есть результаты в играх %s.", team, games)
 			},
 			TeamUnknown: func() string { return "Такой команды нет в составах феста." },
+			VenueNumberRange: func(max string) string {
+				return fmt.Sprintf("Номер команды должен быть от 1 до %s.", max)
+			},
+			VenueNumberTaken: func(number string, team string, name string) string {
+				return fmt.Sprintf("Номер %s на площадке уже у команды «%s». Выберите для команды «%s» другой номер.", number, team, name)
+			},
 		},
 		Rating: ImportsRatingStrings{
 			ApiError: func(detail string) string { return fmt.Sprintf("рейтинг вернул ошибку: %s", detail) },
@@ -2093,6 +2206,53 @@ var RU = Strings{
 		},
 	},
 	Od: OdStrings{
+		Contested: OdContestedStrings{
+			Accepted: func() string { return "Принят" },
+			Add:      func() string { return "Добавить спорный" },
+			AnswerHint: func() string {
+				return "Такой же ответ другой команды выберите из списка: жюри решает по нему один раз."
+			},
+			AnswerLabel:    func() string { return "Ответ команды" },
+			AnswerRequired: func() string { return "Нужны номер вопроса и текст ответа" },
+			Cancel:         func() string { return "Отмена" },
+			ColAnswer:      func() string { return "Ответ" },
+			ColQuestion:    func() string { return "Вопрос" },
+			Delete:         func() string { return "Удалить" },
+			DeleteConfirm: func(answer string, n string) string {
+				return fmt.Sprintf("Удалить ответ «%s» на вопрос %s у всех команд?", answer, n)
+			},
+			DialogTitle:      func() string { return "Спорный ответ" },
+			DialogTitleVenue: func(venue string) string { return fmt.Sprintf("Спорный ответ, %s", venue) },
+			Edit:             func() string { return "Редактировать спорный" },
+			Empty:            func() string { return "Спорных ответов пока нет." },
+			Given: func(n int) string {
+				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "команда", "команды", "команд"))
+			},
+			Move: func() string { return "Перенести" },
+			MoveTitle: func(answer string, n string) string {
+				return fmt.Sprintf("Перенести ответ «%s» с вопроса %s", answer, n)
+			},
+			NoQuestion:   func(n string) string { return fmt.Sprintf("В игре нет вопроса %s", n) },
+			NoSuchNumber: func() string { return "В игре нет команды с таким номером" },
+			NoTeam:       func(n string) string { return fmt.Sprintf("Нет команды с номером %s", n) },
+			Pending:      func() string { return "Не рассмотрен" },
+			PendingTotal: func(n int) string {
+				return fmt.Sprintf("%d %s решения жюри", n, core.Plural("ru", n, "спорный ответ ждёт", "спорных ответа ждут", "спорных ответов ждут"))
+			},
+			QuestionLabel: func() string { return "Номер вопроса" },
+			Rejected:      func() string { return "Отклонён" },
+			Save:          func() string { return "Сохранить" },
+			SaveFailed:    func() string { return "Не удалось сохранить спорный ответ" },
+			StatusInvalid: func() string {
+				return "Решение бывает только «принят», «отклонён» или «не рассмотрен»"
+			},
+			Tab: func() string { return "Спорные" },
+			Taken: func(n string, q string) string {
+				return fmt.Sprintf("У команды %s уже есть спорный ответ на вопрос %s", n, q)
+			},
+			TeamLabel:       func() string { return "Номера команд" },
+			TeamPlaceholder: func() string { return "Через запятую: 3, 7, 12" },
+		},
 		Detailed: OdDetailedStrings{
 			Tour: func(n string) string { return fmt.Sprintf("Т%s", n) },
 		},
@@ -2504,7 +2664,7 @@ var RU = Strings{
 	Roles: RolesStrings{
 		Bulk: RolesBulkStrings{
 			ActionUnknown: func(n string) string {
-				return fmt.Sprintf("строка %s: действие должно быть host, admin или remove", n)
+				return fmt.Sprintf("строка %s: действие должно быть host, admin, game_jury или remove", n)
 			},
 			FormatExpected: func(n string) string { return fmt.Sprintf("строка %s: нужен формат username:role", n) },
 		},

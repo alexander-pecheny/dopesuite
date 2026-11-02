@@ -17,13 +17,14 @@ import (
 // TestParity compares every slide's XML against the presentation chgksuite
 // builds from the same package (scripts/gen_pptx_oracles.py).
 func TestParity(t *testing.T) {
+	requireArial(t)
 	sources, _ := filepath.Glob("testdata/*.4s")
 	for _, src := range sources {
 		name := strings.TrimSuffix(filepath.Base(src), ".4s")
 		t.Run(name, func(t *testing.T) {
 			opts := Options{
 				Language: "ru",
-				FontDirs: []string{"/usr/share/fonts/truetype/msttcorefonts"},
+				FontDirs: []string{msttcoreDir},
 			}
 			// service.4s carries a real config and a real template: a deck whose
 			// every tour opens on a slide the template drew by hand. It is the
@@ -47,12 +48,26 @@ func TestParity(t *testing.T) {
 }
 
 func TestParityCommentFirst(t *testing.T) {
+	requireArial(t)
 	opts := Options{
 		Language:     "ru",
-		FontDirs:     []string{"/usr/share/fonts/truetype/msttcorefonts"},
+		FontDirs:     []string{msttcoreDir},
 		CommentFirst: true,
 	}
 	checkParity(t, "testdata/full.4s", "testdata/full__pptx_comment_first", opts)
+}
+
+// msttcoreDir is where Debian's ttf-mscorefonts-installer puts Arial.
+const msttcoreDir = "/usr/share/fonts/truetype/msttcorefonts"
+
+// requireArial stops a parity test that would measure its text with another
+// font: the oracles were shrunk to fit with Arial, so without it every slide
+// that shrinks differs, and the diff does not say why.
+func requireArial(t *testing.T) {
+	t.Helper()
+	if FindFontFaces("Arial", []string{msttcoreDir}).regular == nil {
+		t.Fatal("Arial is not installed, and the oracles were measured with it: install ttf-mscorefonts-installer")
+	}
 }
 
 func checkParity(t *testing.T, src, oracle string, opts Options) {

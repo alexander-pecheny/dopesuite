@@ -47,7 +47,8 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("GET "+fest+"/invites", route.Manager, s.apiInvites)
 	t.Handle("POST "+game+"/invites", route.Manager, s.apiCreateInvite)
 	t.Handle("POST "+fest+"/multifest-venues/{venue}/invites", route.Manager, s.apiCreateVenueInvite)
-	for _, kind := range []inviteKind{gameInvites, venueInvites} {
+	t.Handle("POST "+fest+"/jury-invites", route.Manager, s.apiCreateJuryInvite)
+	for _, kind := range inviteKinds {
 		t.Handle("POST "+fest+"/"+kind.path+"/{id}/revoke", route.Manager, s.apiChangeInvite(kind, false))
 		t.Handle("DELETE "+fest+"/"+kind.path+"/{id}", route.Manager, s.apiChangeInvite(kind, true))
 	}
@@ -317,8 +318,11 @@ func (s *Server) apiAccess(w http.ResponseWriter, r *http.Request, sc route.Scop
 	out := make([]apiMember, len(members))
 	for i, m := range members {
 		out[i] = apiMember{UserID: m.UserID, Nickname: m.Nickname, Role: m.Role}
-		if m.Role == "host" {
+		switch m.Role {
+		case roles.Host:
 			out[i].Games, out[i].MultiFestVenues = limits[m.UserID], venues[m.UserID]
+		case roles.GameJury:
+			out[i].Games = limits[m.UserID]
 		}
 	}
 	return route.JSON(w, out)
@@ -506,8 +510,10 @@ type apiTeam struct {
 	// any way (ADR-0024), which an import keeps.
 	Hand   bool `json:"hand"`
 	Edited bool `json:"edited"`
-	// MultiFestVenueID is the venue the team plays at (ADR-0032).
+	// MultiFestVenueID is the venue the team plays at (ADR-0032), and
+	// VenueNumber its number there.
 	MultiFestVenueID int64 `json:"multifest_venue_id,omitempty"`
+	VenueNumber      int   `json:"venue_number,omitempty"`
 }
 
 func (s *Server) apiTeams(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -517,7 +523,7 @@ func (s *Server) apiTeams(w http.ResponseWriter, r *http.Request, sc route.Scope
 	}
 	out := make([]apiTeam, len(teams))
 	for i, t := range teams {
-		out[i] = apiTeam{ID: t.ID, RatingID: t.RatingID, Name: t.Name, City: t.City, Players: t.Players, Flags: t.Flags, Hand: t.Hand, Edited: t.Edited, MultiFestVenueID: t.Venue}
+		out[i] = apiTeam{ID: t.ID, RatingID: t.RatingID, Name: t.Name, City: t.City, Players: t.Players, Flags: t.Flags, Hand: t.Hand, Edited: t.Edited, MultiFestVenueID: t.Venue, VenueNumber: t.VenueNumber}
 	}
 	return route.JSON(w, out)
 }

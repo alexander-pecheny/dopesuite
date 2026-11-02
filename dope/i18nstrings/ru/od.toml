@@ -142,3 +142,48 @@ tables_note = 'Столов: {{.n}}. Листы 1–{{.n}} — джокеры.'
 # chip of the whole fest's view.
 label = "Площадка"
 all = "Все площадки"
+
+[contested]
+# Спорные: a team's disputed answer, which the game's jury accepts or rejects
+# after the game (dope/dope/domain/contested and od.ts).
+# The errors a host or the jury reads under a refused save.
+no_such_number = "В игре нет команды с таким номером"
+answer_required = "Нужны номер вопроса и текст ответа"
+status_invalid = "Решение бывает только «принят», «отклонён» или «не рассмотрен»"
+save_failed = "Не удалось сохранить спорный ответ"
+# The button over the entry sheet, and the dialog it opens.
+add = "Добавить спорный"
+# The same button when the selected cell already holds one.
+edit = "Редактировать спорный"
+dialog_title = "Спорный ответ"
+# In a synch fest the team numbers are the venue's.
+dialog_title_venue = 'Спорный ответ, {{.venue}}'
+question_label = "Номер вопроса"
+no_question = 'В игре нет вопроса {{.n}}'
+team_label = "Номера команд"
+# Several teams that gave the same answer go in one save.
+team_placeholder = "Через запятую: 3, 7, 12"
+no_team = 'Нет команды с номером {{.n}}'
+answer_label = "Ответ команды"
+answer_hint = "Такой же ответ другой команды выберите из списка: жюри решает по нему один раз."
+# How often an answer was given, in the suggest list under the answer field.
+given = '{{.n}} {{plural .n "команда" "команды" "команд"}}'
+delete = "Удалить"
+cancel = "Отмена"
+save = "Сохранить"
+# The tab that lists them for the jury and the admins.
+tab = "Спорные"
+empty = "Спорных ответов пока нет."
+col_question = "Вопрос"
+col_answer = "Ответ"
+pending = "Не рассмотрен"
+accepted = "Принят"
+rejected = "Отклонён"
+# The tooltip on a total that carries спорные still waiting for the jury.
+# An organizer's actions on a row of the tab: the answer goes from every team
+# that gave it.
+move = "Перенести"
+move_title = 'Перенести ответ «{{.answer}}» с вопроса {{.n}}'
+delete_confirm = 'Удалить ответ «{{.answer}}» на вопрос {{.n}} у всех команд?'
+taken = 'У команды {{.n}} уже есть спорный ответ на вопрос {{.q}}'
+pending_total = '{{.n}} {{plural .n "спорный ответ ждёт" "спорных ответа ждут" "спорных ответов ждут"}} решения жюри'

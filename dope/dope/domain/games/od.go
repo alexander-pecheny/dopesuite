@@ -3,6 +3,7 @@ package games
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,7 +33,49 @@ type ODState struct {
 	// enters its own teams under its own numbers and completes its own
 	// questions. Entries and Completed then say nothing until flattened.
 	Venues map[string]ODSheet `json:"venues,omitempty"`
+	// Contested are the contested answers, which the server writes here from its own
+	// tables (domain/contested) without their text.
+	Contested []ODContested `json:"contested,omitempty"`
 }
+
+// ODContested is one team's contested answer on one question, under the team's Number.
+type ODContested struct {
+	Question int    `json:"question"`
+	Number   int64  `json:"number"`
+	Status   string `json:"status"`
+}
+
+// ContestedKey is the document's key for its contested answers.
+const ContestedKey = "contested"
+
+// The jury's ruling on a contested answer, as ODContested.Status says it.
+const (
+	ContestedPending  = "pending"
+	ContestedAccepted = "accepted"
+	ContestedRejected = "rejected"
+)
+
+// Scored is the document as the standings read it: the venue sheets folded
+// into one, and every contested answer the jury accepted entered as taken.
+func (s *ODState) Scored() {
+	s.FlattenVenues()
+	for _, c := range s.Contested {
+		if c.Status != ContestedAccepted || c.Question < 0 || c.Question >= max(len(s.Entries), len(s.Completed)) {
+			continue
+		}
+		for len(s.Entries) <= c.Question {
+			s.Entries = append(s.Entries, []int64{})
+		}
+		if !slices.Contains(s.Entries[c.Question], c.Number) {
+			s.Entries[c.Question] = append(s.Entries[c.Question], c.Number)
+		}
+	}
+}
+
+// Contestable is a Protocol whose Games take contested answers.
+type Contestable interface{ Contestable() }
+
+func (od) Contestable() {}
 
 // ODResultsTeam is one ranked row of an OD standings view.
 type ODResultsTeam struct {
@@ -169,7 +212,7 @@ func ComputeODResults(schemeJSON, stateJSON string) (ODResults, error) {
 			return ODResults{}, fmt.Errorf("parse OD state: %w", err)
 		}
 	}
-	state.FlattenVenues()
+	state.Scored()
 	if len(tours) == 0 {
 		// No tour composition recorded: treat every question as one tour, matching
 		// the export's fallback so the view is never empty.

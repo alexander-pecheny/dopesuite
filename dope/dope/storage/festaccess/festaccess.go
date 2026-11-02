@@ -194,11 +194,14 @@ func SaveFestAccessTx(ctx context.Context, tx *sql.Tx, festID, actorID int64, fo
 		if nextRole == "" {
 			nextRole = currentRole
 		}
-		if nextRole != roles.Host || form.Get("delete_"+uid) == "1" {
+		if !limitable(nextRole) || form.Get("delete_"+uid) == "1" {
 			continue
 		}
 		if err := setHostGamesTx(ctx, tx, festID, userID, formIDs(form["games_"+uid])); err != nil {
 			return err
+		}
+		if nextRole != roles.Host {
+			continue
 		}
 		if err := setHostVenuesTx(ctx, tx, festID, userID, formIDs(form["venues_"+uid])); err != nil {
 			return err
@@ -443,7 +446,7 @@ func SetHostLimitsTx(ctx context.Context, tx *sql.Tx, festID, actorID int64, lim
 		if err != nil {
 			return err
 		}
-		if current[userID] != roles.Host {
+		if !limitable(current[userID]) || limit.Venues != nil && current[userID] != roles.Host {
 			return corei18n.User(s.Festaccess.Games.NotHost(nickname))
 		}
 		if limit.Games != nil {
@@ -468,6 +471,12 @@ select id from multifest_venues where fest_id = ? and (cast(id as text) = ? or t
 		}
 	}
 	return nil
+}
+
+// limitable says whether an admin may limit a member with this role to some
+// Games: a host, or the jury.
+func limitable(role string) bool {
+	return role == roles.Host || role == roles.GameJury
 }
 
 // resolveRefsTx turns the names of a fest's Games or venues into their ids by
@@ -546,6 +555,23 @@ select count(*), coalesce(sum(here), 0) from (
 		return false, err
 	}
 	return limited == 0 || here > 0, nil
+}
+
+// MayJudgeGame says whether a user with this role on the fest may rule on this
+// Game's contested answers: an admin or the creator always, the jury unless an admin
+// limited it to other Games.
+func MayJudgeGame(ctx context.Context, q store.Queryer, festID, gameID, userID int64, role string) (bool, error) {
+	if !roles.CanJudge(role) {
+		return false, nil
+	}
+	if roles.Normalize(role) != roles.GameJury {
+		return true, nil
+	}
+	var limited, here int
+	err := q.QueryRowContext(ctx, `
+select count(*), coalesce(sum(game_id = ?), 0) from fest_game_hosts where fest_id = ? and user_id = ?`,
+		gameID, festID, userID).Scan(&limited, &here)
+	return limited == 0 || here > 0, err
 }
 
 // formIDs reads the ids a form's boxes posted.

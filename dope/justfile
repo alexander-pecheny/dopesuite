@@ -30,12 +30,12 @@ fmt:
 # input in the transcript (about 15 s more, in parallel with the rest).
 test: build-web
     cd .. && just typecheck
-    go test -short ./...
+    ../scripts/gotest.sh -short ./...
     bun test --parallel ./dope/web/jstest/
 
 test-full: build-web
     cd .. && just typecheck
-    go test ./...
+    ../scripts/gotest.sh ./...
     bun test --parallel ./dope/web/jstest/
 
 # dope-cli: the API from the shell, for an agent (ADR-0021, the dope-api skill).

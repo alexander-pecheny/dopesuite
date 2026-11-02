@@ -1074,7 +1074,7 @@ func (s *Server) importRatingVenues(ctx context.Context, festID, ratingID int64,
 	if kind, err := multifest.FestKind(ctx, db, festID); err != nil || kind != multifest.Synch {
 		return nil, err
 	}
-	accepted, err := imports.FetchRatingVenues(ctx, ratingID)
+	accepted, err := imports.FetchRatingVenues(ctx, s.h.Engine().RatingSite(""), ratingID)
 	if err != nil {
 		return nil, corei18n.User(dopestrings.Default.Imports.Rating.FetchFailed(err.Error()))
 	}

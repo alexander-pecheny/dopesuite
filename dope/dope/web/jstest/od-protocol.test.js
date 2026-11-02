@@ -131,3 +131,53 @@ test("a synch fest's venue sheets flatten into one, and a venue's sheet shares t
   assert.equal(state.venues["7"].entries[1][1], 2);
   assert.equal(od.isSynch(od.parseState({teams: []}, {}, 1)), false);
 });
+
+test("an accepted спорный counts as taken, a pending one waits beside the score, a rejected one is a miss", () => {
+  const state = od.parseState({
+    teams: [{name: "A", number: 1}, {name: "B", number: 2}, {name: "C", number: 3}],
+    entries: [[1, 0, 0], [0, 0, 0]],
+    completed: [true, true],
+    contested: [
+      {question: 0, number: 2, status: "accepted"},
+      {question: 1, number: 2, status: "pending"},
+      {question: 1, number: 3, status: "rejected"},
+      {question: 1, number: 0, status: "accepted"},
+    ],
+  }, {}, 2);
+  assert.equal(state.contested.length, 3);
+  assert.deepEqual(od.rows(state, [2]).map((r) => [r.index, r.total]), [[0, 1], [1, 1], [2, 0]]);
+  assert.equal(od.pendingCount(state, 1), 1);
+  assert.equal(od.pendingCount(state, 1, 0, 1), 0);
+  assert.equal(od.withPending(1, 1), "1+1");
+  assert.equal(od.contestedAt(state, 2, 1)?.status, "rejected");
+});
+
+test("the same answer from two teams is one ruling, case and spacing aside", () => {
+  const groups = od.groupContested([
+    {question: 0, number: 1, answer: "Пушкин", status: "pending"},
+    {question: 0, number: 2, answer: " пушкин ", status: "pending"},
+    {question: 1, number: 1, answer: "Пушкин", status: "accepted"},
+  ]);
+  assert.deepEqual(groups.map((g) => [g.question, g.numbers, g.status]), [[0, [1, 2], "pending"], [1, [1], "accepted"]]);
+});
+
+test("a venue's sheet names its спорные by the venue's numbers", () => {
+  const state = od.parseState({
+    teams: [{name: "Альфа", number: 4, venue: 7, venueNumber: 1}, {name: "Гамма", number: 5, venue: 9, venueNumber: 1}],
+    venues: {"7": {entries: [[0]], completed: [true]}, "9": {entries: [[0]], completed: [true]}},
+    contested: [{question: 0, number: 4, status: "pending"}, {question: 0, number: 5, status: "pending"}],
+  }, {}, 1);
+  const sheet = od.venueSheet(state, 7);
+  assert.deepEqual(sheet.contested, [{question: 0, number: 1, status: "pending"}]);
+  assert.equal(sheet.teams[0].festNumber, 4);
+});
+
+test("a спорный on a question the team took anyway waits for nothing", () => {
+  const state = od.parseState({
+    teams: [{name: "A", number: 1}],
+    entries: [[1]],
+    completed: [true],
+    contested: [{question: 0, number: 1, status: "pending"}],
+  }, {}, 1);
+  assert.equal(od.pendingCount(state, 0), 0);
+});

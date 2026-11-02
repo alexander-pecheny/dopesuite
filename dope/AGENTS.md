@@ -32,7 +32,7 @@ dope/                    # module root (go.mod: module "dope")
     server/              # package dopeserver — the orchestration trunk + server/tests/ (integration)
     web/                 # HTTP/UI: route (the one dispatcher), pages, hostpages, editbatch, telegrambridge, assets (embed), jstest
     domain/              # game/fest logic: games, core, gamebuild, flatgame, resolver, roster, overrides, imports, entrants, numbering, towns, edit, view
-    storage/             # persistence: store, journal, migrate, festwrite, festaccess, auditmw, storeutil, sqlitez, buffdb
+    storage/             # persistence: store, journal, migrate, festwrite, festaccess, auditmw, storeutil, sqlitez, buffdb, ratingsite
     export/              # output: xlsxexport, gameexport
     platform/            # cross-cutting leaves: realtime, roles, markdown, session, metrics, util
 scripts/
