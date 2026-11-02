@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"qy/qy/domain/question"
+	"qy/qy/platform/gq"
 	qyserver "qy/qy/server"
 )
 
@@ -112,5 +114,45 @@ func TestAnAdminMayTryTheFormBeforeItOpens(t *testing.T) {
 	}
 	if body := w.get(w.user("alice"), "/2026/", http.StatusOK); strings.Contains(body, `href="/nominate"`) {
 		t.Error("the year page should not link the form for everyone yet")
+	}
+}
+
+func TestAGotQuestionsLinkLoadsIntoTheFields(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.ts.SetGotQuestions(gq.Fixed{777: {Question: question.Question{
+		Text: "[Раздаточный материал: яблоко]\nОпубликованный вопрос про ИКС.", Answer: "икс", Source: "книга", Author: "Пётр Петров",
+	}, Tournament: "Кубок", TournamentID: 12345}})
+	alice, bob := w.user("alice"), w.user("bob")
+
+	res := alice.PostJSON("/api/nominate/gq", `{"link": "https://gotquestions.online/question/777"}`)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"handout":"яблоко"`) ||
+		!strings.Contains(res.Body.String(), `"tournament":"https://rating.chgk.info/tournament/12345"`) {
+		t.Errorf("load endpoint: %d %s", res.Code, res.Body.String())
+	}
+	if res := alice.PostJSON("/api/nominate/gq", `{"link": "https://gotquestions.online/question/1"}`); res.Code != http.StatusBadRequest {
+		t.Errorf("an unknown question: %d", res.Code)
+	}
+
+	// Without the page's script the load button posts the form.
+	form := slots("101", map[int]string{1: "https://gotquestions.online/question/777"})
+	form.Set("load", "1")
+	if body := w.post(alice, "/nominate", form, http.StatusOK); !strings.Contains(body, ">икс</textarea>") {
+		t.Error("the load should fill the fields")
+	}
+
+	// A corrected answer is kept, with the gotquestions id.
+	form.Del("load")
+	form.Set("slot1_text", "Опубликованный вопрос про ИКС.")
+	form.Set("slot1_answer", "икс (поправлено)")
+	form.Set("slot1_source", "книга")
+	form.Set("slot1_author", "Пётр Петров")
+	w.post(alice, "/nominate", form, http.StatusSeeOther)
+	if n := w.count(`select count(*) from questions where gq_id = 777 and json_extract(orig, '$.answer') = 'икс (поправлено)' and tournament_title = 'Кубок'`); n != 1 {
+		t.Error("the corrected question should be saved under its gotquestions id")
+	}
+	w.post(bob, "/nominate", slots("202", map[int]string{1: "https://gotquestions.online/question/777"}), http.StatusSeeOther)
+	if w.count(`select count(*) from questions`) != 1 {
+		t.Error("a second nominator of the link should share the question")
 	}
 }

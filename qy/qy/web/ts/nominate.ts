@@ -3,11 +3,12 @@
 // [data-part=fields] block for a question typed in. That block switches
 // between the pasted text and its fields with tabs, and remembers the view
 // in a hidden slotN_view input, so a form shown again opens where it was.
-// The parse button asks /api/nominate/parse and fills the fields without leaving
-// the page; without this script it posts the form, which parses and comes
-// back unsaved.
+// The parse button asks /api/nominate/parse, and the load button beside a
+// gotquestions link (or Enter in it) asks /api/nominate/gq; either fills the
+// fields without leaving the page. Without this script both post the form,
+// which does the same and comes back unsaved.
 import S from "./i18nstrings.js";
-import { needsFields, PARSED_FIELDS, type Parsed } from "./nominate-model.js";
+import { isGotQuestions, needsFields, PARSED_FIELDS, type Parsed } from "./nominate-model.js";
 
 function field(card: HTMLElement, name: string): HTMLInputElement | HTMLTextAreaElement | null {
   return card.querySelector(`[name="slot${card.dataset.slot}_${name}"]`);
@@ -23,37 +24,53 @@ function showView(block: HTMLElement, view: string): void {
   if (input) input.value = view;
 }
 
+// hasFields says the slot's fields hold something: typed, parsed or loaded.
+function hasFields(card: HTMLElement): boolean {
+  return PARSED_FIELDS.some((name) => (field(card, name)?.value.trim() ?? "") !== "");
+}
+
 function syncParts(card: HTMLElement): void {
   const checked = card.querySelector<HTMLInputElement>('input[type=radio][name$="_kind"]:checked');
   const published = checked?.value !== "unpublished";
   const link = field(card, "link")?.value ?? "";
   const linkPart = card.querySelector<HTMLElement>("[data-part=published]");
   const fieldsPart = card.querySelector<HTMLElement>("[data-part=fields]");
+  const load = card.querySelector<HTMLElement>("[data-load]");
   if (linkPart) linkPart.hidden = !published;
-  if (fieldsPart) fieldsPart.hidden = !needsFields(published, link);
+  if (load) load.hidden = !(published && isGotQuestions(link));
+  if (fieldsPart) fieldsPart.hidden = !(needsFields(published, link) || hasFields(card));
 }
 
-function parseMessage(block: HTMLElement, text: string): void {
-  let p = block.querySelector<HTMLElement>("[data-parse-message]");
+function fill(card: HTMLElement, parsed: Parsed): void {
+  for (const name of PARSED_FIELDS) {
+    const el = field(card, name);
+    if (el) el.value = parsed[name];
+  }
+}
+
+// message shows a failure under where it happened, or hides it.
+function message(where: Element | null, text: string): void {
+  if (!where) return;
+  let p = where.querySelector<HTMLElement>(":scope > [data-message]");
   if (!p) {
     p = document.createElement("p");
     p.className = "hint hint-danger";
-    p.dataset.parseMessage = "";
-    block.querySelector("[data-panel=text]")?.append(p);
+    p.dataset.message = "";
+    where.append(p);
   }
   p.textContent = text;
   p.hidden = text === "";
 }
 
-// askParse sends the pasted text to the parse endpoint; a failure comes back
-// as the words to show.
-async function askParse(raw: string): Promise<Parsed | string> {
+// ask posts to one of the form's endpoints; a failure comes back as the
+// words to show.
+async function ask(url: string, body: object): Promise<Parsed | string> {
   try {
-    const res = await fetch("/api/nominate/parse", {
+    const res = await fetch(url, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: raw }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) return (await res.text()).trim() || S.forms.failed();
     return (await res.json()) as Parsed;
@@ -65,16 +82,34 @@ async function askParse(raw: string): Promise<Parsed | string> {
 async function parse(card: HTMLElement, block: HTMLElement): Promise<void> {
   const raw = field(card, "raw")?.value.trim() ?? "";
   if (!raw) return;
-  const parsed = await askParse(raw);
+  const parsed = await ask("/api/nominate/parse", { text: raw });
+  const panel = block.querySelector("[data-panel=text]");
   if (typeof parsed === "string" || !parsed.ok) {
-    parseMessage(block, typeof parsed === "string" ? parsed : S.nominate.slot.parseFailed());
+    message(panel, typeof parsed === "string" ? parsed : S.nominate.slot.parseFailed());
     return;
   }
-  parseMessage(block, "");
-  for (const name of PARSED_FIELDS) {
-    const el = field(card, name);
-    if (el) el.value = parsed[name];
+  message(panel, "");
+  fill(card, parsed);
+  showView(block, "fields");
+}
+
+// load reads a gotquestions question into the fields. When it is not found,
+// the fields open on the text view, for the nominator to paste it.
+async function load(card: HTMLElement, block: HTMLElement): Promise<void> {
+  const link = field(card, "link");
+  if (!link || !isGotQuestions(link.value)) return;
+  const loaded = await ask("/api/nominate/gq", { link: link.value.trim() });
+  const where = card.querySelector("[data-part=published]");
+  block.hidden = false;
+  if (typeof loaded === "string") {
+    message(where, loaded);
+    showView(block, "text");
+    return;
   }
+  message(where, "");
+  fill(card, loaded);
+  const tournament = field(card, "tournament");
+  if (tournament && !tournament.value && loaded.tournament) tournament.value = loaded.tournament;
   showView(block, "fields");
 }
 
@@ -85,7 +120,13 @@ function wire(card: HTMLElement): void {
   syncParts(card);
   card.addEventListener("change", () => syncParts(card));
   field(card, "link")?.addEventListener("input", () => syncParts(card));
-  block.addEventListener("click", (event) => {
+  field(card, "link")?.addEventListener("keydown", (event: Event) => {
+    if (!(event instanceof KeyboardEvent)) return;
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    void load(card, block);
+  });
+  card.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target.closest<HTMLElement>("button") : null;
     if (!target) return;
     if (target.getAttribute("role") === "tab" && target.dataset.view) {
@@ -93,8 +134,21 @@ function wire(card: HTMLElement): void {
     } else if (target.getAttribute("name") === "parse") {
       event.preventDefault();
       void parse(card, block);
+    } else if (target.hasAttribute("data-load")) {
+      event.preventDefault();
+      void load(card, block);
     }
   });
 }
 
 for (const card of document.querySelectorAll<HTMLElement>("form[data-nominate] [data-slot]")) wire(card);
+
+// Enter in a one-line field would submit the form through its first submit
+// button, which is the first slot's load or parse. The link field loads its
+// own slot (above); the others do nothing.
+document.querySelector("form[data-nominate]")?.addEventListener("keydown", (event) => {
+  const el = event.target;
+  if (event instanceof KeyboardEvent && event.key === "Enter" && el instanceof HTMLInputElement && el.type !== "submit") {
+    event.preventDefault();
+  }
+});

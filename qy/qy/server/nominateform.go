@@ -65,6 +65,18 @@ func (in slotInput) needsFields() bool {
 	return !in.published || question.FindLinks(in.link).GotQuestionsID == 0
 }
 
+// isGotQuestions says the question is published on gotquestions, which the
+// form can load it from.
+func (in slotInput) isGotQuestions() bool {
+	return in.published && question.FindLinks(in.link).GotQuestionsID != 0
+}
+
+// fieldsGiven says the slot carries fields: typed in, or loaded from
+// gotquestions and perhaps corrected.
+func (in slotInput) fieldsGiven() bool {
+	return in.fields != question.Question{} || in.handout != ""
+}
+
 func (in slotInput) question() question.Question {
 	q := in.fields
 	q.Text = question.WithHandout(q.Text, in.handout)
@@ -82,7 +94,7 @@ func (in slotInput) sameAs(old slotInput) bool {
 	if in.published != old.published || in.link != old.link {
 		return false
 	}
-	if !in.needsFields() {
+	if !in.needsFields() && !in.fieldsGiven() && !old.fieldsGiven() {
 		return true
 	}
 	return in.tournament == old.tournament && in.raw == old.raw && in.question() == old.question()
@@ -96,6 +108,7 @@ type slotView struct {
 	answer     string // what gotquestions gave, for a published link
 	errs       []string
 	parseMiss  bool
+	loadMiss   bool
 	view       string
 }
 
@@ -103,7 +116,8 @@ type nominationForm struct {
 	rating    string
 	ratingErr error
 	slots     map[int]slotView
-	parseOnly bool
+	parseOnly bool // a parse or a load was asked for, not a save
+	loadSlot  int
 	uploaded  bool
 }
 
@@ -150,10 +164,9 @@ func scanSlot(rows *sql.Rows) (int, slotView, error) {
 	q := question.FromJSON(orig)
 	if isGQ {
 		v.answer = q.Answer
-	} else {
-		v.in.fields = q
-		v.in.handout, v.in.fields.Text = question.SplitHandout(q.Text)
 	}
+	v.in.fields = q
+	v.in.handout, v.in.fields.Text = question.SplitHandout(q.Text)
 	return slot, v, nil
 }
 
@@ -185,11 +198,13 @@ func formText(r *http.Request, key string) string {
 
 // readNominationForm reads every slot of a post and checks it. A slot whose
 // parse button was pressed, or whose fields are empty while its text is not,
-// has the text parsed into its fields.
+// has the text parsed into its fields. A load asked for is left to the
+// handler, which can reach gotquestions.
 func readNominationForm(r *http.Request, c contest.Contest, before map[int]slotView) nominationForm {
 	form := nominationForm{rating: r.FormValue("rating_id"), slots: map[int]slotView{}}
 	parseSlot, _ := strconv.Atoi(r.FormValue("parse"))
-	form.parseOnly = parseSlot != 0
+	form.loadSlot, _ = strconv.Atoi(r.FormValue("load"))
+	form.parseOnly = parseSlot != 0 || form.loadSlot != 0
 	for slot := 1; slot <= c.MainSlots+c.ReserveSlots; slot++ {
 		v := slotView{in: readSlot(r, slot), view: r.FormValue(slotKey(slot, "view"))}
 		old := before[slot]
@@ -269,7 +284,7 @@ func (in slotInput) check() []string {
 		return nil
 	}
 	errs := in.linkErrors()
-	if !in.needsFields() {
+	if !in.needsFields() && !in.fieldsGiven() {
 		return errs
 	}
 	var missing []string
@@ -413,12 +428,28 @@ func slotCard(c contest.Contest, slot int, v slotView) ui.Item {
 			kindRadio(slot, kindPublished, str.Nominate.Slot.Published(), in.published),
 			kindRadio(slot, kindUnpublished, str.Nominate.Slot.Unpublished(), !in.published)),
 		ui.Col(ui.SpaceSM, ui.Data("part", kindPublished), ui.Field(ui.Label(str.Nominate.Slot.Link()),
-			ui.Textfield(ui.Name(slotKey(slot, "link")), ui.Value(in.link), ui.Inputmode("url")),
-			hint(str.Nominate.Slot.LinkHint()))),
+			linkRow(slot, v), hint(str.Nominate.Slot.LinkHint()))),
 		fieldsBlock(slot, v),
 	}
 	items = append(items, slotStatus(v)...)
 	return ui.Card(items...)
+}
+
+// linkRow is the publication's link and, for a gotquestions link, the button
+// that loads the question into the fields.
+func linkRow(slot int, v slotView) ui.Item {
+	load := []ui.Item{ui.Submit(), ui.Formnovalidate(), ui.Name("load"), ui.Value(strconv.Itoa(slot)),
+		ui.IconCloudDownload, ui.Data("load", ""), text(str.Nominate.Slot.Load())}
+	if !v.in.isGotQuestions() {
+		load = append(load, ui.Hidden())
+	}
+	row := []ui.Item{ui.Row(ui.SpaceSM,
+		ui.Textfield(ui.Name(slotKey(slot, "link")), ui.Value(v.in.link), ui.Inputmode("url"), ui.Grow()),
+		ui.Button(load...))}
+	if v.loadMiss {
+		row = append(row, dangerHint(str.Nominate.Slot.LoadFailed()))
+	}
+	return ui.Col(append([]ui.Item{ui.SpaceSM}, row...)...)
 }
 
 // fieldsBlock is the part of a slot for a question typed in: its tournament,

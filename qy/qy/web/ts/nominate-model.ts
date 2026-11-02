@@ -16,4 +16,4 @@ export function needsFields(published: boolean, link: string): boolean {
 // The fields the parse button fills, as the parse endpoint names them.
 export const PARSED_FIELDS = ["text", "handout", "answer", "zachet", "nezachet", "comment", "source", "author"] as const;
 export type ParsedField = (typeof PARSED_FIELDS)[number];
-export type Parsed = { ok: boolean } & Record<ParsedField, string>;
+export type Parsed = { ok: boolean; tournament?: string } & Record<ParsedField, string>;

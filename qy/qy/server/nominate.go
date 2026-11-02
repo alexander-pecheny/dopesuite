@@ -98,6 +98,10 @@ func (s *server) handleNominate(w http.ResponseWriter, r *http.Request, sc route
 		return err
 	}
 	form := readNominationForm(r, c, before)
+	if v, ok := form.slots[form.loadSlot]; ok {
+		s.loadSlot(r.Context(), &v)
+		form.slots[form.loadSlot] = v
+	}
 	rating, ratingErr := parseRatingID(form.rating)
 	if form.parseOnly || form.hasErrors() || ratingErr != nil {
 		if ratingErr != nil && !form.parseOnly {
@@ -158,11 +162,11 @@ func (s *server) slotChanges(ctx context.Context, c contest.Contest, before, aft
 				out[slot] = slotChange{}
 			}
 		case now.in.sameAs(old.in) && now.in.file == nil && !now.in.dropFile:
-		case !now.in.needsFields():
+		case !now.in.needsFields() && !now.in.fieldsGiven():
 			q := s.questionFrom(ctx, c.Year, now.in.link)
 			out[slot] = slotChange{q: &q}
 		default:
-			q := fieldsQuestion(c.Year, now.in)
+			q := s.fieldsQuestion(ctx, c.Year, now.in)
 			ch := slotChange{q: &q, add: now.in.file}
 			if now.in.file == nil && !now.in.dropFile {
 				ch.keepFrom = old.questionID
@@ -173,19 +177,56 @@ func (s *server) slotChanges(ctx context.Context, c contest.Contest, before, aft
 	return out
 }
 
-// fieldsQuestion is a question the nominator typed in: unpublished, or
-// published somewhere other than gotquestions.
-func fieldsQuestion(year int, in slotInput) store.Question {
+// fieldsQuestion is a question as the nominator's fields give it: typed in,
+// or loaded from gotquestions and perhaps corrected. A gotquestions question
+// keeps its id, so a second nominator of it lands on the first one's row and
+// the first one's fields.
+func (s *server) fieldsQuestion(ctx context.Context, year int, in slotInput) store.Question {
 	orig := in.question()
 	q := store.Question{
 		Year: int64(year), SourceText: in.raw, TournamentLink: in.tournament,
 		TournamentID: question.FindLinks(in.tournament).TournamentID,
 		Orig:         orig, Clean: orig.Anonymous(), Published: in.published,
 	}
-	if in.published {
-		q.Link = in.link
+	if !in.published {
+		return q
+	}
+	links := question.FindLinks(in.link)
+	q.Link, q.GQID = in.link, links.GotQuestionsID
+	if q.GQID == 0 {
+		return q
+	}
+	q.Link = links.GotQuestions
+	if found, err := s.gq.Question(ctx, q.GQID); err == nil {
+		q.TournamentTitle = found.Tournament
+		if q.TournamentID == 0 {
+			q.TournamentID = found.TournamentID
+		}
 	}
 	return q
+}
+
+// loadSlot fills a slot's fields from gotquestions, the form's load button
+// when the page's script does not run.
+func (s *server) loadSlot(ctx context.Context, v *slotView) {
+	found, err := s.gq.Question(ctx, question.FindLinks(v.in.link).GotQuestionsID)
+	if err != nil {
+		v.loadMiss = true
+		return
+	}
+	v.in.fields = found.Question
+	v.in.handout, v.in.fields.Text = question.SplitHandout(found.Question.Text)
+	if v.in.tournament == "" {
+		v.in.tournament = tournamentLink(found.TournamentID)
+	}
+	v.view = viewFields
+}
+
+func tournamentLink(id int64) string {
+	if id == 0 {
+		return ""
+	}
+	return "https://rating.chgk.info/tournament/" + idstr.Format(id)
 }
 
 // questionFrom builds a published question out of its gotquestions link,
@@ -292,6 +333,29 @@ func (s *server) handleParseQuestion(w http.ResponseWriter, r *http.Request, _ r
 	return writeJSON(w, map[string]any{
 		"ok": ok, "text": rest, "handout": handout, "answer": q.Answer, "zachet": q.Zachet,
 		"nezachet": q.Nezachet, "comment": q.Comment, "source": q.Source, "author": q.Author,
+	})
+}
+
+// handleLoadQuestion is the form's load button when the page's script runs:
+// a gotquestions link in, the question's fields out, nothing saved.
+func (s *server) handleLoadQuestion(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	var req struct {
+		Link string `json:"link"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		return err
+	}
+	id := question.FindLinks(req.Link).GotQuestionsID
+	found, err := s.gq.Question(r.Context(), id)
+	if id == 0 || err != nil {
+		return userError(str.Nominate.Slot.LoadFailed())
+	}
+	q := found.Question
+	handout, rest := question.SplitHandout(q.Text)
+	return writeJSON(w, map[string]any{
+		"ok": true, "text": rest, "handout": handout, "answer": q.Answer, "zachet": q.Zachet,
+		"nezachet": q.Nezachet, "comment": q.Comment, "source": q.Source, "author": q.Author,
+		"tournament": tournamentLink(found.TournamentID),
 	})
 }
 
