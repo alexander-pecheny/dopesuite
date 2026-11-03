@@ -36,6 +36,7 @@ func routes(s *server) *http.ServeMux {
 	pages.Handle("GET /nominate/file/{id}", route.LoggedIn, s.handleNominationFile)
 	api.Handle("POST /api/nominate/parse", route.LoggedIn, s.handleParseQuestion)
 	api.Handle("POST /api/nominate/load", route.LoggedIn, s.handleLoadQuestion)
+	api.Handle("POST /api/nominate/preview", route.LoggedIn, s.handlePreviewQuestion)
 	pages.Handle("GET /vote", route.LoggedIn, s.handleVotePage)
 	pages.Handle("POST /vote", route.LoggedIn, s.handleVote)
 	pages.Handle("GET /final", route.LoggedIn, s.handleJuryPage)

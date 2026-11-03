@@ -347,7 +347,6 @@ export type Strings = {
       badTournament: () => string;
       fileTooBig: () => string;
       missing: (fields: string) => string;
-      noLink: () => string;
       noTournament: () => string;
     };
     field: {
@@ -374,6 +373,8 @@ export type Strings = {
       title: () => string;
     };
     slot: {
+      add: (field: string) => string;
+      clear: () => string;
       dropFile: () => string;
       file: () => string;
       fileHint: () => string;
@@ -386,14 +387,14 @@ export type Strings = {
       parse: () => string;
       parseFailed: () => string;
       parsed: (answer: string) => string;
-      paste: () => string;
-      pasteHint: () => string;
-      published: () => string;
+      previewEmpty: () => string;
       reserve: (n: string) => string;
+      source: () => string;
       tabFields: () => string;
+      tabPreview: () => string;
       tabText: () => string;
       tournament: () => string;
-      unpublished: () => string;
+      tournamentHint: () => string;
     };
   };
   profile: {
@@ -407,6 +408,7 @@ export type Strings = {
     author: () => string;
     comment: () => string;
     factcheck: () => string;
+    handout: () => string;
     label: (number: string) => string;
     nezachet: () => string;
     showAnswer: () => string;

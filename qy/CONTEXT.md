@@ -7,11 +7,12 @@ the final, and the results day. A new Contest starts from the previous one's
 dates moved 52 weeks on, so each stage falls on the same weekday.
 
 **Nomination.** A logged-in person's pick, in one of their slots. The first
-five slots are main picks and the next three are reserves. A slot holds a
-question published on gotquestions as its link alone. Any other question,
-published elsewhere (a telegram post) or not at all, is held as its fields,
-with its tournament's link (required when it is unpublished) and an optional
-handout file.
+five slots are main picks and the next three are reserves. A slot starts as
+one box for a link or a whole question: a gotquestions or telegram link is
+loaded into the question's fields, a text is parsed into them. A question is
+published when it has a publication link; one without needs its tournament's
+link. A gotquestions question may be saved as its link alone. A slot may
+carry a handout file.
 
 **Question.** A nominated question. `orig` is what the nominator gave, parsed,
 with its credits. `clean` is the anonymised copy the jury reads. Two

@@ -20,7 +20,6 @@ func TestAQuestionPublishedOnTelegramIsTypedIn(t *testing.T) {
 	w.ts.SetNow(day(t, "2026-11-10", 12))
 	alice := w.user("alice")
 	form := slots("101", map[int]string{1: pasted("Вопрос из канала.", "канал", "Алиса")})
-	form.Set("slot1_kind", "published")
 	form.Set("slot1_link", "https://t.me/somechannel/12")
 	form.Del("slot1_tournament")
 	w.post(alice, "/nominate", form, http.StatusSeeOther)
@@ -107,7 +106,7 @@ func TestAHandoutFileStaysWithItsQuestion(t *testing.T) {
 func TestAnAdminMayTryTheFormBeforeItOpens(t *testing.T) {
 	w := newWorld(t)
 	w.ts.SetNow(day(t, "2026-11-02", 12))
-	if body := w.get(w.admin, "/nominate", http.StatusOK); !strings.Contains(body, `name="slot1_kind"`) {
+	if body := w.get(w.admin, "/nominate", http.StatusOK); !strings.Contains(body, `name="slot1_raw"`) {
 		t.Error("an admin should see the form before the stage")
 	}
 	if body := w.get(w.admin, "/2026/", http.StatusOK); !strings.Contains(body, `href="/nominate"`) {
@@ -171,5 +170,47 @@ func TestATelegramPostLoadsLikeAPastedQuestion(t *testing.T) {
 	if res.Code != http.StatusOK || !strings.Contains(body, `"answer":"стекольщик."`) || !strings.Contains(body, `"author":"Сергей Спешков"`) ||
 		!strings.Contains(body, `"handout":"https://cdn.example/pic.jpg"`) {
 		t.Errorf("load: %d %s", res.Code, body)
+	}
+}
+
+func TestALinkSavedUnloadedIsLoadedOnSave(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.ts.SetTelegram(telegram.Fixed{"https://t.me/omps2026/30": {
+		Text: "Вопрос 12\nНазовите ЕГО.\nОтвет: стекольщик.\nИсточник: Жан Кокто. Орфей\nАвтор: Сергей Спешков",
+	}})
+	alice := w.user("alice")
+	w.post(alice, "/nominate", slots("101", map[int]string{1: "https://t.me/omps2026/30"}), http.StatusSeeOther)
+	if n := w.count(`select count(*) from questions where published = 1 and link = 'https://t.me/omps2026/30' and json_extract(orig, '$.answer') = 'стекольщик.'`); n != 1 {
+		t.Error("a telegram link saved as it is should be loaded into its question")
+	}
+	body := w.post(alice, "/nominate", slots("101", map[int]string{1: "https://example.com/post/1"}), http.StatusBadRequest)
+	if !strings.Contains(body, "Не получилось загрузить вопрос") {
+		t.Error("a link the form cannot read should say so")
+	}
+}
+
+func TestClearEmptiesTheSlotUntilSaved(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	alice := w.user("alice")
+	form := slots("101", map[int]string{1: pasted("Вопрос, который уберут.", "уберут", "Алиса")})
+	w.post(alice, "/nominate", form, http.StatusSeeOther)
+	form.Set("clear", "1")
+	if body := w.post(alice, "/nominate", form, http.StatusOK); strings.Contains(body, "Вопрос, который уберут.") {
+		t.Error("a cleared slot should come back empty")
+	}
+	if w.count(`select count(*) from nominations`) != 1 {
+		t.Error("a clear saves nothing")
+	}
+}
+
+func TestThePreviewShowsTheFields(t *testing.T) {
+	w := newWorld(t)
+	alice := w.user("alice")
+	res := alice.PostJSON("/api/nominate/preview", `{"text": "Назовите <ИКС>.", "answer": "груша", "handout": "https://cdn.example/pic.jpg"}`)
+	body := res.Body.String()
+	if res.Code != http.StatusOK || !strings.Contains(body, `\u0026lt;ИКС\u0026gt;`) || !strings.Contains(body, `\u003cimg src=\"https://cdn.example/pic.jpg\"`) {
+		t.Errorf("preview: %d %s", res.Code, body)
 	}
 }

@@ -66,3 +66,16 @@
 .diff-del { background: var(--wash-negative); }
 .diff-skip,
 .diff-same { color: var(--muted); }
+
+/* The nomination form's boxes are one line until they hold more; nominate.ts
+   grows them to their text, so they need no floor, handle or scrollbar. */
+textarea[data-autogrow] {
+  min-height: 0;
+  resize: none;
+  overflow-y: hidden;
+}
+
+/* A handout picture in a slot's preview stays a preview. */
+[data-panel="preview"] .richtext img {
+  max-height: 16rem;
+}

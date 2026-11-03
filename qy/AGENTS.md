@@ -26,9 +26,10 @@ qy/                     module root (go.mod: module "qy")
   (`server/layout.go`). The browser runs one small bundle, `forms.ts`, which
   asks before destructive posts and saves the jury's likes and marks as they
   are clicked. Every form works without it, except the nomination form
-  (`server/nominateform.go`, `web/ts/nominate.ts`): its Текст and Поля tabs
-  need the script. Its parse button still works without it, because the post
-  parses the text and shows the form again unsaved.
+  (`server/nominateform.go`, `server/nominateview.go`, `web/ts/nominate.ts`):
+  its Просмотр, Поля and Текст tabs need the script. Its load, parse and
+  clear buttons still work without it, because the post does the same and
+  shows the form again unsaved.
 - HTML the server rendered itself goes through the overlay's `richtext`
   primitive. Nothing derived from a request goes there unescaped: question
   fields pass through `plain`, and only admin-written Markdown is raw.

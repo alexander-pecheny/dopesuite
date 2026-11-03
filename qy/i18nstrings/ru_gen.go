@@ -453,14 +453,13 @@ var RU = Strings{
 	Nominate: NominateStrings{
 		Error: NominateErrorStrings{
 			BadLink: func() string {
-				return "Ссылка на опубликованный вопрос должна начинаться с https://."
+				return "Ссылка на публикацию должна начинаться с https://."
 			},
 			BadTournament: func() string { return "Ссылка на турнир должна начинаться с https://." },
 			FileTooBig:    func() string { return "Файл больше 20 МБ." },
 			Missing: func(fields string) string {
 				return fmt.Sprintf("Заполните обязательные поля: %s.", fields)
 			},
-			NoLink:       func() string { return "Укажите ссылку на опубликованный вопрос." },
 			NoTournament: func() string { return "Укажите ссылку на турнир." },
 		},
 		Field: NominateFieldStrings{
@@ -469,7 +468,7 @@ var RU = Strings{
 			Comment: func() string { return "Комментарий" },
 			Handout: func() string { return "Раздаточный материал" },
 			HandoutHint: func() string {
-				return "Текст раздатки. Если раздатка — картинка или другой файл, прикрепите его ниже."
+				return "Текст раздатки или ссылка на картинку. Файл можно прикрепить ниже."
 			},
 			Nezachet: func() string { return "Незачёт" },
 			Source:   func() string { return "Источник" },
@@ -490,7 +489,7 @@ var RU = Strings{
 				return "Прикреплённые файлы не сохранились, их нужно выбрать заново."
 			},
 			HowTo: func() string {
-				return "Если вопрос опубликован в базе gotquestions, достаточно ссылки на него. Если вопрос опубликован в другом месте или не опубликован, вставьте вопрос целиком и нажмите «Распарсить». Потом проверьте поля: текст вопроса, ответ, источник и автор обязательны. Для неопубликованного вопроса нужна ещё ссылка на турнир."
+				return "Для каждого вопроса вставьте ссылку на него и нажмите «Загрузить». Загрузить можно вопрос из базы gotquestions или пост из телеграм-канала. Если ссылки нет, вставьте текст вопроса целиком и нажмите «Распарсить». Потом проверьте вопрос во вкладке «Просмотр» и поправьте поля, если что-то распозналось не так. Текст вопроса, ответ, источник и автор обязательны. Для неопубликованного вопроса нужна ещё ссылка на турнир."
 			},
 			Lead: func(main string, reserves string, until string) string {
 				return fmt.Sprintf("Можно номинировать до %s вопросов и %s запасных. Форму можно менять до %s включительно.", main, reserves, until)
@@ -503,21 +502,23 @@ var RU = Strings{
 			Title:    func() string { return "Номинация вопросов" },
 		},
 		Slot: NominateSlotStrings{
+			Add:      func(field string) string { return fmt.Sprintf("+ %s", field) },
+			Clear:    func() string { return "Очистить" },
 			DropFile: func() string { return "Убрать прикреплённый файл" },
 			File:     func() string { return "Файл для раздатки" },
 			FileHint: func() string {
 				return "Картинка или другой файл, до 20 МБ. Новый файл заменит прикреплённый."
 			},
-			Link: func() string { return "Ссылка на опубликованный вопрос" },
+			Link: func() string { return "Ссылка на публикацию" },
 			LinkHint: func() string {
-				return "Ссылка на вопрос в базе gotquestions или на пост, где вопрос опубликован. Вопрос из базы или из телеграм-канала можно загрузить кнопкой «Загрузить»."
+				return "Если вопрос опубликован: ссылка на gotquestions, на пост в телеграме или на другую публикацию."
 			},
 			LinkOnly: func() string {
 				return "Сохранили ссылку. Текст вопроса оргкомитет заберёт из базы сам."
 			},
 			Load: func() string { return "Загрузить" },
 			LoadFailed: func() string {
-				return "Не получилось загрузить вопрос по этой ссылке. Вставьте его текст во вкладке «Текст»."
+				return "Не получилось загрузить вопрос по этой ссылке. Вставьте вместо ссылки текст вопроса и нажмите «Распарсить»."
 			},
 			Main:  func(n string) string { return fmt.Sprintf("Вопрос %s", n) },
 			Parse: func() string { return "Распарсить" },
@@ -527,16 +528,16 @@ var RU = Strings{
 			Parsed: func(answer string) string {
 				return fmt.Sprintf("Распознали вопрос с ответом «%s».", answer)
 			},
-			Paste: func() string { return "Вопрос целиком" },
-			PasteHint: func() string {
-				return "Вставьте вопрос с ответом, источником и автором. «Распарсить» разложит его по полям."
+			PreviewEmpty: func() string {
+				return "Поля пока пустые. Заполните их во вкладке «Поля»."
 			},
-			Published:   func() string { return "Вопрос опубликован" },
-			Reserve:     func(n string) string { return fmt.Sprintf("Запасной вопрос %s", n) },
-			TabFields:   func() string { return "Поля" },
-			TabText:     func() string { return "Текст" },
-			Tournament:  func() string { return "Ссылка на турнир" },
-			Unpublished: func() string { return "Вопрос не опубликован" },
+			Reserve:        func(n string) string { return fmt.Sprintf("Запасной вопрос %s", n) },
+			Source:         func() string { return "Ссылка на вопрос или вопрос целиком" },
+			TabFields:      func() string { return "Поля" },
+			TabPreview:     func() string { return "Просмотр" },
+			TabText:        func() string { return "Текст" },
+			Tournament:     func() string { return "Ссылка на турнир" },
+			TournamentHint: func() string { return "Обязательна, если вопрос не опубликован." },
 		},
 	},
 	Profile: ProfileStrings{
@@ -552,6 +553,7 @@ var RU = Strings{
 		Author:     func() string { return "Автор(ы):" },
 		Comment:    func() string { return "Комментарий:" },
 		Factcheck:  func() string { return "Фактчек" },
+		Handout:    func() string { return "Раздаточный материал:" },
 		Label:      func(number string) string { return fmt.Sprintf("Вопрос %s.", number) },
 		Nezachet:   func() string { return "Незачёт:" },
 		ShowAnswer: func() string { return "Показать ответ" },

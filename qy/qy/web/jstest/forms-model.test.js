@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { formBody, statusText } from "./dist/forms-model.js";
-import { isGotQuestions, isLoadable, needsFields } from "./dist/nominate-model.js";
+import { isGotQuestions, isLoadable, isSingleLink } from "./dist/nominate-model.js";
 
 test("formBody sends every string field, repeated names included", () => {
   expect(formBody([["like", "1"], ["like", "2"], ["portion", "3"]])).toBe("like=1&like=2&portion=3");
@@ -14,13 +14,12 @@ test("statusText reads a saved answer, a refusal, and garbage", () => {
 });
 
 
-test("a published question needs its fields unless gotquestions has it", () => {
+test("the source box holds a link to load or a text to parse", () => {
   expect(isGotQuestions("https://gotquestions.online/question/777")).toBe(true);
   expect(isGotQuestions("https://t.me/somechannel/12")).toBe(false);
-  expect(needsFields(true, "https://gotquestions.online/question/777")).toBe(false);
-  expect(needsFields(true, "https://t.me/somechannel/12")).toBe(true);
-  expect(needsFields(false, "https://gotquestions.online/question/777")).toBe(true);
-  expect(needsFields(true, "")).toBe(false);
+  expect(isSingleLink("  https://t.me/somechannel/12\n")).toBe(true);
+  expect(isSingleLink("Вопрос 1. https://example.com\nОтвет: да")).toBe(false);
+  expect(isSingleLink("")).toBe(false);
 });
 
 test("a gotquestions link and a telegram post can be loaded, a channel cannot", () => {

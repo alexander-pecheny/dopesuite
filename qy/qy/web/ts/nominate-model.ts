@@ -1,4 +1,4 @@
-// The pure half of nominate.ts: which parts of a nomination slot are shown.
+// The pure half of nominate.ts: what a slot's source box holds.
 
 const gotQuestionsRe = /^https?:\/\/(?:www\.)?gotquestions\.online\/question\/\d+/;
 
@@ -14,14 +14,14 @@ export function isLoadable(link: string): boolean {
   return isGotQuestions(link) || telegramPostRe.test(link.trim());
 }
 
-// needsFields says whether a slot's question is typed in: it is unpublished,
-// or published somewhere gotquestions cannot read it from. A published slot
-// shows no fields until its link says which.
-export function needsFields(published: boolean, link: string): boolean {
-  return !published || (link.trim() !== "" && !isGotQuestions(link));
+// isSingleLink says the source box holds one link and nothing else, which
+// the form loads rather than parses.
+export function isSingleLink(raw: string): boolean {
+  const s = raw.trim();
+  return /^https?:\/\/\S+$/.test(s);
 }
 
-// The fields the parse button fills, as the parse endpoint names them.
+// The fields the parse and load endpoints fill, as they name them.
 export const PARSED_FIELDS = ["text", "handout", "answer", "zachet", "nezachet", "comment", "source", "author"] as const;
 export type ParsedField = (typeof PARSED_FIELDS)[number];
 export type Parsed = { ok: boolean; tournament?: string } & Record<ParsedField, string>;

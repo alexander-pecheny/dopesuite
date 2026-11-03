@@ -65,12 +65,6 @@ func (s *server) handleNominatePage(w http.ResponseWriter, r *http.Request, sc r
 	if err != nil {
 		return err
 	}
-	// An empty slot starts as a published question: most are.
-	for slot := 1; slot <= c.MainSlots+c.ReserveSlots; slot++ {
-		if _, ok := slots[slot]; !ok {
-			slots[slot] = slotView{in: slotInput{published: true}}
-		}
-	}
 	return s.ok(w, r, s.nominationView(r, c, sc, nominationForm{rating: rating, slots: slots}))
 }
 
@@ -99,10 +93,12 @@ func (s *server) handleNominate(w http.ResponseWriter, r *http.Request, sc route
 		return err
 	}
 	form := readNominationForm(r, c, before)
-	if v, ok := form.slots[form.loadSlot]; ok {
+	for _, slot := range form.loads {
+		v := form.slots[slot]
 		s.loadSlot(r.Context(), &v)
-		form.slots[form.loadSlot] = v
+		form.slots[slot] = v
 	}
+	form.check()
 	rating, ratingErr := parseRatingID(form.rating)
 	if form.parseOnly || form.hasErrors() || ratingErr != nil {
 		if ratingErr != nil && !form.parseOnly {
@@ -187,9 +183,9 @@ func (s *server) fieldsQuestion(ctx context.Context, year int, in slotInput) sto
 	q := store.Question{
 		Year: int64(year), SourceText: in.raw, TournamentLink: in.tournament,
 		TournamentID: question.FindLinks(in.tournament).TournamentID,
-		Orig:         orig, Clean: orig.Anonymous(), Published: in.published,
+		Orig:         orig, Clean: orig.Anonymous(), Published: in.published(),
 	}
-	if !in.published {
+	if !in.published() {
 		return q
 	}
 	links := question.FindLinks(in.link)
@@ -246,19 +242,19 @@ func (s *server) loadQuestion(ctx context.Context, link string) (loaded, error) 
 	return l, nil
 }
 
-// loadSlot fills a slot's fields by its link, the form's load button when the
-// page's script does not run.
+// loadSlot fills a slot's fields by the link in its source box: the form's
+// load button when the page's script does not run, or a link saved unloaded.
 func (s *server) loadSlot(ctx context.Context, v *slotView) {
-	l, err := s.loadQuestion(ctx, v.in.link)
+	l, err := s.loadQuestion(ctx, v.in.raw)
 	if err != nil {
-		v.loadMiss = true
+		v.loadMiss, v.view = true, viewText
 		return
 	}
-	v.in.fields, v.in.handout = l.q, l.handout
+	v.in.fields, v.in.handout, v.in.link = l.q, l.handout, v.in.raw
 	if v.in.tournament == "" {
 		v.in.tournament = l.tournament
 	}
-	v.view = viewFields
+	v.view = viewPreview
 }
 
 func tournamentLink(id int64) string {
@@ -394,6 +390,20 @@ func (s *server) handleLoadQuestion(w http.ResponseWriter, r *http.Request, _ ro
 		"nezachet": q.Nezachet, "comment": q.Comment, "source": q.Source, "author": q.Author,
 		"tournament": l.tournament,
 	})
+}
+
+// handlePreviewQuestion is the form's preview tab when the page's script
+// runs: the fields in, the question as the preview shows it out.
+func (s *server) handlePreviewQuestion(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	var req map[string]string
+	if err := readJSON(r, &req); err != nil {
+		return err
+	}
+	var q question.Question
+	for _, f := range question.Fields {
+		*q.Ptr(f) = strings.TrimSpace(req[f])
+	}
+	return writeJSON(w, map[string]any{"html": previewHTML(q, strings.TrimSpace(req["handout"]))})
 }
 
 // handleNominationFile serves a handout file to an admin or to a nominator of
