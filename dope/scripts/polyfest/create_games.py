@@ -28,7 +28,6 @@ only = sys.argv[4:]
 for slug, title, body in games:
     if only and slug not in only:
         continue
-    body.setdefault("entrants", [])
     g = api("POST", f"/api/fest/{fest}/games", body)
     gid = g["id"]
     api("PATCH", f"/api/fest/{fest}/games/{gid}/settings", {"title": title, "slug": slug})
