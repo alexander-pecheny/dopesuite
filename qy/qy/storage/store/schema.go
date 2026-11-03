@@ -231,10 +231,14 @@ create table if not exists question_files(
 );
 create index if not exists question_files_question on question_files(question_id, id);
 `)},
-	{Version: 3, Name: "nomination appeals", Up: schema.Exec(`
+	{Version: 3, Name: "nomination appeals and jurors' rating ids", Up: schema.Exec(`
 -- Why the nominator thinks the automatic check of the rules is wrong about
 -- this question, for the admins to decide.
 alter table nominations add column appeal text not null default '';
+
+-- A juror's id on rating.chgk.info, which the check of the rules matches
+-- against a tournament's editors; null until an admin enters it.
+alter table jurors add column rating_id integer;
 `)},
 }
 

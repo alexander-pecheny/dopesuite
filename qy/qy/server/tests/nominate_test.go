@@ -2,6 +2,7 @@ package tests
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -220,13 +221,14 @@ func TestThePreviewShowsTheFields(t *testing.T) {
 func TestTheRulesCheckWarnsAndTheAppealReachesTheAdmins(t *testing.T) {
 	w := newWorld(t)
 	w.ts.SetNow(day(t, "2026-11-10", 12))
-	w.ts.Exec(`insert into jurors(year, telegram_username, kind, name) values(2026, 'petr', 'expert', 'Пётр Петров')`)
-	w.ts.SetRating(rating.Fixed{12345: {Start: "2025-09-01", End: "2025-09-02", Editors: []rating.Person{{ID: 7, Name: "Пётр Петров"}}}})
+	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Пётр Петров"}, "telegram": {"@petr"}, "kind": {"expert"}, "rating_id": {"7"}}, http.StatusSeeOther)
+	// The editor is the juror by rating id, under a name the site spells otherwise.
+	w.ts.SetRating(rating.Fixed{12345: {Start: "2025-09-01", End: "2025-09-02", Editors: []rating.Person{{ID: 7, Name: "Петя Петров-Водкин"}}}})
 	alice := w.user("alice")
 	form := slots("101", map[int]string{1: pasted("Вопрос Петра.", "петр", "Пётр Петров (Москва)")})
 	w.post(alice, "/nominate", form, http.StatusSeeOther)
 	page := w.get(alice, "/nominate", http.StatusOK)
-	for _, want := range []string{"Отыгрыш турнира начался 1 сентября 2025", "Автор вопроса Пётр Петров входит в жюри", "Редактор турнира Пётр Петров"} {
+	for _, want := range []string{"Отыгрыш турнира начался 1 сентября 2025", "Автор вопроса Пётр Петров входит в жюри", "Редактор турнира Петя Петров-Водкин"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the form should warn: %s", want)
 		}

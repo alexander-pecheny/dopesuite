@@ -73,6 +73,7 @@ export const RU: Strings = {
       kind: () => "Жюри",
       name: () => "Имя и фамилия",
       people: () => "Народное",
+      ratingId: () => "ID на рейтинге",
       telegram: () => "Телеграм",
       title: () => "Жюри",
     },

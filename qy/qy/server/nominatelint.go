@@ -29,7 +29,7 @@ type lintResult struct {
 // question: the year's jurors of both kinds and the admins.
 func (s *server) barred(ctx context.Context, year int) ([]eligibility.Person, error) {
 	rows, err := s.db.QueryContext(ctx, `
-select name, 0 from jurors where year = ?
+select name, coalesce(rating_id, 0) from jurors where year = ?
 union all
 select coalesce(u.telegram_name, ''), coalesce(u.rating_id, 0)
 from admins a join users u on u.telegram_username = a.telegram_username collate nocase`, year)

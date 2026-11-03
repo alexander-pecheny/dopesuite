@@ -17,7 +17,8 @@ carry a handout file.
 **Rules check.** The automatic check of rule 2 on a nominated question
 (`domain/eligibility`): its tournament started in the contest's window and
 cannot still be played for rating when the shortlist is published, and no
-juror or admin is among its authors or its tournament's editors. It only
+juror or admin is among its authors or its tournament's editors (by name,
+and by rating id for an editor). It only
 warns. A nominator who thinks it is wrong saves the question with an
 **appeal**, which the admins read on the question's page and decide.
 

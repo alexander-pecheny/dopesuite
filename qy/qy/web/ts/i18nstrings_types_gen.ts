@@ -72,6 +72,7 @@ export type Strings = {
       kind: () => string;
       name: () => string;
       people: () => string;
+      ratingId: () => string;
       telegram: () => string;
       title: () => string;
     };

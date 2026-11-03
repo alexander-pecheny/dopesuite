@@ -93,6 +93,7 @@ var RU = Strings{
 			Kind:       func() string { return "Жюри" },
 			Name:       func() string { return "Имя и фамилия" },
 			People:     func() string { return "Народное" },
+			RatingId:   func() string { return "ID на рейтинге" },
 			Telegram:   func() string { return "Телеграм" },
 			Title:      func() string { return "Жюри" },
 		},

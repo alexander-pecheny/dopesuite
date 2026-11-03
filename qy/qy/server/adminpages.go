@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+
 	"qy/qy/domain/contest"
 	"qy/qy/storage/store"
 	"qy/qy/web/route"
@@ -282,6 +284,13 @@ func (s *server) handleContestSettings(w http.ResponseWriter, r *http.Request, _
 	return seeOther(w, r, contestHref(c.Year)+"?done="+doneSaved)
 }
 
+func jurorRatingID(j store.Juror) string {
+	if j.RatingID == 0 {
+		return ""
+	}
+	return idstr.Format(j.RatingID)
+}
+
 func jurorKindName(kind string) string {
 	if kind == store.People {
 		return str.Admin.Jury.People()
@@ -297,22 +306,23 @@ func (s *server) juryTable(ctx context.Context, c contest.Contest) ([]ui.Item, e
 	base := contestHref(c.Year)
 	var out []ui.Item
 	if len(jurors) > 0 {
-		rows := []ui.Item{ui.Scroll(), ui.Trow(ui.Hcell(text(str.Admin.Jury.Name())), ui.Hcell(text(str.Admin.Jury.Telegram())), ui.Hcell(text(str.Admin.Jury.Kind())), ui.Hcell())}
+		rows := []ui.Item{ui.Scroll(), ui.Trow(ui.Hcell(text(str.Admin.Jury.Name())), ui.Hcell(text(str.Admin.Jury.Telegram())), ui.Hcell(text(str.Admin.Jury.RatingId())), ui.Hcell(text(str.Admin.Jury.Kind())), ui.Hcell())}
 		for _, j := range jurors {
-			rows = append(rows, ui.Trow(ui.Cell(text(j.Name)), ui.Cell(text("@"+j.Telegram)), ui.Cell(text(jurorKindName(j.Kind))),
+			rows = append(rows, ui.Trow(ui.Cell(text(j.Name)), ui.Cell(text("@"+j.Telegram)), ui.Cell(text(jurorRatingID(j))), ui.Cell(text(jurorKindName(j.Kind))),
 				ui.Cell(ui.Form(ui.Method("post"), ui.Action(base+"/jurors/remove"),
 					ui.Hiddenfield(ui.Name("telegram"), ui.Value(j.Telegram)),
 					ui.Button(ui.Submit(), ui.Ghost, ui.Small(), text(str.Common.Remove()))))))
 		}
 		out = append(out, ui.Table(rows...))
 	}
-	out = append(out, ui.Form(ui.Method("post"), ui.Action(base+"/jurors"), ui.DirRow, ui.SpaceSM,
+	out = append(out, ui.Form(ui.Method("post"), ui.Action(base+"/jurors"), ui.Row(ui.Wrap(), ui.SpaceSM,
 		ui.Textfield(ui.Name("name"), ui.Placeholder(str.Admin.Jury.Name()), ui.Required(), ui.Grow()),
 		ui.Textfield(ui.Name("telegram"), ui.Placeholder(str.Admin.Admins.Placeholder()), ui.Required(), ui.Grow()),
+		ui.Textfield(ui.Name("rating_id"), ui.Placeholder(str.Admin.Jury.RatingId()), ui.Inputmode("numeric"), ui.Grow()),
 		ui.Selectfield(ui.Name("kind"),
 			ui.Option(ui.Value(store.Expert), text(str.Admin.Jury.Expert())),
 			ui.Option(ui.Value(store.People), text(str.Admin.Jury.People()))),
-		ui.Button(ui.Submit(), text(str.Common.Add()))))
+		ui.Button(ui.Submit(), text(str.Common.Add())))))
 	return out, nil
 }
 
@@ -325,10 +335,19 @@ func (s *server) handleAddJuror(w http.ResponseWriter, r *http.Request, _ route.
 	if h == "" || name == "" || (kind != store.Expert && kind != store.People) {
 		return userError(str.Admin.Jury.Incomplete())
 	}
+	var rating any
+	if raw := strings.TrimSpace(r.FormValue("rating_id")); raw != "" {
+		id, err := parseRatingID(raw)
+		if err != nil {
+			return err
+		}
+		rating = id
+	}
 	err = s.withWriteTx(r.Context(), "add-juror", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-insert into jurors(year, telegram_username, kind, name) values(?, ?, ?, ?)
-on conflict(year, telegram_username) do update set kind = excluded.kind, name = excluded.name`, c.Year, h, kind, name)
+insert into jurors(year, telegram_username, kind, name, rating_id) values(?, ?, ?, ?, ?)
+on conflict(year, telegram_username) do update set kind = excluded.kind, name = excluded.name, rating_id = excluded.rating_id`,
+			c.Year, h, kind, name, rating)
 		return err
 	})
 	if err != nil {

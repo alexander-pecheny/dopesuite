@@ -54,7 +54,7 @@ CREATE TABLE jurors(
   year integer not null references contests(year) on delete cascade,
   telegram_username text not null collate nocase,
   kind text not null check (kind in ('expert','people')),
-  name text not null,
+  name text not null, rating_id integer,
   primary key(year, telegram_username)
 );
 

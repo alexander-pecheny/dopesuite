@@ -100,12 +100,13 @@ func JurorKind(ctx context.Context, q Querier, year int, telegram string) (strin
 
 type Juror struct {
 	Telegram, Kind, Name string
+	RatingID             int64 // 0 when not entered
 }
 
 func Jurors(ctx context.Context, q Querier, year int) ([]Juror, error) {
 	return Collect(ctx, q, func(r *sql.Rows) (Juror, error) {
 		var j Juror
-		err := r.Scan(&j.Telegram, &j.Kind, &j.Name)
+		err := r.Scan(&j.Telegram, &j.Kind, &j.Name, &j.RatingID)
 		return j, err
-	}, `select telegram_username, kind, name from jurors where year = ? order by kind, name`, year)
+	}, `select telegram_username, kind, name, coalesce(rating_id, 0) from jurors where year = ? order by kind, name`, year)
 }
