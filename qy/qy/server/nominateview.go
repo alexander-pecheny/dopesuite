@@ -111,7 +111,7 @@ func slotCard(c contest.Contest, slot int, v slotView) ui.Item {
 		previewPanel(v),
 		ui.Tabpanel(append([]ui.Item{ui.Data("panel", viewFields)}, fieldEditors(slot, v)...)...),
 		sourcePanel(slot, v),
-		ui.Col(append(links, linkFields(slot, v)...)...),
+		ui.Col(append(append(links, linkFields(slot, v)...), lintBox(c, slot, v))...),
 	}
 	items = append(items, slotStatus(v)...)
 	return ui.Card(items...)

@@ -56,6 +56,7 @@ func (noRating) Tournament(context.Context, int64) (rating.Tournament, error) {
 func (ts *TestServer) SetNow(t time.Time)              { ts.s.now = func() time.Time { return t } }
 func (ts *TestServer) SetGotQuestions(src gq.Source)   { ts.s.gq = src }
 func (ts *TestServer) SetTelegram(src telegram.Source) { ts.s.tg = src }
+func (ts *TestServer) SetRating(src rating.Source)     { ts.s.rating = src }
 
 // Model is a stand-in language model that answers every prompt with Reply.
 type Model struct{ Reply string }

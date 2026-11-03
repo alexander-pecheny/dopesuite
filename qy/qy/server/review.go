@@ -231,13 +231,13 @@ func (s *server) pathQuestion(r *http.Request) (store.Question, contest.Contest,
 }
 
 type nominator struct {
-	telegram, rating string
-	slot             int
+	telegram, rating, appeal string
+	slot                     int
 }
 
 func (s *server) nominatorsOf(ctx context.Context, questionID int64) ([]nominator, error) {
 	rows, err := s.db.QueryContext(ctx, `
-select coalesce(u.telegram_username, u.username, ''), coalesce(u.rating_id, 0), n.slot
+select coalesce(u.telegram_username, u.username, ''), coalesce(u.rating_id, 0), n.slot, n.appeal
 from nominations n join users u on u.id = n.user_id where n.question_id = ? order by n.created_at`, questionID)
 	if err != nil {
 		return nil, err
@@ -247,7 +247,7 @@ from nominations n join users u on u.id = n.user_id where n.question_id = ? orde
 	for rows.Next() {
 		var n nominator
 		var rating int64
-		if err := rows.Scan(&n.telegram, &rating, &n.slot); err != nil {
+		if err := rows.Scan(&n.telegram, &rating, &n.slot, &n.appeal); err != nil {
 			return nil, err
 		}
 		if rating > 0 {
@@ -350,7 +350,11 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 	about = append(about, ui.Details(ui.Summary(text(str.Admin.Question.SourceText())), ui.Richtext(ui.Raw("<p>"+plain(q.SourceText)+"</p>"))))
 	about = append(about, noticeOf(r)...)
 
-	body := []ui.Item{ui.Section(about...)}
+	rules, err := s.rulesSection(ctx, c, q, noms)
+	if err != nil {
+		return err
+	}
+	body := []ui.Item{ui.Section(about...), rules}
 	if q.Orig.Empty() {
 		body = append(body, ui.Section(subhead(str.Admin.Question.PasteTitle()), hint(str.Admin.Question.PasteHint()),
 			ui.Form(ui.Method("post"), ui.Action(href+"/reparse"), ui.DirCol, ui.SpaceSM,

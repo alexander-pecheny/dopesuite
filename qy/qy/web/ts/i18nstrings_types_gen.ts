@@ -98,6 +98,7 @@ export type Strings = {
     };
     question: {
       aiFailed: (error: string) => string;
+      appeal: (who: string, text: string) => string;
       approveEmpty: () => string;
       approved: () => string;
       authorDeclined: () => string;
@@ -132,6 +133,9 @@ export type Strings = {
       preview: () => string;
       published: () => string;
       rejected: () => string;
+      rules: () => string;
+      rulesOk: () => string;
+      rulesUnchecked: () => string;
       sourceText: () => string;
       status: () => string;
       statusLine: (status: string, dates: string) => string;
@@ -359,6 +363,16 @@ export type Strings = {
       source: () => string;
       text: () => string;
       zachet: () => string;
+    };
+    lint: {
+      appeal: () => string;
+      authorBarred: (name: string) => string;
+      datesOff: (date: string, from: string, to: string) => string;
+      editorBarred: (name: string) => string;
+      stillPlayable: (date: string, shortlist: string) => string;
+      title: () => string;
+      unchecked: () => string;
+      whatNow: () => string;
     };
     page: {
       adminPreview: () => string;

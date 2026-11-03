@@ -4,7 +4,10 @@
 // parses (/api/nominate/parse), and the card turns to the "editor" state:
 // tabs for the preview, the fields and the box, then the two links. The tab
 // is remembered in a hidden slotN_view input, so a form shown again opens
-// where it was. An empty optional field hides behind a «+» button. Without
+// where it was. An empty optional field hides behind a «+» button. The
+// automatic check of the rules (/api/nominate/check) runs again whenever
+// the tournament or the authors change, and fills the slot's red box, where
+// the nominator can appeal. Without
 // this script the buttons post the form, which does the same and comes back
 // unsaved.
 import S from "./i18nstrings.js";
@@ -148,6 +151,26 @@ async function refreshPreview(card: HTMLElement): Promise<void> {
   if (el && typeof res !== "string") el.innerHTML = res.html;
 }
 
+// check asks whether the question passes the rules and shows what it fails.
+async function check(card: HTMLElement): Promise<void> {
+  const body = { tournament: field(card, "tournament")?.value ?? "", author: field(card, "author")?.value ?? "" };
+  const res = await ask<{ problems: string[]; unchecked: boolean }>("/api/nominate/check", body);
+  if (typeof res === "string") return;
+  const box = card.querySelector<HTMLElement>("[data-lint]");
+  const list = card.querySelector<HTMLElement>("[data-lint-list]");
+  const unchecked = card.querySelector<HTMLElement>("[data-lint-unchecked]");
+  if (list) {
+    list.replaceChildren(...res.problems.map((t) => {
+      const p = document.createElement("p");
+      p.textContent = t;
+      return p;
+    }));
+  }
+  if (box) box.hidden = res.problems.length === 0;
+  if (unchecked) unchecked.hidden = !res.unchecked;
+  if (box) fitAll(box);
+}
+
 // fillFrom loads the link in the box or parses the text in it, and opens
 // the question on its preview.
 async function fillFrom(card: HTMLElement): Promise<void> {
@@ -171,6 +194,7 @@ async function fillFrom(card: HTMLElement): Promise<void> {
   const tournament = field(card, "tournament");
   if (tournament && !tournament.value && res.tournament) tournament.value = res.tournament;
   setState(card, "editor", "preview");
+  void check(card);
 }
 
 // clear empties the slot and puts it back to the box alone. Nothing changes
@@ -185,6 +209,7 @@ function clear(card: HTMLElement): void {
   syncButtons(card);
   syncOptional(card);
   setState(card, "source", "text");
+  void check(card);
   field(card, "raw")?.focus();
 }
 
@@ -192,6 +217,9 @@ function wire(card: HTMLElement): void {
   syncButtons(card);
   syncOptional(card);
   setState(card, card.dataset.state === "editor" ? "editor" : "source", card.dataset.view || "text");
+  card.addEventListener("change", (event) => {
+    if (event.target === field(card, "tournament") || event.target === field(card, "author")) void check(card);
+  });
   card.addEventListener("input", (event) => {
     const el = event.target;
     if (el instanceof HTMLTextAreaElement && el.hasAttribute("data-autogrow")) fit(el);

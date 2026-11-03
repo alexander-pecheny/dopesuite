@@ -49,6 +49,7 @@ type upload struct {
 type slotInput struct {
 	link       string
 	tournament string
+	appeal     string
 	raw        string
 	fields     question.Question // Text without the handout
 	handout    string
@@ -111,6 +112,7 @@ type slotView struct {
 	errs       []string
 	parseMiss  bool
 	loadMiss   bool
+	lint       lintResult
 	view       string
 }
 
@@ -153,7 +155,7 @@ func (f nominationForm) hasErrors() bool {
 
 func (s *server) nominationSlots(ctx context.Context, year int, userID int64) (map[int]slotView, error) {
 	rows, err := s.db.QueryContext(ctx, `
-select n.slot, q.id, q.published, q.gq_id is not null, q.link, q.tournament_link, q.source_text, q.orig
+select n.slot, q.id, q.published, q.gq_id is not null, q.link, q.tournament_link, q.source_text, q.orig, n.appeal
 from nominations n join questions q on q.id = n.question_id
 where n.year = ? and n.user_id = ?`, year, userID)
 	if err != nil {
@@ -180,7 +182,7 @@ func scanSlot(rows *sql.Rows) (int, slotView, error) {
 	var isGQ bool
 	var orig string
 	var published bool
-	if err := rows.Scan(&slot, &v.questionID, &published, &isGQ, &v.in.link, &v.in.tournament, &v.in.raw, &orig); err != nil {
+	if err := rows.Scan(&slot, &v.questionID, &published, &isGQ, &v.in.link, &v.in.tournament, &v.in.raw, &orig, &v.in.appeal); err != nil {
 		return 0, v, err
 	}
 	q := question.FromJSON(orig)
@@ -267,6 +269,7 @@ func readSlot(r *http.Request, slot int) slotInput {
 	in := slotInput{
 		link:       formText(r, slotKey(slot, "link")),
 		tournament: formText(r, slotKey(slot, "tournament")),
+		appeal:     formText(r, slotKey(slot, "appeal")),
 		raw:        formText(r, slotKey(slot, "raw")),
 		handout:    formText(r, slotKey(slot, "handout")),
 		dropFile:   r.FormValue(slotKey(slot, "drop_file")) != "",

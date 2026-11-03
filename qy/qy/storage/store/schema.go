@@ -231,6 +231,11 @@ create table if not exists question_files(
 );
 create index if not exists question_files_question on question_files(question_id, id);
 `)},
+	{Version: 3, Name: "nomination appeals", Up: schema.Exec(`
+-- Why the nominator thinks the automatic check of the rules is wrong about
+-- this question, for the admins to decide.
+alter table nominations add column appeal text not null default '';
+`)},
 }
 
 func Migrate(db *sql.DB) error { return schema.Apply(db, Migrations) }

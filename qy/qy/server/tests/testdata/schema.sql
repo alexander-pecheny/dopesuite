@@ -73,7 +73,7 @@ CREATE TABLE nominations(
   user_id integer not null references users(id) on delete cascade,
   slot integer not null,
   question_id integer not null references questions(id) on delete cascade,
-  created_at text not null,
+  created_at text not null, appeal text not null default '',
   unique(year, user_id, slot)
 );
 

@@ -128,7 +128,10 @@ var RU = Strings{
 			Title: func() string { return "Оргкомитет" },
 		},
 		Question: AdminQuestionStrings{
-			AiFailed:       func(error string) string { return fmt.Sprintf("Модель не ответила: %s", error) },
+			AiFailed: func(error string) string { return fmt.Sprintf("Модель не ответила: %s", error) },
+			Appeal: func(who string, text string) string {
+				return fmt.Sprintf("Апелляция номинатора %s: %s", who, text)
+			},
 			ApproveEmpty:   func() string { return "Нельзя одобрить вопрос без текста." },
 			Approved:       func() string { return "Одобрен" },
 			AuthorDeclined: func() string { return "Автор против участия в шорт-листе" },
@@ -176,7 +179,14 @@ var RU = Strings{
 			Published: func() string {
 				return "Вопрос опубликован (его видит народное жюри)"
 			},
-			Rejected:        func() string { return "Отклонён" },
+			Rejected: func() string { return "Отклонён" },
+			Rules:    func() string { return "Проверка правил" },
+			RulesOk: func() string {
+				return "Автоматическая проверка нарушений не нашла."
+			},
+			RulesUnchecked: func() string {
+				return "Турнир не удалось проверить на сайте рейтинга."
+			},
 			SourceText:      func() string { return "Что прислал номинатор" },
 			Status:          func() string { return "Статус" },
 			StatusLine:      func(status string, dates string) string { return fmt.Sprintf("%s. %s.", status, dates) },
@@ -474,6 +484,30 @@ var RU = Strings{
 			Source:   func() string { return "Источник" },
 			Text:     func() string { return "Текст вопроса" },
 			Zachet:   func() string { return "Зачёт" },
+		},
+		Lint: NominateLintStrings{
+			Appeal: func() string { return "Почему проверка ошиблась" },
+			AuthorBarred: func(name string) string {
+				return fmt.Sprintf("Автор вопроса %s входит в жюри или оргкомитет конкурса.", name)
+			},
+			DatesOff: func(date string, from string, to string) string {
+				return fmt.Sprintf("Отыгрыш турнира начался %s. Подходят турниры, отыгрыш которых начался с %s по %s.", date, from, to)
+			},
+			EditorBarred: func(name string) string {
+				return fmt.Sprintf("Редактор турнира %s входит в жюри или оргкомитет конкурса.", name)
+			},
+			StillPlayable: func(date string, shortlist string) string {
+				return fmt.Sprintf("Турнир можно сыграть в зачёт до %s, то есть и после публикации шорт-листа %s.", date, shortlist)
+			},
+			Title: func() string {
+				return "Автоматическая проверка считает, что этот вопрос нельзя номинировать:"
+			},
+			Unchecked: func() string {
+				return "Не получилось проверить турнир на сайте рейтинга. Его даты и редакторов оргкомитет проверит сам."
+			},
+			WhatNow: func() string {
+				return "Это пункт 2 регламента. Номинируйте другой вопрос или поправьте ссылку на турнир и поля. Если вы думаете, что проверка ошиблась, напишите почему. Вопрос сохранится, и оргкомитет проверит его вручную."
+			},
 		},
 		Page: NominatePageStrings{
 			AdminPreview: func() string {

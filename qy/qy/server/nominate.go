@@ -65,6 +65,9 @@ func (s *server) handleNominatePage(w http.ResponseWriter, r *http.Request, sc r
 	if err != nil {
 		return err
 	}
+	if err := s.lintSlots(r.Context(), c, slots); err != nil {
+		return err
+	}
 	return s.ok(w, r, s.nominationView(r, c, sc, nominationForm{rating: rating, slots: slots}))
 }
 
@@ -99,6 +102,9 @@ func (s *server) handleNominate(w http.ResponseWriter, r *http.Request, sc route
 		form.slots[slot] = v
 	}
 	form.check()
+	if err := s.lintSlots(r.Context(), c, form.slots); err != nil {
+		return err
+	}
 	rating, ratingErr := parseRatingID(form.rating)
 	if form.parseOnly || form.hasErrors() || ratingErr != nil {
 		if ratingErr != nil && !form.parseOnly {
@@ -107,14 +113,14 @@ func (s *server) handleNominate(w http.ResponseWriter, r *http.Request, sc route
 		return s.render(w, r, unsavedStatus(form), s.nominationView(r, c, sc, form))
 	}
 	changes := s.slotChanges(r.Context(), c, before, form.slots)
-	if err := s.saveNomination(r.Context(), c.Year, sc.User.UserID, rating, changes); err != nil {
+	if err := s.saveNomination(r.Context(), c.Year, sc.User.UserID, rating, changes, form.slots); err != nil {
 		return err
 	}
 	s.nudge()
 	return seeOther(w, r, "/nominate?done="+doneSaved)
 }
 
-func (s *server) saveNomination(ctx context.Context, year int, userID, rating int64, changes map[int]slotChange) error {
+func (s *server) saveNomination(ctx context.Context, year int, userID, rating int64, changes map[int]slotChange, slots map[int]slotView) error {
 	return s.withWriteTx(ctx, "nominate", func(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `update users set rating_id = ?, updated_at = ? where id = ?`, rating, s.stamp(), userID); err != nil {
 			return err
@@ -124,7 +130,7 @@ func (s *server) saveNomination(ctx context.Context, year int, userID, rating in
 				return err
 			}
 		}
-		return nil
+		return saveAppeals(ctx, tx, year, userID, slots)
 	})
 }
 

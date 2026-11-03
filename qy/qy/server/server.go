@@ -66,7 +66,7 @@ func newServer() (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &server{db: db, gq: gq.Unavailable{}, rating: rating.NewClient(), tg: telegram.NewClient(), wake: make(chan struct{}, 1), now: time.Now}
+	s := &server{db: db, gq: gq.Unavailable{}, rating: &rating.Cached{Src: rating.NewClient(), TTL: time.Hour}, tg: telegram.NewClient(), wake: make(chan struct{}, 1), now: time.Now}
 	if gqPath := os.Getenv("QY_GQ_DB"); gqPath != "" {
 		if s.gq, err = gq.Open(gqPath); err != nil {
 			return nil, fmt.Errorf("QY_GQ_DB %s: %w", gqPath, err)

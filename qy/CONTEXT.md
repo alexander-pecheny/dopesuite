@@ -14,6 +14,13 @@ published when it has a publication link; one without needs its tournament's
 link. A gotquestions question may be saved as its link alone. A slot may
 carry a handout file.
 
+**Rules check.** The automatic check of rule 2 on a nominated question
+(`domain/eligibility`): its tournament started in the contest's window and
+cannot still be played for rating when the shortlist is published, and no
+juror or admin is among its authors or its tournament's editors. It only
+warns. A nominator who thinks it is wrong saves the question with an
+**appeal**, which the admins read on the question's page and decide.
+
 **Question.** A nominated question. `orig` is what the nominator gave, parsed,
 with its credits. `clean` is the anonymised copy the jury reads. Two
 nominations of one gotquestions link share a Question; an admin merges other

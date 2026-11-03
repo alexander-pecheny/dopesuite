@@ -23,6 +23,14 @@ const (
 type Tournament struct {
 	Title      string
 	Start, End string // calendar days, YYYY-MM-DD
+	Editors    []Person
+}
+
+// Person is someone the rating site lists on a tournament: their id there
+// and their name and surname.
+type Person struct {
+	ID   int64
+	Name string
 }
 
 type Source interface {
@@ -56,11 +64,20 @@ func (c *Client) Tournament(ctx context.Context, id int64) (Tournament, error) {
 		Name      string `json:"name"`
 		DateStart string `json:"dateStart"`
 		DateEnd   string `json:"dateEnd"`
+		Editors   []struct {
+			ID      int64  `json:"id"`
+			Name    string `json:"name"`
+			Surname string `json:"surname"`
+		} `json:"editors"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return Tournament{}, err
 	}
-	return Tournament{Title: strings.TrimSpace(body.Name), Start: day(body.DateStart), End: day(body.DateEnd)}, nil
+	t := Tournament{Title: strings.TrimSpace(body.Name), Start: day(body.DateStart), End: day(body.DateEnd)}
+	for _, e := range body.Editors {
+		t.Editors = append(t.Editors, Person{ID: e.ID, Name: strings.TrimSpace(e.Name + " " + e.Surname)})
+	}
+	return t, nil
 }
 
 // wait keeps one request at least minInterval after the previous one.
@@ -78,4 +95,49 @@ func day(ts string) string {
 		return ""
 	}
 	return ts[:dayLen]
+}
+
+// Fixed is a Source of known tournaments, for tests.
+type Fixed map[int64]Tournament
+
+func (f Fixed) Tournament(_ context.Context, id int64) (Tournament, error) {
+	t, ok := f[id]
+	if !ok {
+		return Tournament{}, fmt.Errorf("rating: tournament %d: not found", id)
+	}
+	return t, nil
+}
+
+// Cached remembers what a Source said for a while, so a form checked on
+// every change does not ask the site each time.
+type Cached struct {
+	Src Source
+	TTL time.Duration
+	mu  sync.Mutex
+	got map[int64]cachedTournament
+}
+
+type cachedTournament struct {
+	t  Tournament
+	at time.Time
+}
+
+func (c *Cached) Tournament(ctx context.Context, id int64) (Tournament, error) {
+	c.mu.Lock()
+	if e, ok := c.got[id]; ok && time.Since(e.at) < c.TTL {
+		c.mu.Unlock()
+		return e.t, nil
+	}
+	c.mu.Unlock()
+	t, err := c.Src.Tournament(ctx, id)
+	if err != nil {
+		return t, err
+	}
+	c.mu.Lock()
+	if c.got == nil {
+		c.got = map[int64]cachedTournament{}
+	}
+	c.got[id] = cachedTournament{t, time.Now()}
+	c.mu.Unlock()
+	return t, nil
 }

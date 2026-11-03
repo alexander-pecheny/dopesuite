@@ -2,11 +2,13 @@ package tests
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
 	"qy/qy/domain/question"
 	"qy/qy/platform/gq"
+	"qy/qy/platform/rating"
 	"qy/qy/platform/telegram"
 	qyserver "qy/qy/server"
 )
@@ -212,5 +214,31 @@ func TestThePreviewShowsTheFields(t *testing.T) {
 	body := res.Body.String()
 	if res.Code != http.StatusOK || !strings.Contains(body, `\u0026lt;ИКС\u0026gt;`) || !strings.Contains(body, `\u003cimg src=\"https://cdn.example/pic.jpg\"`) {
 		t.Errorf("preview: %d %s", res.Code, body)
+	}
+}
+
+func TestTheRulesCheckWarnsAndTheAppealReachesTheAdmins(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.ts.Exec(`insert into jurors(year, telegram_username, kind, name) values(2026, 'petr', 'expert', 'Пётр Петров')`)
+	w.ts.SetRating(rating.Fixed{12345: {Start: "2025-09-01", End: "2025-09-02", Editors: []rating.Person{{ID: 7, Name: "Пётр Петров"}}}})
+	alice := w.user("alice")
+	form := slots("101", map[int]string{1: pasted("Вопрос Петра.", "петр", "Пётр Петров (Москва)")})
+	w.post(alice, "/nominate", form, http.StatusSeeOther)
+	page := w.get(alice, "/nominate", http.StatusOK)
+	for _, want := range []string{"Отыгрыш турнира начался 1 сентября 2025", "Автор вопроса Пётр Петров входит в жюри", "Редактор турнира Пётр Петров"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the form should warn: %s", want)
+		}
+	}
+	form.Set("slot1_appeal", "Это другой Пётр Петров.")
+	w.post(alice, "/nominate", form, http.StatusSeeOther)
+	admin := w.get(w.admin, "/admin/question/"+strconv.FormatInt(w.questionID("петр"), 10), http.StatusOK)
+	if !strings.Contains(admin, "Это другой Пётр Петров.") || !strings.Contains(admin, "Автор вопроса Пётр Петров") {
+		t.Error("the admin should see the check and the appeal")
+	}
+	res := alice.PostJSON("/api/nominate/check", `{"tournament": "https://rating.chgk.info/tournament/12345", "author": "Иван Иванов"}`)
+	if !strings.Contains(res.Body.String(), "Отыгрыш турнира") || strings.Contains(res.Body.String(), "Автор вопроса") {
+		t.Errorf("check: %s", res.Body.String())
 	}
 }

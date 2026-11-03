@@ -79,3 +79,11 @@ textarea[data-autogrow] {
 [data-panel="preview"] .richtext img {
   max-height: 16rem;
 }
+
+/* The red box under a nominated question that the automatic check of the
+   rules says cannot be nominated. */
+[data-lint] {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--wash-negative);
+}
