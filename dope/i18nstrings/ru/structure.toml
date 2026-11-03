@@ -122,6 +122,12 @@ bouts_after_final = '{{.key}}: {{.token}} — место в финале, пос
 bouts_twice = '{{.key}}: {{.token}} уже сидит в другом бою'
 # A place whose holder has already lost twice.
 bouts_out = '{{.key}}: {{.token}} к этому раунду уже выбывает'
+# A written round with no bouts in it.
+bouts_empty = '{{.key}}: раунд без боёв'
+# A written bout with no name before its seats.
+bouts_unnamed = '{{.key}}: у боя «{{.bout}}» нет имени, напишите его перед местами: «M: E-1 F-2»'
+# The block sends on more than its last written round leaves in.
+bouts_proceeding = 'proceeding_participants: {{.proceeding}}, а после последнего раунда остаётся {{.left}}'
 # A place that is still in and that no later bout takes.
 bouts_unused = '{{.token}} ещё не выбыл, но ни один бой его не берёт'
 
@@ -138,6 +144,8 @@ points_list = "points: жду [победа, ничья, поражение]"
 too_many_block_rounds = 'rr: {{.rounds}} кругов на {{.entrants}} участников по {{.size}} — есть только {{.have}}'
 # No schedule construction exists for this headcount and seat count.
 no_schedule = 'rr: нет расписания на {{.entrants}} участников по {{.size}} за столом'
+# A pairings list, or one round of it, with no bouts.
+pairings_empty = 'pairings: в {{.round}}-м круге нет боёв'
 # A pairings seat that is not a position in the group.
 pairings_seat = 'pairings: «{{.token}}» — не место в группе (от 1 до {{.size}})'
 # A pairings round that seats one position twice.

@@ -211,6 +211,11 @@ func TestDEWrittenRoundsRefuseABadTable(t *testing.T) {
 		"первый раунд в bouts": {"bouts.r2:", "bouts.r1: [Z: A1 B1]\nbouts.r2:"},
 		"место без номера":     {"L: J-1 K-1", "L: J K-1"},
 		"вместе с пересевом":   {"lower_entrants: 4", "lower_entrants: 4\nreseed: true"},
+		"бой из своего раунда": {"K: F-2 G-1]", "K: F-2 G-1, L2: J-1 K-1]"},
+		"бой без имени":        {"L: J-1 K-1", "J-1 K-1"},
+		"пустой раунд":         {"bouts.r3: [L: J-1 K-1]", "bouts.r3: []"},
+		"пустой круг групп":    {"pairings: [1-3 2-4, 1-2 3-4, 4-1 2-3]", "pairings: [1-3 2-4, , 4-1 2-3]"},
+		"пустые pairings":      {"pairings: [1-3 2-4, 1-2 3-4, 4-1 2-3]", "pairings: []"},
 	} {
 		src := strings.Replace(good, edit[0], edit[1], 1)
 		if src == good {
@@ -220,10 +225,12 @@ func TestDEWrittenRoundsRefuseABadTable(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if _, err := Compile(doc, Input{Slug: "x", GameType: "brain", Entrants: seedEntrants(16)}); err == nil {
+		_, err = Compile(doc, Input{Slug: "x", GameType: "brain", Entrants: seedEntrants(16)})
+		switch {
+		case err == nil:
 			t.Errorf("%s: схема принята", name)
-		} else {
-			t.Logf("%s: %v", name, err)
+		case name == "бой из своего раунда" && !strings.Contains(err.Error(), "«J» раньше не было"):
+			t.Errorf("%s: %v, want «боя J раньше не было»", name, err)
 		}
 	}
 }
@@ -246,5 +253,36 @@ func TestPolyfestLettersAreUnique(t *testing.T) {
 	}
 	if got := len(seen); got != 80+22 {
 		t.Errorf("букв %d, want 102", got)
+	}
+}
+
+// Names in `opening:` title and letter the opening's бои even when no round
+// after it is written; `letters: false` takes every letter away, names too.
+func TestDEOpeningNamesWithoutWrittenRounds(t *testing.T) {
+	const src = `
+[scheme]
+kind: roundrobin
+groups: 2
+group_size: 4
+proceeding_participants: 2
+---
+kind: double_elimination
+groups: 1
+group_size: 4
+lower_entrants: 2
+opening: [E: A1 B1, F: A2 B2]
+`
+	scheme := compileSrc(t, src, Input{Slug: "x", GameType: "brain", Entrants: seedEntrants(8)})
+	opening := stageByCode(t, scheme, "s2-r1")
+	for i, want := range []string{"E", "F"} {
+		if got := opening.Matches[i]; got.Letter != want || got.Title != "Бой "+want {
+			t.Errorf("бой %d: буква %q, название %q, want %s", i+1, got.Letter, got.Title, want)
+		}
+	}
+	unlettered := compileSrc(t, src+"letters: false\n", Input{Slug: "x", GameType: "brain", Entrants: seedEntrants(8)})
+	for _, match := range stageByCode(t, unlettered, "s2-r1").Matches {
+		if match.Letter != "" {
+			t.Errorf("%s: буква %q при letters: false", match.Code, match.Letter)
+		}
 	}
 }

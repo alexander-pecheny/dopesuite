@@ -2,6 +2,7 @@ package structure
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -20,9 +21,9 @@ import (
 //
 //	bouts.r2: [M: E-1 H-1 F-2 G-2, N: F-1 G-1 E-2 H-2, …]
 //
-// A seat is an earlier bout's name and a place in it. A bout is named by the
-// prefix before «:», or else by its number in the block (1 is the first bout
-// of the opening round). Who carries how many Losses follows from the seats,
+// A seat is an earlier round's bout and a place in it. A written bout is
+// named by the prefix before «:»; an opening bout the table leaves unnamed
+// answers to its number in the round. Who carries how many Losses follows from the seats,
 // so the brackets are not written: a bout whose seats carry different counts
 // is the grand final, and nothing can follow it.
 
@@ -65,56 +66,72 @@ func hasStr(b Block, key string) bool {
 	return ok
 }
 
-// openingNames are the names `opening:` gives its bouts («E: A1 B2 C3 D4»),
-// in order; nil when it names none.
-func openingNames(b Block) ([]string, error) {
+// SplitBoutItem reads one bout of a written table, «E: A1 B2 C3 D4»: its name,
+// if the scheme gave one, and its seats. The opening's seats are the
+// compiler's to resolve and the names the Kind's, so both read them here.
+func SplitBoutItem(item string) (name, seats string, named bool) {
+	name, seats, named = strings.Cut(item, ":")
+	if !named {
+		return "", item, false
+	}
+	return strings.TrimSpace(name), seats, true
+}
+
+// openingNames are the names `opening:` gives its bouts, in order: "" for a
+// bout it leaves unnamed, and nil when there is no `opening:` at all.
+func openingNames(b Block) ([]string, []bool, error) {
 	items, ok, err := b.List("opening")
 	if err != nil || !ok {
-		return nil, err
+		return nil, nil, err
 	}
 	names := make([]string, len(items))
+	named := make([]bool, len(items))
 	for i, item := range items {
-		if name, _, named := strings.Cut(item, ":"); named {
-			names[i] = strings.TrimSpace(name)
-		}
+		names[i], _, named[i] = SplitBoutItem(item)
 	}
-	return names, nil
+	return names, named, nil
 }
 
 // writtenPlan is the bracket being built: the plan, each bout's name, and
-// which seats of which bouts are already taken.
+// which places of which bouts a later bout already takes.
 type writtenPlan struct {
 	plan   *dePlan
 	byName map[string]int
-	// seatLosses[i][k] is how many Losses the k-th seat of bout i carries in.
-	seatLosses [][]int
-	taken      map[deSource]bool
-	key        string // the key being read, for the complaint
+	// pending are the names of the round being read: a bout may not take a
+	// seat from a bout of its own round, so they join byName once it is read.
+	pending map[string]int
+	taken   map[deSource]bool
+	key     string // the key being read, for the complaint
 }
 
-// extendWritten appends the written rounds to a plan holding the opening
-// round alone, and replaces its survivors with the last round's places.
-func extendWritten(plan *dePlan, opening []string, rounds [][]string) error {
-	w := &writtenPlan{plan: plan, byName: map[string]int{}, taken: map[deSource]bool{}, key: "opening"}
+// nameOpening names the opening round's bouts: by `opening:` where it names
+// them, which also titles and letters them, else by their number.
+func nameOpening(plan *dePlan, names []string, named []bool) (*writtenPlan, error) {
+	w := &writtenPlan{plan: plan, byName: map[string]int{}, pending: map[string]int{}, taken: map[deSource]bool{}, key: "opening"}
 	plan.names = make([]string, len(plan.bouts))
 	plan.titles = make([]string, len(plan.bouts))
-	for i, bout := range plan.bouts {
+	for i, index := range plan.blockRounds[0] {
 		name := strconv.Itoa(i + 1)
-		if i < len(opening) && opening[i] != "" {
-			name = opening[i]
-			plan.titles[i] = name
+		if i < len(named) && named[i] {
+			name = names[i]
+			plan.titles[index] = name
 		}
-		if err := w.name(i, name); err != nil {
-			return err
+		if err := w.name(index, name); err != nil {
+			return nil, err
 		}
-		losses := make([]int, len(bout.sources))
-		for k := range losses {
-			losses[k] = bout.losses
-		}
-		w.seatLosses = append(w.seatLosses, losses)
 	}
+	w.settle()
+	return w, nil
+}
+
+// extend appends the written rounds to a plan holding the opening round
+// alone, and replaces its survivors with the last round's places.
+func (w *writtenPlan) extend(rounds [][]string, proceeding int) error {
 	for r, items := range rounds {
 		w.key = fmt.Sprintf("%s.r%d", writtenBoutsKey, r+2)
+		if len(items) == 0 {
+			return Keyf(w.key, "%s", dopestrings.Default.Structure.De.BoutsEmpty(w.key))
+		}
 		var round []int
 		for _, item := range items {
 			index, err := w.bout(item)
@@ -123,29 +140,39 @@ func extendWritten(plan *dePlan, opening []string, rounds [][]string) error {
 			}
 			round = append(round, index)
 		}
-		plan.blockRounds = append(plan.blockRounds, round)
+		w.settle()
+		w.plan.blockRounds = append(w.plan.blockRounds, round)
 	}
-	return w.finish()
+	return w.finish(proceeding)
 }
 
 func (w *writtenPlan) name(index int, name string) error {
-	if _, dup := w.byName[name]; dup || name == "" || strings.Contains(name, placeSeparator) {
+	_, dup := w.byName[name]
+	_, dupHere := w.pending[name]
+	if dup || dupHere || name == "" || strings.Contains(name, placeSeparator) {
 		return Keyf(w.key, "%s", dopestrings.Default.Structure.De.BoutsName(w.key, name))
 	}
-	w.byName[name] = index
+	w.pending[name] = index
 	w.plan.names[index] = name
 	return nil
 }
 
-// bout reads one written bout, «M: E-1 H-1 F-2 G-2», and appends it.
+// settle makes the round just read available to the rounds after it.
+func (w *writtenPlan) settle() {
+	for name, index := range w.pending {
+		w.byName[name] = index
+	}
+	clear(w.pending)
+}
+
+// bout reads one written bout, «M: E-1 H-1 F-2 G-2», and appends it. A written
+// bout is always named: its number in the block would be neither its title
+// nor anything the regulations call it.
 func (w *writtenPlan) bout(item string) (int, error) {
 	s := dopestrings.Default
-	index := len(w.plan.bouts)
-	name, seats, named := strings.Cut(item, ":")
-	name = strings.TrimSpace(name)
-	title := name
+	name, seats, named := SplitBoutItem(item)
 	if !named {
-		name, seats, title = strconv.Itoa(index+1), item, ""
+		return 0, Keyf(w.key, "%s", s.Structure.De.BoutsUnnamed(w.key, strings.TrimSpace(item)))
 	}
 	tokens := strings.Fields(seats)
 	if len(tokens) <= w.plan.winning {
@@ -162,10 +189,10 @@ func (w *writtenPlan) bout(item string) (int, error) {
 		losses = append(losses, carried)
 	}
 	bout.losses, bout.final = seatLossesOf(losses)
+	index := len(w.plan.bouts)
 	w.plan.bouts = append(w.plan.bouts, bout)
 	w.plan.names = append(w.plan.names, "")
-	w.plan.titles = append(w.plan.titles, title)
-	w.seatLosses = append(w.seatLosses, losses)
+	w.plan.titles = append(w.plan.titles, name)
 	return index, w.name(index, name)
 }
 
@@ -180,6 +207,16 @@ func seatLossesOf(losses []int) (int, bool) {
 		low = min(low, l)
 	}
 	return low, mixed
+}
+
+// carriedLosses is how many Losses a bout's place leaves its holder with. A
+// final's places are its standings, not Losses.
+func (plan *dePlan) carriedLosses(source deSource) int {
+	bout := plan.bouts[source.bout]
+	if !bout.final && source.place > plan.winning {
+		return bout.losses + 1
+	}
+	return bout.losses
 }
 
 // seat reads «E-1»: who finished first in bout E, and the Losses they carry.
@@ -203,10 +240,7 @@ func (w *writtenPlan) seat(token string) (deSource, int, error) {
 	if w.taken[source] {
 		return deSource{}, 0, Keyf(w.key, "%s", dopestrings.Default.Structure.De.BoutsTwice(w.key, token))
 	}
-	carried := w.plan.bouts[index].losses
-	if place > w.plan.winning {
-		carried++
-	}
+	carried := w.plan.carriedLosses(source)
 	if carried >= w.plan.lives {
 		return deSource{}, 0, Keyf(w.key, "%s", dopestrings.Default.Structure.De.BoutsOut(w.key, token))
 	}
@@ -215,8 +249,9 @@ func (w *writtenPlan) seat(token string) (deSource, int, error) {
 }
 
 // finish checks that everyone still in before the last round plays on, and
-// makes the last round's places the block's survivors.
-func (w *writtenPlan) finish() error {
+// makes the last round's places the block's survivors: fewer Losses first,
+// as the planner ranks them, then in the order the round lists them.
+func (w *writtenPlan) finish(proceeding int) error {
 	plan := w.plan
 	last := map[int]bool{}
 	for _, index := range plan.blockRounds[len(plan.blockRounds)-1] {
@@ -226,7 +261,7 @@ func (w *writtenPlan) finish() error {
 	for index, bout := range plan.bouts {
 		for place := 1; place <= len(bout.sources); place++ {
 			source := deSource{bout: index, place: place}
-			alive := bout.final || bout.losses+boolInt(place > plan.winning) < plan.lives
+			alive := plan.carriedLosses(source) < plan.lives
 			switch {
 			case last[index] && alive:
 				plan.survivor = append(plan.survivor, source)
@@ -236,13 +271,12 @@ func (w *writtenPlan) finish() error {
 			}
 		}
 	}
+	sort.SliceStable(plan.survivor, func(i, j int) bool {
+		return plan.carriedLosses(plan.survivor[i]) < plan.carriedLosses(plan.survivor[j])
+	})
+	if proceeding > len(plan.survivor) {
+		return Keyf("proceeding_participants", "%s", dopestrings.Default.Structure.De.BoutsProceeding(strconv.Itoa(proceeding), strconv.Itoa(len(plan.survivor))))
+	}
 	plan.survivor = rankSources(plan.survivor)
 	return nil
-}
-
-func boolInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }

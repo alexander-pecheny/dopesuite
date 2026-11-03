@@ -175,14 +175,18 @@ func planDE(b Block, shape deShape, opening func(n, bouts int) [][]int, written 
 	if err != nil {
 		return nil, fmt.Errorf("double_elimination: %s", err)
 	}
-	if len(written) == 0 {
-		return plan, nil
-	}
-	names, err := openingNames(b)
+	names, named, err := openingNames(b)
 	if err != nil {
 		return nil, err
 	}
-	return plan, extendWritten(plan, names, written)
+	w, err := nameOpening(plan, names, named)
+	if err != nil {
+		return nil, err
+	}
+	if len(written) == 0 {
+		return plan, nil
+	}
+	return plan, w.extend(written, shape.proceeding)
 }
 
 // emitLivesBracket writes one bracket's stages and returns each planned

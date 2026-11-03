@@ -124,8 +124,14 @@ func rrPairings(b Block, size, matchSize int) ([][][]int, error) {
 	if err != nil || !ok {
 		return nil, err
 	}
+	if len(items) == 0 {
+		return nil, Keyf("pairings", "%s", dopestrings.Default.Structure.Rr.PairingsEmpty("1"))
+	}
 	blockRounds := make([][][]int, 0, len(items))
 	for r, item := range items {
+		if item == "" {
+			return nil, Keyf("pairings", "%s", dopestrings.Default.Structure.Rr.PairingsEmpty(strconv.Itoa(r+1)))
+		}
 		seated := map[int]bool{}
 		var tables [][]int
 		for _, bout := range strings.Fields(item) {

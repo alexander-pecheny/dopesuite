@@ -3024,7 +3024,8 @@ var RU = Strings{
 			BoutsAfterFinal: func(key string, token string) string {
 				return fmt.Sprintf("%s: %s — место в финале, после него боёв нет", key, token)
 			},
-			BoutsGap: func(key string, prev string) string { return fmt.Sprintf("%s: перед ним нет %s", key, prev) },
+			BoutsEmpty: func(key string) string { return fmt.Sprintf("%s: раунд без боёв", key) },
+			BoutsGap:   func(key string, prev string) string { return fmt.Sprintf("%s: перед ним нет %s", key, prev) },
 			BoutsName: func(key string, name string) string {
 				return fmt.Sprintf("%s: имя боя «%s» пустое, уже занято или содержит «-»", key, name)
 			},
@@ -3034,6 +3035,9 @@ var RU = Strings{
 			},
 			BoutsPlace: func(key string, token string) string {
 				return fmt.Sprintf("%s: в бою нет места «%s»", key, token)
+			},
+			BoutsProceeding: func(proceeding string, left string) string {
+				return fmt.Sprintf("proceeding_participants: %s, а после последнего раунда остаётся %s", proceeding, left)
 			},
 			BoutsReseed: func() string {
 				return "bouts.rN и reseed: true вместе не работают: раунды уже расписаны"
@@ -3052,6 +3056,9 @@ var RU = Strings{
 			},
 			BoutsUnknown: func(key string, bout string) string {
 				return fmt.Sprintf("%s: боя «%s» раньше не было", key, bout)
+			},
+			BoutsUnnamed: func(key string, bout string) string {
+				return fmt.Sprintf("%s: у боя «%s» нет имени, напишите его перед местами: «M: E-1 F-2»", key, bout)
 			},
 			BoutsUnused: func(token string) string {
 				return fmt.Sprintf("%s ещё не выбыл, но ни один бой его не берёт", token)
@@ -3124,6 +3131,7 @@ var RU = Strings{
 			PairingsBoutSize: func(bout string, size string) string {
 				return fmt.Sprintf("pairings: в бою %s должно быть %s мест", bout, size)
 			},
+			PairingsEmpty: func(round string) string { return fmt.Sprintf("pairings: в %s-м круге нет боёв", round) },
 			PairingsSeat: func(token string, size string) string {
 				return fmt.Sprintf("pairings: «%s» — не место в группе (от 1 до %s)", token, size)
 			},

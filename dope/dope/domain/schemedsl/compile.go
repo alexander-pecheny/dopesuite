@@ -172,7 +172,14 @@ func (c *compiler) run() error {
 // and the deal skips every name taken that way, so no two Matches share one.
 func (c *compiler) assignLetters() error {
 	claimed := map[string]bool{}
-	for _, stage := range c.scheme.Stages {
+	for i := range c.scheme.Stages {
+		stage := &c.scheme.Stages[i]
+		if !c.lettered(stage.Grain.Block) {
+			for m := range stage.Matches {
+				stage.Matches[m].Letter = ""
+			}
+			continue
+		}
 		for _, match := range stage.Matches {
 			if match.Letter == "" {
 				continue
@@ -193,11 +200,7 @@ func (c *compiler) assignLetters() error {
 	}
 	for i := range c.scheme.Stages {
 		stage := &c.scheme.Stages[i]
-		var block int
-		if _, err := fmt.Sscanf(stage.Grain.Block, "s%d", &block); err != nil || block < 1 || block > len(c.doc.Blocks) {
-			continue
-		}
-		if letters, ok := c.doc.Blocks[block-1].Bool("letters"); ok && !letters {
+		if !c.lettered(stage.Grain.Block) {
 			continue
 		}
 		for m := range stage.Matches {
@@ -207,6 +210,17 @@ func (c *compiler) assignLetters() error {
 		}
 	}
 	return nil
+}
+
+// lettered says whether a stage's Block deals letters to its Matches: a stage
+// outside any Block of the scheme deals none, and `letters: false` declines.
+func (c *compiler) lettered(blockCode string) bool {
+	var block int
+	if _, err := fmt.Sscanf(blockCode, "s%d", &block); err != nil || block < 1 || block > len(c.doc.Blocks) {
+		return false
+	}
+	letters, ok := c.doc.Blocks[block-1].Bool("letters")
+	return !ok || letters
 }
 
 // BoutLetter is the letter of the n-th Match (0-based): A..Z, then AA, AB.. —
@@ -766,9 +780,7 @@ func (c *compiler) dealOpening(blk Section, groups, size int) ([][]store.SchemeS
 	for b, item := range items {
 		// «E: A1 B2 C3 D4» names the bout for the written rounds after it
 		// (bouts.r2, …); the name is the Kind's to read, the seats are ours.
-		if _, seats, named := strings.Cut(item, ":"); named {
-			item = seats
-		}
+		_, item, _ = structure.SplitBoutItem(item)
 		tokens := strings.Fields(item)
 		if len(tokens) != perBout {
 			return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningBoutSize(strconv.Itoa(b+1), strconv.Itoa(perBout), strconv.Itoa(len(tokens))))
