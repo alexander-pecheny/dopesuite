@@ -42,6 +42,8 @@ func (b *blockHandle) Int(key string) (int, bool) {
 func (b *blockHandle) Bool(key string) (bool, bool)  { return b.blk.Bool(key) }
 func (b *blockHandle) Str(key string) (string, bool) { return b.blk.Str(key) }
 
+func (b *blockHandle) List(key string) ([]string, bool, error) { return b.blk.List(key) }
+
 func (b *blockHandle) IntList(key string) ([]int, bool, error) {
 	sections := []Section{b.blk}
 	if b.keys[key].Cascade {

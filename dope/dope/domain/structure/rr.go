@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	dopestrings "dope/i18nstrings"
 
@@ -25,7 +26,7 @@ type roundRobin struct{}
 func (roundRobin) Code() string { return "rr" }
 func (roundRobin) Word() string { return "roundrobin" }
 func (roundRobin) Keys() []Key {
-	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "slug"}, {Name: "deal"}}
+	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "slug"}, {Name: "deal"}, {Name: "pairings"}}
 }
 
 // canonOrder is the round-robin comparator chain when a scheme names none:
@@ -70,6 +71,10 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 	if err != nil {
 		return Outputs{}, err
 	}
+	pairings, err := rrPairings(b, size, matchSize)
+	if err != nil {
+		return Outputs{}, err
+	}
 	metric, _ := b.Str("metric")
 	slug, _ := b.Str("slug")
 	out := Outputs{}
@@ -88,6 +93,7 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 			cfg.MatchSize = matchSize
 		}
 		cfg.BlockRounds, _ = b.Int("rounds")
+		cfg.Pairings = pairings
 		if _, err := b.Emit(Stage{Code: code, Title: b.GroupTitle(g, groups), Kind: "rr", Slug: slug,
 			At: At{Group: GroupCode(groups, g)}, Config: cfg}); err != nil {
 			return Outputs{}, err
@@ -106,6 +112,43 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 		})
 	}
 	return out, nil
+}
+
+// rrPairings reads `pairings:`, the group's schedule as the regulations print
+// it when its order is not the canon's: one item per round, its bouts
+// separated by spaces, a bout's seats (positions in the group) joined by «-».
+// Polyfest's KINSBF plays 1–3 2–4, then 1–2 3–4, then 4–1 2–3:
+// `pairings: [1-3 2-4, 1-2 3-4, 4-1 2-3]`. Every group plays it.
+func rrPairings(b Block, size, matchSize int) ([][][]int, error) {
+	items, ok, err := b.List("pairings")
+	if err != nil || !ok {
+		return nil, err
+	}
+	blockRounds := make([][][]int, 0, len(items))
+	for r, item := range items {
+		seated := map[int]bool{}
+		var tables [][]int
+		for _, bout := range strings.Fields(item) {
+			var table []int
+			for _, token := range strings.Split(bout, "-") {
+				position, err := strconv.Atoi(token)
+				if err != nil || position < 1 || position > size {
+					return nil, Keyf("pairings", "%s", dopestrings.Default.Structure.Rr.PairingsSeat(token, strconv.Itoa(size)))
+				}
+				if seated[position] {
+					return nil, Keyf("pairings", "%s", dopestrings.Default.Structure.Rr.PairingsTwice(strconv.Itoa(r+1), token))
+				}
+				seated[position] = true
+				table = append(table, position)
+			}
+			if len(table) != matchSize {
+				return nil, Keyf("pairings", "%s", dopestrings.Default.Structure.Rr.PairingsBoutSize(bout, strconv.Itoa(matchSize)))
+			}
+			tables = append(tables, table)
+		}
+		blockRounds = append(blockRounds, tables)
+	}
+	return blockRounds, nil
 }
 
 // blockOrder resolves the groups' comparator order. On a block with an incoming
@@ -283,11 +326,12 @@ func rrBlockRounds(n, size int, conf RRConfig) ([][][]int, error) {
 
 // affineBlockRounds is the resolvable schedule of the affine plane AG(2,m): m²
 // seats split into m tables of m, m+1 times over, and no two Participants ever
-// share a table twice. It exists exactly when m is prime — the sizes a real
-// group stage uses (3, 5, 7) — so any other m reports no schedule rather than a
-// broken one.
+// share a table twice. It is built for the orders a real group stage uses —
+// a prime (3, 5, 7) and 4, Polyfest's personal SI with groups of 16 four to a
+// table — so any other m reports no schedule rather than a broken one.
 func affineBlockRounds(n, m int) ([][][]int, bool) {
-	if m < 2 || n != m*m || !isPrime(m) {
+	add, mul, ok := finiteField(m)
+	if !ok || n != m*m {
 		return nil, false
 	}
 	point := func(x, y int) int { return x*m + y + 1 }
@@ -303,12 +347,46 @@ func affineBlockRounds(n, m int) ([][][]int, bool) {
 		lines := make([][]int, m)
 		for c := 0; c < m; c++ {
 			for x := 0; x < m; x++ {
-				lines[c] = append(lines[c], point(x, (slope*x+c)%m))
+				lines[c] = append(lines[c], point(x, add(mul(slope, x), c)))
 			}
 		}
 		blockRounds = append(blockRounds, lines)
 	}
 	return blockRounds, true
+}
+
+// GF(4) is the polynomials over GF(2) modulo x² + x + 1: addition is XOR, and
+// a product that reaches x² folds back through the modulus.
+const (
+	gf4Order    = 4
+	gf4Bits     = 2
+	gf4Modulus  = 0b111
+	gf4Overflow = 0b100
+)
+
+// finiteField is the arithmetic of the field of order m: integers mod m for
+// a prime, GF(4) for four.
+func finiteField(m int) (add, mul func(a, b int) int, ok bool) {
+	switch {
+	case m == gf4Order:
+		return func(a, b int) int { return a ^ b }, gf4Mul, true
+	case m >= 2 && isPrime(m):
+		return func(a, b int) int { return (a + b) % m }, func(a, b int) int { return a * b % m }, true
+	}
+	return nil, nil, false
+}
+
+func gf4Mul(a, b int) int {
+	product := 0
+	for bit := 0; bit < gf4Bits; bit++ {
+		if b>>bit&1 == 1 {
+			product ^= a << bit
+		}
+	}
+	if product&gf4Overflow != 0 {
+		product ^= gf4Modulus
+	}
+	return product
 }
 
 func isPrime(n int) bool {

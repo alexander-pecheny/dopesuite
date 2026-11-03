@@ -582,3 +582,42 @@ func TestRoundRobinScheduleCircleMethod(t *testing.T) {
 		}
 	}
 }
+
+// Polyfest's personal SI: groups of 16 at tables of four, five rounds, and
+// every two players share a table exactly once.
+func TestRoundRobinScheduleSixteenAtFour(t *testing.T) {
+	entrants := make([]int, 16)
+	for i := range entrants {
+		entrants[i] = i + 1
+	}
+	matches := mustSchedule(t, "rr", RRConfig{Code: "g", MatchSize: 4, Entrants: seeds(entrants...)})
+	if len(matches) != 20 {
+		t.Fatalf("got %d matches, want 20", len(matches))
+	}
+	met := map[[2]int]int{}
+	seatedInRound := map[[2]int]bool{}
+	for _, m := range matches {
+		if len(m.Slots) != 4 {
+			t.Fatalf("%s seats %d, want 4", m.Code, len(m.Slots))
+		}
+		for i, a := range m.Slots {
+			key := [2]int{m.BlockRound, a.Seed.Number}
+			if seatedInRound[key] {
+				t.Errorf("round %d seats %d twice", m.BlockRound, a.Seed.Number)
+			}
+			seatedInRound[key] = true
+			for _, b := range m.Slots[i+1:] {
+				lo, hi := min(a.Seed.Number, b.Seed.Number), max(a.Seed.Number, b.Seed.Number)
+				met[[2]int{lo, hi}]++
+			}
+		}
+	}
+	if len(met) != 120 {
+		t.Errorf("%d pairs meet, want all 120", len(met))
+	}
+	for pair, n := range met {
+		if n != 1 {
+			t.Errorf("%v meet %d times", pair, n)
+		}
+	}
+}

@@ -1883,6 +1883,7 @@ export type Strings = {
       kindMissing: () => string;
       kindUnknown: (kind: string, known: string) => string;
       kindUnregistered: (kind: string) => string;
+      letterDup: (letter: string) => string;
       matchCodeDup: (match: string, held_stage: string, stage: string) => string;
       noBlocks: () => string;
       slugCharset: (slug: string) => string;
@@ -2063,6 +2064,19 @@ export type Strings = {
   structure: {
     de: {
       badGroups: (groups: string, size: string) => string;
+      boutsAfterFinal: (key: string, token: string) => string;
+      boutsGap: (key: string, prev: string) => string;
+      boutsName: (key: string, name: string) => string;
+      boutsOneBracket: () => string;
+      boutsOut: (key: string, token: string) => string;
+      boutsPlace: (key: string, token: string) => string;
+      boutsReseed: () => string;
+      boutsRound: () => string;
+      boutsSeat: (key: string, token: string) => string;
+      boutsSize: (key: string, bout: string, winning: string) => string;
+      boutsTwice: (key: string, token: string) => string;
+      boutsUnknown: (key: string, bout: string) => string;
+      boutsUnused: (token: string) => string;
       groupsNeeded: () => string;
       participantsNeeded: () => string;
       playoff: () => string;
@@ -2104,6 +2118,9 @@ export type Strings = {
       groupFeed: (n: string) => string;
       groupSizeNeeded: () => string;
       noSchedule: (entrants: string, size: string) => string;
+      pairingsBoutSize: (bout: string, size: string) => string;
+      pairingsSeat: (token: string, size: string) => string;
+      pairingsTwice: (round: string, token: string) => string;
       pointsList: () => string;
       tooManyBlockRounds: (rounds: string, entrants: string, size: string, have: string) => string;
     };

@@ -26,7 +26,7 @@ type pod struct{}
 func (pod) Code() string { return "de" }
 func (pod) Word() string { return "double_elimination" }
 func (pod) Keys() []Key {
-	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "participants"}, {Name: "match_size"}, {Name: "winning_places"}, {Name: "lower_entrants"}, {Name: "opening"}}
+	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "participants"}, {Name: "match_size"}, {Name: "winning_places"}, {Name: "lower_entrants"}, {Name: "opening"}, {Name: writtenBoutsKey, BlockRound: true}}
 }
 
 // dePodSize is KINSBF's classic pod: four to a group.
@@ -99,10 +99,13 @@ func (pod) Expand(b Block) (Outputs, error) {
 	// (Octobearfest personal SI, appendix 3: 3rd and 4th of every group go
 	// straight to the lower bracket).
 	lower, _ := b.Int("lower_entrants")
-	plan, err := planLivesEntered(perGroup, lower, 2, winning, proceeding,
-		func(blockRound, members int) int { return size }, opening)
+	written, err := writtenBlockRounds(b)
 	if err != nil {
-		return Outputs{}, fmt.Errorf("double_elimination: %s", err)
+		return Outputs{}, err
+	}
+	plan, err := planDE(b, deShape{groups: groups, perGroup: perGroup, lower: lower, size: size, winning: winning, proceeding: proceeding}, opening, written)
+	if err != nil {
+		return Outputs{}, err
 	}
 	blockRoundNames := make([]string, len(plan.blockRounds))
 	for i := range plan.blockRounds {
@@ -144,6 +147,42 @@ func (pod) Expand(b Block) (Outputs, error) {
 		out.Groups = append(out.Groups, Feed{Stage: stages[len(stages)-1], Label: label, Place: place})
 	}
 	return out, nil
+}
+
+// deShape is what a double elimination block asks of its bracket: how many
+// brackets of how many, how many start in the lower one, the seats per bout,
+// how many of them win, and how many leave the block.
+type deShape struct {
+	groups, perGroup, lower, size, winning, proceeding int
+}
+
+// planDE plans the bracket: the planner's own rounds, or its opening round
+// and then the rounds the scheme writes out (de_written.go).
+func planDE(b Block, shape deShape, opening func(n, bouts int) [][]int, written [][]string) (*dePlan, error) {
+	s := dopestrings.Default
+	stopAfter := 0
+	if len(written) > 0 {
+		if shape.groups != 1 {
+			return nil, Keyf("groups", "%s", s.Structure.De.BoutsOneBracket())
+		}
+		if reseeded, _ := b.Bool("reseed"); reseeded {
+			return nil, Keyf("reseed", "%s", s.Structure.De.BoutsReseed())
+		}
+		stopAfter = 1
+	}
+	plan, err := planLivesUpTo(shape.perGroup, shape.lower, 2, shape.winning, shape.proceeding, stopAfter,
+		func(blockRound, members int) int { return shape.size }, opening)
+	if err != nil {
+		return nil, fmt.Errorf("double_elimination: %s", err)
+	}
+	if len(written) == 0 {
+		return plan, nil
+	}
+	names, err := openingNames(b)
+	if err != nil {
+		return nil, err
+	}
+	return plan, extendWritten(plan, names, written)
 }
 
 // emitLivesBracket writes one bracket's stages and returns each planned
@@ -201,12 +240,20 @@ func emitLivesBracket(b Block, group, groups int, plan *dePlan, entrants []store
 				}
 			}
 			title := s.Structure.Titles.Bout(strconv.Itoa(seq))
-			if groups == 1 {
+			switch {
+			case boutIndex < len(plan.titles) && plan.titles[boutIndex] != "":
+				title = s.Structure.Titles.Bout(plan.titles[boutIndex])
+			case groups == 1:
 				title = s.Structure.Titles.Bout(strconv.Itoa(i + 1))
+			}
+			letter := ""
+			if boutIndex < len(plan.titles) {
+				letter = plan.titles[boutIndex]
 			}
 			matches = append(matches, store.SchemeMatch{
 				Code:             code,
 				Title:            title,
+				Letter:           letter,
 				Venue:            lanes.Pick(boutIndex + 1),
 				ParticipantCount: len(slots),
 				Slots:            slots,

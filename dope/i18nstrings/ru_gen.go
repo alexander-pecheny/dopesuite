@@ -2810,6 +2810,9 @@ var RU = Strings{
 			KindUnregistered: func(kind string) string {
 				return fmt.Sprintf("%s не зарегистрирован в реестре видов", kind)
 			},
+			LetterDup: func(letter string) string {
+				return fmt.Sprintf("бой «%s» назван дважды: имя боя — его буква, она одна на игру", letter)
+			},
 			MatchCodeDup: func(match string, held_stage string, stage string) string {
 				return fmt.Sprintf("бой \"%s\" есть и в этапе \"%s\", и в \"%s\"", match, held_stage, stage)
 			},
@@ -3018,6 +3021,41 @@ var RU = Strings{
 			BadGroups: func(groups string, size string) string {
 				return fmt.Sprintf("double_elimination: %s групп по %s — так не бывает", groups, size)
 			},
+			BoutsAfterFinal: func(key string, token string) string {
+				return fmt.Sprintf("%s: %s — место в финале, после него боёв нет", key, token)
+			},
+			BoutsGap: func(key string, prev string) string { return fmt.Sprintf("%s: перед ним нет %s", key, prev) },
+			BoutsName: func(key string, name string) string {
+				return fmt.Sprintf("%s: имя боя «%s» пустое, уже занято или содержит «-»", key, name)
+			},
+			BoutsOneBracket: func() string { return "bouts.rN расписывают одну сетку: groups: 1" },
+			BoutsOut: func(key string, token string) string {
+				return fmt.Sprintf("%s: %s к этому раунду уже выбывает", key, token)
+			},
+			BoutsPlace: func(key string, token string) string {
+				return fmt.Sprintf("%s: в бою нет места «%s»", key, token)
+			},
+			BoutsReseed: func() string {
+				return "bouts.rN и reseed: true вместе не работают: раунды уже расписаны"
+			},
+			BoutsRound: func() string {
+				return "bouts пишется по раундам начиная со второго: bouts.r2, bouts.r3, … Первый раунд задаёт opening"
+			},
+			BoutsSeat: func(key string, token string) string {
+				return fmt.Sprintf("%s: «%s» — нужен бой и место, например E-1", key, token)
+			},
+			BoutsSize: func(key string, bout string, winning string) string {
+				return fmt.Sprintf("%s: в бою «%s» мест не больше, чем выходит дальше (%s)", key, bout, winning)
+			},
+			BoutsTwice: func(key string, token string) string {
+				return fmt.Sprintf("%s: %s уже сидит в другом бою", key, token)
+			},
+			BoutsUnknown: func(key string, bout string) string {
+				return fmt.Sprintf("%s: боя «%s» раньше не было", key, bout)
+			},
+			BoutsUnused: func(token string) string {
+				return fmt.Sprintf("%s ещё не выбыл, но ни один бой его не берёт", token)
+			},
 			GroupsNeeded:       func() string { return "double_elimination: нужен groups (или participants, кратный 4)" },
 			ParticipantsNeeded: func() string { return "double_elimination: нужен participants (или groups и group_size)" },
 			Playoff:            func() string { return "Плей-офф" },
@@ -3082,6 +3120,15 @@ var RU = Strings{
 			GroupSizeNeeded: func() string { return "roundrobin: нужен group_size" },
 			NoSchedule: func(entrants string, size string) string {
 				return fmt.Sprintf("rr: нет расписания на %s участников по %s за столом", entrants, size)
+			},
+			PairingsBoutSize: func(bout string, size string) string {
+				return fmt.Sprintf("pairings: в бою %s должно быть %s мест", bout, size)
+			},
+			PairingsSeat: func(token string, size string) string {
+				return fmt.Sprintf("pairings: «%s» — не место в группе (от 1 до %s)", token, size)
+			},
+			PairingsTwice: func(round string, token string) string {
+				return fmt.Sprintf("pairings: в %s-м круге место %s играет дважды", round, token)
 			},
 			PointsList: func() string { return "points: жду [победа, ничья, поражение]" },
 			TooManyBlockRounds: func(rounds string, entrants string, size string, have string) string {

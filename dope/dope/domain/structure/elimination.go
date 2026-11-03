@@ -248,6 +248,10 @@ type dePlan struct {
 	alive      [][]deSource
 	aliveBands [][][2]int // per round, per alive entry: (Losses now, Losses before)
 	survivor   []deSource // block qualifiers, best first
+	// names and titles exist on a bracket with written rounds (de_written.go):
+	// every bout's name, which seats refer to, and the name the scheme gave
+	// it, which titles it ("Bout M"), or "" for a bout it left unnamed.
+	names, titles []string
 }
 
 // planLives lays out an elimination where `lives` Losses end a tournament.
@@ -281,6 +285,13 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(block
 // bracket and its 3rd and 4th straight to the lower one; the rest of the
 // bracket — who drops where, how big each Match is — is the same planner.
 func planLivesEntered(entrants, lower, lives, winning, proceeding int, sizeFor func(blockRound, members int) int, opening func(n, bouts int) [][]int) (*dePlan, error) {
+	return planLivesUpTo(entrants, lower, lives, winning, proceeding, 0, sizeFor, opening)
+}
+
+// planLivesUpTo is planLivesEntered stopped after maxBlockRounds rounds (0
+// plays to the end): a bracket whose later rounds the scheme writes out
+// (`bouts.r2`, …) takes only its opening round from here.
+func planLivesUpTo(entrants, lower, lives, winning, proceeding, maxBlockRounds int, sizeFor func(blockRound, members int) int, opening func(n, bouts int) [][]int) (*dePlan, error) {
 	s := dopestrings.Default
 	if lower < 0 || lower >= entrants || (lower > 0 && lives < 2) {
 		return nil, fmt.Errorf("%s", s.Structure.Elimination.LowerEntrants(strconv.Itoa(lower), strconv.Itoa(entrants)))
@@ -394,6 +405,10 @@ func planLivesEntered(entrants, lower, lives, winning, proceeding int, sizeFor f
 		plan.alive = append(plan.alive, aliveNow)
 		plan.aliveBands = append(plan.aliveBands, bandsNow)
 		brackets = next
+		if blockRound == maxBlockRounds {
+			plan.survivor = flattenBrackets(brackets)
+			return plan, nil
+		}
 		if blockRound > blockRoundLimit {
 			return nil, fmt.Errorf("%s", s.Structure.Elimination.TooManyBlockRounds())
 		}

@@ -98,6 +98,32 @@ bad_groups = 'double_elimination: {{.groups}} групп по {{.size}} — та
 reseed_block_round_unknown = 'reseed: в этом блоке нет раунда {{.round}} — только true/false'
 # The stage title of a single-bracket elimination.
 playoff = "Плей-офф"
+# A bouts key with no round, or for the first round, which opening seats.
+bouts_round = "bouts пишется по раундам начиная со второго: bouts.r2, bouts.r3, … Первый раунд задаёт opening"
+# A written round with the one before it missing.
+bouts_gap = '{{.key}}: перед ним нет {{.prev}}'
+# Written rounds on a block of several brackets.
+bouts_one_bracket = "bouts.rN расписывают одну сетку: groups: 1"
+# Written rounds together with a re-rank between rounds.
+bouts_reseed = "bouts.rN и reseed: true вместе не работают: раунды уже расписаны"
+# A bout name that is empty, taken, or holds the place separator.
+bouts_name = '{{.key}}: имя боя «{{.name}}» пустое, уже занято или содержит «-»'
+# A written bout with no more seats than go on from it.
+bouts_size = '{{.key}}: в бою «{{.bout}}» мест не больше, чем выходит дальше ({{.winning}})'
+# A seat that is not bout-place.
+bouts_seat = '{{.key}}: «{{.token}}» — нужен бой и место, например E-1'
+# A seat naming a bout not played before this round.
+bouts_unknown = '{{.key}}: боя «{{.bout}}» раньше не было'
+# A seat naming a place the bout does not have.
+bouts_place = '{{.key}}: в бою нет места «{{.token}}»'
+# A seat naming a place of the grand final.
+bouts_after_final = '{{.key}}: {{.token}} — место в финале, после него боёв нет'
+# A place seated in two bouts.
+bouts_twice = '{{.key}}: {{.token}} уже сидит в другом бою'
+# A place whose holder has already lost twice.
+bouts_out = '{{.key}}: {{.token}} к этому раунду уже выбывает'
+# A place that is still in and that no later bout takes.
+bouts_unused = '{{.token}} ещё не выбыл, но ни один бой его не берёт'
 
 [rr]
 # The roundrobin block: groups seated from the incoming edge, ranked by the
@@ -112,6 +138,12 @@ points_list = "points: жду [победа, ничья, поражение]"
 too_many_block_rounds = 'rr: {{.rounds}} кругов на {{.entrants}} участников по {{.size}} — есть только {{.have}}'
 # No schedule construction exists for this headcount and seat count.
 no_schedule = 'rr: нет расписания на {{.entrants}} участников по {{.size}} за столом'
+# A pairings seat that is not a position in the group.
+pairings_seat = 'pairings: «{{.token}}» — не место в группе (от 1 до {{.size}})'
+# A pairings round that seats one position twice.
+pairings_twice = 'pairings: в {{.round}}-м круге место {{.token}} играет дважды'
+# A pairings bout whose seat count is not the block's match_size.
+pairings_bout_size = 'pairings: в бою {{.bout}} должно быть {{.size}} мест'
 
 [flat]
 # The flat kind: one match seating every entrant.

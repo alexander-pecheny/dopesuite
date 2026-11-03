@@ -161,16 +161,36 @@ func (c *compiler) run() error {
 			return err
 		}
 	}
-	c.assignLetters()
-	return nil
+	return c.assignLetters()
 }
 
 // assignLetters deals every Match its letter — A..Z, then AA.. — in schedule
 // order over the whole Game: Block, then stage, then Match. A block may decline
 // (`letters: false`): TPSh's written qualifying round is one sitting for
-// everyone and is not called a Match.
-func (c *compiler) assignLetters() {
+// everyone and is not called a Match. A Match the scheme named (a double
+// elimination's written rounds, `E: A1 B2 C3 D4`) keeps its name as its letter,
+// and the deal skips every name taken that way, so no two Matches share one.
+func (c *compiler) assignLetters() error {
+	claimed := map[string]bool{}
+	for _, stage := range c.scheme.Stages {
+		for _, match := range stage.Matches {
+			if match.Letter == "" {
+				continue
+			}
+			if claimed[match.Letter] {
+				return corei18n.User(dopestrings.Default.Scheme.Structure.LetterDup(match.Letter))
+			}
+			claimed[match.Letter] = true
+		}
+	}
 	dealt := 0
+	next := func() string {
+		for claimed[BoutLetter(dealt)] {
+			dealt++
+		}
+		dealt++
+		return BoutLetter(dealt - 1)
+	}
 	for i := range c.scheme.Stages {
 		stage := &c.scheme.Stages[i]
 		var block int
@@ -181,10 +201,12 @@ func (c *compiler) assignLetters() {
 			continue
 		}
 		for m := range stage.Matches {
-			stage.Matches[m].Letter = BoutLetter(dealt)
-			dealt++
+			if stage.Matches[m].Letter == "" {
+				stage.Matches[m].Letter = next()
+			}
 		}
 	}
+	return nil
 }
 
 // BoutLetter is the letter of the n-th Match (0-based): A..Z, then AA, AB.. —
@@ -742,6 +764,11 @@ func (c *compiler) dealOpening(blk Section, groups, size int) ([][]store.SchemeS
 	seen := map[seat]bool{}
 	flat := make([]store.SchemeSlot, 0, total)
 	for b, item := range items {
+		// «E: A1 B2 C3 D4» names the bout for the written rounds after it
+		// (bouts.r2, …); the name is the Kind's to read, the seats are ours.
+		if _, seats, named := strings.Cut(item, ":"); named {
+			item = seats
+		}
 		tokens := strings.Fields(item)
 		if len(tokens) != perBout {
 			return nil, errAt(line, "%s", dopestrings.Default.Scheme.Entrants.OpeningBoutSize(strconv.Itoa(b+1), strconv.Itoa(perBout), strconv.Itoa(len(tokens))))
