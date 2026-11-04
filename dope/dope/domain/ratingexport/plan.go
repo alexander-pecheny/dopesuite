@@ -21,7 +21,7 @@ import (
 
 // Plan is what an export does (ADR-0036): the facts where dope and the site
 // differ, and of them what goes to the site — each venue's rosters under its
-// representative, the teams to move to their venue's request, the зачёты and
+// representative, the teams to move to their venue's request, the Flags and
 // the answers — and what dope takes from the site. Skipped and Warnings are
 // for the person to read first.
 type Plan struct {
@@ -64,7 +64,7 @@ type Fact struct {
 	Flags   []string                        `json:"-"`
 }
 
-// TeamFlags is a team's зачёты to send, by short name and by the site's id.
+// TeamFlags is a team's Flags to send, by short name and by the site's id.
 type TeamFlags struct {
 	Team   int64    `json:"team"`
 	Name   string   `json:"name"`

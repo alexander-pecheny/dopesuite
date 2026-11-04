@@ -1,6 +1,6 @@
 // Package ratingsite is rating.chgk.info's API as dope uses it: the reads
 // the import, the team editor and the export share, and the export's writes
-// through the site's «ввод» (ADR-0036).
+// through the site's data-entry page (ADR-0036).
 package ratingsite
 
 import (

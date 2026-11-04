@@ -14,7 +14,7 @@ const (
 	Ask Action = "ask"
 )
 
-// empty is a fact's value when a side has nothing: no players, no зачёты,
+// empty is a fact's value when a side has nothing: no players, no Flags,
 // no answers.
 func empty(f Fact) string {
 	if f == Answers {

@@ -18,7 +18,7 @@ type Report struct {
 	Rosters int `json:"rosters"`
 	Flags   int `json:"flags"`
 	Results int `json:"results"`
-	// Taken is how many rosters and зачёты dope took from the site.
+	// Taken is how many rosters and Flags dope took from the site.
 	Taken    int      `json:"taken"`
 	Warnings []string `json:"warnings"`
 	// Sent is each fact the site took, for the base, even when a later call
@@ -29,7 +29,7 @@ type Report struct {
 // Send sends the Plan: the moves it found, each venue's rosters under its
 // representative, the moves those rosters turned out to need (a
 // representative of several venues gets new teams in their first request),
-// the зачёты, and then the answers at once. It stops at the site's first
+// the Flags, and then the answers at once. It stops at the site's first
 // refusal; what went before stays on the site, and sending again repeats it
 // harmlessly.
 func Send(ctx context.Context, p Plan, site Site) (Report, error) {
@@ -77,7 +77,7 @@ func Send(ctx context.Context, p Plan, site Site) (Report, error) {
 	return r, nil
 }
 
-// flags sends every team's зачёты at once.
+// flags sends every team's Flags at once.
 func (r *Report) flags(ctx context.Context, site Site, tournament int64, flags []TeamFlags) error {
 	if len(flags) == 0 {
 		return nil

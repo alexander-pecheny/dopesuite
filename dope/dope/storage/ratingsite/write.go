@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// The writes go through the tournament's «ввод». Each needs a token with the
+// The writes go through the tournament's data-entry page. Each needs a token with the
 // right to write, and each replaces the whole of what it names for every
 // team it sends.
 
@@ -41,13 +41,13 @@ func (c Client) SaveRosters(ctx context.Context, tournament, representative int6
 	return saved.Warnings, err
 }
 
-// TeamFlags is a team's зачёты on the tournament, by the site's ids.
+// TeamFlags is a team's Flags on the tournament, by the site's ids.
 type TeamFlags struct {
 	Team  int64   `json:"team"`
 	Flags []int64 `json:"flags"`
 }
 
-// SaveFlags sets each team's зачёты.
+// SaveFlags sets each team's Flags.
 func (c Client) SaveFlags(ctx context.Context, tournament int64, teams []TeamFlags) error {
 	return c.post(ctx, fmt.Sprintf("/tournaments/%d/results_entry/flags", tournament), map[string]any{"teams": teams}, nil)
 }

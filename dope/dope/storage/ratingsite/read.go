@@ -45,7 +45,7 @@ func (p *Player) FullName() string {
 	return strings.TrimSpace(strings.TrimSpace(p.Surname) + " " + strings.TrimSpace(p.Name))
 }
 
-// Flag is a зачёт of a team on a tournament.
+// Flag is a division a team plays in on a tournament (a dope Flag).
 type Flag struct {
 	ID        int64  `json:"id"`
 	ShortName string `json:"shortName"`
@@ -53,7 +53,7 @@ type Flag struct {
 }
 
 // Member is a player of a team's roster on a tournament, with the roster's
-// flag: Б, Л or К.
+// flag, the site's one-letter mark of a base player, a legionnaire and so on.
 type Member struct {
 	Player  Player `json:"player"`
 	Flag    string `json:"flag"`
@@ -119,7 +119,7 @@ func (c Client) Requests(ctx context.Context, tournament int64) ([]Request, erro
 	return out, err
 }
 
-// EntryTeam is a team on the tournament's «ввод», with its request and its
+// EntryTeam is a team on the tournament's data-entry page, with its request and its
 // answers: nil when it has none yet.
 type EntryTeam struct {
 	Team    int64   `json:"team"`
@@ -128,7 +128,7 @@ type EntryTeam struct {
 	Mask    *string `json:"mask"`
 }
 
-// Entry is the tournament's «ввод» as the token's user sees it.
+// Entry is the tournament's data-entry page as the token's user sees it.
 func (c Client) Entry(ctx context.Context, tournament int64) ([]EntryTeam, error) {
 	var entry struct {
 		Teams []EntryTeam `json:"teams"`
@@ -214,7 +214,7 @@ func (c Client) Teams(ctx context.Context, name string, limit int) ([]Team, erro
 	return out, err
 }
 
-// TeamFlags is every зачёт the site knows: its own and those organizers made.
+// TeamFlags is every Flag the site knows: its own and those organizers made.
 func (c Client) TeamFlags(ctx context.Context) ([]Flag, error) {
 	var out []Flag
 	err := c.get(ctx, "/tournament_team_flags", &out)

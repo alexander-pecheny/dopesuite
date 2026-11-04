@@ -91,7 +91,7 @@ func (s Site) existing(ctx context.Context, u Unknown, choice string) (int64, er
 }
 
 // fold is a name as dope compares it with the site's: case, the letter yo
-// and the punctuation between words aside, so «Джерси М» is «Джерси-М».
+// and the punctuation between words aside, so "Jersey M" is "Jersey-M".
 func fold(s string) string {
 	words := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 	return strings.ReplaceAll(strings.Join(words, " "), "\u0451", "\u0435")

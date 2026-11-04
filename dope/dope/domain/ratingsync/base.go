@@ -44,7 +44,7 @@ func RosterBase(team int64, players []int64) Base {
 	return Base{Key{team, Roster}, mustJSON(slices.Compact(ids))}
 }
 
-// FlagsBase is a team's зачёты as the base keeps them: their short names,
+// FlagsBase is a team's Flags as the base keeps them: their short names,
 // without order or repeats.
 func FlagsBase(team int64, shorts []string) Base {
 	names := make([]string, 0, len(shorts))
@@ -71,7 +71,7 @@ func mustJSON(v any) string {
 }
 
 // FromImport is the base an import of these site teams sets: each team's
-// roster and зачёты as the site gave them.
+// roster and Flags as the site gave them.
 func FromImport(teams []roster.FestRosterImportTeam) []Base {
 	var out []Base
 	for _, t := range teams {

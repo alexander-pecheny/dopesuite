@@ -84,8 +84,8 @@ type builder struct {
 	// agreed is the fest's base; onSite is every team the tournament has.
 	agreed map[ratingsync.Key]string
 	onSite map[int64]siteTeam
-	// flagIDs is the site's id of each зачёт by its short name, read when a
-	// team's зачёты first go; 0 for a short name several flags share.
+	// flagIDs is the site's id of each Flag by its short name, read when a
+	// team's Flags first go; 0 for a short name several flags share.
 	flagIDs map[string]int64
 }
 
@@ -97,7 +97,7 @@ type siteTeam struct {
 }
 
 // read loads what the comparison needs: the base, and the tournament's
-// rosters, зачёты and answers.
+// rosters, Flags and answers.
 func (b *builder) read(ctx context.Context, db *sql.DB, festID int64) error {
 	agreed, err := ratingsync.Load(ctx, db, festID)
 	if err != nil {
@@ -287,7 +287,7 @@ func (b *builder) decide(team festTeam, dope, site ratingsync.Base, onSite bool,
 	f.Action = action
 	if action == ratingsync.Take {
 		// dope cannot take the site's answers into its sheet, so it agrees
-		// with them as its own answers stand; a roster or зачёты it takes.
+		// with them as its own answers stand; a roster or Flags it takes.
 		f.Base = site
 		if dope.Fact == ratingsync.Answers {
 			f.Base = dope

@@ -333,7 +333,7 @@ func (s *Server) exportRun(ctx context.Context, sc route.Scope, gameID int64, se
 	return &plan, &report, err
 }
 
-// takeFromSite writes into the fest roster each roster and зачёты whose
+// takeFromSite writes into the fest roster each roster and Flags whose
 // site version stands, as the team editor would, and answers the base
 // every taken fact now has.
 func (s *Server) takeFromSite(ctx context.Context, sc route.Scope, plan ratingexport.Plan) ([]ratingsync.Base, error) {

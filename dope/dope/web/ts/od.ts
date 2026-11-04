@@ -411,14 +411,14 @@ function eachSheet(fn: () => void): void {
 // entryRoot holds the entered sheet's cells: its venue's block when the
 // input tab stacks several.
 function entryRoot(): ParentNode {
-  return odRoot.querySelector(`.od-venue-sheet[data-venue="${cssEscape(String(sheetVenue))}"]`) || odRoot;
+  return odRoot.querySelector(`[data-venue-sheet="${cssEscape(String(sheetVenue))}"]`) || odRoot;
 }
 
 // A click or a focus in another venue's block enters its sheet before the
 // cursor reads the cell.
 function enterSheetOf(event: Event): void {
-  const block = event.target instanceof Element ? event.target.closest<HTMLElement>(".od-venue-sheet") : null;
-  const venue = Number(block?.dataset.venue);
+  const block = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-venue-sheet]") : null;
+  const venue = Number(block?.dataset.venueSheet);
   if (!block || venue === sheetVenue) return;
   sheet.clear();
   useSheet(venue);
@@ -810,8 +810,8 @@ function buildInputView(): HTMLElement {
 // fest's input tab.
 function venueSheetBlock(venue: GameSheet): HTMLElement {
   const block = document.createElement("section");
-  block.className = "od-venue-sheet u-col";
-  block.dataset.venue = String(venue.id);
+  block.className = "u-col";
+  block.dataset.venueSheet = String(venue.id);
   const bar = document.createElement("div");
   bar.className = "sheet-bar";
   const title = document.createElement("h3");
