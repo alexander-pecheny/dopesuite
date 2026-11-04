@@ -95,3 +95,14 @@ func TestParseKeepsTheHandoutInTheText(t *testing.T) {
 		t.Fatalf("got %q / %q from %q", h, rest, q.Text)
 	}
 }
+
+func TestFormatIsReadBackByParse(t *testing.T) {
+	q := Question{
+		Text: WithHandout("Назовите ИКС.", "яблоко"), Answer: "груша.", Zachet: "грушка.",
+		Comment: "так вышло.", Source: "https://example.com/a", Author: "Иван Иванов (Москва)",
+	}
+	got, ok := Parse(Format(q))
+	if !ok || got != q {
+		t.Errorf("Parse(Format(q)) = %#v, %v\nwant %#v", got, ok, q)
+	}
+}

@@ -114,6 +114,16 @@ type slotView struct {
 	loadMiss   bool
 	lint       lintResult
 	view       string
+	from       int // the slot the question was in when the page was drawn, 0 for this one
+}
+
+// origin is the slot this one's question came from: itself unless the
+// nominator moved it.
+func (v slotView) origin(slot int) int {
+	if v.from == 0 {
+		return slot
+	}
+	return v.from
 }
 
 // editing says the slot shows its question rather than only the source
@@ -229,14 +239,19 @@ func readNominationForm(r *http.Request, c contest.Contest, before map[int]slotV
 	parseSlot, _ := strconv.Atoi(r.FormValue("parse"))
 	loadSlot, _ := strconv.Atoi(r.FormValue("load"))
 	clearSlot, _ := strconv.Atoi(r.FormValue("clear"))
-	form.parseOnly = parseSlot != 0 || loadSlot != 0 || clearSlot != 0
+	moveSlot, moveTo := readMove(r.FormValue("move"), c.MainSlots+c.ReserveSlots)
+	form.parseOnly = parseSlot != 0 || loadSlot != 0 || clearSlot != 0 || moveSlot != 0
 	for slot := 1; slot <= c.MainSlots+c.ReserveSlots; slot++ {
-		old := before[slot]
 		if slot == clearSlot {
-			form.slots[slot] = slotView{questionID: old.questionID}
+			form.slots[slot] = slotView{}
 			continue
 		}
-		v := slotView{in: readSlot(r, slot), view: r.FormValue(slotKey(slot, "view"))}
+		from := slot
+		if n, err := strconv.Atoi(r.FormValue(slotKey(slot, "origin"))); err == nil && n >= 1 && n <= c.MainSlots+c.ReserveSlots {
+			from = n
+		}
+		old := before[from]
+		v := slotView{in: readSlot(r, slot), view: r.FormValue(slotKey(slot, "view")), from: from}
 		v.questionID, v.files, v.answer = old.questionID, old.files, old.answer
 		if v.in.file != nil {
 			form.uploaded = true
@@ -245,12 +260,39 @@ func readNominationForm(r *http.Request, c contest.Contest, before map[int]slotV
 		switch {
 		case slot == loadSlot || unfilled && isSingleLink(v.in.raw) && slot != parseSlot:
 			form.loads = append(form.loads, slot)
-		case slot == parseSlot || unfilled:
+		case slot == parseSlot || unfilled || v.textEdited():
 			v.parse()
 		}
 		form.slots[slot] = v
 	}
+	if moveSlot != 0 {
+		form.slots[moveSlot], form.slots[moveTo] = form.slots[moveTo], form.slots[moveSlot]
+	}
 	return form
+}
+
+// textEdited says the nominator changed the question in the text tab and
+// saved from there, so the text and not the fields is the question.
+func (v slotView) textEdited() bool {
+	return v.view == viewText && v.in.fieldsGiven() && v.in.raw != "" && !isSingleLink(v.in.raw) &&
+		v.in.raw != question.Format(v.in.question())
+}
+
+// readMove reads a move button, "3:up" or "3:down", as the two slots to swap.
+func readMove(raw string, slots int) (from, to int) {
+	n, dir, ok := strings.Cut(raw, ":")
+	slot, err := strconv.Atoi(n)
+	if !ok || err != nil {
+		return 0, 0
+	}
+	to = slot + 1
+	if dir == "up" {
+		to = slot - 1
+	}
+	if slot < 1 || slot > slots || to < 1 || to > slots {
+		return 0, 0
+	}
+	return slot, to
 }
 
 func (v *slotView) parse() {

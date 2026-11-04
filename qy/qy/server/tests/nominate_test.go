@@ -213,7 +213,7 @@ func TestThePreviewShowsTheFields(t *testing.T) {
 	alice := w.user("alice")
 	res := alice.PostJSON("/api/nominate/preview", `{"text": "Назовите <ИКС>.", "answer": "груша", "handout": "https://cdn.example/pic.jpg"}`)
 	body := res.Body.String()
-	if res.Code != http.StatusOK || !strings.Contains(body, `\u0026lt;ИКС\u0026gt;`) || !strings.Contains(body, `\u003cimg src=\"https://cdn.example/pic.jpg\"`) {
+	if res.Code != http.StatusOK || !strings.Contains(body, `\u0026lt;ИКС\u0026gt;`) || !strings.Contains(body, `\u003cimg class=\"pv-img\" src=\"https://cdn.example/pic.jpg\"`) {
 		t.Errorf("preview: %d %s", res.Code, body)
 	}
 }
@@ -241,6 +241,53 @@ func TestTheRulesCheckWarnsAndTheAppealReachesTheAdmins(t *testing.T) {
 	}
 	res := alice.PostJSON("/api/nominate/check", `{"tournament": "https://rating.chgk.info/tournament/12345", "author": "Иван Иванов"}`)
 	if !strings.Contains(res.Body.String(), "Отыгрыш турнира") || strings.Contains(res.Body.String(), "Автор вопроса") {
+		t.Errorf("check: %s", res.Body.String())
+	}
+}
+
+func TestMovingAQuestionKeepsItsRowAndFile(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	alice := w.user("alice")
+	form := slots("101", map[int]string{1: pasted("Первый вопрос.", "первый", "Алиса"), 2: pasted("Второй вопрос.", "второй", "Алиса")})
+	res := alice.PostMultipart("/nominate", form, qyserver.File{Field: "slot2_file", Name: "pic.png", Data: []byte("\x89PNG\r\n\x1a\nx")})
+	if res.Code != http.StatusSeeOther {
+		t.Fatalf("POST = %d", res.Code)
+	}
+	first, second := w.questionID("первый"), w.questionID("второй")
+
+	// The page's script swaps the two slots' controls and keeps where each came from.
+	moved := url.Values{"rating_id": {"101"}}
+	for to, from := range map[string]string{"1": "2", "2": "1"} {
+		for k, v := range form {
+			if strings.HasPrefix(k, "slot"+from+"_") {
+				moved["slot"+to+"_"+strings.TrimPrefix(k, "slot"+from+"_")] = v
+			}
+		}
+		moved.Set("slot"+to+"_origin", from)
+	}
+	w.post(alice, "/nominate", moved, http.StatusSeeOther)
+	if n := w.count(`select count(*) from nominations where (slot = 1 and question_id = ?) or (slot = 2 and question_id = ?)`, second, first); n != 2 {
+		t.Error("the two questions should have swapped slots")
+	}
+	if w.count(`select count(*) from questions`) != 2 || w.count(`select count(*) from question_files where question_id = ?`, second) != 1 {
+		t.Error("a move should keep the questions and their files")
+	}
+
+	// Without the script the arrow posts the form and comes back swapped, unsaved.
+	moved.Set("move", "2:up")
+	body := w.post(alice, "/nominate", moved, http.StatusOK)
+	if strings.Index(body, "Первый вопрос.") > strings.Index(body, "Второй вопрос.") {
+		t.Error("the arrow should move the question up")
+	}
+}
+
+func TestThePluralTournamentLinkIsRead(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetRating(rating.Fixed{5000: {Start: "2020-01-01", End: "2020-01-02"}})
+	alice := w.user("alice")
+	res := alice.PostJSON("/api/nominate/check", `{"tournament": "https://rating.chgk.info/tournaments/5000", "author": ""}`)
+	if !strings.Contains(res.Body.String(), "Отыгрыш турнира начался 1 января 2020") {
 		t.Errorf("check: %s", res.Body.String())
 	}
 }

@@ -22,7 +22,7 @@ func isMetaLine(line string) bool {
 
 var (
 	gqLinkRe         = regexp.MustCompile(`https?://(?:www\.)?gotquestions\.online/question/(\d+)`)
-	tournamentLinkRe = regexp.MustCompile(`rating\.chgk\.info/tournament/(\d+)`)
+	tournamentLinkRe = regexp.MustCompile(`rating\.chgk\.info/tournaments?/(\d+)`)
 	parenRe          = regexp.MustCompile(`\([^)]*\)`)
 	authorSplitRe    = regexp.MustCompile(`\s*,\s*|\s+и\s+`)
 	yo               = strings.NewReplacer("ё", "е")
@@ -47,4 +47,24 @@ func SplitHandout(text string) (handout, rest string) {
 		return "", text
 	}
 	return strings.TrimSpace(text[m[2]:m[3]]), strings.TrimSpace(text[m[1]:])
+}
+
+// formatLabels are the captions Format writes each field under, the ones
+// Parse reads back.
+var formatLabels = []struct{ field, label string }{
+	{FieldAnswer, "Ответ"}, {FieldZachet, "Зачёт"}, {FieldNezachet, "Незачёт"},
+	{FieldComment, "Комментарий"}, {FieldSource, "Источник"}, {FieldAuthor, "Автор"},
+}
+
+// Format writes a question as the text a nominator would paste, which Parse
+// reads back into the same fields. q.Text may carry its handout in front.
+func Format(q Question) string {
+	var b strings.Builder
+	b.WriteString("Вопрос 1.\n" + q.Text)
+	for _, f := range formatLabels {
+		if v := q.Get(f.field); v != "" {
+			b.WriteString("\n" + f.label + ": " + v)
+		}
+	}
+	return b.String()
 }

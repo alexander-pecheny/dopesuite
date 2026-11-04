@@ -27,7 +27,7 @@ qy/                     module root (go.mod: module "qy")
   asks before destructive posts and saves the jury's likes and marks as they
   are clicked. Every form works without it, except the nomination form
   (`server/nominateform.go`, `server/nominateview.go`, `web/ts/nominate.ts`):
-  its Просмотр, Поля and Текст tabs need the script. Its load, parse and
+  its Просмотр, Поля and Текст tabs need the script. Its load, parse, move and
   clear buttons still work without it, because the post does the same and
   shows the form again unsaved.
 - HTML the server rendered itself goes through the overlay's `richtext`

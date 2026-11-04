@@ -125,10 +125,8 @@ func (s *server) saveNomination(ctx context.Context, year int, userID, rating in
 		if _, err := tx.ExecContext(ctx, `update users set rating_id = ?, updated_at = ? where id = ?`, rating, s.stamp(), userID); err != nil {
 			return err
 		}
-		for slot, ch := range changes {
-			if err := s.setSlot(ctx, tx, year, userID, slot, ch); err != nil {
-				return err
-			}
+		if err := s.setSlots(ctx, tx, year, userID, changes); err != nil {
+			return err
 		}
 		return saveAppeals(ctx, tx, year, userID, slots)
 	})
@@ -148,6 +146,7 @@ func unsavedStatus(f nominationForm) int {
 // unless the nominator dropped them or attached a new one.
 type slotChange struct {
 	q        *store.Question
+	reuse    int64 // a question moved here from another slot, as it was
 	add      *upload
 	keepFrom int64
 }
@@ -158,13 +157,18 @@ type slotChange struct {
 func (s *server) slotChanges(ctx context.Context, c contest.Contest, before, after map[int]slotView) map[int]slotChange {
 	out := map[int]slotChange{}
 	for slot := 1; slot <= c.MainSlots+c.ReserveSlots; slot++ {
-		old, now := before[slot], after[slot]
+		now := after[slot]
+		old := before[now.origin(slot)]
+		moved := now.origin(slot) != slot
+		unchanged := now.in.sameAs(old.in) && now.in.file == nil && !now.in.dropFile
 		switch {
 		case now.in.empty():
-			if old.questionID != 0 {
+			if before[slot].questionID != 0 {
 				out[slot] = slotChange{}
 			}
-		case now.in.sameAs(old.in) && now.in.file == nil && !now.in.dropFile:
+		case unchanged && !moved:
+		case unchanged && old.questionID != 0:
+			out[slot] = slotChange{reuse: old.questionID}
 		case !now.in.needsFields() && !now.in.fieldsGiven():
 			q := s.questionFrom(ctx, c.Year, now.in.link)
 			out[slot] = slotChange{q: &q}
@@ -294,38 +298,53 @@ func (s *server) questionFrom(ctx context.Context, year int, raw string) store.Q
 	return q
 }
 
-// setSlot points a nominator's slot at the change's question, or empties it.
+// setSlots points a nominator's changed slots at their questions, or empties
+// them. Every changed slot is emptied first and refilled after, so a question
+// moved from one slot to another is never left without a nomination midway.
 // A question nominated by link is shared: a second nominator of the same
 // gotquestions question lands on the first one's row.
-func (s *server) setSlot(ctx context.Context, tx *sql.Tx, year int, userID int64, slot int, ch slotChange) error {
-	var oldID int64
-	err := tx.QueryRowContext(ctx, `select question_id from nominations where year = ? and user_id = ? and slot = ?`, year, userID, slot).Scan(&oldID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+func (s *server) setSlots(ctx context.Context, tx *sql.Tx, year int, userID int64, changes map[int]slotChange) error {
+	var oldIDs []int64
+	for slot := range changes {
+		var oldID int64
+		err := tx.QueryRowContext(ctx, `select question_id from nominations where year = ? and user_id = ? and slot = ?`, year, userID, slot).Scan(&oldID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if oldID != 0 {
+			oldIDs = append(oldIDs, oldID)
+		}
+		if _, err := tx.ExecContext(ctx, `delete from nominations where year = ? and user_id = ? and slot = ?`, year, userID, slot); err != nil {
+			return err
+		}
 	}
-	if _, err := tx.ExecContext(ctx, `delete from nominations where year = ? and user_id = ? and slot = ?`, year, userID, slot); err != nil {
-		return err
-	}
-	if ch.q != nil {
+	for slot, ch := range changes {
+		if ch.q == nil && ch.reuse == 0 {
+			continue
+		}
 		if err := s.fillSlot(ctx, tx, year, userID, slot, ch); err != nil {
 			return err
 		}
 	}
-	if oldID == 0 {
-		return nil
-	}
 	// A question nobody nominates any more and nobody has numbered or reviewed
 	// goes with its last nomination, and its files with it.
-	_, err = tx.ExecContext(ctx, `
+	for _, id := range oldIDs {
+		if _, err := tx.ExecContext(ctx, `
 delete from questions where id = ? and qy is null and status = 'new'
-  and not exists (select 1 from nominations where question_id = ?)`, oldID, oldID)
-	return err
+  and not exists (select 1 from nominations where question_id = ?)`, id, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *server) fillSlot(ctx context.Context, tx *sql.Tx, year int, userID int64, slot int, ch slotChange) error {
-	id, err := s.storeQuestion(ctx, tx, *ch.q)
-	if err != nil {
-		return err
+	id := ch.reuse
+	if id == 0 {
+		var err error
+		if id, err = s.storeQuestion(ctx, tx, *ch.q); err != nil {
+			return err
+		}
 	}
 	if ch.keepFrom != 0 && ch.keepFrom != id {
 		if err := store.CopyFiles(ctx, tx, ch.keepFrom, id); err != nil {
@@ -337,7 +356,7 @@ func (s *server) fillSlot(ctx context.Context, tx *sql.Tx, year int, userID int6
 			return err
 		}
 	}
-	_, err = tx.ExecContext(ctx, `insert into nominations(year, user_id, slot, question_id, created_at) values(?, ?, ?, ?, ?)`,
+	_, err := tx.ExecContext(ctx, `insert into nominations(year, user_id, slot, question_id, created_at) values(?, ?, ?, ?, ?)`,
 		year, userID, slot, id, s.stamp())
 	return err
 }
@@ -398,8 +417,9 @@ func (s *server) handleLoadQuestion(w http.ResponseWriter, r *http.Request, _ ro
 	})
 }
 
-// handlePreviewQuestion is the form's preview tab when the page's script
-// runs: the fields in, the question as the preview shows it out.
+// handlePreviewQuestion is the form's preview and text tabs when the page's
+// script runs: the fields in, the question as the preview shows it and as
+// text out.
 func (s *server) handlePreviewQuestion(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	var req map[string]string
 	if err := readJSON(r, &req); err != nil {
@@ -409,7 +429,10 @@ func (s *server) handlePreviewQuestion(w http.ResponseWriter, r *http.Request, _
 	for _, f := range question.Fields {
 		*q.Ptr(f) = strings.TrimSpace(req[f])
 	}
-	return writeJSON(w, map[string]any{"html": previewHTML(q, strings.TrimSpace(req["handout"]))})
+	handout := strings.TrimSpace(req["handout"])
+	full := q
+	full.Text = question.WithHandout(q.Text, handout)
+	return writeJSON(w, map[string]any{"html": previewHTML(q, handout), "text": question.Format(full)})
 }
 
 // handleNominationFile serves a handout file to an admin or to a nominator of

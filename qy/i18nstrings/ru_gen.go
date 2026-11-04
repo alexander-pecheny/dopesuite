@@ -555,8 +555,10 @@ var RU = Strings{
 			LoadFailed: func() string {
 				return "Не получилось загрузить вопрос по этой ссылке. Вставьте вместо ссылки текст вопроса и нажмите «Распарсить»."
 			},
-			Main:  func(n string) string { return fmt.Sprintf("Вопрос %s", n) },
-			Parse: func() string { return "Распарсить" },
+			Main:     func(n string) string { return fmt.Sprintf("Вопрос %s", n) },
+			MoveDown: func() string { return "Опустить ниже" },
+			MoveUp:   func() string { return "Поднять выше" },
+			Parse:    func() string { return "Распарсить" },
 			ParseFailed: func() string {
 				return "Не нашли в тексте ответ. Проверьте, что в нём есть строка «Ответ:», или заполните поля сами."
 			},
@@ -566,11 +568,15 @@ var RU = Strings{
 			PreviewEmpty: func() string {
 				return "Поля пока пустые. Заполните их во вкладке «Поля»."
 			},
-			Reserve:        func(n string) string { return fmt.Sprintf("Запасной вопрос %s", n) },
-			Source:         func() string { return "Ссылка на вопрос или вопрос целиком" },
-			TabFields:      func() string { return "Поля" },
-			TabPreview:     func() string { return "Просмотр" },
-			TabText:        func() string { return "Текст" },
+			Reserve:    func(n string) string { return fmt.Sprintf("Запасной вопрос %s", n) },
+			Source:     func() string { return "Ссылка на вопрос или вопрос целиком" },
+			TabFields:  func() string { return "Поля" },
+			TabPreview: func() string { return "Просмотр" },
+			TabText:    func() string { return "Текст" },
+			TextHint: func() string {
+				return "Это тот же вопрос текстом. Правки здесь и во вкладке «Поля» переносятся друг в друга."
+			},
+			TextLabel:      func() string { return "Вопрос текстом" },
 			Tournament:     func() string { return "Ссылка на турнир" },
 			TournamentHint: func() string { return "Обязательна, если вопрос не опубликован." },
 		},
@@ -588,7 +594,7 @@ var RU = Strings{
 		Author:     func() string { return "Автор(ы):" },
 		Comment:    func() string { return "Комментарий:" },
 		Factcheck:  func() string { return "Фактчек" },
-		Handout:    func() string { return "Раздаточный материал:" },
+		Handout:    func() string { return "Раздаточный материал" },
 		Label:      func(number string) string { return fmt.Sprintf("Вопрос %s.", number) },
 		Nezachet:   func() string { return "Незачёт:" },
 		ShowAnswer: func() string { return "Показать ответ" },

@@ -30,6 +30,11 @@ preview_empty = "Поля пока пустые. Заполните их во в
 # The button that shows an empty optional field.
 add = '+ {{.field}}'
 clear = "Очистить"
+move_up = "Поднять выше"
+move_down = "Опустить ниже"
+# The box and the line under it once the box holds the question as text.
+text_label = "Вопрос текстом"
+text_hint = "Это тот же вопрос текстом. Правки здесь и во вкладке «Поля» переносятся друг в друга."
 link = "Ссылка на публикацию"
 link_hint = "Если вопрос опубликован: ссылка на gotquestions, на пост в телеграме или на другую публикацию."
 tournament = "Ссылка на турнир"

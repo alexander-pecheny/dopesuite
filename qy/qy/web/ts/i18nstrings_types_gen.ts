@@ -399,6 +399,8 @@ export type Strings = {
       load: () => string;
       loadFailed: () => string;
       main: (n: string) => string;
+      moveDown: () => string;
+      moveUp: () => string;
       parse: () => string;
       parseFailed: () => string;
       parsed: (answer: string) => string;
@@ -408,6 +410,8 @@ export type Strings = {
       tabFields: () => string;
       tabPreview: () => string;
       tabText: () => string;
+      textHint: () => string;
+      textLabel: () => string;
       tournament: () => string;
       tournamentHint: () => string;
     };

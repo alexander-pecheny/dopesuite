@@ -2,13 +2,18 @@
 // in the "source" state: one box for a link or a whole question, which grows
 // as a pasted question does. A link loads (/api/nominate/load), a text
 // parses (/api/nominate/parse), and the card turns to the "editor" state:
-// tabs for the preview, the fields and the box, then the two links. The tab
-// is remembered in a hidden slotN_view input, so a form shown again opens
-// where it was. An empty optional field hides behind a «+» button. The
-// automatic check of the rules (/api/nominate/check) runs again whenever
-// the tournament or the authors change, and fills the slot's red box, where
-// the nominator can appeal. Without
-// this script the buttons post the form, which does the same and comes back
+// tabs for the preview, the fields and the box, then the two links. The box
+// then holds the question as text (/api/nominate/preview writes it), and a
+// change to it is parsed back into the fields on leaving the tab, the way
+// xy's 4s tab and its fields follow each other. The tab is remembered in a
+// hidden slotN_view input, so a form shown again opens where it was. An
+// empty optional field hides behind a «+» button. The automatic check of the
+// rules (/api/nominate/check) runs again as the tournament or the authors
+// are typed, and fills the slot's red box, where the nominator can appeal.
+// The arrows swap a slot's question with its neighbour's; each slot keeps
+// the number of the slot its question was drawn in (slotN_origin), so the
+// server moves the question rather than making a new one. Without this
+// script the buttons post the form, which does the same and comes back
 // unsaved.
 import S from "./i18nstrings.js";
 import { isLoadable, isSingleLink, PARSED_FIELDS, type Parsed } from "./nominate-model.js";
@@ -37,6 +42,53 @@ function fitAll(root: Element): void {
   for (const ta of root.querySelectorAll<HTMLTextAreaElement>("textarea[data-autogrow]")) fit(ta);
 }
 
+type Rendered = { html: string; text: string };
+
+// render asks for the question as the preview shows it and as text.
+async function render(card: HTMLElement): Promise<Rendered | null> {
+  const body: Record<string, string> = {};
+  for (const name of PARSED_FIELDS) body[name] = field(card, name)?.value ?? "";
+  const res = await ask<Rendered>("/api/nominate/preview", body);
+  return typeof res === "string" ? null : res;
+}
+
+async function refreshPreview(card: HTMLElement): Promise<void> {
+  const res = await render(card);
+  const el = card.querySelector<HTMLElement>("[data-panel=preview] .richtext");
+  if (el && res) el.innerHTML = res.html;
+}
+
+// composeText writes the fields into the box as text.
+async function composeText(card: HTMLElement): Promise<void> {
+  const res = await render(card);
+  const raw = field(card, "raw");
+  if (!res || !raw) return;
+  raw.value = res.text;
+  card.dataset.composed = res.text;
+  syncButtons(card);
+  fitAll(card);
+}
+
+// leaveText parses the box back into the fields if it was changed. It says
+// false when the text has no answer, and the tab stays open with the reason.
+async function leaveText(card: HTMLElement): Promise<boolean> {
+  const raw = field(card, "raw")?.value ?? "";
+  if (card.dataset.state !== "editor" || card.dataset.view !== "text" || raw === card.dataset.composed) return true;
+  const res = await ask<Parsed>("/api/nominate/parse", { text: raw });
+  if (typeof res === "string" || !res.ok) {
+    message(card, typeof res === "string" ? res : S.nominate.slot.parseFailed());
+    return false;
+  }
+  message(card, "");
+  fill(card, res);
+  card.dataset.composed = raw;
+  return true;
+}
+
+async function switchTo(card: HTMLElement, view: string): Promise<void> {
+  if (await leaveText(card)) showView(card, view);
+}
+
 function showView(card: HTMLElement, view: string): void {
   const editing = card.dataset.state === "editor";
   if (!editing) view = "text";
@@ -50,6 +102,7 @@ function showView(card: HTMLElement, view: string): void {
   if (input) input.value = view;
   fitAll(card);
   if (view === "preview") void refreshPreview(card);
+  if (view === "text" && editing) void composeText(card);
 }
 
 function setState(card: HTMLElement, state: "source" | "editor", view: string): void {
@@ -60,6 +113,10 @@ function setState(card: HTMLElement, state: "source" | "editor", view: string): 
   }
   const clear = card.querySelector<HTMLElement>("[data-clear]");
   if (clear) clear.hidden = state !== "editor";
+  const label = card.querySelector<HTMLElement>("[data-panel=text] .field > span");
+  if (label) label.textContent = state === "editor" ? S.nominate.slot.textLabel() : S.nominate.slot.source();
+  const hint = card.querySelector<HTMLElement>("[data-text-hint]");
+  if (hint) hint.hidden = state !== "editor";
   showView(card, view);
 }
 
@@ -109,6 +166,7 @@ function fill(card: HTMLElement, parsed: Parsed): void {
     if (el) el.value = parsed[name];
   }
   syncOptional(card);
+  void check(card);
 }
 
 // message shows a failure under the source box, or hides it.
@@ -141,14 +199,6 @@ async function ask<T>(url: string, body: object): Promise<T | string> {
   } catch {
     return S.forms.failed();
   }
-}
-
-async function refreshPreview(card: HTMLElement): Promise<void> {
-  const body: Record<string, string> = {};
-  for (const name of PARSED_FIELDS) body[name] = field(card, name)?.value ?? "";
-  const res = await ask<{ html: string }>("/api/nominate/preview", body);
-  const el = card.querySelector<HTMLElement>("[data-panel=preview] .richtext");
-  if (el && typeof res !== "string") el.innerHTML = res.html;
 }
 
 // check asks whether the question passes the rules and shows what it fails.
@@ -194,7 +244,6 @@ async function fillFrom(card: HTMLElement): Promise<void> {
   const tournament = field(card, "tournament");
   if (tournament && !tournament.value && res.tournament) tournament.value = res.tournament;
   setState(card, "editor", "preview");
-  void check(card);
 }
 
 // clear empties the slot and puts it back to the box alone. Nothing changes
@@ -206,6 +255,7 @@ function clear(card: HTMLElement): void {
   }
   for (const a of card.querySelectorAll('a[href^="/nominate/file/"]')) a.closest(".u-row")?.remove();
   message(card, "");
+  delete card.dataset.composed;
   syncButtons(card);
   syncOptional(card);
   setState(card, "source", "text");
@@ -213,17 +263,62 @@ function clear(card: HTMLElement): void {
   field(card, "raw")?.focus();
 }
 
+// The question parts of a card: everything but its header, which stays
+// with the slot's number when two slots swap their questions.
+function body(card: HTMLElement): Element[] {
+  return [...card.children].filter((el) => !el.hasAttribute("data-head"));
+}
+
+// renumber points a moved question's controls at the slot it is now in.
+function renumber(card: HTMLElement): void {
+  const slot = card.dataset.slot ?? "";
+  for (const el of card.querySelectorAll<HTMLElement>("[name^=slot]")) {
+    el.setAttribute("name", (el.getAttribute("name") ?? "").replace(/^slot\d+_/, `slot${slot}_`));
+  }
+  for (const b of card.querySelectorAll<HTMLButtonElement>("[data-panel] button[name=load], [data-panel] button[name=parse]")) b.value = slot;
+}
+
+// swap trades the questions of two slots, which is how a nominator orders
+// them. Nothing is saved until the form is.
+async function swap(a: HTMLElement, b: HTMLElement): Promise<void> {
+  if (!(await leaveText(a)) || !(await leaveText(b))) return;
+  const bodyA = body(a), bodyB = body(b);
+  a.append(...bodyB);
+  b.append(...bodyA);
+  for (const key of ["state", "view", "composed"]) {
+    const va = a.dataset[key], vb = b.dataset[key];
+    if (vb === undefined) delete a.dataset[key]; else a.dataset[key] = vb;
+    if (va === undefined) delete b.dataset[key]; else b.dataset[key] = va;
+  }
+  for (const card of [a, b]) {
+    renumber(card);
+    setState(card, card.dataset.state === "editor" ? "editor" : "source", card.dataset.view || "text");
+  }
+  b.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function neighbour(card: HTMLElement, dir: string): HTMLElement | null {
+  const n = Number(card.dataset.slot) + (dir === "up" ? -1 : 1);
+  return document.querySelector<HTMLElement>(`form[data-nominate] [data-slot="${n}"]`);
+}
+
+// The check runs again once the nominator stops typing a link or an author.
+const checkDelay = 600;
+
 function wire(card: HTMLElement): void {
   syncButtons(card);
   syncOptional(card);
+  if (card.dataset.state === "editor") card.dataset.composed = field(card, "raw")?.value ?? "";
   setState(card, card.dataset.state === "editor" ? "editor" : "source", card.dataset.view || "text");
-  card.addEventListener("change", (event) => {
-    if (event.target === field(card, "tournament") || event.target === field(card, "author")) void check(card);
-  });
+  let pending = 0;
   card.addEventListener("input", (event) => {
     const el = event.target;
     if (el instanceof HTMLTextAreaElement && el.hasAttribute("data-autogrow")) fit(el);
     if (el === field(card, "raw")) syncButtons(card);
+    if (el === field(card, "tournament") || el === field(card, "author")) {
+      window.clearTimeout(pending);
+      pending = window.setTimeout(() => void check(card), checkDelay);
+    }
   });
   field(card, "raw")?.addEventListener("keydown", (event: Event) => {
     if (!(event instanceof KeyboardEvent) || event.key !== "Enter" || event.shiftKey) return;
@@ -236,7 +331,11 @@ function wire(card: HTMLElement): void {
     const target = event.target instanceof Element ? event.target.closest<HTMLElement>("button") : null;
     if (!target) return;
     if (target.getAttribute("role") === "tab" && target.dataset.view) {
-      showView(card, target.dataset.view);
+      void switchTo(card, target.dataset.view);
+    } else if (target.dataset.move) {
+      event.preventDefault();
+      const other = neighbour(card, target.dataset.move);
+      if (other) void swap(card, other);
     } else if (target.hasAttribute("data-parse") || target.hasAttribute("data-load")) {
       event.preventDefault();
       void fillFrom(card);

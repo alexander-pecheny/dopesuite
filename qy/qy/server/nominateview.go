@@ -92,8 +92,20 @@ func slotState(v slotView) (state, view string) {
 	return stateEditor, viewPreview
 }
 
+// moveButton swaps a slot with the one above or below it; the order of the
+// main questions is the nominator's order of preference.
+func moveButton(slot int, dir string, icon ui.Item, label string, hidden bool) ui.Item {
+	items := []ui.Item{ui.Submit(), ui.Formnovalidate(), ui.Name("move"), ui.Value(strconv.Itoa(slot) + ":" + dir), ui.Ghost, ui.Small(),
+		icon, ui.Data("move", dir), ui.Title(label), ui.Aria("label", label)}
+	if hidden {
+		items = append(items, ui.Hidden())
+	}
+	return ui.Button(items...)
+}
+
 func slotCard(c contest.Contest, slot int, v slotView) ui.Item {
 	state, view := slotState(v)
+	last := c.MainSlots + c.ReserveSlots
 	clear := []ui.Item{ui.Submit(), ui.Formnovalidate(), ui.Name("clear"), ui.Value(strconv.Itoa(slot)), ui.Ghost, ui.Small(),
 		ui.IconX, ui.Data("clear", ""), text(str.Nominate.Slot.Clear())}
 	tabs := []ui.Item{ui.Data("part", "tabs"),
@@ -106,7 +118,11 @@ func slotCard(c contest.Contest, slot int, v slotView) ui.Item {
 	}
 	items := []ui.Item{ui.DirCol, ui.SpaceMD, ui.Data("slot", strconv.Itoa(slot)), ui.Data("state", state), ui.Data("view", view),
 		ui.Hiddenfield(ui.Name(slotKey(slot, "view")), ui.Value(view)),
-		ui.Row(ui.JustifyBetween, ui.AlignCenter, ui.Strong(text(slotLabel(c, slot))), ui.Button(clear...)),
+		ui.Hiddenfield(ui.Name(slotKey(slot, "origin")), ui.Value(strconv.Itoa(v.origin(slot)))),
+		ui.Row(ui.Data("head", ""), ui.SpaceXS, ui.AlignCenter, ui.Strong(ui.Grow(), text(slotLabel(c, slot))),
+			moveButton(slot, "up", ui.IconArrowUp, str.Nominate.Slot.MoveUp(), slot == 1),
+			moveButton(slot, "down", ui.IconArrowDown, str.Nominate.Slot.MoveDown(), slot == last),
+			ui.Button(clear...)),
 		ui.Tabs(tabs...),
 		previewPanel(v),
 		ui.Tabpanel(append([]ui.Item{ui.Data("panel", viewFields)}, fieldEditors(slot, v)...)...),
@@ -119,8 +135,16 @@ func slotCard(c contest.Contest, slot int, v slotView) ui.Item {
 
 // sourcePanel is the box for a link or a whole question, and the button
 // that loads the one or parses the other.
+//
+// Once the slot holds a question, the box holds it as text instead, the
+// way Parse reads it, and nominate.ts keeps the box and the fields in step.
 func sourcePanel(slot int, v slotView) ui.Item {
-	link := isSingleLink(v.in.raw)
+	editing := v.in.fieldsGiven()
+	raw := v.in.raw
+	if editing {
+		raw = question.Format(v.in.question())
+	}
+	link := isSingleLink(raw)
 	load := []ui.Item{ui.Submit(), ui.Formnovalidate(), ui.Name("load"), ui.Value(strconv.Itoa(slot)),
 		ui.IconCloudDownload, ui.Data("load", ""), text(str.Nominate.Slot.Load())}
 	parse := []ui.Item{ui.Submit(), ui.Formnovalidate(), ui.Name("parse"), ui.Value(strconv.Itoa(slot)),
@@ -130,10 +154,17 @@ func sourcePanel(slot int, v slotView) ui.Item {
 	} else {
 		load = append(load, ui.Hidden())
 	}
-	items := []ui.Item{ui.Data("panel", viewText), ui.Field(ui.Label(str.Nominate.Slot.Source()),
+	label, textHint := str.Nominate.Slot.Source(), []ui.Item{ui.Data("text-hint", ""), ui.Text(str.Nominate.Slot.TextHint())}
+	if editing {
+		label = str.Nominate.Slot.TextLabel()
+	} else {
+		textHint = append(textHint, ui.Hidden())
+	}
+	items := []ui.Item{ui.Data("panel", viewText), ui.Field(ui.Label(label),
 		ui.Row(ui.SpaceSM, ui.AlignStart,
-			ui.Editor(ui.Name(slotKey(slot, "raw")), ui.Rows("1"), ui.Grow(), ui.Data("autogrow", ""), ui.Text(v.in.raw)),
-			ui.Button(load...), ui.Button(parse...)))}
+			ui.Editor(ui.Name(slotKey(slot, "raw")), ui.Rows("1"), ui.Grow(), ui.Data("autogrow", ""), ui.Text(raw)),
+			ui.Button(load...), ui.Button(parse...)),
+		ui.Hint(textHint...))}
 	if v.loadMiss {
 		items = append(items, dangerHint(str.Nominate.Slot.LoadFailed()))
 	}
@@ -158,46 +189,54 @@ func fileLink(f store.File) ui.Item {
 
 var imageLinkRe = regexp.MustCompile(`(?i)^https?://\S+\.(?:jpe?g|png|gif|webp)(?:\?\S*)?$`)
 
-// previewHTML is a slot's question as the preview tab shows it: the handout
-// first, a picture's link as the picture, then every field with its label.
+// previewHTML is a slot's question as the preview tab shows it, laid out
+// as xy's preview lays out a question (web/ts/preview.ts there): the label,
+// the handout in a frame with its caption, the text, then each field on a
+// line of its own, the sources and the authors smaller.
 func previewHTML(q question.Question, handout string) string {
 	if q.Text == "" && q.Answer == "" {
 		return "<p>" + html.EscapeString(str.Nominate.Slot.PreviewEmpty()) + "</p>"
 	}
 	var b strings.Builder
+	label := `<strong class="pv-label">` + html.EscapeString(str.Question.Unnumbered()) + " </strong>"
+	b.WriteString(`<article class="pv-q">`)
 	if handout != "" {
-		b.WriteString("<p><b>" + html.EscapeString(str.Question.Handout()) + "</b><br>")
-		first := true
-		for _, line := range strings.Split(handout, "\n") {
-			if line = strings.TrimSpace(line); line == "" {
-				continue
-			}
-			if !first {
-				b.WriteString("<br>")
-			}
-			first = false
-			if imageLinkRe.MatchString(line) {
-				b.WriteString(`<img src="` + html.EscapeString(line) + `" alt="" loading="lazy">`)
-			} else {
-				b.WriteString(plain(line))
-			}
-		}
-		b.WriteString("</p>")
+		b.WriteString(`<div class="pv-q-text">` + label + `</div>`)
+		b.WriteString(`<div class="pv-handout-box u-col"><div class="pv-handout-caption">` + html.EscapeString(str.Question.Handout()) +
+			`</div><div class="pv-handout-frame">` + handoutHTML(handout) + `</div></div>`)
+		label = ""
 	}
-	b.WriteString("<p>" + plain(q.Text) + "</p>")
-	for _, f := range []struct{ label, value string }{
-		{str.Question.Answer(), q.Answer},
-		{str.Question.Zachet(), q.Zachet},
-		{str.Question.Nezachet(), q.Nezachet},
-		{str.Question.Comment(), q.Comment},
-		{str.Question.Source(), q.Source},
-		{str.Question.Author(), q.Author},
+	b.WriteString(`<div class="pv-q-text">` + label + plain(q.Text) + `</div>`)
+	for _, f := range []struct{ label, value, cls string }{
+		{str.Question.Answer(), q.Answer, ""},
+		{str.Question.Zachet(), q.Zachet, ""},
+		{str.Question.Nezachet(), q.Nezachet, ""},
+		{str.Question.Comment(), q.Comment, ""},
+		{str.Question.Source(), q.Source, " pv-small"},
+		{str.Question.Author(), q.Author, " pv-small"},
 	} {
 		if f.value != "" {
-			b.WriteString("<p><b>" + html.EscapeString(f.label) + "</b> " + plain(f.value) + "</p>")
+			b.WriteString(`<div class="pv-field` + f.cls + `"><strong class="pv-label">` + html.EscapeString(f.label) + " </strong>" + plain(f.value) + "</div>")
 		}
 	}
+	b.WriteString("</article>")
 	return b.String()
+}
+
+// handoutHTML is a handout's lines, a picture's link shown as the picture.
+func handoutHTML(handout string) string {
+	var lines []string
+	for _, line := range strings.Split(handout, "\n") {
+		if line = strings.TrimSpace(line); line == "" {
+			continue
+		}
+		if imageLinkRe.MatchString(line) {
+			lines = append(lines, `<img class="pv-img" src="`+html.EscapeString(line)+`" alt="`+html.EscapeString(line)+`" loading="lazy">`)
+		} else {
+			lines = append(lines, plain(line))
+		}
+	}
+	return strings.Join(lines, "<br>")
 }
 
 // fieldEditors are the question's fields, each one line until it holds
