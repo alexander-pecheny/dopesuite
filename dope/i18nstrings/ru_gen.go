@@ -345,10 +345,13 @@ var RU = Strings{
 			FestPlayers: func() string { return "Все игроки феста" },
 			FestTeams:   func() string { return "Все команды феста" },
 			Game:        func(game string) string { return fmt.Sprintf("Таблица игры «%s»", game) },
-			Players:     func() string { return "Посев по игрокам" },
-			Random:      func() string { return "Жребий" },
-			Troikas:     func() string { return "Тройки феста" },
-			Xlsx:        func() string { return "Файл xlsx" },
+			GameTours: func(game string, tours string) string {
+				return fmt.Sprintf("Таблица игры «%s», туры %s", game, tours)
+			},
+			Players: func() string { return "Посев по игрокам" },
+			Random:  func() string { return "Жребий" },
+			Troikas: func() string { return "Тройки феста" },
+			Xlsx:    func() string { return "Файл xlsx" },
 		},
 		State: EntrantsStateStrings{
 			Empty: func() string {
@@ -1862,6 +1865,9 @@ var RU = Strings{
 			TeamTwice: func(source string, name string, first string) string {
 				return fmt.Sprintf("%s содержит команду \"%s\" больше одного раза (первое имя: \"%s\")", source, name, first)
 			},
+			ToursOd: func(game string) string {
+				return fmt.Sprintf("посев по турам игры %s: туры есть только у ОД", game)
+			},
 			XlsxBasketMissing: func(name string, n string) string {
 				return fmt.Sprintf("команда \"%s\" без корзины, а лист корзинный (строка %s)", name, n)
 			},
@@ -1900,16 +1906,14 @@ var RU = Strings{
 			SelfReference: func(grain string, name string) string {
 				return fmt.Sprintf("%s.%s: правило зависит от самого себя", grain, name)
 			},
-			ToursOd: func(game string) string {
-				return fmt.Sprintf("посев по игрокам: tours.%s — туры есть только у ОД", game)
-			},
 		},
 		SeedSource: ImportsSeedSourceStrings{
-			Fest:    func() string { return "список феста" },
-			Ksi:     func() string { return "КСИ" },
-			Players: func() string { return "по игрокам" },
-			Random:  func() string { return "жребий" },
-			Troikas: func() string { return "тройки феста" },
+			Fest:      func() string { return "список феста" },
+			GameTours: func(game string, tours string) string { return fmt.Sprintf("%s, туры %s", game, tours) },
+			Ksi:       func() string { return "КСИ" },
+			Players:   func() string { return "по игрокам" },
+			Random:    func() string { return "жребий" },
+			Troikas:   func() string { return "тройки феста" },
 		},
 	},
 	Journal: JournalStrings{
@@ -2794,6 +2798,9 @@ var RU = Strings{
 			},
 			PlayersNeedSeed: func() string {
 				return "seed: players — нужен хотя бы один seed.<метрика>: mean(<метрика игрока>)"
+			},
+			SeedTours: func(value string) string {
+				return fmt.Sprintf("seed: %s — после кода игры в скобках пишутся туры: od-1[tours 1..3], od-1[tours 3] (первые три) или od-1[tours 1, 3]", value)
 			},
 			ToursGame: func(game string, games string) string {
 				return fmt.Sprintf("tours.%s: такой игры нет в games — там %s", game, games)

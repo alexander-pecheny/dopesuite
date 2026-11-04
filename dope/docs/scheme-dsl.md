@@ -109,6 +109,14 @@ printed table instead writes it out in `deal:` (below).
 
 - `seed: {game}` — that game's standings as metrics, ordered by `[init]`
   `sorting` (roster rating available as a metric).
+- `seed: {game}[tours 1..3]` — an ОД's table after those tours alone, with
+  the questions of its other tours left out, whatever has been played since.
+  The tours are written as in `tours.<game>` below: `[tours 3]` is the first
+  three, `[tours 1..3]` or `[tours 1-3]` a range, and `[tours 1, 3]` a list.
+  The table ranks by questions taken, a tie sharing its place, and `[init]`
+  `sorting` may name `total`, `rating` and `rank` within it. Polyfest's КИнСбФ
+  seeds on the ОД's first game day: `seed: od-1[tours 1..3]`. A Game that is
+  not an ОД has no tours, and its creation is refused.
 - `seed: players` — the посев a сборная format needs, composed over a
   Participant's people rather than over anything it has done itself.
   `games: [a, b]` names the source Games; each player carries `place1..placeN`,

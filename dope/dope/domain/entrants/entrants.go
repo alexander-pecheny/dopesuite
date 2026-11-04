@@ -156,6 +156,10 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 		view.Sources = append(view.Sources, SourceOption{Source: Source{Kind: SourceFest}, Label: s.Entrants.Source.FestTeams(), Divided: true})
 		for _, o := range others {
 			if !games.IsIndividual(o.gameType) && !games.SeatsTroikas(o.gameType) {
+				if tours := sourceTours(o.code, list, declared); len(tours) > 0 {
+					view.Sources = append(view.Sources, SourceOption{Source: Source{Kind: SourceGame, Game: o.code, Tours: tours},
+						Label: s.Entrants.Source.GameTours(o.title, imports.ToursLabel(tours)), Divided: true})
+				}
 				view.Sources = append(view.Sources, SourceOption{Source: Source{Kind: SourceGame, Game: o.code}, Label: s.Entrants.Source.Game(o.title), Divided: true})
 			}
 		}
@@ -170,6 +174,9 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 	// Preselected: what the list was last imported from, else what the scheme
 	// declares, else the format's own roster.
 	stored := imports.ParseSource(list.State.Source, list.State.Division)
+	if stored.Kind == SourceGame {
+		stored.Tours = list.State.Tours
+	}
 	view.Preselect = imports.SourceFor(view.Kind, stored, declared)
 	if view.Preselect.Kind == imports.SourceKSI {
 		// The legacy word for the fest's first KSI, which the picker names by
@@ -191,6 +198,19 @@ select code, title, game_type from games where fest_id = ? and id != ? order by 
 		return View{}, err
 	}
 	return view, nil
+}
+
+// sourceTours is the tours a Game's table is offered over besides the whole
+// of it: those the list was last imported over, else those the scheme
+// declares for that Game.
+func sourceTours(code string, list imports.List, declared imports.Declared) []int {
+	if list.State.Source == code && len(list.State.Tours) > 0 {
+		return list.State.Tours
+	}
+	if declared.Seed == code {
+		return declared.Tours
+	}
+	return nil
 }
 
 // candidates is who the host may add to the list: the fest's teams, troikas or

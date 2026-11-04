@@ -74,6 +74,8 @@ type Source struct {
 	Kind     string `json:"kind"`
 	Game     string `json:"game,omitempty"`
 	Division string `json:"division,omitempty"`
+	// Tours keeps a Game source, an OD, to those tours (store.SchemeSeeding).
+	Tours []int `json:"tours,omitempty"`
 }
 
 // ParseSource reads a source as a list or a scheme stores it: a word, or else
@@ -99,7 +101,7 @@ func (s Source) Seeder(file io.Reader) (SeedSource, error) {
 		if strings.TrimSpace(s.Game) == "" {
 			return nil, corei18n.User(dopestrings.Default.Entrants.Error.SourceMissing())
 		}
-		return FromGame(s.Game, s.Division), nil
+		return fromGame{code: strings.TrimSpace(s.Game), division: strings.TrimSpace(s.Division), tours: s.Tours}, nil
 	case SourceFest:
 		return FromFest(s.Division), nil
 	case SourceTroikas:
@@ -130,6 +132,8 @@ type Declared struct {
 	// Division keeps a declared seed to one division. Without a seed it
 	// names the division whose troikas a Troika Game takes.
 	Division string
+	// Tours keeps a seed Game, an OD, to those tours.
+	Tours []int
 	// DSL says the Game is built from a scheme DSL. A pasted scheme is not,
 	// and never follows its list.
 	DSL bool
@@ -150,7 +154,7 @@ func declaredOf(init schemedsl.Init, hasDSL bool) Declared {
 	d := Declared{DSL: hasDSL}
 	if seeding := init.Seeding; seeding != nil && strings.TrimSpace(seeding.Source) != "" {
 		d.Seed = strings.TrimSpace(seeding.Source)
-		d.Sort, d.Players, d.Division = seeding.Sort, seeding.Players, seeding.Division
+		d.Sort, d.Players, d.Division, d.Tours = seeding.Sort, seeding.Players, seeding.Division, seeding.Tours
 		return d
 	}
 	if hasDSL {
@@ -201,7 +205,11 @@ func (d Declared) EntrantDivision() (string, bool) {
 
 // Source is the declared seed as a list source, kept to its division.
 func (d Declared) Source() Source {
-	return ParseSource(d.Seed, d.Division)
+	source := ParseSource(d.Seed, d.Division)
+	if source.Kind == SourceGame {
+		source.Tours = d.Tours
+	}
+	return source
 }
 
 // DefaultSource is where a format's list comes from when nothing else says:

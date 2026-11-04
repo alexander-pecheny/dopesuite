@@ -23,6 +23,8 @@ export interface EntrantSource {
   kind: string;
   game?: string;
   division?: string;
+  // tours keeps a Game source, an OD, to those tours.
+  tours?: number[];
   // fresh takes the source's list alone, without the host's hand edits.
   fresh?: boolean;
 }
@@ -89,7 +91,9 @@ export interface EntrantsTab {
 
 // sourceKey is a source as the picker's <option> value.
 function sourceKey(source: EntrantSource | undefined): string {
-  return source ? `${source.kind}:${source.game || ""}` : "";
+  if (!source) return "";
+  const tours = source.tours?.length ? `[${source.tours.join(",")}]` : "";
+  return `${source.kind}:${source.game || ""}${tours}`;
 }
 
 export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
@@ -217,7 +221,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     }
     select.addEventListener("change", () => {
       const next = sources.find((source) => sourceKey(source) === select.value);
-      picked = next ? {kind: next.kind, game: next.game, division: picked?.division ?? choice?.division} : null;
+      picked = next ? {kind: next.kind, game: next.game, tours: next.tours, division: picked?.division ?? choice?.division} : null;
       render();
     });
     bar.appendChild(select);
@@ -240,7 +244,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
         division.appendChild(node);
       }
       division.addEventListener("change", () => {
-        picked = {kind: option.kind, game: option.game, division: division!.value};
+        picked = {kind: option.kind, game: option.game, tours: option.tours, division: division!.value};
       });
       bar.appendChild(division);
     }
@@ -278,7 +282,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
       if (!option) return;
       const fresh = keep ? !keep.checked : false;
       if (fresh && !window.confirm(S.entrants.import.confirmFresh())) return;
-      const source: EntrantSource = {kind: option.kind, game: option.game, division: option.divided ? division?.value || "" : "", fresh};
+      const source: EntrantSource = {kind: option.kind, game: option.game, tours: option.tours, division: option.divided ? division?.value || "" : "", fresh};
       const done = () => {
         picked = null;
         if (view) setNotice(S.entrants.import.done(view.rows?.length || 0));

@@ -41,6 +41,8 @@ type seedImportState struct {
 	SourceGameID int64  `json:"sourceGameID,omitempty"`
 	// Division keeps the import to one division (ADR-0020); a re-import repeats it.
 	Division string `json:"division,omitempty"`
+	// Tours keeps a Game source, an OD, to those tours.
+	Tours []int `json:"tours,omitempty"`
 	// Edited says the host has added, removed, moved or renamed an entrant
 	// since the last import, which a re-import would throw away.
 	Edited bool                 `json:"edited,omitempty"`
@@ -167,6 +169,7 @@ type seeding struct {
 	source, label string
 	sourceGameID  int64
 	division      string
+	tours         []int
 	candidates    []seedCandidate
 	// unranked names the candidates the source had nothing to rank by and put
 	// last: a troika whose people the fest roster does not know.
@@ -462,6 +465,7 @@ func listFromSeedingTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, pr
 		Source:       resolved.source,
 		SourceGameID: resolved.sourceGameID,
 		Division:     resolved.division,
+		Tours:        resolved.tours,
 		Rows:         rows,
 	}, nil
 }
@@ -689,18 +693,11 @@ select distinct stage_id from stage_standings st join stages s on s.id = st.stag
 	case len(stages) > 1:
 		return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.MultipleStandings(gameCode, len(stages)))
 	}
-	type row struct {
-		id     int64
-		name   string
-		number int
-		player bool
-		entry  structure.RankedEntry
-	}
 	rows, err := store.CollectRows(ctx, q, `
 select st.rank, p.id, p.name, coalesce(p.number, 0), p.roster = 'player', st.metrics_json
 from stage_standings st join participants p on p.id = st.participant_id
-where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (row, error) {
-		var r row
+where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (standingRow, error) {
+		var r standingRow
 		var metrics string
 		if err := rs.Scan(&r.entry.Rank, &r.id, &r.name, &r.number, &r.player, &metrics); err != nil {
 			return r, err
@@ -711,13 +708,56 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 	if err != nil {
 		return 0, nil, err
 	}
-	if len(rows) == 0 {
-		return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.SourceNoTeams())
+	candidates, err := rankedCandidates(gameCode, gameType, document, rows, rules)
+	return gameID, candidates, err
+}
+
+// standingRow is one team of a source's table as the seed reads it.
+type standingRow struct {
+	id     int64
+	name   string
+	number int
+	player bool
+	entry  structure.RankedEntry
+}
+
+// odTourCandidates is an OD's table counting the given tours alone, as seed
+// candidates: ranked by place, the questions of those tours taken, with the
+// OD's total and rating as the Metrics the [init] sorting may name.
+func odTourCandidates(ctx context.Context, q store.Queryer, festID int64, gameCode string, tours []int, rules []store.SchemeSortRule) (int64, []seedCandidate, error) {
+	doc, err := store.LoadGameDocByCode(ctx, q, festID, gameCode)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.GameMissing(gameCode))
 	}
-	// The table's own rank comes first (the Structure ranked it, ADR-0011);
-	// the [init] sorting rules, when a scheme names some, re-sort within it
-	// by the Metrics the Protocol measured. Rows keep their table order as
-	// the final tie-break.
+	if err != nil {
+		return 0, nil, err
+	}
+	results, err := odResultsAfterTours(gameCode, doc, tours)
+	if err != nil {
+		return 0, nil, err
+	}
+	rows := make([]standingRow, len(results.Teams))
+	for i, team := range results.Teams {
+		rank := i + 1
+		if i > 0 && team.Total == results.Teams[i-1].Total {
+			rank = rows[i-1].entry.Rank
+		}
+		rows[i] = standingRow{name: team.Name, number: int(team.Number), entry: structure.RankedEntry{Rank: rank,
+			Metrics: map[string]float64{"total": float64(team.Total), "rating": float64(team.Rating)}}}
+	}
+	candidates, err := rankedCandidates(gameCode, doc.GameType, doc.State, rows, rules)
+	return doc.GameID, candidates, err
+}
+
+// rankedCandidates orders a source's table as seed candidates. The table's
+// own rank comes first (the Structure ranked it, ADR-0011); the [init]
+// sorting rules, when a scheme names some, re-sort within it by the Metrics
+// the Protocol measured. Rows keep their table order as the final tie-break.
+// A team the source document marks as declined comes pre-declined.
+func rankedCandidates(gameCode, gameType, document string, rows []standingRow, rules []store.SchemeSortRule) ([]seedCandidate, error) {
+	if len(rows) == 0 {
+		return nil, corei18n.User(dopestrings.Default.Imports.Seed.SourceNoTeams())
+	}
 	for i := range rows {
 		rows[i].entry.Participant = int64(i)
 		if rows[i].entry.Metrics == nil {
@@ -738,7 +778,7 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 			}
 		}
 		if !known {
-			return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.MetricUnknown(rule.Metric, gameCode))
+			return nil, corei18n.User(dopestrings.Default.Imports.Seed.MetricUnknown(rule.Metric, gameCode))
 		}
 	}
 	less := structure.LessBy(order)
@@ -760,7 +800,7 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (r
 			candidates[i].ParticipantID = r.id
 		}
 	}
-	return gameID, candidates, nil
+	return candidates, nil
 }
 
 // randomSeedCandidates orders the fest's numbered teams by a deterministic

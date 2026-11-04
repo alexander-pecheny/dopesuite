@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
@@ -595,6 +597,8 @@ select id, name, city, game_id is not null from participants where fest_id = ?`,
 type fromGame struct {
 	code, division string
 	sort           []store.SchemeSortRule
+	// tours keeps an OD to those tours; nil counts its whole table.
+	tours []int
 }
 
 // FromGame is a Game's current table as the seeding, kept to one Division
@@ -611,11 +615,37 @@ func (f fromGame) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 			rules = declared.Sort
 		}
 	}
-	gameID, candidates, err := standingsCandidates(ctx, tx, scope.FestID, f.code, rules)
+	label := f.code
+	var gameID int64
+	var candidates []seedCandidate
+	var err error
+	if len(f.tours) > 0 {
+		label = dopestrings.Default.Imports.SeedSource.GameTours(f.code, ToursLabel(f.tours))
+		gameID, candidates, err = odTourCandidates(ctx, tx, scope.FestID, f.code, f.tours, rules)
+	} else {
+		gameID, candidates, err = standingsCandidates(ctx, tx, scope.FestID, f.code, rules)
+	}
 	if err == nil && f.division != "" {
 		candidates, err = inDivision(ctx, tx, scope.FestID, f.division, candidates)
 	}
-	return seeding{source: f.code, label: f.code, sourceGameID: gameID, division: f.division, candidates: candidates}, err
+	return seeding{source: f.code, label: label, sourceGameID: gameID, division: f.division, tours: f.tours, candidates: candidates}, err
+}
+
+// ToursLabel names the tours a seed counts as a person reads them: «1–3» for
+// a run, «1, 3» otherwise.
+func ToursLabel(tours []int) string {
+	run := true
+	for i := 1; i < len(tours); i++ {
+		run = run && tours[i] == tours[i-1]+1
+	}
+	if run && len(tours) > 1 {
+		return fmt.Sprintf("%d–%d", tours[0], tours[len(tours)-1])
+	}
+	parts := make([]string, len(tours))
+	for i, n := range tours {
+		parts[i] = strconv.Itoa(n)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // FromRandom is a lot over the fest's numbered teams, the same every time it

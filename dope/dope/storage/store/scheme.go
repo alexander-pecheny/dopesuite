@@ -45,6 +45,10 @@ type SchemeSeeding struct {
 	// Division keeps the seed to the teams carrying this Flag, or, with a
 	// leading minus, to the teams not carrying it (ADR-0020).
 	Division string `json:"division,omitempty"`
+	// Tours keeps a source OD to those tours (1 first): the seed is its table
+	// after them alone. Polyfest's KINSBF seeds on the OD's first game day,
+	// whatever has been played since (seed: od-1[tours 1..3]).
+	Tours []int `json:"tours,omitempty"`
 }
 
 // SchemePlayerSeed is a seed composed over a Participant's players rather

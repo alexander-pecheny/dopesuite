@@ -17,8 +17,13 @@ players = "по игрокам"
 fest = "список феста"
 # The fest's troikas, for a Тройка (FromTroikas).
 troikas = "тройки феста"
+# A game's table counting some of its tours (seed: od-1[tours 1..3]).
+game_tours = '{{.game}}, туры {{.tours}}'
 
 [seed]
+# The scheme seeds on some tours of a game that is not an ОД (seed: game[tours
+# …], or tours.<game> beside seed: players). Only an ОД has tours.
+tours_od = 'посев по турам игры {{.game}}: туры есть только у ОД'
 # Importing the seed when the fest has no КСИ game to rank.
 ksi_missing = "в фесте нет игры КСИ"
 # The game's scheme declares no [init] seed at all.
@@ -67,8 +72,6 @@ no_sorting = "посев по игрокам: схема не говорит, ч
 # lists the ones they do.
 metric_unknown = 'sorting: {{.metric}} не считается — есть {{.known}}'
 no_rosters = "посев по игрокам: у команд этой игры нет составов"
-# tours.<game> in the scheme names a game that is not an ОД: only an ОД has tours.
-tours_od = 'посев по игрокам: tours.{{.game}} — туры есть только у ОД'
 
 # A seed.<metric> rule aggregating a player metric no rule defines; {{.over}}
 # is that metric's name.

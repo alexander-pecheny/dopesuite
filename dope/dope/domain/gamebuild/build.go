@@ -308,6 +308,9 @@ func compileForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, doc *sc
 		if !known {
 			return store.FestScheme{}, corei18n.User(dopestrings.Default.Gamebuild.Create.SeedUnknown(source.Game))
 		}
+		if err := checkToursSource(ctx, tx, festID, source); err != nil {
+			return store.FestScheme{}, err
+		}
 	}
 	return schemedsl.Compile(doc, input)
 }
@@ -347,6 +350,22 @@ func festHasGameTx(ctx context.Context, tx *sql.Tx, festID int64, code string) (
 	var known int
 	err := tx.QueryRowContext(ctx, `select count(*) from games where fest_id = ? and code = ?`, festID, code).Scan(&known)
 	return known > 0, err
+}
+
+// checkToursSource refuses a seed that counts some tours of a Game with no
+// tours: only an OD has them.
+func checkToursSource(ctx context.Context, tx *sql.Tx, festID int64, source imports.Source) error {
+	if len(source.Tours) == 0 {
+		return nil
+	}
+	var gameType string
+	if err := tx.QueryRowContext(ctx, `select game_type from games where fest_id = ? and code = ?`, festID, source.Game).Scan(&gameType); err != nil {
+		return err
+	}
+	if !games.Get(gameType).ToursSeed {
+		return corei18n.User(dopestrings.Default.Imports.Seed.ToursOd(source.Game))
+	}
+	return nil
 }
 
 // stageEmptyState builds a match's pristine Protocol document for a stage of a

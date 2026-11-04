@@ -20,6 +20,7 @@ func TestSourceForEveryKindOfEntrant(t *testing.T) {
 	none := imports.Declared{DSL: true}
 	random := imports.Declared{Seed: "random", DSL: true}
 	fromOD := imports.Declared{Seed: "od-1", Division: "Студ", DSL: true}
+	dayOne := imports.Declared{Seed: "od-1", Division: "Студ", Tours: []int{1, 2, 3}, DSL: true}
 	players := imports.Declared{Seed: "players", DSL: true}
 	troikaDivision := imports.Declared{Division: "Студ", DSL: true}
 	stored := imports.ParseSource("ek-1", "-Студ")
@@ -37,6 +38,7 @@ func TestSourceForEveryKindOfEntrant(t *testing.T) {
 		{"troika, a division", imports.KindTroika, imports.Source{}, troikaDivision, imports.Source{Kind: imports.SourceTroikas, Division: "Студ"}},
 		{"team, a lot declared", imports.KindTeam, imports.Source{}, random, imports.Source{Kind: imports.SourceRandom}},
 		{"team, a Game declared", imports.KindTeam, imports.Source{}, fromOD, imports.Source{Kind: imports.SourceGame, Game: "od-1", Division: "Студ"}},
+		{"team, some tours of a Game declared", imports.KindTeam, imports.Source{}, dayOne, imports.Source{Kind: imports.SourceGame, Game: "od-1", Division: "Студ", Tours: []int{1, 2, 3}}},
 		{"troika, players declared", imports.KindTroika, imports.Source{}, players, imports.Source{Kind: imports.SourcePlayers}},
 		{"team, stored over declared", imports.KindTeam, stored, fromOD, imports.Source{Kind: imports.SourceGame, Game: "ek-1", Division: "-Студ"}},
 		{"troika, stored over the division", imports.KindTroika, imports.ParseSource("troikas", ""), troikaDivision, imports.Source{Kind: imports.SourceTroikas}},
@@ -44,7 +46,7 @@ func TestSourceForEveryKindOfEntrant(t *testing.T) {
 		{"player, stored fest", imports.KindPlayer, imports.ParseSource("fest", ""), none, imports.Source{Kind: imports.SourceFest}},
 	}
 	for _, c := range cases {
-		if got := imports.SourceFor(c.kind, c.stored, c.declared); got != c.want {
+		if got := imports.SourceFor(c.kind, c.stored, c.declared); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
 		}
 	}

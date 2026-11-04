@@ -14,6 +14,9 @@ fest_players = "Все игроки феста"
 troikas = "Тройки феста"
 # Another Game's current table; {{.game}} is its title.
 game = 'Таблица игры «{{.game}}»'
+# A Game's table counting some of its tours, as the scheme declares
+# (seed: od-1[tours 1..3]).
+game_tours = 'Таблица игры «{{.game}}», туры {{.tours}}'
 random = "Жребий"
 xlsx = "Файл xlsx"
 # The by-players seeding a scheme declares ([init] seed: players).

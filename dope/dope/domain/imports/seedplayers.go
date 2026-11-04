@@ -304,9 +304,6 @@ func loadSeedSourceGame(ctx context.Context, q store.Queryer, festID int64, code
 	gameID := doc.GameID
 	var places map[int64]float64
 	if len(tours) > 0 {
-		if !games.Get(doc.GameType).ToursSeed {
-			return seedSourceGame{}, corei18n.User(dopestrings.Default.Imports.SeedPlayers.ToursOd(code))
-		}
 		places, err = odPlacesAfterTours(ctx, q, festID, code, doc, tours)
 	} else {
 		places, err = teamPlacesByFestTeam(ctx, q, festID, code)
@@ -391,47 +388,11 @@ order by st.stage_id, st.rank`, []any{festID, code}, func(rs *sql.Rows) (row, er
 }
 
 // odPlacesAfterTours is an OD's table after the given tours alone, as places
-// against fest teams: the questions of the other tours are left out, the rest
-// counted as the OD counts them (by total, a tie shared at the mean of the
-// places it covers). The troika regulations seed on the question-game after its
-// first two tours, whatever has been played since.
+// against fest teams, a tie shared at the mean of the places it covers. The
+// troika regulations seed on the question-game after its first two tours,
+// whatever has been played since.
 func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code string, doc store.GameDoc, tours []int) (map[int64]float64, error) {
-	schemeJSON := doc.SchemeJSON
-	var state games.ODState
-	if err := json.Unmarshal([]byte(doc.State), &state); err != nil {
-		return nil, fmt.Errorf("parse OD state: %w", err)
-	}
-	comp := games.ParseTourComp(schemeJSON)
-	counted := make([]bool, len(state.Entries))
-	base := 0
-	for t, size := range comp {
-		if slices.Contains(tours, t+1) {
-			for i := base; i < base+size && i < len(counted); i++ {
-				counted[i] = true
-			}
-		}
-		base += size
-	}
-	// The OD counts a question with no completion flag as completed, so a
-	// short list would let the later tours back in. Pad it before masking.
-	for len(state.Completed) < len(state.Entries) {
-		state.Completed = append(state.Completed, true)
-	}
-	played := 0
-	for i := range state.Completed {
-		state.Completed[i] = state.Completed[i] && i < len(counted) && counted[i]
-		if state.Completed[i] {
-			played++
-		}
-	}
-	if played == 0 {
-		return nil, corei18n.User(dopestrings.Default.Imports.Seed.NoStandings(code))
-	}
-	partial, err := json.Marshal(state)
-	if err != nil {
-		return nil, err
-	}
-	results, err := games.ComputeODResults(schemeJSON, string(partial))
+	results, err := odResultsAfterTours(code, doc, tours)
 	if err != nil {
 		return nil, err
 	}
@@ -457,6 +418,52 @@ func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code
 	// A team that did not play stands one place behind the last that did.
 	places[0] = float64(len(ranked) + 1)
 	return places, nil
+}
+
+// odResultsAfterTours is an OD's table counting the given tours alone: the
+// questions of the other tours are left out, the rest counted as the OD
+// counts them (by total, then the roster's order). A source that is no OD,
+// or has played none of those tours, is refused.
+func odResultsAfterTours(code string, doc store.GameDoc, tours []int) (games.ODResults, error) {
+	if !games.Get(doc.GameType).ToursSeed {
+		return games.ODResults{}, corei18n.User(dopestrings.Default.Imports.Seed.ToursOd(code))
+	}
+	schemeJSON := doc.SchemeJSON
+	var state games.ODState
+	if err := json.Unmarshal([]byte(doc.State), &state); err != nil {
+		return games.ODResults{}, fmt.Errorf("parse OD state: %w", err)
+	}
+	comp := games.ParseTourComp(schemeJSON)
+	counted := make([]bool, len(state.Entries))
+	base := 0
+	for t, size := range comp {
+		if slices.Contains(tours, t+1) {
+			for i := base; i < base+size && i < len(counted); i++ {
+				counted[i] = true
+			}
+		}
+		base += size
+	}
+	// The OD counts a question with no completion flag as completed, so a
+	// short list would let the later tours back in. Pad it before masking.
+	for len(state.Completed) < len(state.Entries) {
+		state.Completed = append(state.Completed, true)
+	}
+	played := 0
+	for i := range state.Completed {
+		state.Completed[i] = state.Completed[i] && i < len(counted) && counted[i]
+		if state.Completed[i] {
+			played++
+		}
+	}
+	if played == 0 {
+		return games.ODResults{}, corei18n.User(dopestrings.Default.Imports.Seed.NoStandings(code))
+	}
+	partial, err := json.Marshal(state)
+	if err != nil {
+		return games.ODResults{}, err
+	}
+	return games.ComputeODResults(schemeJSON, string(partial))
 }
 
 // samePlace reports whether two standings rows share a place: both carry

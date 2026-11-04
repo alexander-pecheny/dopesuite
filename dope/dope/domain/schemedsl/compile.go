@@ -439,7 +439,11 @@ func ReadInit(doc *Doc, gameType string) (Init, error) {
 		}
 		return Init{}, nil
 	}
-	seeding := &store.SchemeSeeding{Source: seed}
+	seed, tours, err := splitSeedTours(seed)
+	if err != nil {
+		return Init{}, errAt(doc.Init.Values["seed"].Line, "%s", err.Error())
+	}
+	seeding := &store.SchemeSeeding{Source: seed, Tours: tours}
 	if seed == "players" {
 		players, err := readPlayerSeed(doc)
 		if err != nil {
@@ -463,6 +467,35 @@ func ReadInit(doc *Doc, gameType string) (Init, error) {
 		seeding.Division = strings.TrimSpace(division)
 	}
 	return Init{Seeding: seeding}, nil
+}
+
+// seedWords are the seed sources that are no Game, so have no tours.
+var seedWords = []string{"random", "xlsx", "players", "ksi"}
+
+// splitSeedTours reads «od-1[tours 1..3]»: the Game and the tours its table
+// counts. «[tours 3]» is the first three, «[tours 1..3]» or «[tours 1-3]» a
+// range, «[tours 1, 3]» a list. A seed without brackets counts every tour.
+func splitSeedTours(seed string) (string, []int, error) {
+	open := strings.Index(seed, "[")
+	if open < 0 {
+		return seed, nil, nil
+	}
+	refuse := corei18n.User(dopestrings.Default.Scheme.Seed.SeedTours(seed))
+	code := strings.TrimSpace(seed[:open])
+	inner, closed := strings.CutSuffix(strings.TrimSpace(seed[open+1:]), "]")
+	value, named := strings.CutPrefix(strings.TrimSpace(inner), "tours ")
+	if !closed || !named || code == "" || slices.Contains(seedWords, code) {
+		return "", nil, refuse
+	}
+	value = strings.ReplaceAll(strings.TrimSpace(value), "..", "-")
+	if strings.Contains(value, ",") {
+		value = "[" + value + "]"
+	}
+	tours, ok := parseTours(value)
+	if !ok {
+		return "", nil, refuse
+	}
+	return code, tours, nil
 }
 
 // readVenues resolves [defaults] venues (count or titled list); absent, the

@@ -1111,3 +1111,27 @@ func TestSeedPlayersTours(t *testing.T) {
 		}
 	}
 }
+
+// seed: od-1[tours …] keeps the seed Game to those tours, in each form the
+// tours.<game> key takes, and a range written with two dots.
+func TestSeedGameTours(t *testing.T) {
+	src := func(seed string) string {
+		return "[init]\nseed: " + seed + "\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\nquestions: 5\npoints: [3, 1, 0]\n"
+	}
+	for seed, want := range map[string]string{"od-1": "[]", "od-1[tours 1..3]": "[1 2 3]", "od-1[tours 1-2]": "[1 2]",
+		"od-1[tours 2]": "[1 2]", "od-1[tours 1, 3]": "[1 3]", "od-1 [tours 4..4]": "[4]"} {
+		scheme := compileSrc(t, src(seed), Input{Slug: "t", GameType: "brain"})
+		if scheme.Seeding.Source != "od-1" || fmt.Sprint(scheme.Seeding.Tours) != want {
+			t.Errorf("seed: %s → %q %v, want od-1 %s", seed, scheme.Seeding.Source, scheme.Seeding.Tours, want)
+		}
+	}
+	for _, bad := range []string{"od-1[3]", "od-1[tours 3", "od-1[tours 0]", "od-1[tours 3..1]", "[tours 1]", "xlsx[tours 1]"} {
+		doc, err := Parse(src(bad))
+		if err == nil {
+			_, err = Compile(doc, Input{Slug: "t", GameType: "brain"})
+		}
+		if err == nil || !strings.Contains(err.Error(), "seed: "+bad) {
+			t.Errorf("seed: %s → %v, want the seed refused", bad, err)
+		}
+	}
+}

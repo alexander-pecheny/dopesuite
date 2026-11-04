@@ -270,6 +270,7 @@ export type Strings = {
       festPlayers: () => string;
       festTeams: () => string;
       game: (game: string) => string;
+      gameTours: (game: string, tours: string) => string;
       players: () => string;
       random: () => string;
       troikas: () => string;
@@ -1275,6 +1276,7 @@ export type Strings = {
       sourceNoTeams: () => string;
       teamNotFound: () => string;
       teamTwice: (source: string, name: string, first: string) => string;
+      toursOd: (game: string) => string;
       xlsxBasketMissing: (name: string, n: string) => string;
       xlsxBasketNotNumber: (n: string, basket: string) => string;
       xlsxNoSheets: () => string;
@@ -1291,10 +1293,10 @@ export type Strings = {
       noRosters: () => string;
       noSorting: () => string;
       selfReference: (grain: string, name: string) => string;
-      toursOd: (game: string) => string;
     };
     seedSource: {
       fest: () => string;
+      gameTours: (game: string, tours: string) => string;
       ksi: () => string;
       players: () => string;
       random: () => string;
@@ -1876,6 +1878,7 @@ export type Strings = {
       divisionTroikaOnly: () => string;
       playersNeedGames: () => string;
       playersNeedSeed: () => string;
+      seedTours: (value: string) => string;
       toursGame: (game: string, games: string) => string;
       toursValue: (game: string, value: string) => string;
     };

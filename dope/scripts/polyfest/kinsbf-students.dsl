@@ -11,9 +11,8 @@ points: [3, 1, 0]
 sorting: [points, diff, taken]
 
 [init]
-seed: od-1   # the ОД game's code: create the ОД first
+seed: od-1[tours 1..3]   # ОД's first game day; od-1 is the ОД game's code, so create the ОД first
 division: Студ
-sorting: [points desc, rating desc]
 
 [scheme]
 title: Групповой этап
