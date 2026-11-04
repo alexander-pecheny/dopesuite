@@ -355,7 +355,6 @@ export type Strings = {
       author: () => string;
       comment: () => string;
       handout: () => string;
-      handoutHint: () => string;
       nezachet: () => string;
       source: () => string;
       text: () => string;
@@ -388,9 +387,7 @@ export type Strings = {
       clear: () => string;
       dropFile: () => string;
       file: () => string;
-      fileHint: () => string;
       link: () => string;
-      linkHint: () => string;
       linkOnly: () => string;
       load: () => string;
       loadFailed: () => string;
@@ -406,16 +403,13 @@ export type Strings = {
       tabFields: () => string;
       tabPreview: () => string;
       tabText: () => string;
-      textHint: () => string;
       textLabel: () => string;
       tournament: () => string;
-      tournamentHint: () => string;
     };
   };
   profile: {
     loggedInAs: (who: string) => string;
     logout: () => string;
-    ratingHint: () => string;
     title: () => string;
   };
   question: {

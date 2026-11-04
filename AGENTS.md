@@ -156,9 +156,18 @@ code that shows it (see root `docs/adr/0006`, and the terms in root
 
 The Russian in the catalogs is interface copy, not literature. Use normal word
 order and ordinary words. Don't invert a sentence for effect, don't write
-aphorisms, and use a full stop where you were about to use a dash. A hint should
-read like one person explaining something to another. The same goes for commit
-messages, code comments and test names, in Russian and in English.
+aphorisms, and use a full stop where you were about to use a dash. The same goes
+for commit messages, code comments and test names, in Russian and in English.
+
+- **No muted hint under a form field.** A field's label says what goes in it.
+  Don't add a grey line under it explaining when it is needed or what kinds of
+  value it takes ("Если вопрос опубликован: ссылка на…", "Обязательна, если…").
+  If the form needs to say something, say it once, as an error when the value is
+  wrong or in the page's own text.
+- **rating.chgk.info is «турнирный сайт», never «рейтинг».** Write «ID на
+  турнирном сайте», «проверить на турнирном сайте», not «ID на рейтинге» or
+  «сайт рейтинга». The site holds the tournaments, the players and the results;
+  the rating is only one thing it computes.
 
 ## Toolchain
 

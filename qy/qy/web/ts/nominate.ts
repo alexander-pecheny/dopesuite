@@ -115,8 +115,6 @@ function setState(card: HTMLElement, state: "source" | "editor", view: string): 
   if (clear) clear.hidden = state !== "editor";
   const label = card.querySelector<HTMLElement>("[data-panel=text] .field > span");
   if (label) label.textContent = state === "editor" ? S.nominate.slot.textLabel() : S.nominate.slot.source();
-  const hint = card.querySelector<HTMLElement>("[data-text-hint]");
-  if (hint) hint.hidden = state !== "editor";
   showView(card, view);
 }
 

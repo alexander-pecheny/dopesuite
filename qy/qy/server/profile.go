@@ -31,7 +31,6 @@ func (s *server) handleProfilePage(w http.ResponseWriter, r *http.Request, sc ro
 			ui.Section(append([]ui.Item{hint(str.Profile.LoggedInAs(who))}, noticeOf(r)...)...),
 			ui.Section(ui.Form(ui.Method("post"), ui.Action("/profile"), ui.DirCol, ui.SpaceSM,
 				ui.Field(ui.Label(str.Common.RatingId()), ui.Textfield(ui.Name("rating_id"), ui.Value(rating), ui.Inputmode("numeric"), ui.Required())),
-				hint(str.Profile.RatingHint()),
 				ui.Row(ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save()))))),
 			ui.Section(ui.Form(ui.Method("post"), ui.Action("/logout"),
 				ui.Button(ui.Submit(), ui.Ghost, ui.IconLogIn, text(str.Profile.Logout())))),

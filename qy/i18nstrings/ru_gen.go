@@ -93,7 +93,7 @@ var RU = Strings{
 			Kind:       func() string { return "Жюри" },
 			Name:       func() string { return "Имя и фамилия" },
 			People:     func() string { return "Народное" },
-			RatingId:   func() string { return "ID на рейтинге" },
+			RatingId:   func() string { return "ID на турнирном сайте" },
 			Telegram:   func() string { return "Телеграм" },
 			Title:      func() string { return "Жюри" },
 		},
@@ -160,7 +160,7 @@ var RU = Strings{
 			New:          func() string { return "Не проверен" },
 			NoText:       func() string { return "Нет текста" },
 			NominatedBy: func(who string, rating string, slot string) string {
-				return fmt.Sprintf("Номинировал(а) %s, ID на рейтинге %s, %s.", who, rating, slot)
+				return fmt.Sprintf("Номинировал(а) %s, ID на турнирном сайте %s, %s.", who, rating, slot)
 			},
 			OpenLink:       func() string { return "Открыть ссылку" },
 			OpenTournament: func() string { return "Открыть турнир" },
@@ -186,13 +186,13 @@ var RU = Strings{
 				return "Автоматическая проверка нарушений не нашла."
 			},
 			RulesUnchecked: func() string {
-				return "Турнир не удалось проверить на сайте рейтинга."
+				return "Турнир не удалось проверить на турнирном сайте."
 			},
 			SourceText:      func() string { return "Что прислал номинатор" },
 			Status:          func() string { return "Статус" },
 			StatusLine:      func(status string, dates string) string { return fmt.Sprintf("%s. %s.", status, dates) },
 			Tournament:      func() string { return "Турнир" },
-			TournamentId:    func() string { return "ID турнира на рейтинге" },
+			TournamentId:    func() string { return "ID турнира на турнирном сайте" },
 			TournamentStart: func() string { return "Начало отыгрыша" },
 			Unnumbered:      func(id string) string { return fmt.Sprintf("Без номера (№ %s)", id) },
 		},
@@ -369,9 +369,9 @@ var RU = Strings{
 		Add:        func() string { return "Добавить" },
 		ErrorTitle: func() string { return "Не получилось" },
 		Home:       func() string { return "Главная" },
-		RatingId:   func() string { return "Ваш ID на рейтинге (rating.chgk.info)" },
+		RatingId:   func() string { return "Ваш ID на турнирном сайте" },
 		RatingIdInvalid: func() string {
-			return "ID на рейтинге — это число со страницы игрока на rating.chgk.info."
+			return "ID на турнирном сайте — это число со страницы игрока на rating.chgk.info."
 		},
 		Remove:      func() string { return "Удалить" },
 		Save:        func() string { return "Сохранить" },
@@ -455,9 +455,7 @@ var RU = Strings{
 	},
 	Nominate: NominateStrings{
 		Error: NominateErrorStrings{
-			BadLink: func() string {
-				return "Ссылка на публикацию должна начинаться с https://."
-			},
+			BadLink:       func() string { return "Ссылка на вопрос должна начинаться с https://." },
 			BadTournament: func() string { return "Ссылка на турнир должна начинаться с https://." },
 			FileTooBig:    func() string { return "Файл больше 20 МБ." },
 			Missing: func(fields string) string {
@@ -466,13 +464,10 @@ var RU = Strings{
 			NoTournament: func() string { return "Укажите ссылку на турнир." },
 		},
 		Field: NominateFieldStrings{
-			Answer:  func() string { return "Ответ" },
-			Author:  func() string { return "Автор" },
-			Comment: func() string { return "Комментарий" },
-			Handout: func() string { return "Раздаточный материал" },
-			HandoutHint: func() string {
-				return "Текст раздатки или ссылка на картинку. Файл можно прикрепить ниже."
-			},
+			Answer:   func() string { return "Ответ" },
+			Author:   func() string { return "Автор" },
+			Comment:  func() string { return "Комментарий" },
+			Handout:  func() string { return "Раздаточный материал" },
 			Nezachet: func() string { return "Незачёт" },
 			Source:   func() string { return "Источник" },
 			Text:     func() string { return "Текст вопроса" },
@@ -496,7 +491,7 @@ var RU = Strings{
 				return "Автоматическая проверка считает, что этот вопрос нельзя номинировать:"
 			},
 			Unchecked: func() string {
-				return "Не получилось проверить турнир на сайте рейтинга. Его даты и редакторов оргкомитет проверит сам."
+				return "Не получилось проверить турнир на турнирном сайте. Его даты и редакторов оргкомитет проверит сам."
 			},
 			WhatNow: func() string {
 				return "Это пункт 2 регламента. Номинируйте другой вопрос или поправьте ссылку на турнир и поля. Если вы думаете, что проверка ошиблась, напишите почему. Вопрос сохранится, и оргкомитет проверит его вручную."
@@ -533,13 +528,7 @@ var RU = Strings{
 			Clear:    func() string { return "Очистить" },
 			DropFile: func() string { return "Убрать прикреплённый файл" },
 			File:     func() string { return "Файл для раздатки" },
-			FileHint: func() string {
-				return "Картинка или другой файл, до 20 МБ. Новый файл заменит прикреплённый."
-			},
-			Link: func() string { return "Ссылка на публикацию" },
-			LinkHint: func() string {
-				return "Если вопрос опубликован: ссылка на gotquestions, на пост в телеграме или на другую публикацию."
-			},
+			Link:     func() string { return "Ссылка на вопрос" },
 			LinkOnly: func() string {
 				return "Сохранили ссылку. Текст вопроса оргкомитет заберёт из базы сам."
 			},
@@ -565,21 +554,14 @@ var RU = Strings{
 			TabFields:  func() string { return "Поля" },
 			TabPreview: func() string { return "Просмотр" },
 			TabText:    func() string { return "Текст" },
-			TextHint: func() string {
-				return "Это тот же вопрос текстом. Правки здесь и во вкладке «Поля» переносятся друг в друга."
-			},
-			TextLabel:      func() string { return "Вопрос текстом" },
-			Tournament:     func() string { return "Ссылка на турнир" },
-			TournamentHint: func() string { return "Обязательна, если вопрос не опубликован." },
+			TextLabel:  func() string { return "Вопрос текстом" },
+			Tournament: func() string { return "Ссылка на турнир" },
 		},
 	},
 	Profile: ProfileStrings{
 		LoggedInAs: func(who string) string { return fmt.Sprintf("Вы вошли как %s.", who) },
 		Logout:     func() string { return "Выйти" },
-		RatingHint: func() string {
-			return "Мы спрашиваем ID при номинации и при зрительском голосовании, чтобы один человек голосовал один раз."
-		},
-		Title: func() string { return "Профиль" },
+		Title:      func() string { return "Профиль" },
 	},
 	Question: QuestionStrings{
 		Answer:     func() string { return "Ответ:" },

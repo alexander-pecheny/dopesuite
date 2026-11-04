@@ -154,17 +154,14 @@ func sourcePanel(slot int, v slotView) ui.Item {
 	} else {
 		load = append(load, ui.Hidden())
 	}
-	label, textHint := str.Nominate.Slot.Source(), []ui.Item{ui.Data("text-hint", ""), ui.Text(str.Nominate.Slot.TextHint())}
+	label := str.Nominate.Slot.Source()
 	if editing {
 		label = str.Nominate.Slot.TextLabel()
-	} else {
-		textHint = append(textHint, ui.Hidden())
 	}
 	items := []ui.Item{ui.Data("panel", viewText), ui.Field(ui.Label(label),
 		ui.Row(ui.SpaceSM, ui.AlignStart,
 			ui.Editor(ui.Name(slotKey(slot, "raw")), ui.Rows("1"), ui.Grow(), ui.Data("autogrow", ""), ui.Text(raw)),
-			ui.Button(load...), ui.Button(parse...)),
-		ui.Hint(textHint...))}
+			ui.Button(load...), ui.Button(parse...)))}
 	if v.loadMiss {
 		items = append(items, dangerHint(str.Nominate.Slot.LoadFailed()))
 	}
@@ -255,7 +252,7 @@ func fieldEditors(slot int, v slotView) []ui.Item {
 	}
 	handout := ui.Field(ui.Data("field", "handout"), ui.Data("optional", ""), ui.Label(str.Nominate.Field.Handout()),
 		ui.Editor(ui.Name(slotKey(slot, "handout")), ui.Rows("1"), ui.Data("autogrow", ""), ui.Text(in.handout)),
-		hint(str.Nominate.Field.HandoutHint()), fileField(slot, v))
+		fileField(slot, v))
 	adds := []ui.Item{ui.SpaceSM, ui.Wrap(), ui.Data("adds", ""), ui.Hidden()}
 	for _, f := range []struct{ name, label string }{
 		{"handout", str.Nominate.Field.Handout()},
@@ -285,7 +282,7 @@ func fileField(slot int, v slotView) ui.Item {
 	if len(v.files) > 0 {
 		items = append(items, checkbox(slotKey(slot, "drop_file"), str.Nominate.Slot.DropFile(), v.in.dropFile))
 	}
-	items = append(items, ui.Filefield(ui.Name(slotKey(slot, "file"))), hint(str.Nominate.Slot.FileHint()))
+	items = append(items, ui.Filefield(ui.Name(slotKey(slot, "file"))))
 	return ui.Field(items...)
 }
 
@@ -293,11 +290,9 @@ func fileField(slot int, v slotView) ui.Item {
 func linkFields(slot int, v slotView) []ui.Item {
 	return []ui.Item{ui.SpaceSM,
 		ui.Field(ui.Label(str.Nominate.Slot.Link()),
-			ui.Textfield(ui.Name(slotKey(slot, "link")), ui.Value(v.in.link), ui.Inputmode("url")),
-			hint(str.Nominate.Slot.LinkHint())),
+			ui.Textfield(ui.Name(slotKey(slot, "link")), ui.Value(v.in.link), ui.Inputmode("url"))),
 		ui.Field(ui.Label(str.Nominate.Slot.Tournament()),
-			ui.Textfield(ui.Name(slotKey(slot, "tournament")), ui.Value(v.in.tournament), ui.Inputmode("url")),
-			hint(str.Nominate.Slot.TournamentHint())),
+			ui.Textfield(ui.Name(slotKey(slot, "tournament")), ui.Value(v.in.tournament), ui.Inputmode("url"))),
 	}
 }
 
