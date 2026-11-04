@@ -229,7 +229,7 @@ synch_import_note = "Импорт загрузит с турнирного са�
 import_submit = "Показать, что изменится"
 # The preview of an import (ADR-0024): what it would change, before it writes.
 preview_title = "Что изменит импорт"
-preview_nothing = "Импорт ничего не изменит: составы уже совпадают с рейтингом и вашими правками."
+preview_nothing = "Импорт ничего не изменит: составы уже совпадают с турнирным сайтом и вашими правками."
 plan_added_venues = 'Новые площадки: {{.venues}}'
 # The Game of the whole synch fest the import makes when there is none.
 plan_added_games = 'Новая игра для всего турнира: {{.games}}'
@@ -263,7 +263,7 @@ need_rating_note = "Сначала сохраните rating.chgk.info ID в с�
 # results (hostRatingImportDoc, the RosterConflict branch).
 conflict_title = "Команды с результатами уходят из списка"
 # Hint under the dialog title, explaining why the import is asking.
-conflict_hint = "Этих команд больше нет в рейтинге под тем же ID, а результаты у них уже есть. Если команде просто сменили ID, выберите её в списке новых команд — номер и результаты останутся. Если команда действительно снялась, выберите удаление."
+conflict_hint = "Этих команд больше нет на турнирном сайте под тем же ID, а результаты у них уже есть. Если команде просто сменили ID, выберите её в списке новых команд — номер и результаты останутся. Если команда действительно снялась, выберите удаление."
 # One conflicted team's heading; {{.team}} is "Название (Город)".
 conflict_team = '№{{.number}} {{.team}}'
 # The line naming where that team already has results.
@@ -281,7 +281,7 @@ conflict_submit = "Продолжить импорт"
 conflict_cancel = "Отменить импорт"
 # Notice after an import that merged teams; {{.n}} is how many.
 import_merged_notice = 'Сохранены под новым ID, вместе с номером и результатами: {{.n}}.'
-import_unchanged_notice = 'Списки уже совпадают с рейтингом — изменений нет. Команд: {{.teams}}, игроков: {{.players}}.'
+import_unchanged_notice = 'Списки уже совпадают с турнирным сайтом — изменений нет. Команд: {{.teams}}, игроков: {{.players}}.'
 # After an import into a synch fest: the площадки it made, and whether the
 # site lists any team yet.
 import_venues_notice = 'Новых площадок: {{.n}}.'
@@ -302,7 +302,7 @@ all_venues = "Все площадки"
 title = '{{.title}} · тройки'
 crumb = "Тройки"
 # The note at the top of the page.
-hint = "Тройка — это 2–4 игрока, заявленные на Тройку. Команды из рейтинга здесь ни при чём: тройку можно собрать из игроков разных команд. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
+hint = "Тройка — это 2–4 игрока, заявленные на Тройку. Команды с турнирного сайта здесь ни при чём: тройку можно собрать из игроков разных команд. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
 # The note on how troikas reach a Тройка game, shown under the hint.
 games_hint = "Игра «Тройка», в схеме которой есть строка division, сама берёт тройки своего зачёта: division: Студ — тройки зачёта «Студ», division: -Студ — все остальные. Пока в игре ничего не внесено, её участники меняются вместе с тройками на этой странице."
 # The table's column heads, and the edit dialog's name field.

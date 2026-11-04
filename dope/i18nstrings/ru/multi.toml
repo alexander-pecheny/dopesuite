@@ -45,7 +45,7 @@ declined = "Отказ"
 [guests]
 # The «Команды» tab's guest teams: teams the host adds to this one game by
 # name alone. The hint under the add form.
-hint = "Разовая команда играет только в этой игре. В рейтинге и в других играх феста её нет. Убрать её можно, пока у неё нет баллов и отказа."
+hint = "Разовая команда играет только в этой игре. На турнирном сайте и в других играх феста её нет. Убрать её можно, пока у неё нет баллов и отказа."
 # The add form's name field.
 name_placeholder = "Название разовой команды"
 # The add form's button.

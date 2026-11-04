@@ -192,12 +192,12 @@ divisions = "Зачёты"
 divisions_other = "Другие зачёты"
 divisions_hint = "Короткие названия через запятую, например: Студ, МЮ."
 # A new team: the rating site's team it is, found by name as the host types.
-rating_team = "Команда из рейтинга"
+rating_team = "Команда с турнирного сайта"
 rating_team_placeholder = "Начните вводить название"
-rating_team_hint = "Необязательно. Если команды нет в рейтинге, просто заполните название ниже."
+rating_team_hint = "Необязательно. Если команды нет на турнирном сайте, просто заполните название ниже."
 # The picked rating team, and the button that unpicks it.
 rating_team_picked = '{{.team}}, ID {{.id}}'
-rating_team_unpick = "Не из рейтинга"
+rating_team_unpick = "Не с турнирного сайта"
 # A team an import brought: its id on the site, which only the site changes.
 rating_team_of = 'ID на турнирном сайте: {{.id}}'
 

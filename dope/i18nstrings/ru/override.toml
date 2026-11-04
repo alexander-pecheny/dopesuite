@@ -26,6 +26,6 @@ not_found = "Оверрайд не найден."
 
 [save]
 # The picked new team equals the player's rating team.
-team_same = "Новая команда совпадает с командой игрока в рейтинге."
+team_same = "Новая команда совпадает с командой игрока на турнирном сайте."
 # After the overrides the team would carry more than nine players.
 team_too_big = 'В команде "{{.team}}" после оверрайдов больше 9 игроков.'

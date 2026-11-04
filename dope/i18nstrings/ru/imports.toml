@@ -88,15 +88,15 @@ multiple_standings = 'у игры {{.code}} несколько таблиц — 
 
 [rating]
 # The roster import button's request to rating.chgk.net.
-fetch_failed = 'не удалось запросить рейтинг: {{.err}}'
+fetch_failed = 'не удалось запросить турнирный сайт: {{.err}}'
 # A non-200 answer; {{.detail}} is the body snippet or the HTTP status.
-api_error = 'рейтинг вернул ошибку: {{.detail}}'
+api_error = 'турнирный сайт вернул ошибку: {{.detail}}'
 # An answer that is not the expected JSON.
-decode_failed = 'не удалось разобрать ответ рейтинга: {{.err}}'
+decode_failed = 'не удалось разобрать ответ турнирного сайта: {{.err}}'
 # A team with more than nine players.
 squad_too_big = 'состав "{{.name}}" больше 9 игроков'
 # An import run on an empty roster.
-no_teams = "рейтинг не вернул команды"
+no_teams = "турнирный сайт не вернул команды"
 # The import stopped because teams with results would leave the roster. Shown
 # only if the host page does not catch the conflict and ask; {{.n}} is how many
 # such teams there are.
@@ -120,7 +120,7 @@ player_twice = '{{.name}} записан в команду дважды.'
 # Another team on the roster already has this name and city.
 name_taken = 'Команда «{{.name}}» уже есть в составах феста.'
 # A new team picked from the rating site that the fest already has.
-rating_team_taken = "Эта команда рейтинга уже есть в составах феста."
+rating_team_taken = "Эта команда с турнирного сайта уже есть в составах феста."
 rating_team_fixed = "У команды из импорта ID задаёт турнирный сайт."
 # The team is not on the fest roster (removed, or of another fest).
 team_unknown = "Такой команды нет в составах феста."

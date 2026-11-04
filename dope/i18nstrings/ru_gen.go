@@ -591,14 +591,14 @@ var RU = Strings{
 			},
 			PlayerTwice: func(player string) string { return fmt.Sprintf("%s уже есть в составе.", player) },
 			RatingId:    func(id string) string { return fmt.Sprintf("ID %s", id) },
-			RatingTeam:  func() string { return "Команда из рейтинга" },
+			RatingTeam:  func() string { return "Команда с турнирного сайта" },
 			RatingTeamHint: func() string {
-				return "Необязательно. Если команды нет в рейтинге, просто заполните название ниже."
+				return "Необязательно. Если команды нет на турнирном сайте, просто заполните название ниже."
 			},
 			RatingTeamOf:          func(id string) string { return fmt.Sprintf("ID на турнирном сайте: %s", id) },
 			RatingTeamPicked:      func(team string, id string) string { return fmt.Sprintf("%s, ID %s", team, id) },
 			RatingTeamPlaceholder: func() string { return "Начните вводить название" },
-			RatingTeamUnpick:      func() string { return "Не из рейтинга" },
+			RatingTeamUnpick:      func() string { return "Не с турнирного сайта" },
 			Remove:                func(player string) string { return fmt.Sprintf("Убрать: %s", player) },
 			Save:                  func() string { return "Сохранить" },
 			Title:                 func(team string) string { return fmt.Sprintf("Команда «%s»", team) },
@@ -1544,7 +1544,7 @@ var RU = Strings{
 			},
 			ConflictGames: func(games string) string { return fmt.Sprintf("Результаты есть: %s", games) },
 			ConflictHint: func() string {
-				return "Этих команд больше нет в рейтинге под тем же ID, а результаты у них уже есть. Если команде просто сменили ID, выберите её в списке новых команд — номер и результаты останутся. Если команда действительно снялась, выберите удаление."
+				return "Этих команд больше нет на турнирном сайте под тем же ID, а результаты у них уже есть. Если команде просто сменили ID, выберите её в списке новых команд — номер и результаты останутся. Если команда действительно снялась, выберите удаление."
 			},
 			ConflictNoCandidates: func() string {
 				return "В новом списке нет команд, которых ещё нет в фесте, — слить не с чем."
@@ -1586,7 +1586,7 @@ var RU = Strings{
 			},
 			ImportSubmit: func() string { return "Показать, что изменится" },
 			ImportUnchangedNotice: func(teams string, players string) string {
-				return fmt.Sprintf("Списки уже совпадают с рейтингом — изменений нет. Команд: %s, игроков: %s.", teams, players)
+				return fmt.Sprintf("Списки уже совпадают с турнирным сайтом — изменений нет. Команд: %s, игроков: %s.", teams, players)
 			},
 			ImportVenuesNotice: func(n string) string { return fmt.Sprintf("Новых площадок: %s.", n) },
 			ImportXlsxBtn:      func() string { return "Загрузить из xlsx" },
@@ -1630,7 +1630,7 @@ var RU = Strings{
 			PlayersEmpty: func() string { return "Игроки пока не загружены." },
 			PlayersTitle: func(title string) string { return fmt.Sprintf("%s · игроки", title) },
 			PreviewNothing: func() string {
-				return "Импорт ничего не изменит: составы уже совпадают с рейтингом и вашими правками."
+				return "Импорт ничего не изменит: составы уже совпадают с турнирным сайтом и вашими правками."
 			},
 			PreviewTitle:      func() string { return "Что изменит импорт" },
 			RatingImportCrumb: func() string { return "Импорт участников" },
@@ -1716,7 +1716,7 @@ var RU = Strings{
 			},
 			HeadTeamUnknown: func() string { return "Такой команды нет в фесте." },
 			Hint: func() string {
-				return "Тройка — это 2–4 игрока, заявленные на Тройку. Команды из рейтинга здесь ни при чём: тройку можно собрать из игроков разных команд. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
+				return "Тройка — это 2–4 игрока, заявленные на Тройку. Команды с турнирного сайта здесь ни при чём: тройку можно собрать из игроков разных команд. Заменить игрока можно здесь в любой момент между боями — в следующей теме его можно будет посадить в кресло."
 			},
 			LineNoName: func(n string) string {
 				return fmt.Sprintf("Строка %s: нужно название и двоеточие перед игроками.", n)
@@ -1791,7 +1791,7 @@ var RU = Strings{
 				return "У команды из импорта ID задаёт турнирный сайт."
 			},
 			RatingTeamTaken: func() string {
-				return "Эта команда рейтинга уже есть в составах феста."
+				return "Эта команда с турнирного сайта уже есть в составах феста."
 			},
 			TeamScored: func(team string, games string) string {
 				return fmt.Sprintf("Команду «%s» нельзя убрать: у неё есть результаты в играх %s.", team, games)
@@ -1805,20 +1805,22 @@ var RU = Strings{
 			},
 		},
 		Rating: ImportsRatingStrings{
-			ApiError: func(detail string) string { return fmt.Sprintf("рейтинг вернул ошибку: %s", detail) },
+			ApiError: func(detail string) string {
+				return fmt.Sprintf("турнирный сайт вернул ошибку: %s", detail)
+			},
 			ConflictError: func(n string) string {
 				return fmt.Sprintf("Импорт остановлен: из списка уходят команды, у которых уже есть результаты (%s).", n)
 			},
 			DecodeFailed: func(err string) string {
-				return fmt.Sprintf("не удалось разобрать ответ рейтинга: %s", err)
+				return fmt.Sprintf("не удалось разобрать ответ турнирного сайта: %s", err)
 			},
 			FetchFailed: func(err string) string {
-				return fmt.Sprintf("не удалось запросить рейтинг: %s", err)
+				return fmt.Sprintf("не удалось запросить турнирный сайт: %s", err)
 			},
 			MergeStale: func() string {
 				return "Список команд изменился, пока вы отвечали. Запустите импорт ещё раз."
 			},
-			NoTeams: func() string { return "рейтинг не вернул команды" },
+			NoTeams: func() string { return "турнирный сайт не вернул команды" },
 			SquadTooBig: func(name string) string {
 				return fmt.Sprintf("состав \"%s\" больше 9 игроков", name)
 			},
@@ -2043,7 +2045,7 @@ var RU = Strings{
 			Add:    func() string { return "Добавить команду" },
 			Failed: func(error string) string { return fmt.Sprintf("Не получилось: %s", error) },
 			Hint: func() string {
-				return "Разовая команда играет только в этой игре. В рейтинге и в других играх феста её нет. Убрать её можно, пока у неё нет баллов и отказа."
+				return "Разовая команда играет только в этой игре. На турнирном сайте и в других играх феста её нет. Убрать её можно, пока у неё нет баллов и отказа."
 			},
 			NamePlaceholder: func() string { return "Название разовой команды" },
 			RemoveConfirm: func(name string) string {
@@ -2384,7 +2386,7 @@ var RU = Strings{
 		},
 		Save: OverrideSaveStrings{
 			TeamSame: func() string {
-				return "Новая команда совпадает с командой игрока в рейтинге."
+				return "Новая команда совпадает с командой игрока на турнирном сайте."
 			},
 			TeamTooBig: func(team string) string {
 				return fmt.Sprintf("В команде \"%s\" после оверрайдов больше 9 игроков.", team)
