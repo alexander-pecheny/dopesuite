@@ -15,7 +15,6 @@ import (
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
-	"qy/qy/domain/contest"
 	"qy/qy/platform/markdown"
 	"qy/qy/storage/store"
 	"qy/qy/web/route"
@@ -130,13 +129,6 @@ func (s *server) handlePublic(w http.ResponseWriter, r *http.Request, sc route.S
 		return err
 	}
 	body := []ui.Item{ui.Richtext(ui.Raw(renderPage(p, vars)))}
-	if yearOf(trimmed) != 0 && !strings.Contains(trimmed, "/") {
-		status, err := s.contestStatus(ctx, sc, yearOf(trimmed))
-		if err != nil {
-			return err
-		}
-		body = append(status, body...)
-	}
 	if sc.IsAdmin {
 		body = append(body, ui.Row(ui.Button(ui.Href("/admin/pages/edit?path="+trimmed), ui.Ghost, ui.Small(), ui.IconPencil, text(str.Cms.EditThis()))))
 	}
@@ -183,48 +175,6 @@ func (s *server) serveGenerated(w http.ResponseWriter, r *http.Request, sc route
 		return s.serveShortlist(w, r, sc, c)
 	}
 	return route.NotFound(str.Cms.NotYet())
-}
-
-// contestStatus opens the current contest's year page with what the contest
-// asks of a visitor today. Other years' pages have none. The nomination form
-// is linked for admins only until it is launched.
-func (s *server) contestStatus(ctx context.Context, sc route.Scope, year int) ([]ui.Item, error) {
-	c, err := store.Current(ctx, s.db)
-	if errors.Is(err, store.ErrNoContest) || err == nil && c.Year != year {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	stage := c.StageAt(s.now())
-	items := []ui.Item{hint(stageName(stage))}
-	switch stage {
-	case contest.Before:
-		items = append(items, hint(str.Banner.Before(dayText(c.NominationStart))))
-	case contest.Nomination:
-		items = append(items, hint(str.Banner.Nomination(dayText(c.NominationEnd))))
-	}
-	if buttons := stageButtons(c, stage, sc.IsAdmin); len(buttons) > 0 {
-		items = append(items, ui.Row(append([]ui.Item{ui.SpaceSM, ui.Wrap()}, buttons...)...))
-	}
-	return []ui.Item{ui.Col(append([]ui.Item{ui.SpaceSM}, items...)...)}, nil
-}
-
-// stageButtons are the forms a stage opens to visitors.
-func stageButtons(c contest.Contest, stage contest.Stage, admin bool) []ui.Item {
-	var buttons []ui.Item
-	switch stage {
-	case contest.Prelim, contest.Factcheck:
-		buttons = append(buttons, ui.Button(ui.Href("/vote"), ui.Ghost, text(str.Vote.Page.Title())))
-	case contest.Final:
-		if c.ShortlistFrozenAt != "" {
-			buttons = append(buttons, ui.Button(ui.Href("/popular"), ui.Primary, text(str.Final.Popular.Title())))
-		}
-	}
-	if admin && (stage == contest.Before || stage == contest.Nomination) {
-		buttons = append(buttons, ui.Button(ui.Href("/nominate"), ui.Ghost, text(str.Nominate.Page.Title())))
-	}
-	return buttons
 }
 
 func (s *server) serveAsset(w http.ResponseWriter, r *http.Request, p string) (bool, error) {

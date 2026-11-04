@@ -1,3 +1,0 @@
-# The current contest's status at the top of its year page.
-before = 'Номинация вопросов откроется {{.date}}.'
-nomination = 'Номинировать вопросы можно до {{.date}} включительно.'

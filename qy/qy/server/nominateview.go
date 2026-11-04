@@ -58,7 +58,7 @@ func nominationFormItems(c contest.Contest, f nominationForm) []ui.Item {
 		_, msg := errorOf(f.ratingErr)
 		rating = append(rating, dangerHint(msg))
 	}
-	form := []ui.Item{ui.Method("post"), ui.Action("/nominate"), ui.Enctype("multipart/form-data"), ui.DirCol, ui.SpaceLG,
+	form := []ui.Item{ui.Method("post"), ui.Action(nominatePath(c.Year)), ui.Enctype("multipart/form-data"), ui.DirCol, ui.SpaceLG,
 		ui.Data("nominate", ""), ui.Field(rating...)}
 	for slot := 1; slot <= c.MainSlots+c.ReserveSlots; slot++ {
 		if slot == c.MainSlots+1 {

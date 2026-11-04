@@ -115,15 +115,15 @@ func TestNominationIsOpenOnlyDuringItsStage(t *testing.T) {
 	w := newWorld(t)
 	alice := w.user("alice")
 	w.ts.SetNow(day(t, "2026-11-08", 12))
-	if body := w.get(alice, "/nominate", http.StatusOK); strings.Contains(body, `name="slot1_raw"`) {
+	if body := w.get(alice, "/2026/nominate", http.StatusOK); strings.Contains(body, `name="slot1_raw"`) {
 		t.Error("the form is open before the stage")
 	}
-	w.post(alice, "/nominate", slots("1", map[int]string{1: pasted("Текст.", "ответ", "Кто-то")}), http.StatusBadRequest)
+	w.post(alice, "/2026/nominate", slots("1", map[int]string{1: pasted("Текст.", "ответ", "Кто-то")}), http.StatusBadRequest)
 	w.ts.SetNow(day(t, "2026-11-09", 0))
-	if body := w.get(alice, "/nominate", http.StatusOK); !strings.Contains(body, `name="slot8_raw"`) {
+	if body := w.get(alice, "/2026/nominate", http.StatusOK); !strings.Contains(body, `name="slot8_raw"`) {
 		t.Error("the form should have five slots and three reserves")
 	}
-	w.post(alice, "/nominate", slots("abc", map[int]string{1: pasted("Текст.", "ответ", "Кто-то")}), http.StatusBadRequest)
+	w.post(alice, "/2026/nominate", slots("abc", map[int]string{1: pasted("Текст.", "ответ", "Кто-то")}), http.StatusBadRequest)
 }
 
 func TestAContestEndToEnd(t *testing.T) {
@@ -136,18 +136,18 @@ func TestAContestEndToEnd(t *testing.T) {
 	// ---- nomination ----
 	w.ts.SetNow(day(t, "2026-11-10", 12))
 	alice, bob := w.user("alice"), w.user("bob")
-	w.post(alice, "/nominate", slots("101", map[int]string{
+	w.post(alice, "/2026/nominate", slots("101", map[int]string{
 		1: pasted("Вчера Эдуард Голуб ел яблоко и думал об искусстве.", "искусство", "Эдуард Голуб (Москва)"),
 		2: "https://gotquestions.online/question/777",
 		6: pasted("Запасной вопрос Алисы.", "запас алисы", "Алиса"),
 	}), http.StatusSeeOther)
 	// Bob's first pick is the question Alice already nominated by link, so his
 	// reserve counts in its place.
-	w.post(bob, "/nominate", slots("202", map[int]string{
+	w.post(bob, "/2026/nominate", slots("202", map[int]string{
 		1: "https://gotquestions.online/question/777",
 		6: pasted("Запасной вопрос Боба.", "запас боба", "Боб"),
 	}), http.StatusSeeOther)
-	if body := w.get(alice, "/nominate", http.StatusOK); !strings.Contains(body, "искусство") {
+	if body := w.get(alice, "/2026/nominate", http.StatusOK); !strings.Contains(body, "искусство") {
 		t.Error("the form does not show what was parsed")
 	}
 	if w.count(`select count(*) from questions`) != 4 {
@@ -267,7 +267,7 @@ func TestPopularVoteNeedsThreeDifferentQuestions(t *testing.T) {
 	for i, a := range []string{"один", "два", "три", "четыре"} {
 		texts[i+1] = pasted("Вопрос "+a+".", a, "Автор "+a)
 	}
-	w.post(alice, "/nominate", slots("1", texts), http.StatusSeeOther)
+	w.post(alice, "/2026/nominate", slots("1", texts), http.StatusSeeOther)
 	w.ts.SetNow(day(t, "2026-11-24", 12))
 	w.post(w.admin, "/admin/contest/2026/deal", nil, http.StatusSeeOther)
 	var ids []string

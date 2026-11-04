@@ -31,8 +31,8 @@ func routes(s *server) *http.ServeMux {
 	pages.Handle("POST /logout", route.LoggedIn, s.handleLogoutForm)
 
 	// ---- the contest ----
-	pages.Handle("GET /nominate", route.LoggedIn, s.handleNominatePage)
-	pages.Handle("POST /nominate", route.LoggedIn, s.handleNominate)
+	pages.Handle("POST /{year}/nominate", route.LoggedIn, s.handleNominate)
+	pages.Handle("GET /nominate", route.Public, s.handleOldNominate)
 	pages.Handle("GET /nominate/file/{id}", route.LoggedIn, s.handleNominationFile)
 	api.Handle("POST /api/nominate/parse", route.LoggedIn, s.handleParseQuestion)
 	api.Handle("POST /api/nominate/load", route.LoggedIn, s.handleLoadQuestion)
@@ -88,6 +88,16 @@ func routes(s *server) *http.ServeMux {
 	mux.Handle("GET /static/", s.assets.FileServer())
 
 	// ---- everything else is a CMS page, a file, or a year's generated page ----
-	pages.Handle("GET /", route.Public, s.handlePublic)
+	// GET /{year}/nominate would clash with GET /static/ in the mux, so the
+	// form's page is picked out of the catch-all here.
+	nominatePage := pages.Serve(route.LoggedIn, s.handleNominatePage)
+	public := pages.Serve(route.Public, s.handlePublic)
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		if isNominatePath(r.URL.Path) {
+			nominatePage(w, r)
+			return
+		}
+		public(w, r)
+	})
 	return mux
 }

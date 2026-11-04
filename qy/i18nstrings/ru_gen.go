@@ -289,14 +289,6 @@ var RU = Strings{
 			Reserved: func() string { return "Этот логин занят." },
 		},
 	},
-	Banner: BannerStrings{
-		Before: func(date string) string {
-			return fmt.Sprintf("Номинация вопросов откроется %s.", date)
-		},
-		Nomination: func(date string) string {
-			return fmt.Sprintf("Номинировать вопросы можно до %s включительно.", date)
-		},
-	},
 	Bot: BotStrings{
 		Login: BotLoginStrings{
 			Hint: func(url string) string {

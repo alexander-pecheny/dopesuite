@@ -214,10 +214,6 @@ export type Strings = {
       reserved: () => string;
     };
   };
-  banner: {
-    before: (date: string) => string;
-    nomination: (date: string) => string;
-  };
   bot: {
     login: {
       hint: (url: string) => string;

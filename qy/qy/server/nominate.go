@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
@@ -49,8 +50,40 @@ func (s *server) nominationOpen(c contest.Contest, sc route.Scope) bool {
 	return c.StageAt(s.now()) == contest.Nomination || sc.IsAdmin
 }
 
-func (s *server) handleNominatePage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+// nominationContest is the contest of the form's year, which must be the
+// current one: an earlier year's form is gone with its stage.
+func (s *server) nominationContest(r *http.Request) (contest.Contest, error) {
 	c, err := s.currentContest(r.Context())
+	if err != nil {
+		return c, err
+	}
+	if yearOf(strings.TrimPrefix(r.URL.Path, "/")) != c.Year {
+		return c, route.NotFound(str.Cms.NotFound())
+	}
+	return c, nil
+}
+
+func nominatePath(year int) string { return "/" + strconv.Itoa(year) + "/nominate" }
+
+// isNominatePath says whether p is some year's form, /{year}/nominate.
+func isNominatePath(p string) bool {
+	y := yearOf(strings.TrimPrefix(p, "/"))
+	return y != 0 && p == nominatePath(y)
+}
+
+// handleOldNominate sends the form's first address, /nominate, on to the
+// current year's.
+func (s *server) handleOldNominate(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	c, err := s.currentContest(r.Context())
+	if err != nil {
+		return err
+	}
+	http.Redirect(w, r, nominatePath(c.Year), http.StatusMovedPermanently)
+	return nil
+}
+
+func (s *server) handleNominatePage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	c, err := s.nominationContest(r)
 	if err != nil {
 		return err
 	}
@@ -84,7 +117,7 @@ func (s *server) handleNominate(w http.ResponseWriter, r *http.Request, sc route
 	if err := parseNominationForm(w, r); err != nil {
 		return err
 	}
-	c, err := s.currentContest(r.Context())
+	c, err := s.nominationContest(r)
 	if err != nil {
 		return err
 	}
@@ -117,7 +150,7 @@ func (s *server) handleNominate(w http.ResponseWriter, r *http.Request, sc route
 		return err
 	}
 	s.nudge()
-	return seeOther(w, r, "/nominate?done="+doneSaved)
+	return seeOther(w, r, nominatePath(c.Year)+"?done="+doneSaved)
 }
 
 func (s *server) saveNomination(ctx context.Context, year int, userID, rating int64, changes map[int]slotChange, slots map[int]slotView) error {
