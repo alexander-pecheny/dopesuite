@@ -1877,6 +1877,9 @@ var RU = Strings{
 			XlsxNoSheets: func() string { return "в xlsx нет листов" },
 			XlsxNoTeams:  func() string { return "в xlsx нет команд" },
 			XlsxOpen:     func(err string) string { return fmt.Sprintf("не удалось открыть xlsx: %s", err) },
+			XlsxPlayerUnknown: func(n string, name string) string {
+				return fmt.Sprintf("строка %s: игрок \"%s\" не найден в фесте", n, name)
+			},
 			XlsxTeamUnknown: func(n string, name string) string {
 				return fmt.Sprintf("строка %s: команда \"%s\" не найдена в фесте", n, name)
 			},

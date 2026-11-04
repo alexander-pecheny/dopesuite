@@ -656,6 +656,9 @@ type fromRandom struct{}
 
 func (fromRandom) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
 	candidates, err := randomSeedCandidates(ctx, tx, scope)
+	if err == nil {
+		err = ensurePlayerCandidates(ctx, tx, scope.FestID, candidates)
+	}
 	return seeding{source: "random", label: dopestrings.Default.Imports.SeedSource.Random(), candidates: candidates}, err
 }
 

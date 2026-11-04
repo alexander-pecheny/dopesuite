@@ -1282,6 +1282,7 @@ export type Strings = {
       xlsxNoSheets: () => string;
       xlsxNoTeams: () => string;
       xlsxOpen: (err: string) => string;
+      xlsxPlayerUnknown: (n: string, name: string) => string;
       xlsxTeamUnknown: (n: string, name: string) => string;
     };
     seedPlayers: {

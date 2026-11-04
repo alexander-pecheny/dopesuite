@@ -36,6 +36,8 @@ xlsx_no_sheets = "в xlsx нет листов"
 # A sheet row naming a team the fest roster does not have; {{.n}} is the
 # 1-based sheet row, {{.name}} the cell's text.
 xlsx_team_unknown = 'строка {{.n}}: команда "{{.name}}" не найдена в фесте'
+# The same in a Game that seats players (личная СИ): a name no fest player has.
+xlsx_player_unknown = 'строка {{.n}}: игрок "{{.name}}" не найден в фесте'
 # A row's basket column that is not a number.
 xlsx_basket_not_number = 'строка {{.n}}: корзина "{{.basket}}" — не число'
 xlsx_no_teams = "в xlsx нет команд"

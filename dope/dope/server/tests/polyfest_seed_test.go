@@ -1,11 +1,18 @@
 package tests
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
+	"github.com/xuri/excelize/v2"
 )
 
 // Polyfest's КИнСбФ seeds on the ОД's first game day, whatever has been played
@@ -136,5 +143,79 @@ func TestASeedCountsToursOfAnOdAlone(t *testing.T) {
 		if resp.Code == http.StatusOK || !strings.Contains(resp.Body.String(), want) {
 			t.Errorf("seed: %s → %d %s, want a refusal saying %q", seed, resp.Code, resp.Body.String(), want)
 		}
+	}
+}
+
+// Polyfest's personal СИ seeds on its online qualifier, uploaded as a sheet of
+// players' names. The sheet used to be matched against the teams alone, so no
+// player was ever found; now each name is a fest player, who becomes the
+// Game's Participant, and only the players the sheet names do.
+func TestPolyfestSiSeedsOnTheQualifierSheet(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	for i := 1; i <= 40; i++ {
+		if _, err := db.Exec(`insert into fest_players(fest_id, first_name, last_name) values(?, ?, ?)`, festID, "Игрок", fmt.Sprintf("Номер%d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gameID := createSchemeGame(t, db, festID, "si", "СИ молодёжь", readFile(t, "../../../scripts/polyfest/si-youth.dsl"))
+	upload := func(names []string) *httptest.ResponseRecorder {
+		t.Helper()
+		book := excelize.NewFile()
+		book.SetCellValue("Sheet1", "A1", "Игрок")
+		for i, name := range names {
+			if err := book.SetCellValue("Sheet1", fmt.Sprintf("A%d", i+2), name); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var sheet, body bytes.Buffer
+		if err := book.Write(&sheet); err != nil {
+			t.Fatal(err)
+		}
+		form := multipart.NewWriter(&body)
+		part, err := form.CreateFormFile("file", "qualifier.xlsx")
+		if err != nil {
+			t.Fatal(err)
+		}
+		part.Write(sheet.Bytes())
+		form.Close()
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/fest/%d/games/%d/seed-import/xlsx", festID, gameID), &body)
+		req.Header.Set("Content-Type", form.FormDataContentType())
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+		resp := httptest.NewRecorder()
+		srv.HandleScopedAPI(resp, req)
+		return resp
+	}
+	if resp := upload([]string{"Игрок Номер1", "Кто-то Другой"}); resp.Code == http.StatusOK || !strings.Contains(resp.Body.String(), `игрок "Кто-то Другой" не найден`) {
+		t.Fatalf("an unknown name: %d %s, want it refused as a player", resp.Code, resp.Body.String())
+	}
+	var names []string
+	for i := 40; i > 8; i-- {
+		names = append(names, fmt.Sprintf("Игрок Номер%d", i))
+	}
+	resp := upload(names)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("seed-import/xlsx: %d %s", resp.Code, resp.Body.String())
+	}
+	var view struct {
+		Rows []struct {
+			Name string `json:"name"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Rows) != 32 || view.Rows[0].Name != "Игрок Номер40" || view.Rows[31].Name != "Игрок Номер9" {
+		t.Fatalf("seeded %d players, first %+v; want the sheet's 32 in its order", len(view.Rows), view.Rows)
+	}
+	var participants int
+	if err := db.QueryRow(`select count(*) from participants where fest_id = ? and roster = 'player'`, festID).Scan(&participants); err != nil {
+		t.Fatal(err)
+	}
+	if participants != 32 {
+		t.Fatalf("%d player Participants, want the 32 the sheet names", participants)
 	}
 }

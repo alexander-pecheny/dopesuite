@@ -1304,6 +1304,7 @@ shootout: true
       xlsxNoSheets: () => "в xlsx нет листов",
       xlsxNoTeams: () => "в xlsx нет команд",
       xlsxOpen: (err: string) => `не удалось открыть xlsx: ${err}`,
+      xlsxPlayerUnknown: (n: string, name: string) => `строка ${n}: игрок "${name}" не найден в фесте`,
       xlsxTeamUnknown: (n: string, name: string) => `строка ${n}: команда "${name}" не найдена в фесте`,
     },
     seedPlayers: {

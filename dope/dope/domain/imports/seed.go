@@ -115,6 +115,9 @@ type seedRosterTeam struct {
 	// Participant is set for an assembled team (a troika): it has no fest
 	// number and no fest_teams row, so it is named by its Participant id.
 	Participant int64
+	// FestPlayer is set for a Game that seats players: a fest player, who
+	// becomes a Participant only once a seed names them.
+	FestPlayer int64
 }
 
 func LoadSeedImportView(eng *core.Engine, ctx context.Context, scope core.FestScope) (SeedImportView, error) {
@@ -152,6 +155,9 @@ type seedCandidate struct {
 	// ParticipantID names the Participant itself when the source knows it
 	// and a fest number would not find it: a troika, a player, a one-off.
 	ParticipantID int64
+	// festPlayer is a fest player the seed names who may not be a
+	// Participant yet (ensurePlayerCandidates makes them one).
+	festPlayer int64
 }
 
 // A SeedSource ranks the fest's Participants for a Game's seeding: the
@@ -261,6 +267,9 @@ func (f fromXLSX) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope)
 		return seeding{}, err
 	}
 	candidates, err := parseSeedXLSX(f.file, scope.GameID, roster)
+	if err == nil {
+		err = ensurePlayerCandidates(ctx, tx, scope.FestID, candidates)
+	}
 	return seeding{source: "xlsx", label: "xlsx", candidates: candidates}, err
 }
 
@@ -332,6 +341,9 @@ func parseSeedXLSX(file io.Reader, gameID int64, roster []seedRosterTeam) ([]see
 			if headerish {
 				continue
 			}
+			if len(roster) > 0 && roster[0].FestPlayer > 0 {
+				return nil, corei18n.User(dopestrings.Default.Imports.Seed.XlsxPlayerUnknown(strconv.Itoa(i+1), key))
+			}
 			return nil, corei18n.User(dopestrings.Default.Imports.Seed.XlsxTeamUnknown(strconv.Itoa(i+1), key))
 		}
 		basket := 0
@@ -361,9 +373,27 @@ func parseSeedXLSX(file io.Reader, gameID int64, roster []seedRosterTeam) ([]see
 	}
 	candidates := make([]seedCandidate, len(parsed))
 	for i, row := range parsed {
-		candidates[i] = seedCandidate{SourceRank: i + 1, Name: row.team.Name, Number: int(row.team.Number), ParticipantID: row.team.Participant}
+		candidates[i] = seedCandidate{SourceRank: i + 1, Name: row.team.Name, Number: int(row.team.Number),
+			ParticipantID: row.team.Participant, festPlayer: row.team.FestPlayer}
 	}
 	return candidates, nil
+}
+
+// ensurePlayerCandidates makes each fest player a seed names a Participant,
+// which is what the list seats. Only the named ones: a qualifier's 64 of a
+// fest's 360 players.
+func ensurePlayerCandidates(ctx context.Context, tx *sql.Tx, festID int64, candidates []seedCandidate) error {
+	for i, c := range candidates {
+		if c.festPlayer == 0 || c.ParticipantID != 0 {
+			continue
+		}
+		id, err := EnsurePlayerParticipantTx(ctx, tx, festID, c.festPlayer)
+		if err != nil {
+			return err
+		}
+		candidates[i].ParticipantID = id
+	}
+	return nil
 }
 
 // lotKey is what a team's lot is drawn on: its fest number, or for a troika,
@@ -371,6 +401,9 @@ func parseSeedXLSX(file io.Reader, gameID int64, roster []seedRosterTeam) ([]see
 func (t seedRosterTeam) lotKey() int64 {
 	if t.Number > 0 {
 		return t.Number
+	}
+	if t.FestPlayer > 0 {
+		return t.FestPlayer
 	}
 	return t.Participant
 }
@@ -827,7 +860,8 @@ func randomSeedCandidates(ctx context.Context, q store.Queryer, scope core.FestS
 	sort.Slice(lots, func(i, j int) bool { return lots[i].lot < lots[j].lot })
 	candidates := make([]seedCandidate, len(lots))
 	for i, entry := range lots {
-		candidates[i] = seedCandidate{SourceRank: i + 1, Name: entry.team.Name, Number: int(entry.team.Number), ParticipantID: entry.team.Participant}
+		candidates[i] = seedCandidate{SourceRank: i + 1, Name: entry.team.Name, Number: int(entry.team.Number),
+			ParticipantID: entry.team.Participant, festPlayer: entry.team.FestPlayer}
 	}
 	return candidates, nil
 }
@@ -841,6 +875,14 @@ func seedRosterForGame(ctx context.Context, q store.Queryer, scope core.FestScop
 	if err := q.QueryRowContext(ctx, `select game_type from games where fest_id = ? and id = ?`,
 		scope.FestID, scope.GameID).Scan(&gameType); err != nil {
 		return nil, err
+	}
+	if KindOf(gameType) == KindPlayer {
+		return store.CollectRows(ctx, q, `
+select id, trim(first_name || ' ' || last_name) from fest_players where fest_id = ? order by id`, []any{scope.FestID},
+			func(rows *sql.Rows) (seedRosterTeam, error) {
+				var player seedRosterTeam
+				return player, rows.Scan(&player.FestPlayer, &player.Name)
+			})
 	}
 	if !games.SeatsTroikas(gameType) {
 		return loadSeedRosterTeams(ctx, q, scope.FestID)
