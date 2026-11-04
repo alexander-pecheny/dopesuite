@@ -33,6 +33,9 @@ export interface BoardIndex {
   lists: IndexList[];
   cards: IndexCard[];
   comments: IndexComment[];
+  // The board rev the comments were last read at (ADR-0023), which the next
+  // refresh sends as /comments?since=. Absent: it downloads them all.
+  commentsRev?: number;
 }
 
 // One result as a tile shows it.
@@ -110,23 +113,50 @@ export async function putCards(
       lists,
       cards,
       comments: prev.comments.filter((c) => live.has(c.card)),
+      commentsRev: prev.commentsRev,
     });
   }).catch(() => undefined);
 }
 
-// refreshComments pulls every comment on the board in one request and stores the
-// plaintext. Online-only and best-effort: the comments are a bonus, the cards
-// are indexed either way.
+// refreshComments brings the board's comments in the index up to date and
+// stores their plaintext. The first time it downloads every comment. After
+// that it sends the rev it last read at and gets back only the comments added,
+// edited or deleted since (ADR-0023), so a board that is opened again on a
+// slow connection does not download every comment again. Online-only and
+// best-effort: the comments are a bonus, the cards are indexed either way.
 export async function refreshComments(boardId: number, dk: DataKey): Promise<void> {
   if (!xySync.isOnline()) return;
   try {
-    const rows = (await xyApp.fetchJSON(`/api/boards/${boardId}/comments`)) as CommentRow[];
-    const comments = await decryptComments(dk, rows);
+    const since = (await load(boardId))?.commentsRev;
+    const delta = (await xyApp.fetchJSON(
+      `/api/boards/${boardId}/comments?since=${since ?? ""}`,
+    )) as CommentsDelta;
+    const changed = await decryptComments(dk, delta.comments || []);
     await serially(boardId, async () => {
       const prev = (await load(boardId)) || empty();
-      await xyStore.putIndex(boardId, { ...prev, comments });
+      // Another refresh got here first and moved the rev on. What it stored is
+      // newer than this delta, so applying this one could bring back an old
+      // version of an edited comment.
+      if (prev.commentsRev !== since) return;
+      const comments = delta.full ? changed : mergeComments(prev.comments, delta, changed);
+      await xyStore.putIndex(boardId, { ...prev, comments, commentsRev: delta.rev });
     });
   } catch (_) { /* nothing to do: the index keeps the comments it had */ }
+}
+
+// mergeComments applies a delta to the comments an index already holds. Every
+// row in the delta replaces the comment with its id, and a row whose text is
+// now empty (an edit that left only images) removes it. The order by id is
+// kept, which is the order the full download returns.
+export function mergeComments(
+  prev: IndexComment[],
+  delta: Pick<CommentsDelta, "comments" | "gone">,
+  changed: IndexComment[],
+): IndexComment[] {
+  const drop = new Set<number>(delta.gone || []);
+  for (const row of delta.comments || []) drop.add(row.id);
+  const out = prev.filter((c) => !drop.has(c.id)).concat(changed);
+  return out.sort((a, b) => a.id - b.id);
 }
 
 // ---- building from ciphertext ----
@@ -176,6 +206,11 @@ async function decAll(dk: DataKey, b64s: (string | null | undefined)[]): Promise
 // What GET /api/boards/{id}/comments returns, per comment.
 interface CommentRow { id: number; card_id: number; payload: string }
 
+// What GET /api/boards/{id}/comments?since= returns. With full set, comments
+// is every live comment. Otherwise it is the comments added or edited after
+// since, and gone is the ids deleted after it.
+export interface CommentsDelta { rev: number; full: boolean; comments: CommentRow[]; gone: number[] }
+
 async function decryptComments(dk: DataKey, rows: CommentRow[]): Promise<IndexComment[]> {
   const live = rows.filter((row) => row.card_id && row.payload);
   // Search wants a comment's words, not the envelope a comment with images is
@@ -221,7 +256,7 @@ export async function prewarm(boards: BoardRef[], progress: (done: number, total
       const pending = await xySync.pendingCountForBoard(b.id);
       let snap: BoardSnapshot | null | undefined;
       if (pending === 0) {
-        snap = (await xyApp.fetchJSON(`/api/boards/${b.id}`)) as BoardSnapshot;
+        snap = await xySync.fetchSnapshot(b.id, xyApp.fetchJSON);
         await xySync.saveSnapshot(b.id, snap);
       } else {
         snap = await xySync.loadSnapshot(b.id);
@@ -339,5 +374,5 @@ export function search(
 }
 
 export const xySearchIndex = {
-  load, all, forget, putCards, refreshComments, decrypt, indexBoard, prewarm, search, cardTitle,
+  load, all, forget, putCards, refreshComments, mergeComments, decrypt, indexBoard, prewarm, search, cardTitle,
 };

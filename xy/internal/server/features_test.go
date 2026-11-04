@@ -784,6 +784,109 @@ func TestBoardComments(t *testing.T) {
 	}
 }
 
+// TestBoardCommentsDelta covers /comments?since=: the first call returns every
+// comment, and a call with the rev it gave returns only what was added, edited
+// or deleted after it.
+func TestBoardCommentsDelta(t *testing.T) {
+	c, boardID, listID := boardWithList(t)
+	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description": enc("? q"), "rank": "m"})
+	mustStatus(t, resp, 200)
+	var card struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &card)
+	cardID := itoa(card.ID)
+	comment := func(text string) {
+		mustStatus(t, c.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload": enc(text)}), 204)
+	}
+	delta := func(since string) boardCommentsDelta {
+		resp := c.do("GET", "/api/boards/"+boardID+"/comments?since="+since, nil)
+		mustStatus(t, resp, 200)
+		var d boardCommentsDelta
+		c.decode(resp, &d)
+		return d
+	}
+	comment("первый")
+	comment("второй")
+	comment("третий")
+
+	first := delta("")
+	if !first.Full || len(first.Comments) != 3 {
+		t.Fatalf("first delta = %+v, want all 3 comments and full", first)
+	}
+	ids := []int64{first.Comments[0].ID, first.Comments[1].ID, first.Comments[2].ID}
+	since := strconv.FormatInt(first.Rev, 10)
+
+	if d := delta(since); d.Full || len(d.Comments) != 0 || len(d.Gone) != 0 {
+		t.Fatalf("delta with nothing changed = %+v, want empty", d)
+	}
+	// A card edit is not a comment change.
+	mustStatus(t, c.do("PATCH", "/api/cards/"+cardID, map[string]string{"description": enc("? q2")}), 204)
+	if d := delta(since); len(d.Comments) != 0 || len(d.Gone) != 0 {
+		t.Fatalf("delta after a card edit = %+v, want no comments", d)
+	}
+
+	mustStatus(t, c.do("PATCH", "/api/comments/"+itoa(ids[0]), map[string]string{"payload": enc("первый, исправлен")}), 204)
+	mustStatus(t, c.do("DELETE", "/api/comments/"+itoa(ids[1]), nil), 204)
+	comment("четвёртый")
+	d := delta(since)
+	if d.Full {
+		t.Fatalf("delta = %+v, want incremental", d)
+	}
+	if len(d.Comments) != 2 || d.Comments[0].ID != ids[0] || d.Comments[0].Payload != enc("первый, исправлен") || d.Comments[1].Payload != enc("четвёртый") {
+		t.Fatalf("changed = %+v, want the edit and the new comment", d.Comments)
+	}
+	if len(d.Gone) != 1 || d.Gone[0] != ids[1] {
+		t.Fatalf("gone = %v, want [%d]", d.Gone, ids[1])
+	}
+
+	// A since the server cannot use gets everything again: junk, and a rev
+	// from the future (a database restored from a backup).
+	for _, bad := range []string{"junk", strconv.FormatInt(d.Rev+100, 10)} {
+		if d := delta(bad); !d.Full || len(d.Comments) != 3 {
+			t.Fatalf("delta from %q = %+v, want full with 3 comments", bad, d)
+		}
+	}
+}
+
+// TestBoardSnapshotRevalidates checks that the board snapshot carries an
+// ETag, that asking again with it gets a 304 with no body, and that any change
+// to the board gets a fresh 200.
+func TestBoardSnapshotRevalidates(t *testing.T) {
+	c, boardID, listID := boardWithList(t)
+	get := func(etag string) *http.Response {
+		req, err := http.NewRequest("GET", c.base+"/api/boards/"+boardID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if etag != "" {
+			req.Header.Set("If-None-Match", etag)
+		}
+		for _, ck := range c.jar {
+			req.AddCookie(ck)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = resp.Body.Close() })
+		return resp
+	}
+	resp := get("")
+	mustStatus(t, resp, 200)
+	etag := resp.Header.Get("ETag")
+	if etag == "" || resp.Header.Get("Cache-Control") != "private, no-cache" {
+		t.Fatalf("etag %q, cache-control %q", etag, resp.Header.Get("Cache-Control"))
+	}
+	resp = get(etag)
+	mustStatus(t, resp, http.StatusNotModified)
+	// Caddy's encode appends the encoding to the tag it passes on.
+	mustStatus(t, get(strings.TrimSuffix(etag, `"`)+`-gzip"`), http.StatusNotModified)
+
+	mustStatus(t, c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description": enc("? q"), "rank": "m"}), 200)
+	mustStatus(t, get(etag), 200)
+}
+
 // TestCardSeenRoundTrip covers cards.seen (schema v26): a card's hand
 // corrections to who saw it. Same create/patch/clear contract as alias.
 func TestCardSeenRoundTrip(t *testing.T) {

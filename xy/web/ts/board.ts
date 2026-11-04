@@ -243,6 +243,7 @@ async function forgetLocal(): Promise<void> {
   people.forget(boardId);
   await xySearchIndex.forget(boardId);
   try { await xyStore.deleteSnapshot(boardId); } catch (_) {}
+  try { await xyStore.deleteSnapshotBase(boardId); } catch (_) {}
 }
 
 // deleteBoard and leaveBoard take the name rather than reading `state`: the

@@ -26,6 +26,10 @@ type cardDTO struct {
 	// read against. Deliberately NOT a timeline event — the column already
 	// exists on every card ever made, where an event would only cover new ones.
 	CreatedAt string `json:"created_at"`
+	// Same marks a card in a delta whose content has not changed since the
+	// delta's base: only ListID and Rank are filled, and the client keeps the
+	// rest of what it has.
+	Same bool `json:"same,omitempty"`
 }
 
 // cardLabelDTO is one label ASSIGNMENT. SessionID nil = the author's own view of
@@ -75,22 +79,18 @@ from cards where board_id = ? and deleted_at is null order by rank`, boardID)
 		if err := rows.Scan(&c.ID, &c.ListID, &c.Kind, &desc, &c.Rank, &handoutMeta, &alias, &seen, &c.CreatedAt); err != nil {
 			return nil, err
 		}
-		c.Desc = b64(desc)
-		if handoutMeta != nil {
-			s := b64(handoutMeta)
-			c.HandoutMeta = &s
-		}
-		if alias != nil {
-			s := b64(alias)
-			c.Alias = &s
-		}
-		if seen != nil {
-			s := b64(seen)
-			c.Seen = &s
-		}
+		fillCardContent(&c, desc, handoutMeta, alias, seen)
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// fillCardContent sets a card's content fields from their columns.
+func fillCardContent(c *cardDTO, desc, handoutMeta, alias, seen []byte) {
+	c.Desc = b64(desc)
+	c.HandoutMeta = optB64(handoutMeta)
+	c.Alias = optB64(alias)
+	c.Seen = optB64(seen)
 }
 
 type createCardRequest struct {

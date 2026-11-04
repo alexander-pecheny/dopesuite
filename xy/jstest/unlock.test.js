@@ -62,6 +62,7 @@ function makeDeps(opts = {}) {
       pendingCountForBoard: async () => opts.pending || 0,
       saveSnapshot: async (_id, snap) => { calls.saved.push(snap); },
       loadSnapshot: async () => (opts.mirror !== undefined ? structuredClone(opts.mirror) : undefined),
+      fetchSnapshot: (id, fetchJSON) => fetchJSON(`/api/boards/${id}`),
     },
     net: {
       requireLogin: async () => (opts.loggedOut ? null : opts.online === false ? { offline: true } : { user_id: 1 }),

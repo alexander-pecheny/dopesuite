@@ -49,6 +49,17 @@ where b.deleted_at < ?1 or c.deleted_at < ?1 or l.deleted_at < ?1 or a.deleted_a
 		if err := rows.Close(); err != nil {
 			return err
 		}
+		// Before a deleted card or comment goes for good, the board
+		// remembers the highest rev it had. A client whose cursor is older
+		// than that could not learn of the deletion from a delta, so it
+		// gets the whole board again (boardrev.go).
+		if _, err := tx.ExecContext(ctx, `update boards set reaped_rev = max(reaped_rev,
+			   coalesce((select max(rev) from cards c where c.board_id = boards.id and c.deleted_at < ?1), 0),
+			   coalesce((select max(rev) from timeline_events e where e.board_id = boards.id and e.deleted_at < ?1), 0))
+			 where id in (select board_id from cards where deleted_at < ?1
+			              union select board_id from timeline_events where deleted_at < ?1)`, cut); err != nil {
+			return err
+		}
 		// lists.group_id has no ON DELETE action, so live lists pointing at a
 		// reaped group must be unlinked first.
 		stmts := []string{

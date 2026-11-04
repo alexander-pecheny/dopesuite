@@ -187,7 +187,8 @@ function renameStoredFields(t: IDBTransaction): void {
 //   attachments key=attId(number)    → { mime, bytes:Uint8Array, rev }
 //   outbox     keyPath="seq" auto    → queued mutation op
 //   idmap      key=tempId(number<0)  → realId(number)
-//   meta       key=string            → scalar (tempCounter, the telegram target…)
+//   meta       key=string            → scalar (tempCounter, the telegram target…),
+//                                       and "base:<boardId>" → a snapshot's delta base
 //   searchindex key=boardId(number)  → one board's Search Index, PLAINTEXT (ADR-0008)
 const STORES = ["snapshots", "boardlist", "timeline", "attachments", "outbox", "idmap", "meta", "searchindex"];
 
@@ -256,6 +257,16 @@ const putSnapshot = (boardId: number | string, snap: BoardSnapshot): Promise<IDB
   tx("snapshots", "readwrite", (s) => req(s.put(snap, Number(boardId))));
 const deleteSnapshot = (boardId: number | string): Promise<undefined> =>
   tx("snapshots", "readwrite", (s) => req(s.delete(Number(boardId))));
+// The base is the last snapshot exactly as the server sent it, which a delta
+// is merged onto (snapdelta.ts). It lives apart from the snapshot above,
+// because that one also carries the edits still waiting in the outbox.
+const baseKey = (boardId: number | string): string => "base:" + Number(boardId);
+const getSnapshotBase = (boardId: number | string): Promise<BoardSnapshot | undefined> =>
+  tx("meta", "readonly", (s) => req<BoardSnapshot | undefined>(s.get(baseKey(boardId))));
+const putSnapshotBase = (boardId: number | string, snap: BoardSnapshot): Promise<IDBValidKey> =>
+  tx("meta", "readwrite", (s) => req(s.put(snap, baseKey(boardId))));
+const deleteSnapshotBase = (boardId: number | string): Promise<undefined> =>
+  tx("meta", "readwrite", (s) => req(s.delete(baseKey(boardId))));
 
 // ---- search index (PLAINTEXT — see searchindex.ts and ADR-0008) ----
 const getIndex = (boardId: number | string): Promise<unknown | undefined> =>
@@ -353,6 +364,7 @@ async function nextTempId(): Promise<number> {
 
 export const xyStore = {
   getSnapshot, putSnapshot, deleteSnapshot,
+  getSnapshotBase, putSnapshotBase, deleteSnapshotBase,
   getBoardList, putBoardList,
   getIndex, putIndex, deleteIndex, allIndexes,
   getTimeline, putTimeline,

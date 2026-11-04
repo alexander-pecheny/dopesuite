@@ -16,6 +16,7 @@
 // tricky logic and take no globals, so jstest can exercise them without IndexedDB.
 import { xyStore } from "./store.js";
 import { xyInstance } from "./instance.js";
+import { fetchSnapshot as fetchSnapshotVia } from "./snapdelta.js";
 import type { BoardSnapshot, OpBody, OutboxOp, SnapshotCardLabel, SnapshotPlaying, TimelineEvent } from "./store.js";
 
 const HTTP_NO_CONTENT = 204;
@@ -456,6 +457,16 @@ async function saveSnapshot(boardId: number | string, snap: BoardSnapshot): Prom
 async function loadSnapshot(boardId: number | string): Promise<BoardSnapshot | undefined> {
   return direct() ? undefined : xyStore.getSnapshot(boardId);
 }
+// fetchSnapshot downloads a board's snapshot from the server, as a delta when
+// this device holds the board already (snapdelta.ts). A local xy keeps no base,
+// so it always reads the board whole, from its own disk.
+async function fetchSnapshot(boardId: number, fetchJSON: (url: string) => Promise<unknown>): Promise<BoardSnapshot> {
+  return fetchSnapshotVia(boardId, {
+    fetchJSON,
+    getBase: (b) => (direct() ? Promise.resolve(undefined) : xyStore.getSnapshotBase(b)),
+    putBase: async (b, snap) => { if (!direct()) await xyStore.putSnapshotBase(b, snap); },
+  });
+}
 async function pendingCount(): Promise<number> {
   pending = direct() ? 0 : await xyStore.countOps();
   return pending;
@@ -517,7 +528,7 @@ function start(): void {
 export const xySync = {
   mutate, flush, start,
   isOnline, requireOnline, status, onStatus, onBoardSynced,
-  saveSnapshot, loadSnapshot, pendingCount, pendingCountForBoard, pendingOps,
+  saveSnapshot, loadSnapshot, fetchSnapshot, pendingCount, pendingCountForBoard, pendingOps,
   timelineFor, cacheTimeline,
   getAttachment, putAttachment, getBoardList, putBoardList,
   // pure helpers (exported for tests)

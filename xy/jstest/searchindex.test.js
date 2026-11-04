@@ -77,3 +77,24 @@ test("a card is titled by its alias, else by what the board previews", () => {
   assert.equal(cardTitle(card(1, "? Кто?\n! Пушкин", "про Пушкина")), "про Пушкина");
   assert.equal(cardTitle(card(1, "? Кто написал «Онегина»?\n! Пушкин")), "Кто написал «Онегина»?");
 });
+
+test("a comments delta replaces edited comments, drops deleted ones and adds new ones", () => {
+  const { mergeComments } = xySearchIndex;
+  const prev = [
+    { card: 1, id: 10, text: "старый" },
+    { card: 1, id: 11, text: "удалят" },
+    { card: 2, id: 12, text: "останется" },
+    { card: 2, id: 13, text: "станет картинкой" },
+  ];
+  const delta = {
+    comments: [{ id: 10, card_id: 1, payload: "x" }, { id: 13, card_id: 2, payload: "x" }, { id: 14, card_id: 1, payload: "x" }],
+    gone: [11],
+  };
+  // 13 was edited down to images only, so it did not decrypt to any text.
+  const changed = [{ card: 1, id: 14, text: "новый" }, { card: 1, id: 10, text: "исправленный" }];
+  assert.deepEqual(mergeComments(prev, delta, changed), [
+    { card: 1, id: 10, text: "исправленный" },
+    { card: 2, id: 12, text: "останется" },
+    { card: 1, id: 14, text: "новый" },
+  ]);
+});

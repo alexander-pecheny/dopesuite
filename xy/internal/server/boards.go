@@ -206,7 +206,16 @@ values(?, ?, ?, ?, ?, ?, ?, ?)`,
 
 // boardSnapshot is the single-fetch board payload the UI bootstraps from.
 type boardSnapshot struct {
-	ID         int64          `json:"id"`
+	ID int64 `json:"id"`
+	// Rev is the board's revision this snapshot was read at (ADR-0023). The
+	// client sends it back as ?since= to get only what changed after it.
+	Rev int64 `json:"rev"`
+	// Since is set on a delta: the rev it starts from. Cards then holds only
+	// the cards changed after it, GoneCards the ones deleted, and CardLabels,
+	// CardSessions and Votes only the rows of the changed cards. Everything
+	// else is complete, as in a full snapshot.
+	Since      *int64         `json:"since,omitempty"`
+	GoneCards  []int64        `json:"gone_cards,omitempty"`
 	Name       string         `json:"name"`
 	Role       string         `json:"role"`
 	Lists      []listDTO      `json:"lists"`
@@ -274,11 +283,24 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, TourTesters: []tourTesterDTO{}, TourDeclarations: []tourDeclarationDTO{}, Unread: map[string]unreadDTO{}}
+	// One read transaction, so the rev and every row come from the same
+	// snapshot of the database.
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if handleErr(w, err) {
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+	var q querier = tx
+	rev, err := readBoardRev(ctx, q, bid)
+	if handleErr(w, err) {
+		return
+	}
+	since := rev.deltaBase(r.URL.Query())
+	snap := boardSnapshot{Rev: rev.rev, ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, TourTesters: []tourTesterDTO{}, TourDeclarations: []tourDeclarationDTO{}, Unread: map[string]unreadDTO{}}
 
 	var name sql.NullString
 	var token []byte
-	if err := s.db.QueryRowContext(ctx, `select name, rating_token from boards where id = ?`, bid).Scan(&name, &token); handleErr(w, err) {
+	if err := q.QueryRowContext(ctx, `select name, rating_token from boards where id = ?`, bid).Scan(&name, &token); handleErr(w, err) {
 		return
 	}
 	snap.Name = name.String
@@ -286,7 +308,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		t := b64(token)
 		snap.RatingToken = &t
 	}
-	votes, err := scanVotes(ctx, s.db, bid)
+	votes, err := scanVotes(ctx, q, bid, since)
 	if handleErr(w, err) {
 		return
 	}
@@ -295,7 +317,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	// The caller's per-user display prefs (see boardSnapshot.Sizes /
 	// .DefaultAuthor), shared across all their boards — keyed on the user, not
 	// this board.
-	prefs, err := loadUserPrefs(ctx, s.db, uid)
+	prefs, err := loadUserPrefs(ctx, q, uid)
 	if handleErr(w, err) {
 		return
 	}
@@ -311,40 +333,44 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	snap.Timezone = prefs.Timezone.String
 	snap.SessionTitleMode = prefs.SessionTitleMode.String
 
-	lists, err := scanLists(ctx, s.db, bid)
+	lists, err := scanLists(ctx, q, bid)
 	if handleErr(w, err) {
 		return
 	}
 	snap.Lists = lists
 
-	groups, err := scanListGroups(ctx, s.db, bid)
+	groups, err := scanListGroups(ctx, q, bid)
 	if handleErr(w, err) {
 		return
 	}
 	snap.Groups = groups
 
-	cards, err := scanCards(ctx, s.db, bid)
+	if since == fullSnapshot {
+		snap.Cards, err = scanCards(ctx, q, bid)
+	} else {
+		snap.Since = &since
+		snap.Cards, snap.GoneCards, err = scanChangedCards(ctx, q, bid, since)
+	}
 	if handleErr(w, err) {
 		return
 	}
-	snap.Cards = cards
 
-	labels, err := scanLabels(ctx, s.db, bid)
+	labels, err := scanLabels(ctx, q, bid)
 	if handleErr(w, err) {
 		return
 	}
 	snap.Labels = labels
 
-	sessions, err := scanSessions(ctx, s.db, bid)
+	sessions, err := scanSessions(ctx, q, bid)
 	if handleErr(w, err) {
 		return
 	}
 	snap.Sessions = sessions
 
-	clRows, err := s.db.QueryContext(ctx, `
+	clRows, err := q.QueryContext(ctx, `
 select cl.card_id, cl.label_id, cl.session_id
 from card_labels cl join cards c on c.id = cl.card_id
-where c.board_id = ? and c.deleted_at is null`, bid)
+where c.board_id = ? and c.deleted_at is null and c.rev > ?`, bid, since)
 	if handleErr(w, err) {
 		return
 	}
@@ -361,7 +387,7 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 		snap.CardLabels = append(snap.CardLabels, a)
 	}
 
-	ttRows, err := s.db.QueryContext(ctx,
+	ttRows, err := q.QueryContext(ctx,
 		`select list_id, group_id, session_id from tour_testers where board_id = ?`, bid)
 	if handleErr(w, err) {
 		return
@@ -385,7 +411,7 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 		snap.TourTesters = append(snap.TourTesters, d)
 	}
 
-	tdRows, err := s.db.QueryContext(ctx,
+	tdRows, err := q.QueryContext(ctx,
 		`select list_id, group_id, names from tour_declarations where board_id = ?`, bid)
 	if handleErr(w, err) {
 		return
@@ -408,10 +434,10 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 		snap.TourDeclarations = append(snap.TourDeclarations, d)
 	}
 
-	csRows, err := s.db.QueryContext(ctx, `
+	csRows, err := q.QueryContext(ctx, `
 select cs.card_id, cs.session_id
 from card_sessions cs join cards c on c.id = cs.card_id
-where c.board_id = ? and c.deleted_at is null`, bid)
+where c.board_id = ? and c.deleted_at is null and c.rev > ?`, bid, since)
 	if handleErr(w, err) {
 		return
 	}
@@ -427,7 +453,7 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 	// Unread map: one row per card that has at least one event, authored by
 	// someone else, past the caller's read watermark for that bucket. All-false
 	// cards are omitted entirely to keep the payload small.
-	unreadRows, err := s.db.QueryContext(ctx, `
+	unreadRows, err := q.QueryContext(ctx, `
 select e.card_id,
   max(case when `+sqlUnreadComment+` then 1 else 0 end),
   max(case when `+sqlUnreadContent+` then 1 else 0 end),
@@ -455,7 +481,7 @@ group by e.card_id`, uid, uid, uid, uid, bid)
 	if err := unreadRows.Err(); handleErr(w, err) {
 		return
 	}
-	writeJSON(w, snap)
+	writeJSONRevalidated(w, r, snap)
 }
 
 type patchBoardRequest struct {

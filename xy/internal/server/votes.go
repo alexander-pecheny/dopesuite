@@ -23,11 +23,14 @@ type voteDTO struct {
 	Value  string `json:"value"`
 }
 
-func scanVotes(ctx context.Context, q querier, boardID int64) ([]voteDTO, error) {
+// scanVotes lists the votes on the board's live cards whose rev is past
+// sinceRev; fullSnapshot lists them all.
+func scanVotes(ctx context.Context, q querier, boardID, sinceRev int64) ([]voteDTO, error) {
 	rows, err := q.QueryContext(ctx, `
 select v.card_id, v.user_id, v.value
 from card_votes v join cards c on c.id = v.card_id
-where c.board_id = ? and c.deleted_at is null order by v.card_id, v.user_id`, boardID)
+where c.board_id = ? and c.deleted_at is null and c.rev > ?
+order by v.card_id, v.user_id`, boardID, sinceRev)
 	if err != nil {
 		return nil, err
 	}

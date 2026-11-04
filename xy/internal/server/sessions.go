@@ -176,7 +176,7 @@ order by e.id`, sessionID)
 	if handleErr(w, err) {
 		return
 	}
-	writeJSON(w, out)
+	writeJSONRevalidated(w, r, out)
 }
 
 func (s *server) handleAddSessionComment(w http.ResponseWriter, r *http.Request) {

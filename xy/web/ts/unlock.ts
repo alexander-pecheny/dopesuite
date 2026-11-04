@@ -240,6 +240,9 @@ export interface UnlockSync {
   isOnline(): boolean;
   pendingCountForBoard(boardId: number): Promise<number>;
   saveSnapshot(boardId: number, snap: Snapshot): Promise<void>;
+  // fetchSnapshot downloads the board, as a delta when the device has it
+  // already (snapdelta.ts). Typed unknown for the same reason as loadSnapshot.
+  fetchSnapshot(boardId: number, fetchJSON: (url: string) => Promise<unknown>): Promise<unknown>;
   // Typed unknown (the mirror stores whatever shape sync.ts models); load()
   // casts back to Snapshot at this one boundary.
   loadSnapshot(boardId: number): Promise<unknown>;
@@ -438,7 +441,7 @@ export function createUnlock(deps: UnlockDeps): Unlock {
       const pending = await sync.pendingCountForBoard(boardId);
       if (sync.isOnline() && pending === 0) {
         try {
-          snap = (await net.fetchJSON(`/api/boards/${boardId}`)) as Snapshot;
+          snap = (await sync.fetchSnapshot(boardId, net.fetchJSON)) as Snapshot;
           await sync.saveSnapshot(boardId, snap);
         } catch (_) {
           snap = (await sync.loadSnapshot(boardId)) as Snapshot | null | undefined;
@@ -448,7 +451,7 @@ export function createUnlock(deps: UnlockDeps): Unlock {
         snap = (await sync.loadSnapshot(boardId)) as Snapshot | null | undefined;
         fromMirror = true;
         if (!snap && sync.isOnline()) {
-          snap = (await net.fetchJSON(`/api/boards/${boardId}`)) as Snapshot;
+          snap = (await sync.fetchSnapshot(boardId, net.fetchJSON)) as Snapshot;
           await sync.saveSnapshot(boardId, snap);
           fromMirror = false;
         }

@@ -178,9 +178,13 @@ internal/server/       package server — the whole HTTP server
   lists.go             lists + list groups: DTOs/scanners and handlers
   cards.go             cards: DTOs/scanners, create/patch/delete, card labels, Playings, tour testers
   labels.go            labels CRUD
+  boardrev.go          board revisions (ADR-0023): the rev a ?since= delta starts from, and the
+                       cards it sends. The numbering itself is the triggers in db.go (revTriggers),
+                       and TestBoardDeltaMatchesFullSnapshot checks a merged delta is the full board
   comments.go          the Timeline's DTOs and handlers. GET /api/boards/{id}/comments returns
-                       every live comment on a board in one response, as ciphertext, and only
-                       comments; this is what прогрев indexes. desc_edit events are deliberately
+                       the live comments on a board in one response, as ciphertext, and only
+                       comments; this is what прогрев indexes. With ?since= it returns only the
+                       ones changed after that board rev. desc_edit events are deliberately
                        left out, because their payload holds a whole question before and after
                        the edit. The file also has add, patch and delete for comments, plus
                        mentions and import
@@ -276,6 +280,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        which downloads every board this device can unlock so coverage stops
                        depending on which boards were opened. Dropped with the key
                        (forgetDK / board delete). search() is pure and jstest-covered
+    snapdelta.ts       the board snapshot as a delta (ADR-0023): fetchSnapshot asks with the rev
+                       of the base it holds and mergeSnapshot applies the answer. The base is the
+                       server's last snapshot as sent, kept apart from the mirror, which also
+                       carries queued edits
     store.ts           offline IndexedDB layer: snapshot/timeline/attachment mirror,
                        mutation outbox, temp-id↔real-id map (DB "xy-offline")
     instance.ts        what this xy offers: requireLogin reads /api/auth/me's `instance`, and

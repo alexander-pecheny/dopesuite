@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/url"
 	"time"
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
@@ -44,40 +45,116 @@ type boardCommentDTO struct {
 	Payload string `json:"payload"`
 }
 
-// handleGetBoardComments returns every live comment on a board's cards in one
+// boardCommentsDelta is what GET /api/boards/{id}/comments?since= returns.
+// Full says Comments is every live comment and the client should drop what it
+// had. Otherwise Comments is what was added or edited after the rev in since,
+// and Gone lists the ids deleted after it. Rev goes back as the next since.
+type boardCommentsDelta struct {
+	Rev      int64             `json:"rev"`
+	Full     bool              `json:"full"`
+	Comments []boardCommentDTO `json:"comments"`
+	Gone     []int64           `json:"gone"`
+}
+
+// handleGetBoardComments returns the comments on a board's cards in one
 // response, so the client's Search Index can cover comments without a request
 // per card. Comments only: a desc_edit payload carries the whole before/after
 // text of a question, which would make an index of every old wording.
+//
+// Without a since parameter it returns every live comment as a bare array,
+// which is what clients from before ADR-0023 expect. With since (empty on the
+// first call) it returns a boardCommentsDelta, so a board that is opened again
+// only downloads the comments that changed.
 func (s *server) handleGetBoardComments(w http.ResponseWriter, r *http.Request) {
 	_, bid, _, ok := s.requireBoard(w, r, "id")
 	if !ok {
 		return
 	}
-	rows, err := s.db.QueryContext(r.Context(), `
+	if !r.URL.Query().Has("since") {
+		out, err := boardComments(r.Context(), s.db, bid, fullSnapshot)
+		if handleErr(w, err) {
+			return
+		}
+		writeJSONRevalidated(w, r, out)
+		return
+	}
+	out, err := s.boardCommentsDelta(r.Context(), bid, r.URL.Query())
+	if handleErr(w, err) {
+		return
+	}
+	writeJSON(w, out)
+}
+
+func (s *server) boardCommentsDelta(ctx context.Context, bid int64, query url.Values) (boardCommentsDelta, error) {
+	// One read transaction, so the rev and the rows come from the same
+	// snapshot of the database.
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return boardCommentsDelta{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rev, err := readBoardRev(ctx, tx, bid)
+	if err != nil {
+		return boardCommentsDelta{}, err
+	}
+	since := rev.deltaBase(query)
+	out := boardCommentsDelta{Rev: rev.rev, Full: since == fullSnapshot, Gone: []int64{}}
+	if out.Comments, err = boardComments(ctx, tx, bid, since); err != nil || out.Full {
+		return out, err
+	}
+	out.Gone, err = deletedBoardComments(ctx, tx, bid, since)
+	return out, err
+}
+
+// boardComments lists the live comments on a board's live cards stamped
+// after since; fullSnapshot lists them all.
+func boardComments(ctx context.Context, q querier, bid, since int64) ([]boardCommentDTO, error) {
+	rows, err := q.QueryContext(ctx, `
 select e.id, e.card_id, e.payload
 from timeline_events e
 join cards c on c.id = e.card_id
 where c.board_id = ? and e.type = 'comment'
-  and e.deleted_at is null and c.deleted_at is null
-order by e.id`, bid)
-	if handleErr(w, err) {
-		return
+  and e.deleted_at is null and c.deleted_at is null and e.rev > ?
+order by e.id`, bid, since)
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 	out := []boardCommentDTO{}
 	for rows.Next() {
 		var e boardCommentDTO
 		var payload []byte
-		if err := rows.Scan(&e.ID, &e.CardID, &payload); handleErr(w, err) {
-			return
+		if err := rows.Scan(&e.ID, &e.CardID, &payload); err != nil {
+			return nil, err
 		}
 		e.Payload = b64(payload)
 		out = append(out, e)
 	}
-	if err := rows.Err(); handleErr(w, err) {
-		return
+	return out, rows.Err()
+}
+
+// deletedBoardComments lists the comments on a board deleted after since,
+// and the ones moved off a card. A comment on a deleted card is not listed:
+// the client drops those itself, along with the card.
+func deletedBoardComments(ctx context.Context, q querier, bid, since int64) ([]int64, error) {
+	rows, err := q.QueryContext(ctx, `
+select id from timeline_events
+where board_id = ? and type = 'comment' and rev > ?
+  and (deleted_at is not null or card_id is null)
+order by id`, bid, since)
+	if err != nil {
+		return nil, err
 	}
-	writeJSON(w, out)
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +174,7 @@ order by e.id`, cardID)
 	if handleErr(w, err) {
 		return
 	}
-	writeJSON(w, out)
+	writeJSONRevalidated(w, r, out)
 }
 
 type addCommentRequest struct {

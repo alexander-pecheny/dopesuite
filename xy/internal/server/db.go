@@ -875,6 +875,84 @@ alter table cards_v32 rename to cards;
 create index if not exists idx_cards_list on cards(list_id);
 create index if not exists idx_cards_board on cards(board_id);
 pragma foreign_keys=on;`)},
+	// v33 numbers every change to a board (ADR-0023), so a client that already
+	// holds the board downloads only what changed. The triggers do the
+	// numbering, not the handlers, so no write path can forget it. A migration
+	// that rebuilds cards, card_labels, card_sessions, card_votes or
+	// timeline_events drops their triggers and must create them again:
+	// TestRevTriggersExist fails until it does.
+	{Version: 33, Name: "board revisions", Up: schema.Exec(`
+alter table boards add column rev integer not null default 0;
+alter table boards add column reaped_rev integer not null default 0;
+alter table cards add column rev integer not null default 0;
+alter table cards add column content_rev integer not null default 0;
+alter table timeline_events add column rev integer not null default 0;
+create index if not exists idx_cards_board_rev on cards(board_id, rev);
+create index if not exists idx_timeline_board_rev on timeline_events(board_id, rev);
+` + revTriggers)},
+}
+
+// revTriggers number the changes to a board. Each one increments boards.rev
+// and stamps the changed row with the new value:
+//
+//   - cards.content_rev and cards.rev, when what a card says changes
+//     (its text, alias, seen, handout settings or kind) or it is created;
+//   - cards.rev alone, when it only moves or is deleted, so a client
+//     that has its text gets just the new position;
+//   - cards.rev, when its labels, Playings or votes change, so the client
+//     gets that card's sets again;
+//   - timeline_events.rev, when a comment on a card is added, edited,
+//     deleted or moved.
+//
+// SQLite's recursive_triggers is off, so a trigger's own update of the row does
+// not fire it again. An UPDATE that names a column fires its trigger even when
+// the value stays the same, which only costs a needless resend.
+var revTriggers = `
+create trigger if not exists cards_rev_insert after insert on cards begin
+  update boards set rev = rev + 1 where id = new.board_id;
+  update cards set rev = (select rev from boards where id = new.board_id),
+                   content_rev = (select rev from boards where id = new.board_id)
+  where id = new.id;
+end;
+create trigger if not exists cards_rev_content after update of description, alias, seen, handout_meta, kind, board_id on cards begin
+  update boards set rev = rev + 1 where id = new.board_id;
+  update cards set rev = (select rev from boards where id = new.board_id),
+                   content_rev = (select rev from boards where id = new.board_id)
+  where id = new.id;
+end;
+create trigger if not exists cards_rev_position after update of list_id, rank, deleted_at on cards begin
+  update boards set rev = rev + 1 where id = new.board_id;
+  update cards set rev = (select rev from boards where id = new.board_id) where id = new.id;
+end;
+` + cardChildRevTriggers("card_labels") + cardChildRevTriggers("card_sessions") + cardChildRevTriggers("card_votes") + `
+create trigger if not exists comments_rev_insert after insert on timeline_events
+when new.type = 'comment' and new.card_id is not null begin
+  update boards set rev = rev + 1 where id = new.board_id;
+  update timeline_events set rev = (select rev from boards where id = new.board_id) where id = new.id;
+end;
+create trigger if not exists comments_rev_update after update of payload, deleted_at, card_id on timeline_events
+when new.type = 'comment' begin
+  update boards set rev = rev + 1 where id = new.board_id;
+  update timeline_events set rev = (select rev from boards where id = new.board_id) where id = new.id;
+end;
+`
+
+// cardChildRevTriggers stamps a card with a new rev whenever a row of one of
+// its sets (labels, Playings, votes) is added, changed or removed.
+func cardChildRevTriggers(table string) string {
+	bump := func(row string) string {
+		return `
+  update boards set rev = rev + 1 where id = (select board_id from cards where id = ` + row + `.card_id);
+  update cards set rev = (select rev from boards where id = cards.board_id) where id = ` + row + `.card_id;`
+	}
+	return `
+create trigger if not exists ` + table + `_rev_insert after insert on ` + table + ` begin` + bump("new") + `
+end;
+create trigger if not exists ` + table + `_rev_update after update on ` + table + ` begin` + bump("old") + bump("new") + `
+end;
+create trigger if not exists ` + table + `_rev_delete after delete on ` + table + ` begin` + bump("old") + `
+end;
+`
 }
 
 func migrate(db *sql.DB) error { return schema.Apply(db, migrations) }
