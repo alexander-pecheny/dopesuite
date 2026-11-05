@@ -291,7 +291,7 @@ func linkFields(slot int, v slotView) []ui.Item {
 	return []ui.Item{ui.SpaceSM,
 		ui.Field(ui.Label(str.Nominate.Slot.Link()),
 			ui.Textfield(ui.Name(slotKey(slot, "link")), ui.Value(v.in.link), ui.Inputmode("url"))),
-		ui.Field(ui.Label(str.Nominate.Slot.Tournament()),
+		ui.Field(ui.Label(str.Nominate.Slot.Tournament()+" *"),
 			ui.Textfield(ui.Name(slotKey(slot, "tournament")), ui.Value(v.in.tournament), ui.Inputmode("url"))),
 	}
 }

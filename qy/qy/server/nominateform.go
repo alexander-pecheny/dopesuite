@@ -372,15 +372,16 @@ func (in slotInput) check() []string {
 	return errs
 }
 
-// linkErrors checks the publication's link and the tournament's: a question
-// with no publication needs its tournament.
+// linkErrors checks the question's link and the tournament's. Every question
+// needs its tournament: a gotquestions load fills it in when the question's
+// packet names one, and the nominator types it when it does not.
 func (in slotInput) linkErrors() []string {
 	var errs []string
 	if in.link != "" && !isWebLink(in.link) {
 		errs = append(errs, str.Nominate.Error.BadLink())
 	}
 	switch {
-	case !in.published() && in.tournament == "":
+	case in.tournament == "":
 		errs = append(errs, str.Nominate.Error.NoTournament())
 	case in.tournament != "" && !isWebLink(in.tournament):
 		errs = append(errs, str.Nominate.Error.BadTournament())

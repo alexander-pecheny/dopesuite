@@ -91,7 +91,7 @@ func slots(rating string, texts map[int]string) url.Values {
 	for i, t := range texts {
 		key := "slot" + strconv.Itoa(i) + "_"
 		f.Set(key+"raw", t)
-		if !strings.HasPrefix(t, "https://") {
+		if !strings.Contains(t, "gotquestions.online") {
 			f.Set(key+"tournament", "https://rating.chgk.info/tournament/12345")
 		}
 	}
@@ -130,7 +130,7 @@ func TestAContestEndToEnd(t *testing.T) {
 	w := newWorld(t)
 	w.ts.SetGotQuestions(gq.Fixed{777: {Question: question.Question{
 		Text: "Опубликованный вопрос про ИКС.", Answer: "икс", Author: "Пётр Петров",
-	}, Tournament: "Кубок"}})
+	}, Tournament: "Кубок", TournamentID: 12345}})
 	w.ts.SetModel(&qyserver.Model{Reply: `{"suggestions": [{"field": "comment", "quote": "так вышло", "replacement": "", "reason": "подпись"}]}`})
 
 	// ---- nomination ----

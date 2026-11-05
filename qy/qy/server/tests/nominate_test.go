@@ -24,7 +24,6 @@ func TestAQuestionPublishedOnTelegramIsTypedIn(t *testing.T) {
 	alice := w.user("alice")
 	form := slots("101", map[int]string{1: pasted("Вопрос из канала.", "канал", "Алиса")})
 	form.Set("slot1_link", "https://t.me/somechannel/12")
-	form.Del("slot1_tournament")
 	w.post(alice, "/2026/nominate", form, http.StatusSeeOther)
 	id := w.questionID("канал")
 	if n := w.count(`select count(*) from questions where id = ? and published = 1 and link = 'https://t.me/somechannel/12' and gq_id is null`, id); n != 1 {
@@ -160,6 +159,7 @@ func TestAGotQuestionsLinkLoadsIntoTheFields(t *testing.T) {
 
 	// A corrected answer is kept, with the gotquestions id.
 	form.Del("load")
+	form.Set("slot1_tournament", "https://rating.chgk.info/tournament/12345")
 	form.Set("slot1_text", "Опубликованный вопрос про ИКС.")
 	form.Set("slot1_answer", "икс (поправлено)")
 	form.Set("slot1_source", "книга")
@@ -188,6 +188,21 @@ func TestATelegramPostLoadsLikeAPastedQuestion(t *testing.T) {
 		!strings.Contains(body, `"handout":"https://cdn.example/pic.jpg"`) {
 		t.Errorf("load: %d %s", res.Code, body)
 	}
+}
+
+func TestAGotQuestionsQuestionWithNoTournamentAsksForOne(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.ts.SetGotQuestions(gq.Fixed{778: {Question: question.Question{
+		Text: "Вопрос из пакета без турнира.", Answer: "игрек", Source: "книга", Author: "Пётр Петров",
+	}, Tournament: "Синхрон"}})
+	alice := w.user("alice")
+	form := slots("101", map[int]string{1: "https://gotquestions.online/question/778"})
+	if body := w.post(alice, "/2026/nominate", form, http.StatusBadRequest); !strings.Contains(body, "Укажите ссылку на турнир") {
+		t.Error("a packet with no tournament should ask the nominator for its link")
+	}
+	form.Set("slot1_tournament", "https://rating.chgk.info/tournament/12345")
+	w.post(alice, "/2026/nominate", form, http.StatusSeeOther)
 }
 
 func TestALinkSavedUnloadedIsLoadedOnSave(t *testing.T) {
