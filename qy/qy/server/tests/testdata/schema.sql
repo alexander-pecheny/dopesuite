@@ -207,6 +207,16 @@ CREATE TABLE telegram_login_codes(
   consumed_at text
 );
 
+-- table telegram_posts
+CREATE TABLE telegram_posts(
+  channel text not null collate nocase,
+  message_id integer not null,
+  text text not null,
+  forwarded_by integer not null,
+  created_at text not null,
+  primary key(channel, message_id)
+);
+
 -- table users
 CREATE TABLE users(
   id integer primary key,

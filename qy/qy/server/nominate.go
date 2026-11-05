@@ -271,7 +271,7 @@ func (s *server) loadQuestion(ctx context.Context, link string) (loaded, error) 
 	if !telegram.IsPost(link) {
 		return loaded{}, errNotLoadable
 	}
-	post, err := s.tg.Post(ctx, link)
+	post, err := s.telegramPost(ctx, link)
 	if err != nil {
 		return loaded{}, err
 	}
@@ -440,7 +440,7 @@ func (s *server) handleLoadQuestion(w http.ResponseWriter, r *http.Request, _ ro
 	}
 	l, err := s.loadQuestion(r.Context(), strings.TrimSpace(req.Link))
 	if err != nil {
-		return userError(str.Nominate.Slot.LoadFailed())
+		return userError(loadFailure(req.Link))
 	}
 	q := l.q
 	return writeJSON(w, map[string]any{

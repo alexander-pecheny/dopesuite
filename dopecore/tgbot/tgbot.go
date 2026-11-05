@@ -56,6 +56,20 @@ type Message struct {
 	// carries them, which is how a poster finds the message to reply to.
 	ForwardFromChat      *Chat `json:"forward_from_chat"`
 	ForwardFromMessageID int64 `json:"forward_from_message_id"`
+	// ForwardOrigin is where a forwarded message first appeared; for a channel
+	// post its Chat and MessageID name the post.
+	ForwardOrigin *MessageOrigin `json:"forward_origin"`
+	// Caption is a photo's or a document's text, which Text then lacks.
+	Caption string `json:"caption"`
+}
+
+// MessageOrigin is a forwarded message's origin. Type is "user",
+// "hidden_user", "chat" or "channel"; Chat and MessageID are set for a
+// channel.
+type MessageOrigin struct {
+	Type      string `json:"type"`
+	Chat      *Chat  `json:"chat"`
+	MessageID int64  `json:"message_id"`
 }
 
 type User struct {
@@ -74,6 +88,8 @@ type Chat struct {
 	ID int64 `json:"id"`
 	// Type is "private", "group", "supergroup" or "channel".
 	Type string `json:"type"`
+	// Username is a public channel's or group's @name, without the @.
+	Username string `json:"username"`
 }
 
 type Config struct {

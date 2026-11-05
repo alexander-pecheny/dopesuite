@@ -290,6 +290,17 @@ var RU = Strings{
 		},
 	},
 	Bot: BotStrings{
+		Forward: BotForwardStrings{
+			Empty: func() string {
+				return "В этом посте нет текста. Вставьте в форму текст вопроса."
+			},
+			Private: func() string {
+				return "Это пост из закрытого канала, у него нет ссылки. Вставьте в форму текст вопроса."
+			},
+			Saved: func(link string) string {
+				return fmt.Sprintf("Сохранил пост %s. Теперь вставьте эту ссылку в форму номинации и нажмите «Загрузить».", link)
+			},
+		},
 		Login: BotLoginStrings{
 			Hint: func(url string) string {
 				return fmt.Sprintf("Откройте %s и нажмите «Войти через телеграм». Страница покажет код, который нужно прислать мне.", url)
@@ -528,7 +539,10 @@ var RU = Strings{
 			Clear:    func() string { return "Очистить" },
 			DropFile: func() string { return "Убрать прикреплённый файл" },
 			File:     func() string { return "Файл для раздатки" },
-			Link:     func() string { return "Ссылка на вопрос" },
+			ForwardToBot: func(bot string) string {
+				return fmt.Sprintf("Телеграм не показывает этот пост на сайте. Перешлите пост боту %s и нажмите «Загрузить» ещё раз.", bot)
+			},
+			Link: func() string { return "Ссылка на вопрос" },
 			LinkOnly: func() string {
 				return "Сохранили ссылку. Текст вопроса оргкомитет заберёт из базы сам."
 			},

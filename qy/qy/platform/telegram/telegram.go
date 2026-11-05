@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,6 +38,21 @@ var linkRe = regexp.MustCompile(`^https?://(?:www\.)?(?:t\.me|telegram\.me)/(?:s
 
 // IsPost says the link names a post in a public channel.
 func IsPost(link string) bool { return linkRe.MatchString(strings.TrimSpace(link)) }
+
+// Ref is the channel and the post's number a link names.
+func Ref(link string) (channel string, id int64, ok bool) {
+	m := linkRe.FindStringSubmatch(strings.TrimSpace(link))
+	if m == nil {
+		return "", 0, false
+	}
+	id, err := strconv.ParseInt(m[2], 10, 64)
+	return m[1], id, err == nil
+}
+
+// Link is a post's address.
+func Link(channel string, id int64) string {
+	return "https://t.me/" + channel + "/" + strconv.FormatInt(id, 10)
+}
 
 type Client struct{ HTTP *http.Client }
 

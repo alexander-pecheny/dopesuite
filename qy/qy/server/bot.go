@@ -56,7 +56,7 @@ func (s *server) startBot(ctx context.Context) {
 	log.Printf("telegram bot %s polling (token %s)", buildinfo.Version(), tgbot.TokenHash(token))
 	go func() {
 		defer release()
-		_ = s.bot.Run(ctx, recovering(tgbot.LoginHandler(botRegistrar{s}, botTexts())))
+		_ = s.bot.Run(ctx, recovering(s.botHandler()))
 	}()
 }
 

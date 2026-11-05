@@ -240,6 +240,19 @@ alter table nominations add column appeal text not null default '';
 -- against a tournament's editors; null until an admin enters it.
 alter table jurors add column rating_id integer;
 `)},
+	{Version: 4, Name: "channel posts forwarded to the bot", Up: schema.Exec(`
+-- A channel post somebody forwarded to the bot, for a post telegram's web
+-- page does not show (the newer formatting): the form loads the post's link
+-- from here first.
+create table telegram_posts(
+  channel text not null collate nocase,
+  message_id integer not null,
+  text text not null,
+  forwarded_by integer not null,
+  created_at text not null,
+  primary key(channel, message_id)
+);
+`)},
 }
 
 func Migrate(db *sql.DB) error { return schema.Apply(db, Migrations) }

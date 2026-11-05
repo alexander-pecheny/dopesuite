@@ -15,6 +15,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 
 	"qy/qy/platform/gq"
 	"qy/qy/platform/rating"
@@ -57,6 +58,12 @@ func (ts *TestServer) SetNow(t time.Time)              { ts.s.now = func() time.
 func (ts *TestServer) SetGotQuestions(src gq.Source)   { ts.s.gq = src }
 func (ts *TestServer) SetTelegram(src telegram.Source) { ts.s.tg = src }
 func (ts *TestServer) SetRating(src rating.Source)     { ts.s.rating = src }
+
+// BotMessage hands the bot one message, as a private chat's update, and
+// returns what the bot kept of it: its reply, if it was a forwarded post.
+func (ts *TestServer) BotMessage(m tgbot.Message) (string, bool) {
+	return ts.s.keepForward(context.Background(), &m)
+}
 
 // Model is a stand-in language model that answers every prompt with Reply.
 type Model struct{ Reply string }

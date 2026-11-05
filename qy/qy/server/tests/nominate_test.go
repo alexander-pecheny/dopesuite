@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -203,6 +204,41 @@ func TestAGotQuestionsQuestionWithNoTournamentAsksForOne(t *testing.T) {
 	}
 	form.Set("slot1_tournament", "https://rating.chgk.info/tournament/12345")
 	w.post(alice, "/2026/nominate", form, http.StatusSeeOther)
+}
+
+func TestAPostForwardedToTheBotLoadsByItsLink(t *testing.T) {
+	t.Setenv("QY_BOT_USERNAME", "qy_bot")
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.ts.SetTelegram(telegram.Unavailable{})
+	alice := w.user("alice")
+	link := `{"link": "https://t.me/ovdchgk/102"}`
+
+	if res := alice.PostJSON("/api/nominate/load", link); res.Code != http.StatusBadRequest || !strings.Contains(res.Body.String(), "Перешлите пост боту @qy_bot") {
+		t.Errorf("a post the web page does not show should ask for a forward: %d %s", res.Code, res.Body.String())
+	}
+
+	channel := &tgbot.Chat{ID: -100, Type: "channel", Username: "ovdchgk"}
+	forward := tgbot.Message{
+		Chat: &tgbot.Chat{ID: 5, Type: "private"}, From: &tgbot.User{ID: 5},
+		ForwardOrigin: &tgbot.MessageOrigin{Type: "channel", Chat: channel, MessageID: 102},
+		Text:          "Вопрос 7\nНазовите ЕГО.\nОтвет: стекольщик.\nИсточник: Кокто\nАвтор: Сергей Спешков",
+	}
+	if reply, ok := w.ts.BotMessage(forward); !ok || !strings.Contains(reply, "https://t.me/ovdchgk/102") {
+		t.Fatalf("the bot should keep a forwarded post: %v %q", ok, reply)
+	}
+	if res := alice.PostJSON("/api/nominate/load", link); res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"answer":"стекольщик."`) {
+		t.Errorf("the forwarded post should load: %d %s", res.Code, res.Body.String())
+	}
+
+	private := forward
+	private.ForwardOrigin = &tgbot.MessageOrigin{Type: "channel", Chat: &tgbot.Chat{ID: -200, Type: "channel"}, MessageID: 3}
+	if reply, ok := w.ts.BotMessage(private); !ok || !strings.Contains(reply, "закрытого канала") {
+		t.Errorf("a private channel's post has no link to load by: %v %q", ok, reply)
+	}
+	if _, ok := w.ts.BotMessage(tgbot.Message{Chat: &tgbot.Chat{ID: 5, Type: "private"}, From: &tgbot.User{ID: 5}, Text: "ABCD-1234"}); ok {
+		t.Error("a login code is not a forwarded post")
+	}
 }
 
 func TestALinkSavedUnloadedIsLoadedOnSave(t *testing.T) {

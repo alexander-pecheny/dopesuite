@@ -163,7 +163,7 @@ func sourcePanel(slot int, v slotView) ui.Item {
 			ui.Editor(ui.Name(slotKey(slot, "raw")), ui.Rows("1"), ui.Grow(), ui.Data("autogrow", ""), ui.Text(raw)),
 			ui.Button(load...), ui.Button(parse...)))}
 	if v.loadMiss {
-		items = append(items, dangerHint(str.Nominate.Slot.LoadFailed()))
+		items = append(items, dangerHint(loadFailure(v.in.raw)))
 	}
 	if v.parseMiss {
 		items = append(items, dangerHint(str.Nominate.Slot.ParseFailed()))

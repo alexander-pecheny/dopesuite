@@ -215,6 +215,11 @@ export type Strings = {
     };
   };
   bot: {
+    forward: {
+      empty: () => string;
+      private: () => string;
+      saved: (link: string) => string;
+    };
     login: {
       hint: (url: string) => string;
     };
@@ -387,6 +392,7 @@ export type Strings = {
       clear: () => string;
       dropFile: () => string;
       file: () => string;
+      forwardToBot: (bot: string) => string;
       link: () => string;
       linkOnly: () => string;
       load: () => string;
