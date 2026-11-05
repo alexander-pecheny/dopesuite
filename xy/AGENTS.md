@@ -211,12 +211,11 @@ internal/server/       package server — the whole HTTP server
                        zip if several were. The images are sent separately only for the .4s, since
                        docx and pdf embed their own. The PDFs from split-fit go into раздатки/
   exporttg.go          POST /api/export/telegram, the export that publishes instead of downloading
-                       (chgksuite/tg). It is the only export that is a conversation. A bot
-                       cannot look up a channel by its @username, so the person running the export
-                       has to show the bot the channel from the inside while the bot polls. The
-                       response is therefore a stream of NDJSON lines: progress notes, and then a
-                       final line with the channel's id, which the browser remembers so that the
-                       next export can skip the dialogue. Nobody names the discussion group:
+                       (chgksuite/tg). Posting a package takes minutes, so the response is a
+                       stream of NDJSON lines: progress notes, and then a final line with the
+                       channel's id, which the browser remembers. A public channel's @username is
+                       looked up with getChat; a private channel has none, so it is given by its id
+                       or a link to one of its posts. Nobody names the discussion group:
                        ResolveTarget reads it off the channel (getChat's linked_chat_id) and
                        checks that the bot is an administrator of both, which Telegram requires
                        and which is the thing people most often forget. The bot token is passed through the

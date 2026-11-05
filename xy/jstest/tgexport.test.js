@@ -46,7 +46,7 @@ test("the notes arrive as they are streamed, and the resolved id is kept", async
   const tg = panel([
     { note: "Подключаемся к боту…" },
     {},
-    { note: "Перешлите боту любое сообщение из канала «@pack»." },
+    { note: "Публикуем в -1001111, обсуждение -1002222…" },
     { done: true, channel: "-1001111" },
   ]);
   await tg.open(new FormData());
@@ -55,7 +55,7 @@ test("the notes arrive as they are streamed, and the resolved id is kept", async
 
   const log = p.node("tgExportMessage").textContent;
   assert.match(log, /Подключаемся/);
-  assert.match(log, /Перешлите боту/);
+  assert.match(log, /Публикуем в -1001111/);
   assert.match(log, /Опубликовано\./);
   assert.equal(kept.get("bot"), "12345:secret");
   assert.deepEqual(kept.get("target:7"), { channel: "@pack", channelId: "-1001111" });

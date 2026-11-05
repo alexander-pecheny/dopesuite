@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -128,8 +127,7 @@ func (s *server) postToTelegram(ctx context.Context, stream *tgStream, req expor
 	}
 	defer stop()
 
-	say := func(format string, args ...any) { stream.send(tgLine{Note: fmt.Sprintf(format, args...)}) }
-	target, err := tg.ResolveTarget(ctx, bot, channel, say)
+	target, err := tg.ResolveTarget(ctx, bot, channel)
 	if err != nil {
 		return target, err
 	}

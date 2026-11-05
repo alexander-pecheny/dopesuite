@@ -7,29 +7,19 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
-	"time"
 
 	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
-// A channel is given as a numeric id, a t.me link or an @username. The first
-// two are arithmetic; a username is not — a bot cannot look one up, so the
-// person driving the export forwards the bot a post from the channel, once per
-// channel thanks to the cache. The discussion group is never asked for: the
-// channel names it.
+// A channel is given as a numeric id, a t.me link or an @username. getChat
+// takes a public channel's username, and a private channel has none: its id is
+// in any link to one of its posts. The discussion group is never asked for:
+// the channel names it.
 
 const (
-	// promptTimeout is how long the bot waits for the person to do what it asked.
-	promptTimeout = 5 * time.Minute
-	// shortCodeRange bounds a short code to seven hex digits.
-	shortCodeRange = 0xFFFFFFF
-	hexBase        = 16
-	cacheDirMode   = 0o755
-	cacheFileMode  = 0o600
 	// Stand-in ids a dry run posts to when it was given names.
 	dryRunChannelID = 1111111111
 	dryRunChatID    = 2222222222
@@ -75,29 +65,20 @@ func prefixed(id int64) string {
 	return "-100" + strings.TrimPrefix(s, "-")
 }
 
-// Prompter is how the resolution talks to the person running the export: it
-// asks them to do something in Telegram, and they do it.
-type Prompter func(format string, args ...any)
-
 // ResolveTarget turns the channel reference into the ids the export posts to:
 // the channel's and its discussion group's. The bot must administer both.
-func ResolveTarget(ctx context.Context, bot *Bot, channelRef string, say Prompter) (Target, error) {
+func ResolveTarget(ctx context.Context, bot *Bot, channelRef string) (Target, error) {
 	var t Target
 	channelID, channelName, err := parseTargetRef(channelRef)
 	if err != nil {
 		return t, fmt.Errorf("channel: %w", err)
 	}
 	if channelID == 0 {
-		cache := loadResolveCache()
-		if channelID = cache[channelName]; channelID == 0 {
-			if err := introduce(ctx, bot, say); err != nil {
-				return t, err
-			}
-			if channelID, err = askForChannel(ctx, bot, channelName, say); err != nil {
-				return t, err
-			}
-			cache[channelName] = channelID
-			saveResolveCache(cache)
+		channelID = loadResolveCache()[channelName]
+	}
+	if channelID == 0 {
+		if channelID, err = lookUpUsername(ctx, bot, channelName); err != nil {
+			return t, err
 		}
 	}
 	s := chgkstrings.Default
@@ -111,14 +92,19 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef string, say Prompte
 	return t, verifyAccess(ctx, bot, t.ChatID, s.Tg.Verify.WhatChat(), s.Tg.Verify.OfChat())
 }
 
-// askForChannel has the person forward a post from the channel to the bot.
-func askForChannel(ctx context.Context, bot *Bot, name string, say Prompter) (int64, error) {
-	say("%s", chgkstrings.Default.Tg.Resolve.Forward(name))
-	id, err := bot.WaitForForwardedChannel(ctx, promptTimeout)
+// lookUpUsername is the id of the public channel with that username.
+func lookUpUsername(ctx context.Context, bot *Bot, name string) (int64, error) {
+	res, err := bot.Client().Call(ctx, "getChat", map[string]any{"chat_id": "@" + name})
 	if err != nil {
-		return 0, fmt.Errorf("channel %s: %w", name, err)
+		return 0, corei18n.User(chgkstrings.Default.Tg.Verify.NotFound(name))
 	}
-	return id, nil
+	var chat struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(res, &chat); err != nil {
+		return 0, err
+	}
+	return chat.ID, nil
 }
 
 // discussionGroup is the group linked to the channel, as getChat reports it.
@@ -137,20 +123,6 @@ func discussionGroup(ctx context.Context, bot *Bot, channelID string) (string, e
 		return "", corei18n.User(chgkstrings.Default.Tg.Verify.NoDiscussion())
 	}
 	return prefixed(chat.LinkedChatID), nil
-}
-
-// introduce is chgksuite's authenticate_user: before asking the person to do
-// things in Telegram, make sure the bot can hear them at all.
-func introduce(ctx context.Context, bot *Bot, say Prompter) error {
-	s := chgkstrings.Default
-	code := shortCode()
-	say("%s", s.Tg.Resolve.PrivateCode(code))
-	chatID, err := bot.WaitForCode(ctx, code, promptTimeout)
-	if err != nil {
-		return fmt.Errorf("authentication: %w", err)
-	}
-	bot.Client().Send(ctx, chatID, s.Tg.Resolve.Done())
-	return nil
 }
 
 // verifyAccess checks the bot is an administrator where it is about to post,
@@ -187,14 +159,8 @@ func verifyAccess(ctx context.Context, bot *Bot, chatID, dative, genitive string
 	return corei18n.User(chgkstrings.Default.Tg.Verify.NotAdmin(genitive))
 }
 
-// shortCode is a one-off word the person types back, so the bot knows which
-// message is theirs.
-func shortCode() string {
-	return strconv.FormatInt(time.Now().UnixNano()%shortCodeRange, hexBase)
-}
-
-// resolveCachePath is where the ids of named channels are kept, beside
-// chgksuite's own resolve.db rather than inside it: one tool per file.
+// resolveCachePath holds the ids that earlier versions saved for the names
+// people typed, which need not be usernames, so they are still read.
 func resolveCachePath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -211,19 +177,6 @@ func loadResolveCache() map[string]int64 {
 	}
 	_ = json.Unmarshal(data, &cache)
 	return cache
-}
-
-func saveResolveCache(cache map[string]int64) {
-	path := resolveCachePath()
-	if path == "" || len(cache) == 0 {
-		return
-	}
-	data, err := json.MarshalIndent(cache, "", " ")
-	if err != nil {
-		return
-	}
-	_ = os.MkdirAll(filepath.Dir(path), cacheDirMode)
-	_ = os.WriteFile(path, data, cacheFileMode)
 }
 
 // DryRunTarget is where a dry run pretends to post: the channel id it was

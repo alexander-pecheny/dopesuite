@@ -91,18 +91,19 @@ func TestBotWaitsBothWays(t *testing.T) {
 	go func() {
 		time.Sleep(20 * time.Millisecond)
 		b.offer(tgbot.Update{Message: &tgbot.Message{
-			MessageID: 9, Chat: &tgbot.Chat{ID: 5, Type: "private"}, Text: "код abc123",
+			MessageID: 9, Chat: &tgbot.Chat{ID: -100200, Type: "supergroup"},
+			ForwardFromChat: &tgbot.Chat{ID: -100100, Type: "channel"}, ForwardFromMessageID: 43,
 		}})
 	}()
-	chat, err := b.WaitForCode(ctx, "abc123", 2*time.Second)
-	if err != nil || chat != 5 {
-		t.Fatalf("live: got %d, %v", chat, err)
+	got, err = b.WaitForDiscussionCopy(ctx, -100100, -100200, 43, 2*time.Second)
+	if err != nil || got != 9 {
+		t.Fatalf("live: got %d, %v", got, err)
 	}
 }
 
 func TestBotWaitTimesOut(t *testing.T) {
 	b := &Bot{}
-	if _, err := b.WaitForCode(context.Background(), "nope", 10*time.Millisecond); err == nil {
+	if _, err := b.WaitForDiscussionCopy(context.Background(), -100100, -100200, 1, 10*time.Millisecond); err == nil {
 		t.Fatal("waited forever")
 	}
 	if len(b.waiters) != 0 {

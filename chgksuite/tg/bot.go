@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -152,32 +151,6 @@ func (b *Bot) drop(w *waiter) {
 		}
 	}
 	b.waiters = kept
-}
-
-// WaitForCode waits for someone to send the code to the bot in a private chat,
-// and returns that chat: the person driving this export, and where the bot can
-// talk back to them.
-func (b *Bot) WaitForCode(ctx context.Context, code string, timeout time.Duration) (int64, error) {
-	u, err := b.Wait(ctx, timeout, func(u tgbot.Update) bool {
-		return u.Message.Chat != nil && u.Message.Chat.Type == "private" &&
-			strings.Contains(u.Message.Text, code)
-	})
-	if err != nil {
-		return 0, err
-	}
-	return u.Message.Chat.ID, nil
-}
-
-// WaitForForwardedChannel waits for a message forwarded from a channel and
-// returns that channel's id.
-func (b *Bot) WaitForForwardedChannel(ctx context.Context, timeout time.Duration) (int64, error) {
-	u, err := b.Wait(ctx, timeout, func(u tgbot.Update) bool {
-		return u.Message.ForwardFromChat != nil && u.Message.ForwardFromChat.Type == "channel"
-	})
-	if err != nil {
-		return 0, err
-	}
-	return u.Message.ForwardFromChat.ID, nil
 }
 
 // WaitForDiscussionCopy waits for Telegram to copy a channel post into the

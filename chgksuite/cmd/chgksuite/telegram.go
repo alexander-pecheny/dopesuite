@@ -108,8 +108,7 @@ func composeTelegram(args []string) error {
 	}
 	defer stop()
 
-	say := func(format string, a ...any) { fmt.Fprintf(os.Stderr, "\n"+format+"\n", a...) }
-	target, err := tg.ResolveTarget(ctx, bot, *channel, say)
+	target, err := tg.ResolveTarget(ctx, bot, *channel)
 	if err != nil {
 		return err
 	}

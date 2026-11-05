@@ -281,20 +281,14 @@ var RU = Strings{
 		},
 	},
 	Tg: TgStrings{
-		Resolve: TgResolveStrings{
-			Done: func() string { return "✅ Готово, продолжаем." },
-			Forward: func(name string) string {
-				return fmt.Sprintf("Перешлите боту любое сообщение из канала «%s».", name)
-			},
-			PrivateCode: func(code string) string {
-				return fmt.Sprintf("Отправьте боту в личном чате код: %s", code)
-			},
-		},
 		Verify: TgVerifyStrings{
 			NoDiscussion: func() string {
 				return "у канала нет группы обсуждения: привяжите её в настройках канала"
 			},
 			NotAdmin: func(what string) string { return fmt.Sprintf("бот не администратор %s", what) },
+			NotFound: func(name string) string {
+				return fmt.Sprintf("канал @%s не найден: у закрытого канала нет имени, укажите его id или ссылку на любой его пост", name)
+			},
 			NotMember: func(what string, err string) string {
 				return fmt.Sprintf("бот не добавлен к %s: %s", what, err)
 			},

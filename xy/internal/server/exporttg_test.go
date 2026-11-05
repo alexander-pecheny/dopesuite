@@ -13,9 +13,10 @@ import (
 	"testing"
 )
 
-// stubTelegram is a Bot API that never has anything to poll. getChat reports
-// linked as the channel's discussion group (0 is none), and the bot is an
-// administrator of exactly the chats in admins.
+// stubTelegram is a Bot API that never has anything to poll. @pack is the
+// public channel -1001, getChat reports linked as the channel's discussion
+// group (0 is none), and the bot is an administrator of exactly the chats in
+// admins.
 func stubTelegram(t *testing.T, linked int64, admins ...string) *httptest.Server {
 	t.Helper()
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -26,6 +27,10 @@ func stubTelegram(t *testing.T, linked int64, admins ...string) *httptest.Server
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/getMe"):
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"id":42}}`))
+		case strings.HasSuffix(r.URL.Path, "/getChat") && body.ChatID == "@pack":
+			_, _ = fmt.Fprintf(w, `{"ok":true,"result":{"id":-1001,"linked_chat_id":%d}}`, linked)
+		case strings.HasSuffix(r.URL.Path, "/getChat") && strings.HasPrefix(body.ChatID, "@"):
+			_, _ = w.Write([]byte(`{"ok":false,"error_code":400,"description":"Bad Request: chat not found"}`))
 		case strings.HasSuffix(r.URL.Path, "/getChat"):
 			_, _ = fmt.Fprintf(w, `{"ok":true,"result":{"id":%s,"linked_chat_id":%d}}`, body.ChatID, linked)
 		case strings.HasSuffix(r.URL.Path, "/getChatAdministrators"):
@@ -91,26 +96,29 @@ func TestExportTelegramNeedsATarget(t *testing.T) {
 	}
 }
 
-// TestExportTelegramRefuses: the group is the one the channel names, and the
+// TestExportTelegramRefuses: a username is looked up, the group is the one the channel names, and the
 // bot must administer both before the first question goes out. Each refusal
 // arrives in the stream, since the header is already sent.
 func TestExportTelegramRefuses(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		linked int64
-		admins []string
-		want   string
+		name    string
+		channel string
+		linked  int64
+		admins  []string
+		want    string
 	}{
-		{"not an admin of the channel", 1002, nil, "не администратор канала"},
-		{"no discussion group", 0, []string{"-1001"}, "нет группы обсуждения"},
-		{"not an admin of the group", 1002, []string{"-1001"}, "не администратор группы"},
+		{"not an admin of the channel", "-1001", 1002, nil, "не администратор канала"},
+		{"no discussion group", "-1001", 0, []string{"-1001"}, "нет группы обсуждения"},
+		{"not an admin of the group", "-1001", 1002, []string{"-1001"}, "не администратор группы"},
+		{"a username is looked up", "@pack", 1002, []string{"-1001"}, "не администратор группы"},
+		{"no channel has the username", "@nosuch", 1002, nil, "@nosuch не найден"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ts, srv := newTestServer(t)
 			srv.tgAPIBase = stubTelegram(t, tc.linked, tc.admins...).URL
 			c := registerUser(t, srv, ts, 770221, "tgrefused")
 
-			status, lines := postTelegram(t, ts, c, "12345:secret", "-1001")
+			status, lines := postTelegram(t, ts, c, "12345:secret", tc.channel)
 			if status != http.StatusOK {
 				t.Fatalf("status = %d, want 200 — the failure belongs in the stream", status)
 			}
