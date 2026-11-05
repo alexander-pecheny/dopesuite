@@ -81,6 +81,18 @@ exe:
     cp build/typst-x86_64-pc-windows-msvc/LICENSE build/windows/typst-LICENSE
     cp build/typst-x86_64-pc-windows-msvc/NOTICE build/windows/typst-NOTICE
 
+# build/linux/: chgksuite with typst beside it, for this machine's
+# architecture. Wails needs cgo, GTK 4 and WebKitGTK 6.0 here.
+linux_typst := arch() + "-unknown-linux-musl"
+linux:
+    cd ../xy && just build-web
+    just typst {{linux_typst}}
+    rm -rf build/linux
+    CGO_ENABLED=1 go build -trimpath -ldflags "{{ldflags}}" -o build/linux/chgksuite .
+    cp build/typst-{{linux_typst}}/typst ../LICENSE ../NOTICE build/linux/
+    cp build/typst-{{linux_typst}}/LICENSE build/linux/typst-LICENSE
+    cp build/typst-{{linux_typst}}/NOTICE build/linux/typst-NOTICE
+
 [private]
 typst target:
     #!/usr/bin/env bash

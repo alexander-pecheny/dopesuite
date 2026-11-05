@@ -1,9 +1,9 @@
 name: release chgksuite-app
 
-# A pre-release of the desktop app (chgksuite v2) for Windows and macOS, cut by
-# pushing a tag such as `chgksuite-app/2026.10.19`. Each build ships the pinned
-# typst release beside the app (chgksuite-app/justfile). The Mac apps are signed
-# and notarised only when the Developer ID secrets exist.
+# A pre-release of the desktop app (chgksuite v2) for Windows, macOS and Linux,
+# cut by pushing a tag such as `chgksuite-app/2026.10.19`. Each build ships the
+# pinned typst release beside the app (chgksuite-app/justfile). The Mac apps are
+# signed and notarised only when the Developer ID secrets exist.
 on:
   push:
     tags: ["chgksuite-app/*"]
@@ -43,6 +43,46 @@ jobs:
         with:
           name: windows
           path: chgksuite-windows-x64.zip
+
+  linux:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: chgksuite-app/go.mod
+
+      # The version the app carries and compares with newer releases. A manual
+      # run outside a tag builds a "dev" app, which never updates itself.
+      - name: Version
+        run: |
+          case "$GITHUB_REF_NAME" in
+            chgksuite-app/*) echo "CHGKSUITE_VERSION=${GITHUB_REF_NAME#chgksuite-app/}" >> "$GITHUB_ENV" ;;
+          esac
+
+      - name: Install just and the GTK and WebKit headers
+        run: |
+          curl -fsSL https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Build
+        run: |
+          cd chgksuite-app && just linux
+          cd build/linux && zip -r "$GITHUB_WORKSPACE/chgksuite-linux-${{ matrix.arch }}.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: chgksuite-linux-${{ matrix.arch }}.zip
 
   macos:
     runs-on: macos-latest
@@ -119,7 +159,7 @@ jobs:
           path: chgksuite-macos-*.zip
 
   release:
-    needs: [windows, macos]
+    needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -134,4 +174,4 @@ jobs:
           sha256sum *.zip > SHA256SUMS
           gh release create "${GITHUB_REF_NAME}" *.zip SHA256SUMS --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" --prerelease \
-            --notes "chgksuite v2, a preview build for Windows and macOS."
+            --notes "chgksuite v2, a preview build for Windows, macOS and Linux."
