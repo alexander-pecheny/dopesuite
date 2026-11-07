@@ -1129,6 +1129,7 @@ export type Strings = {
       tokensTitle: () => string;
     };
     passphrase: {
+      copyNote: () => string;
       tooFewWords: (n: string) => string;
       tooShort: (n: string) => string;
       wrong: () => string;

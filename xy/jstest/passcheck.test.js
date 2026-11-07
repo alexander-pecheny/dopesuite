@@ -30,7 +30,9 @@ function harness(opts = {}) {
     sentHint: { hidden: true },
     backupHint: { hidden: false },
     backup: { ...node(), hidden: false },
+    close: { classes: new Set(["btn-ghost"]), classList: null },
   };
+  ui.close.classList = { toggle: (name, on) => { if (on) ui.close.classes.add(name); else ui.close.classes.delete(name); } };
   const check = createPassCheck({
     ui,
     now: () => now,
@@ -122,6 +124,7 @@ test("the right passphrase goes to Telegram, and step 2 says so instead of offer
   assert.equal(h.ui.sentHint.hidden, false);
   assert.equal(h.ui.backupHint.hidden, true);
   assert.equal(h.ui.backup.hidden, true);
+  assert.deepEqual([...h.ui.close.classes], ["btn-primary"]); // the one button left is the main one
 });
 
 test("with no Telegram to send to, step 2 offers the backup as before", async () => {
@@ -133,6 +136,7 @@ test("with no Telegram to send to, step 2 offers the backup as before", async ()
   assert.equal(h.ui.sentHint.hidden, true);
   assert.equal(h.ui.backupHint.hidden, false);
   assert.equal(h.ui.backup.hidden, false);
+  assert.deepEqual([...h.ui.close.classes], ["btn-ghost"]);
   h.ui.backup.handlers.click();
   assert.equal(h.calls.backup, 1);
 });

@@ -105,6 +105,8 @@ const passSetup = xyApp.wirePassphraseSetup({
   copied: byId("importPassCopied"),
   saved: byId<HTMLInputElement>("importPassSaved"),
   submit: importBtn,
+  promise: [byId("importPassDanger"), byId("importPassSaved").closest("label")!],
+  copyNote: byId("importPassCopyNote"),
 }, xyCrypto.generatePassphrase);
 void passSetup.roll(false);
 
@@ -563,6 +565,7 @@ form.addEventListener("submit", async (e) => {
 
 (async () => {
   await xyApp.requireLogin();
+  passSetup.reset(); // now that /me says whether the words go to Telegram
   if (!xyInstance.offers("passphrase")) {
     byId("importPassBlock").hidden = true;
     byId<HTMLInputElement>("boardPass").required = false;

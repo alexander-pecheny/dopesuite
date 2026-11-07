@@ -42,6 +42,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       hint id="passCheckBackupHint" @board.passcheck.saved_hint
       row gap="sm" wrap
         button kind="primary" id="passCheckBackup" @board.passcheck.backup
+        -- passcheck.ts makes it primary when it is the only button left
         button kind="ghost" id="passCheckClose" @board.actions.close
     message id="passCheckMessage"
 
@@ -53,8 +54,9 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
         textfield id="changePassInput" placeholder=@board.changepass.placeholder autocomplete="new-password" required grow
         iconbtn id="changePassGen" icon="dices" label=@board.changepass.generate
       muted id="changePassCopied" hidden @board.changepass.copied
-      hint kind="danger" @board.changepass.danger
+      hint kind="danger" id="changePassDanger" @board.changepass.danger
       checkbox id="changePassSaved" @board.changepass.saved
+      hint id="changePassCopyNote" hidden @chrome.passphrase.copy_note
       row gap="sm" wrap
         button submit id="changePassSubmit" disabled @board.changepass.submit
         button kind="ghost" id="changePassCancel" @board.actions.cancel

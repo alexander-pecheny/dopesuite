@@ -1410,6 +1410,9 @@ var RU = Strings{
 			TokensTitle: func() string { return "API-токены · xy" },
 		},
 		Passphrase: ChromePassphraseStrings{
+			CopyNote: func() string {
+				return "Бот пришлёт пароль вам в телеграм. Сохраните это сообщение."
+			},
 			TooFewWords: func(n string) string {
 				return fmt.Sprintf("Пароль доски должен содержать минимум %s слова (через пробел, «-» или «_»).", n)
 			},

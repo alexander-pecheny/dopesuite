@@ -95,7 +95,7 @@ test("the sync badge: offline beats pending beats the last write's state", () =>
 // The ritual the three creation forms share. `generate` and `copy` are injected,
 // so the whole thing runs on fake nodes with no clipboard.
 
-function passForm(copy = async () => {}) {
+function passForm(copy = async () => {}, copySent = () => false) {
   let n = 0;
   const node = () => ({ handlers: {}, addEventListener(type, h) { this.handlers[type] = h; } });
   const ui = {
@@ -104,8 +104,10 @@ function passForm(copy = async () => {}) {
     copied: { hidden: false },
     saved: { checked: true, ...node() },
     submit: { disabled: false },
+    promise: [{ hidden: true }, { hidden: true }],
+    copyNote: { hidden: false },
   };
-  const setup = xyApp.wirePassphraseSetup(ui, () => `пароль ${++n}`, copy);
+  const setup = xyApp.wirePassphraseSetup(ui, () => `пароль ${++n}`, copy, copySent);
   return { ui, setup, copies: copy };
 }
 
@@ -113,6 +115,26 @@ test("wiring resets the form: nothing promised, nothing copied, submit shut", ()
   const { ui } = passForm();
   assert.equal(ui.saved.checked, false);
   assert.equal(ui.copied.hidden, true);
+  assert.equal(ui.submit.disabled, true);
+});
+
+test("without a copy to Telegram, the warning and the promise show", () => {
+  const { ui } = passForm();
+  assert.deepEqual(ui.promise.map((n) => n.hidden), [false, false]);
+  assert.equal(ui.copyNote.hidden, true);
+});
+
+test("a copy to Telegram takes the place of the promise, and submit is open", () => {
+  let sent = true;
+  const { ui, setup } = passForm(async () => {}, () => sent);
+  assert.deepEqual(ui.promise.map((n) => n.hidden), [true, true]);
+  assert.equal(ui.copyNote.hidden, false);
+  assert.equal(ui.submit.disabled, false);
+
+  // Asked again on every reset: /me may arrive after the form was wired.
+  sent = false;
+  setup.reset();
+  assert.deepEqual(ui.promise.map((n) => n.hidden), [false, false]);
   assert.equal(ui.submit.disabled, true);
 });
 

@@ -134,6 +134,9 @@ too_short = 'Пароль доски должен быть не короче {{.
 too_few_words = 'Пароль доски должен содержать минимум {{.n}} слова (через пробел, «-» или «_»).'
 # Thrown on both unlock failures (key unwrap and verify token).
 wrong = "Неверный пароль доски"
+# Shown instead of the warning and the «обещаю» checkbox on every form that
+# sets a passphrase, when the bot will send it to the user (passphrasetg.ts).
+copy_note = "Бот пришлёт пароль вам в телеграм. Сохраните это сообщение."
 
 [tokens]
 # The /tokens page (tokens.dopeui + tokens.ts): API tokens for the

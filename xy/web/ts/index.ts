@@ -306,6 +306,8 @@ const passSetup = xyApp.wirePassphraseSetup({
   copied: byId("createPassCopied"),
   saved: byId<HTMLInputElement>("createPassSaved"),
   submit: byId<HTMLButtonElement>("createSubmit"),
+  promise: [byId("createPassDanger"), byId("createPassSaved").closest("label")!],
+  copyNote: byId("createPassCopyNote"),
 }, xyCrypto.generatePassphrase);
 
 // The passphrase is rolled and copied inside the click, not on submit: the

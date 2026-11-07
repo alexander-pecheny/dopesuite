@@ -73,6 +73,8 @@ export interface PassCheckUI {
   sentHint: { hidden: boolean | string };
   backupHint: { hidden: boolean | string };
   backup: { hidden: boolean | string; addEventListener(type: "click", handler: () => void): void };
+  // The close button: secondary next to the backup button, primary once it is alone.
+  close: { classList: { toggle(name: string, on: boolean): void } };
 }
 
 export interface PassCheckDeps {
@@ -113,6 +115,8 @@ export function createPassCheck(deps: PassCheckDeps): PassCheck {
     ui.sentHint.hidden = !copy.kept;
     ui.backupHint.hidden = copy.kept;
     ui.backup.hidden = copy.kept;
+    ui.close.classList.toggle("btn-primary", copy.kept);
+    ui.close.classList.toggle("btn-ghost", !copy.kept);
     ui.step1.hidden = true;
     ui.step2.hidden = false;
   }

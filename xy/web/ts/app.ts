@@ -26,6 +26,8 @@ export interface AuthMe {
   // off this same payload on every page; /profile is only where it is CHOSEN.
   ui_font?: string | null;
   sizes?: unknown;
+  // A passphrase this user sets goes to their own Telegram (passphrasetg.ts).
+  passphrase_copy?: boolean;
   timezone?: string | null;
   announce_cities?: unknown;
   session_title_mode?: string | null;
@@ -162,11 +164,20 @@ function deriveTitle(desc: string | null | undefined, max = 80): string {
   return (sp > max * TITLE_MIN_KEEP ? cut.slice(0, sp) : cut) + "…";
 }
 
+// The last /api/auth/me this page read. Offline there is none, and a
+// passphrase form then keeps its promise.
+let lastMe: AuthMe | null = null;
+
+// passphraseCopy: a passphrase set on this page will be sent to the user's
+// Telegram, so the form need not make them promise to save it.
+function passphraseCopy(): boolean { return lastMe?.passphrase_copy === true; }
+
 async function requireLogin(): Promise<AuthMe | { offline: true } | null> {
   try {
     const me = (await fetchJSON("/api/auth/me")) as AuthMe | null;
     if (me && me.user_id) {
       xyInstance.setInstance(me.instance);
+      lastMe = me;
       return me;
     }
   } catch (e) {
@@ -261,21 +272,28 @@ function onCmdEnter(node: HTMLElement, run: () => void): void {
 // it, a muted line appears only when the clipboard actually took it, and submit
 // stays shut until the promise is ticked. The words are unrecoverable, so the
 // form's job is to make losing them take an act of will.
-// `generate` and `copy` are injected: this module knows no crypto, and the tests
-// need no clipboard.
+// Unless a copy goes to the user's Telegram (passphrasetg.ts): then the warning
+// and the promise give way to one line saying so, and submit is open.
+// `generate`, `copy` and `copySent` are injected: this module knows no crypto,
+// and the tests need no clipboard.
 export interface PassphraseSetupUI {
   input: { value: string; focus(): void };
   dice: { addEventListener(type: "click", handler: () => void): void };
   copied: { hidden: boolean | string };
   saved: { checked: boolean; addEventListener(type: "change", handler: () => void): void };
   submit: { disabled: boolean };
+  // The warning and the promise's row, hidden when a copy is sent, and the line
+  // shown instead.
+  promise: { hidden: boolean | string }[];
+  copyNote: { hidden: boolean | string };
 }
 export interface PassphraseSetup {
   // Fill the field with a fresh passphrase. `copy` is only ever true inside a
   // user gesture — outside one the clipboard refuses, and a refusal must never
   // be shown as a copy.
   roll(copy: boolean): Promise<void>;
-  // Back to square one: nothing promised, nothing copied, submit shut.
+  // Back to square one: nothing copied, and nothing promised with submit shut,
+  // unless a copy is sent, which needs no promise.
   reset(): void;
 }
 
@@ -283,6 +301,7 @@ function wirePassphraseSetup(
   ui: PassphraseSetupUI,
   generate: () => string,
   copy: (text: string) => Promise<void> = (t) => navigator.clipboard.writeText(t),
+  copySent: () => boolean = passphraseCopy,
 ): PassphraseSetup {
   const gate = (): void => { ui.submit.disabled = !ui.saved.checked; };
   async function roll(withCopy: boolean): Promise<void> {
@@ -295,7 +314,10 @@ function wirePassphraseSetup(
     } catch { /* clipboard denied — the passphrase is visible in the field */ }
   }
   function reset(): void {
-    ui.saved.checked = false;
+    const sent = copySent();
+    for (const node of ui.promise) node.hidden = sent;
+    ui.copyNote.hidden = !sent;
+    ui.saved.checked = sent;
     ui.copied.hidden = true;
     gate();
   }

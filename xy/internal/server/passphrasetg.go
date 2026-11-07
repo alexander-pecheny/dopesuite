@@ -23,6 +23,17 @@ import (
 // serves the code that sees every passphrase. What it keeps is the property
 // that matters, that nothing in xy.db or its backups opens a board.
 
+// passphraseCopy reports whether a passphrase this user sets has somewhere to
+// go: this instance runs a bot and the account is linked to Telegram.
+func (s *server) passphraseCopy(ctx context.Context, uid int64) (bool, error) {
+	if s.bot == nil {
+		return false, nil
+	}
+	var linked bool
+	err := s.db.QueryRowContext(ctx, `select telegram_user_id is not null from users where id = ?`, uid).Scan(&linked)
+	return linked, err
+}
+
 type sendPassphraseRequest struct {
 	Passphrase string `json:"passphrase"`
 	// UnsentOnly is the Passphrase Check's typed path: the words are proven

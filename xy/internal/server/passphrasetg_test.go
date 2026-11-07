@@ -112,6 +112,36 @@ func TestPassphraseGoesToTheOwnersTelegram(t *testing.T) {
 	}
 }
 
+func TestMeSaysWhetherAPassphraseCopyIsSent(t *testing.T) {
+	ts, srv := newTestServer(t)
+	installRecordingBot(t, srv)
+	c := registerUser(t, srv, ts, 881031, "linked")
+	copySent := func() bool {
+		t.Helper()
+		resp := c.do("GET", "/api/auth/me", nil)
+		mustStatus(t, resp, http.StatusOK)
+		var me meResponse
+		c.decode(resp, &me)
+		return me.PassphraseCopy
+	}
+	if !copySent() {
+		t.Fatal("a linked account on an instance with a bot: want passphrase_copy")
+	}
+	if _, err := srv.db.Exec(`update users set telegram_user_id = null where telegram_user_id = 881031`); err != nil {
+		t.Fatal(err)
+	}
+	if copySent() {
+		t.Fatal("no telegram: want no passphrase_copy")
+	}
+	if _, err := srv.db.Exec(`update users set telegram_user_id = 881031 where username = 'linked'`); err != nil {
+		t.Fatal(err)
+	}
+	srv.bot = nil
+	if copySent() {
+		t.Fatal("no bot: want no passphrase_copy")
+	}
+}
+
 func TestPassphraseSendIsTheOwnersOnly(t *testing.T) {
 	ts, srv := newTestServer(t)
 	rec := installRecordingBot(t, srv)
