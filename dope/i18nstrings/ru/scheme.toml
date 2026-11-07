@@ -46,6 +46,8 @@ match_size_block_round = '{{.key}}: размер боя задаётся по н
 # Two Matches the scheme named the same: a name is the Match's letter, which
 # must be unique in the Game.
 letter_dup = 'бой «{{.letter}}» назван дважды: имя боя — его буква, она одна на игру'
+# A `letters:` value other than true, false or groups.
+letters_word = 'letters: «{{.word}}» — пишите true, false или groups (бои группы A — A1, A2…)'
 # A [scheme] section with no blocks at all.
 no_blocks = "в [scheme] нет ни одного блока"
 # A block slug equal to a real stage code — tabs would collide.

@@ -228,7 +228,7 @@ func (s *server) scopedVenuePut(w http.ResponseWriter, r *http.Request, sc route
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	venues, revision, err := s.updateVenue(r.Context(), sc.FestID, number, req.Title)
+	venues, revision, err := s.updateVenue(r.Context(), sc.FestID, number, req)
 	if err != nil {
 		return route.BadUser(err)
 	}
@@ -245,7 +245,7 @@ func (s *server) scopedVenueCreate(w http.ResponseWriter, r *http.Request, sc ro
 	if req.Number < 0 {
 		return route.BadRequest("bad venue number")
 	}
-	change, err := s.createVenue(r.Context(), sc.FestID, req.Number, req.Title)
+	change, err := s.createVenue(r.Context(), sc.FestID, req)
 	if err != nil {
 		return route.BadUser(err)
 	}

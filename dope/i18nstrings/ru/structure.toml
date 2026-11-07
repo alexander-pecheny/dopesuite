@@ -136,6 +136,11 @@ bouts_unused = '{{.token}} ещё не выбыл, но ни один бой е�
 # block's comparators.
 # No group_size given.
 group_size_needed = "roundrobin: нужен group_size"
+# group_venues outside 1..the бои of one round.
+group_venues_range = 'group_venues: от 1 до {{.max}}, столько боёв в одном круге группы'
+# group_venues times the groups is more than the block's venues.
+group_venues_too_few = 'group_venues: группам нужно {{.need}} площадок, а у блока их {{.have}}'
+
 # The feed label of the block's n-th group, as the next block's seating reads it.
 group_feed = 'Гр. {{.n}}'
 # A points list that is not exactly win, draw, loss.

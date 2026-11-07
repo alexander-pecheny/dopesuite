@@ -215,7 +215,7 @@ func TestHostRoleCanEditGameTablesOnly(t *testing.T) {
 		t.Fatalf("host match update status = %d, body %s", updateResp.Code, updateResp.Body.String())
 	}
 
-	venueResp := scopedAPIRequest(t, srv, http.MethodPut, fmt.Sprintf("/api/fest/%d/venues/1", festID), dopeserver.VenueUpdateRequest{Title: "Новая"}, hostToken)
+	venueResp := scopedAPIRequest(t, srv, http.MethodPut, fmt.Sprintf("/api/fest/%d/venues/1", festID), map[string]any{"title": "Новая"}, hostToken)
 	if venueResp.Code != http.StatusOK {
 		t.Fatalf("host venue title update status = %d, body %s", venueResp.Code, venueResp.Body.String())
 	}

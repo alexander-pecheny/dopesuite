@@ -26,7 +26,7 @@ type roundRobin struct{}
 func (roundRobin) Code() string { return "rr" }
 func (roundRobin) Word() string { return "roundrobin" }
 func (roundRobin) Keys() []Key {
-	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "slug"}, {Name: "deal"}, {Name: "pairings"}}
+	return []Key{{Name: "groups"}, {Name: "group_size"}, {Name: "match_size"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "slug"}, {Name: "deal"}, {Name: "pairings"}, {Name: "group_venues"}}
 }
 
 // canonOrder is the round-robin comparator chain when a scheme names none:
@@ -77,6 +77,10 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 	}
 	metric, _ := b.Str("metric")
 	slug, _ := b.Str("slug")
+	spread, err := groupSpread(b, lanes.PerWave(), groups, size, matchSize)
+	if err != nil {
+		return Outputs{}, err
+	}
 	out := Outputs{}
 	for g := 1; g <= groups; g++ {
 		code := fmt.Sprintf("%s-g%d", b.Code(), g)
@@ -91,6 +95,10 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 		}
 		if matchSize > 2 {
 			cfg.MatchSize = matchSize
+		}
+		if spread > 1 {
+			cfg.Venues = groupLanes(lanes, g, spread)
+			cfg.Venue = cfg.Venues[0]
 		}
 		cfg.BlockRounds, _ = b.Int("rounds")
 		cfg.Pairings = pairings
@@ -112,6 +120,42 @@ func (roundRobin) Expand(b Block) (Outputs, error) {
 		})
 	}
 	return out, nil
+}
+
+// groupSpread reads `group_venues:`, how many venues each Group plays at, a
+// round's bouts taking them in turn. Group 1 takes the first of the block's
+// venues, group 2 the next ones, and so on. Polyfest's personal SI plays a
+// group of 16 at two tables: `group_venues: 2`. Absent, a Group has one.
+func groupSpread(b Block, venues, groups, size, matchSize int) (int, error) {
+	spread, ok := b.Int("group_venues")
+	if !ok {
+		return 1, nil
+	}
+	if spread < 1 || spread > size/matchSize {
+		return 0, Keyf("group_venues", "%s", dopestrings.Default.Structure.Rr.GroupVenuesRange(strconv.Itoa(size/matchSize)))
+	}
+	if spread*groups > venues {
+		return 0, Keyf("group_venues", "%s", dopestrings.Default.Structure.Rr.GroupVenuesTooFew(strconv.Itoa(spread*groups), strconv.Itoa(venues)))
+	}
+	return spread, nil
+}
+
+// groupLanes are group g's venues when each group plays at spread of them.
+func groupLanes(lanes Lanes, g, spread int) []int {
+	venues := make([]int, spread)
+	for j := range venues {
+		venues[j] = lanes.Pick((g-1)*spread + j + 1)
+	}
+	return venues
+}
+
+// boutLane is where and in which Wave a round's i-th bout (0-based) plays:
+// the Group's one venue, a bout after another, or its venues in turn.
+func (conf RRConfig) boutLane(i int) (venue, wave int) {
+	if k := len(conf.Venues); k > 1 {
+		return conf.Venues[i%k], i/k + 1
+	}
+	return conf.Venue, i + 1
 }
 
 // rrPairings reads `pairings:`, the group's schedule as the regulations print
@@ -293,12 +337,13 @@ func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 				}
 				slots = append(slots, slot)
 			}
+			venue, turn := conf.boutLane(wave)
 			matches = append(matches, store.SchemeMatch{
 				Code:             fmt.Sprintf("%s-%d", conf.Code, seq),
 				Title:            boutTitle(seq),
-				Venue:            conf.Venue,
+				Venue:            venue,
 				BlockRound:       circle + 1,
-				Wave:             wave + 1,
+				Wave:             turn,
 				ParticipantCount: len(slots),
 				Slots:            slots,
 			})

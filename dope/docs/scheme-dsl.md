@@ -177,7 +177,7 @@ Kind does not read is a compile error, so nothing is dropped on the floor:
 | `stats_from` | with a reseed only: which blocks' bouts the re-rank metrics are summed over (`stats_from: [s1, s2]`); default is the previous block, or the previous round for a boundary reseed. Naming the block itself at a boundary sums its own rounds so far (СтудЧР's ЭК ranked its пересев перед 1/4 by сумма мест over 1/16 and 1/8 together). Eligibility is independent of the stats scope: the previous block's proceeding places, or every place the previous round sent on |
 | `proceeding_participants` | block-grain Edge: how many advance per Group (rr, de) or overall (flat); an se sends its last round's winners on |
 | `deal` | roundrobin only: which ranks each group takes, when the regulations print a table no snake makes — one item per group, its ranks separated by spaces, every rank of the block once. Своячок's Приложение 1: `deal: [1 12 13 24 28 31 42 43 54, 2 11 14 23 25 32 41 44 53, …]`. Ranks are the seed's on the first block and the reseed's after `reseed: true` |
-| `letters` | `letters: false` keeps the block's бои out of the буква deal — the письменный отбор is one sitting for everyone and is not called a бой |
+| `letters` | `letters: false` keeps the block's бои out of the буква deal — the письменный отбор is one sitting for everyone and is not called a бой. `letters: groups` letters each Group's бои by the Group and their number in it, A1…A20, B1…B20, instead of the deal's AA, AB (Polyfest's личная СИ) |
 | `bout.<metric>`, `standings.<metric>` | scoring rules (ADR-0008): an expression per бой summed into the standings, or one over the sums, defining a metric the block may sort by |
 | flat: `participants` | how many the one бой seats (defaults to the game's entrants) |
 | rr: `metric` | the Protocol metric забито counts, when it is not `taken` — Тройка's is `total`, its игровые очки |
@@ -185,6 +185,7 @@ Kind does not read is a compile error, so nothing is dropped on the floor:
 | rr: `rounds` | play this many круги and stop |
 | rr: `pairings` | the group's schedule as the regulations print it, when it is not the canon's order: one item per круг, its бои separated by spaces, a бой's seats (positions in the group, 1 is its best seed) joined by `-`. Every group plays it. Polyfest's КИнСбФ: `pairings: [1-3 2-4, 1-2 3-4, 4-1 2-3]`. Without it a group of two seats plays the КИНСБФ canon or the circle method, and a bigger table the affine plane (9 at three, 16 at four, 25 at five, 49 at seven) |
 | rr: `slug` | the URL slug of the group stage's tabs |
+| rr: `group_venues` | how many venues each Group plays at, a круг's бои taking them in turn: Group 1 the block's first venues, Group 2 the next. Polyfest's личная СИ seats a group of 16 at two tables, `group_venues: 2`, so a круг's four бои are two заходы of two. Absent, a Group has one venue |
 | se: `participants`, `match_size`, `winning_places` | the draw size, the seats per бой (`match_size.r3` for one Round — ЭК plays its 1/4 three to a table), and how many of a бой's places count as winning it: those go on, the rest take their Loss (CONTEXT.md «Winning places»). Two-seat, one winner by default; ЭК's `participants: 48, match_size: 4, winning_places: 2` is the five rounds 1/16, 1/8, 1/4, полуфиналы, финал; without `winning_places` it would be 48→12→3 |
 | se: `rounds` | play this many Rounds and stop short of a final (ТПШ's six winners); the last round's winners are the block's proceeding count |
 | se: `bronze` | add the 3rd-place бой from the semifinal losers (a halving bracket that reaches its semifinal). With `participants: 2` there is no semifinal to lose: the block is seeded straight into its final, takes four out of the previous block's two Groups, and the матч за 3-е место seats the place below the finalists — Троечка's «победители групп в финал, вторые места в матч за 3-е место» |
@@ -215,7 +216,10 @@ extension (`from: block 2 ranks 17-32`), not v1.
 `venues:` — either a count (`venues: 6`, auto-titled) or a titled list; absent,
 the count is derived as the widest block's lane need. The compiler splits a
 Round with more matches than venues into ⌈matches/venues⌉ Waves (`-w{k}` stage
-codes) in canonical order and maps rr Groups one per venue, cycling. Concrete
+codes) in canonical order and maps rr Groups one per venue, cycling
+(`group_venues` gives a Group more). Two Games of one fest share its venues by
+number: Polyfest's two СИ зачёты both write `venues: 12` and take 1–8 and 9–12
+with the block's `venues:` subset. Concrete
 venues stay editable after compilation through the existing venues API; DSL
 names are initial values.
 

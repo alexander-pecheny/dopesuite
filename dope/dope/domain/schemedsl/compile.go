@@ -143,6 +143,9 @@ func (c *compiler) run() error {
 	if err := c.checkKeys(); err != nil {
 		return err
 	}
+	if err := c.checkLetters(); err != nil {
+		return err
+	}
 	if err := c.readInit(); err != nil {
 		return err
 	}
@@ -167,27 +170,39 @@ func (c *compiler) run() error {
 // assignLetters deals every Match its letter — A..Z, then AA.. — in schedule
 // order over the whole Game: Block, then stage, then Match. A block may decline
 // (`letters: false`): TPSh's written qualifying round is one sitting for
-// everyone and is not called a Match. A Match the scheme named (a double
+// everyone and is not called a Match. A block may also letter its Groups' bouts by
+// the Group (`letters: groups`): A1..A20, B1..B20, which Polyfest's personal SI
+// asks for rather than the deal's AA, AB. A Match the scheme named (a double
 // elimination's written rounds, `E: A1 B2 C3 D4`) keeps its name as its letter,
 // and the deal skips every name taken that way, so no two Matches share one.
 func (c *compiler) assignLetters() error {
 	claimed := map[string]bool{}
+	claim := func(letter string) error {
+		if claimed[letter] {
+			return corei18n.User(dopestrings.Default.Scheme.Structure.LetterDup(letter))
+		}
+		claimed[letter] = true
+		return nil
+	}
 	for i := range c.scheme.Stages {
 		stage := &c.scheme.Stages[i]
-		if !c.lettered(stage.Grain.Block) {
+		mode := c.letterMode(stage.Grain.Block)
+		if mode == lettersNone {
 			for m := range stage.Matches {
 				stage.Matches[m].Letter = ""
 			}
 			continue
 		}
+		if mode == lettersGroups {
+			letterByGroup(stage)
+		}
 		for _, match := range stage.Matches {
 			if match.Letter == "" {
 				continue
 			}
-			if claimed[match.Letter] {
-				return corei18n.User(dopestrings.Default.Scheme.Structure.LetterDup(match.Letter))
+			if err := claim(match.Letter); err != nil {
+				return err
 			}
-			claimed[match.Letter] = true
 		}
 	}
 	dealt := 0
@@ -200,7 +215,7 @@ func (c *compiler) assignLetters() error {
 	}
 	for i := range c.scheme.Stages {
 		stage := &c.scheme.Stages[i]
-		if !c.lettered(stage.Grain.Block) {
+		if c.letterMode(stage.Grain.Block) == lettersNone {
 			continue
 		}
 		for m := range stage.Matches {
@@ -212,15 +227,57 @@ func (c *compiler) assignLetters() error {
 	return nil
 }
 
-// lettered says whether a stage's Block deals letters to its Matches: a stage
-// outside any Block of the scheme deals none, and `letters: false` declines.
-func (c *compiler) lettered(blockCode string) bool {
+// letterByGroup letters a Group's bouts the scheme did not name by the
+// Group's letter and their number in it: A1, A2..
+func letterByGroup(stage *store.SchemeStage) {
+	g, err := strconv.Atoi(stage.Grain.Group)
+	if err != nil {
+		return
+	}
+	for m := range stage.Matches {
+		if stage.Matches[m].Letter == "" {
+			stage.Matches[m].Letter = openingLetter(g-1) + strconv.Itoa(m+1)
+		}
+	}
+}
+
+// The `letters:` words: the deal (true, the default), none (false), or each
+// Group's bouts by the Group's letter and their number in it (groups).
+const (
+	lettersDeal   = "true"
+	lettersNone   = "false"
+	lettersGroups = "groups"
+)
+
+// letterMode says how a stage's Block letters its Matches: a stage outside any
+// Block of the scheme deals none, `letters: false` declines, `letters: groups`
+// letters a Group's bouts by the Group.
+func (c *compiler) letterMode(blockCode string) string {
 	var block int
 	if _, err := fmt.Sscanf(blockCode, "s%d", &block); err != nil || block < 1 || block > len(c.doc.Blocks) {
-		return false
+		return lettersNone
 	}
-	letters, ok := c.doc.Blocks[block-1].Bool("letters")
-	return !ok || letters
+	v, ok := c.doc.Blocks[block-1].value("letters")
+	if !ok {
+		return lettersDeal
+	}
+	return v.Raw
+}
+
+// checkLetters refuses a `letters:` word the deal does not know.
+func (c *compiler) checkLetters() error {
+	for _, blk := range c.doc.Blocks {
+		v, ok := blk.value("letters")
+		if !ok {
+			continue
+		}
+		switch v.Raw {
+		case lettersDeal, lettersNone, lettersGroups:
+		default:
+			return errAt(v.Line, "%s", dopestrings.Default.Scheme.Structure.LettersWord(v.Raw))
+		}
+	}
+	return nil
 }
 
 // BoutLetter is the letter of the n-th Match (0-based): A..Z, then AA, AB.. —

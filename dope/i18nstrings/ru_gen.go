@@ -2825,6 +2825,9 @@ var RU = Strings{
 			LetterDup: func(letter string) string {
 				return fmt.Sprintf("бой «%s» назван дважды: имя боя — его буква, она одна на игру", letter)
 			},
+			LettersWord: func(word string) string {
+				return fmt.Sprintf("letters: «%s» — пишите true, false или groups (бои группы A — A1, A2…)", word)
+			},
 			MatchCodeDup: func(match string, held_stage string, stage string) string {
 				return fmt.Sprintf("бой \"%s\" есть и в этапе \"%s\", и в \"%s\"", match, held_stage, stage)
 			},
@@ -3006,6 +3009,8 @@ var RU = Strings{
 		},
 		GroupBouts: StandingsGroupBoutsStrings{
 			Bout:  func() string { return "Бой" },
+			Card:  func(letter string) string { return fmt.Sprintf("Бой %s", letter) },
+			Place: func() string { return "М" },
 			Round: func() string { return "Круг" },
 			Score: func() string { return "Счёт" },
 			Sides: func() string { return "Участники" },
@@ -3137,6 +3142,12 @@ var RU = Strings{
 		Rr: StructureRrStrings{
 			GroupFeed:       func(n string) string { return fmt.Sprintf("Гр. %s", n) },
 			GroupSizeNeeded: func() string { return "roundrobin: нужен group_size" },
+			GroupVenuesRange: func(max string) string {
+				return fmt.Sprintf("group_venues: от 1 до %s, столько боёв в одном круге группы", max)
+			},
+			GroupVenuesTooFew: func(need string, have string) string {
+				return fmt.Sprintf("group_venues: группам нужно %s площадок, а у блока их %s", need, have)
+			},
 			NoSchedule: func(entrants string, size string) string {
 				return fmt.Sprintf("rr: нет расписания на %s участников по %s за столом", entrants, size)
 			},
@@ -3371,8 +3382,11 @@ var RU = Strings{
 			Battle:      func(n string, name string) string { return fmt.Sprintf("пл. %s (%s)", n, name) },
 			BattleShort: func(n string) string { return fmt.Sprintf("пл. %s", n) },
 			Delete:      func() string { return "Удалить площадку" },
+			HostsColumn: func() string { return "Ведущие" },
 			NameColumn:  func() string { return "Название" },
-			WithTime:    func(time string, venue string) string { return fmt.Sprintf("%s %s", time, venue) },
+			PlaceColumn: func() string { return "Аудитория" },
+			WithPlace:   func(where string, place string) string { return fmt.Sprintf("%s, %s", where, place) },
+			WithTime:    func(venue string, time string) string { return fmt.Sprintf("%s %s", venue, time) },
 		},
 		Viewers: WidgetsViewersStrings{
 			Label: func() string { return "Зрителей онлайн" },

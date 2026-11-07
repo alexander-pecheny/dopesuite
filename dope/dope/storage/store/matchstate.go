@@ -316,7 +316,7 @@ func LoadMatchStates(ctx context.Context, q Queryer, sel MatchSelector) ([]DBMat
 	where, args := sel.where()
 	rows, err := q.QueryContext(ctx, `
 select m.id, m.game_id, g.game_type, m.code, m.title, m.status, m.revision, m.state_json,
-       t.revision, t.updated_at, s.code, s.title, v.number, v.title, g.roster_source,
+       t.revision, t.updated_at, s.code, s.title, v.number, v.title, coalesce(v.place, ''), coalesce(v.hosts, ''), g.roster_source,
        coalesce(s.config_json, ''), coalesce(m.starts_at, '')
 from matches m
 join fests t on t.id = m.fest_id
@@ -334,8 +334,9 @@ order by s.position, s.id, m.position, m.id`, args...)
 		var updatedAt, stateJSON, stageConfig string
 		var venueNumber sql.NullInt64
 		var venueTitle sql.NullString
+		var venuePlace, venueHosts string
 		if err := rows.Scan(&match.MatchID, &match.GameID, &match.GameType, &match.Code, &match.Title, &match.Status, &match.Revision, &stateJSON,
-			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &match.RosterSource,
+			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &venuePlace, &venueHosts, &match.RosterSource,
 			&stageConfig, &match.StartsAt); err != nil {
 			rows.Close()
 			return nil, err
@@ -353,7 +354,7 @@ order by s.position, s.id, m.position, m.id`, args...)
 		}
 		match.UpdatedAt = ParseDBTime(updatedAt)
 		if venueNumber.Valid {
-			match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String}
+			match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String, Place: venuePlace, Hosts: venueHosts}
 		}
 		match.State = MatchState{
 			Title:     match.Title,

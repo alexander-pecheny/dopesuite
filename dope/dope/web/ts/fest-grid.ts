@@ -567,28 +567,31 @@ function stageHead(stage: FestGridStage, title: string | undefined, ctx: PaintCo
 // own.
 interface TableHead {
   title: string;
-  venue: Venue | null;
+  // where is the venues the stage's Matches play at, as its head says it.
+  where: string;
 }
 
 function tableHead(stage: FestGridStage, liveStage: FestGridStage): TableHead {
   return {
     title: stage.grain?.group ? groupLabel(stage as StageRef) : String(stage.title || ""),
-    venue: stageVenue(stage, liveStage),
+    where: stageWhere(stage, liveStage),
   };
 }
 
-// stageVenue is the one table every Match of the stage sits at, or null when
-// they spread — a pod's Matches share a table like a group's do.
-function stageVenue(stage: FestGridStage, liveStage: FestGridStage): Venue | null {
+// stageWhere is where a stage's Matches are played: the one table they all
+// sit at with its title, or the tables a group spreads over by number
+// (venues 1, 2), or nothing when some Match has no table.
+function stageWhere(stage: FestGridStage, liveStage: FestGridStage): string {
   const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
-  let found: Venue | null = null;
+  const found = new Map<number, Venue>();
   for (const match of stage.matches || []) {
     const venue = firstVenue(liveMatches.get(match.code)?.venue, match.venue);
-    if (!venue) return null;
-    if (found && venueText(found) !== venueText(venue)) return null;
-    found = venue;
+    if (!venue) return "";
+    found.set(venue.number, venue);
   }
-  return found;
+  const venues = [...found.values()];
+  if (venues.length === 1) return venueText(venues[0]);
+  return venues.length ? S.fest.grid.venue(venues.map((venue) => venue.number).sort((a, b) => a - b).join(", ")) : "";
 }
 
 // stageSlotOrder is the seating order of a stage's participants — first
@@ -628,7 +631,7 @@ function buildStandingsTable({stage, live, entries, order, sort, item}: GridTabl
   const box = el("article", `grid-box grid-standings${metric ? "" : " grid-standings-bare"}`, "");
   const grid = el("div", "grid-slot-grid", "");
   const title = gridCell("grid-slot-head grid-match-head-cell", "");
-  title.appendChild(headLayout(groupTitleNode(stage, head.title, options), venueText(head.venue)));
+  title.appendChild(headLayout(groupTitleNode(stage, head.title, options), head.where));
   grid.appendChild(title);
   if (metric) grid.appendChild(gridHeadCell("slot-total-head", standingsMetricLabel(metric)));
   grid.appendChild(gridHeadCell("slot-place-head", S.fest.grid.colPlace()));
@@ -911,6 +914,8 @@ function matchCard(match: FestGridMatch, venue: Venue | null, ctx: PaintContext,
   const time = (startsAt || "").trim();
   if (time) card.appendChild(el("span", "", S.fest.grid.cardStartsAt(time)));
   if (venue) card.appendChild(el("span", "", venueText(venue)));
+  if (venue?.place) card.appendChild(el("span", "", venue.place));
+  if (venue?.hosts) card.appendChild(el("span", "", venue.hosts));
   const href = matchTitleHref(match, ctx);
   if (href) {
     const link = el("a", "", S.fest.grid.cardOpen());

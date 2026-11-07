@@ -48,6 +48,7 @@ import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridData, FestGridStage} from "./fest-grid.js";
 import S from "./i18nstrings.js";
 import {boutWhereWhen, buildVenuesTable} from "./venue.js";
+import type {VenueFields} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
 import {createUndo, isUndoKey, valueAt} from "./undo.js";
@@ -643,7 +644,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     case "venues":
       return buildVenuesTable(venues, {
         editable: !viewer,
-        onTitleChange: (number, title) => void venueEdits.rename(number, title),
+        onChange: (number, fields) => void venueEdits.update(number, fields),
         onAdd: venueEdits.add,
         onDelete: venueEdits.remove,
       });
@@ -1012,7 +1013,8 @@ export type VenueChange = "rename" | "add" | "delete";
 
 export interface VenueEditor {
   // Each resolves to why the server refused, or to an empty string.
-  rename(number: number, title: string): Promise<string>;
+  // update changes the fields it is given (title, place, hosts).
+  update(number: number, fields: VenueFields): Promise<string>;
   add(title: string, number: number): Promise<string>;
   remove(number: number): Promise<string>;
 }
@@ -1035,7 +1037,7 @@ export function venueEditor(options: {
     return "";
   }
   return {
-    rename: (number, title) => run({url: at(number), method: "PUT", body: {title}}, "rename"),
+    update: (number, fields) => run({url: at(number), method: "PUT", body: fields}, "rename"),
     add: (title, number) => run({url: `${options.festAPI}/venues`, method: "POST", body: number > 0 ? {title, number} : {title}}, "add"),
     remove: (number) => run({url: at(number), method: "DELETE"}, "delete"),
   };

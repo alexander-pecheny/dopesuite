@@ -1173,6 +1173,13 @@ create table if not exists rating_sync_base(
 `)
 		return err
 	}},
+	{Version: 54, Name: "venue place and hosts", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+alter table venues add column place text not null default '';
+alter table venues add column hosts text not null default '';
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

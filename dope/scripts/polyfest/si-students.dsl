@@ -3,9 +3,11 @@
 # бои на четверых, пять кругов, каждый встречается с каждым один раз. За бой
 # 5 − место + очки/200. Восемь из группы в Double Elimination: 1–4 места в
 # верхнюю сетку, 5–8 в нижнюю, дальше бой за боем по Приложению 1.
+# Площадки 1–8 из 12 общих (9–12 у молодёжного зачёта): у группы две,
+# бои круга идут на них по два захода. Бои группы A — A1…A20.
 
 [defaults]
-venues: 4
+venues: 12
 
 [init]
 seed: xlsx
@@ -14,6 +16,9 @@ seed: xlsx
 title: Групповой этап
 kind: roundrobin
 slug: group-stage
+venues: [1, 2, 3, 4, 5, 6, 7, 8]
+group_venues: 2
+letters: groups
 groups: 4
 group_size: 16
 match_size: 4
@@ -24,6 +29,7 @@ proceeding_participants: 8
 ---
 title: Плей-офф
 kind: double_elimination
+venues: [1, 2, 3, 4, 5, 6, 7, 8]
 groups: 1
 group_size: 32
 match_size: 4

@@ -161,3 +161,63 @@ func TestAddVenueLinksTheSchemesBouts(t *testing.T) {
 		t.Fatalf("anonymous add venue status = %d, want refused", resp.Code)
 	}
 }
+
+// A venue carries the room it is in and who hosts there. A venue is added
+// with them, a write changes only the fields it names, and a bout's view
+// carries them beside the venue's number.
+func TestVenuePlaceAndHosts(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	if _, err := db.Exec(`update matches set venue_id = null where fest_id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`delete from venues where fest_id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	hostID, hostToken := createAPITestSession(t, srv, "venue-place-host")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	path := fmt.Sprintf("/api/fest/%d/venues", festID)
+	decode := func(resp interface{ Bytes() []byte }) []store.VenueView {
+		var venues []store.VenueView
+		if err := json.Unmarshal(resp.Bytes(), &venues); err != nil {
+			t.Fatal(err)
+		}
+		return venues
+	}
+	resp := scopedAPIRequest(t, srv, http.MethodPost, path, map[string]any{"number": 1, "title": "Площадка 1", "place": "ауд. 308", "hosts": "Бобыльков / Банникова"}, hostToken)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("add status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	if v := decode(resp.Body); len(v) != 1 || v[0].Place != "ауд. 308" || v[0].Hosts != "Бобыльков / Банникова" {
+		t.Fatalf("venues = %#v", v)
+	}
+	resp = scopedAPIRequest(t, srv, http.MethodPut, path+"/1", map[string]any{"place": "ауд. 310"}, hostToken)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("put status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	if v := decode(resp.Body); v[0].Title != "Площадка 1" || v[0].Place != "ауд. 310" || v[0].Hosts != "Бобыльков / Банникова" {
+		t.Fatalf("after a place-only write: %#v", v)
+	}
+	resp = scopedAPIRequest(t, srv, http.MethodPut, path+"/1", map[string]any{"title": " "}, hostToken)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("empty title status = %d, want 400", resp.Code)
+	}
+	var code string
+	if err := db.QueryRow(`select code from matches where fest_id = ? order by id limit 1`, festID).Scan(&code); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`update matches set venue_id = (select id from venues where fest_id = ? and number = 1) where code = ? and fest_id = ?`, festID, code, festID); err != nil {
+		t.Fatal(err)
+	}
+	states, err := store.LoadMatchStates(t.Context(), db, store.MatchSelector{FestID: festID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range states {
+		if m.Code == code && (m.Venue == nil || m.Venue.Place != "ауд. 310" || m.Venue.Hosts == "") {
+			t.Fatalf("bout %s venue = %#v", code, m.Venue)
+		}
+	}
+}

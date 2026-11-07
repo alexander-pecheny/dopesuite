@@ -12,6 +12,7 @@
 import {formatPlace, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {buildGroupStandingsView, letteredTitle, standingsTable} from "./standings.js";
+import type {GroupBout} from "./standings.js";
 import {buildGameRosterView} from "./fest-roster.js";
 import {nameCell} from "./name-cell.js";
 import {seatPicker} from "./seat-picker.js";
@@ -24,7 +25,8 @@ import {buildFlatScoreTable, buildTwoRowScoreTable} from "./score-table.js";
 import type {ScoreTableThemeRow} from "./score-table.js";
 import {reseedMetricHeader, reseedMetricValue} from "./fest-grid.js";
 import type {FestGridStage, SortRule} from "./fest-grid.js";
-import {computeGroupBlockRounds} from "./group-stats.js";
+import {boutScope, computeGroupBlockRounds, evalScoringRule} from "./group-stats.js";
+import type {GroupBlockRoundsMatch} from "./group-stats.js";
 import {canonicalKey, groupLabel} from "./game-tabs.js";
 import type {GameTab} from "./game-tabs.js";
 import type {StageRef} from "./standings.js";
@@ -593,6 +595,31 @@ function buildBouts(tab: GameTab | undefined): HTMLElement {
 // the split by block round. The order and the points are the server's
 // standings (head-to-head and all); the split by round is reckoned here from
 // the bouts, since the server has no column for it.
+// groupBout is one bout in a group's list: who sat, the score, and once the
+// bout is finished each seat's place and the points the rule paid it.
+function groupBout(match: {code?: string; round?: number}, scored: GroupBlockRoundsMatch, pointsRule: string): GroupBout {
+  const code = match.code || "";
+  const view = page.view(code);
+  const state = stateOf(code);
+  const values = valuesOf(view);
+  const sides = !view ? [] : seatsOf(view).map((id, seat) => {
+    const place = Number(view.participants?.[seat]?.place) || undefined;
+    return {
+      name: seatName(view, seat),
+      score: ek.scoreSection(state.sections.get(id), values).total,
+      place,
+      points: view.finished && place ? evalScoringRule(pointsRule, boutScope(scored, seat)) : undefined,
+    };
+  });
+  return {
+    label: boutLetters.get(code) || code,
+    href: page.boutHref(code),
+    blockRound: Number(match.round) || undefined,
+    sides,
+    started: Boolean(view?.finished) || sides.some((side) => Number(side.score)),
+  };
+}
+
 function buildGroupTable(tab: GameTab | undefined): HTMLElement {
   const groups = (tab?.stages || []).map((code) => {
     const stage = (scheme.stages || []).find((entry) => entry.code === code);
@@ -620,19 +647,8 @@ function buildGroupTable(tab: GameTab | undefined): HTMLElement {
         if (entrant.label) rows.push({id: 0, name: entrant.label, points: 0, blockRounds: new Array<number>(blockRoundCount).fill(0), bouts: []});
       }
     }
-    const groupBouts = planned.map((match) => {
-      const view = page.view(match.code || "");
-      const state = stateOf(match.code || "");
-      const values = valuesOf(view);
-      const sides = !view ? [] : seatsOf(view).map((id, seat) => ({name: seatName(view, seat), score: ek.scoreSection(state.sections.get(id), values).total}));
-      return {
-        label: boutLetters.get(match.code || "") || match.code || "",
-        href: page.boutHref(match.code || ""),
-        blockRound: Number(match.round) || undefined,
-        sides,
-        started: Boolean(view?.finished) || sides.some((side) => Number(side.score)),
-      };
-    });
+    const pointsRule = stage?.config?.rules?.bout?.points || "seats + 1 - place";
+    const groupBouts = planned.map((match, index) => groupBout(match, matches[index], pointsRule));
     return {title: stage ? groupLabel(stage as StageRef) : code, anchor: groupAnchorID(code), blockRoundCount, rows, groupBouts};
   });
   return buildGroupStandingsView(groups, {boutHref: page.boutHref});

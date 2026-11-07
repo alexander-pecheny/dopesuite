@@ -14,8 +14,12 @@ import (
 )
 
 // Venue-edit request bodies used by the match-update handlers below.
+// venueUpdateRequest is the body of PUT /api/fest/{fest}/venues/{n}: the
+// fields it names change, the ones it leaves out keep their value.
 type venueUpdateRequest struct {
-	Title string `json:"title"`
+	Title *string `json:"title,omitempty"`
+	Place *string `json:"place,omitempty"`
+	Hosts *string `json:"hosts,omitempty"`
 }
 
 type matchVenueRequest struct {

@@ -1,4 +1,5 @@
-// Venue: the number-plus-title a match is played at, and the venues table.
+// Venue: the number-plus-title a match is played at, where it is (place) and
+// who hosts there, and the venues table.
 
 import {option, td} from "./cells.js";
 import {nameCell} from "./name-cell.js";
@@ -10,11 +11,15 @@ import S from "./i18nstrings.js";
 // Visible width, in characters, of the new venue's title field.
 const TITLE_FIELD_SIZE = 24;
 
-export type VenueLike = number | string | {number?: unknown; Number?: unknown; title?: unknown; Title?: unknown} | null | undefined;
+export type VenueLike = number | string | {number?: unknown; Number?: unknown; title?: unknown; Title?: unknown; place?: unknown; hosts?: unknown} | null | undefined;
 
 export interface Venue {
   number: number;
   title: string;
+  // place is the room the participants look for (room 308), hosts who
+  // host there. Either may be empty.
+  place?: string;
+  hosts?: string;
   // bouts is how many bouts play at it, in the fest's venue list.
   bouts?: number;
 }
@@ -28,7 +33,17 @@ export function normalizeVenue(venue: VenueLike): Venue | null {
   const number = Number(venue.number ?? venue.Number);
   if (!Number.isFinite(number) || number <= 0) return null;
   const title = String(venue.title ?? venue.Title ?? "").trim();
-  return {number, title};
+  const place = String(venue.place ?? "").trim();
+  const hosts = String(venue.hosts ?? "").trim();
+  return {number, title, ...(place ? {place} : {}), ...(hosts ? {hosts} : {})};
+}
+
+// VenueFields are what a host edits on a venue; a write names the ones it
+// changes.
+export interface VenueFields {
+  title?: string;
+  place?: string;
+  hosts?: string;
 }
 
 export function formatVenue(venue: VenueLike): string {
@@ -45,6 +60,17 @@ export function formatBattleVenue(venue: VenueLike): string {
     : S.widgets.venue.battleShort(String(normalized.number));
 }
 
+// boutWhere is where and when a bout is played as its head says it: the
+// table's number, the start time, then the room when the venue has one
+// (venue 1 18:00, room 308). A venue with no room says its title instead,
+// as before.
+export function boutWhere(venue: VenueLike, startsAt: string | undefined): string {
+  const normalized = normalizeVenue(venue);
+  if (!normalized?.place) return withStartsAt(formatBattleVenue(venue), startsAt);
+  const where = withStartsAt(S.widgets.venue.battleShort(String(normalized.number)), startsAt);
+  return S.widgets.venue.withPlace(where, normalized.place);
+}
+
 export function formatBattleVenueShort(venue: VenueLike): string {
   const normalized = normalizeVenue(venue);
   return normalized ? S.widgets.venue.battleShort(String(normalized.number)) : "";
@@ -52,7 +78,8 @@ export function formatBattleVenueShort(venue: VenueLike): string {
 
 export interface VenuesTableOptions {
   editable?: boolean;
-  onTitleChange?: (number: number, title: string) => void;
+  // onChange saves one field the host changed.
+  onChange?: (number: number, fields: VenueFields) => void;
   // onAdd adds a venue. number is 0 when the host left it empty, and then
   // the server takes the next free one. It and onDelete resolve to why the
   // server refused, or to an empty string; the table shows the refusal.
@@ -73,7 +100,7 @@ export function venueDeletable(venue: Venue): boolean {
 
 export function buildVenuesTable(venues: Venue[] | null | undefined, options: VenuesTableOptions = {}): HTMLElement {
   const editable = Boolean(options.editable);
-  const onTitleChange = typeof options.onTitleChange === "function" ? options.onTitleChange : null;
+  const onChange = editable && typeof options.onChange === "function" ? options.onChange : null;
   const onDelete = editable && typeof options.onDelete === "function" ? options.onDelete : null;
   const onAdd = editable && typeof options.onAdd === "function" ? options.onAdd : null;
   const wrapper = document.createElement("div");
@@ -86,21 +113,25 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
     notice.hidden = !error;
   };
 
-  const title = (venue: Venue) => {
-    if (!editable || !onTitleChange) return venue.title;
+  // field is one of a venue's texts: an input for a host, the text for a
+  // spectator. The title may not be emptied; the place and hosts may.
+  const field = (venue: Venue, key: keyof VenueFields, label: string) => {
+    const value = venue[key] || "";
+    if (!onChange) return value;
     const input = document.createElement("input");
     input.className = "venue-input";
-    input.value = venue.title;
-    input.dataset.committedTitle = venue.title;
+    input.value = value;
+    input.setAttribute("aria-label", label);
+    input.dataset.committed = value;
     input.addEventListener("change", () => {
-      const title = input.value.trim();
-      if (!title) {
-        input.value = input.dataset.committedTitle ?? "";
+      const typed = input.value.trim();
+      if (!typed && key === "title") {
+        input.value = input.dataset.committed ?? "";
         return;
       }
-      if (title === input.dataset.committedTitle) return;
-      input.dataset.committedTitle = title;
-      onTitleChange(venue.number, title);
+      if (typed === input.dataset.committed) return;
+      input.dataset.committed = typed;
+      onChange(venue.number, {[key]: typed});
     });
     return td(input);
   };
@@ -118,12 +149,25 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
     box.appendChild(remove);
     return td(box);
   };
-  const columns: StandingsColumn[] = [{label: "№", kind: "place"}, {label: S.widgets.venue.nameColumn(), kind: "name"}];
+  const columns: StandingsColumn[] = [
+    {label: "№", kind: "place"},
+    {label: S.widgets.venue.nameColumn(), kind: "name"},
+    {label: S.widgets.venue.placeColumn()},
+    {label: S.widgets.venue.hostsColumn()},
+  ];
   if (onDelete) columns.push({label: ""});
   wrapper.appendChild(standingsTable({
     className: "venues-results-table",
     columns,
-    rows: (venues || []).map((venue) => onDelete ? [venue.number, title(venue), actions(venue)] : [venue.number, title(venue)]),
+    rows: (venues || []).map((venue) => {
+      const row = [
+        venue.number,
+        field(venue, "title", S.widgets.venue.nameColumn()),
+        field(venue, "place", S.widgets.venue.placeColumn()),
+        field(venue, "hosts", S.widgets.venue.hostsColumn()),
+      ];
+      return onDelete ? [...row, actions(venue)] : row;
+    }),
   }));
   if (onAdd) wrapper.appendChild(venueAddForm(nextVenueNumber(venues), (title, number) => void onAdd(title, number).then(refused)));
   if (onAdd || onDelete) wrapper.appendChild(notice);
@@ -212,7 +256,7 @@ export function boutWhereWhen(options: BoutWhereWhenOptions): HTMLElement[] {
   const nodes: HTMLElement[] = [];
   const startsAt = (options.startsAt || "").trim();
   if (startsAt || options.venueAlways) {
-    const label = venueLabel(options.venue, options.className, withStartsAt(formatBattleVenue(options.venue), startsAt));
+    const label = venueLabel(options.venue, options.className, boutWhere(options.venue, startsAt));
     if (label) nodes.push(label);
   }
   const host = options.host;

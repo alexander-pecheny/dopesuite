@@ -75,6 +75,9 @@
   --od-detailed-name-base-col-compact: 90px;
   --od-detailed-name-extra-col: 3em;
   --group-bouts-pairing-col-mobile: 210px;
+  --group-bout-card-name-col: 190px;
+  --group-bout-round-col: 5em;
+  --group-bout-card-num-col: 3.5em;
 }
 
 /* ── name popovers ─────────────────────────────────────────
@@ -1312,6 +1315,28 @@ button.seat-picker-control {
 .group-standings-head {
   margin: var(--space-2) 0 0;
   font-size: var(--text-md);
+}
+
+/* A group whose bouts seat three or four takes the whole row: its table,
+   then its bouts one table each, a круг to a row (standings.ts). */
+.group-standings-item.group-standings-wide {
+  grid-column: 1 / -1;
+}
+
+.group-bout-round {
+  width: var(--group-bout-round-col);
+  padding-top: var(--space-1);
+}
+
+.results-table.group-bout-card-table {
+  --results-team-col: var(--group-bout-card-name-col);
+}
+
+/* A card's numbers keep one width, so a bout not played yet is as wide as
+   the played ones beside it. */
+.group-bout-card-table td.results-num,
+.group-bout-card-table th.results-num {
+  min-width: var(--group-bout-card-num-col);
 }
 
 /* The list of a group's bouts: the pairing is as wide as two names, and a
@@ -2608,6 +2633,8 @@ body:not(.embedded-match) .grid-match {
 .group-standings-table .results-team,
 .group-bouts-table thead th.results-team-head,
 .group-bouts-table .results-team,
+.group-bout-card-table thead th.results-team-head,
+.group-bout-card-table .results-team,
 .troika-swiss-table thead th.results-team-head,
 .troika-swiss-table .results-team {
   width: var(--results-team-col);
@@ -3663,7 +3690,8 @@ body:not(.embedded-match) .grid-match {
 /* A player's round in the groups tab leads to the bout he played it in, and
    so does a bout's letter in the list under a group's table. */
 .group-standings-table .group-round-link,
-.group-bouts-table .group-round-link {
+.group-bouts-table .group-round-link,
+.group-bout-card-table .group-round-link {
   display: block;
   color: inherit;
   text-decoration: none;
@@ -3672,7 +3700,9 @@ body:not(.embedded-match) .grid-match {
 .group-standings-table .group-round-link:hover,
 .group-standings-table .group-round-link:focus,
 .group-bouts-table .group-round-link:hover,
-.group-bouts-table .group-round-link:focus {
+.group-bouts-table .group-round-link:focus,
+.group-bout-card-table .group-round-link:hover,
+.group-bout-card-table .group-round-link:focus {
   color: var(--blue);
 }
 

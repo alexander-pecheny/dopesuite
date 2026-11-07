@@ -1910,6 +1910,7 @@ shootout: true
       kindUnknown: (kind: string, known: string) => `неизвестный kind ${kind} (есть ${known})`,
       kindUnregistered: (kind: string) => `${kind} не зарегистрирован в реестре видов`,
       letterDup: (letter: string) => `бой «${letter}» назван дважды: имя боя — его буква, она одна на игру`,
+      lettersWord: (word: string) => `letters: «${word}» — пишите true, false или groups (бои группы A — A1, A2…)`,
       matchCodeDup: (match: string, held_stage: string, stage: string) => `бой "${match}" есть и в этапе "${held_stage}", и в "${stage}"`,
       noBlocks: () => "в [scheme] нет ни одного блока",
       slugCharset: (slug: string) => `slug — латиница, цифры и дефис, а не "${slug}"`,
@@ -2067,6 +2068,8 @@ shootout: true
     },
     groupBouts: {
       bout: () => "Бой",
+      card: (letter: string) => `Бой ${letter}`,
+      place: () => "М",
       round: () => "Круг",
       score: () => "Счёт",
       sides: () => "Участники",
@@ -2146,6 +2149,8 @@ shootout: true
     rr: {
       groupFeed: (n: string) => `Гр. ${n}`,
       groupSizeNeeded: () => "roundrobin: нужен group_size",
+      groupVenuesRange: (max: string) => `group_venues: от 1 до ${max}, столько боёв в одном круге группы`,
+      groupVenuesTooFew: (need: string, have: string) => `group_venues: группам нужно ${need} площадок, а у блока их ${have}`,
       noSchedule: (entrants: string, size: string) => `rr: нет расписания на ${entrants} участников по ${size} за столом`,
       pairingsBoutSize: (bout: string, size: string) => `pairings: в бою ${bout} должно быть ${size} мест`,
       pairingsEmpty: (round: string) => `pairings: в ${round}-м круге нет боёв`,
@@ -2320,8 +2325,11 @@ shootout: true
       battle: (n: string, name: string) => `пл. ${n} (${name})`,
       battleShort: (n: string) => `пл. ${n}`,
       delete: () => "Удалить площадку",
+      hostsColumn: () => "Ведущие",
       nameColumn: () => "Название",
-      withTime: (time: string, venue: string) => `${time} ${venue}`,
+      placeColumn: () => "Аудитория",
+      withPlace: (where: string, place: string) => `${where}, ${place}`,
+      withTime: (venue: string, time: string) => `${venue} ${time}`,
     },
     viewers: {
       label: () => "Зрителей онлайн",

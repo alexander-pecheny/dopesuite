@@ -286,3 +286,48 @@ opening: [E: A1 B1, F: A2 B2]
 		}
 	}
 }
+
+// Polyfest's personal SI letters a group's бои by the group, A1…A20, and
+// plays a group at two venues: the студ groups on 1–8, two each, the
+// молодёжь's on 9–12, a round's four бои two at a time.
+func TestPolyfestSIGroupsLetterAndSpread(t *testing.T) {
+	for _, c := range []struct {
+		file     string
+		entrants int
+		venues   [][2]int
+	}{
+		{"si-students.dsl", 64, [][2]int{{1, 2}, {3, 4}, {5, 6}, {7, 8}}},
+		{"si-youth.dsl", 32, [][2]int{{9, 10}, {11, 12}}},
+	} {
+		scheme := polyfestScheme(t, c.file, "si", c.entrants)
+		for g, pair := range c.venues {
+			stage := stageByCode(t, scheme, fmt.Sprintf("s1-g%d", g+1))
+			if len(stage.Matches) != 20 {
+				t.Fatalf("%s group %d: %d бои", c.file, g+1, len(stage.Matches))
+			}
+			for i, match := range stage.Matches {
+				letter := fmt.Sprintf("%c%d", 'A'+g, i+1)
+				venue, wave := pair[i%2], i%4/2+1
+				if match.Letter != letter || match.Venue != venue || match.Wave != wave || match.BlockRound != i/4+1 {
+					t.Errorf("%s %s: буква %s, площадка %d, заход %d, круг %d; want %s, %d, %d, %d",
+						c.file, match.Code, match.Letter, match.Venue, match.Wave, match.BlockRound, letter, venue, wave, i/4+1)
+				}
+			}
+		}
+	}
+}
+
+// `group_venues:` needs as many venues as the groups take, and no more per
+// group than a round has бои; `letters:` takes true, false or groups.
+func TestGroupVenuesAndLettersRefuse(t *testing.T) {
+	const base = "[defaults]\nvenues: 4\n\n[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 16\nmatch_size: 4\n"
+	for _, extra := range []string{"group_venues: 3\n", "group_venues: 5\n", "letters: maybe\n"} {
+		doc, err := Parse(base + extra)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Compile(doc, Input{Slug: "x", GameType: "si", Entrants: seedEntrants(32)}); err == nil {
+			t.Errorf("%q compiled", extra)
+		}
+	}
+}

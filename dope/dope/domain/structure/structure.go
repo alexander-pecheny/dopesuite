@@ -91,10 +91,15 @@ type Contender struct {
 
 // RRConfig is a round-robin Group: its schedule and its cross-table rule.
 type RRConfig struct {
-	Code        string             `json:"code,omitempty"`
-	Label       string             `json:"label,omitempty"`
-	Title       string             `json:"title,omitempty"`
-	Venue       int                `json:"venue,omitempty"`
+	Code  string `json:"code,omitempty"`
+	Label string `json:"label,omitempty"`
+	Title string `json:"title,omitempty"`
+	Venue int    `json:"venue,omitempty"`
+	// Venues are the Group's venues when it has more than one: a round's
+	// bouts take them in turn, so a round of four bouts at two venues is two
+	// Waves of two. Polyfest's personal SI plays a group of 16 at two
+	// tables. Empty means every bout at Venue.
+	Venues      []int              `json:"venues,omitempty"`
 	Entrants    []store.SchemeSlot `json:"entrants,omitempty"`
 	Pairings    [][][]int          `json:"pairings,omitempty"`
 	MatchSize   int                `json:"matchSize,omitempty"`

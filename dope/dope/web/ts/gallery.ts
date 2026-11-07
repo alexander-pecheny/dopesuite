@@ -87,8 +87,9 @@ const groups: GroupStandingsGroup[] = [
     {name: "Алексей Погорелов", points: 10, blockRounds: [3, 3, 2]},
     {name: LONG, points: 8.5, blockRounds: [2, 2.5, 1]},
   ], groupBouts: [
-    {label: "A", href: "#", blockRound: 1, started: true, sides: [{name: "Ярослав Кудымов", score: 120}, {name: "Алексей Погорелов", score: 90}, {name: LONG, score: -10}]},
-    {label: "B", href: "#", blockRound: 2, started: false, sides: [{name: "Ярослав Кудымов"}, {name: "Алексей Погорелов"}, {name: LONG}]},
+    {label: "A1", href: "#", blockRound: 1, started: true, sides: [{name: "Ярослав Кудымов", score: 120, place: 1, points: 3.6}, {name: "Алексей Погорелов", score: 90, place: 2, points: 2.45}, {name: LONG, score: -10, place: 3, points: 0.95}]},
+    {label: "A2", href: "#", blockRound: 1, started: true, sides: [{name: "Никита Косенков", score: 60, place: 1, points: 3.3}, {name: "Есения Погорелова", score: 20, place: 2, points: 2.1}, {name: "Вера Вершинина", score: 0, place: 3, points: 1}]},
+    {label: "A3", href: "#", blockRound: 2, started: false, sides: [{name: "Ярослав Кудымов"}, {name: "Алексей Погорелов"}, {name: LONG}]},
   ]},
   {title: "Группа 2", blockRoundCount: 3, rows: [
     {name: "Никита Косенков", points: 9, blockRounds: [3, 3, 3]},
@@ -106,7 +107,7 @@ const individualStats: IndividualStatsRow[] = [
   {player: LONG, sum: 90, plus: 120, battles: 4, right: [1, 1, 0, 1, 1]},
 ];
 
-const venues: Venue[] = [{number: 1, title: "Рим, Алиенора", bouts: 4}, {number: 2, title: ""}, {number: 3, title: LONG, bouts: 2}];
+const venues: Venue[] = [{number: 1, title: "Рим, Алиенора", place: "ауд. 308", hosts: "Бобыльков / Банникова", bouts: 4}, {number: 2, title: ""}, {number: 3, title: LONG, bouts: 2}];
 
 const roster: RosterTeam[] = [
   {number: 1, name: "Детективы для элит", city: "Санкт-Петербург", ratingID: 1, players: [{name: "Дмитрий Яшин", ratingID: 1}, {name: "Анастасия Банникова"}, {name: "Даниил Чеченин"}, {name: "Денис Потехин"}]},
@@ -231,7 +232,7 @@ function render(root: HTMLElement): void {
     section(S.gallery.section.ekStats(), "table-host", buildEKStatsTable(ekStats)),
     section(S.gallery.section.individualStats(), "table-host", buildIndividualStatsTable(individualStats)),
     section(S.gallery.section.venues(), "table-host", buildVenuesTable(venues)),
-    section(S.gallery.section.venuesHost(), "table-host", buildVenuesTable(venues, {editable: true, onTitleChange: () => {}, onAdd: () => Promise.resolve(""), onDelete: () => Promise.resolve("")})),
+    section(S.gallery.section.venuesHost(), "table-host", buildVenuesTable(venues, {editable: true, onChange: () => {}, onAdd: () => Promise.resolve(""), onDelete: () => Promise.resolve("")})),
     section(S.gallery.section.roster(), "table-host fits-frame", buildRosterTable(roster)),
     section(S.gallery.section.chips(), "fits-frame", chips()),
     section(S.gallery.section.suggest(), "fits-frame", suggestField()),

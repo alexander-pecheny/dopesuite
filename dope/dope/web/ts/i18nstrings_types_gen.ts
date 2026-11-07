@@ -1888,6 +1888,7 @@ export type Strings = {
       kindUnknown: (kind: string, known: string) => string;
       kindUnregistered: (kind: string) => string;
       letterDup: (letter: string) => string;
+      lettersWord: (word: string) => string;
       matchCodeDup: (match: string, held_stage: string, stage: string) => string;
       noBlocks: () => string;
       slugCharset: (slug: string) => string;
@@ -2045,6 +2046,8 @@ export type Strings = {
     };
     groupBouts: {
       bout: () => string;
+      card: (letter: string) => string;
+      place: () => string;
       round: () => string;
       score: () => string;
       sides: () => string;
@@ -2124,6 +2127,8 @@ export type Strings = {
     rr: {
       groupFeed: (n: string) => string;
       groupSizeNeeded: () => string;
+      groupVenuesRange: (max: string) => string;
+      groupVenuesTooFew: (need: string, have: string) => string;
       noSchedule: (entrants: string, size: string) => string;
       pairingsBoutSize: (bout: string, size: string) => string;
       pairingsEmpty: (round: string) => string;
@@ -2298,8 +2303,11 @@ export type Strings = {
       battle: (n: string, name: string) => string;
       battleShort: (n: string) => string;
       delete: () => string;
+      hostsColumn: () => string;
       nameColumn: () => string;
-      withTime: (time: string, venue: string) => string;
+      placeColumn: () => string;
+      withPlace: (where: string, place: string) => string;
+      withTime: (venue: string, time: string) => string;
     };
     viewers: {
       label: () => string;

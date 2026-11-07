@@ -14,11 +14,11 @@ import (
 // LoadVenues returns a fest's venues ordered by number.
 func LoadVenues(ctx context.Context, q Queryer, festID int64) ([]VenueView, error) {
 	return CollectRows(ctx, q, `
-select v.number, v.title, (select count(*) from matches m where m.venue_id = v.id) from venues v
+select v.number, v.title, v.place, v.hosts, (select count(*) from matches m where m.venue_id = v.id) from venues v
 where v.fest_id = ?
 order by v.number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
 		var venue VenueView
-		if err := rows.Scan(&venue.Number, &venue.Title, &venue.Bouts); err != nil {
+		if err := rows.Scan(&venue.Number, &venue.Title, &venue.Place, &venue.Hosts, &venue.Bouts); err != nil {
 			return venue, err
 		}
 		return venue, nil
@@ -48,7 +48,7 @@ order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error)
 func LoadFestMatches(ctx context.Context, q Queryer, stageID int64, gameType string) ([]FestMatchView, error) {
 	rows, err := q.QueryContext(ctx, `
 select m.id, m.code, m.title, m.letter, m.position, m.participant_count, m.status, m.revision,
-       v.number, v.title, coalesce(m.starts_at, ''), m.game_id
+       v.number, v.title, coalesce(v.place, ''), coalesce(v.hosts, ''), coalesce(m.starts_at, ''), m.game_id
 from matches m
 left join venues v on v.id = m.venue_id
 where m.stage_id = ?
@@ -68,11 +68,12 @@ order by m.position, m.id`, stageID)
 		var match FestMatchView
 		var venueNumber sql.NullInt64
 		var venueTitle sql.NullString
-		if err := rows.Scan(&matchID, &match.Code, &match.Title, &match.Letter, &match.Position, &match.ParticipantCount, &match.Status, &match.Revision, &venueNumber, &venueTitle, &match.StartsAt, &match.GameID); err != nil {
+		var venuePlace, venueHosts string
+		if err := rows.Scan(&matchID, &match.Code, &match.Title, &match.Letter, &match.Position, &match.ParticipantCount, &match.Status, &match.Revision, &venueNumber, &venueTitle, &venuePlace, &venueHosts, &match.StartsAt, &match.GameID); err != nil {
 			return nil, err
 		}
 		if venueNumber.Valid {
-			match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String}
+			match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String, Place: venuePlace, Hosts: venueHosts}
 		}
 		match.ID = matchID
 		records = append(records, matchRecord{ID: matchID, Match: match})

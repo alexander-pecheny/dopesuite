@@ -586,7 +586,7 @@ CREATE TABLE venues(
   number integer not null,
   title text not null,
   created_at text not null,
-  updated_at text not null,
+  updated_at text not null, place text not null default '', hosts text not null default '',
   unique(fest_id, number)
 );
 

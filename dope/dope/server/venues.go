@@ -28,6 +28,8 @@ import (
 type venueCreateRequest struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`
+	Place  string `json:"place,omitempty"`
+	Hosts  string `json:"hosts,omitempty"`
 }
 
 // venueChange is what a venue write did: the fest's venues after it, the
@@ -59,16 +61,32 @@ func (s *server) writeVenues(ctx context.Context, festID int64, label string, pa
 
 func venueUserError(msg string) error { return corei18n.User(msg) }
 
-func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, title string) ([]store.VenueView, int64, error) {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return nil, 0, venueUserError(dopestrings.Default.Server.Venue.TitleEmpty())
+func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, req venueUpdateRequest) ([]store.VenueView, int64, error) {
+	sets, args := []string{}, []any{}
+	payload := map[string]any{"number": number}
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
+			return nil, 0, venueUserError(dopestrings.Default.Server.Venue.TitleEmpty())
+		}
+		sets, args, payload["title"] = append(sets, "title = ?"), append(args, title), title
 	}
-	change, err := s.writeVenues(reqCtx, festID, "venue-rename", map[string]any{"number": number, "title": title},
+	if req.Place != nil {
+		place := strings.TrimSpace(*req.Place)
+		sets, args, payload["place"] = append(sets, "place = ?"), append(args, place), place
+	}
+	if req.Hosts != nil {
+		hosts := strings.TrimSpace(*req.Hosts)
+		sets, args, payload["hosts"] = append(sets, "hosts = ?"), append(args, hosts), hosts
+	}
+	if len(sets) == 0 {
+		return nil, 0, errors.New("venue update names no field")
+	}
+	change, err := s.writeVenues(reqCtx, festID, "venue-rename", payload,
 		func(ctx context.Context, tx *sql.Tx) ([]matchScope, error) {
 			result, err := tx.ExecContext(ctx, `
-update venues set title = ?, updated_at = ?
-where fest_id = ? and number = ?`, title, util.UtcNow(), festID, number)
+update venues set `+strings.Join(sets, ", ")+`, updated_at = ?
+where fest_id = ? and number = ?`, append(args, util.UtcNow(), festID, number)...)
 			if err != nil {
 				return nil, err
 			}
@@ -87,8 +105,9 @@ where fest_id = ? and number = ?`, title, util.UtcNow(), festID, number)
 // createVenue adds venue number (the next free one when number is 0) to the
 // fest, and seats there every bout a Game's scheme puts at that table and
 // that sits at no venue yet.
-func (s *server) createVenue(reqCtx context.Context, festID int64, number int, title string) (venueChange, error) {
-	title = strings.TrimSpace(title)
+func (s *server) createVenue(reqCtx context.Context, festID int64, req venueCreateRequest) (venueChange, error) {
+	number, title := req.Number, strings.TrimSpace(req.Title)
+	place, hosts := strings.TrimSpace(req.Place), strings.TrimSpace(req.Hosts)
 	if title == "" {
 		return venueChange{}, venueUserError(dopestrings.Default.Server.Venue.TitleEmpty())
 	}
@@ -113,7 +132,7 @@ func (s *server) createVenue(reqCtx context.Context, festID int64, number int, t
 		}
 		now := util.UtcNow()
 		venueID, err := store.InsertReturningID(ctx, tx, `
-insert into venues(fest_id, number, title, created_at, updated_at) values(?, ?, ?, ?, ?)`, festID, number, title, now, now)
+insert into venues(fest_id, number, title, place, hosts, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?)`, festID, number, title, place, hosts, now, now)
 		if err != nil {
 			return nil, err
 		}
