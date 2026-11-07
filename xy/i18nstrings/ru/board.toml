@@ -76,6 +76,10 @@ submit = "ОК"
 forgot = "Не помню пароль, поменять"
 # Hint of step 2, after the passphrase checked out.
 saved_hint = "Пароль сохранён. А ещё сейчас хорошее время, чтобы сохранить бэкап."
+# Hint of step 2 when the owner's Telegram holds the current passphrase
+# (sent just now or earlier, passphrasetg.ts). Replaces saved_hint and the
+# backup button.
+sent_hint = "Пароль сохранён. Копия есть у вас в телеграме, в чате с ботом xy."
 # Primary button starting the backup flow.
 backup = "Сохранить бэкап"
 

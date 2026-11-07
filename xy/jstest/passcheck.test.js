@@ -13,7 +13,8 @@ const OPEN = { owner: true, cached: true, online: true, testMode: false, deepLin
 function harness(opts = {}) {
   let now = opts.now ?? 10_000_000_000;
   let stamp = opts.stamp ?? null;
-  const calls = { opened: [], messages: [], changePass: 0, backup: 0 };
+  const calls = { opened: [], messages: [], changePass: 0, backup: 0, sent: [] };
+  const copy = opts.copy ?? { sent: true, kept: true };
   const node = () => ({ handlers: {}, addEventListener(type, h) { this.handlers[type] = h; } });
   const ui = {
     modal: {
@@ -26,7 +27,9 @@ function harness(opts = {}) {
     form: node(),
     pass: { value: "", focused: 0, focus() { this.focused++; } },
     forgot: node(),
-    backup: node(),
+    sentHint: { hidden: true },
+    backupHint: { hidden: false },
+    backup: { ...node(), hidden: false },
   };
   const check = createPassCheck({
     ui,
@@ -34,6 +37,7 @@ function harness(opts = {}) {
     read: () => stamp,
     write: (at) => { stamp = at; },
     verify: async (pass) => { if (pass !== GOOD) throw new Error("Неверный пароль доски"); },
+    send: async (pass) => { calls.sent.push(pass); return copy; },
     changePass: (onDone) => { calls.changePass++; calls.onDone = onDone; },
     backup: () => { calls.backup++; },
   });
@@ -102,17 +106,33 @@ test("the wrong passphrase keeps the modal open and says so", async () => {
   assert.equal(h.ui.step1.hidden, false);
   assert.equal(h.ui.step2.hidden, true);
   assert.equal(h.stamp(), null);
+  assert.deepEqual(h.calls.sent, []); // wrong words are never sent anywhere
 });
 
-test("the right passphrase swaps in the backup step and stamps the clock", async () => {
+test("the right passphrase goes to Telegram, and step 2 says so instead of offering a backup", async () => {
   const h = harness();
   h.check.maybe(OPEN);
   h.ui.pass.value = GOOD;
   await h.submit();
+  assert.deepEqual(h.calls.sent, [GOOD]);
   assert.equal(h.ui.step1.hidden, true);
   assert.equal(h.ui.step2.hidden, false);
   assert.equal(h.ui.title.textContent, "Пароль доски"); // the heading stops asking
   assert.equal(h.stamp(), h.at());
+  assert.equal(h.ui.sentHint.hidden, false);
+  assert.equal(h.ui.backupHint.hidden, true);
+  assert.equal(h.ui.backup.hidden, true);
+});
+
+test("with no Telegram to send to, step 2 offers the backup as before", async () => {
+  const h = harness({ copy: { sent: false, kept: false } });
+  h.check.maybe(OPEN);
+  h.ui.pass.value = GOOD;
+  await h.submit();
+  assert.equal(h.ui.step2.hidden, false);
+  assert.equal(h.ui.sentHint.hidden, true);
+  assert.equal(h.ui.backupHint.hidden, false);
+  assert.equal(h.ui.backup.hidden, false);
   h.ui.backup.handlers.click();
   assert.equal(h.calls.backup, 1);
 });
@@ -124,8 +144,10 @@ test("«не помню» opens the change form, whose success satisfies the che
   assert.equal(h.calls.changePass, 1);
   assert.equal(h.ui.step2.hidden, true); // not yet: the form is still open
 
-  h.calls.onDone();
+  h.calls.onDone({ sent: true, kept: true });
   assert.equal(h.ui.step2.hidden, false);
+  assert.equal(h.ui.sentHint.hidden, false);
+  assert.deepEqual(h.calls.sent, []); // the change form sent the new words itself
   assert.equal(h.stamp(), h.at());
 });
 

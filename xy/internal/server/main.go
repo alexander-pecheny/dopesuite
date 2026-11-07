@@ -221,6 +221,7 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/boards/{id}/membership", srv.serverOnly(srv.handleLeaveBoard))
 	mux.HandleFunc("GET /api/boards/{id}/keymeta", srv.handleGetKeymeta)
 	mux.HandleFunc("PUT /api/boards/{id}/keymeta", srv.serverOnly(srv.handlePutKeymeta))
+	mux.HandleFunc("POST /api/boards/{id}/passphrase/telegram", srv.serverOnly(srv.handleSendPassphrase))
 	mux.HandleFunc("GET /api/boards/{id}/members", srv.serverOnly(srv.handleListMembers))
 	mux.HandleFunc("POST /api/boards/{id}/members", srv.serverOnly(srv.handleAddMember))
 	mux.HandleFunc("DELETE /api/boards/{id}/members/{userId}", srv.serverOnly(srv.handleRemoveMember))

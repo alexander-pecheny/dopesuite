@@ -725,6 +725,7 @@ export type Strings = {
       hintLead: () => string;
       hintMid: () => string;
       savedHint: () => string;
+      sentHint: () => string;
       submit: () => string;
       title: () => string;
     };
@@ -1767,6 +1768,10 @@ export type Strings = {
       boardUnnamed: () => string;
       verbMentioned: () => string;
       verbReplied: () => string;
+    };
+    passphrase: {
+      keep: () => string;
+      text: (board: string, passphrase: string) => string;
     };
   };
   passphrase: {

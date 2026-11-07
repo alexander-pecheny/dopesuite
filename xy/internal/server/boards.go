@@ -635,7 +635,9 @@ func (s *server) handlePutKeymeta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "put-keymeta", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update boards set kdf_salt = ?, kdf_params = ?, wrapped_key = ?, updated_at = ? where id = ?`,
+		// The copy in the owner's Telegram is of the old words now; until the new
+		// ones are sent, the board counts as never sent (passphrasetg.go).
+		_, err := tx.ExecContext(ctx, `update boards set kdf_salt = ?, kdf_params = ?, wrapped_key = ?, passphrase_sent_at = null, updated_at = ? where id = ?`,
 			salt, req.KDFParams, wrapped, rfc3339(time.Now()), bid)
 		return err
 	})

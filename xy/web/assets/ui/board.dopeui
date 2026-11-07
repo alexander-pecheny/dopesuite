@@ -38,7 +38,8 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
           button submit @board.passcheck.submit
           button kind="ghost" id="passCheckForgot" @board.passcheck.forgot
     col id="passCheckStep2" gap="sm" hidden
-      hint @board.passcheck.saved_hint
+      hint id="passCheckSentHint" hidden @board.passcheck.sent_hint
+      hint id="passCheckBackupHint" @board.passcheck.saved_hint
       row gap="sm" wrap
         button kind="primary" id="passCheckBackup" @board.passcheck.backup
         button kind="ghost" id="passCheckClose" @board.actions.close

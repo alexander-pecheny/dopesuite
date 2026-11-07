@@ -46,6 +46,7 @@ import { createCardDetail, nowStamp } from "./carddetail.js";
 import { createDwell, liveTestMode } from "./testmode.js";
 import { createChangePass } from "./changepass.js";
 import { createPassCheck, passCheckStore } from "./passcheck.js";
+import { sendPassphrase } from "./passphrasetg.js";
 import { createNameOverflow } from "./nameoverflow.js";
 import { createTransfer } from "./transfer.js";
 import { type AnnounceCity, newKey, parseSession, type SessionMeta, serializeSession, sessionLabel, sessionNumbers, type Tester, testerNames, type TitleMode, whoSaw } from "./sessions.js";
@@ -1714,6 +1715,7 @@ const changePass = createChangePass({
   jput,
   errMsg,
   onChanged: () => passCheck.stamp(),
+  sendPassphrase: (pass) => sendPassphrase(boardId, pass),
 });
 
 const passCheckClock = passCheckStore(localStorage);
@@ -1727,6 +1729,8 @@ const passCheck = createPassCheck({
     form: byId<HTMLFormElement>("passCheckForm"),
     pass: byId<HTMLInputElement>("passCheckPass"),
     forgot: byId("passCheckForgot"),
+    sentHint: byId("passCheckSentHint"),
+    backupHint: byId("passCheckBackupHint"),
     backup: byId("passCheckBackup"),
   },
   now: () => Date.now(),
@@ -1736,6 +1740,7 @@ const passCheck = createPassCheck({
     const keymeta = (await fetchJSON(`/api/boards/${boardId}/keymeta`)) as BoardKeymeta;
     await xyCrypto.unlockBoard(pass, keymeta);
   },
+  send: (pass) => sendPassphrase(boardId, pass, true),
   changePass: (onDone) => changePass.open(onDone),
   backup: () => openPanel("bundle-export"),
 });

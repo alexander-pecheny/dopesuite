@@ -930,6 +930,9 @@ var RU = Strings{
 			SavedHint: func() string {
 				return "Пароль сохранён. А ещё сейчас хорошее время, чтобы сохранить бэкап."
 			},
+			SentHint: func() string {
+				return "Пароль сохранён. Копия есть у вас в телеграме, в чате с ботом xy."
+			},
 			Submit: func() string { return "ОК" },
 			Title:  func() string { return "Помните пароль доски?" },
 		},
@@ -2344,6 +2347,14 @@ var RU = Strings{
 			BoardUnnamed:  func() string { return "на доске" },
 			VerbMentioned: func() string { return "упомянул(а) вас" },
 			VerbReplied:   func() string { return "ответил(а) на ваш комментарий" },
+		},
+		Passphrase: NotifyPassphraseStrings{
+			Keep: func() string {
+				return "Это ваша копия пароля. Без пароля доску можно открыть только на устройстве, где она уже открыта. Если пароль поменяют, придёт новое сообщение."
+			},
+			Text: func(board string, passphrase string) string {
+				return fmt.Sprintf("Пароль доски «%s»: <code>%s</code>", board, passphrase)
+			},
 		},
 	},
 	Passphrase: PassphraseStrings{

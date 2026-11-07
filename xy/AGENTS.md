@@ -160,6 +160,9 @@ internal/server/       package server — the whole HTTP server
   boards.go            boards CRUD, keymeta (passphrase re-wrap), /meta (role + plaintext name, what
                        the passphrase overlay reads before a key exists), members, leaving a board,
                        /api/collaborators (who I share boards with), ACL helpers
+  passphrasetg.go      the Passphrase Copy: POST /api/boards/{id}/passphrase/telegram, owner only.
+                       The bot sends the words to the owner's own chat and the server forgets them;
+                       only boards.passphrase_sent_at is kept, and PUT keymeta clears it
   boardinvites.go      invite links (ADR-0017). The owner creates, revokes and deletes them and
                        decides on join requests; the invitee looks up a code and joins. A link
                        grants membership only, never the key. The state machine is in
@@ -591,6 +594,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        repaints the ☰ row's waiting count
     firstrun.ts        the two questions every account answers once (timezone, default
                        author), asked on whichever page is opened first
+    passphrasetg.ts    sendPassphrase(boardId, words, unsentOnly?): the Passphrase Copy's client.
+                       Called after create, import and «Сменить пароль», and by the Passphrase
+                       Check (passcheck.ts) once the owner has typed the words. Never throws
     wordlist.ts        EFF diceware list for generated passphrases (data only)
     profile.ts         /profile: username set-once, logout, and six dialogs — change
                        password, board sizes (three sliders + a to-scale pseudo-board

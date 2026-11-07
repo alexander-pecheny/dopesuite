@@ -890,6 +890,9 @@ alter table timeline_events add column rev integer not null default 0;
 create index if not exists idx_cards_board_rev on cards(board_id, rev);
 create index if not exists idx_timeline_board_rev on timeline_events(board_id, rev);
 ` + revTriggers)},
+	{Version: 34, Name: "passphrase sent to telegram", Up: schema.Exec(`
+alter table boards add column passphrase_sent_at text;
+`)},
 }
 
 // revTriggers number the changes to a board. Each one increments boards.rev
