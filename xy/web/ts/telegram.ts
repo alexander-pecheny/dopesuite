@@ -4,9 +4,12 @@
 // without one would set passphrases nobody keeps a copy of. The page mints a
 // code, the person sends it to the bot, and once the bot has seen it the
 // Telegram is on the account and the page goes on to where they were headed.
-// The only other way out is logging out.
+// Until the account has put it off telegramSnoozes times (tglink.go),
+// the "remind me later" button lets it go on for a day; after that, the other way out
+// is logging out.
 import { xyApp, type AuthMe } from "./app.js";
 import S from "./i18nstrings.js";
+import { qrSvg } from "./kit/qr.js";
 
 const { fetchJSON, fetchVoid, byId, errMsg } = xyApp;
 
@@ -56,6 +59,25 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 let code = "";
 
+const goOn = (): void => window.location.replace(safeNext(new URLSearchParams(location.search).get("next")));
+
+// The day-long delay, while the account has any left.
+function offerLater(left: number): void {
+  if (left <= 0) return;
+  byId("tgLinkLaterBlock").hidden = false;
+  byId("tgLinkLaterLeft").textContent = S.chrome.telegram.laterLeft(left);
+  byId("tgLinkLater").addEventListener("click", async () => {
+    try {
+      await fetchVoid("/api/auth/tg/link/snooze", { method: "POST" });
+    } catch (e) {
+      byId("tgLinkLaterMessage").textContent = errMsg(e);
+      return;
+    }
+    code = "";
+    goOn();
+  });
+}
+
 async function start(): Promise<void> {
   const message = byId("tgLinkMessage");
   const retry = byId("tgLinkRetry");
@@ -79,6 +101,7 @@ async function start(): Promise<void> {
   deepLink.href = "https://t.me/" + bot + "?start=" + encodeURIComponent(code);
   deepLink.target = "_blank";
   deepLink.rel = "noopener";
+  byId("tgLinkQr").replaceChildren(qrSvg(deepLink.href, byId("tgLinkQrHint").textContent || ""));
   waiting.hidden = false;
   const forCode = code;
   const out = await pollLink(forCode, () => forCode === code, {
@@ -87,7 +110,7 @@ async function start(): Promise<void> {
   });
   if (out.kind === "stale") return;
   if (out.kind === "linked") {
-    window.location.replace(safeNext(new URLSearchParams(location.search).get("next")));
+    goOn();
     return;
   }
   waiting.hidden = true;
@@ -104,9 +127,10 @@ async function main(): Promise<void> {
     return;
   }
   if (!me.telegram_required) {
-    window.location.replace(safeNext(new URLSearchParams(location.search).get("next")));
+    goOn();
     return;
   }
+  offerLater(me.telegram_snoozes_left ?? 0);
   byId("tgLinkRetry").addEventListener("click", () => void start());
   byId("tgLinkLogout").addEventListener("click", async () => {
     try { await fetchVoid("/api/auth/logout", { method: "POST" }); } catch (_) {}

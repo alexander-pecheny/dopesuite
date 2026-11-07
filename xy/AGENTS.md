@@ -161,7 +161,7 @@ internal/server/       package server — the whole HTTP server
                        the passphrase overlay reads before a key exists), members, leaving a board,
                        /api/collaborators (who I share boards with), ACL helpers
   passphrasetg.go      the Passphrase Copy: POST /api/boards/{id}/passphrase/telegram, owner only.
-  tglink.go            linking a Telegram to a logged-in account (/api/auth/tg/link/*) and telegram_required.
+  tglink.go            linking a Telegram to a logged-in account (/api/auth/tg/link/*), telegram_required and the seven day-long snoozes.
                        The bot sends the words to the owner's own chat and the server forgets them;
                        only boards.passphrase_sent_at is kept, and PUT keymeta clears it
   boardinvites.go      invite links (ADR-0017). The owner creates, revokes and deletes them and

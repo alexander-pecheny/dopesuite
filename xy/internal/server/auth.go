@@ -208,6 +208,8 @@ type meResponse struct {
 	// TelegramRequired: every page sends this account to /telegram to link
 	// one before anything else (tglink.go).
 	TelegramRequired bool `json:"telegram_required,omitempty"`
+	// TelegramSnoozesLeft: how many more times /telegram may be put off a day.
+	TelegramSnoozesLeft int `json:"telegram_snoozes_left,omitempty"`
 }
 
 func meOf(u session.User) meResponse {
@@ -272,9 +274,11 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	if resp.PassphraseCopy, err = s.passphraseCopy(r.Context(), u.UserID); handleErr(w, err) {
 		return
 	}
-	if resp.TelegramRequired, err = s.telegramRequired(r.Context(), u.UserID); handleErr(w, err) {
+	ask, err := s.telegramAskFor(r.Context(), u.UserID, time.Now())
+	if handleErr(w, err) {
 		return
 	}
+	resp.TelegramRequired, resp.TelegramSnoozesLeft = ask.Required, ask.SnoozesLeft
 	writeJSON(w, resp)
 }
 

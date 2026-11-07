@@ -31,6 +31,7 @@ export interface AuthMe {
   // No Telegram on the account while the bot works: every page sends it to
   // /telegram first (telegram.ts).
   telegram_required?: boolean;
+  telegram_snoozes_left?: number;
   timezone?: string | null;
   announce_cities?: unknown;
   session_title_mode?: string | null;

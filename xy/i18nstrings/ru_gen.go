@@ -249,6 +249,9 @@ var RU = Strings{
 		Tg: AuthTgStrings{
 			AccountLinked: func() string { return "к этому аккаунту уже привязан телеграм" },
 			CodeMissing:   func() string { return "код не найден, начните заново" },
+			NoMoreSnoozes: func() string {
+				return "откладывать больше нельзя, привяжите телеграм"
+			},
 			PasswordWrong: func() string { return "неверный пароль" },
 			TelegramTaken: func() string {
 				return "этот телеграм уже привязан к другому аккаунту"
@@ -1469,10 +1472,14 @@ var RU = Strings{
 			BotHintLead: func() string { return "Если ссылка не открывается, напишите боту " },
 			BotHintMid:  func() string { return " и пришлите код " },
 			Expired:     func() string { return "Код устарел. Получите новый." },
-			LinkHint:    func() string { return "Пройдите по ссылке:" },
-			Retry:       func() string { return "Получить новый код" },
-			Title:       func() string { return "Привяжите телеграм" },
-			Waiting:     func() string { return "Жду подтверждения от бота…" },
+			Later:       func() string { return "Напомнить позже" },
+			LaterLeft: func(n int) string {
+				return fmt.Sprintf("Отложить можно ещё %d %s.", n, core.Plural("ru", n, "раз", "раза", "раз"))
+			},
+			LinkHint: func() string { return "Пройдите по ссылке:" },
+			Retry:    func() string { return "Получить новый код" },
+			Title:    func() string { return "Привяжите телеграм" },
+			Waiting:  func() string { return "Жду подтверждения от бота…" },
 			Why: func() string {
 				return "Бот xy присылает в телеграм пароли ваших досок. Если вы забудете пароль, копия останется в чате с ботом. Чтобы продолжить, привяжите телеграм к своему аккаунту."
 			},

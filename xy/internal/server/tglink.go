@@ -17,18 +17,70 @@ import (
 // (adduser, /admin) before the bot existed for them. A board passphrase's copy
 // goes to the owner's Telegram (passphrasetg.go), so an account without one
 // would set passphrases nobody keeps. While this instance's bot is working,
-// every page sends such an account to /telegram first (telegramRequired).
+// every page sends such an account to /telegram first (telegramAskFor).
 
-// telegramRequired: the account has no Telegram and this instance can link one
-// right now. A bot that is down is no reason to lock anyone out, so an
-// instance whose bot is not polling asks nothing.
-func (s *server) telegramRequired(ctx context.Context, uid int64) (bool, error) {
+// An account may put the link off a day at a time, telegramSnoozes times in
+// all; after that the page has no «later» and the link is the only way on.
+const (
+	telegramSnoozes     = 7
+	telegramSnoozeLasts = 24 * time.Hour
+)
+
+// telegramAsk is what /api/auth/me says about linking: whether every page
+// sends the account to /telegram now, and how many day-long delays it has left.
+type telegramAsk struct {
+	Required    bool
+	SnoozesLeft int
+}
+
+// telegramAskFor: the account has no Telegram, this instance can link one right
+// now, and the account has not put it off until later today. A bot that is
+// down is no reason to stop anyone, so an instance whose bot is not polling
+// asks nothing.
+func (s *server) telegramAskFor(ctx context.Context, uid int64, now time.Time) (telegramAsk, error) {
 	if s.telegramStatus() != tgStatusOK {
-		return false, nil
+		return telegramAsk{}, nil
 	}
 	var linked bool
-	err := s.db.QueryRowContext(ctx, `select telegram_user_id is not null from users where id = ?`, uid).Scan(&linked)
-	return !linked, err
+	var snoozes int
+	var until sql.NullString
+	err := s.db.QueryRowContext(ctx, `select telegram_user_id is not null, telegram_snoozes, telegram_snoozed_until from users where id = ?`, uid).
+		Scan(&linked, &snoozes, &until)
+	if err != nil || linked {
+		return telegramAsk{}, err
+	}
+	if until.Valid && until.String > rfc3339(now) {
+		return telegramAsk{}, nil
+	}
+	return telegramAsk{Required: true, SnoozesLeft: max(telegramSnoozes-snoozes, 0)}, nil
+}
+
+// handleTgLinkSnooze is the "remind me later" button: the pages leave the account alone
+// for a day, and one of its delays is spent.
+func (s *server) handleTgLinkSnooze(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireCookieUser(w, r)
+	if !ok {
+		return
+	}
+	now := time.Now()
+	err := s.withWriteTx(r.Context(), "tg-link-snooze", func(ctx context.Context, tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `
+update users set telegram_snoozes = telegram_snoozes + 1, telegram_snoozed_until = ?
+where id = ? and telegram_user_id is null and telegram_snoozes < ?`,
+			rfc3339(now.Add(telegramSnoozeLasts)), u.UserID, telegramSnoozes)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err == nil && n == 0 {
+			err = corei18n.User(xystrings.Default.Auth.Tg.NoMoreSnoozes())
+		}
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (xyUsers) ByID(ctx context.Context, tx tglogin.Tx, uid int64) (tglogin.Account, bool, error) {

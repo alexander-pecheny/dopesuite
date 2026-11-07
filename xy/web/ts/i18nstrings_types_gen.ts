@@ -204,6 +204,7 @@ export type Strings = {
     tg: {
       accountLinked: () => string;
       codeMissing: () => string;
+      noMoreSnoozes: () => string;
       passwordWrong: () => string;
       telegramTaken: () => string;
       usernameFormat: () => string;
@@ -1168,6 +1169,8 @@ export type Strings = {
       botHintLead: () => string;
       botHintMid: () => string;
       expired: () => string;
+      later: () => string;
+      laterLeft: (n: number) => string;
       linkHint: () => string;
       retry: () => string;
       title: () => string;

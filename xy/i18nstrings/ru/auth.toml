@@ -26,6 +26,8 @@ telegram_taken = "этот телеграм уже привязан к друг�
 username_reserved = "этот логин зарезервирован"
 # Linking a Telegram (tglink.go) to an account that already has one.
 account_linked = "к этому аккаунту уже привязан телеграм"
+# «Напомнить позже» (tglink.go) once every delay is spent.
+no_more_snoozes = "откладывать больше нельзя, привяжите телеграм"
 
 [login]
 # handleLoginPassword — password login.

@@ -189,6 +189,7 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("POST /api/auth/tg/claim", srv.serverOnly(srv.handleTgClaim))
 	mux.HandleFunc("POST /api/auth/tg/link/start", srv.serverOnly(srv.handleTgLinkStart))
 	mux.HandleFunc("GET /api/auth/tg/link/status", srv.serverOnly(srv.handleTgLinkStatus))
+	mux.HandleFunc("POST /api/auth/tg/link/snooze", srv.serverOnly(srv.handleTgLinkSnooze))
 	mux.HandleFunc("POST /api/auth/login-password", srv.serverOnly(srv.handleLoginPassword))
 	mux.HandleFunc("POST /api/auth/logout", srv.serverOnly(srv.handleLogout))
 	mux.HandleFunc("GET /api/auth/me", srv.handleMe)

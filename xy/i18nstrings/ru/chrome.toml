@@ -215,3 +215,6 @@ waiting = "Жду подтверждения от бота…"
 # The code expired or the wait timed out; the button mints a new one.
 expired = "Код устарел. Получите новый."
 retry = "Получить новый код"
+# Puts the page off for a day, a limited number of times (tglink.go).
+later = "Напомнить позже"
+later_left = 'Отложить можно ещё {{.n}} {{plural .n "раз" "раза" "раз"}}.'

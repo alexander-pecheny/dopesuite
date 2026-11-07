@@ -893,6 +893,10 @@ create index if not exists idx_timeline_board_rev on timeline_events(board_id, r
 	{Version: 34, Name: "passphrase sent to telegram", Up: schema.Exec(`
 alter table boards add column passphrase_sent_at text;
 `)},
+	{Version: 35, Name: "telegram link snoozes", Up: schema.Exec(`
+alter table users add column telegram_snoozes integer not null default 0;
+alter table users add column telegram_snoozed_until text;
+`)},
 }
 
 // revTriggers number the changes to a board. Each one increments boards.rev
