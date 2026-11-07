@@ -16,8 +16,6 @@ game = "Игра"
 [tabs]
 # The crosstab-of-bouts tab (ЭК, брейн).
 grid = "Сетка"
-# The ЭК tab listing the scheme's venues (tables).
-venues = "Площадки"
 # The statistics tab (ЭК; also the троечка's stats tab).
 stats = "Статистика"
 # The брейн per-player statistics tab.

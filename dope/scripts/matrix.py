@@ -65,7 +65,7 @@ GALLERY = "gallery|/gallery"
 PAGES = f"""
 ek-grid|/fest/{FEST}/game/1/#grid
 ek-protocol|/fest/{FEST}/game/1/#stage:s1-r1
-ek-venues|/fest/{FEST}/game/1/#venues
+venues|/fest/{FEST}/venues
 ek-stats|/fest/{FEST}/game/1/#stats
 ek-roster|/fest/{FEST}/game/1/#roster
 brain-grid|/fest/{FEST}/game/2/#grid

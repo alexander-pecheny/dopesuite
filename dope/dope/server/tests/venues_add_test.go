@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"dope/dope/platform/roles"
+	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
 )
 
@@ -219,5 +222,63 @@ func TestVenuePlaceAndHosts(t *testing.T) {
 		if m.Code == code && (m.Venue == nil || m.Venue.Place != "ауд. 310" || m.Venue.Hosts == "") {
 			t.Fatalf("bout %s venue = %#v", code, m.Venue)
 		}
+	}
+}
+
+// The fest's venues page lists every bout at each venue across its Games, and
+// says whether the caller may edit the venues: a host may, a stranger on a
+// public fest may only read. The page itself is served at /fest/{ref}/venues.
+func TestFestVenueSchedule(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	if _, err := db.Exec(`update fests set is_public = 1 where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	hostID, hostToken := createAPITestSession(t, srv, "venue-schedule-host")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	var placed int
+	if err := db.QueryRow(`select count(*) from matches where fest_id = ? and venue_id is not null`, festID).Scan(&placed); err != nil {
+		t.Fatal(err)
+	}
+	if placed == 0 {
+		t.Fatal("the fixture fest seats no bout at a venue")
+	}
+	path := fmt.Sprintf("/api/fest/%d/venues/schedule", festID)
+	type schedule struct {
+		Venues   []store.VenueView `json:"venues"`
+		Bouts    []store.VenueBout `json:"bouts"`
+		Editable bool              `json:"editable"`
+	}
+	read := func(token string) schedule {
+		resp := scopedAPIRequest(t, srv, http.MethodGet, path, nil, token)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("schedule status = %d, body %s", resp.Code, resp.Body.String())
+		}
+		var out schedule
+		if err := json.Unmarshal(resp.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	host := read(hostToken)
+	if !host.Editable || len(host.Bouts) != placed {
+		t.Fatalf("host: editable %v, %d bouts, want true and %d", host.Editable, len(host.Bouts), placed)
+	}
+	for _, b := range host.Bouts {
+		if b.Venue == 0 || b.Game == "" || b.Code == "" {
+			t.Fatalf("bout %#v", b)
+		}
+	}
+	if stranger := read(""); stranger.Editable || len(stranger.Bouts) != placed {
+		t.Fatalf("stranger: editable %v, %d bouts", stranger.Editable, len(stranger.Bouts))
+	}
+	srv.Eng().Assets = dopeserver.StaticFiles
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/fest/%d/venues", festID), nil)
+	resp := httptest.NewRecorder()
+	srv.HandleFestRouter(resp, req)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `id="festVenues"`) {
+		t.Fatalf("venues page status = %d", resp.Code)
 	}
 }

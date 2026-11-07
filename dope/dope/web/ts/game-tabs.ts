@@ -8,7 +8,7 @@ export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "kd" | "tro
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
-  | "stats" | "roster" | "venues" | "entrants"
+  | "stats" | "roster" | "entrants"
   | "results" | "detailed" | "input" | "screen" | "refusals"
   | "personal" | "players" | "contested";
 
@@ -37,7 +37,7 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "es":
   case "si":
     return [
-      ...fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()]),
+      ...fixedTabs(["grid", S.screen.tabs.grid()]),
       ...entrantsTab(host),
       ...foldReseeds(stages.flatMap((stage) => blockRoundTabs(stage, stages))),
       ...fixedTabs(["stats", S.screen.tabs.stats()], ...when(options.game !== "si", ["roster", S.screen.tabs.roster()])),
@@ -46,13 +46,9 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
     return brainTabs(stages, host, S.screen.tabs.individualStats());
   // Troika's tabs are brain's: a crosstab, a table and protocols per Block, the
   // reseed, and the per-player statistics its three chairs make interesting.
-  // Its bouts are played at the fest's venues like a personal SI's, so it lists
-  // them beside the grid.
-  case "troika": {
-    const tabs = brainTabs(stages, host, S.screen.tabs.stats());
-    tabs.splice(1, 0, ...fixedTabs(["venues", S.screen.tabs.venues()]));
-    return tabs;
-  }
+  // Its venues, like every Game's, are on the fest's venues page.
+  case "troika":
+    return brainTabs(stages, host, S.screen.tabs.stats());
   // Хамса's stages read straight across: the бои of each Игра, the Block's own
   // table, the пересев and the Финал, in the order the scheme wrote them.
   case "hamsa":

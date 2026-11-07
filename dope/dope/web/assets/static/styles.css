@@ -77,6 +77,8 @@
   --group-bouts-pairing-col-mobile: 210px;
   --group-bout-round-col: 5em;
   --group-bout-box-col: 300px;
+  --venue-schedule-col: 340px;
+  --venue-schedule-game-col: 200px;
 }
 
 /* ── name popovers ─────────────────────────────────────────
@@ -1314,6 +1316,20 @@ button.seat-picker-control {
 .group-standings-head {
   margin: var(--space-2) 0 0;
   font-size: var(--text-md);
+}
+
+/* The fest's venues page: each venue's bouts, as many venues abreast as the
+   screen fits (fest-venues.ts). */
+.venue-schedules {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--venue-schedule-col), 100%), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+  margin-top: var(--space-4);
+}
+
+.results-table.venue-schedule-table {
+  --results-team-col: var(--venue-schedule-game-col);
 }
 
 /* A group whose bouts seat three or four takes the whole row: its table,
@@ -2637,6 +2653,8 @@ body:not(.embedded-match) .grid-match {
 .group-standings-table .results-team,
 .group-bouts-table thead th.results-team-head,
 .group-bouts-table .results-team,
+.venue-schedule-table thead th.results-team-head,
+.venue-schedule-table .results-team,
 .troika-swiss-table thead th.results-team-head,
 .troika-swiss-table .results-team {
   width: var(--results-team-col);
@@ -3692,7 +3710,8 @@ body:not(.embedded-match) .grid-match {
 /* A player's round in the groups tab leads to the bout he played it in, and
    so does a bout's letter in the list under a group's table. */
 .group-standings-table .group-round-link,
-.group-bouts-table .group-round-link {
+.group-bouts-table .group-round-link,
+.venue-schedule-table .group-round-link {
   display: block;
   color: inherit;
   text-decoration: none;
@@ -3701,7 +3720,9 @@ body:not(.embedded-match) .grid-match {
 .group-standings-table .group-round-link:hover,
 .group-standings-table .group-round-link:focus,
 .group-bouts-table .group-round-link:hover,
-.group-bouts-table .group-round-link:focus {
+.group-bouts-table .group-round-link:focus,
+.venue-schedule-table .group-round-link:hover,
+.venue-schedule-table .group-round-link:focus {
   color: var(--blue);
 }
 

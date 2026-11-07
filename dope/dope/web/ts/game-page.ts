@@ -190,17 +190,20 @@ function viewerHrefForCurrentLocation(): string {
 // mountGameDownloads registers the game's archive download links in the ☰ menu:
 // "Download XLSX" for everyone, and "Download .json.gz" (current state + edit
 // history) for hosts only. apiBase is the game's /api/fest/.../games/... base.
-export function mountGameDownloads(opts: {apiBase?: string; canEdit?: boolean} | null | undefined): void {
+export function mountGameDownloads(opts: {apiBase?: string; canEdit?: boolean; venuesHref?: string} | null | undefined): void {
   const apiBase = opts && opts.apiBase;
   const menu = (window as Window & PageGlobals).dopeMenu;
   if (!apiBase || !menu?.setExtras) return;
-  const items: DopeMenuExtra[] = [{
+  const items: DopeMenuExtra[] = [];
+  // The fest's venues page, for a Game whose bouts are played at them.
+  if (opts.venuesHref) items.push({label: S.host.festVenues.link(), href: opts.venuesHref, icon: "list"});
+  items.push({
     label: S.screen.downloads.xlsx(),
     href: `${apiBase}/export.xlsx`,
     title: S.screen.downloads.xlsxTitle(),
     download: true,
     icon: "file-down",
-  }];
+  });
   if (opts.canEdit) {
     items.push({
       label: S.screen.downloads.archive(),

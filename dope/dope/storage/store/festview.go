@@ -25,6 +25,39 @@ order by v.number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
 	})
 }
 
+// VenueBout is one bout of a fest's schedule at a venue: when it starts, the
+// Game it belongs to (its URL ref and title) and the bout's letter, code and
+// title.
+type VenueBout struct {
+	Venue     int    `json:"venue"`
+	StartsAt  string `json:"startsAt,omitempty"`
+	Game      string `json:"game"`
+	GameTitle string `json:"gameTitle"`
+	Code      string `json:"code"`
+	Letter    string `json:"letter,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Finished  bool   `json:"finished,omitempty"`
+}
+
+// LoadVenueBouts returns every bout of the fest that sits at a venue, venue
+// by venue, in the order they are played: by start time, then the Game's
+// order and the schedule's.
+func LoadVenueBouts(ctx context.Context, q Queryer, festID int64) ([]VenueBout, error) {
+	return CollectRows(ctx, q, `
+select v.number, coalesce(m.starts_at, ''), coalesce(nullif(g.slug, ''), g.code), g.title,
+       m.code, m.letter, m.title, m.status = 'finished'
+from matches m
+join venues v on v.id = m.venue_id
+join games g on g.id = m.game_id
+join stages s on s.id = m.stage_id
+where m.fest_id = ?
+order by v.number, coalesce(m.starts_at, '') = '', m.starts_at, g.position, s.position, m.position`, []any{festID},
+		func(rows *sql.Rows) (VenueBout, error) {
+			var b VenueBout
+			return b, rows.Scan(&b.Venue, &b.StartsAt, &b.Game, &b.GameTitle, &b.Code, &b.Letter, &b.Title, &b.Finished)
+		})
+}
+
 // LoadReseedEntries returns a stage's reseed entries ordered by rank.
 func LoadReseedEntries(ctx context.Context, q Queryer, stageID int64) ([]ReseedEntryView, error) {
 	return CollectRows(ctx, q, `

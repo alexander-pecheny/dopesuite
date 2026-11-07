@@ -51,6 +51,9 @@ export interface GameShellSpec {
   // true; the bout page (brain, Hamsa, Troika) turns it off, though the
   // server exports every format.
   downloads?: boolean;
+  // Whether the Game plays at the fest's venues: the ☰ menu then links the
+  // fest's venues page.
+  venues?: boolean;
   chrome: () => GameChrome;
   cursorKinds: Record<string, CursorKind>;
   // The element the cursor rests on when nothing is focused (the sheet's
@@ -100,7 +103,9 @@ export function mountGamePage(spec: GameShellSpec): GameShell {
       jumpLink = mountViewerLink();
       if (spec.init?.teamsUnnumbered) mountUnnumberedBanner(spec.festID, gameVenue(spec.init));
     }
-    if (spec.apiBase && spec.downloads !== false) mountGameDownloads({apiBase: spec.apiBase, canEdit});
+    if (spec.apiBase && spec.downloads !== false) {
+      mountGameDownloads({apiBase: spec.apiBase, canEdit, venuesHref: spec.venues && spec.festID ? `/fest/${spec.festID}/venues` : ""});
+    }
   }
 
   const indicator = createSyncIndicator(createStatusReporter(spec.statusNode));

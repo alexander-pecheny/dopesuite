@@ -774,6 +774,11 @@ export const RU: Strings = {
       titleLabel: () => "Название",
       venuesHint: () => "Ведущий площадки ведёт её игры и правит её команды и номера.",
     },
+    festVenues: {
+      crumb: () => "Площадки",
+      link: () => "Площадки и расписание",
+      title: (fest: string) => `Площадки · ${fest}`,
+    },
     forbidden: {
       heading: () => "У вас нет доступа к этой странице",
       note: () => "Если вы ведёте площадку, откройте ссылку-приглашение от организаторов и нажмите «Стать ведущим». Если вы уже это сделали, попросите организаторов выбрать вам площадку в разделе «Доступ».",
@@ -1975,7 +1980,6 @@ shootout: true
       roster: () => "Составы",
       screen: () => "Экран",
       stats: () => "Статистика",
-      venues: () => "Площадки",
     },
     title: {
       fest: () => "Фест",
@@ -2326,6 +2330,11 @@ shootout: true
       hostsColumn: () => "Ведущие",
       nameColumn: () => "Название",
       placeColumn: () => "Аудитория",
+      scheduleBout: () => "Бой",
+      scheduleEmpty: () => "Боёв здесь нет.",
+      scheduleGame: () => "Игра",
+      scheduleHead: (n: string, title: string) => `${n}. ${title}`,
+      scheduleTime: () => "Время",
       withPlace: (where: string, place: string) => `${where}, ${place}`,
       withTime: (venue: string, time: string) => `${venue} ${time}`,
     },

@@ -62,6 +62,14 @@ add_number = "Номер площадки"
 add = "Добавить"
 # The button that deletes a venue no bout plays at.
 delete = "Удалить площадку"
+# The fest's venues page: each venue's bouts, the column heads, and the
+# line under a venue no bout plays at.
+schedule_time = "Время"
+schedule_game = "Игра"
+schedule_bout = "Бой"
+schedule_empty = "Боёв здесь нет."
+# A venue's heading on that page: its number and title.
+schedule_head = '{{.n}}. {{.title}}'
 
 [profile]
 # The host profile page's password form messages.

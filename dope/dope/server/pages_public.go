@@ -45,6 +45,9 @@ type publicFestDetail struct {
 	Description template.HTML
 	Games       []hostpages.PublicFestGame
 	Venues      []hostpages.PublicVenue
+	// BoutVenues says the fest has venues its bouts are played at, which its
+	// venues page lists.
+	BoutVenues bool
 }
 
 func (d publicFestDetail) Ref() string {
@@ -147,6 +150,7 @@ func (s *server) renderPublicFestPage(w http.ResponseWriter, r *http.Request, id
 		Description: detail.Description,
 		Games:       detail.Games,
 		Venues:      detail.Venues,
+		BoutVenues:  detail.BoutVenues,
 	}))
 }
 
@@ -232,6 +236,9 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 		Description: markdown.Render(description),
 		Games:       festGames,
 		Venues:      venueGames,
+	}
+	if err := s.eng.DB.QueryRowContext(ctx, `select exists(select 1 from venues where fest_id = ?)`, id).Scan(&detail.BoutVenues); err != nil {
+		return publicFestDetail{}, err
 	}
 	return detail, nil
 }

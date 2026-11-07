@@ -764,3 +764,11 @@ nothing_to_send = "Турнирный сайт уже совпадает с dope
 flags_subhead = "Зачёты"
 flags_line = '{{.team}}: {{.flags}}'
 flag_unknown = 'на турнирном сайте нет зачёта «{{.flag}}»'
+
+[fest_venues]
+# The fest's venues page (/fest/{ref}/venues): every venue with its room and
+# hosts, and the bouts each one plays, across the fest's games.
+title = 'Площадки · {{.fest}}'
+crumb = "Площадки"
+# The link to it from the fest page, the host dashboard and a game's ☰ menu.
+link = "Площадки и расписание"

@@ -128,6 +128,7 @@ created from pasted JSON. Leaving `entrants` out seats everyone.
 | `GET …/seed-import` M · `POST …/seed-import/{ksi,run,xlsx,decline}` M | seeds |
 | `GET\|PUT …/games/<game>/screen-settings` | the projector board |
 | `GET /api/fest/<fest>/venues` R | the fest's venues, shared by its games: `number`, `title`, and `bouts` played at each |
+| `GET /api/fest/<fest>/venues/schedule` R | the venues page's data: `venues`, every `bouts` row at a venue (`venue`, `startsAt`, `game`, `gameTitle`, `code`, `letter`, `finished`), and whether the caller may edit (`editable`). The page is `/fest/<fest>/venues` |
 | `POST …/venues` M · `PUT …/venues/<n>` M · `DELETE …/venues/<n>` M | add `{title, number?, place?, hosts?}` (no number takes the next free one; `place` is the room, «ауд. 308», `hosts` who host there), change `{title?, place?, hosts?}` (the fields named), delete one no bout plays at. A bout's head reads «пл. 1 18:00, ауд. 308». Adding venue N seats at it every bout a game's scheme puts at table N that has no venue yet. Each answers with the venues |
 | `GET …/results` · `…/export.xlsx` R · `…/export.json.gz` M | results |
 

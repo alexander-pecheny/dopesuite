@@ -38,6 +38,8 @@ type PublicFestDetail struct {
 	Description template.HTML
 	Games       []PublicFestGame
 	Venues      []PublicVenue
+	// BoutVenues links the fest's venues page.
+	BoutVenues bool
 }
 
 // jumpHostNav are the body data-jump-* attrs menu.js reads to offer the host
@@ -113,7 +115,11 @@ func PublicFestDoc(d PublicFestDetail) *ui.Doc {
 			}
 			rows = append(rows, ui.Listrow(row...))
 		}
-		page = append(page, ui.Section(ui.Subhead(ui.Text(s.Host.Pages.GamesSubhead())), ui.List(rows...)))
+		games := []ui.Item{ui.Subhead(ui.Text(s.Host.Pages.GamesSubhead())), ui.List(rows...)}
+		if d.BoutVenues {
+			games = append(games, FestVenuesLink(d.Ref))
+		}
+		page = append(page, ui.Section(games...))
 	}
 	if len(d.Venues) > 0 {
 		page = append(page, publicVenuesSection(d.Venues))

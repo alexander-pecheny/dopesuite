@@ -47,8 +47,7 @@ import type {StageRef} from "./standings.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridData, FestGridStage} from "./fest-grid.js";
 import S from "./i18nstrings.js";
-import {boutWhereWhen, buildVenuesTable} from "./venue.js";
-import type {VenueFields} from "./venue.js";
+import {boutWhereWhen} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
 import {createUndo, isUndoKey, valueAt} from "./undo.js";
@@ -238,6 +237,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     viewer,
     apiBase: route.apiBase,
     init: spec.init,
+    venues: true,
     // Every bout format exports its sheets (games.Definition.Sheets).
     chrome: () => ({festTitle: fest?.title || "", gameTitle: fest?.gameName || scheme.title || spec.title()}),
     cursorKinds: spec.cursorKinds,
@@ -480,10 +480,11 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     return true;
   }
 
-  // Only a host edits a bout's venue, and only a Game with a venues tab lists
-  // them to a spectator.
+  // Only a host needs the fest's venues, to move a bout to another; a
+  // spectator reads a bout's venue off the bout. The fest lists them on its
+  // venues page.
   async function fetchVenues(): Promise<void> {
-    if (viewer && !tabs().some((tab) => tab.kind === "venues")) return;
+    if (viewer) return;
     const response = await fetch(`${festAPI}/venues`);
     if (!response.ok) throw new Error(`venues ${response.status}`);
     adoptVenues(await response.json());
@@ -508,8 +509,8 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
         render();
       },
     }, {
-      // A host renamed, added or removed a venue: the venues tab and the
-      // bouts' heads say so, and an added venue may have seated bouts.
+      // A host renamed, added or removed a venue: the bouts' heads say so,
+      // and an added venue may have seated bouts.
       prefix: venuesScope,
       adopt: (_scope, view) => {
         if (!adoptVenues(view.data)) return;
@@ -569,7 +570,6 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
         if (adoptView(view) && view?.code) refresh(view.code);
         return;
       }
-      if (scope === venuesScope) return; // venueEditor's callback draws it
       // A reseed or a draw answers with the fest view.
       adoptFest(response as BoutFest);
       render();
@@ -620,19 +620,6 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     undo();
   }
 
-  const venueEdits = venueEditor({
-    writer,
-    festID: String(route.festID || ""),
-    festAPI,
-    adopt: (list, change) => {
-      adoptVenues(list);
-      // The server seats at a new venue the bouts the scheme puts there.
-      if (change === "add") resync();
-      refreshFest();
-      render();
-    },
-  });
-
   // ---- the render loop ----
 
   function buildTab(tab: GameTab | undefined): HTMLElement {
@@ -641,13 +628,6 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
       return entrantsTab().element();
     case "roster":
       return (rosterView ||= spec.buildRoster());
-    case "venues":
-      return buildVenuesTable(venues, {
-        editable: !viewer,
-        onChange: (number, fields) => void venueEdits.update(number, fields),
-        onAdd: venueEdits.add,
-        onDelete: venueEdits.remove,
-      });
     case "reseed":
       return reseedTab(tab);
     case "grid":
@@ -1007,38 +987,4 @@ export function finishControl(options: FinishControlOptions): HTMLLabelElement {
     label.append(text);
   }
   return label;
-}
-
-export type VenueChange = "rename" | "add" | "delete";
-
-export interface VenueEditor {
-  // Each resolves to why the server refused, or to an empty string.
-  // update changes the fields it is given (title, place, hosts).
-  update(number: number, fields: VenueFields): Promise<string>;
-  add(title: string, number: number): Promise<string>;
-  remove(number: number): Promise<string>;
-}
-
-// venueEditor is the host's edits to the fest's venues, which every Game of
-// the fest shares. Each goes out on the venues:<fest> scope and answers with
-// the whole list, which adopt is handed.
-export function venueEditor(options: {
-  writer: ScopedWriter;
-  festID: string;
-  festAPI: string;
-  adopt: (venues: Venue[], change: VenueChange) => void;
-}): VenueEditor {
-  const scope = `venues:${options.festID}`;
-  const at = (number: number) => `${options.festAPI}/venues/${encodeURIComponent(number)}`;
-  async function run(request: WriteRequest, change: VenueChange): Promise<string> {
-    const sent = await options.writer.send(scope, request);
-    if (!sent.ok) return sent.error || "";
-    if (Array.isArray(sent.response)) options.adopt(sent.response as Venue[], change);
-    return "";
-  }
-  return {
-    update: (number, fields) => run({url: at(number), method: "PUT", body: fields}, "rename"),
-    add: (title, number) => run({url: `${options.festAPI}/venues`, method: "POST", body: number > 0 ? {title, number} : {title}}, "add"),
-    remove: (number) => run({url: at(number), method: "DELETE"}, "delete"),
-  };
 }

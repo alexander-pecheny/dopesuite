@@ -2,10 +2,13 @@ package dopeserver
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"dope/dope/domain/games"
 	"dope/dope/export/gameexport"
+	"dope/dope/web/hostpages"
+	"dope/dope/web/pages"
 	"dope/dope/web/route"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
@@ -25,6 +28,7 @@ func (s *server) fest() *route.Table {
 			return nil
 		})
 		t.Handle("GET /fest/{fest}/game/{rest...}", route.Public, s.viewerGamePage)
+		t.Handle("GET /fest/{fest}/venues", route.Read, s.festVenuesPage)
 		s.festTable = t
 	})
 	return s.festTable
@@ -98,5 +102,20 @@ func (s *server) viewerGamePage(w http.ResponseWriter, r *http.Request, sc route
 		return nil
 	}
 	s.serveGameHTMLWithInit(w, r, def.Page, scope)
+	return nil
+}
+
+// festVenuesPage is /fest/{fest}/venues: the fest's venues and what each
+// plays, for anyone who may see the fest.
+func (s *server) festVenuesPage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var title, slug string
+	if err := s.eng.DB.QueryRowContext(r.Context(), `select title, coalesce(slug, '') from fests where id = ?`, sc.FestID).Scan(&title, &slug); err != nil {
+		return err
+	}
+	ref := slug
+	if ref == "" {
+		ref = strconv.FormatInt(sc.FestID, 10)
+	}
+	pages.RenderDoc(w, s.eng.AssetETags, hostpages.FestVenuesDoc(ref, title))
 	return nil
 }

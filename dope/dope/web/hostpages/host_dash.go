@@ -222,8 +222,15 @@ func hostDashGamesSection(data hostFestDashData, ref string) *dopeui.Element {
 	} else {
 		sect = append(sect, dopeui.Empty(dopeui.Text(s.Host.Dash.GamesEmpty())))
 	}
+	buttons := []dopeui.Item{dopeui.SpaceSM, dopeui.Wrap()}
 	if data.CanManageGames {
-		sect = append(sect, dopeui.Row(dopeui.Button(dopeui.Href("/host/fest/"+ref+"/game/new"), dopeui.Text(s.Host.Dash.AddGameBtn()))))
+		buttons = append(buttons, dopeui.Button(dopeui.Href("/host/fest/"+ref+"/game/new"), dopeui.Text(s.Host.Dash.AddGameBtn())))
+	}
+	if len(data.Games) > 0 {
+		buttons = append(buttons, dopeui.Button(dopeui.Href("/fest/"+ref+"/venues"), dopeui.Text(s.Host.FestVenues.Link())))
+	}
+	if len(buttons) > 2 {
+		sect = append(sect, dopeui.Row(buttons...))
 	}
 	return dopeui.Section(sect...)
 }

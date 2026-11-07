@@ -773,6 +773,11 @@ export type Strings = {
       titleLabel: () => string;
       venuesHint: () => string;
     };
+    festVenues: {
+      crumb: () => string;
+      link: () => string;
+      title: (fest: string) => string;
+    };
     forbidden: {
       heading: () => string;
       note: () => string;
@@ -1953,7 +1958,6 @@ export type Strings = {
       roster: () => string;
       screen: () => string;
       stats: () => string;
-      venues: () => string;
     };
     title: {
       fest: () => string;
@@ -2304,6 +2308,11 @@ export type Strings = {
       hostsColumn: () => string;
       nameColumn: () => string;
       placeColumn: () => string;
+      scheduleBout: () => string;
+      scheduleEmpty: () => string;
+      scheduleGame: () => string;
+      scheduleHead: (n: string, title: string) => string;
+      scheduleTime: () => string;
       withPlace: (where: string, place: string) => string;
       withTime: (venue: string, time: string) => string;
     };

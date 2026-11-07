@@ -25,6 +25,7 @@ import (
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
+	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
@@ -66,6 +67,7 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("GET "+fest, route.Read, s.scopedFest)
 	t.Handle("POST "+fest+"/presence", route.Editor, s.hostPresence)
 	t.Handle("GET "+fest+"/venues", route.Read, s.scopedVenues)
+	t.Handle("GET "+fest+"/venues/schedule", route.Read, s.scopedVenueSchedule)
 	t.Handle("POST "+fest+"/venues", route.Editor, s.scopedVenueCreate)
 	t.Handle("PUT "+fest+"/venues/{n}", route.Editor, s.scopedVenuePut)
 	t.Handle("DELETE "+fest+"/venues/{n}", route.Editor, s.scopedVenueDelete)
@@ -217,6 +219,33 @@ func (s *server) scopedVenues(w http.ResponseWriter, r *http.Request, sc route.S
 		return err
 	}
 	return route.JSON(w, venues)
+}
+
+// venueSchedule is the fest's venues page: the venues, every bout played at
+// each in order, and whether the caller may edit the venues.
+type venueSchedule struct {
+	Venues   []store.VenueView `json:"venues"`
+	Bouts    []store.VenueBout `json:"bouts"`
+	Editable bool              `json:"editable"`
+}
+
+func (s *server) scopedVenueSchedule(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	venues, err := s.loadVenuesLocked(sc.FestID)
+	if err != nil {
+		return err
+	}
+	bouts, err := store.LoadVenueBouts(r.Context(), s.eng.DB, sc.FestID)
+	if err != nil {
+		return err
+	}
+	// A public fest's read does not look the role up; the page asks.
+	role := sc.Role
+	if role == "" && sc.HasUser {
+		if role, err = festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, sc.FestID, sc.User.UserID); err != nil {
+			return err
+		}
+	}
+	return route.JSON(w, venueSchedule{Venues: venues, Bouts: bouts, Editable: role != ""})
 }
 
 func (s *server) scopedVenuePut(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
