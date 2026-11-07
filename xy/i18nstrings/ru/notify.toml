@@ -20,3 +20,12 @@ board_unnamed = "в доску"
 board_named = 'в доску «{{.board}}»'
 # The owner's nudge sentence: who is asking, through where, with the board link.
 text = '{{.requester}} просится {{.where}} по ссылке-приглашению: {{.link}}'
+
+[passphrase]
+# The owner's copy of a board passphrase, sent when the passphrase is set
+# (create, import, change) or first typed at the Passphrase Check
+# (passphrasetg.go). Sent with parse_mode=HTML: the server escapes both values,
+# and <code> makes the passphrase copy on tap.
+text = 'Пароль доски «{{.board}}»: <code>{{.passphrase}}</code>'
+# The paragraph under it.
+keep = 'Это ваша копия пароля. Без пароля доску можно открыть только на устройстве, где она уже открыта. Если пароль поменяют, придёт новое сообщение.'

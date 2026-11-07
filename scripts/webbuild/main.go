@@ -151,7 +151,7 @@ func xyPrecache() (urls []string, version string) {
 // mirrors the source graph), so a shared module cannot be inlined the way dope
 // and spliff inline it: it is built beside xy's, under dist/kit/, and imported
 // from "./kit/<name>.js". web/ts/kit/<name>.d.ts is how tsc follows that URL.
-var xyKitModules = []string{"suggest"}
+var xyKitModules = []string{"suggest", "qr", "vendor/qrcodegen"}
 
 func xySWBuild() api.BuildOptions {
 	urls, version := xyPrecache()

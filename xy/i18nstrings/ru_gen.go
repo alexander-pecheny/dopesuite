@@ -247,7 +247,11 @@ var RU = Strings{
 			TimezoneTooLong: func() string { return "слишком длинный часовой пояс" },
 		},
 		Tg: AuthTgStrings{
+			AccountLinked: func() string { return "к этому аккаунту уже привязан телеграм" },
 			CodeMissing:   func() string { return "код не найден, начните заново" },
+			NoMoreSnoozes: func() string {
+				return "откладывать больше нельзя, привяжите телеграм"
+			},
 			PasswordWrong: func() string { return "неверный пароль" },
 			TelegramTaken: func() string {
 				return "этот телеграм уже привязан к другому аккаунту"
@@ -930,6 +934,9 @@ var RU = Strings{
 			SavedHint: func() string {
 				return "Пароль сохранён. А ещё сейчас хорошее время, чтобы сохранить бэкап."
 			},
+			SentHint: func() string {
+				return "Пароль сохранён. Копия есть у вас в телеграме, в чате с ботом xy."
+			},
 			Submit: func() string { return "ОК" },
 			Title:  func() string { return "Помните пароль доски?" },
 		},
@@ -1402,11 +1409,15 @@ var RU = Strings{
 			UnreadTitle:        func() string { return "Есть непрочитанные изменения" },
 		},
 		Page: ChromePageStrings{
-			IndexTitle:  func() string { return "Мои доски · xy" },
-			JoinTitle:   func() string { return "Приглашение · xy" },
-			TokensTitle: func() string { return "API-токены · xy" },
+			IndexTitle:    func() string { return "Мои доски · xy" },
+			JoinTitle:     func() string { return "Приглашение · xy" },
+			TelegramTitle: func() string { return "Телеграм · xy" },
+			TokensTitle:   func() string { return "API-токены · xy" },
 		},
 		Passphrase: ChromePassphraseStrings{
+			CopyNote: func() string {
+				return "Бот пришлёт пароль вам в телеграм. Сохраните это сообщение."
+			},
 			TooFewWords: func(n string) string {
 				return fmt.Sprintf("Пароль доски должен содержать минимум %s слова (через пробел, «-» или «_»).", n)
 			},
@@ -1456,6 +1467,22 @@ var RU = Strings{
 			Syncing:        func() string { return "Синхронизация…" },
 			SyncingPending: func(n string) string { return fmt.Sprintf("Синхронизация · осталось %s", n) },
 			WriteError:     func() string { return "Ошибка" },
+		},
+		Telegram: ChromeTelegramStrings{
+			BotHintLead: func() string { return "Если ссылка не открывается, напишите боту " },
+			BotHintMid:  func() string { return " и пришлите код " },
+			Expired:     func() string { return "Код устарел. Получите новый." },
+			Later:       func() string { return "Напомнить позже" },
+			LaterLeft: func(n int) string {
+				return fmt.Sprintf("Отложить можно ещё %d %s.", n, core.Plural("ru", n, "раз", "раза", "раз"))
+			},
+			LinkHint: func() string { return "Пройдите по ссылке:" },
+			Retry:    func() string { return "Получить новый код" },
+			Title:    func() string { return "Привяжите телеграм" },
+			Waiting:  func() string { return "Жду подтверждения от бота…" },
+			Why: func() string {
+				return "Бот xy присылает в телеграм пароли ваших досок. Если вы забудете пароль, копия останется в чате с ботом. Чтобы продолжить, привяжите телеграм к своему аккаунту."
+			},
 		},
 		Tokens: ChromeTokensStrings{
 			Copied: func() string { return "Скопировано" },
@@ -2344,6 +2371,14 @@ var RU = Strings{
 			BoardUnnamed:  func() string { return "на доске" },
 			VerbMentioned: func() string { return "упомянул(а) вас" },
 			VerbReplied:   func() string { return "ответил(а) на ваш комментарий" },
+		},
+		Passphrase: NotifyPassphraseStrings{
+			Keep: func() string {
+				return "Это ваша копия пароля. Без пароля доску можно открыть только на устройстве, где она уже открыта. Если пароль поменяют, придёт новое сообщение."
+			},
+			Text: func(board string, passphrase string) string {
+				return fmt.Sprintf("Пароль доски «%s»: <code>%s</code>", board, passphrase)
+			},
 		},
 	},
 	Passphrase: PassphraseStrings{

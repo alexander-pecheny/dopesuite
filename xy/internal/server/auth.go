@@ -202,6 +202,14 @@ type meResponse struct {
 	OnboardedAt      string          `json:"onboarded_at,omitempty"`
 	// Instance is set on a local server only: what it leaves out (local.go).
 	Instance *instanceCaps `json:"instance,omitempty"`
+	// PassphraseCopy: a passphrase this user sets will be sent to their own
+	// Telegram (passphrasetg.go), so the forms that set one drop their promise.
+	PassphraseCopy bool `json:"passphrase_copy,omitempty"`
+	// TelegramRequired: every page sends this account to /telegram to link
+	// one before anything else (tglink.go).
+	TelegramRequired bool `json:"telegram_required,omitempty"`
+	// TelegramSnoozesLeft: how many more times /telegram may be put off a day.
+	TelegramSnoozesLeft int `json:"telegram_snoozes_left,omitempty"`
 }
 
 func meOf(u session.User) meResponse {
@@ -263,6 +271,14 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	resp.SessionTitleMode = p.SessionTitleMode.String
 	resp.OnboardedAt = p.OnboardedAt.String
 	resp.Instance = s.instance()
+	if resp.PassphraseCopy, err = s.passphraseCopy(r.Context(), u.UserID); handleErr(w, err) {
+		return
+	}
+	ask, err := s.telegramAskFor(r.Context(), u.UserID, time.Now())
+	if handleErr(w, err) {
+		return
+	}
+	resp.TelegramRequired, resp.TelegramSnoozesLeft = ask.Required, ask.SnoozesLeft
 	writeJSON(w, resp)
 }
 
@@ -335,7 +351,9 @@ func botUsername() string { return strings.TrimSpace(os.Getenv("XY_BOT_NAME")) }
 // The Telegram handshake (start → status poll → claim) is dopecore/tglogin's
 // state machine over xy's users table; these handlers keep xy's write
 // transaction, its validation and its error text.
-func (s *server) handshake() tglogin.Handshake { return tglogin.Handshake{Users: xyUsers{}} }
+func (s *server) handshake() tglogin.Handshake {
+	return tglogin.Handshake{Users: xyUsers{}, Accounts: xyUsers{}}
+}
 
 func (s *server) handleTgStart(w http.ResponseWriter, r *http.Request) {
 	if s.bot == nil {

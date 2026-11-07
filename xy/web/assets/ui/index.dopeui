@@ -38,8 +38,9 @@ page title=@chrome.page.index_title kind="full" scripts="dist/index.js"
           iconbtn id="genPassBtn" icon="dices" label=@chrome.home.pass_generate
         muted id="createPassCopied" hidden @chrome.home.pass_copied
         hint @chrome.home.pass_hint
-        hint kind="danger" @chrome.home.pass_warning
+        hint kind="danger" id="createPassDanger" @chrome.home.pass_warning
         checkbox id="createPassSaved" @chrome.home.pass_saved
+        hint id="createPassCopyNote" hidden @chrome.passphrase.copy_note
       row gap="sm" wrap
         button submit id="createSubmit" disabled @chrome.home.create_submit
         button kind="ghost" id="createCancel" @board.actions.cancel

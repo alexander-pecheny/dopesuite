@@ -202,7 +202,9 @@ export type Strings = {
       timezoneTooLong: () => string;
     };
     tg: {
+      accountLinked: () => string;
       codeMissing: () => string;
+      noMoreSnoozes: () => string;
       passwordWrong: () => string;
       telegramTaken: () => string;
       usernameFormat: () => string;
@@ -725,6 +727,7 @@ export type Strings = {
       hintLead: () => string;
       hintMid: () => string;
       savedHint: () => string;
+      sentHint: () => string;
       submit: () => string;
       title: () => string;
     };
@@ -1125,9 +1128,11 @@ export type Strings = {
     page: {
       indexTitle: () => string;
       joinTitle: () => string;
+      telegramTitle: () => string;
       tokensTitle: () => string;
     };
     passphrase: {
+      copyNote: () => string;
       tooFewWords: (n: string) => string;
       tooShort: (n: string) => string;
       wrong: () => string;
@@ -1159,6 +1164,18 @@ export type Strings = {
       syncing: () => string;
       syncingPending: (n: string) => string;
       writeError: () => string;
+    };
+    telegram: {
+      botHintLead: () => string;
+      botHintMid: () => string;
+      expired: () => string;
+      later: () => string;
+      laterLeft: (n: number) => string;
+      linkHint: () => string;
+      retry: () => string;
+      title: () => string;
+      waiting: () => string;
+      why: () => string;
     };
     tokens: {
       copied: () => string;
@@ -1767,6 +1784,10 @@ export type Strings = {
       boardUnnamed: () => string;
       verbMentioned: () => string;
       verbReplied: () => string;
+    };
+    passphrase: {
+      keep: () => string;
+      text: (board: string, passphrase: string) => string;
     };
   };
   passphrase: {

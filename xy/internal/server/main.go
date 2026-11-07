@@ -157,6 +157,7 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("GET /profile/tokens", srv.serverOnly(srv.servePage("ui/tokens.dopeui")))
 	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.dopeui"))
 	mux.HandleFunc("GET /join/{code}", srv.serverOnly(srv.servePage("ui/join.dopeui")))
+	mux.HandleFunc("GET /telegram", srv.serverOnly(srv.servePage("ui/telegram.dopeui")))
 	// The specimen sheet for the design system (design-review skill): every
 	// primitive a panel is built from, on one page, from fixtures. Dev only —
 	// NoCache is disk-asset mode, which is where a skin is being worked on.
@@ -186,6 +187,9 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("POST /api/auth/tg/start", srv.serverOnly(srv.handleTgStart))
 	mux.HandleFunc("GET /api/auth/tg/status", srv.serverOnly(srv.handleTgStatus))
 	mux.HandleFunc("POST /api/auth/tg/claim", srv.serverOnly(srv.handleTgClaim))
+	mux.HandleFunc("POST /api/auth/tg/link/start", srv.serverOnly(srv.handleTgLinkStart))
+	mux.HandleFunc("GET /api/auth/tg/link/status", srv.serverOnly(srv.handleTgLinkStatus))
+	mux.HandleFunc("POST /api/auth/tg/link/snooze", srv.serverOnly(srv.handleTgLinkSnooze))
 	mux.HandleFunc("POST /api/auth/login-password", srv.serverOnly(srv.handleLoginPassword))
 	mux.HandleFunc("POST /api/auth/logout", srv.serverOnly(srv.handleLogout))
 	mux.HandleFunc("GET /api/auth/me", srv.handleMe)
@@ -221,6 +225,7 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("DELETE /api/boards/{id}/membership", srv.serverOnly(srv.handleLeaveBoard))
 	mux.HandleFunc("GET /api/boards/{id}/keymeta", srv.handleGetKeymeta)
 	mux.HandleFunc("PUT /api/boards/{id}/keymeta", srv.serverOnly(srv.handlePutKeymeta))
+	mux.HandleFunc("POST /api/boards/{id}/passphrase/telegram", srv.serverOnly(srv.handleSendPassphrase))
 	mux.HandleFunc("GET /api/boards/{id}/members", srv.serverOnly(srv.handleListMembers))
 	mux.HandleFunc("POST /api/boards/{id}/members", srv.serverOnly(srv.handleAddMember))
 	mux.HandleFunc("DELETE /api/boards/{id}/members/{userId}", srv.serverOnly(srv.handleRemoveMember))

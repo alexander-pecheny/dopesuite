@@ -7,7 +7,7 @@ import { createChangePass } from "../web/assets/static/dist/changepass.js";
 const DK = { key: "K", raw: new Uint8Array([1, 2, 3]) };
 
 function harness(opts = {}) {
-  const calls = { opened: 0, closed: 0, messages: [], puts: [], rewrapped: [], changed: 0, rolled: [], resets: 0 };
+  const calls = { opened: 0, closed: 0, messages: [], puts: [], rewrapped: [], changed: 0, sent: [], rolled: [], resets: 0 };
   const ui = {
     modal: {
       open() { calls.opened++; },
@@ -44,6 +44,7 @@ function harness(opts = {}) {
     },
     errMsg: (e) => String(e.message ?? e),
     onChanged: () => { calls.changed++; },
+    sendPassphrase: async (p) => { calls.sent.push(p); return { sent: true, kept: true }; },
   });
   return { cp, ui, calls, submit: () => ui.form.handlers.submit({ preventDefault() {} }) };
 }
@@ -91,10 +92,23 @@ test("a refused PUT keeps the form open and stamps nothing", async () => {
   assert.equal(calls.closed, 0);
 });
 
+test("the new words go to Telegram once the server has them, and never before", async () => {
+  const ok = harness();
+  ok.ui.input.value = "правильная лошадь батарея скрепка";
+  await ok.submit();
+  assert.deepEqual(ok.calls.sent, ["правильная лошадь батарея скрепка"]);
+
+  const refused = harness({ putFails: true });
+  refused.ui.input.value = "правильная лошадь батарея скрепка";
+  await refused.submit();
+  assert.deepEqual(refused.calls.sent, []); // the board still has the old words
+});
+
 test("the callback the Passphrase Check hands in runs once, on success only", async () => {
   const h = harness();
   let done = 0;
-  h.cp.open(() => { done++; });
+  let copy = null;
+  h.cp.open((c) => { done++; copy = c; });
   h.ui.input.value = "коротко";
   await h.submit();
   assert.equal(done, 0);
@@ -102,6 +116,7 @@ test("the callback the Passphrase Check hands in runs once, on success only", as
   h.ui.input.value = "правильная лошадь батарея скрепка";
   await h.submit();
   assert.equal(done, 1);
+  assert.deepEqual(copy, { sent: true, kept: true }); // the check says where the words went
 
   await h.submit(); // the ☰ may open the form again; the check is already answered
   assert.equal(done, 1);

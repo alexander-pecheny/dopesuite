@@ -8,6 +8,7 @@ import { xySearchIndex } from "./searchindex.js";
 import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
 import { stampPassCheck } from "./passcheck.js";
+import { sendPassphrase } from "./passphrasetg.js";
 import { icon, iconed } from "./icons_gen.js";
 import { createNameOverflow } from "./nameoverflow.js";
 import S from "./i18nstrings.js";
@@ -305,6 +306,8 @@ const passSetup = xyApp.wirePassphraseSetup({
   copied: byId("createPassCopied"),
   saved: byId<HTMLInputElement>("createPassSaved"),
   submit: byId<HTMLButtonElement>("createSubmit"),
+  promise: [byId("createPassDanger"), byId("createPassSaved").closest("label")!],
+  copyNote: byId("createPassCopyNote"),
 }, xyCrypto.generatePassphrase);
 
 // The passphrase is rolled and copied inside the click, not on submit: the
@@ -337,6 +340,7 @@ createForm.addEventListener("submit", async (e) => {
     const res = (await jpost("/api/boards", { ...keymeta, name })) as { id: number };
     await xyCrypto.cacheDK(res.id, dk);
     stampPassCheck(res.id); // the words are known today; the check is a month off
+    await sendPassphrase(res.id, pass); // the owner's copy, in their Telegram
     window.location.href = `/board/${res.id}`;
   } catch (err) {
     createMessage.textContent = errMsg(err);

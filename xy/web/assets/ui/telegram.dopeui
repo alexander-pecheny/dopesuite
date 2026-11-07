@@ -1,0 +1,21 @@
+page title=@chrome.page.telegram_title kind="sheet" scripts="dist/telegram.js"
+  topbar title=@chrome.telegram.title
+
+  section
+    hint @chrome.telegram.why
+    hint @chrome.telegram.link_hint
+    button id="tgLinkDeepLink" href="#" "t.me/…"
+    hint @chrome.telegram.bot_hint_lead (strong id="tgLinkBot" "@…") @chrome.telegram.bot_hint_mid (strong id="tgLinkCode" "…") "."
+    hint id="tgLinkQrHint" @login.code.qr_hint
+    col id="tgLinkQr"
+    hint id="tgLinkWaiting" @chrome.telegram.waiting
+    message id="tgLinkMessage"
+    button id="tgLinkRetry" hidden @chrome.telegram.retry
+
+  section id="tgLinkLaterBlock" hidden
+    hint id="tgLinkLaterLeft"
+    button kind="ghost" id="tgLinkLater" @chrome.telegram.later
+    message id="tgLinkLaterMessage"
+
+  section
+    button kind="ghost" id="tgLinkLogout" @profile.account.logout

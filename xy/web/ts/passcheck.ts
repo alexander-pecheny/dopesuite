@@ -9,6 +9,7 @@
 // the whole rule runs on plain objects in jstest.
 
 import S from "./i18nstrings.js";
+import type { PassphraseCopy } from "./passphrasetg.js";
 
 export const PASSCHECK_PREFIX = "xy-passcheck:";
 const PASSCHECK_INTERVAL_DAYS = 30;
@@ -67,7 +68,13 @@ export interface PassCheckUI {
   form: { addEventListener(type: "submit", handler: (e: { preventDefault(): void }) => void): void };
   pass: { value: string; focus(): void };
   forgot: { addEventListener(type: "click", handler: () => void): void };
-  backup: { addEventListener(type: "click", handler: () => void): void };
+  // Step 2 says one of two things: the words are in the owner's Telegram, or
+  // (no Telegram to send to) it is a good time to download a backup.
+  sentHint: { hidden: boolean | string };
+  backupHint: { hidden: boolean | string };
+  backup: { hidden: boolean | string; addEventListener(type: "click", handler: () => void): void };
+  // The close button: secondary next to the backup button, primary once it is alone.
+  close: { classList: { toggle(name: string, on: boolean): void } };
 }
 
 export interface PassCheckDeps {
@@ -77,8 +84,12 @@ export interface PassCheckDeps {
   write(at: number): void;
   // Throws when the words are wrong; the thrown message is what the modal shows.
   verify(passphrase: string): Promise<void>;
-  // "Forgot the passphrase, change it" — the change form, which calls back on success.
-  changePass(onDone: () => void): void;
+  // Sends the typed words to the owner's Telegram unless a copy of the current
+  // ones is already there (passphrasetg.ts).
+  send(passphrase: string): Promise<PassphraseCopy>;
+  // "Forgot the passphrase, change it" — the change form, which sends the new
+  // words itself and calls back on success.
+  changePass(onDone: (copy: PassphraseCopy) => void): void;
   // "Save backup" — the ☰ archive panel.
   backup(): void;
 }
@@ -98,9 +109,14 @@ export function createPassCheck(deps: PassCheckDeps): PassCheck {
 
   // The second step: the clock is stamped here, not at close, so a reader who
   // walks away after proving the words is not asked again tomorrow.
-  function proved(): void {
+  function proved(copy: PassphraseCopy): void {
     stamp();
     ui.title.textContent = S.passphrase.check.title();
+    ui.sentHint.hidden = !copy.kept;
+    ui.backupHint.hidden = copy.kept;
+    ui.backup.hidden = copy.kept;
+    ui.close.classList.toggle("btn-primary", copy.kept);
+    ui.close.classList.toggle("btn-ghost", !copy.kept);
     ui.step1.hidden = true;
     ui.step2.hidden = false;
   }
@@ -110,10 +126,11 @@ export function createPassCheck(deps: PassCheckDeps): PassCheck {
     ui.modal.message("");
     try {
       await deps.verify(ui.pass.value);
-      proved();
     } catch (err) {
       ui.modal.message(err instanceof Error ? err.message : String(err));
+      return;
     }
+    proved(await deps.send(ui.pass.value));
   });
   ui.forgot.addEventListener("click", () => deps.changePass(proved));
   ui.backup.addEventListener("click", () => deps.backup());

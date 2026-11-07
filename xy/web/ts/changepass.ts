@@ -7,6 +7,7 @@
 import type { PassphraseSetup } from "./app.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { BoardPanel } from "./panels.js";
+import type { PassphraseCopy } from "./passphrasetg.js";
 import S from "./i18nstrings.js";
 
 export interface ChangePassUI {
@@ -35,20 +36,22 @@ export interface ChangePassDeps {
   errMsg(err: unknown): string;
   // The passphrase is freshly known again — stamp the Passphrase Check clock.
   onChanged(): void;
+  // Sends the new words to the owner's Telegram (passphrasetg.ts).
+  sendPassphrase(passphrase: string): Promise<PassphraseCopy>;
 }
 
 export interface ChangePass {
   panel: BoardPanel;
   // The same form the ☰ opens, with a callback for the Passphrase Check, which
-  // treats a change as an answer.
-  open(onDone?: () => void): void;
+  // treats a change as an answer and says where the new words went.
+  open(onDone?: (copy: PassphraseCopy) => void): void;
 }
 
 export function createChangePass(deps: ChangePassDeps): ChangePass {
   const { ui } = deps;
-  let done: (() => void) | null = null;
+  let done: ((copy: PassphraseCopy) => void) | null = null;
 
-  function open(onDone?: () => void): void {
+  function open(onDone?: (copy: PassphraseCopy) => void): void {
     done = onDone ?? null;
     ui.setup.reset();
     void ui.setup.roll(true);
@@ -68,10 +71,11 @@ export function createChangePass(deps: ChangePassDeps): ChangePass {
       return;
     }
     deps.onChanged();
+    const copy = await deps.sendPassphrase(pass);
     ui.modal.close();
     const after = done;
     done = null;
-    after?.();
+    after?.(copy);
   }
 
   ui.form.addEventListener("submit", async (e) => { e.preventDefault(); await submit(); });

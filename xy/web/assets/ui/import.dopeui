@@ -41,8 +41,9 @@ page title=@import.page.title kind="wide" scripts="dist/import.js"
         iconbtn id="genPassBtn" icon="dices" label=@import.board.gen_pass
       muted id="importPassCopied" hidden @import.board.pass_copied
       hint @import.board.pass_hint
-      hint kind="danger" @import.board.pass_danger
+      hint kind="danger" id="importPassDanger" @import.board.pass_danger
       checkbox id="importPassSaved" @import.board.pass_saved
+      hint id="importPassCopyNote" hidden @chrome.passphrase.copy_note
     row gap="sm" wrap
       button submit id="importBtn" disabled @import.board.submit
       button kind="ghost" href="/" @import.board.cancel

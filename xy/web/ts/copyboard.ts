@@ -59,9 +59,12 @@ export function createCopyBoardPanel(board: Board, shell: PanelShell): BoardPane
       const submit = el("button", { type: "submit", class: "btn btn-primary", disabled: "disabled" }, S.board.copy.submit()) as HTMLButtonElement;
       const status = el("p", { class: "hint" });
 
+      const danger = el("p", { class: "hint hint-danger", text: S.board.copy.passDanger() });
+      const copyNote = el("p", { class: "hint", hidden: "hidden", text: S.chrome.passphrase.copyNote() });
       const setup: PassphraseSetup = xyApp.wirePassphraseSetup({
         input: passInput, dice, copied,
         saved: check, submit,
+        promise: [danger, saved], copyNote,
       }, xyCrypto.generatePassphrase);
       // The passphrase is rolled and copied inside the menu-row click, not on
       // submit: the clipboard only answers to a user gesture, and this is the one
@@ -75,8 +78,9 @@ export function createCopyBoardPanel(board: Board, shell: PanelShell): BoardPane
         el("div", { class: "u-row u-gap-sm u-align-center" }, passInput, dice),
         copied,
         el("p", { class: "hint", text: S.board.copy.passHint() }),
-        el("p", { class: "hint hint-danger", text: S.board.copy.passDanger() }),
+        danger,
         saved,
+        copyNote,
         el("div", { class: "u-row u-gap-sm u-wrap" }, submit),
         status,
       );

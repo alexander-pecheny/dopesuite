@@ -15,6 +15,8 @@ index_title = "Мои доски · xy"
 join_title = "Приглашение · xy"
 # Browser tab / page title of the API tokens page (tokens.dopeui).
 tokens_title = "API-токены · xy"
+# Browser tab / page title of the page that links a Telegram (telegram.dopeui).
+telegram_title = "Телеграм · xy"
 
 [sync]
 # The header's sync badge (app.ts); its title attribute spells the state out.
@@ -134,6 +136,9 @@ too_short = 'Пароль доски должен быть не короче {{.
 too_few_words = 'Пароль доски должен содержать минимум {{.n}} слова (через пробел, «-» или «_»).'
 # Thrown on both unlock failures (key unwrap and verify token).
 wrong = "Неверный пароль доски"
+# Shown instead of the warning and the «обещаю» checkbox on every form that
+# sets a passphrase, when the bot will send it to the user (passphrasetg.ts).
+copy_note = "Бот пришлёт пароль вам в телеграм. Сохраните это сообщение."
 
 [tokens]
 # The /tokens page (tokens.dopeui + tokens.ts): API tokens for the
@@ -197,3 +202,19 @@ button_title = "Цвет метки"
 # IndexedDB open (store.ts): the error when another tab holds the old
 # database version during an upgrade.
 upgrade_blocked = "Другая вкладка xy держит старую версию хранилища — закройте её и обновите страницу."
+
+[telegram]
+# telegram.dopeui / telegram.ts: an account with no Telegram is sent here from
+# every page while the bot works, and links one before going on.
+title = "Привяжите телеграм"
+why = "Бот xy присылает в телеграм пароли ваших досок. Если вы забудете пароль, копия останется в чате с ботом. Чтобы продолжить, привяжите телеграм к своему аккаунту."
+link_hint = "Пройдите по ссылке:"
+bot_hint_lead = "Если ссылка не открывается, напишите боту "
+bot_hint_mid = " и пришлите код "
+waiting = "Жду подтверждения от бота…"
+# The code expired or the wait timed out; the button mints a new one.
+expired = "Код устарел. Получите новый."
+retry = "Получить новый код"
+# Puts the page off for a day, a limited number of times (tglink.go).
+later = "Напомнить позже"
+later_left = 'Отложить можно ещё {{.n}} {{plural .n "раз" "раза" "раз"}}.'
