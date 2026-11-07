@@ -28,6 +28,9 @@ export interface AuthMe {
   sizes?: unknown;
   // A passphrase this user sets goes to their own Telegram (passphrasetg.ts).
   passphrase_copy?: boolean;
+  // No Telegram on the account while the bot works: every page sends it to
+  // /telegram first (telegram.ts).
+  telegram_required?: boolean;
   timezone?: string | null;
   announce_cities?: unknown;
   session_title_mode?: string | null;
@@ -176,6 +179,10 @@ async function requireLogin(): Promise<AuthMe | { offline: true } | null> {
   try {
     const me = (await fetchJSON("/api/auth/me")) as AuthMe | null;
     if (me && me.user_id) {
+      if (me.telegram_required) {
+        window.location.replace("/telegram?next=" + encodeURIComponent(location.pathname + location.search + location.hash));
+        return null;
+      }
       xyInstance.setInstance(me.instance);
       lastMe = me;
       return me;

@@ -202,6 +202,7 @@ export type Strings = {
       timezoneTooLong: () => string;
     };
     tg: {
+      accountLinked: () => string;
       codeMissing: () => string;
       passwordWrong: () => string;
       telegramTaken: () => string;
@@ -1126,6 +1127,7 @@ export type Strings = {
     page: {
       indexTitle: () => string;
       joinTitle: () => string;
+      telegramTitle: () => string;
       tokensTitle: () => string;
     };
     passphrase: {
@@ -1161,6 +1163,16 @@ export type Strings = {
       syncing: () => string;
       syncingPending: (n: string) => string;
       writeError: () => string;
+    };
+    telegram: {
+      botHintLead: () => string;
+      botHintMid: () => string;
+      expired: () => string;
+      linkHint: () => string;
+      retry: () => string;
+      title: () => string;
+      waiting: () => string;
+      why: () => string;
     };
     tokens: {
       copied: () => string;

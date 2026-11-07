@@ -247,6 +247,7 @@ var RU = Strings{
 			TimezoneTooLong: func() string { return "слишком длинный часовой пояс" },
 		},
 		Tg: AuthTgStrings{
+			AccountLinked: func() string { return "к этому аккаунту уже привязан телеграм" },
 			CodeMissing:   func() string { return "код не найден, начните заново" },
 			PasswordWrong: func() string { return "неверный пароль" },
 			TelegramTaken: func() string {
@@ -1405,9 +1406,10 @@ var RU = Strings{
 			UnreadTitle:        func() string { return "Есть непрочитанные изменения" },
 		},
 		Page: ChromePageStrings{
-			IndexTitle:  func() string { return "Мои доски · xy" },
-			JoinTitle:   func() string { return "Приглашение · xy" },
-			TokensTitle: func() string { return "API-токены · xy" },
+			IndexTitle:    func() string { return "Мои доски · xy" },
+			JoinTitle:     func() string { return "Приглашение · xy" },
+			TelegramTitle: func() string { return "Телеграм · xy" },
+			TokensTitle:   func() string { return "API-токены · xy" },
 		},
 		Passphrase: ChromePassphraseStrings{
 			CopyNote: func() string {
@@ -1462,6 +1464,18 @@ var RU = Strings{
 			Syncing:        func() string { return "Синхронизация…" },
 			SyncingPending: func(n string) string { return fmt.Sprintf("Синхронизация · осталось %s", n) },
 			WriteError:     func() string { return "Ошибка" },
+		},
+		Telegram: ChromeTelegramStrings{
+			BotHintLead: func() string { return "Если ссылка не открывается, напишите боту " },
+			BotHintMid:  func() string { return " и пришлите код " },
+			Expired:     func() string { return "Код устарел. Получите новый." },
+			LinkHint:    func() string { return "Пройдите по ссылке:" },
+			Retry:       func() string { return "Получить новый код" },
+			Title:       func() string { return "Привяжите телеграм" },
+			Waiting:     func() string { return "Жду подтверждения от бота…" },
+			Why: func() string {
+				return "Бот xy присылает в телеграм пароли ваших досок. Если вы забудете пароль, копия останется в чате с ботом. Чтобы продолжить, привяжите телеграм к своему аккаунту."
+			},
 		},
 		Tokens: ChromeTokensStrings{
 			Copied: func() string { return "Скопировано" },

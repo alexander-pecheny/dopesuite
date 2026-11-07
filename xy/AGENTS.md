@@ -161,6 +161,7 @@ internal/server/       package server — the whole HTTP server
                        the passphrase overlay reads before a key exists), members, leaving a board,
                        /api/collaborators (who I share boards with), ACL helpers
   passphrasetg.go      the Passphrase Copy: POST /api/boards/{id}/passphrase/telegram, owner only.
+  tglink.go            linking a Telegram to a logged-in account (/api/auth/tg/link/*) and telegram_required.
                        The bot sends the words to the owner's own chat and the server forgets them;
                        only boards.passphrase_sent_at is kept, and PUT keymeta clears it
   boardinvites.go      invite links (ADR-0017). The owner creates, revokes and deletes them and
@@ -595,6 +596,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     firstrun.ts        the two questions every account answers once (timezone, default
                        author), asked on whichever page is opened first
     passphrasetg.ts    sendPassphrase(boardId, words, unsentOnly?): the Passphrase Copy's client.
+    telegram.ts        /telegram: an account without Telegram links one before any other page (requireLogin sends it).
                        Called after create, import and «Сменить пароль», and by the Passphrase
                        Check (passcheck.ts) once the owner has typed the words. Never throws
     wordlist.ts        EFF diceware list for generated passphrases (data only)

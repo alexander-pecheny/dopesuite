@@ -24,6 +24,8 @@ password_wrong = "неверный пароль"
 telegram_taken = "этот телеграм уже привязан к другому аккаунту"
 # First Telegram login: the chosen username is reserved (admin names).
 username_reserved = "этот логин зарезервирован"
+# Linking a Telegram (tglink.go) to an account that already has one.
+account_linked = "к этому аккаунту уже привязан телеграм"
 
 [login]
 # handleLoginPassword — password login.
