@@ -23,8 +23,8 @@ import type {GameInitLike} from "./game-page.js";
 import {figureData, paintFigures, paintMark, stackedSheet} from "./stacked-sheet.js";
 import {buildFlatScoreTable, buildTwoRowScoreTable} from "./score-table.js";
 import type {ScoreTableThemeRow} from "./score-table.js";
-import {reseedMetricHeader, reseedMetricValue} from "./fest-grid.js";
-import type {FestGridStage, SortRule} from "./fest-grid.js";
+import {buildBoutBox, reseedMetricHeader, reseedMetricValue} from "./fest-grid.js";
+import type {FestGridMatch, FestGridStage, SortRule} from "./fest-grid.js";
 import {boutScope, computeGroupBlockRounds, evalScoringRule} from "./group-stats.js";
 import type {GroupBlockRoundsMatch} from "./group-stats.js";
 import {canonicalKey, groupLabel} from "./game-tabs.js";
@@ -603,21 +603,38 @@ function groupBout(match: {code?: string; round?: number}, scored: GroupBlockRou
   const state = stateOf(code);
   const values = valuesOf(view);
   const sides = !view ? [] : seatsOf(view).map((id, seat) => {
-    const place = Number(view.participants?.[seat]?.place) || undefined;
+    const place = Number(view.participants?.[seat]?.place) || 0;
     return {
       name: seatName(view, seat),
       score: ek.scoreSection(state.sections.get(id), values).total,
-      place,
       points: view.finished && place ? evalScoringRule(pointsRule, boutScope(scored, seat)) : undefined,
     };
   });
   return {
+    code,
     label: boutLetters.get(code) || code,
     href: page.boutHref(code),
     blockRound: Number(match.round) || undefined,
     sides,
     started: Boolean(view?.finished) || sides.some((side) => Number(side.score)),
   };
+}
+
+// formatPoints is a bout's points to three decimals at most: the rules pay
+// 5 - place + total / 200.
+function formatPoints(value: number): string {
+  return String(Number(value.toFixed(3))).replace(/^-/, "\u2212");
+}
+
+// groupBoutBox is a group's bout as the grid draws it, with the points it
+// paid each seat after the place.
+function groupBoutBox(bout: GroupBout): HTMLElement {
+  const code = bout.code || "";
+  const stage = (scheme.stages || []).find((entry) => (entry.matches || []).some((match) => match.code === code));
+  const match = (stage?.matches || []).find((entry) => entry.code === code) || {code};
+  const live = (page.festStage(stage?.code || "")?.matches || []).find((entry) => entry.code === code);
+  const points = bout.sides.map((side) => (side.points === undefined ? "" : formatPoints(side.points)));
+  return buildBoutBox(match as FestGridMatch, live, {letters: boutLetters, matchHref: page.boutHref}, {head: S.standings.columns.points(), values: points});
 }
 
 function buildGroupTable(tab: GameTab | undefined): HTMLElement {
@@ -651,7 +668,7 @@ function buildGroupTable(tab: GameTab | undefined): HTMLElement {
     const groupBouts = planned.map((match, index) => groupBout(match, matches[index], pointsRule));
     return {title: stage ? groupLabel(stage as StageRef) : code, anchor: groupAnchorID(code), blockRoundCount, rows, groupBouts};
   });
-  return buildGroupStandingsView(groups, {boutHref: page.boutHref});
+  return buildGroupStandingsView(groups, {boutHref: page.boutHref, boutBox: groupBoutBox});
 }
 
 // buildRankedStageTable draws a ranked stage's table: place, team, and the

@@ -2046,8 +2046,6 @@ export type Strings = {
     };
     groupBouts: {
       bout: () => string;
-      card: (letter: string) => string;
-      place: () => string;
       round: () => string;
       score: () => string;
       sides: () => string;

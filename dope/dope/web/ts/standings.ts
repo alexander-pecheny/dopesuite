@@ -54,16 +54,21 @@ export interface GroupStandingsGroup {
 // GroupBout is one bout in the list under a group's table: its letter, the
 // link to it, its круг and who sits in it, with the score once it began.
 export interface GroupBout {
+  // code is the bout's, for the page's boutBox.
+  code?: string;
   label: string;
   href?: string;
   blockRound?: number;
-  // A side's place and the points it took for the bout are known once the
-  // bout has them; the bout cards show them.
-  sides: Array<{name: string; score?: number | string | null; place?: number; points?: number}>;
+  // points are what the bout paid a side, once it is finished.
+  sides: Array<{name: string; score?: number | string | null; points?: number}>;
   started: boolean;
 }
 
 export interface GroupStandingsOptions {
+  // boutBox draws one bout of a group whose bouts seat three or four; with
+  // it the group's bouts are laid out a round to a row beside its table,
+  // without it they are the list under the table.
+  boutBox?: (bout: GroupBout) => HTMLElement;
   // boutHref links a player's block round to the bout he played it in.
   boutHref?: (code: string) => string;
 }
@@ -314,16 +319,16 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[], options: 
         ...blockRounds(group).map((blockRound) => roundCell(score(row.blockRounds[blockRound] || 0), row.bouts?.[blockRound] || "", options)),
       ]),
     }));
-    if (!group.groupBouts?.some((bout) => bout.sides.length > 2)) item.appendChild(wrapper);
+    if (!options.boutBox || !group.groupBouts?.some((bout) => bout.sides.length > 2)) item.appendChild(wrapper);
     if (group.groupBouts?.length) {
       // Bouts of three or four read better one table each, a round to a
       // row, as the sheets lay them out beside the group's table.
-      const cards = group.groupBouts.some((bout) => bout.sides.length > 2);
-      if (cards) {
+      const boutBox = options.boutBox;
+      if (boutBox && group.groupBouts.some((bout) => bout.sides.length > 2)) {
         item.classList.add("group-standings-wide");
         const side = document.createElement("div");
         side.className = "u-row u-wrap u-gap-lg u-align-start";
-        side.append(wrapper, groupBoutCards(group.groupBouts, score));
+        side.append(wrapper, groupBoutCards(group.groupBouts, boutBox));
         item.appendChild(side);
       } else {
         item.appendChild(groupBoutsTable(group.groupBouts));
@@ -360,10 +365,9 @@ export function groupBoutsTable(bouts: readonly GroupBout[]): HTMLElement {
 }
 
 // groupBoutCards lays a group's bouts out the way the sheets do: a row per
-// round, and in it each bout as a small table of its seats with Σ, the place
-// and the points it paid. Every name fits whole, which a one-line list of
-// four players could not do.
-function groupBoutCards(bouts: readonly GroupBout[], score: (value: number) => string): HTMLElement {
+// round, its bouts side by side in one line that scrolls, each the box the
+// page draws for it (the grid's, with the venue and the time in its head).
+function groupBoutCards(bouts: readonly GroupBout[], boutBox: (bout: GroupBout) => HTMLElement): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "u-col u-gap-md";
   const rounds = new Map<number, GroupBout[]>();
@@ -373,45 +377,15 @@ function groupBoutCards(bouts: readonly GroupBout[], score: (value: number) => s
   }
   for (const [round, list] of [...rounds.entries()].sort((a, b) => a[0] - b[0])) {
     const row = document.createElement("div");
-    row.className = "u-row u-wrap u-gap-md u-align-start";
+    row.className = "group-bout-row u-row u-gap-md u-align-start";
     const label = document.createElement("strong");
     label.className = "group-bout-round";
     label.textContent = S.standings.columns.blockRound(String(round));
     row.appendChild(label);
-    for (const bout of list) {
-      const card = document.createElement("div");
-      card.className = "results-wrapper";
-      card.appendChild(standingsTable({
-        className: "group-bout-card-table",
-        columns: [
-          {label: boutCardTitle(bout), kind: "name", pin: false},
-          {label: "Σ", kind: "num"},
-          {label: S.standings.groupBouts.place(), kind: "num"},
-          {label: S.standings.columns.points(), kind: "num"},
-        ],
-        rows: bout.sides.map((side) => [
-          side.name || "—",
-          bout.started ? formatScore(side.score) : "",
-          side.place ? String(side.place) : "",
-          side.points === undefined ? "" : score(side.points),
-        ]),
-      }));
-      row.appendChild(card);
-    }
+    for (const bout of list) row.appendChild(boutBox(bout));
     wrap.appendChild(row);
   }
   return wrap;
-}
-
-// boutCardTitle is a bout card's head, «Бой A1», a link to the bout.
-function boutCardTitle(bout: GroupBout): CellContent {
-  const text = S.standings.groupBouts.card(bout.label);
-  if (!bout.href) return text;
-  const link = document.createElement("a");
-  link.className = "group-round-link";
-  link.href = bout.href;
-  link.textContent = text;
-  return link;
 }
 
 function boutLabelCell(bout: GroupBout): CellContentItem {

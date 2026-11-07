@@ -6,6 +6,7 @@
 import {buildVenuesTable} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {buildGroupStandingsView, resultsTeamCell, standingsTable} from "./standings.js";
+import type {GroupBout} from "./standings.js";
 import {divisionChipRow} from "./divisions.js";
 import type {GroupStandingsGroup} from "./standings.js";
 import {buildRosterTable} from "./fest-roster.js";
@@ -14,7 +15,7 @@ import {buildEKStatsTable, buildIndividualStatsTable} from "./ek-stats.js";
 import type {EKPlayerStatsRow, IndividualStatsRow} from "./ek-stats.js";
 import {bindNameCells} from "./name-cell.js";
 import {floatingPopover} from "./widgets.js";
-import { buildFestGrid, buildReseedStagePanel } from "./fest-grid.js";
+import { buildBoutBox, buildFestGrid, buildReseedStagePanel } from "./fest-grid.js";
 import { autocomplete } from "../../../../dopeuikit/assets/ts/suggest.js";
 import type { FestGridMatch, FestGridStage } from "./fest-grid.js";
 import S from "./i18nstrings.js";
@@ -87,8 +88,8 @@ const groups: GroupStandingsGroup[] = [
     {name: "Алексей Погорелов", points: 10, blockRounds: [3, 3, 2]},
     {name: LONG, points: 8.5, blockRounds: [2, 2.5, 1]},
   ], groupBouts: [
-    {label: "A1", href: "#", blockRound: 1, started: true, sides: [{name: "Ярослав Кудымов", score: 120, place: 1, points: 3.6}, {name: "Алексей Погорелов", score: 90, place: 2, points: 2.45}, {name: LONG, score: -10, place: 3, points: 0.95}]},
-    {label: "A2", href: "#", blockRound: 1, started: true, sides: [{name: "Никита Косенков", score: 60, place: 1, points: 3.3}, {name: "Есения Погорелова", score: 20, place: 2, points: 2.1}, {name: "Вера Вершинина", score: 0, place: 3, points: 1}]},
+    {label: "A1", href: "#", blockRound: 1, started: true, sides: [{name: "Ярослав Кудымов", score: 120, points: 3.6}, {name: "Алексей Погорелов", score: 90, points: 2.45}, {name: LONG, score: -10, points: 0.95}]},
+    {label: "A2", href: "#", blockRound: 1, started: true, sides: [{name: "Никита Косенков", score: 60, points: 3.3}, {name: "Есения Погорелова", score: 20, points: 2.1}, {name: "Вера Вершинина", score: 0, points: 1}]},
     {label: "A3", href: "#", blockRound: 2, started: false, sides: [{name: "Ярослав Кудымов"}, {name: "Алексей Погорелов"}, {name: LONG}]},
   ]},
   {title: "Группа 2", blockRoundCount: 3, rows: [
@@ -96,6 +97,19 @@ const groups: GroupStandingsGroup[] = [
     {name: "Есения Погорелова", points: 6, blockRounds: [2, 2, 2]},
   ]},
 ];
+
+// galleryBoutBox draws a group's bout the way a bout page does: the grid's
+// box, a venue and a time in its head, the points after the place.
+function galleryBoutBox(bout: GroupBout): HTMLElement {
+  const played = bout.started;
+  const match: FestGridMatch = {
+    code: bout.code || bout.label, letter: bout.label, participantCount: bout.sides.length,
+    status: played ? "finished" : "pending", venue: {number: 1, title: "Рим", place: "ауд. 308"}, startsAt: "18:00",
+    slots: bout.sides.map((side) => side.name),
+    participants: bout.sides.map((side, i) => ({name: side.name, total: played ? side.score : undefined, place: played ? i + 1 : undefined})),
+  };
+  return buildBoutBox(match, match, {}, {head: "Очки", values: bout.sides.map((side) => (side.points === undefined ? "" : String(side.points)))});
+}
 
 const ekStats: EKPlayerStatsRow[] = [
   {player: "Тимур Трубачеев", team: "Стол", sum: 180, plus: 200, battles: 3, rightTotal: 6, right: [1, 2, 0, 1, 2], wrong: [0, 0, 1, 0, 0], share: 0.67},
@@ -228,7 +242,7 @@ function render(root: HTMLElement): void {
   root.replaceChildren(
     section(S.gallery.section.festGrid(), "table-host grid-host", buildFestGrid({stages: festStages})),
     section(S.gallery.section.reseed(), "table-host fits-frame", buildReseedStagePanel(reseedStage, {letters: new Map([["s1-g1-1", "A"], ["s1-g1-2", "B"]])})),
-    section(S.gallery.section.groupStandings(), "table-host fits-frame", buildGroupStandingsView(groups)),
+    section(S.gallery.section.groupStandings(), "table-host fits-frame", buildGroupStandingsView(groups, {boutBox: galleryBoutBox})),
     section(S.gallery.section.ekStats(), "table-host", buildEKStatsTable(ekStats)),
     section(S.gallery.section.individualStats(), "table-host", buildIndividualStatsTable(individualStats)),
     section(S.gallery.section.venues(), "table-host", buildVenuesTable(venues)),

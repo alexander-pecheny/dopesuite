@@ -2068,8 +2068,6 @@ shootout: true
     },
     groupBouts: {
       bout: () => "Бой",
-      card: (letter: string) => `Бой ${letter}`,
-      place: () => "М",
       round: () => "Круг",
       score: () => "Счёт",
       sides: () => "Участники",

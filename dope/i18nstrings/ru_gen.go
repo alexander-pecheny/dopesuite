@@ -3009,8 +3009,6 @@ var RU = Strings{
 		},
 		GroupBouts: StandingsGroupBoutsStrings{
 			Bout:  func() string { return "Бой" },
-			Card:  func(letter string) string { return fmt.Sprintf("Бой %s", letter) },
-			Place: func() string { return "М" },
 			Round: func() string { return "Круг" },
 			Score: func() string { return "Счёт" },
 			Sides: func() string { return "Участники" },

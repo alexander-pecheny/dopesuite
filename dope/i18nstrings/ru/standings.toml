@@ -21,7 +21,3 @@ bout = "Бой"
 round = "Круг"
 sides = "Участники"
 score = "Счёт"
-# A group's bouts of three or four, one table each: the table's head (the
-# bout's letter) and its place column.
-card = 'Бой {{.letter}}'
-place = "М"

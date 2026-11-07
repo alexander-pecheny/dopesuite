@@ -217,7 +217,7 @@ function venueAddForm(next: number, onAdd: (title: string, number: number) => vo
 // with no time keeps the wording as it was.
 export function withStartsAt(text: string, startsAt: string | undefined): string {
   const time = (startsAt || "").trim();
-  return time ? S.widgets.venue.withTime(time, text).trim() : text;
+  return time ? S.widgets.venue.withTime(text, time).trim() : text;
 }
 
 // venueLabel is a bout's venue as a header shows it, number and title,

@@ -75,9 +75,8 @@
   --od-detailed-name-base-col-compact: 90px;
   --od-detailed-name-extra-col: 3em;
   --group-bouts-pairing-col-mobile: 210px;
-  --group-bout-card-name-col: 190px;
   --group-bout-round-col: 5em;
-  --group-bout-card-num-col: 3.5em;
+  --group-bout-box-col: 300px;
 }
 
 /* ── name popovers ─────────────────────────────────────────
@@ -1324,19 +1323,24 @@ button.seat-picker-control {
 }
 
 .group-bout-round {
+  flex: none;
   width: var(--group-bout-round-col);
   padding-top: var(--space-1);
 }
 
-.results-table.group-bout-card-table {
-  --results-team-col: var(--group-bout-card-name-col);
+/* A round's bouts stay on one line, and the line scrolls. */
+.group-bout-row {
+  overflow-x: auto;
 }
 
-/* A card's numbers keep one width, so a bout not played yet is as wide as
-   the played ones beside it. */
-.group-bout-card-table td.results-num,
-.group-bout-card-table th.results-num {
-  min-width: var(--group-bout-card-num-col);
+.group-bout-row > .grid-box {
+  flex: none;
+  width: var(--group-bout-box-col);
+}
+
+/* A group's bout box carries the points it paid after М. */
+.grid-slot-grid.grid-slot-grid-extra {
+  grid-template-columns: minmax(0, 1fr) var(--grid-num-col) var(--grid-num-col) var(--grid-place-col);
 }
 
 /* The list of a group's bouts: the pairing is as wide as two names, and a
@@ -2633,8 +2637,6 @@ body:not(.embedded-match) .grid-match {
 .group-standings-table .results-team,
 .group-bouts-table thead th.results-team-head,
 .group-bouts-table .results-team,
-.group-bout-card-table thead th.results-team-head,
-.group-bout-card-table .results-team,
 .troika-swiss-table thead th.results-team-head,
 .troika-swiss-table .results-team {
   width: var(--results-team-col);
@@ -3690,8 +3692,7 @@ body:not(.embedded-match) .grid-match {
 /* A player's round in the groups tab leads to the bout he played it in, and
    so does a bout's letter in the list under a group's table. */
 .group-standings-table .group-round-link,
-.group-bouts-table .group-round-link,
-.group-bout-card-table .group-round-link {
+.group-bouts-table .group-round-link {
   display: block;
   color: inherit;
   text-decoration: none;
@@ -3700,9 +3701,7 @@ body:not(.embedded-match) .grid-match {
 .group-standings-table .group-round-link:hover,
 .group-standings-table .group-round-link:focus,
 .group-bouts-table .group-round-link:hover,
-.group-bouts-table .group-round-link:focus,
-.group-bout-card-table .group-round-link:hover,
-.group-bout-card-table .group-round-link:focus {
+.group-bouts-table .group-round-link:focus {
   color: var(--blue);
 }
 

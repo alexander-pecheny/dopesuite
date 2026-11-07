@@ -14,6 +14,8 @@ export interface FestGridVenueObject {
   Number?: unknown;
   title?: unknown;
   Title?: unknown;
+  place?: unknown;
+  hosts?: unknown;
 }
 
 export type FestGridVenue = number | string | FestGridVenueObject | null | undefined;
@@ -772,8 +774,29 @@ function buildMatchBoxes({live, boxes}: GridBoxes, ctx: PaintContext): HTMLEleme
   const matches = document.createElement("div");
   matches.className = "grid-matches";
   const liveMatches = new Map((live.matches || []).map((match) => [match.code, match]));
-  for (const item of boxes) matches.appendChild(buildMatchBox(item.match, liveMatches.get(item.match.code), item, ctx));
+  for (const item of boxes) {
+    const box = buildMatchBox(item.match, liveMatches.get(item.match.code), item.rows, ctx);
+    spanRows(box, item);
+    matches.appendChild(box);
+  }
   return matches;
+}
+
+// BoutColumn is a column a caller adds to a bout's box after the place: its head and
+// one value per seat, in seat order.
+export interface BoutColumn {
+  head: string;
+  values: string[];
+}
+
+// buildBoutBox is one bout as the grid draws it, standing on its own: the
+// letter, the start time and the venue in its head, then the seats with Σ and
+// the place, and the caller's column after them (a group's points). The group view of a
+// bout page lays a group's bouts out with it.
+export function buildBoutBox(match: FestGridMatch, liveMatch: FestGridMatch | undefined, options: FestGridOptions, extra?: BoutColumn): HTMLElement {
+  const ctx: PaintContext = {letters: options.letters || null, options};
+  const rows = gridSlotRowCount(match, match.slots || []) + 1;
+  return buildMatchBox(match, liveMatch, rows, ctx, extra);
 }
 
 // spanRows sets a box on the shared row grid: its span, at the row it is
@@ -783,7 +806,7 @@ function spanRows(box: HTMLElement, item: GridItem): void {
   box.style.setProperty("grid-row", item.row ? `${item.row} / span ${item.units}` : `span ${item.units}`);
 }
 
-function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefined, item: GridItem, ctx: PaintContext): HTMLElement {
+function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefined, rows: number, ctx: PaintContext, extra?: BoutColumn): HTMLElement {
   const box = document.createElement("article");
   box.className = `grid-box grid-match ${liveMatch?.status || "pending"}`;
   box.dataset.matchCode = match.code || "";
@@ -791,18 +814,19 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
 
   const venue = firstVenue(liveMatch?.venue, match.venue);
   const grid = document.createElement("div");
-  grid.className = "grid-slot-grid";
+  grid.className = extra ? "grid-slot-grid grid-slot-grid-extra" : "grid-slot-grid";
   grid.appendChild(matchHeadCell(match, venue, ctx, liveMatch?.startsAt ?? match.startsAt));
   grid.appendChild(gridHeadCell("slot-total-head", "Σ"));
   grid.appendChild(gridHeadCell("slot-place-head", S.fest.grid.colPlace()));
+  if (extra) grid.appendChild(gridHeadCell("slot-total-head", extra.head));
   const liveTeams = liveMatch?.participants || [];
   const slots = match.slots || [];
-  spanRows(box, item);
   const realRows: HTMLElement[][] = [];
-  for (let index = 0; index < item.rows - 1; index += 1) {
+  for (let index = 0; index < rows - 1; index += 1) {
     const slot = slots[index];
     if (!slot) {
       phantomSlotCells().forEach((cell) => grid.appendChild(cell));
+      if (extra) grid.appendChild(gridCell("slot-total grid-slot-phantom-cell", ""));
       continue;
     }
     const live = liveTeams[index] || {};
@@ -811,6 +835,7 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
       gridCell("slot-total", scoreText(live.total)),
       gridCell("slot-place", placeText(live.place)),
     ];
+    if (extra) cells.push(gridCell("slot-total", extra.values[index] || ""));
     realRows.push(cells);
     cells.forEach((cell) => grid.appendChild(cell));
   }
