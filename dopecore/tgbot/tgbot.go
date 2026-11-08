@@ -61,6 +61,8 @@ type Message struct {
 	ForwardOrigin *MessageOrigin `json:"forward_origin"`
 	// Caption is a photo's or a document's text, which Text then lacks.
 	Caption string `json:"caption"`
+	// RichMessage is a post in Telegram's rich formatting, which has no Text.
+	RichMessage *RichMessage `json:"rich_message"`
 }
 
 // MessageOrigin is a forwarded message's origin. Type is "user",

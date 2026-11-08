@@ -2,6 +2,7 @@ package tests
 
 import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -229,6 +230,25 @@ func TestAPostForwardedToTheBotLoadsByItsLink(t *testing.T) {
 	}
 	if res := alice.PostJSON("/api/nominate/load", link); res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"answer":"стекольщик."`) {
 		t.Errorf("the forwarded post should load: %d %s", res.Code, res.Body.String())
+	}
+
+	// A post in the new rich formatting has no text, only blocks, with the
+	// answer folded away under a details toggle.
+	var rich tgbot.Message
+	if err := json.Unmarshal([]byte(`{"rich_message":{"blocks":[
+		{"type":"paragraph","text":[{"type":"bold","text":"Вопрос 15:"}," Назовите ИКС словом латинского происхождения."]},
+		{"type":"details","summary":"Ответ","blocks":[{"type":"paragraph","text":[{"type":"bold","text":"Ответ:"}," цирк"]}]},
+		{"type":"footer","text":[{"type":"bold","text":"Источники:"}," 1. ",{"type":"url","text":"https://ru.wiktionary.org/wiki/цирк","url":"https://ru.wiktionary.org/wiki/цирк"},"\n",{"type":"bold","text":"Автор:"}," Кирилл Карташов"]}
+	]}}`), &rich); err != nil {
+		t.Fatal(err)
+	}
+	rich.Chat, rich.From = forward.Chat, forward.From
+	rich.ForwardOrigin = &tgbot.MessageOrigin{Type: "channel", Chat: channel, MessageID: 103}
+	if reply, ok := w.ts.BotMessage(rich); !ok || !strings.Contains(reply, "https://t.me/ovdchgk/103") {
+		t.Fatalf("the bot should keep a rich post: %v %q", ok, reply)
+	}
+	if res := alice.PostJSON("/api/nominate/load", `{"link": "https://t.me/ovdchgk/103"}`); res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"answer":"цирк"`) {
+		t.Errorf("the rich post should load: %d %s", res.Code, res.Body.String())
 	}
 
 	private := forward

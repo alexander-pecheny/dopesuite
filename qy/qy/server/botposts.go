@@ -59,6 +59,9 @@ func (s *server) keepForward(ctx context.Context, m *tgbot.Message) (string, boo
 		text = strings.TrimSpace(m.Caption)
 	}
 	if text == "" {
+		text = m.RichMessage.PlainText()
+	}
+	if text == "" {
 		return str.Bot.Forward.Empty(), true
 	}
 	err := s.withWriteTx(ctx, "tg-forward", func(ctx context.Context, tx *sql.Tx) error {
