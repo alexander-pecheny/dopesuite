@@ -175,9 +175,10 @@ function pvQuestion<C extends PvCard>(card: C, desc: string, number: string | nu
     if (fresh) { wrap.append(qline); fresh = false; }
     qline.append(renderFieldBody(p.text, imgMap, fieldOpts("question", screen)));
   }
+  const fields = opts.fold ?? wrap;
   for (const f of chgk4s.fieldOrder(!!opts.commentFirst)) {
     const b = find(f);
-    if (b) wrap.append(pvField(f, b.text, imgMap, screen, pvSmallCls(f)));
+    if (b) fields.append(pvField(f, b.text, imgMap, screen, pvSmallCls(f)));
   }
   return wrap;
 }
@@ -193,6 +194,10 @@ function markedDesc(card: PvCard): string {
 export interface PreviewOpts<C extends PvCard = PvCard> {
   edit?: (card: C) => HTMLElement;
   commentFirst?: boolean;
+  // fold takes a question's fields (answer, zachet, … author) instead of the
+  // card, which then holds the question alone: qy's pages keep them behind a
+  // «show the answer» disclosure.
+  fold?: ParentNode;
 }
 
 export function renderPreviewCard<C extends PvCard>(card: C, number: string | null, imgMap: Map<string, string>, screen: boolean, opts: PreviewOpts<C> = {}): HTMLElement {

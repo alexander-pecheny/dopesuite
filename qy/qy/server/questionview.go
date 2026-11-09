@@ -1,6 +1,7 @@
 package qyserver
 
 import (
+	"encoding/json"
 	"html"
 	"regexp"
 	"strconv"
@@ -23,29 +24,31 @@ type card struct {
 
 func qyLabel(n int) string { return "QY" + strconv.Itoa(n) }
 
-// questionHTML renders a card the way the old static site did: the number and
-// the text, then the answer and the rest behind a disclosure.
+// questionHTML is a card's frame: the number and the text, then the answer and
+// the rest behind a disclosure. The question itself is drawn in the browser by
+// chgksuite's renderer (web/ts/questions.ts), the one xy's boards and the
+// nomination form's preview use, from the fields in data-question; until then,
+// or without the script, the frame shows them as plain text.
 func questionHTML(c card) string {
 	var b strings.Builder
 	anchor, label := qyLabel(c.qy), str.Question.Label(qyLabel(c.qy))
+	number := anchor
 	if c.qy == 0 {
-		label = str.Question.Unnumbered()
+		label, number = str.Question.Unnumbered(), ""
 	}
-	b.WriteString(`<p><b id="` + anchor + `">` + html.EscapeString(label) + `</b> `)
-	b.WriteString(plain(c.q.Text) + "</p>")
+	handout, text := question.SplitHandout(c.q.Text)
+	fields, _ := json.Marshal(map[string]string{
+		"text": text, "handout": handout, "answer": c.q.Answer, "zachet": c.q.Zachet,
+		"nezachet": c.q.Nezachet, "comment": c.q.Comment, "source": c.q.Source, "author": c.q.Author,
+	})
+	b.WriteString(`<div id="` + anchor + `" data-question="` + html.EscapeString(string(fields)) +
+		`" data-number="` + number + `">`)
+	b.WriteString(`<p data-part="question"><b>` + html.EscapeString(label) + `</b> ` + plain(c.q.Text) + "</p>")
 	b.WriteString("<details><summary>" + html.EscapeString(str.Question.ShowAnswer()) + "</summary>")
-	for _, f := range []struct{ label, value string }{
-		{str.Question.Answer(), c.q.Answer},
-		{str.Question.Zachet(), c.q.Zachet},
-		{str.Question.Nezachet(), c.q.Nezachet},
-		{str.Question.Comment(), c.q.Comment},
-		{str.Question.Source(), c.q.Source},
-		{str.Question.Author(), c.q.Author},
-		{str.Question.Tournament(), c.tournament},
-	} {
-		if f.value != "" {
-			b.WriteString("<p><b>" + html.EscapeString(f.label) + "</b> " + plain(f.value) + "</p>")
-		}
+	b.WriteString(`<div data-part="fields"><p>` + plain(question.FormatFields(c.q)) + "</p></div>")
+	if c.tournament != "" {
+		b.WriteString(`<div class="pv-field"><strong class="pv-label">` + html.EscapeString(str.Question.Tournament()) +
+			" </strong>" + plain(c.tournament) + "</div>")
 	}
 	if c.extra != "" {
 		b.WriteString(rich(c.extra))
@@ -58,6 +61,7 @@ func questionHTML(c card) string {
 		b.WriteString(`<details id="` + anchor + `_factcheck"><summary>` + html.EscapeString(str.Question.Factcheck()) + "</summary>")
 		b.WriteString(rich(c.factcheck) + "</details>")
 	}
+	b.WriteString("</div>")
 	return b.String()
 }
 

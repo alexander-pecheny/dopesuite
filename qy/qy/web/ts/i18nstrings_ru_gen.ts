@@ -420,17 +420,11 @@ export const RU: Strings = {
     title: () => "Профиль",
   },
   question: {
-    answer: () => "Ответ:",
-    author: () => "Автор(ы):",
-    comment: () => "Комментарий:",
     factcheck: () => "Фактчек",
     label: (number: string) => `Вопрос ${number}.`,
-    nezachet: () => "Незачёт:",
     showAnswer: () => "Показать ответ",
-    source: () => "Источник(и):",
     tournament: () => "Турнир:",
     unnumbered: () => "Вопрос.",
-    zachet: () => "Зачёт:",
   },
   results: {
     places: (jury: string, popular: string, rank_sum: string, points: string) => `Место у жюри: ${jury}, место у зрителей: ${popular}, сумма рангов у жюри: ${rank_sum}, баллы у зрителей: ${points}`,

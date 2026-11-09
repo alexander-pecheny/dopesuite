@@ -578,17 +578,11 @@ var RU = Strings{
 		Title:      func() string { return "Профиль" },
 	},
 	Question: QuestionStrings{
-		Answer:     func() string { return "Ответ:" },
-		Author:     func() string { return "Автор(ы):" },
-		Comment:    func() string { return "Комментарий:" },
 		Factcheck:  func() string { return "Фактчек" },
 		Label:      func(number string) string { return fmt.Sprintf("Вопрос %s.", number) },
-		Nezachet:   func() string { return "Незачёт:" },
 		ShowAnswer: func() string { return "Показать ответ" },
-		Source:     func() string { return "Источник(и):" },
 		Tournament: func() string { return "Турнир:" },
 		Unnumbered: func() string { return "Вопрос." },
-		Zachet:     func() string { return "Зачёт:" },
 	},
 	Results: ResultsStrings{
 		Places: func(jury string, popular string, rank_sum string, points string) string {

@@ -59,12 +59,19 @@ var formatLabels = []struct{ field, label string }{
 // Format writes a question as the text a nominator would paste, which Parse
 // reads back into the same fields. q.Text may carry its handout in front.
 func Format(q Question) string {
-	var b strings.Builder
-	b.WriteString("Вопрос 1.\n" + q.Text)
+	if rest := FormatFields(q); rest != "" {
+		return "Вопрос 1.\n" + q.Text + "\n" + rest
+	}
+	return "Вопрос 1.\n" + q.Text
+}
+
+// FormatFields writes the fields after the text, one "Label: value" a line.
+func FormatFields(q Question) string {
+	var lines []string
 	for _, f := range formatLabels {
 		if v := q.Get(f.field); v != "" {
-			b.WriteString("\n" + f.label + ": " + v)
+			lines = append(lines, f.label+": "+v)
 		}
 	}
-	return b.String()
+	return strings.Join(lines, "\n")
 }

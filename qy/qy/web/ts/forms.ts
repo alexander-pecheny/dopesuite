@@ -8,6 +8,8 @@
 //   - #toggle-all-details, the archive's button that opens every answer on a
 //     results page. The old site wired it with an inline script, which the CMS
 //     strips.
+//   - [data-question]: a question card, drawn by chgksuite's renderer
+//     (questions.ts).
 import S from "./i18nstrings.js";
 import { formBody, statusText } from "./forms-model.js";
 
@@ -53,3 +55,4 @@ if (toggleAll) {
   });
 }
 import "./nominate.js";
+import "./questions.js";

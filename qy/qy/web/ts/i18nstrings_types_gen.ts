@@ -419,17 +419,11 @@ export type Strings = {
     title: () => string;
   };
   question: {
-    answer: () => string;
-    author: () => string;
-    comment: () => string;
     factcheck: () => string;
     label: (number: string) => string;
-    nezachet: () => string;
     showAnswer: () => string;
-    source: () => string;
     tournament: () => string;
     unnumbered: () => string;
-    zachet: () => string;
   };
   results: {
     places: (jury: string, popular: string, rank_sum: string, points: string) => string;

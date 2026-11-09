@@ -30,6 +30,10 @@ qy/                     module root (go.mod: module "qy")
   its Просмотр, Поля and Текст tabs need the script. Its load, parse, move and
   clear buttons still work without it, because the post does the same and
   shows the form again unsaved.
+- A question card (`server/questionview.go`) is drawn in the browser by
+  chgksuite's renderer (`chgksuite/web/ts/preview.ts`, shared with xy) from
+  the fields the server puts in `data-question`; `web/ts/questions.ts` does it.
+  Without the script the card shows the fields as plain text.
 - HTML the server rendered itself goes through the overlay's `richtext`
   primitive. Nothing derived from a request goes there unescaped: question
   fields pass through `plain`, and only admin-written Markdown is raw.
