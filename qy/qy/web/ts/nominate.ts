@@ -19,6 +19,7 @@
 // unsaved.
 import S from "./i18nstrings.js";
 import { renderPreviewCard } from "../../../../chgksuite/web/ts/preview.js";
+import { markUnsaved } from "./unsaved.js";
 import { fourS, imageLinks, isLoadable, isSingleLink, PARSED_FIELDS, type Parsed, type ParsedField } from "./nominate-model.js";
 
 type Control = HTMLInputElement | HTMLTextAreaElement;
@@ -255,6 +256,7 @@ async function fillFrom(card: HTMLElement): Promise<void> {
   }
   message(card, "");
   fill(card, res);
+  markUnsaved(card.closest("form"));
   const tournament = field(card, "tournament");
   if (tournament && !tournament.value && res.tournament) tournament.value = res.tournament;
   setState(card, "editor", "preview");
@@ -269,6 +271,7 @@ function clear(card: HTMLElement): void {
   }
   for (const a of card.querySelectorAll('a[href^="/nominate/file/"]')) a.closest(".u-row")?.remove();
   message(card, "");
+  markUnsaved(card.closest("form"));
   delete card.dataset.composed;
   syncButtons(card);
   syncOptional(card);
@@ -308,6 +311,7 @@ async function swap(a: HTMLElement, b: HTMLElement): Promise<void> {
     renumber(card);
     setState(card, card.dataset.state === "editor" ? "editor" : "source", card.dataset.view || "text");
   }
+  markUnsaved(a.closest("form"));
   b.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 

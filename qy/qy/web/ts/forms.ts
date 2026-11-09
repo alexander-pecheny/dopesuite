@@ -8,6 +8,7 @@
 //   - #toggle-all-details, the archive's button that opens every answer on a
 //     results page. The old site wired it with an inline script, which the CMS
 //     strips.
+//   - leaving a page with an unsaved form asks first (unsaved.ts).
 //   - [data-question]: a question card, drawn by chgksuite's renderer
 //     (questions.ts).
 import S from "./i18nstrings.js";
@@ -56,3 +57,4 @@ if (toggleAll) {
 }
 import "./nominate.js";
 import "./questions.js";
+import "./unsaved.js";
