@@ -49,10 +49,9 @@ battle_short = 'пл. {{.n}}'
 # A bout's venue with the start time the host gave it, the venue first.
 # {{.venue}} is the venue as above, and may be empty.
 with_time = '{{.venue}} {{.time}}'
-# A bout's venue and time, then the room the venue is in.
-with_place = '{{.where}}, {{.place}}'
-# The venues table's room and hosts columns.
-place_column = "Аудитория"
+# A bout's venue number and time, then the venue's title (its room).
+with_title = '{{.where}}, {{.title}}'
+# The venues table's hosts column.
 hosts_column = "Ведущие"
 # The add row under the host's venues table: the title field's placeholder,
 # the number field's label (left empty, the venue takes the next free

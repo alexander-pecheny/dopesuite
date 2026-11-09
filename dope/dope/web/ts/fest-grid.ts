@@ -14,7 +14,6 @@ export interface FestGridVenueObject {
   Number?: unknown;
   title?: unknown;
   Title?: unknown;
-  place?: unknown;
   hosts?: unknown;
 }
 
@@ -939,7 +938,6 @@ function matchCard(match: FestGridMatch, venue: Venue | null, ctx: PaintContext,
   const time = (startsAt || "").trim();
   if (time) card.appendChild(el("span", "", S.fest.grid.cardStartsAt(time)));
   if (venue) card.appendChild(el("span", "", venueText(venue)));
-  if (venue?.place) card.appendChild(el("span", "", venue.place));
   if (venue?.hosts) card.appendChild(el("span", "", venue.hosts));
   const href = matchTitleHref(match, ctx);
   if (href) {

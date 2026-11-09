@@ -1180,6 +1180,16 @@ alter table venues add column hosts text not null default '';
 `)
 		return err
 	}},
+	// The room went into the title, which is what the participants look
+	// for: a venue that had a room takes it as its title, and its old title
+	// (the hosts' names, on the fest that used it) becomes its hosts.
+	{Version: 55, Name: "venue room is its title", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+update venues set hosts = case when hosts = '' then title else hosts end, title = place where place != '';
+alter table venues drop column place;
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

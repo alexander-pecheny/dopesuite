@@ -165,10 +165,10 @@ func TestAddVenueLinksTheSchemesBouts(t *testing.T) {
 	}
 }
 
-// A venue carries the room it is in and who hosts there. A venue is added
+// A venue carries its title (the room) and who hosts there. A venue is added
 // with them, a write changes only the fields it names, and a bout's view
 // carries them beside the venue's number.
-func TestVenuePlaceAndHosts(t *testing.T) {
+func TestVenueTitleAndHosts(t *testing.T) {
 	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
@@ -179,7 +179,7 @@ func TestVenuePlaceAndHosts(t *testing.T) {
 	if _, err := db.Exec(`delete from venues where fest_id = ?`, festID); err != nil {
 		t.Fatal(err)
 	}
-	hostID, hostToken := createAPITestSession(t, srv, "venue-place-host")
+	hostID, hostToken := createAPITestSession(t, srv, "venue-hosts-host")
 	addAPITestRole(t, srv, festID, hostID, roles.Host)
 	path := fmt.Sprintf("/api/fest/%d/venues", festID)
 	decode := func(resp interface{ Bytes() []byte }) []store.VenueView {
@@ -189,19 +189,19 @@ func TestVenuePlaceAndHosts(t *testing.T) {
 		}
 		return venues
 	}
-	resp := scopedAPIRequest(t, srv, http.MethodPost, path, map[string]any{"number": 1, "title": "Площадка 1", "place": "ауд. 308", "hosts": "Бобыльков / Банникова"}, hostToken)
+	resp := scopedAPIRequest(t, srv, http.MethodPost, path, map[string]any{"number": 1, "title": "ауд. 308", "hosts": "Бобыльков / Банникова"}, hostToken)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("add status = %d, body %s", resp.Code, resp.Body.String())
 	}
-	if v := decode(resp.Body); len(v) != 1 || v[0].Place != "ауд. 308" || v[0].Hosts != "Бобыльков / Банникова" {
+	if v := decode(resp.Body); len(v) != 1 || v[0].Title != "ауд. 308" || v[0].Hosts != "Бобыльков / Банникова" {
 		t.Fatalf("venues = %#v", v)
 	}
-	resp = scopedAPIRequest(t, srv, http.MethodPut, path+"/1", map[string]any{"place": "ауд. 310"}, hostToken)
+	resp = scopedAPIRequest(t, srv, http.MethodPut, path+"/1", map[string]any{"title": "ауд. 310"}, hostToken)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("put status = %d, body %s", resp.Code, resp.Body.String())
 	}
-	if v := decode(resp.Body); v[0].Title != "Площадка 1" || v[0].Place != "ауд. 310" || v[0].Hosts != "Бобыльков / Банникова" {
-		t.Fatalf("after a place-only write: %#v", v)
+	if v := decode(resp.Body); v[0].Title != "ауд. 310" || v[0].Hosts != "Бобыльков / Банникова" {
+		t.Fatalf("after a title-only write: %#v", v)
 	}
 	resp = scopedAPIRequest(t, srv, http.MethodPut, path+"/1", map[string]any{"title": " "}, hostToken)
 	if resp.Code != http.StatusBadRequest {
@@ -219,7 +219,7 @@ func TestVenuePlaceAndHosts(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, m := range states {
-		if m.Code == code && (m.Venue == nil || m.Venue.Place != "ауд. 310" || m.Venue.Hosts == "") {
+		if m.Code == code && (m.Venue == nil || m.Venue.Title != "ауд. 310" || m.Venue.Hosts == "") {
 			t.Fatalf("bout %s venue = %#v", code, m.Venue)
 		}
 	}

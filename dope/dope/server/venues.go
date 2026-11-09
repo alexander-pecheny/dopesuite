@@ -28,7 +28,6 @@ import (
 type venueCreateRequest struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`
-	Place  string `json:"place,omitempty"`
 	Hosts  string `json:"hosts,omitempty"`
 }
 
@@ -71,10 +70,6 @@ func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, r
 		}
 		sets, args, payload["title"] = append(sets, "title = ?"), append(args, title), title
 	}
-	if req.Place != nil {
-		place := strings.TrimSpace(*req.Place)
-		sets, args, payload["place"] = append(sets, "place = ?"), append(args, place), place
-	}
 	if req.Hosts != nil {
 		hosts := strings.TrimSpace(*req.Hosts)
 		sets, args, payload["hosts"] = append(sets, "hosts = ?"), append(args, hosts), hosts
@@ -107,7 +102,7 @@ where fest_id = ? and number = ?`, append(args, util.UtcNow(), festID, number)..
 // that sits at no venue yet.
 func (s *server) createVenue(reqCtx context.Context, festID int64, req venueCreateRequest) (venueChange, error) {
 	number, title := req.Number, strings.TrimSpace(req.Title)
-	place, hosts := strings.TrimSpace(req.Place), strings.TrimSpace(req.Hosts)
+	hosts := strings.TrimSpace(req.Hosts)
 	if title == "" {
 		return venueChange{}, venueUserError(dopestrings.Default.Server.Venue.TitleEmpty())
 	}
@@ -132,7 +127,7 @@ func (s *server) createVenue(reqCtx context.Context, festID int64, req venueCrea
 		}
 		now := util.UtcNow()
 		venueID, err := store.InsertReturningID(ctx, tx, `
-insert into venues(fest_id, number, title, place, hosts, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?)`, festID, number, title, place, hosts, now, now)
+insert into venues(fest_id, number, title, hosts, created_at, updated_at) values(?, ?, ?, ?, ?, ?)`, festID, number, title, hosts, now, now)
 		if err != nil {
 			return nil, err
 		}

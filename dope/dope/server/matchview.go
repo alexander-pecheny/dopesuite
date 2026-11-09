@@ -18,7 +18,6 @@ import (
 // fields it names change, the ones it leaves out keep their value.
 type venueUpdateRequest struct {
 	Title *string `json:"title,omitempty"`
-	Place *string `json:"place,omitempty"`
 	Hosts *string `json:"hosts,omitempty"`
 }
 

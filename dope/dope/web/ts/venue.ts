@@ -1,5 +1,5 @@
-// Venue: the number-plus-title a match is played at, where it is (place) and
-// who hosts there, and the venues table.
+// Venue: the number-plus-title a match is played at (the title is usually the
+// room), who hosts there, and the venues table.
 
 import {option, td} from "./cells.js";
 import {nameCell} from "./name-cell.js";
@@ -11,14 +11,12 @@ import S from "./i18nstrings.js";
 // Visible width, in characters, of the new venue's title field.
 const TITLE_FIELD_SIZE = 24;
 
-export type VenueLike = number | string | {number?: unknown; Number?: unknown; title?: unknown; Title?: unknown; place?: unknown; hosts?: unknown} | null | undefined;
+export type VenueLike = number | string | {number?: unknown; Number?: unknown; title?: unknown; Title?: unknown; hosts?: unknown} | null | undefined;
 
 export interface Venue {
   number: number;
   title: string;
-  // place is the room the participants look for (room 308), hosts who
-  // host there. Either may be empty.
-  place?: string;
+  // hosts are who host there; it may be empty.
   hosts?: string;
   // bouts is how many bouts play at it, in the fest's venue list.
   bouts?: number;
@@ -33,16 +31,14 @@ export function normalizeVenue(venue: VenueLike): Venue | null {
   const number = Number(venue.number ?? venue.Number);
   if (!Number.isFinite(number) || number <= 0) return null;
   const title = String(venue.title ?? venue.Title ?? "").trim();
-  const place = String(venue.place ?? "").trim();
   const hosts = String(venue.hosts ?? "").trim();
-  return {number, title, ...(place ? {place} : {}), ...(hosts ? {hosts} : {})};
+  return {number, title, ...(hosts ? {hosts} : {})};
 }
 
 // VenueFields are what a host edits on a venue; a write names the ones it
 // changes.
 export interface VenueFields {
   title?: string;
-  place?: string;
   hosts?: string;
 }
 
@@ -61,14 +57,13 @@ export function formatBattleVenue(venue: VenueLike): string {
 }
 
 // boutWhere is where and when a bout is played as its head says it: the
-// table's number, the start time, then the room when the venue has one
-// (venue 1 18:00, room 308). A venue with no room says its title instead,
-// as before.
+// table's number, the start time, then the venue's title, usually its room
+// (venue 1 18:00, room 308).
 export function boutWhere(venue: VenueLike, startsAt: string | undefined): string {
   const normalized = normalizeVenue(venue);
-  if (!normalized?.place) return withStartsAt(formatBattleVenue(venue), startsAt);
+  if (!normalized) return "";
   const where = withStartsAt(S.widgets.venue.battleShort(String(normalized.number)), startsAt);
-  return S.widgets.venue.withPlace(where, normalized.place);
+  return normalized.title ? S.widgets.venue.withTitle(where, normalized.title) : where;
 }
 
 export function formatBattleVenueShort(venue: VenueLike): string {
@@ -114,7 +109,7 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
   };
 
   // field is one of a venue's texts: an input for a host, the text for a
-  // spectator. The title may not be emptied; the place and hosts may.
+  // spectator. The title may not be emptied; the hosts may.
   const field = (venue: Venue, key: keyof VenueFields, label: string) => {
     const value = venue[key] || "";
     if (!onChange) return value;
@@ -152,8 +147,7 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
   const columns: StandingsColumn[] = [
     {label: "№", kind: "place"},
     {label: S.widgets.venue.nameColumn(), kind: "name"},
-    {label: S.widgets.venue.placeColumn()},
-    {label: S.widgets.venue.hostsColumn()},
+    {label: S.widgets.venue.hostsColumn(), className: "venue-hosts"},
   ];
   if (onDelete) columns.push({label: ""});
   wrapper.appendChild(standingsTable({
@@ -163,7 +157,6 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
       const row = [
         venue.number,
         field(venue, "title", S.widgets.venue.nameColumn()),
-        field(venue, "place", S.widgets.venue.placeColumn()),
         field(venue, "hosts", S.widgets.venue.hostsColumn()),
       ];
       return onDelete ? [...row, actions(venue)] : row;

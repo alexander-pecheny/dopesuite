@@ -110,9 +110,8 @@ type StandingView struct {
 type VenueView struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`
-	// Place is where the venue is, the room as the participants look for
-	// it (room 308), and Hosts who host there (the host and the assistant).
-	Place string `json:"place,omitempty"`
+	// Title is what the participants look for, usually the room (room 308);
+	// Hosts who host there (the host and the assistant).
 	Hosts string `json:"hosts,omitempty"`
 	Bouts int    `json:"bouts,omitempty"`
 }

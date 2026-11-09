@@ -104,7 +104,7 @@ function galleryBoutBox(bout: GroupBout): HTMLElement {
   const played = bout.started;
   const match: FestGridMatch = {
     code: bout.code || bout.label, letter: bout.label, participantCount: bout.sides.length,
-    status: played ? "finished" : "pending", venue: {number: 1, title: "Рим", place: "ауд. 308"}, startsAt: "18:00",
+    status: played ? "finished" : "pending", venue: {number: 1, title: "ауд. 308"}, startsAt: "18:00",
     slots: bout.sides.map((side) => side.name),
     participants: bout.sides.map((side, i) => ({name: side.name, total: played ? side.score : undefined, place: played ? i + 1 : undefined})),
   };
@@ -121,7 +121,7 @@ const individualStats: IndividualStatsRow[] = [
   {player: LONG, sum: 90, plus: 120, battles: 4, right: [1, 1, 0, 1, 1]},
 ];
 
-const venues: Venue[] = [{number: 1, title: "Рим, Алиенора", place: "ауд. 308", hosts: "Бобыльков / Банникова", bouts: 4}, {number: 2, title: ""}, {number: 3, title: LONG, bouts: 2}];
+const venues: Venue[] = [{number: 1, title: "ауд. 308", hosts: "Бобыльков / Банникова", bouts: 4}, {number: 2, title: ""}, {number: 3, title: LONG, bouts: 2}];
 
 const roster: RosterTeam[] = [
   {number: 1, name: "Детективы для элит", city: "Санкт-Петербург", ratingID: 1, players: [{name: "Дмитрий Яшин", ratingID: 1}, {name: "Анастасия Банникова"}, {name: "Даниил Чеченин"}, {name: "Денис Потехин"}]},

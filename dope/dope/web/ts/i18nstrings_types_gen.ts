@@ -2307,14 +2307,13 @@ export type Strings = {
       delete: () => string;
       hostsColumn: () => string;
       nameColumn: () => string;
-      placeColumn: () => string;
       scheduleBout: () => string;
       scheduleEmpty: () => string;
       scheduleGame: () => string;
       scheduleHead: (n: string, title: string) => string;
       scheduleTime: () => string;
-      withPlace: (where: string, place: string) => string;
       withTime: (venue: string, time: string) => string;
+      withTitle: (where: string, title: string) => string;
     };
     viewers: {
       label: () => string;

@@ -20,7 +20,7 @@ func FestVenuesDoc(ref, title string) *dopeui.Doc {
 	s := dopestrings.Default
 	festCrumb := dopeui.Crumb(dopeui.Href("/fest/"+ref), dopeui.Text(title))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(
-		dopeui.Title(s.Host.FestVenues.Title(title)), dopeui.PagePublic,
+		dopeui.Title(s.Host.FestVenues.Title(title)), dopeui.PageWide,
 		dopeui.Classicscripts("dist/fest-venues.js"),
 		dopeui.Publictopbar(pages.Trail([]dopeui.Item{pages.HomeCrumb(), festCrumb}, s.Host.FestVenues.Crumb())),
 		dopeui.Col(dopeui.ID("festVenues"),

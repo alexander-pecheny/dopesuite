@@ -372,6 +372,7 @@ var PageMulti = Attr{Name: "kind", Value: "multi"}
 var PageTroika = Attr{Name: "kind", Value: "troika"}
 var PageHamsa = Attr{Name: "kind", Value: "hamsa"}
 var PagePublic = Attr{Name: "kind", Value: "public"}
+var PageWide = Attr{Name: "kind", Value: "wide"}
 var PageGallery = Attr{Name: "kind", Value: "gallery"}
 var SwatchWhite = Attr{Name: "color", Value: "white"}
 var SwatchYellow = Attr{Name: "color", Value: "yellow"}

@@ -69,6 +69,9 @@ func mustApp() *base.App {
 			BootScripts: []string{"/static/dist/menu-config.js", "/static/menu.js"},
 			PageKinds: map[string]base.PageKind{
 				"public": {Body: []string{"public"}, Main: []string{"public-main"}},
+				// A public page whose content is wider than prose (the fest's
+				// venues, a table and a grid of schedules) takes the screen's width.
+				"wide": {Body: []string{"public"}, Main: []string{"public-main", "wide-main"}},
 				// The gallery scrolls like a public page but takes the whole width;
 				// each of its sections is its own horizontal scroller.
 				"gallery": {Body: []string{"public"}, Main: []string{"public-main", "gallery-main"}},

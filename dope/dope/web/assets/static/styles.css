@@ -79,6 +79,9 @@
   --group-bout-box-col: 300px;
   --venue-schedule-col: 340px;
   --venue-schedule-game-col: 200px;
+  /* The venues table: the title (a room, usually) and the hosts' names. */
+  --venue-title-col: 280px;
+  --venue-hosts-col: 380px;
 }
 
 /* ── name popovers ─────────────────────────────────────────
@@ -2510,9 +2513,14 @@ body:not(.embedded-match) .grid-match {
 
 .venues-results-table {
   --results-place-col: 64px;
-  --results-team-col: 420px;
+  --results-team-col: var(--venue-title-col);
   width: max-content;
-  min-width: 420px;
+}
+
+.venues-results-table .venue-hosts {
+  width: var(--venue-hosts-col);
+  min-width: var(--venue-hosts-col);
+  text-align: left;
 }
 
 .reseed-results-wrapper {
@@ -4341,6 +4349,12 @@ body.is-fullscreen.od-page .match-main {
   /* Dim KSI stickers a shade on dark theme — full-bright colors read as
      over-contrasty against the dark cells. */
   --ksi-sticker-dim: brightness(0.85);
+}
+
+/* A wide public page (the fest's venues): the public page's padding over the
+   screen's whole width. */
+.wide-main {
+  max-width: none;
 }
 
 /* The gallery (/gallery, dev mode): every shared table and the Сетка from

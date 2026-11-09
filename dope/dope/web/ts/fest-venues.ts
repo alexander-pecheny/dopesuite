@@ -1,7 +1,8 @@
 // The fest's venues page (/fest/{ref}/venues): the venues every Game of the
-// fest shares, with the room and the hosts of each, and under them what each
-// venue plays, bout by bout in the order of their start times. A host edits
-// the venues here; a bout's venue is still moved from the bout itself.
+// fest shares, with the title (the room) and the hosts of each, and under
+// them what each venue plays, bout by bout in the order of their start times.
+// A host edits the venues here; a bout's venue is still moved from the bout
+// itself.
 
 import {buildVenuesTable} from "./venue.js";
 import type {Venue, VenueFields} from "./venue.js";
@@ -65,16 +66,15 @@ export function byVenue(bouts: readonly VenueBout[]): Map<number, VenueBout[]> {
     head.className = "subhead";
     head.textContent = S.widgets.venue.scheduleHead(String(venue.number), venue.title);
     section.appendChild(head);
-    const about = [venue.place, venue.hosts].filter(Boolean).join(" · ");
-    if (about) {
+    if (venue.hosts) {
       const line = document.createElement("p");
-      line.className = "muted";
-      line.textContent = about;
+      line.className = "hint";
+      line.textContent = venue.hosts;
       section.appendChild(line);
     }
     if (!bouts.length) {
       const empty = document.createElement("p");
-      empty.className = "muted";
+      empty.className = "hint";
       empty.textContent = S.widgets.venue.scheduleEmpty();
       section.appendChild(empty);
       return section;
@@ -102,7 +102,7 @@ export function byVenue(bouts: readonly VenueBout[]): Map<number, VenueBout[]> {
       return "";
     };
     // A host edits the venues in their table; a spectator reads each one's
-    // room and hosts over its bouts.
+    // title and hosts over its bouts.
     const table = !data.editable ? null : buildVenuesTable(data.venues, {
       editable: true,
       onChange: (number: number, fields: VenueFields) => void edit(request(`${api}/venues/${number}`, "PUT", fields)),
