@@ -337,3 +337,21 @@ func TestTheAdminsSeeWhoNominatedWhat(t *testing.T) {
 		t.Error("the nominations page is open to a nominator")
 	}
 }
+
+func TestTheRatingSitesNameShowsWhenTelegramsDiffers(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.ts.SetBuff(qyserver.Buff{101: "Алиса Иванова", 202: "Борис Петров"})
+	alice, bob := w.user("alice"), w.user("bob")
+	w.ts.Exec(`update users set telegram_name = 'Alice I.' where telegram_username = 'alice'`)
+	w.ts.Exec(`update users set telegram_name = 'петров борис' where telegram_username = 'bob'`)
+	w.post(alice, "/2026/nominate", slots("101", map[int]string{1: pasted("Вопрос Алисы.", "альфа", "Кто-то")}), http.StatusSeeOther)
+	w.post(bob, "/2026/nominate", slots("202", map[int]string{1: pasted("Вопрос Боба.", "гамма", "Кто-то")}), http.StatusSeeOther)
+	body := w.get(w.admin, "/admin/contest/2026/nominations", http.StatusOK)
+	if !strings.Contains(body, "Алиса Иванова, 101") {
+		t.Error("a name unlike Telegram's should be shown")
+	}
+	if strings.Contains(body, "Борис Петров") {
+		t.Error("the same name in another order should not be repeated")
+	}
+}

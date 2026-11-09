@@ -1,0 +1,11 @@
+# /etc/systemd/system/buff-sync.service on vps-he: see buff-sync.sh.
+[Unit]
+Description=copy buff.db from vps2day-ee
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/buff-sync
+Nice=10
+IOSchedulingClass=idle

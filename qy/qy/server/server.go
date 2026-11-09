@@ -20,6 +20,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
+	"qy/qy/platform/buff"
 	"qy/qy/platform/gq"
 	"qy/qy/platform/openrouter"
 	"qy/qy/platform/rating"
@@ -47,7 +48,9 @@ type server struct {
 
 	gq     gq.Source
 	rating rating.Source
-	tg     telegram.Source
+	// buff names the rating site's players, from the mirror dope reads too.
+	buff buff.Names
+	tg   telegram.Source
 	// llm is nil when no OpenRouter key is set: the rule pass still runs.
 	llm completer
 	// wake nudges the background pass when a question arrives.
@@ -66,10 +69,15 @@ func newServer() (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &server{db: db, gq: gq.Unavailable{}, rating: &rating.Cached{Src: rating.NewClient(), TTL: time.Hour}, tg: telegram.NewClient(), wake: make(chan struct{}, 1), now: time.Now}
+	s := &server{db: db, gq: gq.Unavailable{}, buff: buff.None{}, rating: &rating.Cached{Src: rating.NewClient(), TTL: time.Hour}, tg: telegram.NewClient(), wake: make(chan struct{}, 1), now: time.Now}
 	if gqPath := os.Getenv("QY_GQ_DB"); gqPath != "" {
 		if s.gq, err = gq.Open(gqPath); err != nil {
 			return nil, fmt.Errorf("QY_GQ_DB %s: %w", gqPath, err)
+		}
+	}
+	if buffPath := os.Getenv("QY_BUFF_DB"); buffPath != "" {
+		if s.buff, err = buff.Open(buffPath); err != nil {
+			return nil, fmt.Errorf("QY_BUFF_DB %s: %w", buffPath, err)
 		}
 	}
 	if key := strings.TrimSpace(os.Getenv("QY_OPENROUTER_KEY")); key != "" {

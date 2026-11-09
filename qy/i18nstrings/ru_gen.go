@@ -110,8 +110,11 @@ var RU = Strings{
 			First:    func(date string) string { return fmt.Sprintf("Первая номинация %s", date) },
 			NoRating: func() string { return "ID на турнирном сайте не указан" },
 			Rating:   func(id string) string { return fmt.Sprintf("Турнирный сайт: %s", id) },
-			Slot:     func(question string, status string) string { return fmt.Sprintf("%s, %s", question, status) },
-			Who:      func() string { return "Номинатор" },
+			RatingNamed: func(name string, id string) string {
+				return fmt.Sprintf("Турнирный сайт: %s, %s", name, id)
+			},
+			Slot: func(question string, status string) string { return fmt.Sprintf("%s, %s", question, status) },
+			Who:  func() string { return "Номинатор" },
 		},
 		Numbering: AdminNumberingStrings{
 			AfterNomination: func(date string) string {

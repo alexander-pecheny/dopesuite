@@ -17,6 +17,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex/sqlitextest"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 
+	"qy/qy/platform/buff"
 	"qy/qy/platform/gq"
 	"qy/qy/platform/rating"
 	"qy/qy/platform/telegram"
@@ -39,7 +40,7 @@ func NewTestServer(t *testing.T, dir string) *TestServer {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	s := &server{db: db, gq: gq.Unavailable{}, rating: noRating{}, tg: telegram.Unavailable{}, wake: make(chan struct{}, 1), now: time.Now}
+	s := &server{db: db, gq: gq.Unavailable{}, buff: buff.None{}, rating: noRating{}, tg: telegram.Unavailable{}, wake: make(chan struct{}, 1), now: time.Now}
 	s.assets, s.pages = newAssets()
 	if err := s.pages.Warm(pagePaths...); err != nil {
 		t.Fatalf("warm pages: %v", err)
@@ -58,6 +59,12 @@ func (ts *TestServer) SetNow(t time.Time)              { ts.s.now = func() time.
 func (ts *TestServer) SetGotQuestions(src gq.Source)   { ts.s.gq = src }
 func (ts *TestServer) SetTelegram(src telegram.Source) { ts.s.tg = src }
 func (ts *TestServer) SetRating(src rating.Source)     { ts.s.rating = src }
+func (ts *TestServer) SetBuff(names buff.Names)        { ts.s.buff = names }
+
+// Buff is a stand-in mirror of the rating site that knows the names given.
+type Buff map[int64]string
+
+func (b Buff) Players(context.Context, []int64) map[int64]string { return b }
 
 // BotMessage hands the bot one message, as a private chat's update, and
 // returns what the bot kept of it: its reply, if it was a forwarded post.

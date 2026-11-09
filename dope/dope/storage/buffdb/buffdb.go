@@ -9,12 +9,16 @@ import (
 	"database/sql"
 	"os"
 	"strings"
+	"time"
 	"unicode"
 
 	_ "modernc.org/sqlite"
 )
 
 const PathEnv = "DOPE_BUFF_DB"
+
+// reconnectAfter is how long a connection reads the file it opened.
+const reconnectAfter = 5 * time.Minute
 
 // Store answers questions about rating.chgk.info. The zero value is Disabled:
 // every method returns nothing.
@@ -37,6 +41,9 @@ func Open(path string) (*Store, error) {
 		return Disabled(), err
 	}
 	db.SetMaxOpenConns(4)
+	// A branch instance's copy is replaced by a rename (qy/deploy/buff-sync.sh);
+	// a connection older than that still reads the old file.
+	db.SetConnMaxLifetime(reconnectAfter)
 	return &Store{db: db}, nil
 }
 

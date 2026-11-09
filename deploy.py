@@ -71,8 +71,9 @@ BRANCH_USER = "dopetest"
 BRANCH_PORT_BASE = 9791
 BRANCH_PORT_LIMIT = 9819
 # A copy of production's buff.db (/home/ap/buff/buff.db on vps2day-ee), read
-# by every instance's rating search; refresh it by copying again. An instance
-# reads none when the file is missing.
+# by every instance's rating search and by qy. The buff-sync timer on vps-he
+# refreshes it nightly (qy/deploy/buff-sync.sh). An instance reads none when
+# the file is missing.
 BRANCH_BUFF_DB = f"{BRANCH_STATE_DIR}/buff.db"
 # The prod database a --seed prod instance starts from.
 BRANCH_PROD_HOST = "vps2day-ee"

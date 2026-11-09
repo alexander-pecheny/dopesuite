@@ -121,6 +121,13 @@ textarea[data-autogrow] {
   box-shadow: 1px 0 0 var(--grid);
 }
 
+/* The nominator's links are small buttons stacked in a narrow column: less
+   padding, so a name wraps less. */
+[data-nominations] .data-table td:first-child .btn {
+  max-width: 100%;
+  padding-inline: var(--space-2);
+}
+
 /* The corner cell sticks both ways and stays above both. */
 [data-nominations] .data-table tr:first-child th:first-child {
   z-index: 3;
@@ -137,10 +144,5 @@ textarea[data-autogrow] {
   [data-nominations] .data-table th:first-child {
     min-width: 7rem;
     max-width: 8rem;
-  }
-
-  [data-nominations] .data-table td:first-child .btn {
-    max-width: 100%;
-    padding-inline: var(--space-2, 8px);
   }
 }

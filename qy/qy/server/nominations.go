@@ -3,7 +3,9 @@ package qyserver
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
@@ -20,6 +22,7 @@ import (
 type nominatorRow struct {
 	name, handle string
 	rating       int64
+	ratingName   string
 	first        string
 	slots        []nominatedSlot
 }
@@ -77,6 +80,18 @@ func (s *server) handleNominations(w http.ResponseWriter, r *http.Request, _ rou
 	if err != nil {
 		return err
 	}
+	var ids []int64
+	for _, p := range people {
+		if p.rating > 0 {
+			ids = append(ids, p.rating)
+		}
+	}
+	names := s.buff.Players(ctx, ids)
+	for i := range people {
+		if n := names[people[i].rating]; n != "" && !sameName(n, people[i].name) {
+			people[i].ratingName = n
+		}
+	}
 	byID := make(map[int64]store.Question, len(qs))
 	for _, q := range qs {
 		byID[q.ID] = q
@@ -89,7 +104,7 @@ func (s *server) handleNominations(w http.ResponseWriter, r *http.Request, _ rou
 	rows := []ui.Item{ui.Scroll(), ui.Trow(head...)}
 	for _, p := range people {
 		n += len(p.slots)
-		rows = append(rows, ui.Trow(append([]ui.Item{ui.Cell(nominatorHead(p)...)}, s.slotCells(c, p, byID)...)...))
+		rows = append(rows, ui.Trow(append([]ui.Item{ui.Cell(nominatorHead(p))}, s.slotCells(c, p, byID)...)...))
 	}
 	y := strconv.Itoa(c.Year)
 	body := []ui.Item{ui.Section(hint(str.Admin.Nominations.Empty()))}
@@ -104,23 +119,40 @@ func (s *server) handleNominations(w http.ResponseWriter, r *http.Request, _ rou
 }
 
 // nominatorHead is who the person is: their name, their handle, their rating
-// ID and when they first nominated.
-func nominatorHead(p nominatorRow) []ui.Item {
-	var out []ui.Item
+// ID, with the name the rating site has when it is not the one in Telegram,
+// and when they first nominated.
+func nominatorHead(p nominatorRow) ui.Item {
+	out := []ui.Item{ui.SpaceSM}
 	if p.name != "" {
 		out = append(out, ui.Strong(text(p.name)))
 	}
 	if p.handle != "" {
 		out = append(out, ui.Row(ui.Button(ui.Href("https://t.me/"+p.handle), ui.Ghost, ui.Small(), text("@"+p.handle))))
 	}
-	if p.rating > 0 {
-		id := idstr.Format(p.rating)
-		out = append(out, ui.Row(ui.Button(ui.Href("https://rating.chgk.info/player/"+id), ui.Ghost, ui.Small(), ui.IconLink,
-			text(str.Admin.Nominations.Rating(id)))))
-	} else {
+	switch id := idstr.Format(p.rating); {
+	case p.rating == 0:
 		out = append(out, hint(str.Admin.Nominations.NoRating()))
+	case p.ratingName != "":
+		out = append(out, ratingButton(id, str.Admin.Nominations.RatingNamed(p.ratingName, id)))
+	default:
+		out = append(out, ratingButton(id, str.Admin.Nominations.Rating(id)))
 	}
-	return append(out, hint(str.Admin.Nominations.First(sinceStamp(p.first))))
+	return ui.Col(append(out, hint(str.Admin.Nominations.First(sinceStamp(p.first))))...)
+}
+
+func ratingButton(id, label string) ui.Item {
+	return ui.Row(ui.Button(ui.Href("https://rating.chgk.info/player/"+id), ui.Ghost, ui.Small(), ui.IconLink, text(label)))
+}
+
+// sameName says whether two spellings name the same person: the same words in
+// any order, ignoring case and the diaeresis on e.
+func sameName(a, b string) bool {
+	words := func(s string) []string {
+		w := strings.Fields(strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(s, "\u0451", "\u0435"), "\u0401", "\u0435")))
+		slices.Sort(w)
+		return w
+	}
+	return slices.Equal(words(a), words(b))
 }
 
 // slotCells are the person's slots, one cell each, empty where they left the

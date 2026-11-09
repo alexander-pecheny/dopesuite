@@ -60,6 +60,12 @@ Restore with `litestream restore -config /etc/litestream.yml -o <file>
 /var/lib/qy/qy.db`. `gq.db` is not backed up: `just import-gq` rebuilds it from
 the dump.
 
+`QY_BUFF_DB` is buff's mirror of rating.chgk.info, which names the players on
+the nominations page (`platform/buff`). buff updates it on vps2day-ee; the
+`buff-sync` timer on vps-he copies it to `/var/lib/dope-test/buff.db` at 05:30
+UTC (`deploy/buff-sync.sh`). The copy is put in place by a rename, so readers
+reconnect every few minutes to see it.
+
 ## Commands
 
 `just dev`, `just test`, `just check` as in the other apps. `just

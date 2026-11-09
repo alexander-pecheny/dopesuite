@@ -35,6 +35,11 @@ Everything below is done by hand once; `deploy.py` only ships the binary.
   and an OpenRouter key for the model (`QY_OPENROUTER_KEY`).
 - A copy of gotquestions for nominations by link, while its API is down:
   `just import-gq <dump.sql.gz> /var/lib/qy/gq.db`, then `QY_GQ_DB` names it.
+- buff's mirror of rating.chgk.info, for the players' names on the admins'
+  nominations page: `QY_BUFF_DB=/var/lib/dope-test/buff.db`, the copy the dope
+  branch instances read too. `deploy/buff-sync.sh` refreshes it from
+  vps2day-ee every night, run by `deploy/buff-sync.{service,timer}`
+  (installed as `/usr/local/bin/buff-sync` and in `/etc/systemd/system`).
 - Caddy:
 
   ```

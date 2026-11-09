@@ -1,0 +1,12 @@
+# /etc/systemd/system/buff-sync.timer on vps-he. buff's nightly update on
+# vps2day-ee starts at 01:05 UTC and has finished by about 04:30.
+[Unit]
+Description=nightly copy of buff.db from vps2day-ee
+
+[Timer]
+OnCalendar=*-*-* 05:30:00 UTC
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
