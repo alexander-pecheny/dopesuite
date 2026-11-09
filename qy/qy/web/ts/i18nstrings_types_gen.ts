@@ -13,6 +13,7 @@ export type Strings = {
     };
     contest: {
       final: () => string;
+      nominations: () => string;
       questions: () => string;
       settings: () => string;
       settingsHint: () => string;
@@ -78,6 +79,15 @@ export type Strings = {
       telegram: () => string;
       telegramId: (id: string) => string;
       title: () => string;
+    };
+    nominations: {
+      appeal: (text: string) => string;
+      count: (people: number, n: number) => string;
+      empty: () => string;
+      first: (date: string) => string;
+      noRating: () => string;
+      rating: (id: string) => string;
+      slot: (slot: string, question: string, status: string) => string;
     };
     numbering: {
       afterNomination: (date: string) => string;

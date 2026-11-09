@@ -240,6 +240,7 @@ func (s *server) handleContestPage(w http.ResponseWriter, r *http.Request, _ rou
 			ui.Section(append([]ui.Item{
 				hint(stageName(c.StageAt(s.now()))),
 				ui.List(
+					ui.Listrow(ui.Href(base+"/nominations"), ui.Listtitle(text(str.Admin.Contest.Nominations()))),
 					ui.Listrow(ui.Href(base+"/questions"), ui.Listtitle(text(str.Admin.Contest.Questions()))),
 					ui.Listrow(ui.Href(base+"/stage1"), ui.Listtitle(text(str.Admin.Contest.Stage1()))),
 					ui.Listrow(ui.Href(base+"/final"), ui.Listtitle(text(str.Admin.Contest.Final()))),

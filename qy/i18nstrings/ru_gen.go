@@ -21,9 +21,10 @@ var RU = Strings{
 			Title:       func() string { return "Оргкомитет" },
 		},
 		Contest: AdminContestStrings{
-			Final:     func() string { return "Финал и итоги" },
-			Questions: func() string { return "Вопросы" },
-			Settings:  func() string { return "Настройки" },
+			Final:       func() string { return "Финал и итоги" },
+			Nominations: func() string { return "Номинации" },
+			Questions:   func() string { return "Вопросы" },
+			Settings:    func() string { return "Настройки" },
 			SettingsHint: func() string {
 				return "Даты — календарные дни по Москве, этап идёт с первого дня по последний включительно. Формат: ГГГГ-ММ-ДД."
 			},
@@ -99,6 +100,19 @@ var RU = Strings{
 			Telegram:   func() string { return "Телеграм" },
 			TelegramId: func(id string) string { return fmt.Sprintf("ID %s", id) },
 			Title:      func() string { return "Жюри" },
+		},
+		Nominations: AdminNominationsStrings{
+			Appeal: func(text string) string { return fmt.Sprintf("Апелляция: %s", text) },
+			Count: func(people int, n int) string {
+				return fmt.Sprintf("%d %s, %d %s.", people, core.Plural("ru", people, "номинатор", "номинатора", "номинаторов"), n, core.Plural("ru", n, "номинация", "номинации", "номинаций"))
+			},
+			Empty:    func() string { return "Пока никто ничего не номинировал." },
+			First:    func(date string) string { return fmt.Sprintf("Первая номинация %s", date) },
+			NoRating: func() string { return "ID на турнирном сайте не указан" },
+			Rating:   func(id string) string { return fmt.Sprintf("Турнирный сайт: %s", id) },
+			Slot: func(slot string, question string, status string) string {
+				return fmt.Sprintf("%s: %s, %s", slot, question, status)
+			},
 		},
 		Numbering: AdminNumberingStrings{
 			AfterNomination: func(date string) string {

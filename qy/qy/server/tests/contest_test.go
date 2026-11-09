@@ -309,3 +309,31 @@ func TestPopularVoteNeedsThreeDifferentQuestions(t *testing.T) {
 		t.Errorf("a voter's second vote should replace the first, got %d votes", n)
 	}
 }
+
+func TestTheAdminsSeeWhoNominatedWhat(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	alice, bob := w.user("alice"), w.user("bob")
+	w.post(alice, "/2026/nominate", slots("101", map[int]string{
+		1: pasted("Первый вопрос Алисы.", "альфа", "Кто-то"),
+		2: pasted("Второй вопрос Алисы.", "бета", "Кто-то"),
+	}), http.StatusSeeOther)
+	w.post(bob, "/2026/nominate", slots("202", map[int]string{1: pasted("Вопрос Боба.", "гамма", "Кто-то")}), http.StatusSeeOther)
+
+	body := w.get(w.admin, "/admin/contest/2026/nominations", http.StatusOK)
+	alicePos, bobPos := strings.Index(body, "@alice"), strings.Index(body, "@bob")
+	if alicePos < 0 || bobPos < alicePos {
+		t.Fatal("the nominators should be listed in the order they came")
+	}
+	for _, want := range []string{"Первый вопрос Алисы.", "Второй вопрос Алисы.", "Вопрос Боба.", "rating.chgk.info/player/101", "rating.chgk.info/player/202"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the nominations page lacks %q", want)
+		}
+	}
+	if i := strings.Index(body, "Вопрос Боба."); i < bobPos {
+		t.Error("Bob's question should be in Bob's row")
+	}
+	if res := alice.Get("/admin/contest/2026/nominations"); res.Code == http.StatusOK {
+		t.Error("the nominations page is open to a nominator")
+	}
+}

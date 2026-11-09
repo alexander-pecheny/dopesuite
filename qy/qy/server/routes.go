@@ -56,6 +56,7 @@ func routes(s *server) *http.ServeMux {
 	pages.Handle("POST /admin/contest/{year}/jurors/remove", route.Admin, s.handleRemoveJuror)
 	pages.Handle("POST /admin/contest/{year}/deal", route.Admin, s.handleDeal)
 	pages.Handle("GET /admin/contest/{year}/questions", route.Admin, s.handleQuestionList)
+	pages.Handle("GET /admin/contest/{year}/nominations", route.Admin, s.handleNominations)
 	pages.Handle("GET /admin/contest/{year}/stage1", route.Admin, s.handleStage1Report)
 	pages.Handle("POST /admin/contest/{year}/freeze", route.Admin, s.handleFreeze)
 	pages.Handle("POST /admin/contest/{year}/unfreeze", route.Admin, s.handleUnfreeze)

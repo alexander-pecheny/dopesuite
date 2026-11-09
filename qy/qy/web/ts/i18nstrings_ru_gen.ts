@@ -14,6 +14,7 @@ export const RU: Strings = {
     },
     contest: {
       final: () => "Финал и итоги",
+      nominations: () => "Номинации",
       questions: () => "Вопросы",
       settings: () => "Настройки",
       settingsHint: () => "Даты — календарные дни по Москве, этап идёт с первого дня по последний включительно. Формат: ГГГГ-ММ-ДД.",
@@ -79,6 +80,15 @@ export const RU: Strings = {
       telegram: () => "Телеграм",
       telegramId: (id: string) => `ID ${id}`,
       title: () => "Жюри",
+    },
+    nominations: {
+      appeal: (text: string) => `Апелляция: ${text}`,
+      count: (people: number, n: number) => `${people} ${plural("ru", people, "номинатор", "номинатора", "номинаторов")}, ${n} ${plural("ru", n, "номинация", "номинации", "номинаций")}.`,
+      empty: () => "Пока никто ничего не номинировал.",
+      first: (date: string) => `Первая номинация ${date}`,
+      noRating: () => "ID на турнирном сайте не указан",
+      rating: (id: string) => `Турнирный сайт: ${id}`,
+      slot: (slot: string, question: string, status: string) => `${slot}: ${question}, ${status}`,
     },
     numbering: {
       afterNomination: (date: string) => `Номера раздаются после конца номинации, ${date}.`,
