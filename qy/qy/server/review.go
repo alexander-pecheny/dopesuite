@@ -377,6 +377,10 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 		body = append(body, ui.Section(subhead(str.Admin.Question.Preview()),
 			ui.Card(ui.Richtext(ui.Raw(questionHTML(card{qy: q.QY, q: q.Clean, factcheck: q.Factcheck, extra: q.ExtraContext}))))))
 	}
+	if !q.Orig.Empty() {
+		body = append(body, ui.Section(ui.Details(ui.Summary(text(str.Admin.Question.Orig())),
+			hint(str.Admin.Question.OrigHint()), ui.Form(origForm(href, q)...))))
+	}
 	body = append(body, ui.Section(subhead(str.Admin.Question.Edit()), ui.Form(questionForm(href, q)...)))
 	return s.ok(w, r, view{
 		title: questionName(q),
@@ -430,14 +434,11 @@ func questionForm(href string, q store.Question) []ui.Item {
 	form := []ui.Item{ui.Method("post"), ui.Action(href), ui.DirCol, ui.SpaceSM,
 		ui.Field(ui.Label(str.Admin.Question.Status()), status), hint(str.Admin.Question.EditHint())}
 	for _, f := range question.Fields {
-		value, rows := q.Clean.Get(f), "3"
+		value := q.Clean.Get(f)
 		if f == question.FieldAuthor {
 			value = q.Orig.Author
 		}
-		if f == question.FieldText || f == question.FieldComment {
-			rows = "6"
-		}
-		form = append(form, ui.Field(ui.Label(fieldName(f)), ui.Editor(ui.Name(f), ui.Rows(rows), ui.Text(value))))
+		form = append(form, ui.Field(ui.Label(fieldName(f)), ui.Editor(ui.Name(f), ui.Rows(fieldRows(f)), ui.Text(value))))
 	}
 	pin := ui.Selectfield(ui.Name("pin"),
 		option("", str.Admin.Question.PinNone(), q.Pin),
@@ -456,6 +457,51 @@ func questionForm(href string, q store.Question) []ui.Item {
 		ui.Row(ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save()))),
 	)
 	return form
+}
+
+// origForm edits the question as it was nominated.
+func origForm(href string, q store.Question) []ui.Item {
+	form := []ui.Item{ui.Method("post"), ui.Action(href + "/orig"), ui.DirCol, ui.SpaceSM}
+	for _, f := range question.Fields {
+		form = append(form, ui.Field(ui.Label(fieldName(f)), ui.Editor(ui.Name(f), ui.Rows(fieldRows(f)), ui.Text(q.Orig.Get(f)))))
+	}
+	return append(form, ui.Row(ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save()))))
+}
+
+func fieldRows(f string) string {
+	if f == question.FieldText || f == question.FieldComment {
+		return "6"
+	}
+	return "3"
+}
+
+// handleSaveOrig saves the question as nominated. A field of the jury's copy
+// that still reads as the nominated one did follows the fix; one the
+// anonymiser or an admin changed is left alone.
+func (s *server) handleSaveOrig(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	if err := parseForm(w, r); err != nil {
+		return err
+	}
+	q, _, err := s.pathQuestion(r)
+	if err != nil {
+		return err
+	}
+	for _, f := range question.Fields {
+		v := strings.TrimSpace(strings.ReplaceAll(r.FormValue(f), "\r\n", "\n"))
+		if f != question.FieldAuthor && q.Clean.Get(f) == q.Orig.Get(f) {
+			*q.Clean.Ptr(f) = v
+		}
+		*q.Orig.Ptr(f) = v
+	}
+	if q.Orig.Empty() {
+		return userError(str.Admin.Question.OrigEmpty())
+	}
+	if err := s.withWriteTx(r.Context(), "save-orig", func(ctx context.Context, tx *sql.Tx) error {
+		return store.SaveQuestion(ctx, tx, q, s.stamp())
+	}); err != nil {
+		return err
+	}
+	return seeOther(w, r, questionHref(q.ID)+"?done="+doneSaved)
 }
 
 func option(value, label, current string) ui.Item {

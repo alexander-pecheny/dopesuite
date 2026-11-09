@@ -67,6 +67,7 @@ func routes(s *server) *http.ServeMux {
 	pages.Handle("POST /admin/question/{id}", route.Admin, s.handleSaveQuestion)
 	pages.Handle("POST /admin/question/{id}/suggestions/{sid}", route.Admin, s.handleSuggestion)
 	pages.Handle("POST /admin/question/{id}/merge", route.Admin, s.handleMerge)
+	pages.Handle("POST /admin/question/{id}/orig", route.Admin, s.handleSaveOrig)
 	pages.Handle("POST /admin/question/{id}/reparse", route.Admin, s.handleReparse)
 	pages.Handle("POST /admin/question/{id}/rerun", route.Admin, s.handleRerun)
 	pages.Handle("GET /admin/pages", route.Admin, s.handlePageList)

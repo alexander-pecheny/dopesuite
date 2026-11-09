@@ -183,7 +183,14 @@ var RU = Strings{
 			},
 			OpenLink:       func() string { return "Открыть ссылку" },
 			OpenTournament: func() string { return "Открыть турнир" },
-			Parse:          func() string { return "Распознать" },
+			Orig:           func() string { return "Номинированный текст" },
+			OrigEmpty: func() string {
+				return "Вопрос нельзя сохранить без текста и ответа."
+			},
+			OrigHint: func() string {
+				return "Здесь правится вопрос так, как его номинировали: его видят оргкомитет и итоги. Поля текста для жюри, которые совпадали с прежним вариантом, поменяются вместе с ним. То, что прислал номинатор, останется как было."
+			},
+			Parse: func() string { return "Распознать" },
 			ParseFailed: func() string {
 				return "Не нашли в тексте ответ. Проверьте, что в нём есть строка «Ответ:»."
 			},

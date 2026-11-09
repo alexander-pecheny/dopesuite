@@ -355,3 +355,32 @@ func TestTheRatingSitesNameShowsWhenTelegramsDiffers(t *testing.T) {
 		t.Error("the same name in another order should not be repeated")
 	}
 }
+
+func TestAnAdminFixesTheNominatedText(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	alice := w.user("alice")
+	w.post(alice, "/2026/nominate", slots("101", map[int]string{1: pasted("Назовите ЕГО.\nОтвет", "газ", "Кто-то")}), http.StatusSeeOther)
+	href := "/admin/question/" + strconv.FormatInt(w.questionID("газ"), 10)
+	// The jury's comment was reworded by hand before the fix.
+	w.ts.Exec(`update questions set clean = json_set(clean, '$.comment', 'Переписано.')`)
+
+	form := url.Values{"text": {"Назовите ЕГО."}, "answer": {"газ"}, "comment": {"Иначе."}, "source": {"книга."}, "author": {"Кто-то"}}
+	w.post(w.admin, href+"/orig", form, http.StatusSeeOther)
+	var orig, clean, comment, author, source string
+	w.ts.DB().QueryRow(`select json_extract(orig, '$.text'), json_extract(clean, '$.text'), json_extract(clean, '$.comment'),
+  json_extract(orig, '$.author'), source_text from questions`).Scan(&orig, &clean, &comment, &author, &source)
+	if orig != "Назовите ЕГО." || clean != "Назовите ЕГО." {
+		t.Errorf("the fix should reach both copies: %q, %q", orig, clean)
+	}
+	if comment != "Переписано." {
+		t.Errorf("a field reworded for the jury should stay: %q", comment)
+	}
+	if !strings.Contains(source, "Назовите ЕГО.\nОтвет\n") {
+		t.Error("what the nominator sent should stay as it was")
+	}
+	w.post(w.admin, href+"/orig", url.Values{"text": {""}, "answer": {""}}, http.StatusBadRequest)
+	if res := alice.Post(href+"/orig", form); res.Code == http.StatusSeeOther {
+		t.Error("a nominator should not edit the nominated text")
+	}
+}
