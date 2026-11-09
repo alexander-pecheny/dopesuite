@@ -3,6 +3,9 @@ name = 'Вопрос года — {{.year}}'
 none = "Конкурс ещё не объявлен."
 # What {{jury}} says in the rules until the expert jury is entered.
 jury_pending = "<состав жюри будет вписан позже>"
+# The end of the rules' list of the jury, for its anonymous members.
+anonymous_juror = "ещё один анонимный участник"
+anonymous_jurors = 'ещё {{.n}} {{plural .n "анонимный участник" "анонимных участника" "анонимных участников"}}'
 
 [stage]
 before = "Конкурс скоро начнётся."

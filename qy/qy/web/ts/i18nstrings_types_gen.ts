@@ -290,6 +290,8 @@ export type Strings = {
     toHome: () => string;
   };
   contest: {
+    anonymousJuror: () => string;
+    anonymousJurors: (n: number) => string;
     juryPending: () => string;
     name: (year: string) => string;
     none: () => string;

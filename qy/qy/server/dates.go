@@ -80,10 +80,21 @@ func (s *server) rulesVars(ctx context.Context, c contest.Contest) (map[string]s
 		return nil, err
 	}
 	var expert []string
+	anonymous := 0
 	for _, j := range jurors {
-		if j.Kind == store.Expert && !j.Anonymous {
+		switch {
+		case j.Kind != store.Expert:
+		case j.Anonymous:
+			anonymous++
+		default:
 			expert = append(expert, j.Name)
 		}
+	}
+	switch {
+	case anonymous == 1:
+		expert = append(expert, str.Contest.AnonymousJuror())
+	case anonymous > 1:
+		expert = append(expert, str.Contest.AnonymousJurors(anonymous))
 	}
 	// The placeholder is escaped: the page is Markdown or HTML, where its
 	// angle brackets would read as a tag.

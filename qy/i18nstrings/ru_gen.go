@@ -395,6 +395,10 @@ var RU = Strings{
 		ToHome:      func() string { return "На главную" },
 	},
 	Contest: ContestStrings{
+		AnonymousJuror: func() string { return "ещё один анонимный участник" },
+		AnonymousJurors: func(n int) string {
+			return fmt.Sprintf("ещё %d %s", n, core.Plural("ru", n, "анонимный участник", "анонимных участника", "анонимных участников"))
+		},
 		JuryPending: func() string { return "<состав жюри будет вписан позже>" },
 		Name:        func(year string) string { return fmt.Sprintf("Вопрос года — %s", year) },
 		None:        func() string { return "Конкурс ещё не объявлен." },

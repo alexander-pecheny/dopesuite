@@ -291,6 +291,8 @@ export const RU: Strings = {
     toHome: () => "На главную",
   },
   contest: {
+    anonymousJuror: () => "ещё один анонимный участник",
+    anonymousJurors: (n: number) => `ещё ${n} ${plural("ru", n, "анонимный участник", "анонимных участника", "анонимных участников")}`,
     juryPending: () => "<состав жюри будет вписан позже>",
     name: (year: string) => `Вопрос года — ${year}`,
     none: () => "Конкурс ещё не объявлен.",

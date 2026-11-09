@@ -76,14 +76,13 @@ func TestNextYearsRulesCarryTheTextWithNewDates(t *testing.T) {
 	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Иван Иванов"}, "telegram": {"b"}, "kind": {"expert"}}, http.StatusSeeOther)
 	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Тайный Участник"}, "telegram": {"c"}, "kind": {"expert"}, "anonymous": {"1"}}, http.StatusSeeOther)
 	rules := w.get(w.ts.Anonymous(), "/2026/rules/", http.StatusOK)
-	if strings.Contains(rules, "Тайный") {
-		t.Error("the rules name an anonymous juror")
+	if strings.Contains(rules, "Тайный") || !strings.Contains(rules, "Анна Свирина, Иван Иванов и ещё один анонимный участник") {
+		t.Error("the rules should count an anonymous juror without naming them")
 	}
 	for _, want := range []string{
 		"Вопрос года — 2026. Регламент",
 		"проводится с 9 ноября до 25 января 2027 года",
 		"Номинация идёт с 9 по 23 ноября",
-		"Анна Свирина и Иван Иванов",
 	} {
 		if !strings.Contains(rules, want) {
 			t.Errorf("the 2026 rules lack %q", want)
