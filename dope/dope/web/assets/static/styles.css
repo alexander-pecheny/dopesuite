@@ -4921,25 +4921,35 @@ body.is-fullscreen.od-page .match-main {
 
 .grid-box[data-bracket] .grid-slot-top-right { border-top-right-radius: 0; }
 
-/* The ⓘ at the end of a bout's head, which opens its card. */
+/* The ⓘ, with the bout's venue and time before it when it has them: the
+   button takes the rest of the head, the venue clips first, the icon keeps
+   to the right edge. */
 .grid-match-info {
   display: inline-flex;
-  flex: none;
-  align-self: center;
-  margin-left: auto;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: var(--space-1-5);
+  min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--muted);
+  font: inherit;
+  text-align: left;
   cursor: var(--cursor-action);
 }
 
 .grid-match-info:hover,
-.grid-match-info[aria-expanded="true"] {
+.grid-match-info[aria-expanded="true"],
+.grid-match-info:hover .grid-match-venue,
+.grid-match-info[aria-expanded="true"] .grid-match-venue {
   color: var(--text);
 }
 
 .grid-match-info svg {
+  flex: none;
+  align-self: center;
+  margin-left: auto;
   width: var(--grid-info-icon);
   height: var(--grid-info-icon);
 }

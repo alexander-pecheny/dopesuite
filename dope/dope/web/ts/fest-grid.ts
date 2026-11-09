@@ -883,12 +883,13 @@ function decorateGridSlotRows(rows: HTMLElement[][]): void {
 
 // A bout's head holds what fits a narrow column: the letter, the start time
 // and the venue's number. Everything else about the bout (its whole title,
-// its bracket, the venue's name) is on the card its ⓘ opens.
+// its bracket, the venue's name) is on the card its ⓘ opens; the venue and
+// time are part of that button, so a click on them opens the card too.
 function matchHeadCell(match: FestGridMatch, venue: Venue | null, ctx: PaintContext, startsAt?: string): HTMLElement {
   const cell = gridCell("grid-slot-head grid-match-head-cell", "");
   const where = venue ? S.fest.grid.venue(String(venue.number)) : "";
-  const layout = headLayout(matchTitleNode(match, ctx), withStartsAt(where, startsAt));
-  layout.appendChild(matchInfoButton(match, venue, ctx, startsAt));
+  const layout = headLayout(matchTitleNode(match, ctx), "");
+  layout.appendChild(matchInfoButton(match, venue, ctx, startsAt, venueLabel(null, "grid-match-venue", withStartsAt(where, startsAt))));
   cell.appendChild(layout);
   return cell;
 }
@@ -906,10 +907,11 @@ function headLayout(title: HTMLElement, where: string): HTMLElement {
   return layout;
 }
 
-function matchInfoButton(match: FestGridMatch, venue: Venue | null, ctx: PaintContext, startsAt?: string): HTMLElement {
+function matchInfoButton(match: FestGridMatch, venue: Venue | null, ctx: PaintContext, startsAt: string | undefined, where: HTMLElement | null): HTMLElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "grid-match-info";
+  if (where) button.appendChild(where);
   button.title = S.fest.grid.matchInfo();
   button.setAttribute("aria-label", S.fest.grid.matchInfo());
   button.setAttribute("aria-haspopup", "dialog");
