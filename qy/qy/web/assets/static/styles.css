@@ -82,3 +82,45 @@ textarea[data-autogrow] {
   border-radius: var(--radius-md);
   background: var(--wash-negative);
 }
+
+/* Who nominated what: a row per nominator and a column per slot, each holding
+   a whole question. The table takes the page's full width and scrolls
+   sideways; the nominator's column stays in view while it does. */
+.wide-frame .section[data-nominations] {
+  max-width: none;
+}
+
+[data-nominations] .data-table td,
+[data-nominations] .data-table th {
+  min-width: 22rem;
+  max-width: 28rem;
+}
+
+[data-nominations] .data-table td:first-child,
+[data-nominations] .data-table th:first-child {
+  min-width: 10rem;
+  max-width: 12rem;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: 1px 0 0 var(--grid);
+}
+
+@media (max-width: 600px) {
+  [data-nominations] .data-table td,
+  [data-nominations] .data-table th {
+    min-width: 17rem;
+  }
+
+  [data-nominations] .data-table td:first-child,
+  [data-nominations] .data-table th:first-child {
+    min-width: 7rem;
+    max-width: 8rem;
+  }
+
+  [data-nominations] .data-table td:first-child .btn {
+    max-width: 100%;
+    padding-inline: var(--space-2, 8px);
+  }
+}

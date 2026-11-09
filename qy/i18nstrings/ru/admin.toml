@@ -80,11 +80,12 @@ incomplete = "Укажите имя, ник в телеграме и жюри."
 [nominations]
 count = '{{.people}} {{plural .people "номинатор" "номинатора" "номинаторов"}}, {{.n}} {{plural .n "номинация" "номинации" "номинаций"}}.'
 empty = "Пока никто ничего не номинировал."
+who = "Номинатор"
 rating = 'Турнирный сайт: {{.id}}'
 no_rating = "ID на турнирном сайте не указан"
 first = 'Первая номинация {{.date}}'
 appeal = 'Апелляция: {{.text}}'
-slot = '{{.slot}}: {{.question}}, {{.status}}'
+slot = '{{.question}}, {{.status}}'
 
 [questions]
 count = 'Всего {{.n}} {{plural .n "вопрос" "вопроса" "вопросов"}}.'

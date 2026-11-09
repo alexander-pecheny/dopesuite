@@ -87,7 +87,8 @@ export type Strings = {
       first: (date: string) => string;
       noRating: () => string;
       rating: (id: string) => string;
-      slot: (slot: string, question: string, status: string) => string;
+      slot: (question: string, status: string) => string;
+      who: () => string;
     };
     numbering: {
       afterNomination: (date: string) => string;

@@ -88,7 +88,8 @@ export const RU: Strings = {
       first: (date: string) => `Первая номинация ${date}`,
       noRating: () => "ID на турнирном сайте не указан",
       rating: (id: string) => `Турнирный сайт: ${id}`,
-      slot: (slot: string, question: string, status: string) => `${slot}: ${question}, ${status}`,
+      slot: (question: string, status: string) => `${question}, ${status}`,
+      who: () => "Номинатор",
     },
     numbering: {
       afterNomination: (date: string) => `Номера раздаются после конца номинации, ${date}.`,

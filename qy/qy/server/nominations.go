@@ -82,15 +82,19 @@ func (s *server) handleNominations(w http.ResponseWriter, r *http.Request, _ rou
 		byID[q.ID] = q
 	}
 	n := 0
-	var blocks []ui.Item
+	head := []ui.Item{ui.Hcell(text(str.Admin.Nominations.Who()))}
+	for slot := 1; slot <= c.MainSlots+c.ReserveSlots; slot++ {
+		head = append(head, ui.Hcell(text(slotLabel(c, slot))))
+	}
+	rows := []ui.Item{ui.Scroll(), ui.Trow(head...)}
 	for _, p := range people {
 		n += len(p.slots)
-		blocks = append(blocks, ui.Section(append(nominatorHead(p), s.nominatedQuestions(c, p, byID)...)...))
+		rows = append(rows, ui.Trow(append([]ui.Item{ui.Cell(nominatorHead(p)...)}, s.slotCells(c, p, byID)...)...))
 	}
 	y := strconv.Itoa(c.Year)
 	body := []ui.Item{ui.Section(hint(str.Admin.Nominations.Empty()))}
 	if len(people) > 0 {
-		body = append([]ui.Item{ui.Section(hint(str.Admin.Nominations.Count(len(people), n)))}, blocks...)
+		body = []ui.Item{ui.Section(ui.Data("nominations", ""), hint(str.Admin.Nominations.Count(len(people), n)), ui.Table(rows...))}
 	}
 	return s.ok(w, r, view{
 		title: str.Admin.Contest.Nominations(),
@@ -99,44 +103,50 @@ func (s *server) handleNominations(w http.ResponseWriter, r *http.Request, _ rou
 	})
 }
 
-// nominatorHead is who the person is: their name, then their handle, their
-// rating ID and when they first nominated, on one line.
+// nominatorHead is who the person is: their name, their handle, their rating
+// ID and when they first nominated.
 func nominatorHead(p nominatorRow) []ui.Item {
-	name := p.name
-	if name == "" {
-		name = "@" + p.handle
+	var out []ui.Item
+	if p.name != "" {
+		out = append(out, ui.Strong(text(p.name)))
 	}
-	links := []ui.Item{ui.SpaceSM, ui.AlignCenter, ui.Wrap()}
 	if p.handle != "" {
-		links = append(links, ui.Button(ui.Href("https://t.me/"+p.handle), ui.Ghost, ui.Small(), text("@"+p.handle)))
+		out = append(out, ui.Row(ui.Button(ui.Href("https://t.me/"+p.handle), ui.Ghost, ui.Small(), text("@"+p.handle))))
 	}
 	if p.rating > 0 {
 		id := idstr.Format(p.rating)
-		links = append(links, ui.Button(ui.Href("https://rating.chgk.info/player/"+id), ui.Ghost, ui.Small(), ui.IconLink,
-			text(str.Admin.Nominations.Rating(id))))
+		out = append(out, ui.Row(ui.Button(ui.Href("https://rating.chgk.info/player/"+id), ui.Ghost, ui.Small(), ui.IconLink,
+			text(str.Admin.Nominations.Rating(id)))))
 	} else {
-		links = append(links, hint(str.Admin.Nominations.NoRating()))
+		out = append(out, hint(str.Admin.Nominations.NoRating()))
 	}
-	links = append(links, hint(str.Admin.Nominations.First(sinceStamp(p.first))))
-	return []ui.Item{subhead(name), ui.Row(links...)}
+	return append(out, hint(str.Admin.Nominations.First(sinceStamp(p.first))))
 }
 
-// nominatedQuestions is every question the person put in, as nominated: the text
-// they gave, before the anonymiser and the admins touched it.
-func (s *server) nominatedQuestions(c contest.Contest, p nominatorRow, byID map[int64]store.Question) []ui.Item {
-	var out []ui.Item
+// slotCells are the person's slots, one cell each, empty where they left the
+// slot empty. A question is shown as nominated: the text they gave, before
+// the anonymiser and the admins touched it.
+func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]store.Question) []ui.Item {
+	cells := make([]ui.Item, c.MainSlots+c.ReserveSlots)
+	for i := range cells {
+		cells[i] = ui.Cell()
+	}
 	for _, sl := range p.slots {
+		if sl.slot < 1 || sl.slot > len(cells) {
+			continue
+		}
 		q := byID[sl.questionID]
-		out = append(out, ui.Row(ui.Button(ui.Href(questionHref(q.ID)), ui.Ghost, ui.Small(),
-			text(str.Admin.Nominations.Slot(slotLabel(c, sl.slot), questionName(q), statusName(q))))))
+		items := []ui.Item{ui.Row(ui.Button(ui.Href(questionHref(q.ID)), ui.Ghost, ui.Small(),
+			text(str.Admin.Nominations.Slot(questionName(q), statusName(q)))))}
 		if q.Orig.Empty() {
-			out = append(out, ui.Card(ui.Richtext(ui.Raw("<p>"+plain(q.SourceText)+"</p>"))))
+			items = append(items, ui.Richtext(ui.Raw("<p>"+plain(q.SourceText)+"</p>")))
 		} else {
-			out = append(out, ui.Card(ui.Richtext(ui.Raw(questionHTML(card{qy: q.QY, q: q.Orig, tournament: q.TournamentTitle})))))
+			items = append(items, ui.Richtext(ui.Raw(questionHTML(card{qy: q.QY, q: q.Orig, tournament: q.TournamentTitle}))))
 		}
 		if sl.appeal != "" {
-			out = append(out, hint(str.Admin.Nominations.Appeal(sl.appeal)))
+			items = append(items, hint(str.Admin.Nominations.Appeal(sl.appeal)))
 		}
+		cells[sl.slot-1] = ui.Cell(items...)
 	}
-	return out
+	return cells
 }
