@@ -9,6 +9,7 @@ import (
 	"qy/qy/domain/contest"
 	"qy/qy/domain/eligibility"
 	"qy/qy/domain/question"
+	"qy/qy/platform/gq"
 	"qy/qy/storage/store"
 	"qy/qy/web/route"
 	"qy/qy/web/ui"
@@ -26,13 +27,14 @@ type lintResult struct {
 }
 
 // barred are the people who may not have written or edited a nominated
-// question: the year's jurors of both kinds and the admins.
+// question: the year's jurors of both kinds and the admins. An anonymous
+// juror is left out, so the check never says they are on the jury.
 func (s *server) barred(ctx context.Context, year int) ([]eligibility.Person, error) {
 	rows, err := s.db.QueryContext(ctx, `
-select name, coalesce(rating_id, 0) from jurors where year = ?
+select name, coalesce(rating_id, 0) from jurors where year = ? and not anonymous
 union all
 select coalesce(u.telegram_name, ''), coalesce(u.rating_id, 0)
-from admins a join users u on u.telegram_username = a.telegram_username collate nocase`, year)
+from admins a join users u on `+store.AdminIsUser, year)
 	if err != nil {
 		return nil, err
 	}
@@ -52,24 +54,46 @@ func lintWindow(c contest.Contest) eligibility.Window {
 	return eligibility.Window{From: c.QuestionsFrom, To: c.QuestionsTo, Shortlist: c.FinalStart}
 }
 
-// lint checks one question by its tournament's link and its authors.
-func (s *server) lint(ctx context.Context, c contest.Contest, barred []eligibility.Person, tournamentLink, authors string) lintResult {
+// lintInput is what the check reads of one question: its tournament's link,
+// its id on gotquestions, the text it was pasted as (for its number) and its
+// authors.
+type lintInput struct {
+	tournament, pasted, authors string
+	gqID                        int64
+}
+
+// lint checks one question. Its editors are the ones of its own tour:
+// gotquestions knows them for a question it has; otherwise the rating site
+// does, when it splits the tournament by tour and the pasted text gives the
+// question's number. Failing both, every editor of the tournament counts.
+func (s *server) lint(ctx context.Context, c contest.Contest, barred []eligibility.Person, in lintInput) lintResult {
 	var t eligibility.Tournament
 	res := lintResult{}
-	if id := question.FindLinks(tournamentLink).TournamentID; id != 0 {
+	var tourEditors []gq.Editor
+	if in.gqID != 0 {
+		if found, err := s.gq.Question(ctx, in.gqID); err == nil {
+			tourEditors = found.Editors
+		}
+	}
+	if id := question.FindLinks(in.tournament).TournamentID; id != 0 {
 		got, err := s.rating.Tournament(ctx, id)
 		if err != nil {
 			res.unchecked = true
 		} else {
 			t.Start, t.End = got.Start, got.End
-			for _, e := range got.Editors {
-				t.Editors = append(t.Editors, eligibility.Person{Name: e.Name, RatingID: e.ID})
+			if tourEditors == nil {
+				for _, e := range got.EditorsOf(question.Number(in.pasted)) {
+					t.Editors = append(t.Editors, eligibility.Person{Name: e.Name, RatingID: e.ID})
+				}
 			}
 		}
-	} else if tournamentLink != "" {
+	} else if in.tournament != "" {
 		res.unchecked = true
 	}
-	res.problems = eligibility.Check(lintWindow(c), t, authors, barred)
+	for _, e := range tourEditors {
+		t.Editors = append(t.Editors, eligibility.Person{Name: e.Name, RatingID: e.RatingID})
+	}
+	res.problems = eligibility.Check(lintWindow(c), t, in.authors, barred)
 	return res
 }
 
@@ -83,7 +107,7 @@ func (s *server) lintSlots(ctx context.Context, c contest.Contest, slots map[int
 		if v.in.empty() {
 			continue
 		}
-		v.lint = s.lint(ctx, c, barred, v.in.tournament, v.in.fields.Author)
+		v.lint = s.lint(ctx, c, barred, lintInput{tournament: v.in.tournament, gqID: question.FindLinks(v.in.link).GotQuestionsID, pasted: v.in.raw, authors: v.in.fields.Author})
 		slots[slot] = v
 	}
 	return nil
@@ -139,6 +163,8 @@ func lintBox(c contest.Contest, slot int, v slotView) ui.Item {
 func (s *server) handleCheckQuestion(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	var req struct {
 		Tournament string `json:"tournament"`
+		Link       string `json:"link"`
+		Raw        string `json:"raw"`
 		Author     string `json:"author"`
 	}
 	if err := readJSON(r, &req); err != nil {
@@ -152,7 +178,8 @@ func (s *server) handleCheckQuestion(w http.ResponseWriter, r *http.Request, _ r
 	if err != nil {
 		return err
 	}
-	res := s.lint(r.Context(), c, barred, strings.TrimSpace(req.Tournament), strings.TrimSpace(req.Author))
+	res := s.lint(r.Context(), c, barred, lintInput{tournament: strings.TrimSpace(req.Tournament),
+		gqID: question.FindLinks(req.Link).GotQuestionsID, pasted: req.Raw, authors: strings.TrimSpace(req.Author)})
 	problems := res.texts(c)
 	if problems == nil {
 		problems = []string{}
@@ -182,7 +209,7 @@ func (s *server) rulesSection(ctx context.Context, c contest.Contest, q store.Qu
 	if question.FindLinks(link).TournamentID == 0 && q.TournamentID != 0 {
 		link = tournamentLink(q.TournamentID)
 	}
-	res := s.lint(ctx, c, barred, link, q.Orig.Author)
+	res := s.lint(ctx, c, barred, lintInput{tournament: link, gqID: q.GQID, pasted: q.SourceText, authors: q.Orig.Author})
 	items := []ui.Item{subhead(str.Admin.Question.Rules())}
 	for _, t := range res.texts(c) {
 		items = append(items, dangerHint(t))

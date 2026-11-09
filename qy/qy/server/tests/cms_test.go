@@ -74,7 +74,11 @@ func TestNextYearsRulesCarryTheTextWithNewDates(t *testing.T) {
 	w.ts.ImportArchive(archiveFixture(t))
 	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Анна Свирина"}, "telegram": {"a"}, "kind": {"expert"}}, http.StatusSeeOther)
 	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Иван Иванов"}, "telegram": {"b"}, "kind": {"expert"}}, http.StatusSeeOther)
+	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Тайный Участник"}, "telegram": {"c"}, "kind": {"expert"}, "anonymous": {"1"}}, http.StatusSeeOther)
 	rules := w.get(w.ts.Anonymous(), "/2026/rules/", http.StatusOK)
+	if strings.Contains(rules, "Тайный") {
+		t.Error("the rules name an anonymous juror")
+	}
 	for _, want := range []string{
 		"Вопрос года — 2026. Регламент",
 		"проводится с 9 ноября до 25 января 2027 года",

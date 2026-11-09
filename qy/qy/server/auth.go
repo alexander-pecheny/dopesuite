@@ -15,6 +15,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/tglogin"
 
+	"qy/qy/storage/store"
 	"qy/qy/web/route"
 )
 
@@ -266,6 +267,9 @@ values(?, ?, ?, ?, ?, ?)`, id.TelegramUserID, id.Username, id.Name, username, rf
 	if err != nil {
 		return 0, err
 	}
+	if err := store.BindTelegram(ctx, tx, id.TelegramUserID, id.Username.String); err != nil {
+		return 0, err
+	}
 	return res.LastInsertId()
 }
 
@@ -273,7 +277,10 @@ func (qyUsers) Attach(ctx context.Context, tx tglogin.Tx, userID int64, id tglog
 	_, err := tx.ExecContext(ctx, `
 update users set telegram_user_id = ?, telegram_username = ?, telegram_name = ?, updated_at = ? where id = ?`,
 		id.TelegramUserID, id.Username, id.Name, rfc3339(now), userID)
-	return err
+	if err != nil {
+		return err
+	}
+	return store.BindTelegram(ctx, tx, id.TelegramUserID, id.Username.String)
 }
 
 // ---- password login ----

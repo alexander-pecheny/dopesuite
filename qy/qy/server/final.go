@@ -282,7 +282,7 @@ func (s *server) countFinal(ctx context.Context, c contest.Contest) (finalTally,
 		t.byID[q.ID], qy[q.ID] = q, q.QY
 	}
 	rows, err := s.db.QueryContext(ctx, `
-select u.id from jurors j join users u on j.telegram_username = u.telegram_username
+select u.id from jurors j join users u on `+store.JurorIsUser+`
 where j.year = ? and j.kind = ?`, c.Year, store.Expert)
 	if err != nil {
 		return t, err

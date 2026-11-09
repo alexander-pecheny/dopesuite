@@ -196,6 +196,29 @@ func TestAContestEndToEnd(t *testing.T) {
 	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Эксперт Один"}, "telegram": {"@Ex1"}, "kind": {"expert"}}, http.StatusSeeOther)
 	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Народ Один"}, "telegram": {"pe1"}, "kind": {"people"}}, http.StatusSeeOther)
 	ex, pe := w.user("ex1"), w.user("pe1")
+	// A juror with no telegram handle is named by their telegram id.
+	noHandle := w.ts.AddUser("nohandle")
+	w.ts.Exec(`update users set telegram_username = null, telegram_user_id = 448180345 where id = ?`, noHandle)
+	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Эксперт Без Ника"}, "telegram": {"448180345"}, "kind": {"expert"}}, http.StatusSeeOther)
+	if body := w.get(w.ts.As(noHandle), "/vote", http.StatusOK); strings.Count(body, `name="like"`) != 3 {
+		t.Error("a juror named by telegram id should see the likes")
+	}
+	if admin := w.get(w.admin, "/admin/contest/2026", http.StatusOK); !strings.Contains(admin, "ID 448180345") {
+		t.Error("the jury table should show the telegram id")
+	}
+	w.post(w.admin, "/admin/contest/2026/jurors/remove", url.Values{"telegram": {"448180345"}}, http.StatusSeeOther)
+	// Once the handle is known to be someone's, the juror is that person: a
+	// stranger who later takes the handle is not.
+	bound := w.ts.AddUser("bound")
+	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Эксперт Два"}, "telegram": {"@bound"}, "kind": {"expert"}}, http.StatusSeeOther)
+	w.ts.Exec(`update users set telegram_username = 'renamed', username = 'renamed' where id = ?`, bound)
+	if body := w.get(w.user("bound"), "/vote", http.StatusOK); strings.Contains(body, `name="like"`) {
+		t.Error("whoever takes a juror's old handle sees the likes")
+	}
+	if body := w.get(w.ts.As(bound), "/vote", http.StatusOK); !strings.Contains(body, `name="like"`) {
+		t.Error("a juror who renamed themselves lost the likes")
+	}
+	w.post(w.admin, "/admin/contest/2026/jurors/remove", url.Values{"telegram": {"bound"}}, http.StatusSeeOther)
 	if body := w.get(alice, "/vote", http.StatusOK); strings.Contains(body, `name="like"`) {
 		t.Error("a non-juror sees the likes")
 	}

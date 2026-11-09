@@ -24,6 +24,25 @@ type Tournament struct {
 	Title      string
 	Start, End string // calendar days, YYYY-MM-DD
 	Editors    []Person
+	Tours      []Tour // who edited which questions, when the site says
+}
+
+// Tour is one tour's credit: the questions it holds, numbered through the
+// whole tournament, and its editors.
+type Tour struct {
+	From, To int
+	Editors  []Person
+}
+
+// EditorsOf are the editors of question n: its tour's when the site splits
+// them by tour, else the whole tournament's.
+func (t Tournament) EditorsOf(n int) []Person {
+	for _, tour := range t.Tours {
+		if n >= tour.From && n <= tour.To && len(tour.Editors) > 0 {
+			return tour.Editors
+		}
+	}
+	return t.Editors
 }
 
 // Person is someone the rating site lists on a tournament: their id there
@@ -61,23 +80,45 @@ func (c *Client) Tournament(ctx context.Context, id int64) (Tournament, error) {
 		return Tournament{}, fmt.Errorf("rating: tournament %d: %s", id, resp.Status)
 	}
 	var body struct {
-		Name      string `json:"name"`
-		DateStart string `json:"dateStart"`
-		DateEnd   string `json:"dateEnd"`
-		Editors   []struct {
-			ID      int64  `json:"id"`
-			Name    string `json:"name"`
-			Surname string `json:"surname"`
-		} `json:"editors"`
+		Name      string       `json:"name"`
+		DateStart string       `json:"dateStart"`
+		DateEnd   string       `json:"dateEnd"`
+		Editors   []sitePerson `json:"editors"`
+		Credits   []struct {
+			Questions []int `json:"questions"`
+			Editors   []struct {
+				Player sitePerson `json:"player"`
+			} `json:"editors"`
+		} `json:"credits"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return Tournament{}, err
 	}
 	t := Tournament{Title: strings.TrimSpace(body.Name), Start: day(body.DateStart), End: day(body.DateEnd)}
 	for _, e := range body.Editors {
-		t.Editors = append(t.Editors, Person{ID: e.ID, Name: strings.TrimSpace(e.Name + " " + e.Surname)})
+		t.Editors = append(t.Editors, e.person())
+	}
+	for _, c := range body.Credits {
+		if len(c.Questions) != 2 {
+			continue
+		}
+		tour := Tour{From: c.Questions[0], To: c.Questions[1]}
+		for _, e := range c.Editors {
+			tour.Editors = append(tour.Editors, e.Player.person())
+		}
+		t.Tours = append(t.Tours, tour)
 	}
 	return t, nil
+}
+
+type sitePerson struct {
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	Surname string `json:"surname"`
+}
+
+func (p sitePerson) person() Person {
+	return Person{ID: p.ID, Name: strings.TrimSpace(p.Name + " " + p.Surname)}
 }
 
 // wait keeps one request at least minInterval after the previous one.

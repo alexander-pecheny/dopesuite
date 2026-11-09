@@ -32,7 +32,7 @@ func (s *server) currentJuror(ctx context.Context, sc route.Scope) (contest.Cont
 	if err != nil {
 		return c, juror{}, err
 	}
-	kind, err := store.JurorKind(ctx, s.db, c.Year, sc.User.Telegram.String)
+	kind, err := store.JurorKind(ctx, s.db, c.Year, sc.User.UserID)
 	return c, juror{sc.User.UserID, kind}, err
 }
 

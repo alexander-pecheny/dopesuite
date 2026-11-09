@@ -11,11 +11,19 @@ import (
 	"qy/qy/domain/question"
 )
 
-// Found is a question as gotquestions has it.
+// Found is a question as gotquestions has it, with the editors of its tour.
 type Found struct {
 	Question     question.Question
 	TournamentID int64
 	Tournament   string
+	Editors      []Editor
+}
+
+// Editor is someone gotquestions credits with editing a question: their name
+// and their id on the rating site, 0 when it does not know it.
+type Editor struct {
+	Name     string
+	RatingID int64
 }
 
 type Source interface {

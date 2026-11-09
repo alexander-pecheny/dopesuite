@@ -81,7 +81,7 @@ func (s *server) rulesVars(ctx context.Context, c contest.Contest) (map[string]s
 	}
 	var expert []string
 	for _, j := range jurors {
-		if j.Kind == store.Expert {
+		if j.Kind == store.Expert && !j.Anonymous {
 			expert = append(expert, j.Name)
 		}
 	}

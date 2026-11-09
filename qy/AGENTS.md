@@ -42,6 +42,24 @@ qy/                     module root (go.mod: module "qy")
 - The CMS is studchr's site_v2 ported: pages, revisions and files in SQLite.
   Its visual editor was not ported; pages are edited as Markdown or HTML.
 
+- Jurors and admins are entered by Telegram handle or numeric Telegram id. The
+  first login under a handle writes the person's id onto the entry, and from
+  then on only the id matches (`store.JurorIsUser`, `store.AdminIsUser`), so a
+  handle that changes hands carries no access. An anonymous juror votes like
+  the others and is named nowhere: not in the rules' `{{jury}}`, not by the
+  nomination check.
+- The nomination check bars an editor only from their own tour: gotquestions'
+  tour editors for a question it has, else the rating site's credits by the
+  number the pasted text opens with, else every editor of the tournament.
+
+## Backups
+
+`/var/lib/qy/qy.db` is replicated by the box's litestream (`/etc/litestream.yml`
+on vps-he, the same R2 bucket as xy and spliff) to `r2:backups/qy/qy.db`.
+Restore with `litestream restore -config /etc/litestream.yml -o <file>
+/var/lib/qy/qy.db`. `gq.db` is not backed up: `just import-gq` rebuilds it from
+the dump.
+
 ## Commands
 
 `just dev`, `just test`, `just check` as in the other apps. `just

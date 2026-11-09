@@ -328,6 +328,11 @@ func TestTheRulesCheckWarnsAndTheAppealReachesTheAdmins(t *testing.T) {
 	if !strings.Contains(res.Body.String(), "Отыгрыш турнира") || strings.Contains(res.Body.String(), "Автор вопроса") {
 		t.Errorf("check: %s", res.Body.String())
 	}
+	// An anonymous juror's question goes through without a word about the jury.
+	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Тайный Участник"}, "telegram": {"@secret"}, "kind": {"expert"}, "anonymous": {"1"}}, http.StatusSeeOther)
+	if res := alice.PostJSON("/api/nominate/check", `{"author": "Тайный Участник"}`); strings.Contains(res.Body.String(), "Тайный") {
+		t.Errorf("check names an anonymous juror: %s", res.Body.String())
+	}
 }
 
 func TestMovingAQuestionKeepsItsRowAndFile(t *testing.T) {
@@ -374,5 +379,40 @@ func TestThePluralTournamentLinkIsRead(t *testing.T) {
 	res := alice.PostJSON("/api/nominate/check", `{"tournament": "https://rating.chgk.info/tournaments/5000", "author": ""}`)
 	if !strings.Contains(res.Body.String(), "Отыгрыш турнира начался 1 января 2020") {
 		t.Errorf("check: %s", res.Body.String())
+	}
+}
+
+// An editor on the jury bars only the tour they edited: the rating site's
+// credits by the pasted question's number, gotquestions' by the question.
+func TestAnEditorBarsOnlyTheirOwnTour(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Пётр Петров"}, "telegram": {"@petr"}, "kind": {"expert"}, "rating_id": {"7"}}, http.StatusSeeOther)
+	petr, ivan := rating.Person{ID: 7, Name: "Пётр Петров"}, rating.Person{ID: 8, Name: "Иван Иванов"}
+	w.ts.SetRating(rating.Fixed{12345: {Start: "2026-01-10", End: "2026-01-11", Editors: []rating.Person{petr, ivan},
+		Tours: []rating.Tour{{From: 1, To: 12, Editors: []rating.Person{ivan}}, {From: 13, To: 24, Editors: []rating.Person{petr}}}}})
+	alice := w.user("alice")
+	check := func(raw, link string) string {
+		body, _ := json.Marshal(map[string]string{"tournament": "https://rating.chgk.info/tournament/12345", "raw": raw, "link": link, "author": "Алиса"})
+		return alice.PostJSON("/api/nominate/check", string(body)).Body.String()
+	}
+	if res := check("Вопрос 3\nТекст.", ""); strings.Contains(res, "Редактор") {
+		t.Errorf("a question of Ivan's tour: %s", res)
+	}
+	if res := check("Вопрос 14\nТекст.", ""); !strings.Contains(res, "Редактор турнира Пётр Петров") {
+		t.Errorf("a question of Petr's tour: %s", res)
+	}
+	if res := check("Текст без номера.", ""); !strings.Contains(res, "Редактор турнира Пётр Петров") {
+		t.Errorf("with no number every editor counts: %s", res)
+	}
+	w.ts.SetGotQuestions(gq.Fixed{
+		901: {Question: question.Question{Text: "Т.", Answer: "а"}, Editors: []gq.Editor{{Name: "Иван Иванов", RatingID: 8}}},
+		902: {Question: question.Question{Text: "Т.", Answer: "б"}, Editors: []gq.Editor{{Name: "Пётр Петров", RatingID: 7}}},
+	})
+	if res := check("", "https://gotquestions.online/question/901"); strings.Contains(res, "Редактор") {
+		t.Errorf("gotquestions says Ivan edited it: %s", res)
+	}
+	if res := check("", "https://gotquestions.online/question/902"); !strings.Contains(res, "Редактор турнира Пётр Петров") {
+		t.Errorf("gotquestions says Petr edited it: %s", res)
 	}
 }

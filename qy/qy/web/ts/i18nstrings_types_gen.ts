@@ -66,6 +66,8 @@ export type Strings = {
       voters: (n: number) => string;
     };
     jury: {
+      anonymous: () => string;
+      anonymousName: (name: string) => string;
       expert: () => string;
       hint: () => string;
       incomplete: () => string;
@@ -74,6 +76,7 @@ export type Strings = {
       people: () => string;
       ratingId: () => string;
       telegram: () => string;
+      telegramId: (id: string) => string;
       title: () => string;
     };
     numbering: {

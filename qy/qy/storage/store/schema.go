@@ -253,6 +253,22 @@ create table telegram_posts(
   primary key(channel, message_id)
 );
 `)},
+	{Version: 5, Name: "anonymous jurors, and jurors and admins by telegram id", Up: schema.Exec(`
+-- An anonymous juror votes like the others but is named nowhere on the site:
+-- not in the rules' list of the jury, not by the nomination check.
+alter table jurors add column anonymous integer not null default 0;
+-- A handle can change hands; the telegram id cannot. A juror or an admin is
+-- entered by handle or by id, and the first login under the handle writes
+-- the id here; from then on only the id lets them in.
+alter table jurors add column telegram_user_id integer;
+alter table admins add column telegram_user_id integer;
+update jurors set telegram_user_id = (select u.telegram_user_id from users u
+  where u.telegram_username = jurors.telegram_username collate nocase and u.telegram_user_id is not null
+  order by u.updated_at desc limit 1);
+update admins set telegram_user_id = (select u.telegram_user_id from users u
+  where u.telegram_username = admins.telegram_username collate nocase and u.telegram_user_id is not null
+  order by u.updated_at desc limit 1);
+`)},
 }
 
 func Migrate(db *sql.DB) error { return schema.Apply(db, Migrations) }

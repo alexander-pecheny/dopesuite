@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"qy/qy/domain/question"
@@ -27,7 +28,7 @@ func importFixture(t *testing.T) *DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != (Counts{Packs: 1, Questions: 1, People: 2, Authors: 2}) {
+	if n != (Counts{Packs: 1, Questions: 2, People: 2, Authors: 2, Editors: 2}) {
 		t.Fatalf("counts = %+v", n)
 	}
 	if err := db.Close(); err != nil {
@@ -49,9 +50,20 @@ func TestImportedQuestion(t *testing.T) {
 	want := Found{TournamentID: 8380, Tournament: "Кубок", Question: question.Question{
 		Text:   question.WithHandout("Вопрос\\про\nИКС.", "Текст\nhttps://gotquestions.online/pics/1/10.png"),
 		Answer: "икс", Author: "Пётр Петров, Ваня",
-	}}
-	if got != want {
+	}, Editors: []Editor{{Name: "Пётр Петров", RatingID: 707}}}
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
+	}
+}
+
+// A tour with no editors of its own has the pack's.
+func TestATourWithoutEditorsHasThePacks(t *testing.T) {
+	got, err := importFixture(t).Question(context.Background(), 13)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []Editor{{Name: "Иван Иванов"}}; !reflect.DeepEqual(got.Editors, want) {
+		t.Errorf("editors = %+v, want %+v", got.Editors, want)
 	}
 }
 

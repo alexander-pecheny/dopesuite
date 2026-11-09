@@ -212,7 +212,12 @@ async function ask<T>(url: string, body: object): Promise<T | string> {
 
 // check asks whether the question passes the rules and shows what it fails.
 async function check(card: HTMLElement): Promise<void> {
-  const body = { tournament: field(card, "tournament")?.value ?? "", author: field(card, "author")?.value ?? "" };
+  const body = {
+    tournament: field(card, "tournament")?.value ?? "",
+    link: field(card, "link")?.value ?? "",
+    raw: field(card, "raw")?.value ?? "",
+    author: field(card, "author")?.value ?? "",
+  };
   const res = await ask<{ problems: string[]; unchecked: boolean }>("/api/nominate/check", body);
   if (typeof res === "string") return;
   const box = card.querySelector<HTMLElement>("[data-lint]");

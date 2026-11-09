@@ -11,30 +11,39 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
-// The dump is gotquestions' own pg_dump in plain text. Import keeps the four
-// tables a question needs, and only the questions that are public on the site.
+// The dump is gotquestions' own pg_dump in plain text. Import keeps the tables
+// a question needs, its authors and its editors, and only the questions that
+// are public on the site. A question's editors are its tour's; a pack that
+// does not split them by tour has editors of its own.
 
 const schema = `
 create table packs (id integer primary key, title text not null, tournament_id integer not null);
 create table questions (
   id integer primary key, pack_id integer not null,
   handout text not null, handout_pic text not null, text text not null, answer text not null,
-  zachet text not null, nezachet text not null, comment text not null, source text not null
+  zachet text not null, nezachet text not null, comment text not null, source text not null,
+  tour_id integer
 );
-create table people (id integer primary key, name text not null);
+create table people (id integer primary key, name text not null, player_id integer);
 create table question_authors (question_id integer not null, person_id integer not null, alias text not null);
 create index question_authors_question on question_authors(question_id);
+create table tour_editors (tour_id integer not null, person_id integer not null, alias text not null);
+create index tour_editors_tour on tour_editors(tour_id);
+create table pack_editors (pack_id integer not null, person_id integer not null, alias text not null);
+create index pack_editors_pack on pack_editors(pack_id);
 `
 
 // copied names the columns read out of each COPY block, in insert order.
 var copied = map[string][]string{
 	"pack":             {"id", "title", `"tIds"`, "published"},
-	"question":         {"id", `"packId"`, `"razdatkaText"`, `"razdatkaPic"`, "text", "answer", "zachet", "nezachet", "comment", "source", `"takenDown"`},
-	"person":           {"id", "name"},
+	"question":         {"id", `"packId"`, `"razdatkaText"`, `"razdatkaPic"`, "text", "answer", "zachet", "nezachet", "comment", "source", `"tourId"`, `"takenDown"`},
+	"person":           {"id", "name", `"playerId"`},
 	"question_authors": {`"questionId"`, `"personId"`, "alias"},
+	"tour_editors":     {`"tourId"`, `"personId"`, "alias"},
+	"pack_editors":     {`"packId"`, `"personId"`, "alias"},
 }
 
-type Counts struct{ Packs, Questions, People, Authors int }
+type Counts struct{ Packs, Questions, People, Authors, Editors int }
 
 // Import loads a pg_dump into db, which must be empty.
 func Import(ctx context.Context, db *sql.DB, dump io.Reader) (Counts, error) {
@@ -69,7 +78,9 @@ func Import(ctx context.Context, db *sql.DB, dump io.Reader) (Counts, error) {
 		raw := strings.Split(line, "\t")
 		row := make([]string, len(pick))
 		for i, c := range pick {
-			row[i] = unescape(raw[c])
+			if c >= 0 {
+				row[i] = unescape(raw[c])
+			}
 		}
 		if err := insertRow(ctx, ins, table, row, public, &n); err != nil {
 			return n, fmt.Errorf("%s row %q: %w", table, row[0], err)
@@ -84,9 +95,11 @@ func Import(ctx context.Context, db *sql.DB, dump io.Reader) (Counts, error) {
 func inserts(ctx context.Context, tx *sql.Tx) (map[string]*sql.Stmt, error) {
 	queries := map[string]string{
 		"pack":             `insert into packs values (?, ?, ?)`,
-		"question":         `insert into questions values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"person":           `insert into people values (?, ?)`,
+		"question":         `insert into questions values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"person":           `insert into people values (?, ?, ?)`,
 		"question_authors": `insert into question_authors values (?, ?, ?)`,
+		"tour_editors":     `insert into tour_editors values (?, ?, ?)`,
+		"pack_editors":     `insert into pack_editors values (?, ?, ?)`,
 	}
 	out := map[string]*sql.Stmt{}
 	for t, q := range queries {
@@ -113,17 +126,32 @@ func insertRow(ctx context.Context, ins map[string]*sql.Stmt, table string, row 
 		args, n.Packs = []any{id, row[1], tid}, n.Packs+1
 	case "question":
 		pack, _ := idstr.Parse(row[1])
-		if !public[pack] || row[10] == "t" {
+		if !public[pack] || row[11] == "t" {
 			return nil
 		}
-		args, n.Questions = anyOf(row[:10]), n.Questions+1
+		args, n.Questions = append(anyOf(row[:10]), nullInt(row[10])), n.Questions+1
 	case "person":
-		args, n.People = anyOf(row), n.People+1
+		args, n.People = []any{row[0], row[1], nullInt(row[2])}, n.People+1
 	case "question_authors":
 		args, n.Authors = anyOf(row), n.Authors+1
+	case "pack_editors":
+		if pack, _ := idstr.Parse(row[0]); !public[pack] {
+			return nil
+		}
+		args, n.Editors = anyOf(row), n.Editors+1
+	case "tour_editors":
+		args, n.Editors = anyOf(row), n.Editors+1
 	}
 	_, err := ins[table].ExecContext(ctx, args...)
 	return err
+}
+
+// nullInt is a COPY field for an integer column: NULL when it was \N.
+func nullInt(v string) any {
+	if v == "" {
+		return nil
+	}
+	return v
 }
 
 func anyOf(row []string) []any {
@@ -151,9 +179,15 @@ func copyHeader(line string) (string, []int) {
 	for i, c := range strings.Split(cols, ", ") {
 		at[c] = i
 	}
+	// A column the dump does not have reads as empty, so an older dump still
+	// loads.
 	pick := make([]int, len(want))
 	for i, c := range want {
-		pick[i] = at[c]
+		if j, ok := at[c]; ok {
+			pick[i] = j
+		} else {
+			pick[i] = -1
+		}
 	}
 	return table, pick
 }

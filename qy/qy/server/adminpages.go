@@ -131,8 +131,7 @@ func (s *server) handleAddAdmin(w http.ResponseWriter, r *http.Request, _ route.
 		return userError(str.Admin.Admins.Empty())
 	}
 	err := s.withWriteTx(r.Context(), "add-admin", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `insert or ignore into admins(telegram_username) values(?)`, h)
-		return err
+		return addAdmin(ctx, tx, h)
 	})
 	if err != nil {
 		return err
@@ -291,6 +290,21 @@ func jurorRatingID(j store.Juror) string {
 	return idstr.Format(j.RatingID)
 }
 
+func jurorName(j store.Juror) string {
+	if j.Anonymous {
+		return str.Admin.Jury.AnonymousName(j.Name)
+	}
+	return j.Name
+}
+
+// jurorTelegram shows a handle as @handle and a numeric telegram id as such.
+func jurorTelegram(t string) string {
+	if t != "" && t[0] >= '0' && t[0] <= '9' {
+		return str.Admin.Jury.TelegramId(t)
+	}
+	return "@" + t
+}
+
 func jurorKindName(kind string) string {
 	if kind == store.People {
 		return str.Admin.Jury.People()
@@ -308,7 +322,7 @@ func (s *server) juryTable(ctx context.Context, c contest.Contest) ([]ui.Item, e
 	if len(jurors) > 0 {
 		rows := []ui.Item{ui.Scroll(), ui.Trow(ui.Hcell(text(str.Admin.Jury.Name())), ui.Hcell(text(str.Admin.Jury.Telegram())), ui.Hcell(text(str.Admin.Jury.RatingId())), ui.Hcell(text(str.Admin.Jury.Kind())), ui.Hcell())}
 		for _, j := range jurors {
-			rows = append(rows, ui.Trow(ui.Cell(text(j.Name)), ui.Cell(text("@"+j.Telegram)), ui.Cell(text(jurorRatingID(j))), ui.Cell(text(jurorKindName(j.Kind))),
+			rows = append(rows, ui.Trow(ui.Cell(text(jurorName(j))), ui.Cell(text(jurorTelegram(j.Telegram))), ui.Cell(text(jurorRatingID(j))), ui.Cell(text(jurorKindName(j.Kind))),
 				ui.Cell(ui.Form(ui.Method("post"), ui.Action(base+"/jurors/remove"),
 					ui.Hiddenfield(ui.Name("telegram"), ui.Value(j.Telegram)),
 					ui.Button(ui.Submit(), ui.Ghost, ui.Small(), text(str.Common.Remove()))))))
@@ -322,6 +336,7 @@ func (s *server) juryTable(ctx context.Context, c contest.Contest) ([]ui.Item, e
 		ui.Selectfield(ui.Name("kind"),
 			ui.Option(ui.Value(store.Expert), text(str.Admin.Jury.Expert())),
 			ui.Option(ui.Value(store.People), text(str.Admin.Jury.People()))),
+		checkboxOf("anonymous", "1", str.Admin.Jury.Anonymous(), false),
 		ui.Button(ui.Submit(), text(str.Common.Add())))))
 	return out, nil
 }
@@ -344,10 +359,15 @@ func (s *server) handleAddJuror(w http.ResponseWriter, r *http.Request, _ route.
 		rating = id
 	}
 	err = s.withWriteTx(r.Context(), "add-juror", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `
-insert into jurors(year, telegram_username, kind, name, rating_id) values(?, ?, ?, ?, ?)
-on conflict(year, telegram_username) do update set kind = excluded.kind, name = excluded.name, rating_id = excluded.rating_id`,
-			c.Year, h, kind, name, rating)
+		tgID, err := store.TelegramIDOf(ctx, tx, h)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `
+insert into jurors(year, telegram_username, telegram_user_id, kind, name, rating_id, anonymous) values(?, ?, ?, ?, ?, ?, ?)
+on conflict(year, telegram_username) do update set telegram_user_id = coalesce(excluded.telegram_user_id, telegram_user_id),
+  kind = excluded.kind, name = excluded.name, rating_id = excluded.rating_id, anonymous = excluded.anonymous`,
+			c.Year, h, tgID, kind, name, rating, r.FormValue("anonymous") != "")
 		return err
 	})
 	if err != nil {

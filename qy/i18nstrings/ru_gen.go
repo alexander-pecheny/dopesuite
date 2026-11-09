@@ -85,9 +85,11 @@ var RU = Strings{
 			},
 		},
 		Jury: AdminJuryStrings{
-			Expert: func() string { return "Экспертное" },
+			Anonymous:     func() string { return "Анонимно" },
+			AnonymousName: func(name string) string { return fmt.Sprintf("%s (анонимно)", name) },
+			Expert:        func() string { return "Экспертное" },
 			Hint: func() string {
-				return "Члены жюри входят через телеграм под тем ником, который здесь указан."
+				return "Члены жюри входят через телеграм под тем ником, который здесь указан. У кого нет ника, тому вместо него укажите числовой ID в телеграме. Анонимного члена жюри сайт нигде не называет: его нет в списке жюри в регламенте, и проверка номинаций его не упоминает."
 			},
 			Incomplete: func() string { return "Укажите имя, ник в телеграме и жюри." },
 			Kind:       func() string { return "Жюри" },
@@ -95,6 +97,7 @@ var RU = Strings{
 			People:     func() string { return "Народное" },
 			RatingId:   func() string { return "ID на турнирном сайте" },
 			Telegram:   func() string { return "Телеграм" },
+			TelegramId: func(id string) string { return fmt.Sprintf("ID %s", id) },
 			Title:      func() string { return "Жюри" },
 		},
 		Numbering: AdminNumberingStrings{

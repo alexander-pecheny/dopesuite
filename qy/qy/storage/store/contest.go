@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 
 	"qy/qy/domain/contest"
 )
@@ -85,13 +86,54 @@ const (
 	People = "people"
 )
 
-// JurorKind is what jury, if any, the telegram handle sits on in year.
-func JurorKind(ctx context.Context, q Querier, year int, telegram string) (string, error) {
-	if telegram == "" {
-		return "", nil
+// JurorIsUser joins jurors j to users u, and AdminIsUser admins a to users u:
+// by the telegram id once it is known, by the handle until then.
+const (
+	JurorIsUser = `(j.telegram_user_id = u.telegram_user_id or (j.telegram_user_id is null and j.telegram_username = u.telegram_username))`
+	AdminIsUser = `(a.telegram_user_id = u.telegram_user_id or (a.telegram_user_id is null and a.telegram_username = u.telegram_username))`
+)
+
+// Execer is a connection or a transaction to write through.
+type Execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// BindTelegram writes a telegram id onto the jurors and admins entered under
+// its handle, at a login under that handle.
+func BindTelegram(ctx context.Context, x Execer, telegramUserID int64, handle string) error {
+	if telegramUserID == 0 || handle == "" {
+		return nil
 	}
+	for _, table := range []string{"jurors", "admins"} {
+		if _, err := x.ExecContext(ctx, `update `+table+` set telegram_user_id = ?
+where telegram_user_id is null and telegram_username = ?`, telegramUserID, handle); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// TelegramIDOf is the telegram id behind what an admin typed for a juror or
+// an admin: the number itself, or the id of whoever last logged in under the
+// handle. It is nil when nobody has yet.
+func TelegramIDOf(ctx context.Context, q Querier, handle string) (any, error) {
+	if id, err := strconv.ParseInt(handle, 10, 64); err == nil {
+		return id, nil
+	}
+	var id int64
+	err := q.QueryRowContext(ctx, `select telegram_user_id from users
+where telegram_username = ? collate nocase and telegram_user_id is not null order by updated_at desc limit 1`, handle).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return id, err
+}
+
+// JurorKind is what jury, if any, the user sits on in year.
+func JurorKind(ctx context.Context, q Querier, year int, userID int64) (string, error) {
 	var kind string
-	err := q.QueryRowContext(ctx, `select kind from jurors where year = ? and telegram_username = ?`, year, telegram).Scan(&kind)
+	err := q.QueryRowContext(ctx, `select j.kind from jurors j join users u on `+JurorIsUser+`
+where j.year = ? and u.id = ?`, year, userID).Scan(&kind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -99,14 +141,15 @@ func JurorKind(ctx context.Context, q Querier, year int, telegram string) (strin
 }
 
 type Juror struct {
-	Telegram, Kind, Name string
-	RatingID             int64 // 0 when not entered
+	Telegram, Kind, Name string // Telegram is a handle or a numeric telegram id
+	RatingID             int64  // 0 when not entered
+	Anonymous            bool
 }
 
 func Jurors(ctx context.Context, q Querier, year int) ([]Juror, error) {
 	return Collect(ctx, q, func(r *sql.Rows) (Juror, error) {
 		var j Juror
-		err := r.Scan(&j.Telegram, &j.Kind, &j.Name, &j.RatingID)
+		err := r.Scan(&j.Telegram, &j.Kind, &j.Name, &j.RatingID, &j.Anonymous)
 		return j, err
-	}, `select telegram_username, kind, name, coalesce(rating_id, 0) from jurors where year = ? order by kind, name`, year)
+	}, `select telegram_username, kind, name, coalesce(rating_id, 0), anonymous from jurors where year = ? order by kind, name`, year)
 }

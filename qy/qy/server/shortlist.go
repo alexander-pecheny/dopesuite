@@ -16,7 +16,7 @@ func likeCounts(ctx context.Context, q store.Querier, year int) (map[int64][2]in
 	rows, err := q.QueryContext(ctx, `
 select l.question_id, j.kind, count(*) from likes l
 join users u on u.id = l.user_id
-join jurors j on j.year = ? and j.telegram_username = u.telegram_username
+join jurors j on j.year = ? and `+store.JurorIsUser+`
 join questions qq on qq.id = l.question_id and qq.year = ?
 group by l.question_id, j.kind`, year, year)
 	if err != nil {

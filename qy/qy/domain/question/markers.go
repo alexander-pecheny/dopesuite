@@ -2,6 +2,7 @@ package question
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -15,6 +16,20 @@ var metaLineRe = regexp.MustCompile(`(?i)^\s*(название турнира|т
 // statsLineRe is the line a channel closes a played question with: how many
 // teams took it, "2/42", then who.
 var statsLineRe = regexp.MustCompile(`^\s*\d+\s*/\s*\d+(\s|$)`)
+
+// numberRe is the line a pasted question opens with, "Вопрос 12".
+var numberRe = regexp.MustCompile(`(?im)^\s*вопрос\s+(\d+)\b`)
+
+// Number is the question's number in its tournament, as a pasted text gives
+// it, or 0.
+func Number(text string) int {
+	m := numberRe.FindStringSubmatch(text)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
+}
 
 func isMetaLine(line string) bool {
 	return metaLineRe.MatchString(line) || statsLineRe.MatchString(line) || gqLinkRe.MatchString(strings.TrimSpace(line)) && len(strings.Fields(line)) == 1

@@ -13,6 +13,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 	kit "pecheny.me/dopeuikit/kit"
 
+	"qy/qy/storage/store"
 	"qy/qy/web/route"
 	"qy/qy/web/ui"
 )
@@ -31,11 +32,8 @@ func (s *server) isAdmin(ctx context.Context, u session.User) (bool, error) {
 	if u.Username.Valid && isAdminUsername(u.Username.String) {
 		return true, nil
 	}
-	if !u.Telegram.Valid || u.Telegram.String == "" {
-		return false, nil
-	}
 	var n int
-	err := s.db.QueryRowContext(ctx, `select count(*) from admins where telegram_username = ?`, u.Telegram.String).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `select count(*) from admins a join users u on `+store.AdminIsUser+` where u.id = ?`, u.UserID).Scan(&n)
 	return n > 0, err
 }
 
@@ -52,12 +50,22 @@ func (s *server) seedAdmins(ctx context.Context) error {
 	}
 	return s.withWriteTx(ctx, "seed-admins", func(ctx context.Context, tx *sql.Tx) error {
 		for _, h := range handles {
-			if _, err := tx.ExecContext(ctx, `insert or ignore into admins(telegram_username) values(?)`, h); err != nil {
+			if err := addAdmin(ctx, tx, h); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+// addAdmin enters an admin by handle or telegram id, with the id if it is known.
+func addAdmin(ctx context.Context, tx *sql.Tx, h string) error {
+	id, err := store.TelegramIDOf(ctx, tx, h)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `insert or ignore into admins(telegram_username, telegram_user_id) values(?, ?)`, h, id)
+	return err
 }
 
 // normalHandle is a telegram handle as the users table stores it: no @.

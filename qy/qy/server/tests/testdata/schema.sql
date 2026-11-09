@@ -13,7 +13,7 @@ CREATE INDEX suggestions_question on suggestions(question_id, id);
 -- table admins
 CREATE TABLE admins(
   telegram_username text primary key collate nocase
-);
+, telegram_user_id integer);
 
 -- table assets
 CREATE TABLE assets(
@@ -54,7 +54,7 @@ CREATE TABLE jurors(
   year integer not null references contests(year) on delete cascade,
   telegram_username text not null collate nocase,
   kind text not null check (kind in ('expert','people')),
-  name text not null, rating_id integer,
+  name text not null, rating_id integer, anonymous integer not null default 0, telegram_user_id integer,
   primary key(year, telegram_username)
 );
 
