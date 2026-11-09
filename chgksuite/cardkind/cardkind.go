@@ -4,13 +4,13 @@
 // asks it here, so a new kind is one row in this table rather than an edit in
 // every file that used to spell the answer out.
 //
-// The browser reads the same table from xy/web/ts/cardkind_gen.ts, which `go
-// generate` writes from this one, and xy/web/ts/cardkind.ts asks it the same
+// The browser reads the same table from web/ts/cardkind_gen.ts, which `go
+// generate` writes from this one, and web/ts/cardkind.ts asks it the same
 // questions. The server's allow-list is Valid, and a test holds the cards.kind
 // CHECK constraint to Names.
 package cardkind
 
-//go:generate go run ./genkinds ../../xy/web/ts/cardkind_gen.ts
+//go:generate go run ./genkinds ../web/ts/cardkind_gen.ts
 
 // The kinds a Card can have, as they are stored.
 const (

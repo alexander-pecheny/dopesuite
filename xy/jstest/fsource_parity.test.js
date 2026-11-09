@@ -3,16 +3,16 @@
 // and the .hndt document the browser writes and the server parses.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyChgk } from "../web/assets/static/dist/chgk.js";
+import { chgk4s } from "../web/assets/static/dist/chgk/chgk.js";
 import { xyHndt } from "../web/assets/static/dist/hndt.js";
 import { xyListExport } from "../web/assets/static/dist/listexport.js";
-import { MARKERS } from "../web/assets/static/dist/markers_gen.js";
+import { MARKERS } from "../web/assets/static/dist/chgk/markers_gen.js";
 import corpus from "../../chgksuite/fsource/testdata/parity.json" with { type: "json" };
 
 test("splitMarker agrees with fsource.SplitMarker on every fixture line", () => {
   assert.ok(corpus.lines.length > 50, "the corpus is seeded from the fixtures");
   for (const { line, prefix, rest } of corpus.lines) {
-    assert.deepEqual(xyChgk.splitMarker(line), { prefix, rest }, JSON.stringify(line));
+    assert.deepEqual(chgk4s.splitMarker(line), { prefix, rest }, JSON.stringify(line));
   }
 });
 
@@ -20,16 +20,16 @@ test("every marker the generated table names is a marked line, and only those", 
   const types = new Set(MARKERS.map(([, t]) => t));
   assert.ok(types.has("battle") && types.has("setcounter") && types.has("handout"));
   for (const [marker, type] of MARKERS) {
-    const [b] = xyChgk.parseBlocks(`${marker} текст`);
+    const [b] = chgk4s.parseBlocks(`${marker} текст`);
     assert.equal(b.type, type, marker);
     assert.equal(b.text, "текст");
   }
-  assert.equal(xyChgk.parseBlocks("просто строка")[0].type, "pre");
+  assert.equal(chgk4s.parseBlocks("просто строка")[0].type, "pre");
 });
 
 test("imgRefs agrees with the inline tokenizer's img runs", () => {
   for (const { source, refs } of corpus.imgRefs) {
-    assert.deepEqual(xyChgk.imgRefs(source), refs, JSON.stringify(source));
+    assert.deepEqual(chgk4s.imgRefs(source), refs, JSON.stringify(source));
   }
 });
 
@@ -45,7 +45,7 @@ test("the browser writes the corpus .hndt byte for byte, and reads its settings 
 test("a backslashed marker line continues its field, one backslash lighter, as fsource.UnescapeLine reads it", () => {
   assert.ok(corpus.escapes.some((e) => e.escaped), "the corpus holds escaped lines");
   for (const { line, text } of corpus.escapes) {
-    if (xyChgk.startsBlock(line)) continue;
-    assert.equal(xyChgk.parseBlocks(`? q\n${line}`)[0].text, `q\n${text}`.trimEnd(), line);
+    if (chgk4s.startsBlock(line)) continue;
+    assert.equal(chgk4s.parseBlocks(`? q\n${line}`)[0].text, `q\n${text}`.trimEnd(), line);
   }
 });

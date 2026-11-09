@@ -582,7 +582,6 @@ var RU = Strings{
 		Author:     func() string { return "Автор(ы):" },
 		Comment:    func() string { return "Комментарий:" },
 		Factcheck:  func() string { return "Фактчек" },
-		Handout:    func() string { return "Раздаточный материал" },
 		Label:      func(number string) string { return fmt.Sprintf("Вопрос %s.", number) },
 		Nezachet:   func() string { return "Незачёт:" },
 		ShowAnswer: func() string { return "Показать ответ" },

@@ -1,22 +1,19 @@
-// preview.ts — xy's one screen rendering of a question: a 4s card as the docx
+// preview.ts — the one screen rendering of a question: a 4s card as the docx
 // export would set it. renderPreviewCard turns a card into DOM — a numbered
 // question with its answer, zachet (accepted answer) and the rest, or a
 // heading/meta block — over
 // renderRich, which walks chgk's inline runs (bold, italic, links, (screen …),
-// line and page breaks, images) in print or screen mode. The list preview, the
-// card editor's Preview view and the import preview all draw through it.
-import { xyApp } from "./app.js";
-import { xyChgk } from "./chgk.js";
+// line and page breaks, images) in print or screen mode. xy's list preview, card
+// editor and import preview draw through it, and so does qy's nomination form.
+import { el } from "./dom.js";
+import { chgk4s } from "./chgk.js";
 import { splitTheme } from "./themes.js";
 import S from "./i18nstrings.js";
 import { exportMarker, isTheme, KIND } from "./cardkind.js";
 import type { HandoutPiece, ScreenValue } from "./chgk.js";
-import type { BoardCard } from "./unlock.js";
-
-const { el } = xyApp;
 
 export interface PvCard { id: number; kind: string; desc: string; listId?: number }
-const PV_LABELS = xyChgk.QUESTION_LABELS;
+const PV_LABELS = chgk4s.QUESTION_LABELS;
 
 // fillPreviewImages swaps the image-missing placeholders inside an already
 // rendered preview for the images that have since resolved.
@@ -34,7 +31,7 @@ export interface RichOpts { accents?: boolean; brackets?: boolean; nbsp?: boolea
 function fieldOpts(field: string, screen: boolean): RichOpts {
   const nbsp = field !== "source" && field !== "handout";
   if (!screen) return { accents: false, brackets: false, nbsp };
-  return { accents: true, brackets: !xyChgk.fieldKeepsBrackets(field), nbsp };
+  return { accents: true, brackets: !chgk4s.fieldKeepsBrackets(field), nbsp };
 }
 
 // renderRich turns a 4s text element into DOM, mirroring the docx render: inline
@@ -45,12 +42,12 @@ function fieldOpts(field: string, screen: boolean): RichOpts {
 // stay within the strict CSP.
 export function renderRich(text: string, imgMap: Map<string, string>, opts: RichOpts = {}): DocumentFragment {
   const screenSide = !!(opts.accents || opts.brackets);
-  const nb = (t: string): string => (opts.nbsp ? xyChgk.replaceNoBreak(t) : t);
+  const nb = (t: string): string => (opts.nbsp ? chgk4s.replaceNoBreak(t) : t);
   const frag = document.createDocumentFragment();
   // An image renders as a block, so it already ends its line; under pre-wrap the
   // source's own newline right after "(img …)" would add a second, empty one.
   let afterImg = false;
-  for (let [type, val] of xyChgk.renderRuns(text, opts)) {
+  for (let [type, val] of chgk4s.renderRuns(text, opts)) {
     if (afterImg) {
       afterImg = false;
       if (!type && typeof val === "string" && val.startsWith("\n")) val = val.slice(1);
@@ -58,7 +55,7 @@ export function renderRich(text: string, imgMap: Map<string, string>, opts: Rich
     if (type === "linebreak") { frag.append(el("br")); continue; }
     if (type === "pagebreak") { frag.append(el("hr", { class: "pv-pagebreak" })); continue; }
     if (type === "img") {
-      const name = xyChgk.imgName(val);
+      const name = chgk4s.imgName(val);
       const url = imgMap.get(name);
       if (url) frag.append(el("img", { class: "pv-img", src: url, alt: name }));
       else frag.append(el("span", { class: "pv-img-missing", dataset: { img: name }, text: S.chgk.preview.imageMissing(name) }));
@@ -92,7 +89,7 @@ export function renderRich(text: string, imgMap: Map<string, string>, opts: Rich
 // Works for every field (question, answer, source, comment, …), not just sources.
 export function renderFieldBody(text: string, imgMap: Map<string, string>, opts: RichOpts): DocumentFragment {
   const frag = document.createDocumentFragment();
-  const lst = xyChgk.splitList(text);
+  const lst = chgk4s.splitList(text);
   if (lst.items) {
     if (lst.preamble.trim()) frag.append(renderRich(lst.preamble, imgMap, opts));
     const box = el("div", { class: "pv-list" });
@@ -117,10 +114,10 @@ function pvSmallCls(field: string): string {
 }
 
 // pvField renders a "Label: value" line, numbering any "- …" list. The caption
-// rules (a "!!Label" override, the plural source label) are xyChgk's, shared with
+// rules (a "!!Label" override, the plural source label) are chgk4s's, shared with
 // the copy targets.
 function pvField(field: string, text: string, imgMap: Map<string, string>, screen: boolean, cls: string): HTMLElement {
-  const cap = xyChgk.fieldCaption(field, text);
+  const cap = chgk4s.fieldCaption(field, text);
   const node = el("div", { class: "pv-field" + (cls ? " " + cls : "") },
     el("strong", { class: "pv-label", text: cap.label + ": " }));
   node.append(renderFieldBody(cap.text, imgMap, fieldOpts(field, screen)));
@@ -147,18 +144,18 @@ function pvHandoutBox(label: string, text: string, imgMap: Map<string, string>, 
 // one; the card-detail preview (already inside the editor) leaves it off.
 // pvQuestion renders one question — a whole OD card, or one rung of a SI theme,
 // where `number` is the rung's point value rather than a position in the tour.
-function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: Map<string, string>, screen: boolean, opts: PreviewOpts, bareNumber?: boolean): HTMLElement {
+function pvQuestion<C extends PvCard>(card: C, desc: string, number: string | null, imgMap: Map<string, string>, screen: boolean, opts: PreviewOpts<C>, bareNumber?: boolean): HTMLElement {
   const { edit } = opts;
-  const find = (t: string): { type: string; text: string } | undefined => xyChgk.parseBlocks(desc).find((b) => b.type === t);
+  const find = (t: string): { type: string; text: string } | undefined => chgk4s.parseBlocks(desc).find((b) => b.type === t);
   const wrap = el("article", { class: "pv-q", dataset: { cardId: card.id } });
   // Question line: small inline ✏️ (edit lists only) + bold "Question N." label
   // (overridable) + question text (which may itself be a blitz/duplet list).
-  const qov = xyChgk.applyOverride(xyChgk.questionText(desc));
+  const qov = chgk4s.applyOverride(chgk4s.questionText(desc));
   // A rung of a theme is labelled by its bare point value, the way si_mode sets
   // it; an OD question by its «question N» label.
   const qLabel = bareNumber ? "" : qov.label || S.chgk.label.question();
   let qline = el("div", { class: "pv-q-text" });
-  if (edit) qline.append(edit(card as BoardCard));
+  if (edit) qline.append(edit(card));
   qline.append(el("strong", { class: "pv-label", text: `${qLabel}${number ? (qLabel ? " " : "") + number : ""}. ` }));
   wrap.append(qline);
   // The handouts are set apart as the exports set them (question_pieces): the
@@ -166,7 +163,7 @@ function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: M
   const pieces: HandoutPiece[] = [];
   const handout = find("handout");
   if (handout) pieces.push({ kind: "handout", label: S.chgk.label.handout(), text: handout.text });
-  pieces.push(...xyChgk.splitHandouts(qov.text));
+  pieces.push(...chgk4s.splitHandouts(qov.text));
   let fresh = false; // qline holds only the label: the text after a box opens a new one
   for (const p of pieces) {
     if (p.kind === "handout") {
@@ -178,7 +175,7 @@ function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: M
     if (fresh) { wrap.append(qline); fresh = false; }
     qline.append(renderFieldBody(p.text, imgMap, fieldOpts("question", screen)));
   }
-  for (const f of xyChgk.fieldOrder(!!opts.commentFirst)) {
+  for (const f of chgk4s.fieldOrder(!!opts.commentFirst)) {
     const b = find(f);
     if (b) wrap.append(pvField(f, b.text, imgMap, screen, pvSmallCls(f)));
   }
@@ -189,18 +186,18 @@ function pvQuestion(card: PvCard, desc: string, number: string | null, imgMap: M
 // written as plain text gets the marker its kind stands for (listexport.ts).
 function markedDesc(card: PvCard): string {
   const marker = exportMarker(card.kind);
-  if (!marker || !card.desc.trim() || xyChgk.startsBlock(card.desc.trimStart().split("\n")[0])) return card.desc;
+  if (!marker || !card.desc.trim() || chgk4s.startsBlock(card.desc.trimStart().split("\n")[0])) return card.desc;
   return `${marker} ${card.desc.trimStart()}`;
 }
 
-export interface PreviewOpts {
-  edit?: (card: BoardCard) => HTMLElement;
+export interface PreviewOpts<C extends PvCard = PvCard> {
+  edit?: (card: C) => HTMLElement;
   commentFirst?: boolean;
 }
 
-export function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<string, string>, screen: boolean, opts: PreviewOpts = {}): HTMLElement {
+export function renderPreviewCard<C extends PvCard>(card: C, number: string | null, imgMap: Map<string, string>, screen: boolean, opts: PreviewOpts<C> = {}): HTMLElement {
   const { edit } = opts;
-  const blocks = xyChgk.parseBlocks(markedDesc(card));
+  const blocks = chgk4s.parseBlocks(markedDesc(card));
   const find = (t: string) => blocks.find((b) => b.type === t);
 
   // A theme is a heading and a ladder of questions, each labelled by its bare
@@ -210,13 +207,13 @@ export function renderPreviewCard(card: PvCard, number: string | null, imgMap: M
     const t = splitTheme(card.desc);
     const wrap = el("div", { class: "pv-theme", dataset: { cardId: card.id } });
     const head = el("h3", { class: "pv-section" });
-    if (edit) head.append(edit(card as BoardCard));
-    head.append(renderRich(xyChgk.themeLabel(t.name, number ?? ""), imgMap, { nbsp: true }));
+    if (edit) head.append(edit(card));
+    head.append(renderRich(chgk4s.themeLabel(t.name, number ?? ""), imgMap, { nbsp: true }));
     wrap.append(head);
     if (t.author !== null) wrap.append(pvField("author", t.author, imgMap, screen, ""));
     if (t.comment !== null) wrap.append(pvField("comment", t.comment, imgMap, screen, pvSmallCls("comment")));
     for (const slot of t.slots) {
-      wrap.append(pvQuestion(card, xyChgk.composeFields(slot.fields), slot.number, imgMap, screen, { commentFirst: opts.commentFirst }, true));
+      wrap.append(pvQuestion(card, chgk4s.composeFields(slot.fields), slot.number, imgMap, screen, { commentFirst: opts.commentFirst }, true));
     }
     return wrap;
   }
@@ -246,7 +243,7 @@ export function renderPreviewCard(card: PvCard, number: string | null, imgMap: M
     }
   }
   // Inline ✏️ tucked in front of the block's first line (edit lists only).
-  if (edit) (wrap.firstElementChild || wrap).prepend(edit(card as BoardCard));
+  if (edit) (wrap.firstElementChild || wrap).prepend(edit(card));
   return wrap;
 }
 

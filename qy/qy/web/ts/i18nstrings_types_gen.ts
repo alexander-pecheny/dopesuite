@@ -423,7 +423,6 @@ export type Strings = {
     author: () => string;
     comment: () => string;
     factcheck: () => string;
-    handout: () => string;
     label: (number: string) => string;
     nezachet: () => string;
     showAnswer: () => string;

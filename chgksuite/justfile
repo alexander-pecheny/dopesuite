@@ -69,8 +69,8 @@ generate-check:
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
     rc=0
-    for target in "./fsource ../xy/web/ts/markers_gen.ts" \
-                  "./cardkind ../xy/web/ts/cardkind_gen.ts"; do
+    for target in "./fsource web/ts/markers_gen.ts" \
+                  "./cardkind web/ts/cardkind_gen.ts"; do
       set -- $target
       gentarget=$1 file=$2
       cp "$file" "$tmp/before"

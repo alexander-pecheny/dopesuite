@@ -1,10 +1,34 @@
-# The question captions the Go side reads too. xy's chgk.toml holds the rest.
-# listexport looks for the handout caption at the start of a handout, and
-# writes an author caption only when it is not the one chgksuite prints.
+# The captions chgksuite prints around a question: the browser's question
+# renderer (web/ts/chgk.ts, preview.ts) sets them, listexport looks for the
+# handout caption at the start of a handout and writes an author caption only
+# when it is not the one chgksuite prints.
 
 [label]
+# The captions chgksuite prints around a question, as the list preview, the
+# card editor's Просмотр and every copy target render them.
+# The bold caption of the preview's question line (preview.ts); the default
+# when no "!!" override renames the field.
+question = "Вопрос"
+# The preview and copy caption of the answer field.
+answer = "Ответ"
+# The preview and copy caption of the зачёт (accepted answer) field.
+zachet = "Зачёт"
+# The preview and copy caption of the незачёт (rejected answer) field.
+nezachet = "Незачёт"
+# The preview and copy caption of the comment field.
+comment = "Комментарий"
+# The preview and copy caption of a single source.
+source = "Источник"
+# The caption when the source field is a "- …" list (plural).
+source_plural = "Источники"
+# The preview and copy caption of the author field.
+author = "Автор"
 # The preview and copy caption of the handout field.
 handout = "Раздаточный материал"
+# The caption of an editor card (who edited the pack).
+editor = "Редактор"
+# The caption of a date card.
+date = "Дата"
 
 [author]
 # The caption choices the card editor offers for the author field; the first is
@@ -17,3 +41,27 @@ feminine = "Авторка"
 plural = "Авторы"
 # The feminine plural caption.
 feminine_plural = "Авторки"
+
+[copy]
+# The copy-target labels of a question card's copy menu (chgk.ts copyTargets).
+# The menu item that copies the handout itself.
+handout = "Раздатка"
+# The copy piece holding just the question text.
+question = "Вопрос"
+# The label of the n-th leg's copy piece on a blitz/duplet card.
+question_piece = 'Вопрос {{.n}}'
+# The numbered lead-in pasted before the question text ("Вопрос 12. " — the
+# trailing space is deliberate, the text follows it).
+question_numbered = 'Вопрос {{.number}}. '
+# The copy piece with the question number stripped.
+question_unnumbered = "Вопрос без номера"
+# The copy piece with handout and question together.
+question_whole = "Вопрос целиком"
+# The copy piece with question, handout and the answer block.
+question_with_answer = "Вопрос с ответом"
+# The note standing in for an unpastable picture, inside the handout bracket.
+image_handout_note = '[{{.label}}: см. изображение]'
+
+[preview]
+# The placeholder shown where a handout image has not loaded yet (preview.ts).
+image_missing = '[изображение: {{.name}}]'

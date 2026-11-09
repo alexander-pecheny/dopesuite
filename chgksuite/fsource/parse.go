@@ -109,9 +109,9 @@ func (q *Question) MarshalJSON() ([]byte, error) {
 }
 
 // markerMapping mirrors the prefix→type table in parse_4s. It is the one
-// marker table on both sides: `go generate` writes it into xy/web/ts/markers_gen.ts.
+// marker table on both sides: `go generate` writes it into web/ts/markers_gen.ts.
 //
-//go:generate go run ./genmarkers ../../xy/web/ts/markers_gen.ts
+//go:generate go run ./genmarkers ../web/ts/markers_gen.ts
 var markerMapping = map[string]string{
 	"#":       "meta",
 	"##":      "section",

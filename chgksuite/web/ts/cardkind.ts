@@ -7,7 +7,6 @@
 // read too. cardkind_gen.ts is generated from it (`go generate ./cardkind` in
 // chgksuite/), so a rule changes there, never here.
 
-import S from "./i18nstrings.js";
 import { KINDS, type KindName } from "./cardkind_gen.js";
 
 export type { KindName };
@@ -121,23 +120,7 @@ export function forListType(type: string | null | undefined): KindName {
 // pickable is the kinds the card editor's kind menu offers, in its order.
 export const pickable: ReadonlyArray<KindName> = KINDS.filter((k) => k.pickable).map((k) => k.name);
 
-// label is what a kind is called on screen, or null for a kind nobody picks or
-// sees by name.
-export function label(kind: string | null | undefined): string | null {
-  switch (kind) {
-    case KIND.question: return S.board.card.kindQuestion();
-    case KIND.theme: return S.board.card.kindTheme();
-    case KIND.troikaTheme: return S.board.card.kindTroikaTheme();
-    case KIND.battle: return S.board.card.kindBattle();
-    case KIND.meta: return S.board.card.kindMeta();
-    case KIND.heading: return S.board.card.kindHeading();
-    case KIND.other: return S.board.card.kindOther();
-    case KIND.handoutsPreamble: return S.card.kind.handoutsPreamble();
-    default: return null;
-  }
-}
-
-export const xyCardKind = {
+export const cardKinds = {
   KIND, counter, numbered, isTheme, testable, exported, carriesHandouts, versioned, exportMarker,
-  restartsThemes, setsBase, ladder, gameOf, forListType, pickable, label,
+  restartsThemes, setsBase, ladder, gameOf, forListType, pickable,
 };

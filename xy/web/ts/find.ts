@@ -6,7 +6,7 @@
 //
 // ES module.
 
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 
 // One matched run, as offsets into the ORIGINAL text — the folded copy is an
 // internal affair and no caller ever sees its offsets.
@@ -133,7 +133,7 @@ function guarded(source: string): Span[] {
       const nameAt = at + line.indexOf(version[1], line.indexOf("xy-version:"));
       out.push({ start: at, end: nameAt }, { start: nameAt + version[1].length, end });
     } else {
-      const { prefix } = xyChgk.splitMarker(line);
+      const { prefix } = chgk4s.splitMarker(line);
       if (prefix) out.push({ start: at, end: at + prefix.length });
     }
     at = end + 1;

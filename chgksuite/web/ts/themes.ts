@@ -204,6 +204,6 @@ export function progress(desc: string | null | undefined, ladder: ReadonlyArray<
   return { filled: slots.filter(isFilled).length, total: Math.max(slots.length, ladder.length) };
 }
 
-export const xyThemes = {
+export const chgkThemes = {
   splitTheme, composeTheme, nextNumber, withSlot, blankTheme, swapSlots, isFilled, authorsOf, themeName, progress,
 };

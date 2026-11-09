@@ -37,6 +37,11 @@ type Config struct {
 	// edit in the sibling kit checkout hot-reloads. Optional.
 	CoreCSSDiskPath string
 
+	// Layers are the stylesheets a shared library owns (chgksuite's question
+	// renderer), served between CoreCSS and the app's own layer so the app can
+	// still adjust them. Same disk-or-embed contract as CoreCSS.
+	Layers []Layer
+
 	// Fonts is the kit's font FS, rooted at "fonts/…".
 	Fonts fs.FS
 	// FontsDiskRoot is the directory containing "fonts" in disk/dev mode.
@@ -46,6 +51,14 @@ type Config struct {
 	// Shared are kit-owned files served under /static/ alongside the app's own
 	// (e.g. the shared login.js). Same disk-or-embed contract as CoreCSS.
 	Shared []SharedFile
+}
+
+// Layer is one library stylesheet in the served styles.css.
+type Layer struct {
+	// Bytes are the embedded stylesheet.
+	Bytes []byte
+	// DiskPath is where it is read from in disk/dev mode. Optional.
+	DiskPath string
 }
 
 // SharedFile is one kit-owned static file.
@@ -175,9 +188,18 @@ func (a *Assets) BuildStylesheet() []byte {
 			core = b
 		}
 	}
+	out := append([]byte{}, core...)
+	for _, l := range a.cfg.Layers {
+		b := l.Bytes
+		if a.NoCache && l.DiskPath != "" {
+			if disk, err := os.ReadFile(l.DiskPath); err == nil {
+				b = disk
+			}
+		}
+		out = append(out, '\n')
+		out = append(out, b...)
+	}
 	layer, _ := fs.ReadFile(a.Source, "static/styles.css")
-	out := make([]byte, 0, len(core)+1+len(layer))
-	out = append(out, core...)
 	out = append(out, '\n')
 	out = append(out, layer...)
 	if !a.NoCache {

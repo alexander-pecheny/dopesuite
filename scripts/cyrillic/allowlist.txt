@@ -51,7 +51,7 @@ scripts/classcheck/main.go
 xy/internal/server/exportpack.go
 xy/internal/server/translit.go
 xy/internal/xycli/fold.go
-xy/web/ts/chgk.ts
+chgksuite/web/ts/chgk.ts
 xy/web/ts/find.ts
 xy/web/ts/sessions.ts
 xy/web/ts/sw.ts

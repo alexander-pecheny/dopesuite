@@ -33,9 +33,10 @@ var stylesheets = []string{
 	"xy/web/assets/static/styles.css",
 	"spliff/spliff/web/assets/static/styles.css",
 	"qy/qy/web/assets/static/styles.css",
+	"chgksuite/web/preview.css",
 }
 
-var sourceRoots = []string{"dopeuikit", "dopecore", "dope", "xy", "spliff", "qy"}
+var sourceRoots = []string{"dopeuikit", "dopecore", "dope", "xy", "spliff", "qy", "chgksuite/web"}
 
 var skipDirs = map[string]bool{
 	"node_modules": true,

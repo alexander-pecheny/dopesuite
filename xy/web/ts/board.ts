@@ -8,7 +8,7 @@ import { createReplacePanel } from "./replace.js";
 import { createMoveListPanel } from "./movelist.js";
 import { createListsManage, unitsOf } from "./listsmanage.js";
 import { createAddListPanel, createList } from "./addlist.js";
-import { progress } from "./themes.js";
+import { progress } from "./chgk/themes.js";
 import { createImportPanel } from "./importpack.js";
 import { createExportPanel } from "./export.js";
 import { createStatsPanel } from "./statspanel.js";
@@ -28,13 +28,14 @@ import { xyApp, xySizes } from "./app.js";
 import { xyInstance } from "./instance.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
-import { xyChgk } from "./chgk.js";
-import { fillPreviewImages, renderPreviewCard } from "./preview.js";
+import { chgk4s } from "./chgk/chgk.js";
+import { fillPreviewImages, renderPreviewCard } from "./chgk/preview.js";
 import { createCardLabels } from "./cardlabels.js";
 import { createBell } from "./bell.js";
 import { xyVersions } from "./versions.js";
 import { xyListExport } from "./listexport.js";
-import { carriesHandouts, counter, exported, isTheme, KIND, ladder, label as kindLabel, numbered, versioned } from "./cardkind.js";
+import { carriesHandouts, counter, exported, isTheme, KIND, ladder, numbered, versioned } from "./chgk/cardkind.js";
+import { label as kindLabel } from "./kindlabel.js";
 import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
@@ -658,7 +659,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
     el("span", { class: "klist-title", text: list.title || S.board.list.untitled() }));
   // The numbers belong to the questions, not to the view: they are computed over
   // the WHOLE list and carried across, so a filtered tour reads 1, 4, 7.
-  const allNumbers = precomputedNumbers || xyChgk.numberQuestionCards(cards);
+  const allNumbers = precomputedNumbers || chgk4s.numberQuestionCards(cards);
   const view = shownCards(cards, allNumbers, labelFilter.keep());
   const shown = view.cards;
   const counted = (cs: ReadonlyArray<BoardCard>): number => cs.filter((c) => numbered(c.kind)).length;
@@ -846,7 +847,7 @@ function forgetCardLabels(deletedCards: BoardCard[]): void {
 // state.cardTitle is the reader's fallback preference — question text or answer.
 const cardBody = (card: BoardCard): string =>
   card.kind === KIND.handoutsPreamble ? kindLabel(card.kind) ?? "" :
-  aliasOf(card) || (card.kind === KIND.appeal ? appealTitle(card) : deriveTitle(xyChgk.previewText(card.kind, card.desc, state.cardTitle), Infinity));
+  aliasOf(card) || (card.kind === KIND.appeal ? appealTitle(card) : deriveTitle(chgk4s.previewText(card.kind, card.desc, state.cardTitle), Infinity));
 
 function appealTitle(card: BoardCard): string {
   const a = parseAppeal(card.desc);
@@ -975,7 +976,7 @@ function appealQuestion(listId: number, n: number): HTMLElement {
   if (!card) return el("p", { class: "hint", text: S.appeals.card.noQuestion(scope.title, String(n)) });
   const imgMap = new Map<string, string>();
   const node = renderPreviewCard(card, String(n), imgMap, true, { commentFirst: scope.commentFirst });
-  void attachments.resolveImages([card], xyChgk.imageRefs([card]), (name, url) => { imgMap.set(name, url); fillPreviewImages(node, imgMap); });
+  void attachments.resolveImages([card], chgk4s.imageRefs([card]), (name, url) => { imgMap.set(name, url); fillPreviewImages(node, imgMap); });
   return node;
 }
 
@@ -1260,7 +1261,7 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
 // Renders a whole list the way chgksuite's docx export would — questions with
 // numbered labels and Answer/Correct/Comment/etc. fields, plus meta, headings
 // and handouts — but in the browser, so it's instant. Inline 4s markup
-// (bold/italic/links/(img …)/(screen …)) is parsed via xyChgk; referenced image
+// (bold/italic/links/(img …)/(screen …)) is parsed via chgk4s; referenced image
 // handouts are resolved from the cards' attachments (decrypted + object-URL'd).
 
 // The card shape the preview renders: a persisted board card, the card detail's
@@ -1359,12 +1360,12 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   // arrive, so a long list is readable immediately.
   // Match the board: a grouped list numbers continuously across its group. In
   // whole-group mode the cards ARE the concatenated group, so number them flat.
-  const numbers = !group && list.groupId != null ? listNumbers(board, list) : xyChgk.numberQuestionCards(cards);
+  const numbers = !group && list.groupId != null ? listNumbers(board, list) : chgk4s.numberQuestionCards(cards);
   const imgMap = new Map<string, string>();
   const ctx = { cards, numbers, imgMap };
   previewCtx = ctx;
   renderPreviewBody(byId<HTMLInputElement>("previewScreen").checked);
-  await attachments.resolveImages(cards, xyChgk.imageRefs(cards), (name, url) => {
+  await attachments.resolveImages(cards, chgk4s.imageRefs(cards), (name, url) => {
     imgMap.set(name, url);
     // Ignore a close (or another list's preview) that happened during the await.
     if (previewCtx === ctx && !previewOverlay.hidden) fillPreviewImages(body, imgMap);
@@ -1549,7 +1550,7 @@ const cardDetail = createCardDetail({
   questionNumberFor,
   commentFirst: (listId) => { const l = state.lists.find((x) => x.id === listId); return !!l && tourCommentFirst(state, l); },
   forgetCardLabels,
-  preview: { renderPreviewCard, resolveImages: attachments.resolveImages, imageRefs: xyChgk.imageRefs, fillPreviewImages, previewList },
+  preview: { renderPreviewCard, resolveImages: attachments.resolveImages, imageRefs: chgk4s.imageRefs, fillPreviewImages, previewList },
   attachments,
   onOpenCard: (id) => { if (id != null) testDwell.opened(id); else testDwell.closed(); },
   popupMenu,

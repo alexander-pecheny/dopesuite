@@ -1,4 +1,4 @@
-// genmarkers writes xy/web/ts/markers_gen.ts from fsource's marker table, so the
+// genmarkers writes web/ts/markers_gen.ts from fsource's marker table, so the
 // TypeScript 4s reader and the Go one cannot drift on what a marker is.
 package main
 

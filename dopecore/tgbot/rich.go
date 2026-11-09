@@ -16,7 +16,7 @@ type RichMessage struct {
 // PlainText flattens the message into plain text, one line per paragraph:
 // what a reader sees with every collapsed block opened, without the
 // formatting. A details block's summary is left out, since it is the
-// label of the toggle ("Ответ") and not part of what it hides.
+// label of the toggle (the answer's caption) and not part of what it hides.
 func (r *RichMessage) PlainText() string {
 	if r == nil {
 		return ""

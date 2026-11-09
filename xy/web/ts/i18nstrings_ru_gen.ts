@@ -1047,38 +1047,6 @@ export const RU: Strings = {
     },
   },
   chgk: {
-    author: {
-      default: () => "Автор",
-      feminine: () => "Авторка",
-      femininePlural: () => "Авторки",
-      plural: () => "Авторы",
-    },
-    copy: {
-      handout: () => "Раздатка",
-      imageHandoutNote: (label: string) => `[${label}: см. изображение]`,
-      question: () => "Вопрос",
-      questionNumbered: (number: string) => `Вопрос ${number}. `,
-      questionPiece: (n: string) => `Вопрос ${n}`,
-      questionUnnumbered: () => "Вопрос без номера",
-      questionWhole: () => "Вопрос целиком",
-      questionWithAnswer: () => "Вопрос с ответом",
-    },
-    label: {
-      answer: () => "Ответ",
-      author: () => "Автор",
-      comment: () => "Комментарий",
-      date: () => "Дата",
-      editor: () => "Редактор",
-      handout: () => "Раздаточный материал",
-      nezachet: () => "Незачёт",
-      question: () => "Вопрос",
-      source: () => "Источник",
-      sourcePlural: () => "Источники",
-      zachet: () => "Зачёт",
-    },
-    preview: {
-      imageMissing: (name: string) => `[изображение: ${name}]`,
-    },
     zip: {
       corrupt: () => "повреждённый zip-архив",
       fileCorrupt: (name: string) => `повреждённый файл в архиве: ${name}`,
@@ -1468,12 +1436,6 @@ ${usage}
       offlineFormats: () => "Эти форматы доступны только онлайн.",
       progress: () => "Экспорт…",
       progressHandouts: () => "Экспорт… (вёрстка раздаток может занять время)",
-    },
-  },
-  fsource: {
-    theme: {
-      defaultLabel: (n: string, name: string) => `Тема ${n}. ${name}`,
-      reserveNumber: (n: string) => `запас${n}`,
     },
   },
   gallery: {

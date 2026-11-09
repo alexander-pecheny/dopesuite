@@ -1,0 +1,65 @@
+/* The question renderer's stylesheet (web/ts/preview.ts): a 4s question laid
+   out as the .docx export sets it. Every app that draws questions with the
+   renderer serves this between the kit's core.css and its own layer
+   (webassets.Config.Layers), so xy's board and qy's nomination form look
+   alike. */
+
+/* docx-like rhythm: the gap below each question matches the preview's own top
+   padding (space-5) so the spacing reads even top-to-bottom; a small gap between
+   the question text and its answer block; and no gap between the answer/zachet/
+   comment/source/author lines (they read as one tight block). */
+.pv-q { margin-bottom: var(--space-5); }
+/* preserve authored line breaks inside multi-line question/answer/meta text */
+.pv-q-text, .pv-field, .pv-meta, .pv-list-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pv-q-text { margin-bottom: var(--space-2); }
+.pv-field { margin-bottom: 0; }
+.pv-label { font-weight: var(--fw-bold); }
+/* numbered list (sources, blitz/duplet questions & answers): the "N." marker and
+   the item body are separate boxes so wrapping a long unbreakable value (e.g. a
+   bare URL) inside the body can never orphan the marker onto its own line. The
+   numbers are plain weight (only field labels are bold). */
+.pv-list { margin-top: var(--space-1); }
+.pv-list-item { display: flex; gap: 0.4em; margin-bottom: var(--space-0-5); }
+.pv-list-num { flex: 0 0 auto; font-weight: var(--fw-regular); }
+.pv-list-body { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+/* A handout set apart from its question, as the .docx/.pdf set it: the caption
+   at the source size, flush with the frame's left edge. A one-line handout
+   (.pv-handout-line) gets a frame as wide as it or its caption and sits centred
+   in it; the body is an inline block, so a line that wraps after all fills the
+   frame and reads from the left. The box keeps the question lines' own rhythm
+   (.pv-q-text). */
+.pv-handout-box { gap: var(--space-0-5); margin-bottom: var(--space-2); }
+.pv-handout-caption { font-size: calc(10em / 12); }
+.pv-handout-frame { border: 1px solid currentColor; padding: var(--space-1) var(--space-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pv-handout-line { width: fit-content; max-width: 100%; }
+.pv-handout-line .pv-handout-frame { text-align: center; }
+.pv-handout-body { display: inline-block; max-width: 100%; text-align: left; vertical-align: top; }
+.pv-handout-frame .pv-img { margin: 0; } /* the frame's padding is its margin */
+/* sources/authors set smaller, matching the exports' 12pt → 10pt. The block after
+   a body-size one starts one BODY line below, not one small line: the lost height
+   is 1.55 × (2/12) body-em = 0.31 of the small block's own em. */
+.pv-small { font-size: calc(10em / 12); }
+:not(.pv-small) + .pv-small { margin-top: 0.31em; }
+.pv-heading { font-size: var(--text-xl); font-weight: var(--fw-bold); margin: var(--space-5) 0 var(--space-3); }
+.pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
+.pv-empty { color: var(--muted); }
+/* break long URLs at any character so they never force horizontal scroll on
+   narrow screens (links are often unbreakable runs with no spaces). */
+.pv-link { color: var(--blue); overflow-wrap: anywhere; word-break: break-word; }
+.pv-sc { font-variant: small-caps; }
+/* the dash IS the page-break mark, so it takes --grid-dark, not --border */
+.pv-pagebreak { border: 0; border-top: 1px dashed var(--grid-dark); margin: var(--space-4) 0; }
+.pv-img {
+  display: block;
+  max-width: min(100%, 480px);
+  max-height: 12em;
+  width: auto;
+  height: auto;
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-sm);
+  background: var(--uchu-yang); /* a transparent handout is printed on white paper */
+}
+/* block, like the image it stands in for — renderRich swallows the source
+   newline after an (img …), so an inline placeholder would glue to the text */
+.pv-img-missing { display: block; color: var(--muted); font-style: italic; }
+

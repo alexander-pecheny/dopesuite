@@ -1321,38 +1321,6 @@ var RU = Strings{
 		},
 	},
 	Chgk: ChgkStrings{
-		Author: ChgkAuthorStrings{
-			Default:        func() string { return "Автор" },
-			Feminine:       func() string { return "Авторка" },
-			FemininePlural: func() string { return "Авторки" },
-			Plural:         func() string { return "Авторы" },
-		},
-		Copy: ChgkCopyStrings{
-			Handout:            func() string { return "Раздатка" },
-			ImageHandoutNote:   func(label string) string { return fmt.Sprintf("[%s: см. изображение]", label) },
-			Question:           func() string { return "Вопрос" },
-			QuestionNumbered:   func(number string) string { return fmt.Sprintf("Вопрос %s. ", number) },
-			QuestionPiece:      func(n string) string { return fmt.Sprintf("Вопрос %s", n) },
-			QuestionUnnumbered: func() string { return "Вопрос без номера" },
-			QuestionWhole:      func() string { return "Вопрос целиком" },
-			QuestionWithAnswer: func() string { return "Вопрос с ответом" },
-		},
-		Label: ChgkLabelStrings{
-			Answer:       func() string { return "Ответ" },
-			Author:       func() string { return "Автор" },
-			Comment:      func() string { return "Комментарий" },
-			Date:         func() string { return "Дата" },
-			Editor:       func() string { return "Редактор" },
-			Handout:      func() string { return "Раздаточный материал" },
-			Nezachet:     func() string { return "Незачёт" },
-			Question:     func() string { return "Вопрос" },
-			Source:       func() string { return "Источник" },
-			SourcePlural: func() string { return "Источники" },
-			Zachet:       func() string { return "Зачёт" },
-		},
-		Preview: ChgkPreviewStrings{
-			ImageMissing: func(name string) string { return fmt.Sprintf("[изображение: %s]", name) },
-		},
 		Zip: ChgkZipStrings{
 			Corrupt: func() string { return "повреждённый zip-архив" },
 			FileCorrupt: func(name string) string {
@@ -1889,12 +1857,6 @@ var RU = Strings{
 			ProgressHandouts: func() string {
 				return "Экспорт… (вёрстка раздаток может занять время)"
 			},
-		},
-	},
-	Fsource: FsourceStrings{
-		Theme: FsourceThemeStrings{
-			DefaultLabel:  func(n string, name string) string { return fmt.Sprintf("Тема %s. %s", n, name) },
-			ReserveNumber: func(n string) string { return fmt.Sprintf("запас%s", n) },
 		},
 	},
 	Gallery: GalleryStrings{

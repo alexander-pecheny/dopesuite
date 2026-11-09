@@ -1046,38 +1046,6 @@ export type Strings = {
     };
   };
   chgk: {
-    author: {
-      default: () => string;
-      feminine: () => string;
-      femininePlural: () => string;
-      plural: () => string;
-    };
-    copy: {
-      handout: () => string;
-      imageHandoutNote: (label: string) => string;
-      question: () => string;
-      questionNumbered: (number: string) => string;
-      questionPiece: (n: string) => string;
-      questionUnnumbered: () => string;
-      questionWhole: () => string;
-      questionWithAnswer: () => string;
-    };
-    label: {
-      answer: () => string;
-      author: () => string;
-      comment: () => string;
-      date: () => string;
-      editor: () => string;
-      handout: () => string;
-      nezachet: () => string;
-      question: () => string;
-      source: () => string;
-      sourcePlural: () => string;
-      zachet: () => string;
-    };
-    preview: {
-      imageMissing: (name: string) => string;
-    };
     zip: {
       corrupt: () => string;
       fileCorrupt: (name: string) => string;
@@ -1440,12 +1408,6 @@ export type Strings = {
       offlineFormats: () => string;
       progress: () => string;
       progressHandouts: () => string;
-    };
-  };
-  fsource: {
-    theme: {
-      defaultLabel: (n: string, name: string) => string;
-      reserveNumber: (n: string) => string;
     };
   };
   gallery: {

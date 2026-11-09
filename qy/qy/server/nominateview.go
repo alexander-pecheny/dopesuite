@@ -1,9 +1,7 @@
 package qyserver
 
 import (
-	"html"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -172,8 +170,9 @@ func sourcePanel(slot int, v slotView) ui.Item {
 }
 
 func previewPanel(v slotView) ui.Item {
-	items := []ui.Item{ui.Data("panel", viewPreview), ui.Col(ui.SpaceSM,
-		ui.Richtext(ui.Raw(previewHTML(v.in.fields, v.in.handout))))}
+	// The page's script draws the question here with chgksuite's renderer
+	// (chgksuite/web/ts/preview.ts), the one xy draws its cards with.
+	items := []ui.Item{ui.Data("panel", viewPreview), ui.Col(ui.SpaceSM, ui.Richtext())}
 	for _, f := range v.files {
 		items = append(items, fileLink(f))
 	}
@@ -182,58 +181,6 @@ func previewPanel(v slotView) ui.Item {
 
 func fileLink(f store.File) ui.Item {
 	return ui.Row(ui.Button(ui.Href("/nominate/file/"+idstr.Format(f.ID)), ui.Ghost, ui.Small(), ui.IconPaperclip, text(f.Name)))
-}
-
-var imageLinkRe = regexp.MustCompile(`(?i)^https?://\S+\.(?:jpe?g|png|gif|webp)(?:\?\S*)?$`)
-
-// previewHTML is a slot's question as the preview tab shows it, laid out
-// as xy's preview lays out a question (web/ts/preview.ts there): the label,
-// the handout in a frame with its caption, the text, then each field on a
-// line of its own, the sources and the authors smaller.
-func previewHTML(q question.Question, handout string) string {
-	if q.Text == "" && q.Answer == "" {
-		return "<p>" + html.EscapeString(str.Nominate.Slot.PreviewEmpty()) + "</p>"
-	}
-	var b strings.Builder
-	label := `<strong class="pv-label">` + html.EscapeString(str.Question.Unnumbered()) + " </strong>"
-	b.WriteString(`<article class="pv-q">`)
-	if handout != "" {
-		b.WriteString(`<div class="pv-q-text">` + label + `</div>`)
-		b.WriteString(`<div class="pv-handout-box u-col"><div class="pv-handout-caption">` + html.EscapeString(str.Question.Handout()) +
-			`</div><div class="pv-handout-frame">` + handoutHTML(handout) + `</div></div>`)
-		label = ""
-	}
-	b.WriteString(`<div class="pv-q-text">` + label + plain(q.Text) + `</div>`)
-	for _, f := range []struct{ label, value, cls string }{
-		{str.Question.Answer(), q.Answer, ""},
-		{str.Question.Zachet(), q.Zachet, ""},
-		{str.Question.Nezachet(), q.Nezachet, ""},
-		{str.Question.Comment(), q.Comment, ""},
-		{str.Question.Source(), q.Source, " pv-small"},
-		{str.Question.Author(), q.Author, " pv-small"},
-	} {
-		if f.value != "" {
-			b.WriteString(`<div class="pv-field` + f.cls + `"><strong class="pv-label">` + html.EscapeString(f.label) + " </strong>" + plain(f.value) + "</div>")
-		}
-	}
-	b.WriteString("</article>")
-	return b.String()
-}
-
-// handoutHTML is a handout's lines, a picture's link shown as the picture.
-func handoutHTML(handout string) string {
-	var lines []string
-	for _, line := range strings.Split(handout, "\n") {
-		if line = strings.TrimSpace(line); line == "" {
-			continue
-		}
-		if imageLinkRe.MatchString(line) {
-			lines = append(lines, `<img class="pv-img" src="`+html.EscapeString(line)+`" alt="`+html.EscapeString(line)+`" loading="lazy">`)
-		} else {
-			lines = append(lines, plain(line))
-		}
-	}
-	return strings.Join(lines, "<br>")
 }
 
 // fieldEditors are the question's fields, each one line until it holds

@@ -20,8 +20,8 @@ import type { IconName } from "./icons_gen.js";
 import type { WriteState } from "./app.js";
 import type { Modal } from "./modal.js";
 import { icon } from "./icons_gen.js";
-import { xyChgk } from "./chgk.js";
-import { gameOf } from "./cardkind.js";
+import { chgk4s } from "./chgk/chgk.js";
+import { gameOf } from "./chgk/cardkind.js";
 
 export interface Board {
   readonly id: number;
@@ -88,7 +88,7 @@ export function listScope(board: Board, list: BoardList): ListScope {
   // what the add-card button makes, and a list typed ChGK may well hold themes.
   // One theme makes the whole scope SI (cardkind.ts says why).
   const game = gameOf(cards);
-  return { list, grouped: list.groupId != null, group, lists, cards, numbers: xyChgk.numberQuestionCards(cards), title, game, commentFirst: group ? group.commentFirst : list.commentFirst, handoutPage: (group ? group.handoutPage : list.handoutPage) ?? "" };
+  return { list, grouped: list.groupId != null, group, lists, cards, numbers: chgk4s.numberQuestionCards(cards), title, game, commentFirst: group ? group.commentFirst : list.commentFirst, handoutPage: (group ? group.handoutPage : list.handoutPage) ?? "" };
 }
 
 // listNumbers is one list's slice of its scope's numbering, parallel to

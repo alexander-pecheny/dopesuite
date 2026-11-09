@@ -29,7 +29,7 @@
 //
 // ES module.
 
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 import { xyVersions } from "./versions.js";
 
 // ── quotes ──────────────────────────────────────────────────────────────────
@@ -285,9 +285,9 @@ function typography(s: string, accents = false, o: AccentOpts = {}): string {
 export function pass(source: string | null | undefined, accents = false, o: AccentOpts = {}): string {
   const lines = (source || "").split("\n");
   return lines.map((line) => {
-    const { prefix, rest } = xyChgk.splitMarker(line);
+    const { prefix, rest } = chgk4s.splitMarker(line);
     if (rest.trim() === "") return line;
-    return prefix + xyChgk.replaceNoBreak(typography(rest, accents, o));
+    return prefix + chgk4s.replaceNoBreak(typography(rest, accents, o));
   }).join("\n");
 }
 

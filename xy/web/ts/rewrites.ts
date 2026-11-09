@@ -14,7 +14,7 @@ import { modal } from "./modal.js";
 import type { Board, BoardPanel } from "./panels.js";
 import type { BoardCard } from "./unlock.js";
 import S from "./i18nstrings.js";
-import { numbered, versioned } from "./cardkind.js";
+import { numbered, versioned } from "./chgk/cardkind.js";
 
 const { el, byId, errMsg } = xyApp;
 

@@ -14,7 +14,7 @@ import { xyCrypto } from "./crypto.js";
 import { iconed } from "./icons_gen.js";
 import { type Board, type ListPanel, listScope, type PanelShell } from "./panels.js";
 import type { BoardCard, BoardList } from "./unlock.js";
-import { counter, testable } from "./cardkind.js";
+import { counter, testable } from "./chgk/cardkind.js";
 import type { Tester } from "./sessions.js";
 
 const { el, errMsg } = xyApp;

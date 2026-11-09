@@ -8,7 +8,7 @@
 
 import { xyApp } from "./app.js";
 import { xySync } from "./sync.js";
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 import { xyListExport } from "./listexport.js";
 import { modal } from "./modal.js";
 import { createTelegramExport } from "./tgexport.js";
@@ -183,7 +183,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     fd.append("filename", title);
     fd.append("game", exportCtx.game);
     if (exportCtx.commentFirst) fd.append("comment_first", "1");
-    const needed = xySync.isOnline() ? xyChgk.imageRefs(cards) : new Set<string>();
+    const needed = xySync.isOnline() ? chgk4s.imageRefs(cards) : new Set<string>();
     const found = await attachments.appendImages(fd, cards, needed);
     const missing = [...needed].filter((n) => !found.has(n));
     if (missing.length && !confirm(S.export.run.missingImagesConfirm(missing.join(", ")))) return null;
@@ -202,7 +202,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     const source = xyListExport.exportSource(cards);
     // Images are fetched (and decrypted) from the server, so offline there are
     // none to be had — the .4s then goes out as bare text rather than not at all.
-    const wanted = xySync.isOnline() ? xyChgk.imageRefs(cards) : new Set<string>();
+    const wanted = xySync.isOnline() ? chgk4s.imageRefs(cards) : new Set<string>();
     const wantsImages = formats.includes("4s") && wanted.size > 0;
 
     if (formats.length === 1 && formats[0] === "4s" && !wantsImages) {

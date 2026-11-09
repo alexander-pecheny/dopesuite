@@ -14,8 +14,8 @@
 // between editors, and "easier" above a question tells a tester how hard it is
 // meant to be before they have tried it).
 
-import { composeFields, extractInlineHandout, parseBlocks, scanDirectives, splitFields, splitHandouts, versionLineName } from "./chgk.js";
-import type { HiddenSpan } from "./chgk.js";
+import { composeFields, extractInlineHandout, parseBlocks, scanDirectives, splitFields, splitHandouts, versionLineName } from "./chgk/chgk.js";
+import type { HiddenSpan } from "./chgk/chgk.js";
 import S from "./i18nstrings.js";
 
 const PAGEBREAK = "(PAGEBREAK)";

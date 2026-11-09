@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { installDOM } from "./dom.js";
 
 installDOM([]);
-const { renderPreviewCard, renderRich, fillPreviewImages } = await import("../web/assets/static/dist/preview.js");
+const { renderPreviewCard, renderRich, fillPreviewImages } = await import("../web/assets/static/dist/chgk/preview.js");
 
 const q = { id: 1, kind: "question", desc: "? Что _это_?\n! То.\n= Сё.\n^ - раз\n- два\n@ Аня" };
 

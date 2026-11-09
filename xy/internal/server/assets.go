@@ -7,6 +7,8 @@ import (
 
 	kit "pecheny.me/dopeuikit/kit"
 
+	chgkweb "code.pecheny.me/pecheny/dopesuite/chgksuite/web"
+
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 
 	xystrings "xy/i18nstrings"
@@ -17,9 +19,13 @@ import (
 // newAssets resolves xy's asset source (live disk in dev, else the embedded FS)
 // with the kit's files wired in, and the page set that compiles ui/*.dopeui.
 func newAssets() (*webassets.Assets, *kit.PageSet) {
-	a := kit.Assets(assets.FS, ".", "web/assets")
+	a := kit.AssetsWithLayers(assets.FS, chgkLayers, ".", "web/assets")
 	return a, kit.NewPageSet(a.Source, a.NoCache, ui.Compile).Provide("ui/login.dopeui", kit.LoginPage(xystrings.Default.Auth.Page.Title(), "/"))
 }
+
+// chgkLayers is chgksuite's question renderer stylesheet, which the pages that
+// draw questions with it need.
+var chgkLayers = []webassets.Layer{{Bytes: chgkweb.PreviewCSS, DiskPath: chgkweb.PreviewCSSDiskPath}}
 
 // pagePaths are the ui/*.dopeui sources servePage compiles; warmed up front in
 // embed mode so a broken page fails at startup rather than on a request.

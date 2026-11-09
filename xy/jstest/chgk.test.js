@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyChgk } from "../web/assets/static/dist/chgk.js";
+import { chgk4s } from "../web/assets/static/dist/chgk/chgk.js";
 import { xyVersions } from "../web/assets/static/dist/versions.js";
 import { xyListExport } from "../web/assets/static/dist/listexport.js";
 
 const { questionText, blockText, numberQuestionCards, parseBlocks, numberDirective,
-  removeAccents, removeSquareBrackets, screenText, parse4sElem } = xyChgk;
+  removeAccents, removeSquareBrackets, screenText, parse4sElem } = chgk4s;
 
 test("question text strips the leading '? ' marker", () => {
   const desc = "? В каком году?\n! 1799\n^ источник";
@@ -73,11 +73,11 @@ test("a battle restarts the question count in a brain game and the theme count i
 
 // A section or battle card is shown by its text, not by its marker.
 test("a heading or battle card's title drops its ##, ### or #B", () => {
-  assert.equal(xyChgk.previewText("heading", "## Групповой этап 1"), "Групповой этап 1");
-  assert.equal(xyChgk.previewText("heading", "### Турнир"), "Турнир");
-  assert.equal(xyChgk.previewText("battle", "#B Бой 2"), "Бой 2");
-  assert.equal(xyChgk.previewText("battle", "Бой 2"), "Бой 2");
-  assert.equal(xyChgk.previewText("troika_theme", "#T ТЕМА 5 (2 БАЛЛА). Звуки\n№ 1\n? а"), "Звуки (2 БАЛЛА)");
+  assert.equal(chgk4s.previewText("heading", "## Групповой этап 1"), "Групповой этап 1");
+  assert.equal(chgk4s.previewText("heading", "### Турнир"), "Турнир");
+  assert.equal(chgk4s.previewText("battle", "#B Бой 2"), "Бой 2");
+  assert.equal(chgk4s.previewText("battle", "Бой 2"), "Бой 2");
+  assert.equal(chgk4s.previewText("troika_theme", "#T ТЕМА 5 (2 БАЛЛА). Звуки\n№ 1\n? а"), "Звуки (2 БАЛЛА)");
 });
 
 test("№№ resets the running base and subsequent questions continue", () => {
@@ -134,7 +134,7 @@ test("screenText applies both transforms", () => {
 });
 
 test("a legacy \"> \" handout block is still offered as its own paste", () => {
-  const t = xyChgk.copyTargets("> Схема ме́тро\n? Что на схеме?\n! круг", "3");
+  const t = chgk4s.copyTargets("> Схема ме́тро\n? Что на схеме?\n! круг", "3");
   assert.deepEqual(t.map((x) => x.text), [
     "Раздаточный материал:\nСхема метро",
     "Вопрос 3. Что на схеме?",
@@ -214,7 +214,7 @@ test("a link without its protocol keeps its underscores instead of going italic"
 });
 
 test("the gluing leaves a protocol-less link alone and picks up after it", () => {
-  assert.equal(xyChgk.replaceNoBreak("www.example.com/a-b_c и что-то ещё"), "www.example.com/a-b_c и\u00a0что\u2011то ещё");
+  assert.equal(chgk4s.replaceNoBreak("www.example.com/a-b_c и что-то ещё"), "www.example.com/a-b_c и\u00a0что\u2011то ещё");
 });
 
 test("italic still parses beside a link", () => {
@@ -223,107 +223,107 @@ test("italic still parses beside a link", () => {
 });
 
 test("printRuns keeps host-only square brackets and accents (print mode)", () => {
-  const runs = xyChgk.printRuns("текст [реплика ведущего] сл`ово");
+  const runs = chgk4s.printRuns("текст [реплика ведущего] сл`ово");
   const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
   assert.ok(flat.includes("[реплика ведущего]"), "host brackets preserved");
   assert.ok(flat.includes("сло́во"), "backtick stress resolved");
 });
 
 test("printRuns unescapes \\[ and \\] to literal brackets", () => {
-  const runs = xyChgk.printRuns("\\[не директива\\]");
+  const runs = chgk4s.printRuns("\\[не директива\\]");
   const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
   assert.equal(flat, "[не директива]");
 });
 
 test("printRuns tags an (img …) run with its filename as the last token", () => {
-  const runs = xyChgk.printRuns("(img w=300 cat.jpg)");
+  const runs = chgk4s.printRuns("(img w=300 cat.jpg)");
   const img = runs.find((r) => r[0] === "img");
   assert.ok(img, "img run present");
   assert.equal(String(img[1]).trim().split(/\s+/).pop(), "cat.jpg");
 });
 
 test("applyOverride peels a !!Label override (~ → space) off a field value", () => {
-  assert.deepEqual(xyChgk.applyOverride("!!Авторка Анна Смирнова"),
+  assert.deepEqual(chgk4s.applyOverride("!!Авторка Анна Смирнова"),
     { label: "Авторка", text: "Анна Смирнова" });
-  assert.deepEqual(xyChgk.applyOverride("!!Верный~ответ Москва"),
+  assert.deepEqual(chgk4s.applyOverride("!!Верный~ответ Москва"),
     { label: "Верный ответ", text: "Москва" });
 });
 
 test("applyOverride leaves a normal value untouched", () => {
-  assert.deepEqual(xyChgk.applyOverride("Анна Смирнова"), { label: null, text: "Анна Смирнова" });
-  assert.deepEqual(xyChgk.applyOverride("- один\n- два"), { label: null, text: "- один\n- два" });
+  assert.deepEqual(chgk4s.applyOverride("Анна Смирнова"), { label: null, text: "Анна Смирнова" });
+  assert.deepEqual(chgk4s.applyOverride("- один\n- два"), { label: null, text: "- один\n- два" });
 });
 
 test("splitList turns '- ' lines into numbered items (with preamble)", () => {
-  assert.deepEqual(xyChgk.splitList("см.:\n- источник один\n- источник два"),
+  assert.deepEqual(chgk4s.splitList("см.:\n- источник один\n- источник два"),
     { preamble: "см.:", items: ["источник один", "источник два"] });
 });
 
 test("splitList: a single '- ' item is not a list (marker stripped)", () => {
-  assert.deepEqual(xyChgk.splitList("- единственный"), { preamble: "единственный", items: null });
+  assert.deepEqual(chgk4s.splitList("- единственный"), { preamble: "единственный", items: null });
 });
 
 test("splitList: no dash → plain text", () => {
-  assert.deepEqual(xyChgk.splitList("обычный текст"), { preamble: "обычный текст", items: null });
+  assert.deepEqual(chgk4s.splitList("обычный текст"), { preamble: "обычный текст", items: null });
 });
 
 test("splitList handles a blitz question (no preamble, multiple items)", () => {
-  const r = xyChgk.splitList("- Первый вопрос?\n- Второй вопрос?\n- Третий вопрос?");
+  const r = chgk4s.splitList("- Первый вопрос?\n- Второй вопрос?\n- Третий вопрос?");
   assert.equal(r.preamble, "");
   assert.deepEqual(r.items, ["Первый вопрос?", "Второй вопрос?", "Третий вопрос?"]);
 });
 
 test("renderRuns screen mode strips host brackets and accents", () => {
-  const runs = xyChgk.renderRuns("текст [ведущему] сл́ово", { accents: true, brackets: true });
+  const runs = chgk4s.renderRuns("текст [ведущему] сл́ово", { accents: true, brackets: true });
   const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
   assert.ok(!flat.includes("["), "host brackets removed");
   assert.ok(!flat.includes("́"), "accent removed");
 });
 
 test("renderRuns answer-style (accents only) keeps brackets", () => {
-  const runs = xyChgk.renderRuns("Москва [и область]", { accents: true, brackets: false });
+  const runs = chgk4s.renderRuns("Москва [и область]", { accents: true, brackets: false });
   const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
   assert.ok(flat.includes("[и область]"), "brackets kept for answer/zachet");
 });
 
 test("replaceNoBreak glues short prepositions and particles with NBSP", () => {
-  assert.equal(xyChgk.replaceNoBreak("в лесу"), "в лесу");
-  assert.equal(xyChgk.replaceNoBreak("сделал бы"), "сделал бы");
-  assert.equal(xyChgk.replaceNoBreak("то да сё"), "то да сё");
+  assert.equal(chgk4s.replaceNoBreak("в лесу"), "в лесу");
+  assert.equal(chgk4s.replaceNoBreak("сделал бы"), "сделал бы");
+  assert.equal(chgk4s.replaceNoBreak("то да сё"), "то да сё");
 });
 
 test("replaceNoBreak uses a non-breaking hyphen in short hyphenated words", () => {
-  assert.equal(xyChgk.replaceNoBreak("из-за"), "из‑за");
+  assert.equal(chgk4s.replaceNoBreak("из-за"), "из‑за");
   // a stray spaced hyphen must NOT turn every hyphen non-breaking
-  assert.equal(xyChgk.replaceNoBreak("кто - то"), "кто - то");
+  assert.equal(chgk4s.replaceNoBreak("кто - то"), "кто - то");
 });
 
 test("replaceNoBreak leaves URLs untouched", () => {
-  assert.equal(xyChgk.replaceNoBreak("см. http://a.com/x_y и тут"), "см. http://a.com/x_y и тут");
+  assert.equal(chgk4s.replaceNoBreak("см. http://a.com/x_y и тут"), "см. http://a.com/x_y и тут");
 });
 
 test("fixTrelloFormatting collapses double line breaks and unescapes markers", () => {
   const raw = "\\### Тур 1\n\n? Вопрос\n\n\\@ Автор\n\n  отступ\n\\- пункт";
-  const out = xyChgk.fixTrelloFormatting(raw);
+  const out = chgk4s.fixTrelloFormatting(raw);
   assert.equal(out, "### Тур 1\n? Вопрос\n@ Автор\nотступ\n- пункт");
 });
 
 test("fixTrelloFormatting collapses Trello smart-link [url](url) to a bare url", () => {
   const raw = "см. [https://example.com/a_b](https://example.com/a_b) тут";
-  assert.equal(xyChgk.fixTrelloFormatting(raw), "см. https://example.com/a_b тут");
+  assert.equal(chgk4s.fixTrelloFormatting(raw), "см. https://example.com/a_b тут");
 });
 
 test("fixTrelloFormatting keeps real markdown links (text != url) intact", () => {
   const raw = "[пример](https://example.com)";
-  assert.equal(xyChgk.fixTrelloFormatting(raw), "[пример](https://example.com)");
+  assert.equal(chgk4s.fixTrelloFormatting(raw), "[пример](https://example.com)");
 });
 
 test("fixTrelloFormatting strips code fences", () => {
-  assert.equal(xyChgk.fixTrelloFormatting("```\n? q\n```"), "\n? q\n");
+  assert.equal(chgk4s.fixTrelloFormatting("```\n? q\n```"), "\n? q\n");
 });
 
 // ── structured fields ────────────────────────────────────────────────────────
-const { splitFields, composeFields } = xyChgk;
+const { splitFields, composeFields } = chgk4s;
 
 test("splitFields separates known question fields", () => {
   const desc = "№№ 5\n> (img map.png)\n? Что на схеме?\n! круг\n= окружность\n!= квадрат\n/ комментарий\n^ книга\n@ Иванов, Пётр";
@@ -445,53 +445,53 @@ test("unmodelled blocks survive as extra", () => {
 // ---- card-preview modes (users.card_title) ----
 
 test("answerText returns the '! ' block, or '' when there is none", () => {
-  assert.equal(xyChgk.answerText("? Кто?\n! Пушкин\n/ комментарий"), "Пушкин");
-  assert.equal(xyChgk.answerText("? Кто?"), "");
+  assert.equal(chgk4s.answerText("? Кто?\n! Пушкин\n/ комментарий"), "Пушкин");
+  assert.equal(chgk4s.answerText("? Кто?"), "");
 });
 
 test("previewText in answer mode previews a question by its answer", () => {
   const desc = "? Длинный текст вопроса\n! Пушкин";
-  assert.equal(xyChgk.previewText("question", desc, "answer"), "Пушкин");
-  assert.equal(xyChgk.previewText("question", desc, "question"), "Длинный текст вопроса");
+  assert.equal(chgk4s.previewText("question", desc, "answer"), "Пушкин");
+  assert.equal(chgk4s.previewText("question", desc, "question"), "Длинный текст вопроса");
   // No mode is the historic default.
-  assert.equal(xyChgk.previewText("question", desc), "Длинный текст вопроса");
+  assert.equal(chgk4s.previewText("question", desc), "Длинный текст вопроса");
 });
 
 test("an answerless question falls back to its text rather than previewing blank", () => {
-  assert.equal(xyChgk.previewText("question", "? Кто?", "answer"), "Кто?");
+  assert.equal(chgk4s.previewText("question", "? Кто?", "answer"), "Кто?");
 });
 
 test("answer mode does not touch non-question cards", () => {
-  assert.equal(xyChgk.previewText("heading", "### Тур 1", "answer"), "Тур 1");
-  assert.equal(xyChgk.previewText("meta", "# Дата", "answer"), "Дата");
+  assert.equal(chgk4s.previewText("heading", "### Тур 1", "answer"), "Тур 1");
+  assert.equal(chgk4s.previewText("meta", "# Дата", "answer"), "Дата");
 });
 
 // ---- the auto-preview starts at the question itself (issue #98) ----
 
 test("a question previews past a leading Внимание sentence", () => {
-  assert.equal(xyChgk.previewText("question", "? Внимание, в вопросе есть замены. Икс сделал Игрек."), "Икс сделал Игрек.");
-  assert.equal(xyChgk.previewText("question", "? ВНИМАНИЕ! Вопрос в двух частях.\nПервая часть."), "Вопрос в двух частях.\nПервая часть.");
+  assert.equal(chgk4s.previewText("question", "? Внимание, в вопросе есть замены. Икс сделал Игрек."), "Икс сделал Игрек.");
+  assert.equal(chgk4s.previewText("question", "? ВНИМАНИЕ! Вопрос в двух частях.\nПервая часть."), "Вопрос в двух частях.\nПервая часть.");
   // a Внимание line with no full stop ends at its line
-  assert.equal(xyChgk.previewText("question", "? Внимание, блиц\nПервый вопрос."), "Первый вопрос.");
+  assert.equal(chgk4s.previewText("question", "? Внимание, блиц\nПервый вопрос."), "Первый вопрос.");
 });
 
 test("a question previews past a leading handout bracket", () => {
-  assert.equal(xyChgk.previewText("question", "? [Раздаточный материал: (img foto.jpg)]\nНа фото Икс."), "На фото Икс.");
-  assert.equal(xyChgk.previewText("question", "? [Раздаточный материал:\nстрока один\nстрока два]\nВнимание, замена.\nЭто Икс."), "Это Икс.");
+  assert.equal(chgk4s.previewText("question", "? [Раздаточный материал: (img foto.jpg)]\nНа фото Икс."), "На фото Икс.");
+  assert.equal(chgk4s.previewText("question", "? [Раздаточный материал:\nстрока один\nстрока два]\nВнимание, замена.\nЭто Икс."), "Это Икс.");
 });
 
 test("only the lead is skipped, and a question that is nothing but a lead keeps it", () => {
-  assert.equal(xyChgk.previewText("question", "? Он сказал: «Внимание, мотор!». Кто он?"), "Он сказал: «Внимание, мотор!». Кто он?");
-  assert.equal(xyChgk.previewText("question", "? Икс. [Раздаточный материал: текст] Кто?"), "Икс. [Раздаточный материал: текст] Кто?");
-  assert.equal(xyChgk.previewText("question", "? Внимание, замена."), "Внимание, замена.");
+  assert.equal(chgk4s.previewText("question", "? Он сказал: «Внимание, мотор!». Кто он?"), "Он сказал: «Внимание, мотор!». Кто он?");
+  assert.equal(chgk4s.previewText("question", "? Икс. [Раздаточный материал: текст] Кто?"), "Икс. [Раздаточный материал: текст] Кто?");
+  assert.equal(chgk4s.previewText("question", "? Внимание, замена."), "Внимание, замена.");
   // «Вниманием» is a word, not the lead-in
-  assert.equal(xyChgk.previewText("question", "? Вниманием публики владел Икс."), "Вниманием публики владел Икс.");
+  assert.equal(chgk4s.previewText("question", "? Вниманием публики владел Икс."), "Вниманием публики владел Икс.");
   // answer mode shows the answer as before
-  assert.equal(xyChgk.previewText("question", "? Внимание, замена. Кто?\n! Икс", "answer"), "Икс");
+  assert.equal(chgk4s.previewText("question", "? Внимание, замена. Кто?\n! Икс", "answer"), "Икс");
 });
 
 // ---- what a card offers to copy (issue #45) ----
-const { copyTargets } = xyChgk;
+const { copyTargets } = chgk4s;
 
 test("a numberless question with nothing else offers exactly one thing to copy", () => {
   const t = copyTargets("? Простой вопрос?", null);
@@ -652,7 +652,7 @@ test("an imported «!!АвторкаМария» is recovered rather than shown 
 // ---- hidden comments (chgksuite 1.4.0b1) ----
 // (hidden-comment …) is an editor's note that reaches no rendering. Only Текст
 // (the source verbatim) and Поля (whose fields are raw 4s) show one.
-const { previewText } = xyChgk;
+const { previewText } = chgk4s;
 
 test("a hidden comment reaches no rendering", () => {
   assert.equal(screenText("Текст (hidden-comment проверить у Ани) дальше."), "Текст дальше.");
@@ -678,10 +678,10 @@ test("a раздатка carries no hidden comment to the print", () => {
 });
 
 test("a handout line that starts with a marker survives the fields round trip (issue #103)", () => {
-  const f = xyChgk.splitFields("? Текст");
+  const f = chgk4s.splitFields("? Текст");
   f.handout = { kind: "text", text: "> раз\n< два\n\\> три" };
-  const desc = xyChgk.composeFields(f);
+  const desc = chgk4s.composeFields(f);
   assert.ok(desc.includes("\n\\> раз") && desc.includes("\n\\\\> три"), desc);
   assert.deepEqual(parseBlocks(desc).map((b) => b.type), ["question"]);
-  assert.equal(xyChgk.splitFields(desc).handout.text, "> раз\n< два\n\\> три");
+  assert.equal(chgk4s.splitFields(desc).handout.text, "> раз\n< два\n\\> три");
 });

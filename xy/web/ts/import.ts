@@ -25,7 +25,7 @@ import { xyCrypto } from "./crypto.js";
 import { xyInstance } from "./instance.js";
 import { encodePayload } from "./eventpayload.js";
 import { xyRank } from "./rank.js";
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 import { xyTrello } from "./trellomodel.js";
 import type { RawDescEdit } from "./trellomodel.js";
 import { importBundle, createBoardFromBundle } from "./bundleimport.js";
@@ -338,7 +338,7 @@ function trelloBundle(source: ImportSource, name: string): { bundle: Bundle; byt
         if (lid != null) cardLabels.push({ card_id: cardId, label_id: lid, session_id: null });
       }
       for (const cm of (source.history.comments.get(c.id) || [])) {
-        const body = xyChgk.fixTrelloFormatting(cm.text || "");
+        const body = chgk4s.fixTrelloFormatting(cm.text || "");
         event({
           card_id: cardId, session_id: null, type: "comment",
           created_at: cm.date || new Date().toISOString(),

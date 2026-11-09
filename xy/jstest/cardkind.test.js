@@ -3,9 +3,10 @@
 // answers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyCardKind } from "../web/assets/static/dist/cardkind.js";
+import { cardKinds } from "../web/assets/static/dist/chgk/cardkind.js";
+import { label } from "../web/assets/static/dist/kindlabel.js";
 
-const K = xyCardKind;
+const K = cardKinds;
 
 // kind, numbered, exported, carriesHandouts, versioned, exportMarker,
 // restartsThemes, setsBase, game of a scope holding it, pickable
@@ -77,8 +78,8 @@ test("cardkind: a theme's ladder is its game's", () => {
 });
 
 test("cardkind: the kinds people pick or see have a label, the others none", () => {
-  for (const k of K.pickable) assert.ok(K.label(k), k);
-  assert.ok(K.label("handouts_preamble"));
-  assert.equal(K.label("normal"), null);
-  assert.equal(K.label("test"), null);
+  for (const k of K.pickable) assert.ok(label(k), k);
+  assert.ok(label("handouts_preamble"));
+  assert.equal(label("normal"), null);
+  assert.equal(label("test"), null);
 });

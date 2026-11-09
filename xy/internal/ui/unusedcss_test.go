@@ -276,7 +276,7 @@ var knownUnstyled = map[string]bool{
 // were not.
 func TestNoUndefinedCSSClasses(t *testing.T) {
 	defined := map[string]bool{}
-	for _, path := range []string{"../../web/assets/static/styles.css", "../../../dopeuikit/assets/core.css"} {
+	for _, path := range []string{"../../web/assets/static/styles.css", "../../../dopeuikit/assets/core.css", "../../../chgksuite/web/preview.css"} {
 		css, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
@@ -368,7 +368,7 @@ func resolveSpace(v string, scale map[string]int) (int, bool) {
 func TestHeadingsSitWithTheirContent(t *testing.T) {
 	scale := map[string]int{}
 	var css strings.Builder
-	for _, path := range []string{"../../../dopeuikit/assets/core.css", "../../web/assets/static/styles.css"} {
+	for _, path := range []string{"../../../dopeuikit/assets/core.css", "../../../chgksuite/web/preview.css", "../../web/assets/static/styles.css"} {
 		b, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)

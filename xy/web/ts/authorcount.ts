@@ -4,13 +4,13 @@
 // what a fee is divided by.
 
 import S from "./i18nstrings.js";
-import { xyChgk, type ChgkCard } from "./chgk.js";
+import { chgk4s, type ChgkCard } from "./chgk/chgk.js";
 import { xyVersions } from "./versions.js";
 import { xyFind } from "./find.js";
-import { authorsOf as themeAuthorsOf, splitTheme } from "./themes.js";
+import { authorsOf as themeAuthorsOf, splitTheme } from "./chgk/themes.js";
 import { xyApp } from "./app.js";
 import { iconed } from "./icons_gen.js";
-import { counter, numbered } from "./cardkind.js";
+import { counter, numbered } from "./chgk/cardkind.js";
 import type { ListPanel, PanelShell } from "./panels.js";
 
 const PERCENT = 100;
@@ -38,12 +38,12 @@ function displayName(name: string): string {
 }
 
 function authorsOf(card: ChgkCard): string[] {
-  const names = xyChgk.splitFields(xyVersions.versionBody(card.desc, 0)).authors || [];
+  const names = chgk4s.splitFields(xyVersions.versionBody(card.desc, 0)).authors || [];
   return names.filter((n) => authorKey(n));
 }
 
 export function countAuthors(cards: ReadonlyArray<ChgkCard>, upTo: string, includeZero: boolean): AuthorCount {
-  const numbers = xyChgk.numberQuestionCards(cards);
+  const numbers = chgk4s.numberQuestionCards(cards);
   // zero marks a zero-numbered question, one whose own number says so. A
   // theme's questions are never zero ones, though their "theme.points" number
   // is not a plain integer, so the kind decides that, not the number's spelling.
@@ -51,7 +51,7 @@ export function countAuthors(cards: ReadonlyArray<ChgkCard>, upTo: string, inclu
   cards.forEach((card, i) => {
     const n = numbers[i];
     if (n == null) return;
-    if (counter(card.kind) !== "theme") { questions.push({ names: authorsOf(card), number: n, zero: xyChgk.isZeroNumber(n) }); return; }
+    if (counter(card.kind) !== "theme") { questions.push({ names: authorsOf(card), number: n, zero: chgk4s.isZeroNumber(n) }); return; }
     // A theme is not one question: it is paid by the questions inside it, each
     // numbered «theme.points» so the cutoff and the numbers column still read as
     // positions in the tour. A question's own author wins over the theme's.

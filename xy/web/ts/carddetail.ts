@@ -14,25 +14,27 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { sealPayload } from "./eventpayload.js";
 import { xySync } from "./sync.js";
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 import { xyVersions } from "./versions.js";
-import { blankTheme, composeTheme, isFilled, splitTheme, swapSlots, withSlot, type Theme } from "./themes.js";
+import { blankTheme, composeTheme, isFilled, splitTheme, swapSlots, withSlot, type Theme } from "./chgk/themes.js";
 import { xyTypo } from "./typo.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import { normalizeAlias, xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
-import { forListType, isTheme as holdsTheme, KIND, ladder, label as kindLabel, numbered, versioned } from "./cardkind.js";
+import { forListType, isTheme as holdsTheme, KIND, ladder, numbered, versioned } from "./chgk/cardkind.js";
+import { label as kindLabel } from "./kindlabel.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import { parseAppeal } from "./appeals.js";
 import { appealHeading, verdictLines, type AppealCard } from "./appealcard.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
-import type { CardFields, CopyTarget, Handout } from "./chgk.js";
+import type { CardFields, CopyTarget, Handout } from "./chgk/chgk.js";
 import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 import type { Transfer } from "./transfer.js";
 import { icon, iconed } from "./icons_gen.js";
 import S from "./i18nstrings.js";
+import chgkStrings from "./chgk/i18nstrings.js";
 
 const { fetchJSON, jpost, jput, jdelete, el, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
@@ -445,7 +447,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       }
     };
     for (const c of state().cards) {
-      if (c.kind === KIND.question) add(pick(xyChgk.splitFields(c.desc)));
+      if (c.kind === KIND.question) add(pick(chgk4s.splitFields(c.desc)));
       // A theme's authors and sources are those of the questions inside it.
       else if (holdsTheme(c.kind)) for (const slot of splitTheme(c.desc).slots) add(pick(slot.fields));
     }
@@ -710,7 +712,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function imageInsert(input: HTMLTextAreaElement): HTMLElement {
     const thumbs = el("div", { class: "tl-draft-imgs", hidden: true });
     const refresh = (): void => {
-      void fillThumbs(thumbs, xyChgk.imgRefs(input.value), (name) => {
+      void fillThumbs(thumbs, chgk4s.imgRefs(input.value), (name) => {
         const ref = new RegExp(String.raw`[ \t]*\(img\s+(?:\S+\s+)*` + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + String.raw`\)`, "g");
         replaceField(input, input.value.replace(ref, "").trim());
       });
@@ -808,7 +810,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // sourceRow is one line of the sources: text, or a picture when the whole line is
   // one (img …). The row's toggle switches between the two.
   function sourceRow(val: string, asImage: boolean, suggestions: string[], onEnter: () => void): { row: HTMLElement; remove: HTMLElement; read(): string; focusable(): HTMLElement } {
-    const whole = xyChgk.imgRefs(val);
+    const whole = chgk4s.imgRefs(val);
     const isImage = asImage || (whole.length === 1 && /^\(img\s[^\n]*\)$/.test(val.trim()));
     // A line as written, (img w=… name) sizes and all, survives until its picture changes.
     const original = isImage ? val.trim() : "";
@@ -851,17 +853,17 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // "!!override" — the AUTHOR_LABELS captions (issue #44).
   function buildAuthorsField(initial: string[] | null, suggestions: string[], label: string | null): FieldReader<AuthorsValue> {
     const wrap = el("div", { class: "fld" });
-    const addBtn = el("button", { class: "fld-add", type: "button", text: S.card.field.add(xyChgk.AUTHOR_LABELS[0]), title: S.card.field.addTitle() });
+    const addBtn = el("button", { class: "fld-add", type: "button", text: S.card.field.add(chgk4s.AUTHOR_LABELS[0]), title: S.card.field.addTitle() });
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: S.card.field.removeTitle() });
     const labelSel = el("select", { class: "fld-label-select", title: S.card.authors.captionTitle() }) as HTMLSelectElement;
-    for (const l of xyChgk.AUTHOR_LABELS) labelSel.append(el("option", { value: l, text: l }));
+    for (const l of chgk4s.AUTHOR_LABELS) labelSel.append(el("option", { value: l, text: l }));
     // A card may already carry a caption of its own (a custom "!!" override). It
     // gets its own entry rather than being silently folded into the default
     // caption — nothing an editor wrote is thrown away by opening the card.
-    if (label && !(xyChgk.AUTHOR_LABELS as readonly string[]).includes(label)) {
+    if (label && !(chgk4s.AUTHOR_LABELS as readonly string[]).includes(label)) {
       labelSel.append(el("option", { value: label, text: label }));
     }
-    labelSel.value = label || xyChgk.AUTHOR_LABELS[0];
+    labelSel.value = label || chgk4s.AUTHOR_LABELS[0];
     const head = el("div", { class: "fld-head" }, labelSel, rmBtn);
     const tags = el("div", { class: "fld-tags" });
     const tagSet: string[] = [];
@@ -905,7 +907,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (isTheme()) { renderThemeFields(); return; }
     if (isAppeal()) { renderAppealFields(); return; }
     const source = versionDesc();
-    const f = xyChgk.splitFields(source);
+    const f = chgk4s.splitFields(source);
     // A brand-new card pre-fills the user's default author (a /profile setting)
     // and opens the two fields every question has, ready to type into.
     const fresh = freshCard && !draft.desc.trim();
@@ -945,7 +947,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       hndt: buildField(S.card.field.hndt(), "area", draft.meta, { muted: true }),
     };
     const c = openCardCard();
-    const rest = xyChgk.fieldOrder(!!c && deps.commentFirst(c.listId)).map((f) => (f === "source" ? "sources" : f === "author" ? "authors" : f));
+    const rest = chgk4s.fieldOrder(!!c && deps.commentFirst(c.listId)).map((f) => (f === "source" ? "sources" : f === "author" ? "authors" : f));
     const order = ["handout", "question", ...rest] as const;
     return { nodes: order.map((k) => R[k].node), hndt: R.hndt, readers: R };
   }
@@ -1155,7 +1157,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // readCardFields collapses the fields editor back into a 4s description + handout
   // settings, preserving the pre-question and unmodelled blocks captured at render time.
   function readCardFields(R: FieldReaders): { desc: string; meta: string | null } {
-    return { desc: xyChgk.composeFields(readQuestionFields(R, cardFieldsPre, cardFieldsExtra)), meta: R.hndt.read() };
+    return { desc: chgk4s.composeFields(readQuestionFields(R, cardFieldsPre, cardFieldsExtra)), meta: R.hndt.read() };
   }
 
   // renderCardPreview renders the open card's draft the docx way (single-card
@@ -1675,7 +1677,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     captureDraft(); // copy what is on screen, not what was last saved
     const targets = isTheme()
       ? themeCopyTargets(versionDesc(), deps.questionNumberFor(card))
-      : xyChgk.copyTargets(versionDesc(), deps.questionNumberFor(card));
+      : chgk4s.copyTargets(versionDesc(), deps.questionNumberFor(card));
     if (targets.length === 1) { copyAndReport(targets[0]); return; }
     deps.popupMenu(ui.copy, targets.map((t) => ({ label: t.label, onClick: () => copyAndReport(t) })));
   });
@@ -1686,16 +1688,16 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // question at a time, like everything else here.
   function themeCopyTargets(desc: string, number: string | null): CopyTarget[] {
     const t = splitTheme(desc);
-    const label = S.fsource.theme.defaultLabel(number ?? "", t.name);
+    const label = chgkStrings.fsource.theme.defaultLabel(number ?? "", t.name);
     const out: CopyTarget[] = [{ label: S.card.slot.copyTheme(), text: label }];
     const whole: string[] = [label];
     for (const slot of t.slots) {
       if (!isFilled(slot)) continue;
       const head = S.card.slot.head(slot.number);
-      for (const c of xyChgk.copyTargets(xyChgk.composeFields(slot.fields), slot.number)) {
+      for (const c of chgk4s.copyTargets(chgk4s.composeFields(slot.fields), slot.number)) {
         out.push({ ...c, label: `${head}: ${c.label}` });
       }
-      whole.push(S.card.slot.copyQuestion(slot.number, xyChgk.screenText(slot.fields.question ?? "")));
+      whole.push(S.card.slot.copyQuestion(slot.number, chgk4s.screenText(slot.fields.question ?? "")));
     }
     out.push({ label: S.card.slot.copyWhole(), text: whole.join("\n\n") });
     return out;

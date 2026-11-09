@@ -2,8 +2,10 @@
 // in the "source" state: one box for a link or a whole question, which grows
 // as a pasted question does. A link loads (/api/nominate/load), a text
 // parses (/api/nominate/parse), and the card turns to the "editor" state:
-// tabs for the preview, the fields and the box, then the two links. The box
-// then holds the question as text (/api/nominate/preview writes it), and a
+// tabs for the preview, the fields and the box, then the two links. The
+// preview is chgksuite's question renderer (chgksuite/web/ts/preview.ts, xy's
+// too) drawing the fields as a 4s card. The box then holds the question as
+// text (/api/nominate/preview writes it), and a
 // change to it is parsed back into the fields on leaving the tab, the way
 // xy's 4s tab and its fields follow each other. The tab is remembered in a
 // hidden slotN_view input, so a form shown again opens where it was. An
@@ -16,7 +18,8 @@
 // script the buttons post the form, which does the same and comes back
 // unsaved.
 import S from "./i18nstrings.js";
-import { isLoadable, isSingleLink, PARSED_FIELDS, type Parsed } from "./nominate-model.js";
+import { renderPreviewCard } from "../../../../chgksuite/web/ts/preview.js";
+import { fourS, imageLinks, isLoadable, isSingleLink, PARSED_FIELDS, type Parsed, type ParsedField } from "./nominate-model.js";
 
 type Control = HTMLInputElement | HTMLTextAreaElement;
 
@@ -42,29 +45,37 @@ function fitAll(root: Element): void {
   for (const ta of root.querySelectorAll<HTMLTextAreaElement>("textarea[data-autogrow]")) fit(ta);
 }
 
-type Rendered = { html: string; text: string };
-
-// render asks for the question as the preview shows it and as text.
-async function render(card: HTMLElement): Promise<Rendered | null> {
-  const body: Record<string, string> = {};
-  for (const name of PARSED_FIELDS) body[name] = field(card, name)?.value ?? "";
-  const res = await ask<Rendered>("/api/nominate/preview", body);
-  return typeof res === "string" ? null : res;
+function fields(card: HTMLElement): Record<ParsedField, string> {
+  const out = {} as Record<ParsedField, string>;
+  for (const name of PARSED_FIELDS) out[name] = field(card, name)?.value ?? "";
+  return out;
 }
 
-async function refreshPreview(card: HTMLElement): Promise<void> {
-  const res = await render(card);
+// render asks for the question as text.
+async function render(card: HTMLElement): Promise<string | null> {
+  const res = await ask<{ text: string }>("/api/nominate/preview", fields(card));
+  return typeof res === "string" ? null : res.text;
+}
+
+function refreshPreview(card: HTMLElement): void {
   const el = card.querySelector<HTMLElement>("[data-panel=preview] .richtext");
-  if (el && res) el.innerHTML = res.html;
+  if (!el) return;
+  const f = fields(card);
+  if (!f.text.trim() && !f.answer.trim()) {
+    el.replaceChildren(Object.assign(document.createElement("p"), { textContent: S.nominate.slot.previewEmpty() }));
+    return;
+  }
+  const images = new Map(imageLinks(f.handout).map((u) => [u, u]));
+  el.replaceChildren(renderPreviewCard({ id: 0, kind: "question", desc: fourS(f) }, null, images, false));
 }
 
 // composeText writes the fields into the box as text.
 async function composeText(card: HTMLElement): Promise<void> {
-  const res = await render(card);
+  const text = await render(card);
   const raw = field(card, "raw");
-  if (!res || !raw) return;
-  raw.value = res.text;
-  card.dataset.composed = res.text;
+  if (text === null || !raw) return;
+  raw.value = text;
+  card.dataset.composed = text;
   syncButtons(card);
   fitAll(card);
 }
@@ -101,7 +112,7 @@ function showView(card: HTMLElement, view: string): void {
   const input = field(card, "view");
   if (input) input.value = view;
   fitAll(card);
-  if (view === "preview") void refreshPreview(card);
+  if (view === "preview") refreshPreview(card);
   if (view === "text" && editing) void composeText(card);
 }
 

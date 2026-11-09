@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyVersions } from "../web/assets/static/dist/versions.js";
-import { xyChgk } from "../web/assets/static/dist/chgk.js";
+import { chgk4s } from "../web/assets/static/dist/chgk/chgk.js";
 
 // ---- question versions (issue #47) ----
 // A Version is a WHOLE 4s body — question, ответ, зачёт, раздатка and all —
@@ -12,7 +12,7 @@ const {
   splitVersions, versionBody, versionName, setVersionBody, setVersionName,
   addVersion, removeVersion, promoteVersion, convertLegacyVersions, composeVersions,
 } = xyVersions;
-const { splitFields } = xyChgk;
+const { splitFields } = chgk4s;
 
 const TWO = [
   "(hidden-comment xy-version:)",
@@ -103,8 +103,8 @@ test("a name cannot break out of its own directive", () => {
 // is xy's own metadata and parseBlocks drops it.
 
 test("the board previews version 1 and never the separator", () => {
-  assert.equal(xyChgk.previewText("question", TWO, null), "Первая?");
-  assert.equal(xyChgk.questionText(TWO), "Первая?");
+  assert.equal(chgk4s.previewText("question", TWO, null), "Первая?");
+  assert.equal(chgk4s.questionText(TWO), "Первая?");
   assert.equal(splitFields(TWO).question, "Первая?");
   assert.equal(splitFields(TWO).answer, "Ответ раз");
 });

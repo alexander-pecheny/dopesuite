@@ -43,6 +43,26 @@ func xySources() []string {
 	return out
 }
 
+// chgkSources are chgksuite's browser modules: the 4s parser and the question
+// renderer (chgksuite/web/ts). xy imports them as modules of its own from
+// "./chgk/<name>.js", built under dist/chgk/ the way the kit's are under
+// dist/kit/, and web/ts/chgk/<name>.d.ts is how tsc follows that URL. qy
+// bundles them.
+func chgkSources() []string {
+	files, err := os.ReadDir("chgksuite/web/ts")
+	if err != nil {
+		fatal(err.Error())
+	}
+	var out []string
+	for _, f := range files {
+		name := f.Name()
+		if strings.HasSuffix(name, ".ts") && !strings.HasSuffix(name, ".d.ts") {
+			out = append(out, "chgksuite/web/ts/"+name)
+		}
+	}
+	return out
+}
+
 // xyPrecache derives the service worker's app-shell manifest from the build
 // graph and the shipped asset dirs, plus a content-hash cache version — the
 // hand-typed list it replaces had already shipped one offline-504 regression
@@ -86,10 +106,15 @@ func xyPrecache() (urls []string, version string) {
 	hashFile("xy/web/assets/static/manifest.webmanifest")
 	addURL("/static/styles.css")
 	hashFile("dopeuikit/assets/core.css")
+	hashFile("chgksuite/web/preview.css")
 	hashFile("xy/web/assets/static/styles.css")
 	for _, src := range xySources() {
 		name := strings.TrimSuffix(filepath.Base(src), ".ts")
 		addURL("/static/dist/" + name + ".js")
+		hashFile(src)
+	}
+	for _, src := range chgkSources() {
+		addURL("/static/dist/chgk/" + strings.TrimSuffix(filepath.Base(src), ".ts") + ".js")
 		hashFile(src)
 	}
 	addURL("/static/menu.js")
@@ -270,6 +295,7 @@ func targets() []target {
 				},
 				{
 					EntryPointsAdvanced: entries("qy/qy/web/ts/", "forms-model", "nominate-model"),
+					Bundle:              true,
 					Format:              api.FormatESModule,
 					Outdir:              "qy/qy/web/jstest/dist",
 				},
@@ -286,6 +312,11 @@ func targets() []target {
 					EntryPointsAdvanced: entries("dopeuikit/assets/ts/", xyKitModules...),
 					Format:              api.FormatESModule,
 					Outdir:              "xy/web/assets/static/dist/kit",
+				},
+				{
+					EntryPoints: chgkSources(),
+					Format:      api.FormatESModule,
+					Outdir:      "xy/web/assets/static/dist/chgk",
 				},
 				xySWBuild(),
 			}

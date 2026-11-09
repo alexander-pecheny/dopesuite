@@ -33,6 +33,12 @@ const kitDisk = "../dopeuikit/assets"
 // of the app layer, the fonts, login.js, menu.js — wired in for both modes;
 // the app names its embedded FS and the disk roots that switch on dev mode.
 func Assets(embedded fs.FS, diskRoots ...string) *webassets.Assets {
+	return AssetsWithLayers(embedded, nil, diskRoots...)
+}
+
+// AssetsWithLayers is Assets with library stylesheets served between core.css
+// and the app layer (webassets.Config.Layers).
+func AssetsWithLayers(embedded fs.FS, layers []webassets.Layer, diskRoots ...string) *webassets.Assets {
 	js := func(name string) webassets.SharedFile {
 		return webassets.SharedFile{Path: "/static/" + name, DiskPath: kitDisk + "/dist/" + name, ContentType: "text/javascript; charset=utf-8"}
 	}
@@ -43,6 +49,7 @@ func Assets(embedded fs.FS, diskRoots ...string) *webassets.Assets {
 		DiskRoots:       diskRoots,
 		CoreCSS:         CoreCSS,
 		CoreCSSDiskPath: kitDisk + "/core.css",
+		Layers:          layers,
 		Fonts:           Fonts,
 		FontsDiskRoot:   kitDisk,
 		Shared:          []webassets.SharedFile{login, menu},

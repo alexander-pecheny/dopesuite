@@ -33,9 +33,12 @@ container image instead.
   `typstwasm/typst.wasm`. Do it once per clone and again only on a typst
   bump. Every recipe that compiles typstwasm fails with that instruction until
   the file exists.
-- **Two generators write into xy.** `go generate ./fsource` writes
-  `../xy/web/ts/markers_gen.ts` and `go generate ./cardkind` writes
-  `../xy/web/ts/cardkind_gen.ts`. `just generate-check` fails if either is
+- **The browser's half lives in web/ts.** The 4s parser and the question
+  renderer (`chgk.ts`, `preview.ts`, `themes.ts`, `cardkind.ts`) are shared by
+  xy, which loads them from /static/dist/chgk/, and qy, which bundles them.
+  Their strings are this module's catalog, generated into web/ts too.
+  `go generate ./fsource` writes `web/ts/markers_gen.ts` and
+  `go generate ./cardkind` writes `web/ts/cardkind_gen.ts`. `just generate-check` fails if either is
   stale. Several testdata corpora are also read by xy's jstest suite:
   `fsource/testdata/parity.json`, `listexport/testdata/cases.json`,
   `typoedit/testdata/pass_cases.json` and `xyenvelope/testdata/envelope.json`.
@@ -87,7 +90,7 @@ cardkind/              the Card Kinds and what each does (numbered and in which 
                        the Theme count, sets the base, sets the tour's game, its theme ladder, offered in the kind menu).
                        One table: xy's allow-list is Valid, xy's tests hold the cards.kind CHECK
                        and board.dopeui's kind menu to it, listexport and xy-cli ask it, and
-                       `go generate` writes it into xy/web/ts/cardkind_gen.ts for cardkind.ts
+                       `go generate` writes it into web/ts/cardkind_gen.ts for cardkind.ts
 fsource/               the "4s" format, both ways: parse.go = parse_4s (oracle-tested vs
                        chgksuite --debug), compose.go = compose_4s (structure → 4s text).
                        testdata/parity.json is the Go/TS corpus: every fixture line split
@@ -95,7 +98,7 @@ fsource/               the "4s" format, both ways: parse.go = parse_4s (oracle-t
                        Go parses; parity_test.go is the oracle (regenerate with
                        `go test ./fsource -run TestParity -update`),
                        xy/jstest/fsource_parity.test.js the other reader. markerMapping is the
-                       one marker table: `go generate` writes xy/web/ts/markers_gen.ts
+                       one marker table: `go generate` writes web/ts/markers_gen.ts
 typo/                  typotools.py: the typography pass (quotes/dashes/stress accents/
                        %-decoding) + URL-aware underscore escaping
 typoedit/              the typography pass: typo (quotes, dashes and %-decoding, which is every

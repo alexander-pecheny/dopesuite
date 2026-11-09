@@ -1391,7 +1391,7 @@ export function composeFields(f: Partial<CardFields>): string {
   return out.join("\n");
 }
 
-export const xyChgk = {
+export const chgk4s = {
   parseBlocks, splitMarker, startsBlock, fieldOrder, opensQuestion, numberDirective, questionText, answerText, blockText, previewText, imgName, imgRefs, imageRefs,
   isZeroNumber, numberQuestionCards, themeLabel,
   removeAccents, removeSquareBrackets, screenText, parse4sElem,

@@ -1,4 +1,4 @@
-// genkinds writes xy/web/ts/cardkind_gen.ts from cardkind.All, so the browser and
+// genkinds writes web/ts/cardkind_gen.ts from cardkind.All, so the browser and
 // the server cannot drift on what a Card Kind does.
 package main
 

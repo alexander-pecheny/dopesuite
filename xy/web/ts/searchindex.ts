@@ -12,7 +12,7 @@
 // ES module.
 
 import { xyApp } from "./app.js";
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 import { xyCrypto } from "./crypto.js";
 import type { DataKey } from "./crypto.js";
 import { byRank } from "./dragrank.js";
@@ -282,7 +282,7 @@ export interface TitleableCard { kind: string; desc: string; alias: string | nul
 export function cardTitle(c: TitleableCard, mode: string | null = null, blank = S.search.blank()): string {
   const alias = (c.alias || "").trim();
   if (alias) return alias;
-  return xyChgk.previewText(c.kind, c.desc, mode).trim().split("\n")[0] || blank;
+  return chgk4s.previewText(c.kind, c.desc, mode).trim().split("\n")[0] || blank;
 }
 
 // One board's text folded for searching. Folding is most of the cost of a match,

@@ -46,8 +46,10 @@ type BoardsyncUploadStrings struct {
 
 // ChgkStrings is the chgk Surface.
 type ChgkStrings struct {
-	Author ChgkAuthorStrings
-	Label  ChgkLabelStrings
+	Author  ChgkAuthorStrings
+	Copy    ChgkCopyStrings
+	Label   ChgkLabelStrings
+	Preview ChgkPreviewStrings
 }
 
 type ChgkAuthorStrings struct {
@@ -57,8 +59,33 @@ type ChgkAuthorStrings struct {
 	Plural         func() string
 }
 
+type ChgkCopyStrings struct {
+	Handout            func() string
+	ImageHandoutNote   func(label string) string
+	Question           func() string
+	QuestionNumbered   func(number string) string
+	QuestionPiece      func(n string) string
+	QuestionUnnumbered func() string
+	QuestionWhole      func() string
+	QuestionWithAnswer func() string
+}
+
 type ChgkLabelStrings struct {
-	Handout func() string
+	Answer       func() string
+	Author       func() string
+	Comment      func() string
+	Date         func() string
+	Editor       func() string
+	Handout      func() string
+	Nezachet     func() string
+	Question     func() string
+	Source       func() string
+	SourcePlural func() string
+	Zachet       func() string
+}
+
+type ChgkPreviewStrings struct {
+	ImageMissing func(name string) string
 }
 
 // ChgkcliStrings is the chgkcli Surface.
@@ -213,7 +240,8 @@ type FsourceStrings struct {
 }
 
 type FsourceThemeStrings struct {
-	DefaultLabel func(n string, name string) string
+	DefaultLabel  func(n string, name string) string
+	ReserveNumber func(n string) string
 }
 
 // ImportStrings is the import Surface.
@@ -358,8 +386,38 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Chgk.Author.FemininePlural(), true
 	case "chgk.author.plural":
 		return s.Chgk.Author.Plural(), true
+	case "chgk.copy.handout":
+		return s.Chgk.Copy.Handout(), true
+	case "chgk.copy.question":
+		return s.Chgk.Copy.Question(), true
+	case "chgk.copy.question_unnumbered":
+		return s.Chgk.Copy.QuestionUnnumbered(), true
+	case "chgk.copy.question_whole":
+		return s.Chgk.Copy.QuestionWhole(), true
+	case "chgk.copy.question_with_answer":
+		return s.Chgk.Copy.QuestionWithAnswer(), true
+	case "chgk.label.answer":
+		return s.Chgk.Label.Answer(), true
+	case "chgk.label.author":
+		return s.Chgk.Label.Author(), true
+	case "chgk.label.comment":
+		return s.Chgk.Label.Comment(), true
+	case "chgk.label.date":
+		return s.Chgk.Label.Date(), true
+	case "chgk.label.editor":
+		return s.Chgk.Label.Editor(), true
 	case "chgk.label.handout":
 		return s.Chgk.Label.Handout(), true
+	case "chgk.label.nezachet":
+		return s.Chgk.Label.Nezachet(), true
+	case "chgk.label.question":
+		return s.Chgk.Label.Question(), true
+	case "chgk.label.source":
+		return s.Chgk.Label.Source(), true
+	case "chgk.label.source_plural":
+		return s.Chgk.Label.SourcePlural(), true
+	case "chgk.label.zachet":
+		return s.Chgk.Label.Zachet(), true
 	case "chgkcli.add_stats.custom_csv_flag":
 		return s.Chgkcli.AddStats.CustomCsvFlag(), true
 	case "chgkcli.board.board_url_prompt":
@@ -485,7 +543,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "boardsync.config.empty_url", "boardsync.config.unrecognized", "boardsync.fetch.card", "boardsync.fetch.list", "boardsync.upload.default_caption", "boardsync.upload.list_missing", "boardsync.upload.no_lists", "boardsync.upload.posted", "boardsync.upload.uploading", "chgk.author.default", "chgk.author.feminine", "chgk.author.feminine_plural", "chgk.author.plural", "chgk.label.handout", "chgkcli.add_stats.custom_csv_flag", "chgkcli.board.board_url_prompt", "chgkcli.board.empty_token", "chgkcli.board.initial_passphrase_prompt", "chgkcli.board.need_board_url", "chgkcli.board.no_answers_flag", "chgkcli.board.no_token", "chgkcli.board.nothing_to_upload", "chgkcli.board.only_answers_flag", "chgkcli.board.open_browser", "chgkcli.board.open_browser_tokens", "chgkcli.board.passphrase_prompt", "chgkcli.board.token_prompt", "chgkcli.docx.no_paragraph_flag", "chgkcli.docx.only_question_number_flag", "chgkcli.handouts.already_exists", "chgkcli.handouts.colour_suffix", "chgkcli.handouts.dimensions_note", "chgkcli.handouts.html_geometry_note", "chgkcli.handouts.pages_note", "chgkcli.handouts.scale_note", "chgkcli.handouts.skip_warning", "chgkcli.handouts.warn_question", "chgkcli.handouts.watch_note", "chgkcli.lj.genimp_flag", "chgkcli.parse.tour_numbers_as_words_flag", "chgkcli.shared.replace_no_break_hyphens_flag", "chgkcli.telegram.done", "chgkcli.telegram.posting", "chgkcli.telegram.stop_if_no_stats_flag", "chgkimport.error.no_4s", "chgkimport.error.no_questions", "chgkimport.error.too_big", "docs.docx.host_version", "docs.docx.screen_version", "docs.handout.bad_markup", "docs.handout.image_missing", "docs.handout.language_missing", "docs.handout.pack_multiple", "docs.handout.pack_no_grid", "docs.handout.pack_none", "docs.handout.preamble_setting", "docs.handout.rotate_image_missing", "docs.handout_list.by_number_lead", "docs.handout_list.by_tour_lead", "docs.handout_list.heading", "docs.handout_list.tour_none", "docs.handout_list.tour_numbers", "docs.image.missing", "docs.markdown.answer", "docs.markdown.author", "docs.markdown.comment", "docs.markdown.image_link", "docs.markdown.nezachet", "docs.markdown.question", "docs.markdown.source", "docs.markdown.zachet", "docs.pptx.question_caps", "docs.print.measure", "docs.print.measure_no_size", "docs.print.measure_zero_height", "docs.print.pdf", "docs.print.png", "docs.print.width_missing", "docs.typst.line_error", "docs.typst.line_not_pair", "fsource.theme.default_label", "import.versions.head", "import.versions.label", "import.versions.question", "install.archive_escape", "install.browser.archive_no_shell", "install.browser.downloading", "install.browser.no_build", "install.browser.no_sandbox", "install.browser.not_found", "install.browser.not_installed", "install.browser.platform_missing", "install.browser.releases_failed", "install.browser.releases_no_stable", "install.browser.symlink_escape", "install.installed", "install.typst.archive_no_binary", "install.typst.downloading", "install.typst.not_found", "install.typst.platform_missing", "install.typst.release_no_build", "install.typst.releases_failed", "install.typst.unknown_archive", "lj.error.fault", "lj.error.malformed", "lj.error.no_challenge", "lj.error.nothing", "lj.error.status", "stats.options.label", "stats.question.line", "stats.question.takers", "stats.range.bad", "stats.rating.decode", "stats.rating.status", "stats.results.empty", "stats.table.disputed", "stats.table.header_missing", "stats.xlsx.no_sheets", "stats.xlsx.part_missing", "stats.xlsx.sheet_missing", "tg.verify.no_discussion", "tg.verify.not_admin", "tg.verify.not_found", "tg.verify.not_member", "tg.verify.of_channel", "tg.verify.of_chat", "tg.verify.what_channel", "tg.verify.what_chat", "xyenvelope.unlock.wrong_passphrase":
+	case "boardsync.config.empty_url", "boardsync.config.unrecognized", "boardsync.fetch.card", "boardsync.fetch.list", "boardsync.upload.default_caption", "boardsync.upload.list_missing", "boardsync.upload.no_lists", "boardsync.upload.posted", "boardsync.upload.uploading", "chgk.author.default", "chgk.author.feminine", "chgk.author.feminine_plural", "chgk.author.plural", "chgk.copy.handout", "chgk.copy.image_handout_note", "chgk.copy.question", "chgk.copy.question_numbered", "chgk.copy.question_piece", "chgk.copy.question_unnumbered", "chgk.copy.question_whole", "chgk.copy.question_with_answer", "chgk.label.answer", "chgk.label.author", "chgk.label.comment", "chgk.label.date", "chgk.label.editor", "chgk.label.handout", "chgk.label.nezachet", "chgk.label.question", "chgk.label.source", "chgk.label.source_plural", "chgk.label.zachet", "chgk.preview.image_missing", "chgkcli.add_stats.custom_csv_flag", "chgkcli.board.board_url_prompt", "chgkcli.board.empty_token", "chgkcli.board.initial_passphrase_prompt", "chgkcli.board.need_board_url", "chgkcli.board.no_answers_flag", "chgkcli.board.no_token", "chgkcli.board.nothing_to_upload", "chgkcli.board.only_answers_flag", "chgkcli.board.open_browser", "chgkcli.board.open_browser_tokens", "chgkcli.board.passphrase_prompt", "chgkcli.board.token_prompt", "chgkcli.docx.no_paragraph_flag", "chgkcli.docx.only_question_number_flag", "chgkcli.handouts.already_exists", "chgkcli.handouts.colour_suffix", "chgkcli.handouts.dimensions_note", "chgkcli.handouts.html_geometry_note", "chgkcli.handouts.pages_note", "chgkcli.handouts.scale_note", "chgkcli.handouts.skip_warning", "chgkcli.handouts.warn_question", "chgkcli.handouts.watch_note", "chgkcli.lj.genimp_flag", "chgkcli.parse.tour_numbers_as_words_flag", "chgkcli.shared.replace_no_break_hyphens_flag", "chgkcli.telegram.done", "chgkcli.telegram.posting", "chgkcli.telegram.stop_if_no_stats_flag", "chgkimport.error.no_4s", "chgkimport.error.no_questions", "chgkimport.error.too_big", "docs.docx.host_version", "docs.docx.screen_version", "docs.handout.bad_markup", "docs.handout.image_missing", "docs.handout.language_missing", "docs.handout.pack_multiple", "docs.handout.pack_no_grid", "docs.handout.pack_none", "docs.handout.preamble_setting", "docs.handout.rotate_image_missing", "docs.handout_list.by_number_lead", "docs.handout_list.by_tour_lead", "docs.handout_list.heading", "docs.handout_list.tour_none", "docs.handout_list.tour_numbers", "docs.image.missing", "docs.markdown.answer", "docs.markdown.author", "docs.markdown.comment", "docs.markdown.image_link", "docs.markdown.nezachet", "docs.markdown.question", "docs.markdown.source", "docs.markdown.zachet", "docs.pptx.question_caps", "docs.print.measure", "docs.print.measure_no_size", "docs.print.measure_zero_height", "docs.print.pdf", "docs.print.png", "docs.print.width_missing", "docs.typst.line_error", "docs.typst.line_not_pair", "fsource.theme.default_label", "fsource.theme.reserve_number", "import.versions.head", "import.versions.label", "import.versions.question", "install.archive_escape", "install.browser.archive_no_shell", "install.browser.downloading", "install.browser.no_build", "install.browser.no_sandbox", "install.browser.not_found", "install.browser.not_installed", "install.browser.platform_missing", "install.browser.releases_failed", "install.browser.releases_no_stable", "install.browser.symlink_escape", "install.installed", "install.typst.archive_no_binary", "install.typst.downloading", "install.typst.not_found", "install.typst.platform_missing", "install.typst.release_no_build", "install.typst.releases_failed", "install.typst.unknown_archive", "lj.error.fault", "lj.error.malformed", "lj.error.no_challenge", "lj.error.nothing", "lj.error.status", "stats.options.label", "stats.question.line", "stats.question.takers", "stats.range.bad", "stats.rating.decode", "stats.rating.status", "stats.results.empty", "stats.table.disputed", "stats.table.header_missing", "stats.xlsx.no_sheets", "stats.xlsx.part_missing", "stats.xlsx.sheet_missing", "tg.verify.no_discussion", "tg.verify.not_admin", "tg.verify.not_found", "tg.verify.not_member", "tg.verify.of_channel", "tg.verify.of_chat", "tg.verify.what_channel", "tg.verify.what_chat", "xyenvelope.unlock.wrong_passphrase":
 		return true
 	}
 	return false

@@ -10,12 +10,12 @@
 // jstest/listexport_parity.test.js holds this file to it. A rule changed here
 // is changed there first.
 
-import S from "./i18nstrings.js";
-import { bracketSpans, dropHidden, imgInText, isHandoutBody, numberQuestionCards, opensQuestion, parseBlocks, questionText, startsBlock } from "./chgk.js";
-import type { ChgkCard, Handout } from "./chgk.js";
+import chgkStrings from "./chgk/i18nstrings.js";
+import { bracketSpans, dropHidden, imgInText, isHandoutBody, numberQuestionCards, opensQuestion, parseBlocks, questionText, startsBlock } from "./chgk/chgk.js";
+import type { ChgkCard, Handout } from "./chgk/chgk.js";
 import { xyVersions } from "./versions.js";
 import { xyHndt } from "./hndt.js";
-import { exported, exportMarker, gameOf, KIND, carriesHandouts, numbered } from "./cardkind.js";
+import { exported, exportMarker, gameOf, KIND, carriesHandouts, numbered } from "./chgk/cardkind.js";
 
 // A Card as the assembly reads it, in board order.
 export interface ExportCard extends ChgkCard { id?: number; handoutMeta?: string | null }
@@ -140,7 +140,7 @@ function handoutForCard(desc: string | null | undefined): Handout | null {
 // with a warning printed for whoever runs it. Here the answer lights the
 // board's badge and offers the handouts panel with nobody to warn, so the label
 // has to open the text (chgksuite/listexport/hndt.go says the same).
-const HANDOUT_LABEL = new RegExp(`^${S.chgk.label.handout()}[.:]?\\s*`, "i");
+const HANDOUT_LABEL = new RegExp(`^${chgkStrings.chgk.label.handout()}[.:]?\\s*`, "i");
 function unbracketedHandout(q: string): Handout | null {
   const name = imgInText(q);
   if (name) return { kind: "image", name };

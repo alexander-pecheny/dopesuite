@@ -117,7 +117,8 @@ localserver/           the public face of local mode for the desktop app: Open(d
                        (4s, docx, pdf, pptx, handouts, import, telegram and the rest), listexport,
                        cardkind, xyenvelope and the chgksuite CLI. xy imports it through a
                        replace; the server's exports, import and handouts and xy-cli are built
-                       on it, and its generators write web/ts/markers_gen.ts and cardkind_gen.ts
+                       on it, and its web/ts (the 4s parser and the question renderer) is built
+                       into dist/chgk/ and imported from "./chgk/<name>.js"
 internal/xycli/        xy-cli: the board from the shell, for an agent. It seals and opens through
                        chgksuite/xyenvelope, the second implementation of the Envelope (scrypt
                        KEK + AES-GCM, parity-tested both ways against crypto.ts), over an

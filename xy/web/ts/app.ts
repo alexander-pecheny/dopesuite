@@ -1,6 +1,7 @@
 // app.ts — shared frontend helpers. API fetch wrappers, HTML escaping, tiny
 // DOM builder, derived card titles.
 import S from "./i18nstrings.js";
+import { el, type ElChild, type ElProps } from "./chgk/dom.js";
 import { type InstanceCaps, xyInstance } from "./instance.js";
 
 export const HTTP_NO_CONTENT = 204;
@@ -77,8 +78,6 @@ function escapeHtml(s: unknown): string {
   )[c]!);
 }
 
-export type ElChild = Node | string | number | boolean | null | undefined | ElChild[];
-export type ElProps = Record<string, unknown>;
 
 // byId is the page's node lookup: a missing id is a page bug, so it throws.
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -132,26 +131,6 @@ function syncBadge(node: HTMLElement): SyncBadge {
     set: (op) => { lastOp = op; paint(); },
     onSync: (st) => { sync = st; paint(); },
   };
-}
-
-// el(tag, props, ...children) — minimal DOM builder. props.class, props.text,
-// event handlers as on*, everything else set as attribute/property.
-function el(tag: string, props: ElProps = {}, ...children: ElChild[]): HTMLElement {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (k === "class") node.className = String(v);
-    else if (k === "text") node.textContent = String(v);
-    else if (k === "dataset") Object.assign(node.dataset, v);
-    else if (k.startsWith("on") && typeof v === "function") {
-      node.addEventListener(k.slice(2).toLowerCase(), v as EventListener);
-    } else if (v === true) node.setAttribute(k, "");
-    else if (v !== false && v != null) node.setAttribute(k, String(v));
-  }
-  for (const c of children.flat(Infinity as 1) as Array<Exclude<ElChild, ElChild[]>>) {
-    if (c == null || c === false) continue;
-    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
-  }
-  return node;
 }
 
 // deriveTitle turns a card's plain-text description into a short preview: all

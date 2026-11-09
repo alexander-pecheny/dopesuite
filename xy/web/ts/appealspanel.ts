@@ -12,7 +12,7 @@ import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { byRank } from "./dragrank.js";
 import { iconed } from "./icons_gen.js";
-import { KIND } from "./cardkind.js";
+import { KIND } from "./chgk/cardkind.js";
 import { createList } from "./addlist.js";
 import { xlsxSheet } from "./xlsx.js";
 import { appealFields, appealHeading, statusText } from "./appealcard.js";

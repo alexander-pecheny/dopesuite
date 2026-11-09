@@ -2,7 +2,7 @@
 // of import.ts so jstest can exercise them without a DOM or a Trello token;
 // import.ts keeps the network and the encryption.
 
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 
 export type CardKind = "question" | "heading" | "meta" | "other";
 export interface MappedCard { desc: string; alias: string | null; kind: CardKind }
@@ -23,7 +23,7 @@ const META_BLOCKS = new Set<string>(["meta", "editor", "date"]);
 // links, checklists — and reading those as questions makes them a numbered part
 // of the package, so anything unmarked lands in "Other".
 export function cardKind(desc: string): CardKind {
-  const blocks = xyChgk.parseBlocks(desc);
+  const blocks = chgk4s.parseBlocks(desc);
   if (blocks.some((b) => QUESTION_BLOCKS.has(b.type))) return "question";
   if (blocks.some((b) => HEADING_BLOCKS.has(b.type))) return "heading";
   if (blocks.some((b) => META_BLOCKS.has(b.type))) return "meta";
@@ -37,7 +37,7 @@ export function cardKind(desc: string): CardKind {
 export function mapCard(name: string | null | undefined, rawDesc: string | null | undefined): MappedCard {
   const title = String(name || "").trim();
   const body = String(rawDesc || "").trim();
-  const desc = xyChgk.fixTrelloFormatting(body || title);
+  const desc = chgk4s.fixTrelloFormatting(body || title);
   return { desc, alias: body ? title || null : null, kind: cardKind(desc) };
 }
 
@@ -51,7 +51,7 @@ export function descEdits(edits: RawDescEdit[] | undefined, currentDesc: string)
   const out: DescEdit[] = [];
   let after = String(currentDesc || "");
   for (const e of (edits || [])) {
-    const before = xyChgk.fixTrelloFormatting(e.before || "");
+    const before = chgk4s.fixTrelloFormatting(e.before || "");
     out.push({ before, after, date: e.date || "", author: e.author || "" });
     after = before;
   }

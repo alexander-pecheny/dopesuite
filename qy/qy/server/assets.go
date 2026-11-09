@@ -7,6 +7,8 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
 	kit "pecheny.me/dopeuikit/kit"
 
+	chgkweb "code.pecheny.me/pecheny/dopesuite/chgksuite/web"
+
 	"qy/qy/web/assets"
 	"qy/qy/web/route"
 	"qy/qy/web/ui"
@@ -18,10 +20,14 @@ import (
 // FS) with the kit's files wired in. The only .dopeui page is the kit's login;
 // every other page is built on the server with the typed builder.
 func newAssets() (*webassets.Assets, *kit.PageSet) {
-	a := kit.Assets(assets.FS, ".", "qy/web/assets")
+	a := kit.AssetsWithLayers(assets.FS, chgkLayers, ".", "qy/web/assets")
 	return a, kit.NewPageSet(a.Source, a.NoCache, ui.Compile).
 		Provide("ui/login.dopeui", kit.LoginPage(qystrings.Default.Auth.Page.Title(), "/"))
 }
+
+// chgkLayers is chgksuite's question renderer stylesheet, which the
+// nomination form's preview draws with.
+var chgkLayers = []webassets.Layer{{Bytes: chgkweb.PreviewCSS, DiskPath: chgkweb.PreviewCSSDiskPath}}
 
 var pagePaths = []string{"ui/login.dopeui"}
 

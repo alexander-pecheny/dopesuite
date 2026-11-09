@@ -67,8 +67,6 @@ test-js: build-web
 
 # The kit's guard (root justfile) covers only kit/tags_gen.go; the overlay's
 # tags_gen.go goes just as stale when vocab.json (ours or the kit's) changes.
-# web/ts/markers_gen.ts and web/ts/cardkind_gen.ts are written from chgksuite,
-# so its generate-check guards them.
 generate-check:
     #!/usr/bin/env bash
     set -euo pipefail

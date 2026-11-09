@@ -9,7 +9,7 @@ import (
 // question carries stress accents and bracketed reading instructions; the
 // screen's copy carries neither. A bracket whose body opens with the handout
 // marker is a handout — the players see it, so it and everything inside it
-// survive both passes. The same port lives in xy/web/ts/chgk.ts for the card editor.
+// survive both passes. The same port lives in web/ts/chgk.ts for the browser.
 
 // reHandoutShort is regexes_ru.json's handout_short.
 var reHandoutShort = regexp.MustCompile(`^Р[Аа][Зз][Дд][Аа][Тт]`)

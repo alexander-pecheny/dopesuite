@@ -293,13 +293,13 @@ func TestClearEmptiesTheSlotUntilSaved(t *testing.T) {
 	}
 }
 
-func TestThePreviewShowsTheFields(t *testing.T) {
+func TestTheTextTabWritesTheFields(t *testing.T) {
 	w := newWorld(t)
 	alice := w.user("alice")
-	res := alice.PostJSON("/api/nominate/preview", `{"text": "Назовите <ИКС>.", "answer": "груша", "handout": "https://cdn.example/pic.jpg"}`)
+	res := alice.PostJSON("/api/nominate/preview", `{"text": "Назовите ИКС.", "answer": "груша", "handout": "https://cdn.example/pic.jpg"}`)
 	body := res.Body.String()
-	if res.Code != http.StatusOK || !strings.Contains(body, `\u0026lt;ИКС\u0026gt;`) || !strings.Contains(body, `\u003cimg class=\"pv-img\" src=\"https://cdn.example/pic.jpg\"`) {
-		t.Errorf("preview: %d %s", res.Code, body)
+	if res.Code != http.StatusOK || !strings.Contains(body, "Назовите ИКС.") || !strings.Contains(body, "https://cdn.example/pic.jpg") || !strings.Contains(body, "груша") {
+		t.Errorf("text: %d %s", res.Code, body)
 	}
 }
 

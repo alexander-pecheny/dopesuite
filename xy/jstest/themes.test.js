@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyThemes } from "../web/assets/static/dist/themes.js";
+import { chgkThemes } from "../web/assets/static/dist/chgk/themes.js";
 
 // A Card typed «Тема СИ» holds one theme: a `#T` head and a ladder of `№` slots
 // whose values are the point values. The ladder is the order and the points at
 // once, which is why nothing here ever renumbers.
-const { splitTheme, composeTheme, nextNumber, withSlot, blankTheme, swapSlots, isFilled, authorsOf, progress } = xyThemes;
+const { splitTheme, composeTheme, nextNumber, withSlot, blankTheme, swapSlots, isFilled, authorsOf, progress } = chgkThemes;
 const SI = ["10", "20", "30", "40", "50"];
 const TROIKA = ["1", "2", "3"];
 

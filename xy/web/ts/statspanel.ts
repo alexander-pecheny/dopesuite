@@ -6,7 +6,7 @@
 
 import S from "./i18nstrings.js";
 import { xyApp } from "./app.js";
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 import { xySync } from "./sync.js";
 import { modal } from "./modal.js";
 import { buildBundle } from "./bundleexport.js";
@@ -22,13 +22,13 @@ const CLOSE_AFTER_SUCCESS_MS = 1200;
 // withStatsLine is stats.patchQuestion on a card's 4s: the line becomes the
 // comment, another paragraph of it, or another item when the comment is a list.
 export function withStatsLine(desc: string, line: string): string {
-  const f = xyChgk.splitFields(desc);
+  const f = chgk4s.splitFields(desc);
   const comment = (f.comment ?? "").trimEnd();
   const last = comment.split("\n").pop() ?? "";
   if (!comment.trim()) f.comment = line;
   else if (/^\s*- /.test(last)) f.comment = `${comment}\n- ${line}`;
   else f.comment = `${comment}\n${line}`;
-  return xyChgk.composeFields(f);
+  return chgk4s.composeFields(f);
 }
 
 // statsQuestions are the cards the results count, in order: every numbered

@@ -450,9 +450,8 @@ func (s *server) handleLoadQuestion(w http.ResponseWriter, r *http.Request, _ ro
 	})
 }
 
-// handlePreviewQuestion is the form's preview and text tabs when the page's
-// script runs: the fields in, the question as the preview shows it and as
-// text out.
+// handlePreviewQuestion is the form's text tab when the page's script runs:
+// the fields in, the question as text out. The preview tab draws itself.
 func (s *server) handlePreviewQuestion(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
 	var req map[string]string
 	if err := readJSON(r, &req); err != nil {
@@ -462,10 +461,8 @@ func (s *server) handlePreviewQuestion(w http.ResponseWriter, r *http.Request, _
 	for _, f := range question.Fields {
 		*q.Ptr(f) = strings.TrimSpace(req[f])
 	}
-	handout := strings.TrimSpace(req["handout"])
-	full := q
-	full.Text = question.WithHandout(q.Text, handout)
-	return writeJSON(w, map[string]any{"html": previewHTML(q, handout), "text": question.Format(full)})
+	q.Text = question.WithHandout(q.Text, strings.TrimSpace(req["handout"]))
+	return writeJSON(w, map[string]any{"text": question.Format(q)})
 }
 
 // handleNominationFile serves a handout file to an admin or to a nominator of

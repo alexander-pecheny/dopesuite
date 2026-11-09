@@ -75,35 +75,6 @@ textarea[data-autogrow] {
   overflow-y: hidden;
 }
 
-/* A nominated question's preview, laid out as xy's preview lays out a
-   question (xy/web/assets/static/styles.css, .pv-*): the text a little apart
-   from the fields, the fields one tight block, the sources and the authors
-   smaller, the handout in a frame under its caption. */
-.pv-q-text,
-.pv-field {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.pv-q-text { margin-bottom: var(--space-2); }
-.pv-label { font-weight: var(--fw-bold); }
-.pv-handout-box {
-  gap: var(--space-0-5);
-  margin-bottom: var(--space-2);
-}
-.pv-handout-caption { font-size: calc(10em / 12); }
-.pv-handout-frame {
-  border: 1px solid currentColor;
-  padding: var(--space-1) var(--space-2);
-  overflow-wrap: anywhere;
-}
-.pv-img {
-  display: block;
-  max-width: 100%;
-  max-height: 16rem;
-}
-.pv-small { font-size: calc(10em / 12); }
-:not(.pv-small) + .pv-small { margin-top: 0.31em; }
-
 /* The red box under a nominated question that the automatic check of the
    rules says cannot be nominated. */
 [data-lint] {

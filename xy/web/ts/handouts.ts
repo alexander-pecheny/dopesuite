@@ -11,9 +11,9 @@ import S from "./i18nstrings.js";
 import { xyApp, DECIMAL_RADIX } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 import { xyHndt } from "./hndt.js";
-import { carriesHandouts, KIND } from "./cardkind.js";
+import { carriesHandouts, KIND } from "./chgk/cardkind.js";
 import { xyListExport } from "./listexport.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
@@ -444,7 +444,7 @@ export function createHandoutsPanel(board: Board, attachments: Pick<Attachments,
   function wantedImages(source: string): Set<string> {
     const wanted = new Set<string>();
     for (const m of source.matchAll(/^\s*image:\s*(.+?)\s*$/gm)) wanted.add(m[1]);
-    for (const n of xyChgk.imgRefs(source)) wanted.add(n);
+    for (const n of chgk4s.imgRefs(source)) wanted.add(n);
     return wanted;
   }
 

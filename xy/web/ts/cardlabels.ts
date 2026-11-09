@@ -13,7 +13,7 @@ import { type CardSeen, nameOf, parseCardSeen, type SeenPerson, seenPeople, sess
 import { autocomplete } from "./kit/suggest.js";
 import * as people from "./people.js";
 import { icon } from "./icons_gen.js";
-import { KIND } from "./cardkind.js";
+import { KIND } from "./chgk/cardkind.js";
 import S from "./i18nstrings.js";
 import { type Board, sessionsNewestFirst } from "./panels.js";
 import type { BoardCard, BoardLabel, BoardList } from "./unlock.js";

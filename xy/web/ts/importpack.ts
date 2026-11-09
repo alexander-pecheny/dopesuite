@@ -18,7 +18,7 @@ import { xyApp, ISO_DATE_LEN } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { sealPayload } from "./eventpayload.js";
 import { xySync } from "./sync.js";
-import { xyChgk } from "./chgk.js";
+import { chgk4s } from "./chgk/chgk.js";
 import { xyRank } from "./rank.js";
 import { byRank } from "./dragrank.js";
 import { nowStamp } from "./carddetail.js";
@@ -28,7 +28,7 @@ import { xyInstance } from "./instance.js";
 import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board } from "./panels.js";
 import S from "./i18nstrings.js";
-import { KIND, numbered } from "./cardkind.js";
+import { KIND, numbered } from "./chgk/cardkind.js";
 
 // Quiet time after the last option change before the preview is redrawn.
 const PREVIEW_DEBOUNCE_MS = 200;
@@ -195,7 +195,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     const out: string[] = [];
     let open = false, laddered = false;
     for (const b of blocks) {
-      const types = xyChgk.parseBlocks(b).map((x) => x.type);
+      const types = chgk4s.parseBlocks(b).map((x) => x.type);
       if (types.includes("theme")) { out.push(b); open = true; laddered = false; continue; }
       if (open && !CLOSES_THEME.has(types[0]) && !(laddered && types[0] === "meta")) {
         out[out.length - 1] += "\n\n" + b;
@@ -214,7 +214,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // compose_4s puts the "№ N" directive ahead of the "? …" marker, and an
   // unmarked block ("pre") is question text whose author didn't prefix it.
   function importKind(desc: string, game: string): string {
-    const types = new Set(xyChgk.parseBlocks(desc).map((b) => b.type));
+    const types = new Set(chgk4s.parseBlocks(desc).map((b) => b.type));
     if (types.has("theme")) return game === "troika" ? KIND.troikaTheme : KIND.theme;
     if (types.has("question") || types.has("answer") || types.has("pre")) return KIND.question;
     if (types.has("battle")) return KIND.battle;
@@ -254,7 +254,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     if (!ctx) return;
     const body = byId("importPreview");
     const cards = importCards(byId<HTMLTextAreaElement>("importSource").value, importCtx?.game ?? "chgk");
-    const numbers = xyChgk.numberQuestionCards(cards);
+    const numbers = chgk4s.numberQuestionCards(cards);
     body.replaceChildren();
     cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], ctx.imgMap, false)));
     const qs = cards.filter((c) => numbered(c.kind)).length;
@@ -295,7 +295,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     const tours: Array<{ title: string; cards: ImportCard[] }> = [];
     let cur: { title: string; cards: ImportCard[] } | null = null;
     for (const c of cards) {
-      const sec = xyChgk.parseBlocks(c.desc).find((b) => b.type === "section");
+      const sec = chgk4s.parseBlocks(c.desc).find((b) => b.type === "section");
       if (sec) {
         cur = { title: sec.text.split("\n")[0].trim() || S.import.pack.tourFallback(String(tours.length + 1)), cards: [] };
         tours.push(cur);
@@ -359,7 +359,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
           done++;
           // Attach only the images this card actually references, so a handout lands
           // on the question that uses it (which is where the preview/export look).
-          for (const ref of xyChgk.imageRefs([c])) {
+          for (const ref of chgk4s.imageRefs([c])) {
             const img = byName.get(ref);
             if (!img) { missing.add(ref); continue; }
             if (await attachImported(res.id, img)) attached++;

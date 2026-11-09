@@ -424,7 +424,6 @@ export const RU: Strings = {
     author: () => "Автор(ы):",
     comment: () => "Комментарий:",
     factcheck: () => "Фактчек",
-    handout: () => "Раздаточный материал",
     label: (number: string) => `Вопрос ${number}.`,
     nezachet: () => "Незачёт:",
     showAnswer: () => "Показать ответ",
