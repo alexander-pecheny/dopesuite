@@ -20,6 +20,9 @@ interface VenueBout {
   letter?: string;
   title?: string;
   finished?: boolean;
+  // room and hosts are the Game's own title and hosts for the venue.
+  room?: string;
+  hosts?: string;
 }
 
 interface Schedule {
@@ -59,6 +62,20 @@ export function byVenue(bouts: readonly VenueBout[]): Map<number, VenueBout[]> {
     return td(link);
   };
 
+  // gameCell is the bout's Game, and under it the venue's title and hosts
+  // when the Game gave its own.
+  const gameCell = (bout: VenueBout): string | HTMLElement => {
+    const own = [bout.room, bout.hosts].filter(Boolean).join(" · ");
+    if (!own) return bout.gameTitle;
+    const box = document.createElement("span");
+    box.className = "u-col";
+    const line = document.createElement("span");
+    line.className = "hint";
+    line.textContent = own;
+    box.append(bout.gameTitle, line);
+    return td(box);
+  };
+
   const schedule = (venue: Venue, bouts: VenueBout[]): HTMLElement => {
     const section = document.createElement("section");
     section.className = "u-col u-gap-xs";
@@ -88,7 +105,7 @@ export function byVenue(bouts: readonly VenueBout[]): Map<number, VenueBout[]> {
         {label: S.widgets.venue.scheduleGame(), kind: "name"},
         {label: S.widgets.venue.scheduleBout(), kind: "num"},
       ],
-      rows: bouts.map((bout) => [bout.startsAt || "", bout.gameTitle, boutLink(bout)]),
+      rows: bouts.map((bout) => [bout.startsAt || "", gameCell(bout), boutLink(bout)]),
     }));
     section.appendChild(wrapper);
     return section;

@@ -23,31 +23,31 @@ const labels = (tabs) => tabs.map((t) => t.label);
 // the order they are ranked in, which the Сетка already shows.
 test("ЭК: a Block of Groups is one standings tab and one tab per круг", () => {
   const tabs = gameTabs([group(1), group(2), playoff], {game: "ek", viewer: true});
-  assert.deepEqual(labels(tabs), ["Сетка", "Групповой этап", "Круг 1", "Круг 2", "Финал", "Статистика", "Составы"]);
-  assert.deepEqual(keys(tabs).slice(1, 5), ["stage:s1-standings", "stage:s1-r1", "stage:s1-r2", "stage:s2-r1"]);
-  assert.deepEqual(tabs.slice(1, 5).map((t) => t.kind), ["block", "round", "round", "stage"]);
+  assert.deepEqual(labels(tabs), ["Сетка", "Площадки", "Групповой этап", "Круг 1", "Круг 2", "Финал", "Статистика", "Составы"]);
+  assert.deepEqual(keys(tabs).slice(2, 6), ["stage:s1-standings", "stage:s1-r1", "stage:s1-r2", "stage:s2-r1"]);
+  assert.deepEqual(tabs.slice(2, 6).map((t) => t.kind), ["block", "round", "round", "stage"]);
   // A tab is assembled from real server stages, which is what gets fetched.
-  assert.deepEqual(tabs[1].stages, ["s1-g1", "s1-g2"]);
   assert.deepEqual(tabs[2].stages, ["s1-g1", "s1-g2"]);
-  assert.deepEqual(tabs[4].stages, ["s2-r1"]);
+  assert.deepEqual(tabs[3].stages, ["s1-g1", "s1-g2"]);
+  assert.deepEqual(tabs[5].stages, ["s2-r1"]);
   // The pane draws the tab's stage: synthetic for a круг, with every группа's
   // бой of that round, each saying which table it was.
-  assert.equal(tabs[1].stage.stage_type, "standings");
-  assert.deepEqual(tabs[2].stage.matches.map((m) => [m.code, m.group]), [["s1-g1-1", "Группа 1"], ["s1-g2-1", "Группа 2"]]);
-  assert.equal(tabs[4].stage.title, "Финал");
+  assert.equal(tabs[2].stage.stage_type, "standings");
+  assert.deepEqual(tabs[3].stage.matches.map((m) => [m.code, m.group]), [["s1-g1-1", "Группа 1"], ["s1-g2-1", "Группа 2"]]);
+  assert.equal(tabs[5].stage.title, "Финал");
 });
 
 test("ЭК: the synthetic codes read as the block's slug when the scheme names one", () => {
   const tabs = gameTabs([group(1, {slug: "group-stage"}), group(2, {slug: "group-stage"}), playoff], {game: "ek", viewer: true});
-  assert.deepEqual(keys(tabs).slice(1, 4), ["stage:group-stage", "stage:group-stage-r1", "stage:group-stage-r2"]);
+  assert.deepEqual(keys(tabs).slice(2, 5), ["stage:group-stage", "stage:group-stage-r1", "stage:group-stage-r2"]);
 });
 
 test("ЭК: a Block of one Group keeps its own tab", () => {
   const only = {...group(1), title: "Группа"};
   const tabs = gameTabs([only, playoff], {game: "ek", viewer: true});
-  assert.deepEqual(keys(tabs).slice(1, 3), ["stage:s1-g1", "stage:s2-r1"]);
-  assert.equal(tabs[1].kind, "stage");
-  assert.equal(tabs[1].stage, only);
+  assert.deepEqual(keys(tabs).slice(2, 4), ["stage:s1-g1", "stage:s2-r1"]);
+  assert.equal(tabs[2].kind, "stage");
+  assert.equal(tabs[2].stage, only);
 });
 
 // Every reseed used to be a tab of its own — личная СИ showed seven of them.
@@ -62,20 +62,20 @@ test("ЭК: N reseeds fold into one Пересев, one keeps its tab", () => {
     {code: "s2-r2", title: "Плей-офф. 2 этап", stage_type: "matches"},
   ];
   const tabs = gameTabs(stages, {game: "si", viewer: true});
-  assert.deepEqual(keys(tabs), ["grid", "stage:s1", `stage:${RESEED_TAB_CODE}`, "stage:s2-r1", "stage:s2-r2", "stats"]);
-  assert.equal(tabs[2].kind, "reseed");
-  assert.deepEqual(tabs[2].stages, ["s2-reseed", "s2-r2-reseed"]);
+  assert.deepEqual(keys(tabs), ["grid", "venues", "stage:s1", `stage:${RESEED_TAB_CODE}`, "stage:s2-r1", "stage:s2-r2", "stats"]);
+  assert.equal(tabs[3].kind, "reseed");
+  assert.deepEqual(tabs[3].stages, ["s2-reseed", "s2-r2-reseed"]);
   const lone = gameTabs(stages.slice(0, 3), {game: "si", viewer: true});
-  assert.deepEqual(keys(lone).slice(1, 4), ["stage:s1", "stage:s2-reseed", "stage:s2-r1"]);
-  assert.equal(lone[2].label, "Пересев");
-  assert.deepEqual(lone[2].stages, ["s2-reseed"]);
+  assert.deepEqual(keys(lone).slice(2, 5), ["stage:s1", "stage:s2-reseed", "stage:s2-r1"]);
+  assert.equal(lone[3].label, "Пересев");
+  assert.deepEqual(lone[3].stages, ["s2-reseed"]);
 });
 
 test("ЭК: the host gets «Участники», an individual game has no составы", () => {
-  assert.deepEqual(keys(gameTabs([], {game: "ek", viewer: false})), ["grid", "entrants", "stats", "roster"]);
-  assert.deepEqual(labels(gameTabs([], {game: "ek", viewer: false}))[1], "Участники");
-  assert.deepEqual(keys(gameTabs([], {game: "si", viewer: false})), ["grid", "entrants", "stats"]);
-  assert.deepEqual(keys(gameTabs([], {game: "ek", viewer: true})), ["grid", "stats", "roster"]);
+  assert.deepEqual(keys(gameTabs([], {game: "ek", viewer: false})), ["grid", "venues", "entrants", "stats", "roster"]);
+  assert.deepEqual(labels(gameTabs([], {game: "ek", viewer: false}))[2], "Участники");
+  assert.deepEqual(keys(gameTabs([], {game: "si", viewer: false})), ["grid", "venues", "entrants", "stats"]);
+  assert.deepEqual(keys(gameTabs([], {game: "ek", viewer: true})), ["grid", "venues", "stats", "roster"]);
 });
 
 test("ЭК: a legacy `@` bookmark canonicalises to the tab it meant", () => {
@@ -92,21 +92,21 @@ test("ЭК: a legacy `@` bookmark canonicalises to the tab it meant", () => {
 test("брейн: a ranking Block is a crosstab tab and a протоколы tab", () => {
   const stages = [group(1), group(2), {code: "s2-reseed", title: "Пересев", stage_type: "reseed", kind: "reseed"}, playoff];
   const tabs = gameTabs(stages, {game: "brain", viewer: true});
-  assert.deepEqual(keys(tabs), ["grid", "block:s1", "protocol:s1", "protocol:s2", "reseed", "stats", "roster"]);
-  assert.deepEqual(labels(tabs).slice(1, 4), ["Групповой этап", "Групповой этап (протоколы)", "Финал (протоколы)"]);
-  assert.deepEqual(tabs[1].kind, "block");
-  assert.deepEqual(tabs[1].stages, ["s1-g1", "s1-g2"]);
-  assert.deepEqual(tabs[3].stages, ["s2-r1"]);
-  assert.deepEqual(tabs[4].stages, ["s2-reseed"]);
+  assert.deepEqual(keys(tabs), ["grid", "venues", "block:s1", "protocol:s1", "protocol:s2", "reseed", "stats", "roster"]);
+  assert.deepEqual(labels(tabs).slice(2, 5), ["Групповой этап", "Групповой этап (протоколы)", "Финал (протоколы)"]);
+  assert.deepEqual(tabs[2].kind, "block");
+  assert.deepEqual(tabs[2].stages, ["s1-g1", "s1-g2"]);
+  assert.deepEqual(tabs[4].stages, ["s2-r1"]);
+  assert.deepEqual(tabs[5].stages, ["s2-reseed"]);
 });
 
 test("брейн: pods get a block tab and a протоколы tab; a bare bracket only протоколы", () => {
   const pod = (n) => ({code: `s2-g${n}`, title: `DE ${n}`, stage_type: "matches", kind: "matches", grain: {block: "s2", group: String(n)}});
   const bracket = ["1/2 финала", "Финал"].map((title, i) => ({code: `s3-r${i + 1}`, title, stage_type: "matches", grain: {block: "s3"}}));
   const tabs = gameTabs([pod(1), pod(2), ...bracket], {game: "brain", viewer: true});
-  assert.deepEqual(keys(tabs).slice(1, 4), ["block:s2", "protocol:s2", "protocol:s3"]);
-  assert.deepEqual(labels(tabs).slice(1, 4), ["DE", "DE (протоколы)", "Плей-офф (протоколы)"]);
-  assert.equal(tabs[1].kind, "pods");
+  assert.deepEqual(keys(tabs).slice(2, 5), ["block:s2", "protocol:s2", "protocol:s3"]);
+  assert.deepEqual(labels(tabs).slice(2, 5), ["DE", "DE (протоколы)", "Плей-офф (протоколы)"]);
+  assert.equal(tabs[2].kind, "pods");
 });
 
 // Every buzzer Game has its entrant list, seeded or not: the host always gets
@@ -114,10 +114,10 @@ test("брейн: pods get a block tab and a протоколы tab; a bare brac
 test("брейн, Тройка, Хамса: the host gets «Участники»", () => {
   for (const game of ["brain", "troika", "hamsa"]) {
     const host = gameTabs([], {game, viewer: false});
-    assert.deepEqual(keys(host), ["grid", "stats", "roster", "entrants"]);
+    assert.deepEqual(keys(host), ["grid", "venues", "stats", "roster", "entrants"]);
     assert.equal(host.at(-1).label, "Участники");
     assert.equal(canonicalKey(host, "seed"), "entrants");
-    assert.deepEqual(keys(gameTabs([], {game, viewer: true})), ["grid", "stats", "roster"]);
+    assert.deepEqual(keys(gameTabs([], {game, viewer: true})), ["grid", "venues", "stats", "roster"]);
   }
 });
 

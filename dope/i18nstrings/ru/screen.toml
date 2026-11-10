@@ -20,6 +20,8 @@ grid = "Сетка"
 stats = "Статистика"
 # The брейн per-player statistics tab.
 individual_stats = "Индивидуальная статистика"
+# The venues tab of every bout Game: the fest's venues as the Game shows them.
+venues = "Площадки"
 # The rosters tab (ЭК, КСИ, ОД, брейн).
 roster = "Составы"
 # The per-question detailed results tab (КСИ, ОД).

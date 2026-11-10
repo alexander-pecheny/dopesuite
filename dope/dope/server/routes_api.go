@@ -80,6 +80,8 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("PATCH "+game+"/matches/{code}/state", route.Editor.Numbered(), s.scopedMatchPatch)
 	t.Handle("POST "+game+"/matches/{code}/finish", route.Editor.Numbered(), s.scopedMatchFinish)
 	t.Handle("POST "+game+"/matches/{code}/venue", route.Editor, s.scopedMatchVenue)
+	t.Handle("GET "+game+"/venues", route.Read, s.scopedGameVenues)
+	t.Handle("PUT "+game+"/venues/{n}", route.Editor, s.scopedGameVenuePut)
 	t.Handle("POST "+game+"/matches/{code}/starts-at", route.Editor, s.scopedMatchStartsAt)
 	t.Handle("GET "+game+"/stages/matches", route.Read, s.scopedAllStageMatches)
 	t.Handle("GET "+game+"/stages/{stage}/matches", route.Read, s.scopedStageMatches)
@@ -293,6 +295,35 @@ func (s *server) scopedVenueDelete(w http.ResponseWriter, r *http.Request, sc ro
 		return route.BadUser(err)
 	}
 	return route.JSONBytes(w, s.broadcastVenues(sc.FestID, change))
+}
+
+// scopedGameVenues answers the fest's venues as the Game shows them: its
+// own title and hosts over the fest's.
+func (s *server) scopedGameVenues(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	venues, err := store.LoadGameVenues(r.Context(), s.eng.DB, sc.FestID, sc.GameID)
+	if err != nil {
+		return err
+	}
+	return route.JSON(w, venues)
+}
+
+// scopedGameVenuePut sets the Game's own title or hosts for a venue; an
+// empty one goes back to the fest's. It answers with the Game's venues.
+func (s *server) scopedGameVenuePut(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	number, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || number <= 0 {
+		return route.BadRequest("bad venue number")
+	}
+	var req venueUpdateRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	change, err := s.updateGameVenue(r.Context(), sc.FestID, sc.GameID, number, req)
+	if err != nil {
+		return route.BadUser(err)
+	}
+	s.broadcastVenues(sc.FestID, change)
+	return s.scopedGameVenues(w, r, sc)
 }
 
 // ---- matches ----

@@ -28,6 +28,9 @@ CREATE INDEX fest_venue_hosts_user_idx on fest_venue_hosts(fest_id, user_id);
 -- index game_invites_game_idx
 CREATE INDEX game_invites_game_idx on game_invites(game_id);
 
+-- index game_venues_venue_idx
+CREATE INDEX game_venues_venue_idx on game_venues(venue_id);
+
 -- index games_fest_slug_idx
 CREATE UNIQUE INDEX games_fest_slug_idx on games(fest_id, slug) where slug is not null;
 
@@ -244,6 +247,16 @@ CREATE TABLE game_team_players(
   player_id integer not null references players(id) on delete cascade,
   roster_order integer not null, hand INTEGER NOT NULL DEFAULT 0,
   primary key(game_id, participant_id, player_id)
+);
+
+-- table game_venues
+CREATE TABLE game_venues(
+  game_id integer not null references games(id) on delete cascade,
+  venue_id integer not null references venues(id) on delete cascade,
+  title text,
+  hosts text,
+  updated_at text not null,
+  primary key(game_id, venue_id)
 );
 
 -- table games

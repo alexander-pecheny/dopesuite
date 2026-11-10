@@ -1190,6 +1190,22 @@ alter table venues drop column place;
 `)
 		return err
 	}},
+	// A Game may give a fest venue its own title and hosts; a field left
+	// null is the fest's.
+	{Version: 56, Name: "game venue overrides", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+create table game_venues(
+  game_id integer not null references games(id) on delete cascade,
+  venue_id integer not null references venues(id) on delete cascade,
+  title text,
+  hosts text,
+  updated_at text not null,
+  primary key(game_id, venue_id)
+);
+create index game_venues_venue_idx on game_venues(venue_id);
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

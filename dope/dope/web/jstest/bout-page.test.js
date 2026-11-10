@@ -95,13 +95,15 @@ function fakeShell(viewer) {
 // the `bouts` map, so a test moves the server's state by editing it.
 function serve(bouts) {
   const calls = [];
+  let venues = [{number: 1, title: "Hall"}];
+  serve.venues = (list) => { venues = list; };
   globalThis.fetch = (url, options = {}) => {
     const method = options.method || "GET";
     const body = options.body ? JSON.parse(options.body) : undefined;
     calls.push({url, method, body});
     let answer;
     if (url === `${API}/stages/matches`) answer = [{code: "s1", matches: Object.values(bouts)}];
-    else if (url === "/api/fest/f/venues") answer = [{number: 1, title: "Hall"}];
+    else if (url === `${API}/venues`) answer = venues;
     else if (url === API) answer = {stages: [{code: "s1", title: "Fresh"}]};
     else if (url.startsWith(`${API}/matches/`) && url.endsWith("/finish")) answer = {};
     else if (url.startsWith(`${API}/matches/`) && url.endsWith("/state")) {
@@ -168,17 +170,17 @@ test("a start fetches the bouts, opens the stream, connects presence and reads t
   assert.deepEqual(page.stateOf("m1"), {a: 1, parsed: true}, "the bout is parsed by the page");
   assert.equal(shell.calls.presence, 1, "presence connects after the first fetch");
   assert.ok(shell.calls.touched >= 1);
-  assert.deepEqual(page.venues, [{number: 1, title: "Hall"}], "a host reads the fest's venues");
+  assert.deepEqual(page.venues, [{number: 1, title: "Hall"}], "the page reads the Game's venues");
   assert.ok(calls.some((c) => c.url === `${API}/stages/matches`));
 });
 
-test("a spectator reads no venues when the Game has no venues tab, and connects no writes", async () => {
+test("a spectator reads the venues for its tab, and connects no writes", async () => {
   store.clear();
   const calls = serve({m1: {code: "m1", seq: 3, state: {a: 1}}});
   const {page} = mount({viewer: true});
   page.start();
   await settle();
-  assert.ok(!calls.some((c) => c.url.endsWith("/venues")));
+  assert.ok(calls.some((c) => c.url === `${API}/venues`));
   page.patch("m1", ["a"], 2);
   await settle();
   assert.ok(!calls.some((c) => c.method === "PATCH"), "a spectator never writes");
@@ -228,7 +230,8 @@ test("edits a previous load left un-acked are re-sent and shown once the bouts a
   assert.equal(store.get("dope.pending.v2:match:7:m1"), undefined, "acked, so no longer persisted");
 });
 
-test("a venues event replaces the venues and reads the bouts and the fest view again", async () => {
+// The event carries the fest's list; the page reads the Game's own over it.
+test("a venues event reads the Game's venues, the bouts and the fest view again", async () => {
   store.clear();
   const calls = serve({m1: {code: "m1", seq: 3, state: {a: 1}}});
   const {page, streams} = mount();
@@ -236,7 +239,8 @@ test("a venues event replaces the venues and reads the bouts and the fest view a
   await settle();
   const venues = page.venues;
   const fetched = calls.length;
-  streams[0].emit({scope: "venues:f", data: [{number: 2, title: "Annex"}], seq: 1});
+  serve.venues([{number: 2, title: "Annex"}]);
+  streams[0].emit({scope: "venues:f", data: [{number: 2, title: "Fest's"}], seq: 1});
   await settle();
   assert.equal(page.venues, venues, "the one array, kept in place");
   assert.deepEqual(page.venues, [{number: 2, title: "Annex"}]);

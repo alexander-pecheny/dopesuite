@@ -47,8 +47,8 @@ import type {StageRef} from "./standings.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridData, FestGridStage} from "./fest-grid.js";
 import S from "./i18nstrings.js";
-import {boutWhereWhen} from "./venue.js";
-import type {Venue} from "./venue.js";
+import {boutWhereWhen, buildVenuesTable} from "./venue.js";
+import type {Venue, VenueFields} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
 import {createUndo, isUndoKey, valueAt} from "./undo.js";
 import type {UndoResult} from "./undo.js";
@@ -245,9 +245,9 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   });
   const {scopeGameID, indicator} = shell;
   const apiBase = route.apiBase || "";
-  const festAPI = `/api/fest/${encodeURIComponent(String(route.festID || ""))}`;
   const matchPrefix = `match:${scopeGameID}:`;
   const venuesScope = `venues:${route.festID}`;
+  const gameVenuesScope = `game-venues:${scopeGameID}`;
   const letters = festLetters(fest?.stages as StageRef[] | undefined);
 
   const views = new Map<string, V>();
@@ -256,6 +256,8 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   adoptFest(fest);
   const venues: Venue[] = [];
   let rosterView: HTMLElement | null = null;
+  // The venues tab, built again only when the venues change.
+  let venuesView: HTMLElement | null = null;
   // The entrants tab is built the first time it is drawn; after a change the
   // bouts are fetched again, since seats moved, and a rebuilt Structure reloads.
   let entrants: EntrantsTab | null = null;
@@ -474,21 +476,21 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     }, REFETCH_DEBOUNCE_MS);
   }
 
+  // adoptVenues says whether the list changed, so this host's own write,
+  // read again off the stream, does not draw the tab under the next field.
   function adoptVenues(list: unknown): boolean {
-    if (!Array.isArray(list)) return false;
+    if (!Array.isArray(list) || JSON.stringify(list) === JSON.stringify(venues)) return false;
     venues.splice(0, venues.length, ...(list as Venue[]));
+    venuesView = null;
     return true;
   }
 
-  // Only a host needs the fest's venues, to move a bout to another; a
-  // spectator reads a bout's venue off the bout. The fest lists them on its
-  // venues page.
+  // The fest's venues as this Game shows them: its venues tab, and the
+  // host's pencil, which moves a bout to another.
   async function fetchVenues(): Promise<void> {
-    if (viewer) return;
-    const response = await fetch(`${festAPI}/venues`);
+    const response = await fetch(`${apiBase}/venues`);
     if (!response.ok) throw new Error(`venues ${response.status}`);
-    adoptVenues(await response.json());
-    render();
+    if (adoptVenues(await response.json())) render();
   }
 
   // ---- the stream and the writer ----
@@ -511,9 +513,11 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     }, {
       // A host renamed, added or removed a venue: the bouts' heads say so,
       // and an added venue may have seated bouts.
+      // The list it carries is the fest's; the Game's own titles are read
+      // again over it.
       prefix: venuesScope,
-      adopt: (_scope, view) => {
-        if (!adoptVenues(view.data)) return;
+      adopt: () => {
+        fetchVenues().catch(() => indicator.fail());
         resync();
         refreshFest();
         render();
@@ -568,6 +572,12 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
       if (scope.startsWith(matchPrefix)) {
         const view = response as V | null;
         if (adoptView(view) && view?.code) refresh(view.code);
+        return;
+      }
+      // The Game's venue titles answer with its venues; the bouts' heads
+      // read them on the stream.
+      if (scope === gameVenuesScope) {
+        adoptVenues(response);
         return;
       }
       // A reseed or a draw answers with the fest view.
@@ -630,12 +640,42 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
       return (rosterView ||= spec.buildRoster());
     case "reseed":
       return reseedTab(tab);
+    case "venues":
+      return (venuesView ||= venuesTab());
     case "grid":
     case undefined:
       return grid();
     default:
       return spec.buildTab(tab);
     }
+  }
+
+  // venuesTab is the fest's venues as the Game shows them. A host sets the
+  // Game's own title and hosts there; the fest's venues page adds, deletes
+  // and names them for the whole fest.
+  function venuesTab(): HTMLElement {
+    const table = buildVenuesTable(venues, {
+      editable: !viewer,
+      inherit: true,
+      onChange: (number: number, fields: VenueFields) => void writer.send(gameVenuesScope, {url: `${apiBase}/venues/${number}`, method: "PUT", body: fields}),
+    });
+    const head = document.createElement("div");
+    head.className = "u-row u-wrap u-gap-sm u-align-center u-justify-between";
+    if (!viewer) {
+      const intro = document.createElement("p");
+      intro.className = "hint";
+      intro.textContent = S.widgets.venue.gameIntro();
+      head.appendChild(intro);
+    }
+    const link = document.createElement("a");
+    link.className = "btn";
+    link.href = `/fest/${encodeURIComponent(String(route.festID || ""))}/venues`;
+    link.textContent = S.host.festVenues.link();
+    head.appendChild(link);
+    const box = document.createElement("div");
+    box.className = "u-col u-gap-sm";
+    box.append(head, table);
+    return box;
   }
 
   function grid(data?: FestGridData): HTMLElement {
@@ -724,7 +764,9 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     // sizes and the one in view stays put, so the sheet does not jump under
     // the cursor. A tab of no bouts keeps its scroll the same way.
     redrawSteady(root, BOUT_BOX_SELECTOR, () => {
-      root.replaceChildren(node);
+      // A tab kept whole (the venues, the rosters) stays mounted, so a
+      // field a host is typing in keeps its focus.
+      if (root.firstChild !== node || root.childNodes.length !== 1) root.replaceChildren(node);
       if (keepView && frame) frame.scrollTop = scrollTop;
     }, keepView);
     drawnTab = activeTab;

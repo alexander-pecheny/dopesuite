@@ -1980,6 +1980,7 @@ shootout: true
       roster: () => "Составы",
       screen: () => "Экран",
       stats: () => "Статистика",
+      venues: () => "Площадки",
     },
     title: {
       fest: () => "Фест",
@@ -2327,6 +2328,7 @@ shootout: true
       battle: (n: string, name: string) => `пл. ${n} (${name})`,
       battleShort: (n: string) => `пл. ${n}`,
       delete: () => "Удалить площадку",
+      gameIntro: () => "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры. Пустое поле берёт значение феста.",
       hostsColumn: () => "Ведущие",
       nameColumn: () => "Название",
       scheduleBout: () => "Бой",

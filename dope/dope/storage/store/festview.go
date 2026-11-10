@@ -25,6 +25,33 @@ order by v.number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
 	})
 }
 
+// LoadGameVenues returns a fest's venues as one Game shows them: each with
+// the Game's own title and hosts over the fest's, and how many of the Game's
+// bouts play at it.
+func LoadGameVenues(ctx context.Context, q Queryer, festID, gameID int64) ([]VenueView, error) {
+	return CollectRows(ctx, q, `
+select v.number, v.title, v.hosts, gv.title, gv.hosts,
+       (select count(*) from matches m where m.venue_id = v.id and m.game_id = ?)
+from venues v
+left join game_venues gv on gv.venue_id = v.id and gv.game_id = ?
+where v.fest_id = ?
+order by v.number`, []any{gameID, gameID, festID}, func(rows *sql.Rows) (VenueView, error) {
+		var venue VenueView
+		var ownTitle, ownHosts sql.NullString
+		if err := rows.Scan(&venue.Number, &venue.FestTitle, &venue.FestHosts, &ownTitle, &ownHosts, &venue.Bouts); err != nil {
+			return venue, err
+		}
+		venue.Title, venue.Hosts = venue.FestTitle, venue.FestHosts
+		if ownTitle.Valid {
+			venue.Title, venue.OwnTitle = ownTitle.String, &ownTitle.String
+		}
+		if ownHosts.Valid {
+			venue.Hosts, venue.OwnHosts = ownHosts.String, &ownHosts.String
+		}
+		return venue, nil
+	})
+}
+
 // VenueBout is one bout of a fest's schedule at a venue: when it starts, the
 // Game it belongs to (its URL ref and title) and the bout's letter, code and
 // title.
@@ -37,6 +64,10 @@ type VenueBout struct {
 	Letter    string `json:"letter,omitempty"`
 	Title     string `json:"title,omitempty"`
 	Finished  bool   `json:"finished,omitempty"`
+	// Room and Hosts are the Game's own title and hosts for the venue, when
+	// it gave them.
+	Room  string `json:"room,omitempty"`
+	Hosts string `json:"hosts,omitempty"`
 }
 
 // LoadVenueBouts returns every bout of the fest that sits at a venue, venue
@@ -45,16 +76,17 @@ type VenueBout struct {
 func LoadVenueBouts(ctx context.Context, q Queryer, festID int64) ([]VenueBout, error) {
 	return CollectRows(ctx, q, `
 select v.number, coalesce(m.starts_at, ''), coalesce(nullif(g.slug, ''), g.code), g.title,
-       m.code, m.letter, m.title, m.status = 'finished'
+       m.code, m.letter, m.title, m.status = 'finished', coalesce(gv.title, ''), coalesce(gv.hosts, '')
 from matches m
 join venues v on v.id = m.venue_id
 join games g on g.id = m.game_id
+left join game_venues gv on gv.game_id = m.game_id and gv.venue_id = m.venue_id
 join stages s on s.id = m.stage_id
 where m.fest_id = ?
 order by v.number, coalesce(m.starts_at, '') = '', m.starts_at, g.position, s.position, m.position`, []any{festID},
 		func(rows *sql.Rows) (VenueBout, error) {
 			var b VenueBout
-			return b, rows.Scan(&b.Venue, &b.StartsAt, &b.Game, &b.GameTitle, &b.Code, &b.Letter, &b.Title, &b.Finished)
+			return b, rows.Scan(&b.Venue, &b.StartsAt, &b.Game, &b.GameTitle, &b.Code, &b.Letter, &b.Title, &b.Finished, &b.Room, &b.Hosts)
 		})
 }
 
@@ -81,9 +113,10 @@ order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error)
 func LoadFestMatches(ctx context.Context, q Queryer, stageID int64, gameType string) ([]FestMatchView, error) {
 	rows, err := q.QueryContext(ctx, `
 select m.id, m.code, m.title, m.letter, m.position, m.participant_count, m.status, m.revision,
-       v.number, v.title, coalesce(v.hosts, ''), coalesce(m.starts_at, ''), m.game_id
+       v.number, coalesce(gv.title, v.title), coalesce(gv.hosts, v.hosts, ''), coalesce(m.starts_at, ''), m.game_id
 from matches m
 left join venues v on v.id = m.venue_id
+left join game_venues gv on gv.game_id = m.game_id and gv.venue_id = m.venue_id
 where m.stage_id = ?
 order by m.position, m.id`, stageID)
 	if err != nil {

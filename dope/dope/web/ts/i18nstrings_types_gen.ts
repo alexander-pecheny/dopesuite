@@ -1958,6 +1958,7 @@ export type Strings = {
       roster: () => string;
       screen: () => string;
       stats: () => string;
+      venues: () => string;
     };
     title: {
       fest: () => string;
@@ -2305,6 +2306,7 @@ export type Strings = {
       battle: (n: string, name: string) => string;
       battleShort: (n: string) => string;
       delete: () => string;
+      gameIntro: () => string;
       hostsColumn: () => string;
       nameColumn: () => string;
       scheduleBout: () => string;

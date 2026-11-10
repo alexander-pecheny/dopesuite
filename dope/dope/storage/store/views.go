@@ -114,6 +114,13 @@ type VenueView struct {
 	// Hosts who host there (the host and the assistant).
 	Hosts string `json:"hosts,omitempty"`
 	Bouts int    `json:"bouts,omitempty"`
+	// In a Game's venue list (LoadGameVenues) Title and Hosts are what the
+	// Game shows; FestTitle and FestHosts are the fest's, and OwnTitle and
+	// OwnHosts the Game's own, when it gave one.
+	FestTitle string  `json:"festTitle,omitempty"`
+	FestHosts string  `json:"festHosts,omitempty"`
+	OwnTitle  *string `json:"ownTitle,omitempty"`
+	OwnHosts  *string `json:"ownHosts,omitempty"`
 }
 
 // StageMatches is one stage's full match views (the bulk all-stages response

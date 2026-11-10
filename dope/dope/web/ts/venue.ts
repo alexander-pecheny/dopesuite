@@ -20,6 +20,13 @@ export interface Venue {
   hosts?: string;
   // bouts is how many bouts play at it, in the fest's venue list.
   bouts?: number;
+  // In a Game's venue list, title and hosts are what the Game shows; the
+  // fest's are festTitle and festHosts, and the Game's own, when it gave
+  // them, ownTitle and ownHosts.
+  festTitle?: string;
+  festHosts?: string;
+  ownTitle?: string;
+  ownHosts?: string;
 }
 
 export function normalizeVenue(venue: VenueLike): Venue | null {
@@ -80,6 +87,10 @@ export interface VenuesTableOptions {
   // server refused, or to an empty string; the table shows the refusal.
   onAdd?: (title: string, number: number) => Promise<string>;
   onDelete?: (number: number) => Promise<string>;
+  // inherit edits a Game's own title and hosts over the fest's: a field
+  // holds the Game's own value with the fest's as its placeholder, and an
+  // emptied one goes back to the fest's.
+  inherit?: boolean;
 }
 
 // nextVenueNumber is the number a new venue takes when the host gives none:
@@ -110,17 +121,19 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
 
   // field is one of a venue's texts: an input for a host, the text for a
   // spectator. The title may not be emptied; the hosts may.
+  const inherit = Boolean(options.inherit);
   const field = (venue: Venue, key: keyof VenueFields, label: string) => {
-    const value = venue[key] || "";
-    if (!onChange) return value;
+    if (!onChange) return venue[key] || "";
+    const value = (inherit ? venue[key === "title" ? "ownTitle" : "ownHosts"] : venue[key]) || "";
     const input = document.createElement("input");
     input.className = "venue-input";
     input.value = value;
+    if (inherit) input.placeholder = venue[key === "title" ? "festTitle" : "festHosts"] || "";
     input.setAttribute("aria-label", label);
     input.dataset.committed = value;
     input.addEventListener("change", () => {
       const typed = input.value.trim();
-      if (!typed && key === "title") {
+      if (!typed && key === "title" && !inherit) {
         input.value = input.dataset.committed ?? "";
         return;
       }

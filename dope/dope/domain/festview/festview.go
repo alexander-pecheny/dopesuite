@@ -40,6 +40,9 @@ where t.id = ?`, gameID, festID).
 	view.UpdatedAt = updatedAt
 
 	venues, err := store.LoadVenues(ctx, q, festID)
+	if gameID > 0 {
+		venues, err = store.LoadGameVenues(ctx, q, festID, gameID)
+	}
 	if err != nil {
 		return store.FestView{}, err
 	}

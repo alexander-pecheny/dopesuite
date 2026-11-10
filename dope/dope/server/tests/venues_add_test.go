@@ -225,6 +225,89 @@ func TestVenueTitleAndHosts(t *testing.T) {
 	}
 }
 
+// A Game may give a fest venue its own title and hosts: its bouts and its
+// venue list read them, the fest's list and the other Games keep the fest's,
+// and an emptied field goes back to the fest's.
+func TestGameVenueOverride(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, gameID := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	if _, err := db.Exec(`update matches set venue_id = null where fest_id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`delete from venues where fest_id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	hostID, hostToken := createAPITestSession(t, srv, "game-venue-host")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	festPath := fmt.Sprintf("/api/fest/%d/venues", festID)
+	gamePath := fmt.Sprintf("/api/fest/%d/games/%d/venues", festID, gameID)
+	decode := func(resp interface{ Bytes() []byte }) []store.VenueView {
+		var venues []store.VenueView
+		if err := json.Unmarshal(resp.Bytes(), &venues); err != nil {
+			t.Fatal(err)
+		}
+		return venues
+	}
+	resp := scopedAPIRequest(t, srv, http.MethodPost, festPath, map[string]any{"number": 1, "title": "ауд. 308", "hosts": "Бобыльков"}, hostToken)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("add status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	var code string
+	if err := db.QueryRow(`select code from matches where game_id = ? order by id limit 1`, gameID).Scan(&code); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`update matches set venue_id = (select id from venues where fest_id = ? and number = 1) where code = ? and game_id = ?`, festID, code, gameID); err != nil {
+		t.Fatal(err)
+	}
+	resp = scopedAPIRequest(t, srv, http.MethodPut, gamePath+"/1", map[string]any{"title": "ауд. 410"}, hostToken)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("game put status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	v := decode(resp.Body)
+	if len(v) != 1 || v[0].Title != "ауд. 410" || v[0].Hosts != "Бобыльков" || v[0].FestTitle != "ауд. 308" || v[0].OwnTitle == nil || v[0].OwnHosts != nil || v[0].Bouts != 1 {
+		t.Fatalf("game venues = %#v", v)
+	}
+	if f := decode(scopedAPIRequest(t, srv, http.MethodGet, festPath, nil, hostToken).Body); f[0].Title != "ауд. 308" {
+		t.Fatalf("fest venues = %#v", f)
+	}
+	boutVenue := func() *store.VenueView {
+		states, err := store.LoadMatchStates(t.Context(), db, store.MatchSelector{FestID: festID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range states {
+			if m.Code == code && m.GameID == gameID {
+				return m.Venue
+			}
+		}
+		t.Fatalf("no bout %s", code)
+		return nil
+	}
+	if got := boutVenue(); got == nil || got.Title != "ауд. 410" || got.Hosts != "Бобыльков" {
+		t.Fatalf("bout venue = %#v", got)
+	}
+	resp = scopedAPIRequest(t, srv, http.MethodPut, gamePath+"/1", map[string]any{"hosts": "Иванов"}, hostToken)
+	if v := decode(resp.Body); v[0].Title != "ауд. 410" || v[0].Hosts != "Иванов" {
+		t.Fatalf("after a hosts-only write: %#v", v)
+	}
+	resp = scopedAPIRequest(t, srv, http.MethodPut, gamePath+"/1", map[string]any{"title": "", "hosts": ""}, hostToken)
+	if v := decode(resp.Body); v[0].Title != "ауд. 308" || v[0].Hosts != "Бобыльков" || v[0].OwnTitle != nil || v[0].OwnHosts != nil {
+		t.Fatalf("after clearing: %#v", v)
+	}
+	var left int
+	if err := db.QueryRow(`select count(*) from game_venues`).Scan(&left); err != nil || left != 0 {
+		t.Fatalf("game_venues rows = %d, err %v", left, err)
+	}
+	if got := boutVenue(); got == nil || got.Title != "ауд. 308" {
+		t.Fatalf("bout venue after clearing = %#v", got)
+	}
+	if resp := scopedAPIRequest(t, srv, http.MethodPut, gamePath+"/9", map[string]any{"title": "x"}, hostToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("unknown venue status = %d", resp.Code)
+	}
+}
+
 // The fest's venues page lists every bout at each venue across its Games, and
 // says whether the caller may edit the venues: a host may, a stranger on a
 // public fest may only read. The page itself is served at /fest/{ref}/venues.

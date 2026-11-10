@@ -232,3 +232,51 @@ func (s *server) broadcastVenues(festID int64, change venueChange) []byte {
 	s.eng.BroadcastState(festID, fmt.Sprintf("venues:%d", festID), change.Revision, data)
 	return data
 }
+
+// updateGameVenue gives one Game its own title or hosts for a fest venue.
+// A field the request names and leaves empty goes back to the fest's. It
+// answers with the change, whose Seated are the Game's bouts at the venue,
+// which read the new title.
+func (s *server) updateGameVenue(reqCtx context.Context, festID, gameID int64, number int, req venueUpdateRequest) (venueChange, error) {
+	if req.Title == nil && req.Hosts == nil {
+		return venueChange{}, errors.New("venue update names no field")
+	}
+	payload := map[string]any{"action": "game", "game": gameID, "number": number}
+	own := func(field *string, key string) (sql.NullString, bool) {
+		if field == nil {
+			return sql.NullString{}, false
+		}
+		value := strings.TrimSpace(*field)
+		payload[key] = value
+		return sql.NullString{String: value, Valid: value != ""}, true
+	}
+	title, setTitle := own(req.Title, "title")
+	hosts, setHosts := own(req.Hosts, "hosts")
+	return s.writeVenues(reqCtx, festID, "game-venue", payload, func(ctx context.Context, tx *sql.Tx) ([]matchScope, error) {
+		var venueID int64
+		err := tx.QueryRowContext(ctx, `select id from venues where fest_id = ? and number = ?`, festID, number).Scan(&venueID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, venueUserError(dopestrings.Default.Server.Venue.Unknown(strconv.Itoa(number)))
+		}
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `
+insert into game_venues(game_id, venue_id, title, hosts, updated_at) values(?, ?, ?, ?, ?)
+on conflict(game_id, venue_id) do update set
+  title = case when ? then excluded.title else title end,
+  hosts = case when ? then excluded.hosts else hosts end,
+  updated_at = excluded.updated_at`,
+			gameID, venueID, title, hosts, util.UtcNow(), setTitle, setHosts); err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `delete from game_venues where game_id = ? and venue_id = ? and title is null and hosts is null`, gameID, venueID); err != nil {
+			return nil, err
+		}
+		return store.CollectRows(ctx, tx, `select id, code from matches where game_id = ? and venue_id = ?`, []any{gameID, venueID},
+			func(rows *sql.Rows) (matchScope, error) {
+				m := matchScope{festScope: festScope{FestID: festID, GameID: gameID}}
+				return m, rows.Scan(&m.MatchID, &m.Code)
+			})
+	})
+}

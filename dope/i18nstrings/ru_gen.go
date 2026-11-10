@@ -2913,6 +2913,7 @@ var RU = Strings{
 			Roster:          func() string { return "Составы" },
 			Screen:          func() string { return "Экран" },
 			Stats:           func() string { return "Статистика" },
+			Venues:          func() string { return "Площадки" },
 		},
 		Title: ScreenTitleStrings{
 			Fest: func() string { return "Фест" },
@@ -3378,12 +3379,15 @@ var RU = Strings{
 			Label: func() string { return "Все вкладки" },
 		},
 		Venue: WidgetsVenueStrings{
-			Add:           func() string { return "Добавить" },
-			AddNumber:     func() string { return "Номер площадки" },
-			AddTitle:      func() string { return "Новая площадка" },
-			Battle:        func(n string, name string) string { return fmt.Sprintf("пл. %s (%s)", n, name) },
-			BattleShort:   func(n string) string { return fmt.Sprintf("пл. %s", n) },
-			Delete:        func() string { return "Удалить площадку" },
+			Add:         func() string { return "Добавить" },
+			AddNumber:   func() string { return "Номер площадки" },
+			AddTitle:    func() string { return "Новая площадка" },
+			Battle:      func(n string, name string) string { return fmt.Sprintf("пл. %s (%s)", n, name) },
+			BattleShort: func(n string) string { return fmt.Sprintf("пл. %s", n) },
+			Delete:      func() string { return "Удалить площадку" },
+			GameIntro: func() string {
+				return "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры. Пустое поле берёт значение феста."
+			},
 			HostsColumn:   func() string { return "Ведущие" },
 			NameColumn:    func() string { return "Название" },
 			ScheduleBout:  func() string { return "Бой" },

@@ -8,7 +8,7 @@ export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "kd" | "tro
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
-  | "stats" | "roster" | "entrants"
+  | "stats" | "roster" | "venues" | "entrants"
   | "results" | "detailed" | "input" | "screen" | "refusals"
   | "personal" | "players" | "contested";
 
@@ -37,7 +37,7 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "es":
   case "si":
     return [
-      ...fixedTabs(["grid", S.screen.tabs.grid()]),
+      ...gridTabs(),
       ...entrantsTab(host),
       ...foldReseeds(stages.flatMap((stage) => blockRoundTabs(stage, stages))),
       ...fixedTabs(["stats", S.screen.tabs.stats()], ...when(options.game !== "si", ["roster", S.screen.tabs.roster()])),
@@ -46,7 +46,6 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
     return brainTabs(stages, host, S.screen.tabs.individualStats());
   // Troika's tabs are brain's: a crosstab, a table and protocols per Block, the
   // reseed, and the per-player statistics its three chairs make interesting.
-  // Its venues, like every Game's, are on the fest's venues page.
   case "troika":
     return brainTabs(stages, host, S.screen.tabs.stats());
   // Хамса's stages read straight across: the бои of each Игра, the Block's own
@@ -64,6 +63,12 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "kd":
     return fixedTabs(["personal", S.screen.tabs.personal()], ["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()], ["input", S.screen.tabs.input()], ...when(host, ["screen", S.screen.tabs.screen()]), ["players", S.screen.tabs.players()]);
   }
+}
+
+// gridTabs open every bout Game's bar: the Сетка, then the venues its bouts
+// are played at, with the Game's own titles and hosts over the fest's.
+function gridTabs(): GameTab[] {
+  return fixedTabs(["grid", S.screen.tabs.grid()], ["venues", S.screen.tabs.venues()]);
 }
 
 export function canonicalKey(tabs: GameTab[], key: string): string {
@@ -191,7 +196,7 @@ function stageTabLabel(stage: StageRef): string {
 // Per Block its crosstab (or pod board) and protocols, as the source workbook
 // had them; "table" / "protocol" are the pre-Block hashes.
 function brainTabs(stages: StageRef[], host: boolean, statsLabel: string): GameTab[] {
-  const tabs = fixedTabs(["grid", S.screen.tabs.grid()]);
+  const tabs = gridTabs();
   let table: string | undefined = "table";
   let protocol: string | undefined = "protocol";
   for (const block of blocks(stages)) {
@@ -218,7 +223,7 @@ function brainTabs(stages: StageRef[], host: boolean, statsLabel: string): GameT
 // carries its Block's name in front ("Групповой этап. Игра №1"), which the tab
 // bar has no room for and the crumb trail says anyway.
 function hamsaTabs(stages: StageRef[], host: boolean): GameTab[] {
-  const tabs = fixedTabs(["grid", S.screen.tabs.grid()]);
+  const tabs = gridTabs();
   for (const stage of stages) {
     // A пересев keeps its place in the chain rather than being folded to the
     // end: Хамса has one, and it is played between the group stage and the
