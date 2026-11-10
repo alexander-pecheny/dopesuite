@@ -385,6 +385,9 @@ delete_submit = "Удалить фест"
 public_label = "Публичный"
 # The fest's switch for спорные in its ОД, with the hint under it.
 contested_label = "Спорные ответы в ОД"
+# The fest's switch: a bout's venue reads as its title (the room) rather than
+# its number.
+venue_rooms_label = "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)"
 contested_hint = "Ведущие отмечают спорные ответы, жюри игры их принимает или отклоняет. На синхроне включено сразу."
 title_label = "Название"
 description_label = "Описание (markdown)"

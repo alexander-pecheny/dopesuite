@@ -1,6 +1,6 @@
 import {festLetters, letteredTitle, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {normalizeVenue, venueLabel, withStartsAt} from "./venue.js";
+import {normalizeVenue, venueLabel, venueShort, venuesByRoom, venuesShort, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {nameCell} from "./name-cell.js";
 import {icon} from "./icons_gen.js";
@@ -591,8 +591,8 @@ function stageWhere(stage: FestGridStage, liveStage: FestGridStage): string {
     found.set(venue.number, venue);
   }
   const venues = [...found.values()];
-  if (venues.length === 1) return venueText(venues[0]);
-  return venues.length ? S.fest.grid.venue(venues.map((venue) => venue.number).sort((a, b) => a - b).join(", ")) : "";
+  if (venues.length === 1 && !venuesByRoom()) return venueText(venues[0]);
+  return venuesShort(venues);
 }
 
 // stageSlotOrder is the seating order of a stage's participants — first
@@ -887,7 +887,7 @@ function decorateGridSlotRows(rows: HTMLElement[][]): void {
 // time are part of that button, so a click on them opens the card too.
 function matchHeadCell(match: FestGridMatch, venue: Venue | null, ctx: PaintContext, startsAt?: string): HTMLElement {
   const cell = gridCell("grid-slot-head grid-match-head-cell", "");
-  const where = venue ? S.fest.grid.venue(String(venue.number)) : "";
+  const where = venue ? venueShort(venue) : "";
   const layout = headLayout(matchTitleNode(match, ctx), "");
   layout.appendChild(matchInfoButton(match, venue, ctx, startsAt, venueLabel(null, "grid-match-venue", withStartsAt(where, startsAt))));
   cell.appendChild(layout);

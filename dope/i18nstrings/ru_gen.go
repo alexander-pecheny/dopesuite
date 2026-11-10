@@ -1036,6 +1036,9 @@ var RU = Strings{
 			SynchImportLink: func() string { return "Загрузить площадки" },
 			TeamsNumbered:   func(n string, numbered string) string { return fmt.Sprintf("%s, с номером: %s", n, numbered) },
 			TitleLabel:      func() string { return "Название" },
+			VenueRoomsLabel: func() string {
+				return "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)"
+			},
 			VenuesHint: func() string {
 				return "Ведущий площадки ведёт её игры и правит её команды и номера."
 			},

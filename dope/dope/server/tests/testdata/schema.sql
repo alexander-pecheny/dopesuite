@@ -183,7 +183,7 @@ CREATE TABLE fests(
   start_date text,
   end_date text,
   is_public integer not null default 0
-, kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind in ('regular','synch','multi')), contested INTEGER);
+, kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind in ('regular','synch','multi')), contested INTEGER, venue_rooms integer not null default 0);
 
 -- table game_assignments
 CREATE TABLE game_assignments(

@@ -63,14 +63,41 @@ export function formatBattleVenue(venue: VenueLike): string {
     : S.widgets.venue.battleShort(String(normalized.number));
 }
 
+// A fest may name its bouts' venues by their titles (the rooms) instead of
+// their numbers; the page that draws its bouts says which, from its fest view.
+let roomLabels = false;
+
+export function nameVenuesByRoom(on: boolean): void {
+  roomLabels = on;
+}
+
+export function venuesByRoom(): boolean {
+  return roomLabels;
+}
+
+// venueShort is a venue as a bout's head names it: its number (venue 1), or its
+// title when the fest names venues by room and the venue has one.
+export function venueShort(venue: VenueLike): string {
+  const normalized = normalizeVenue(venue);
+  if (!normalized) return "";
+  return roomLabels && normalized.title ? normalized.title : S.widgets.venue.battleShort(String(normalized.number));
+}
+
+// venuesShort is several venues as a group's head names them.
+export function venuesShort(venues: readonly Venue[]): string {
+  if (!venues.length) return "";
+  if (roomLabels && venues.every((venue) => venue.title)) return venues.map((venue) => venue.title).join(", ");
+  return S.widgets.venue.battleShort(venues.map((venue) => venue.number).sort((a, b) => a - b).join(", "));
+}
+
 // boutWhere is where and when a bout is played as its head says it: the
 // table's number, the start time, then the venue's title, usually its room
 // (venue 1 18:00, room 308).
 export function boutWhere(venue: VenueLike, startsAt: string | undefined): string {
   const normalized = normalizeVenue(venue);
   if (!normalized) return "";
-  const where = withStartsAt(S.widgets.venue.battleShort(String(normalized.number)), startsAt);
-  return normalized.title ? S.widgets.venue.withTitle(where, normalized.title) : where;
+  const where = withStartsAt(venueShort(normalized), startsAt);
+  return normalized.title && !roomLabels ? S.widgets.venue.withTitle(where, normalized.title) : where;
 }
 
 export function formatBattleVenueShort(venue: VenueLike): string {

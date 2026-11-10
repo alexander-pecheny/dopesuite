@@ -41,6 +41,8 @@ type hostFestDashData struct {
 	Kind string
 	// Contested says whether the fest's OD takes contested answers.
 	Contested       bool
+	// VenueRooms says whether a bout's venue reads as its title (the room).
+	VenueRooms bool
 	MultiFestVenues []venueRow
 	Description     string
 	Slug            string
@@ -163,8 +165,21 @@ func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
 		kindField(data.Kind, data.Games),
 		pub,
 		contestedField(data.Contested),
+		venueRoomsField(data.VenueRooms),
 		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.SaveSubmit()))),
 	)
+}
+
+// venueRoomsField is the fest's switch between naming a bout's venue by its
+// number (venue 1) and by its title (the room). The hidden field tells the box
+// left unticked apart from a form that has no box.
+func venueRoomsField(on bool) *dopeui.Element {
+	s := dopestrings.Default
+	box := []dopeui.Item{dopeui.Name("venue_rooms"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.VenueRoomsLabel())}
+	if on {
+		box = append(box, dopeui.Checked())
+	}
+	return dopeui.Col(dopeui.Hiddenfield(dopeui.Name("venue_rooms_present"), dopeui.Value("1")), dopeui.Checkbox(box...))
 }
 
 // contestedField is the fest's switch for contested answers. The hidden field tells the
@@ -430,6 +445,9 @@ type FestSettings struct {
 	// Contested says whether the fest's OD takes contested answers; nil leaves it to
 	// the fest's type, which turns them on for a synch fest alone.
 	Contested *bool `json:"contested,omitempty"`
+	// VenueRooms names a bout's venue by its title (the room) rather than its
+	// number; nil leaves it as it is.
+	VenueRooms *bool `json:"venue_rooms,omitempty"`
 }
 
 func festSettingsFromForm(form url.Values) FestSettings {
@@ -446,7 +464,16 @@ func festSettingsFromForm(form url.Values) FestSettings {
 
 		ReplaceGames: form.Get("replace_games") == "1",
 		Contested:    formContested(form),
+		VenueRooms:   formVenueRooms(form),
 	}
+}
+
+func formVenueRooms(form url.Values) *bool {
+	if form.Get("venue_rooms_present") != "1" {
+		return nil
+	}
+	on := form.Get("venue_rooms") == "1"
+	return &on
 }
 
 func formContested(form url.Values) *bool {
@@ -552,10 +579,12 @@ func (s *Server) LoadFestSettings(ctx context.Context, festID int64) (FestSettin
 		ratingID  sql.NullInt64
 		isPublic  int
 		contested sql.NullBool
+		rooms     bool
 	)
 	err := s.h.Engine().DB.QueryRowContext(ctx, `
-select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind, contested
-from fests where id = ?`, festID).Scan(&f.Title, &f.Slug, &f.Description, &startDate, &endDate, &ratingID, &isPublic, &f.Kind, &contested)
+select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind, contested, venue_rooms
+from fests where id = ?`, festID).Scan(&f.Title, &f.Slug, &f.Description, &startDate, &endDate, &ratingID, &isPublic, &f.Kind, &contested, &rooms)
+	f.VenueRooms = &rooms
 	f.StartDate, f.EndDate, f.RatingID, f.IsPublic = startDate.String, endDate.String, ratingID.Int64, isPublic == 1
 	if contested.Valid {
 		f.Contested = &contested.Bool
@@ -613,6 +642,9 @@ where id = ?`,
 			f.Title, slugValue, f.Description, f.ratingValue(),
 			util.NullableString(strings.TrimSpace(f.StartDate)), util.NullableString(strings.TrimSpace(f.EndDate)), util.BoolToInt(f.IsPublic),
 			kind, util.UtcNow(), festID)
+		if err == nil && f.VenueRooms != nil {
+			_, err = tx.ExecContext(ctx, `update fests set venue_rooms = ? where id = ?`, util.BoolToInt(*f.VenueRooms), festID)
+		}
 		if err != nil || f.Contested == nil {
 			return write, err
 		}
@@ -806,10 +838,11 @@ func (s *Server) renderHostFestDashboard(w http.ResponseWriter, r *http.Request,
 		isPublic    int
 		kind        string
 		contestedOn bool
+		venueRooms  bool
 	)
 	if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind, coalesce(contested, kind = 'synch')
-from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, &endDate, &ratingID, &isPublic, &kind, &contestedOn); err != nil {
+select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public, kind, coalesce(contested, kind = 'synch'), venue_rooms
+from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, &endDate, &ratingID, &isPublic, &kind, &contestedOn, &venueRooms); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -923,6 +956,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 		},
 		Kind:            kind,
 		Contested:       contestedOn,
+		VenueRooms:      venueRooms,
 		Description:     description,
 		Slug:            slug,
 		Games:           hostGames,

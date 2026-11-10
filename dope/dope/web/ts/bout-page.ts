@@ -47,7 +47,7 @@ import type {StageRef} from "./standings.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridData, FestGridStage} from "./fest-grid.js";
 import S from "./i18nstrings.js";
-import {boutWhereWhen, buildVenuesTable} from "./venue.js";
+import {boutWhereWhen, buildVenuesTable, nameVenuesByRoom} from "./venue.js";
 import type {Venue, VenueFields} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
 import {createUndo, isUndoKey, valueAt} from "./undo.js";
@@ -100,6 +100,8 @@ export interface BoutFest {
   gameName?: string;
   schemaJson?: unknown;
   stages?: Array<FestGridStage | null>;
+  // venueRooms names the bouts' venues by their titles, not their numbers.
+  venueRooms?: boolean;
 }
 
 export interface BoutPageSpec<V extends BoutView, S> {
@@ -375,6 +377,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   // ---- the bouts ----
 
   function adoptFest(view: BoutFest | null | undefined): void {
+    if (view) nameVenuesByRoom(Boolean(view.venueRooms));
     for (const stage of view?.stages || []) if (stage?.code) festStages.set(stage.code, stage);
   }
 

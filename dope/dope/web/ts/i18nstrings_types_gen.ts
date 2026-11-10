@@ -771,6 +771,7 @@ export type Strings = {
       synchImportLink: () => string;
       teamsNumbered: (n: string, numbered: string) => string;
       titleLabel: () => string;
+      venueRoomsLabel: () => string;
       venuesHint: () => string;
     };
     festVenues: {

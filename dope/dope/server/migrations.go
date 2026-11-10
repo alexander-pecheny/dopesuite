@@ -1206,6 +1206,12 @@ create index game_venues_venue_idx on game_venues(venue_id);
 `)
 		return err
 	}},
+	// A fest may name its bouts' venues by their titles (the rooms) rather
+	// than by their numbers.
+	{Version: 57, Name: "fest venue rooms", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`alter table fests add column venue_rooms integer not null default 0;`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

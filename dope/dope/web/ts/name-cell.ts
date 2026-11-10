@@ -73,7 +73,7 @@ export function nameCell(text: string, options: NameCellOptions = {}): HTMLEleme
   name.setAttribute("aria-label", options.ariaLabel ?? text);
   wrap.appendChild(name);
 
-  const badges = teamFlagBadges(options.badges);
+  const badges = options.layout ? null : teamFlagBadges(options.badges);
   if (options.layout) {
     const layout = document.createElement("span");
     layout.className = "od-detailed-team-layout";
@@ -83,10 +83,11 @@ export function nameCell(text: string, options: NameCellOptions = {}): HTMLEleme
       number.textContent = options.number.text;
       layout.appendChild(number);
     }
+    // The badges sit at the pill's right end, two to a line in small type,
+    // and the name clips and fades before them.
+    const compact = compactFlagBadges(options.badges);
+    if (compact) wrap.appendChild(compact);
     layout.appendChild(wrap);
-    // The badges are the layout grid's third column: beside the name, outside
-    // the pill it clips and fades inside.
-    if (badges) layout.appendChild(badges);
     cell.appendChild(layout);
   } else {
     const city = options.city ? cityNode(options.city) : null;
@@ -130,6 +131,29 @@ export function teamFlagBadges(flags: readonly string[] | undefined): HTMLElemen
     badge.className = "team-flag";
     badge.textContent = flag;
     wrap.appendChild(badge);
+  }
+  return wrap;
+}
+
+// FLAGS_PER_LINE is how many Flags share a line inside a sheet's name pill.
+const FLAGS_PER_LINE = 2;
+
+// compactFlagBadges is a team's Flags inside a sheet's name pill: small type,
+// no pills of their own, two to a line, each line flush right.
+function compactFlagBadges(flags: readonly string[] | undefined): HTMLElement | null {
+  if (!flags || flags.length === 0) return null;
+  const wrap = document.createElement("span");
+  wrap.className = "team-flags team-flags-compact";
+  for (let at = 0; at < flags.length; at += FLAGS_PER_LINE) {
+    const line = document.createElement("span");
+    line.className = "team-flags-line";
+    for (const flag of flags.slice(at, at + FLAGS_PER_LINE)) {
+      const badge = document.createElement("span");
+      badge.className = "team-flag";
+      badge.textContent = flag;
+      line.appendChild(badge);
+    }
+    wrap.appendChild(line);
   }
   return wrap;
 }

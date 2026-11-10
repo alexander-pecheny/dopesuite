@@ -772,6 +772,7 @@ export const RU: Strings = {
       synchImportLink: () => "Загрузить площадки",
       teamsNumbered: (n: string, numbered: string) => `${n}, с номером: ${numbered}`,
       titleLabel: () => "Название",
+      venueRoomsLabel: () => "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)",
       venuesHint: () => "Ведущий площадки ведёт её игры и правит её команды и номера.",
     },
     festVenues: {

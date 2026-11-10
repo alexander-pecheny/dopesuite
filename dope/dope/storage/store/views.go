@@ -145,6 +145,8 @@ type FestView struct {
 	RegularThemeCount int         `json:"regularThemeCount"`
 	Venues            []VenueView `json:"venues"`
 	Stages            []StageView `json:"stages"`
+	// VenueRooms names a bout's venue by its title (the room), not its number.
+	VenueRooms bool `json:"venueRooms,omitempty"`
 	// HiddenDivisions are the Flags whose divisions this game does not show.
 	HiddenDivisions []string `json:"hiddenDivisions,omitempty"`
 }

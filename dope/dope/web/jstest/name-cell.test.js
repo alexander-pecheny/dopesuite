@@ -130,19 +130,22 @@ test("nameCell is one vocabulary: the cell, the wrap, the name and the popover's
   assert.ok(!cell.classList.contains("name-cell-truncated"), "only the pass says a name does not fit");
 });
 
-test("the detailed sheets set number, name and badges side by side in one layout", () => {
+test("the detailed sheets set number and name side by side, the badges inside the name's pill two to a line", () => {
   const cell = nameCell("Ктулху", {
     tag: "th",
     layout: true,
     number: {text: "7", className: "od-detailed-team-number"},
-    badges: ["Школ"],
+    badges: ["S", "Мол", "МЧР"],
     ariaLabel: "7. Ктулху",
     popoverText: "7. Ктулху",
   });
   assert.equal(cell.tag, "th");
   const [layout, popover] = cell.children;
   assert.equal(layout.className, "od-detailed-team-layout");
-  assert.deepEqual(layout.children.map((c) => c.className), ["od-detailed-team-number", "name-cell-wrap", "u-row u-gap-xs u-align-center team-flags"]);
+  assert.deepEqual(layout.children.map((c) => c.className), ["od-detailed-team-number", "name-cell-wrap"]);
+  const flags = layout.children[1].children.at(-1);
+  assert.equal(flags.className, "team-flags team-flags-compact");
+  assert.deepEqual(flags.children.map((line) => line.children.map((f) => f.textContent)), [["S", "Мол"], ["МЧР"]]);
   assert.equal(layout.children[0].textContent, "7");
   assert.equal(textOf(cell).textContent, "Ктулху");
   assert.equal(textOf(cell).attributes["aria-label"], "7. Ктулху");
