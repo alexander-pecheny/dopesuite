@@ -40,9 +40,9 @@ type hostFestDashData struct {
 	Fest view.HostFest
 	Kind string
 	// Contested says whether the fest's OD takes contested answers.
-	Contested       bool
+	Contested bool
 	// VenueRooms says whether a bout's venue reads as its title (the room).
-	VenueRooms bool
+	VenueRooms      bool
 	MultiFestVenues []venueRow
 	Description     string
 	Slug            string

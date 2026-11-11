@@ -216,60 +216,65 @@ func ParseRosterXLSX(r io.Reader) ([]SheetTeam, error) {
 // by hand. Teams the sheet does not name are left alone. It returns what the
 // roster was and is, for the preview.
 func ApplyRosterSheetTx(ctx context.Context, tx *sql.Tx, festID int64, teams []SheetTeam) (ImportPlan, RosterWrite, error) {
-	state, err := roster.LoadHandState(ctx, tx, festID)
+	before, err := roster.LoadHandState(ctx, tx, festID)
 	if err != nil {
 		return ImportPlan{}, RosterWrite{}, err
 	}
-	before := activeRoster(state)
-	var written RosterWrite
+	// Each team records its edits against state, which follows them in
+	// memory, and the roster is rewritten once at the end: a rewrite per team
+	// made a sheet of a hundred teams outlast the write's deadline.
+	state := workingState(before)
+	flags, err := roster.LoadFestTeamFlags(ctx, tx, festID)
+	if err != nil {
+		return ImportPlan{}, RosterWrite{}, err
+	}
 	for _, team := range teams {
-		rowID := int64(0)
-		for _, row := range state.Teams {
-			if row.Deleted {
-				continue
-			}
-			if team.RatingID > 0 && row.RatingID == team.RatingID {
-				rowID = row.ID
-				break
-			}
-			if team.RatingID <= 0 && strings.EqualFold(row.Name, team.Name) && strings.EqualFold(row.City, team.City) {
-				rowID = row.ID
-			}
-		}
+		rowID := sheetTeamRow(state, team)
 		in := TeamInput{RatingID: team.RatingID, Name: team.Name, City: team.City, Players: team.Players}
-		if rowID > 0 {
-			if err := setSheetFlagsTx(ctx, tx, festID, rowID, team.Flags); err != nil {
-				return ImportPlan{}, RosterWrite{}, err
-			}
-			if written, err = SaveHandTeamTx(ctx, tx, festID, rowID, in); err != nil {
+		if rowID == 0 {
+			if rowID, err = recordNewTeamTx(ctx, tx, festID, in, &state); err != nil {
 				return ImportPlan{}, RosterWrite{}, corei18n.User(dopestrings.Default.Imports.RosterXlsx.TeamFailed(team.Name, userMessage(err)))
 			}
-		} else {
-			id, w, err := CreateHandTeamTx(ctx, tx, festID, in)
-			if err != nil {
-				return ImportPlan{}, RosterWrite{}, corei18n.User(dopestrings.Default.Imports.RosterXlsx.TeamFailed(team.Name, userMessage(err)))
-			}
-			written = w
-			if team.Flags != nil && strings.TrimSpace(*team.Flags) != "" {
-				if err := setSheetFlagsTx(ctx, tx, festID, id, team.Flags); err != nil {
-					return ImportPlan{}, RosterWrite{}, err
-				}
-				if written, err = rewriteFromHandTx(ctx, tx, festID, state); err != nil {
-					return ImportPlan{}, RosterWrite{}, err
-				}
-			}
+		} else if err := recordTeamTx(ctx, tx, festID, rowID, in, &state); err != nil {
+			return ImportPlan{}, RosterWrite{}, corei18n.User(dopestrings.Default.Imports.RosterXlsx.TeamFailed(team.Name, userMessage(err)))
 		}
-		if state, err = roster.LoadHandState(ctx, tx, festID); err != nil {
+		if err := setSheetFlagsTx(ctx, tx, festID, rowID, team.Flags, flags); err != nil {
 			return ImportPlan{}, RosterWrite{}, err
 		}
 	}
-	after := activeRoster(state)
-	return planRoster(before, after, roster.MergeResult{}), written, nil
+	written, err := rewriteFromHandTx(ctx, tx, festID, before)
+	if err != nil {
+		return ImportPlan{}, RosterWrite{}, err
+	}
+	after, err := roster.LoadHandState(ctx, tx, festID)
+	if err != nil {
+		return ImportPlan{}, RosterWrite{}, err
+	}
+	return planRoster(activeRoster(before), activeRoster(after), roster.MergeResult{}), written, nil
+}
+
+// sheetTeamRow is the fest team a sheet's team is: the one with its rating
+// id, or else the one with its name and city; 0 for none.
+func sheetTeamRow(state roster.HandState, team SheetTeam) int64 {
+	rowID := int64(0)
+	for _, row := range state.Teams {
+		if row.Deleted {
+			continue
+		}
+		if team.RatingID > 0 && row.RatingID == team.RatingID {
+			return row.ID
+		}
+		if team.RatingID <= 0 && strings.EqualFold(row.Name, team.Name) && strings.EqualFold(row.City, team.City) {
+			rowID = row.ID
+		}
+	}
+	return rowID
 }
 
 // setSheetFlagsTx gives a team the sheet's Flags, as the host's, when the
-// sheet has the column and they differ.
-func setSheetFlagsTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, typed *string) error {
+// sheet has the column and they differ. now is every team's Flags, which it
+// keeps up to date.
+func setSheetFlagsTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, typed *string, now map[int64][]roster.FestRosterFlag) error {
 	if typed == nil {
 		return nil
 	}
@@ -278,17 +283,14 @@ func setSheetFlagsTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, type
 		flags = append(flags, roster.FestRosterFlag{Short: part, Full: part})
 	}
 	flags = roster.NormalizeFlags(flags)
-	now, err := roster.LoadFestTeamFlags(ctx, tx, festID)
-	if err != nil {
-		return err
-	}
 	if strings.Join(roster.FlagShortNames(now[teamID]), ",") == strings.Join(roster.FlagShortNames(flags), ",") {
 		return nil
 	}
 	if err := roster.ReplaceTeamFlagsTx(ctx, tx, teamID, flags); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `update fest_teams set hand_flags = 1 where id = ? and fest_id = ?`, teamID, festID)
+	now[teamID] = flags
+	_, err := tx.ExecContext(ctx, `update fest_teams set hand_flags = 1 where id = ? and fest_id = ?`, teamID, festID)
 	return err
 }
 

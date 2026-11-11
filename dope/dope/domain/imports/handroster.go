@@ -209,55 +209,76 @@ where fest_id = ? and deleted = 0 and id != ? and lower(name) = lower(?) and low
 // CreateHandTeamTx adds a team the host made (ADR-0024): no rating id, the
 // next free number, its people as the host's edits. Returns the team's id.
 func CreateHandTeamTx(ctx context.Context, tx *sql.Tx, festID int64, in TeamInput) (int64, RosterWrite, error) {
-	in, err := in.normalized()
-	if err != nil {
-		return 0, RosterWrite{}, err
-	}
-	if err := checkNameFree(ctx, tx, festID, 0, in.Name, in.City); err != nil {
-		return 0, RosterWrite{}, err
-	}
 	before, err := roster.LoadHandState(ctx, tx, festID)
 	if err != nil {
 		return 0, RosterWrite{}, err
+	}
+	work := workingState(before)
+	teamID, err := recordNewTeamTx(ctx, tx, festID, in, &work)
+	if err != nil {
+		return 0, RosterWrite{}, err
+	}
+	written, err := rewriteFromHandTx(ctx, tx, festID, before)
+	return teamID, written, err
+}
+
+// workingState is a copy of a roster that recording a team's edits may
+// change without touching the one it was loaded as.
+func workingState(state roster.HandState) roster.HandState {
+	return roster.HandState{Teams: slices.Clone(state.Teams), Edits: state.Edits}
+}
+
+// recordNewTeamTx makes a team the host typed and records its people, and
+// adds it to state as the rewrite will write it; it leaves the rewrite to the
+// caller.
+func recordNewTeamTx(ctx context.Context, tx *sql.Tx, festID int64, in TeamInput, state *roster.HandState) (int64, error) {
+	in, err := in.normalized()
+	if err != nil {
+		return 0, err
+	}
+	if err := checkNameFree(ctx, tx, festID, 0, in.Name, in.City); err != nil {
+		return 0, err
 	}
 	var number int64
 	var position float64
 	if err := tx.QueryRowContext(ctx, `
 select coalesce(max(number), 0) + 1, coalesce(max(position), 0) + 1 from fest_teams where fest_id = ?`, festID).Scan(&number, &position); err != nil {
-		return 0, RosterWrite{}, err
+		return 0, err
 	}
 	if in.RatingID > 0 {
 		var already int
 		if err := tx.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ? and rating_id = ? and deleted = 0`,
 			festID, in.RatingID).Scan(&already); err != nil {
-			return 0, RosterWrite{}, err
+			return 0, err
 		}
 		if already > 0 {
-			return 0, RosterWrite{}, corei18n.User(dopestrings.Default.Imports.HandRoster.RatingTeamTaken())
+			return 0, corei18n.User(dopestrings.Default.Imports.HandRoster.RatingTeamTaken())
 		}
 	}
 	teamID, err := store.InsertReturningID(ctx, tx, `
 insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted, hand, client_id) values(?, ?, ?, ?, ?, ?, 0, 1, ?)`,
 		festID, util.NullableInt64(in.RatingID), in.Name, in.City, position, number, util.NullableString(in.ClientID))
 	if err != nil {
-		return 0, RosterWrite{}, err
+		return 0, err
 	}
 	if in.Venue != nil {
 		if err := claimVenueNumberTx(ctx, tx, teamID, *in.Venue, in); err != nil {
-			return 0, RosterWrite{}, err
+			return 0, err
 		}
 		if err := placeHandTeamTx(ctx, tx, festID, teamID, *in.Venue); err != nil {
-			return 0, RosterWrite{}, err
+			return 0, err
 		}
 	}
 	if err := saveTeamPlayersTx(ctx, tx, festID, teamID, nil, in.Players); err != nil {
-		return 0, RosterWrite{}, err
+		return 0, err
 	}
 	if err := setTypedFlagsTx(ctx, tx, festID, teamID, in.Flags); err != nil {
-		return 0, RosterWrite{}, err
+		return 0, err
 	}
-	written, err := rewriteFromHandTx(ctx, tx, festID, before)
-	return teamID, written, err
+	state.Teams = append(state.Teams, roster.HandTeam{
+		ID: teamID, RatingID: in.RatingID, Number: number, Name: in.Name, City: in.City, Hand: true, Players: in.Players,
+	})
+	return teamID, nil
 }
 
 // SaveHandTeamTx sets a team's name, city and people as the host typed them.
@@ -266,13 +287,25 @@ insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted
 // an edit an import applies again. A person added who sits on another team
 // moves: they are taken off that one.
 func SaveHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in TeamInput) (RosterWrite, error) {
-	in, err := in.normalized()
+	before, err := roster.LoadHandState(ctx, tx, festID)
 	if err != nil {
 		return RosterWrite{}, err
 	}
-	state, err := roster.LoadHandState(ctx, tx, festID)
-	if err != nil {
+	work := workingState(before)
+	if err := recordTeamTx(ctx, tx, festID, teamID, in, &work); err != nil {
 		return RosterWrite{}, err
+	}
+	return rewriteFromHandTx(ctx, tx, festID, before)
+}
+
+// recordTeamTx records the edits that give a team the name, city and people
+// the host typed, and changes state the way the rewrite will: the team has
+// those people, and a person it took leaves the other teams. It leaves the
+// rewrite to the caller, so a sheet of teams rewrites the roster once.
+func recordTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in TeamInput, state *roster.HandState) error {
+	in, err := in.normalized()
+	if err != nil {
+		return err
 	}
 	var row *roster.HandTeam
 	for i := range state.Teams {
@@ -281,38 +314,38 @@ func SaveHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in Te
 		}
 	}
 	if row == nil {
-		return RosterWrite{}, corei18n.User(dopestrings.Default.Imports.HandRoster.TeamUnknown())
+		return corei18n.User(dopestrings.Default.Imports.HandRoster.TeamUnknown())
 	}
 	if err := checkNameFree(ctx, tx, festID, teamID, in.Name, in.City); err != nil {
-		return RosterWrite{}, err
+		return err
 	}
 	if in.RatingTeam != nil && *in.RatingTeam != row.RatingID {
 		if !row.Hand {
-			return RosterWrite{}, corei18n.User(dopestrings.Default.Imports.HandRoster.RatingTeamFixed())
+			return corei18n.User(dopestrings.Default.Imports.HandRoster.RatingTeamFixed())
 		}
 		if err := linkRatingTx(ctx, tx, festID, teamID, *in.RatingTeam); err != nil {
-			return RosterWrite{}, err
+			return err
 		}
 	}
 	switch {
 	case row.Hand:
 		if _, err := tx.ExecContext(ctx, `update fest_teams set name = ?, city = ? where id = ?`, in.Name, in.City, teamID); err != nil {
-			return RosterWrite{}, err
+			return err
 		}
 		if in.Venue != nil {
 			if err := placeHandTeamTx(ctx, tx, festID, teamID, *in.Venue); err != nil {
-				return RosterWrite{}, err
+				return err
 			}
 		}
 	default:
 		if in.Name != row.Name {
 			if _, err := tx.ExecContext(ctx, `update fest_teams set hand_name = ? where id = ?`, in.Name, teamID); err != nil {
-				return RosterWrite{}, err
+				return err
 			}
 		}
 		if in.City != row.City {
 			if _, err := tx.ExecContext(ctx, `update fest_teams set hand_city = ? where id = ?`, in.City, teamID); err != nil {
-				return RosterWrite{}, err
+				return err
 			}
 		}
 	}
@@ -337,17 +370,51 @@ func SaveHandTeamTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, in Te
 		}
 		for _, other := range elsewhere[roster.PlayerKey(p)] {
 			if err := roster.SaveHandEditTx(ctx, tx, festID, roster.HandEdit{TeamID: other, Player: p, Remove: true}, now); err != nil {
-				return RosterWrite{}, err
+				return err
 			}
 		}
 	}
 	if err := saveTeamPlayersTx(ctx, tx, festID, teamID, row.Players, in.Players); err != nil {
-		return RosterWrite{}, err
+		return err
 	}
 	if err := setTypedFlagsTx(ctx, tx, festID, teamID, in.Flags); err != nil {
-		return RosterWrite{}, err
+		return err
 	}
-	return rewriteFromHandTx(ctx, tx, festID, state)
+	if row.Hand {
+		row.Name, row.City = in.Name, in.City
+	}
+	takeTeamPlayers(state, teamID, in.Players)
+	return nil
+}
+
+// takeTeamPlayers gives a team of state these people, and takes the ones it
+// did not have off every other team.
+func takeTeamPlayers(state *roster.HandState, teamID int64, players []roster.FestRosterImportPlayer) {
+	had := map[string]bool{}
+	for _, team := range state.Teams {
+		if team.ID == teamID {
+			for _, p := range team.Players {
+				had[roster.PlayerKey(p)] = true
+			}
+		}
+	}
+	taken := map[string]bool{}
+	for _, p := range players {
+		if !had[roster.PlayerKey(p)] {
+			taken[roster.PlayerKey(p)] = true
+		}
+	}
+	for i := range state.Teams {
+		team := &state.Teams[i]
+		if team.ID == teamID {
+			team.Players = slices.Clone(players)
+			continue
+		}
+		if team.Deleted || len(taken) == 0 {
+			continue
+		}
+		team.Players = slices.DeleteFunc(slices.Clone(team.Players), func(p roster.FestRosterImportPlayer) bool { return taken[roster.PlayerKey(p)] })
+	}
 }
 
 // setTypedFlagsTx sets the Divisions the host picked for a team. A short
