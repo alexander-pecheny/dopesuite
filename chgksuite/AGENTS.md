@@ -113,12 +113,16 @@ typoedit/              the typography pass: typo (quotes, dashes and %-decoding,
                        both test suites read testdata/pass_cases.json
 docxread/              .docx → plain text — a hand-rolled python-docx (zip/OPC, runs,
                        hyperlinks, numbering, tables, image extraction, in memory, no fs)
-docread/               Word 97–2003 .doc → the same plain text, minus images, list numbers
-                       and formatting: OLE container, FIB, piece table. Only `chgksuite
-                       credits` and `question` use it; doctest/ writes minimal .doc files for tests
-rtfread/               .rtf → plain text, body only (font tables, info, pictures, headers,
-                       field instructions dropped; \'hh in the font's code page, \uN as is).
-                       Only `chgksuite credits` and `question` use it
+docread/               Word 97–2003 .doc → the same plain text, minus list numbers and
+                       formatting: OLE container, FIB, piece table; ToTextImages adds the
+                       PNG/JPEG/DIB pictures, inline (PICF in Data) and floating (drawing
+                       BStore), as (img …) (testdata: Apache POI's own .doc files). Only
+                       `chgksuite credits` and `question` use it; doctest/ writes minimal .doc
+                       files for tests
+rtfread/               .rtf → plain text, body only (font tables, info, headers, field
+                       instructions dropped; \'hh in the font's code page, \uN as is);
+                       ToTextImages keeps the body's PNG/JPEG \pict as (img …). Only
+                       `chgksuite credits` and `question` use it
 textparse/             parser.py's parsers: plain text → structure. The chgk/brain parser
                        runs in stages, one file each: label.go (each line typed by its
                        marker), starts.go (questions that carry no marker), group.go (which

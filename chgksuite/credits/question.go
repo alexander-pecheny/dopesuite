@@ -20,9 +20,10 @@ var ErrNoQuestion = errors.New("no such question")
 // and the question in 4s (every field, the number left out), for a renderer of
 // 4s to draw. File is the document it was read from, Language that document's
 // language as chgksuite's --language code, "ru" for Russian. Images are the
-// pictures its (img …) directives name that the file (a .docx) or its archive
-// holds: raster ones only, within the caps below; a picture left out is drawn
-// as missing.
+// pictures its (img …) directives name that the file or its archive holds:
+// a .docx's, a .doc's (docread), an .rtf's (rtfread), a PDF's (placed by
+// pdftohtml, pdfimages.go), those beside a .4s in an archive; raster ones only,
+// within the caps below. A picture left out is drawn as missing.
 type QuestionText struct {
 	Number   string          `json:"number"`
 	Source   string          `json:"source"`

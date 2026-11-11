@@ -201,15 +201,34 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		return f, nil
 	}
 	var text string
+	var images []chgkimport.Image
+	// Pictures get the names chgksuite gives a .docx's: the file's name first.
+	prefix := strings.ReplaceAll(strings.TrimSuffix(name, path.Ext(name)), " ", "_") + "_"
 	switch format {
 	case "pdf":
-		t, err := pdfText(data, opt.PDFToText)
+		var t string
+		var err error
+		if opt.images {
+			t, images, err = pdfTextImages(data, opt.PDFToText, prefix)
+		} else {
+			t, err = pdfText(data, opt.PDFToText)
+		}
 		if err != nil {
 			return file{}, err
 		}
 		text = unwrap(t)
 	case "doc":
-		t, err := docread.ToText(data)
+		var t string
+		var err error
+		if opt.images {
+			var pics []docread.Image
+			t, pics, err = docread.ToTextImages(data, prefix)
+			for _, p := range pics {
+				images = append(images, chgkimport.Image{Name: p.Name, Data: p.Data})
+			}
+		} else {
+			t, err = docread.ToText(data)
+		}
 		if errors.Is(err, docread.ErrEncrypted) {
 			return file{}, fmt.Errorf("%w: %v", ErrEncrypted, err)
 		}
@@ -218,7 +237,17 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		}
 		text = t
 	case "rtf":
-		t, err := rtfread.ToText(data)
+		var t string
+		var err error
+		if opt.images {
+			var pics []rtfread.Image
+			t, pics, err = rtfread.ToTextImages(data, prefix)
+			for _, p := range pics {
+				images = append(images, chgkimport.Image{Name: p.Name, Data: p.Data})
+			}
+		} else {
+			t, err = rtfread.ToText(data)
+		}
 		if err != nil {
 			return file{}, err
 		}
@@ -239,7 +268,6 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		}
 		text = t
 	}
-	var images []chgkimport.Image
 	if isSI(text) {
 		// Not a ЧГК packet: it credits nobody and, in a zip, is not picked.
 		return file{name: name, format: format}, nil

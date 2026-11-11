@@ -2,8 +2,9 @@
 // format before .docx — so `chgksuite credits` can read old packets without
 // LibreOffice. It is the minimum of [MS-DOC] that gives the main document's
 // text in reading order: the OLE container (cfb.go), the FIB, and the piece
-// table. Formatting, lists, images, footnotes and headers are not read, and
-// neither are Word 6/95 or encrypted files. LibreOffice's ww8 filter
+// table; ToTextImages also reads the pictures (pictures.go). Formatting,
+// lists, footnotes and headers are not read, and neither are Word 6/95 or
+// encrypted files. LibreOffice's ww8 filter
 // (sw/source/filter/ww8/ww8scan.cxx) is the reference for what real files do.
 package docread
 
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"
 
@@ -71,30 +73,49 @@ var (
 // paragraphs separated by a blank line, table cells as paragraphs of their own,
 // a manual line break as a newline, field codes dropped and their results kept.
 func ToText(data []byte) (string, error) {
-	c, err := openCFB(data)
+	d, err := open(data)
 	if err != nil {
 		return "", err
+	}
+	return docxread.Tidy(render(d.raw, nil)), nil
+}
+
+// document is a .doc opened down to its main text: raw holds a rune per
+// character position (CP), fcs the stream offset each one was read from.
+type document struct {
+	c         *cfb
+	wd, table []byte
+	fcLcb     int // where the FIB's fc/lcb pairs start
+	cbRgFcLcb int
+	raw       []rune
+	fcs       []uint32
+}
+
+func open(data []byte) (*document, error) {
+	c, err := openCFB(data)
+	if err != nil {
+		return nil, err
 	}
 	wd, _, err := c.stream("WordDocument")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(wd) < fibRgW {
-		return "", fmt.Errorf("doc: no WordDocument stream")
+		return nil, fmt.Errorf("doc: no WordDocument stream")
 	}
 	le := binary.LittleEndian
 	switch ident := le.Uint16(wd); {
 	case ident == identWord6 || ident == identWord95:
-		return "", ErrOldWord
+		return nil, ErrOldWord
 	case ident != identWord97:
-		return "", fmt.Errorf("doc: unknown FIB identifier %#x", ident)
+		return nil, fmt.Errorf("doc: unknown FIB identifier %#x", ident)
 	}
 	if nFib := le.Uint16(wd[2:]); nFib < minNFib {
-		return "", ErrOldWord
+		return nil, ErrOldWord
 	}
 	flags := le.Uint16(wd[0x0A:])
 	if flags&flagEncrypted != 0 {
-		return "", ErrEncrypted
+		return nil, ErrEncrypted
 	}
 
 	// The FIB's variable part: csw shorts, cslw longs (ccpText is the fourth),
@@ -102,27 +123,25 @@ func ToText(data []byte) (string, error) {
 	csw := int(le.Uint16(wd[0x20:]))
 	p := fibRgW + 2*csw
 	if p+2 > len(wd) {
-		return "", fmt.Errorf("doc: truncated FIB")
+		return nil, fmt.Errorf("doc: truncated FIB")
 	}
 	cslw := int(le.Uint16(wd[p:]))
 	rglw := p + 2
 	p = rglw + longSize*cslw
 	if cslw <= ccpTextLong || p+2 > len(wd) {
-		return "", fmt.Errorf("doc: truncated FIB")
+		return nil, fmt.Errorf("doc: truncated FIB")
 	}
 	ccpText := le.Uint32(wd[rglw+ccpTextLong*longSize:])
 	if ccpText > uint32(len(wd)) {
 		// Every character takes at least a byte of the stream; pieces may
 		// overlap, so without this cap a crafted file could ask for gigabytes.
-		return "", fmt.Errorf("doc: text longer than the document")
+		return nil, fmt.Errorf("doc: text longer than the document")
 	}
 	cbRgFcLcb := int(le.Uint16(wd[p:]))
 	fcLcb := p + 2
 	if cbRgFcLcb <= clxPair || fcLcb+(clxPair+1)*fcLcbPairSize > len(wd) {
-		return "", fmt.Errorf("doc: truncated FIB")
+		return nil, fmt.Errorf("doc: truncated FIB")
 	}
-	fcClx := le.Uint32(wd[fcLcb+clxPair*fcLcbPairSize:])
-	lcbClx := le.Uint32(wd[fcLcb+clxPair*fcLcbPairSize+longSize:])
 
 	tableName := "0Table"
 	if flags&flagWhichTbl != 0 {
@@ -130,44 +149,59 @@ func ToText(data []byte) (string, error) {
 	}
 	table, ok, err := c.stream(tableName)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if !ok {
-		return "", fmt.Errorf("doc: no %s stream", tableName)
+		return nil, fmt.Errorf("doc: no %s stream", tableName)
 	}
-	if uint64(fcClx)+uint64(lcbClx) > uint64(len(table)) || lcbClx == 0 {
-		return "", fmt.Errorf("doc: piece table out of range")
+	d := &document{c: c, wd: wd, table: table, fcLcb: fcLcb, cbRgFcLcb: cbRgFcLcb}
+	clx, ok := d.tableBlock(clxPair)
+	if !ok || len(clx) == 0 {
+		return nil, fmt.Errorf("doc: piece table out of range")
 	}
-	raw, err := readPieces(wd, table[fcClx:fcClx+lcbClx], ccpText)
-	if err != nil {
-		return "", err
+	if d.raw, d.fcs, err = readPieces(wd, clx, ccpText); err != nil {
+		return nil, err
 	}
-	return docxread.Tidy(render(raw)), nil
+	return d, nil
+}
+
+// tableBlock is the table stream's block the FIB's fc/lcb pair i names.
+func (d *document) tableBlock(i int) ([]byte, bool) {
+	if i >= d.cbRgFcLcb || d.fcLcb+(i+1)*fcLcbPairSize > len(d.wd) {
+		return nil, false
+	}
+	le := binary.LittleEndian
+	fc := le.Uint32(d.wd[d.fcLcb+i*fcLcbPairSize:])
+	lcb := le.Uint32(d.wd[d.fcLcb+i*fcLcbPairSize+longSize:])
+	if uint64(fc)+uint64(lcb) > uint64(len(d.table)) {
+		return nil, false
+	}
+	return d.table[fc : fc+lcb], true
 }
 
 // readPieces assembles the first ccpText characters through the piece table
 // (the Clx: optional Prc records of property modifiers, then the Pcdt). A
 // piece is UTF-16LE, or, with bit 30 of its fc set, one byte per character in
 // cp1252 at fc/2.
-func readPieces(wd, clx []byte, ccpText uint32) ([]rune, error) {
+func readPieces(wd, clx []byte, ccpText uint32) ([]rune, []uint32, error) {
 	le := binary.LittleEndian
 	for len(clx) > 0 && clx[0] == clxtPrc {
 		if len(clx) < prcHeaderLen {
-			return nil, fmt.Errorf("doc: truncated Clx")
+			return nil, nil, fmt.Errorf("doc: truncated Clx")
 		}
 		n := prcHeaderLen + int(le.Uint16(clx[1:]))
 		if n > len(clx) {
-			return nil, fmt.Errorf("doc: truncated Clx")
+			return nil, nil, fmt.Errorf("doc: truncated Clx")
 		}
 		clx = clx[n:]
 	}
 	if len(clx) < pcdtHeadLen || clx[0] != clxtPcdt {
-		return nil, fmt.Errorf("doc: no piece table")
+		return nil, nil, fmt.Errorf("doc: no piece table")
 	}
 	lcb := int(le.Uint32(clx[1:]))
 	plc := clx[pcdtHeadLen:]
 	if lcb > len(plc) || (lcb-cpSize)%(cpSize+pcdSize) != 0 {
-		return nil, fmt.Errorf("doc: bad piece table size")
+		return nil, nil, fmt.Errorf("doc: bad piece table size")
 	}
 	n := (lcb - cpSize) / (cpSize + pcdSize)
 	cp := func(i int) uint32 { return le.Uint32(plc[cpSize*i:]) }
@@ -175,6 +209,7 @@ func readPieces(wd, clx []byte, ccpText uint32) ([]rune, error) {
 	dec := charmap.Windows1252.NewDecoder()
 
 	var out []rune
+	var fcs []uint32
 	for i := 0; i < n && uint32(len(out)) < ccpText; i++ {
 		start, end := cp(i), cp(i+1)
 		if end <= start {
@@ -188,30 +223,53 @@ func readPieces(wd, clx []byte, ccpText uint32) ([]rune, error) {
 		if fc&fcCompressed != 0 {
 			off := uint64(fc&^fcCompressed) / 2
 			if off+uint64(count) > uint64(len(wd)) {
-				return nil, fmt.Errorf("doc: piece past the end of the text")
+				return nil, nil, fmt.Errorf("doc: piece past the end of the text")
 			}
 			s, err := dec.Bytes(wd[off : off+uint64(count)])
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
-			out = append(out, []rune(string(s))...)
+			rs := []rune(string(s))
+			if len(rs) != int(count) {
+				return nil, nil, fmt.Errorf("doc: a compressed piece of %d bytes decoded to %d characters", count, len(rs))
+			}
+			out = append(out, rs...)
+			for k := range uint64(count) {
+				fcs = append(fcs, uint32(off+k))
+			}
 		} else {
 			off := uint64(fc)
 			if off+2*uint64(count) > uint64(len(wd)) {
-				return nil, fmt.Errorf("doc: piece past the end of the text")
+				return nil, nil, fmt.Errorf("doc: piece past the end of the text")
 			}
-			u := make([]uint16, count)
-			for k := range u {
-				u[k] = le.Uint16(wd[off+2*uint64(k):])
+			// One rune per UTF-16 unit, so a rune's index is its CP: a
+			// surrogate pair gives its character and a 0, which render drops.
+			for k := uint64(0); k < uint64(count); k++ {
+				u := le.Uint16(wd[off+2*k:])
+				r := rune(u)
+				if utf16.IsSurrogate(r) && k+1 < uint64(count) {
+					if pair := utf16.DecodeRune(r, rune(le.Uint16(wd[off+2*k+2:]))); pair != utf8.RuneError {
+						out = append(out, pair, 0)
+						fcs = append(fcs, uint32(off+2*k), uint32(off+2*k+2))
+						k++
+						continue
+					}
+				}
+				if utf16.IsSurrogate(r) {
+					r = utf8.RuneError
+				}
+				out = append(out, r)
+				fcs = append(fcs, uint32(off+2*k))
 			}
-			out = append(out, utf16.Decode(u)...)
 		}
 	}
-	return out, nil
+	return out, fcs, nil
 }
 
-// render turns Word's control characters into docxread's plain text.
-func render(raw []rune) string {
+// render turns Word's control characters into docxread's plain text. pictures
+// keys the picture anchors (0x01 inline, 0x08 floating) by their CP: each
+// becomes a marker of its key, which ToTextImages swaps for the directive.
+func render(raw []rune, pictures map[int]string) string {
 	var paras []string
 	var cur strings.Builder
 	// Fields nest: 0x13 opens one, 0x14 ends its code and starts its result,
@@ -232,7 +290,7 @@ func render(raw []rune) string {
 		paras = append(paras, typo.EscapeUnderscoresExceptURLs(strings.TrimRight(cur.String(), " "), false))
 		cur.Reset()
 	}
-	for _, r := range raw {
+	for i, r := range raw {
 		switch r {
 		case fieldBegin:
 			inCode = append(inCode, true)
@@ -262,9 +320,13 @@ func render(raw []rune) string {
 		case '\t':
 			cur.WriteByte('\t')
 		default:
-			// Below 0x20 are anchors with nothing to read: a picture (0x01),
-			// a footnote or comment mark (0x02, 0x05), a drawn object (0x08).
-			if r >= ' ' {
+			// Below 0x20 are anchors: a picture (0x01), a footnote or comment
+			// mark (0x02, 0x05), a drawn object (0x08). A picture read
+			// (ToTextImages) gets a marker, swapped for its directive after the
+			// underscores are escaped: the name has its own.
+			if key, ok := pictures[i]; ok {
+				cur.WriteString(pictureMark + key + pictureMarkEnd)
+			} else if r >= ' ' {
 				cur.WriteRune(r)
 			}
 		}

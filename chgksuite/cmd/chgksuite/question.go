@@ -16,8 +16,9 @@ import (
 //	chgksuite question --number 7 [--name packet.zip] [--questions 36] <file | ->
 //
 // The file is read as `credits` reads it (formats, the packet picked out of an
-// archive). The output carries the pictures the question names that the
-// .docx, or the archive beside a .4s, holds (raster only, base64). No question
+// archive). The output carries the pictures the question names that the file
+// holds (.docx, .doc, .rtf, PDF — the PDF's through poppler's pdftohtml — or
+// beside a .4s in an archive; raster only, base64). No question
 // under that number, or two, exits with code 4; a password-protected file with
 // code 3.
 func questionCmd(args []string) error {

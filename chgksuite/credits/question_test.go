@@ -3,8 +3,11 @@ package credits
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -107,5 +110,80 @@ func TestQuestionImagesBesideA4sInAnArchive(t *testing.T) {
 	}
 	if len(q.Images) != 1 || q.Images[0].Name != "a.png" || q.Images[0].MIME != "image/png" || !bytes.Equal(q.Images[0].Data, pic) {
 		t.Fatalf("images %+v", q.Images)
+	}
+}
+
+// An .rtf's picture comes with its question, named after the file.
+func TestQuestionImagesOfAnRTF(t *testing.T) {
+	pic := pngOf(t)
+	rtf := `{\rtf1\ansi\ansicpg1251 \'c2\'ee\'ef\'f0\'ee\'f1 1. \'d7\'f2\'ee \'ed\'e0 \'ea\'e0\'f0\'f2\'e8\'ed\'ea\'e5?\par{\*\shppict{\pict\pngblip ` +
+		fmt.Sprintf("%x", pic) + `}}\par \'ce\'f2\'e2\'e5\'f2: \'d1\'ee\'e2\'e0\par}`
+	q, err := Question("пакет тура.rtf", []byte(rtf), "1", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(q.Images) != 1 || q.Images[0].Name != "пакет_тура_image1.png" || !bytes.Equal(q.Images[0].Data, pic) ||
+		!strings.Contains(q.Source, "(img пакет_тура_image1.png)") {
+		t.Fatalf("question %+v", q)
+	}
+}
+
+// A PDF's picture goes after the lowest line ending above it on its page,
+// found in pdftotext's text as written; above every line, first on the page.
+func TestPDFPicturePlace(t *testing.T) {
+	layout := []byte(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "x"><html><body><doc>
+<page><flow><block><line yMax="91"><word>Тур</word><word>1</word></line></block>
+<block><line yMax="125"><word>Вопрос</word><word>2.</word></line><line yMax="141"><word>Что</word><word>&amp;</word><word>это?</word></line></block>
+<block><line yMax="350"><word>Назовите.</word></line></block></flow></page>
+<page><flow><block><line yMax="80"><word>Ответ:</word><word>сова</word></line></block></flow></page></doc></body></html>`)
+	lines := pdfLines(layout)
+	if len(lines[0]) != 4 || lines[0][2].text != "Что & это?" || lines[1][0].yMax != 80 {
+		t.Fatalf("lines %+v", lines)
+	}
+	page := "Тур 1\nВопрос 2.\nЧто & это?\n\nНазовите.\n"
+	ends := pdfLineEnds(page, lines[0])
+	for _, c := range []struct {
+		top  float64
+		want string
+	}{
+		{247, "Тур 1\nВопрос 2.\nЧто & это?"},
+		{142, "Тур 1\nВопрос 2.\nЧто & это?"}, // the line reaches a point below the top: still above
+		{400, page[:len(page)-1]},
+		{10, ""},
+	} {
+		if got := page[:pdfAnchor(lines[0], ends, c.top)]; got != c.want {
+			t.Errorf("top %v: after %q, want %q", c.top, got, c.want)
+		}
+	}
+}
+
+// The whole of it over a packet chgksuite set in PDF (testdata/pictures.pdf:
+// a picture in question 2's text, one in question 3's comment). It needs
+// poppler's pdftotext and pdftohtml.
+func TestQuestionImagesOfAPDF(t *testing.T) {
+	for _, bin := range []string{"pdftotext", "pdftohtml"} {
+		if _, err := exec.LookPath(bin); err != nil {
+			t.Skipf("%s not on PATH", bin)
+		}
+	}
+	data, err := os.ReadFile("testdata/pictures.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ number, source string }{
+		{"2", "? Что изображено на картинке?\n(img pictures_image1.jpg)\nНазовите это.\n! Сова"},
+		{"3", "(img pictures_image2.jpg)"},
+	} {
+		q, err := Question("pictures.pdf", data, c.number, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(q.Source, c.source) || len(q.Images) != 1 || pictureMIME(q.Images[0].Name) != "image/jpeg" ||
+			!bytes.HasPrefix(q.Images[0].Data, []byte("\xff\xd8\xff")) {
+			t.Errorf("question %s: %q, %d images", c.number, q.Source, len(q.Images))
+		}
+	}
+	if q, err := Question("pictures.pdf", data, "1", Options{}); err != nil || len(q.Images) != 0 {
+		t.Errorf("question 1: %+v, %v", q, err)
 	}
 }

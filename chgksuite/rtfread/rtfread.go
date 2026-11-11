@@ -4,11 +4,13 @@
 // objects, headers and footers, field instructions and every \* destination.
 // Bytes written as \'hh are decoded in the code page of the font they stand in
 // (\fcharset), else the document's \ansicpg; \uN characters are taken as they
-// are and their fallback bytes skipped.
+// are and their fallback bytes skipped. ToTextImages also keeps the body's
+// PNG and JPEG pictures, each as an (img …) directive where it stands.
 package rtfread
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"strconv"
 	"strings"
@@ -46,6 +48,25 @@ type state struct {
 	font int
 	// inFontTable: \fN and \fcharsetN describe a font rather than switch to it.
 	inFontTable bool
+	// hidden: inside a destination that is not the body (a header, the info, a
+	// \* destination other than \shppict); a picture there is not kept.
+	hidden bool
+	// pict: inside a \pict group, whose own text is the picture's hex;
+	// pictNested: in a group within it (\*\blipuid), whose text is not.
+	pict, pictNested bool
+}
+
+// Image is a picture of the body, named as its (img …) directive names it.
+type Image struct {
+	Name string
+	Data []byte
+}
+
+// picture is the \pict group being read.
+type picture struct {
+	ext string // "png" or "jpg"; "" for a format a browser does not draw (WMF, EMF, DIB)
+	hex []byte
+	bin []byte
 }
 
 type reader struct {
@@ -59,6 +80,11 @@ type reader struct {
 	st        state
 	stack     []state
 	toSkip    int // fallback characters still to drop after \uN
+	// images: keep pictures (ToTextImages), named prefix + "imageN.ext".
+	images bool
+	prefix string
+	pic    *picture
+	pics   []Image
 }
 
 // ToText reads an RTF document's body text.
@@ -72,6 +98,21 @@ func ToText(data []byte) (string, error) {
 	return r.out.String(), nil
 }
 
+// ToTextImages is ToText with the body's PNG and JPEG pictures: each becomes
+// "(img <prefix>imageN.png)" in the text where it stands, and an Image of that
+// name. A picture in a header, a footnote or an object is left out, and so is
+// one in a format a browser does not draw (a Word picture's WMF fallback in
+// \nonshppict is skipped with its group).
+func ToTextImages(data []byte, prefix string) (string, []Image, error) {
+	if !bytes.HasPrefix(bytes.TrimLeft(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf")), " \r\n\t"), []byte(`{\rtf`)) {
+		return "", nil, ErrNotRTF
+	}
+	r := &reader{src: data, ansicpg: 1252, charsets: map[int]int{}, st: state{uc: 1, font: -1}, images: true, prefix: prefix}
+	r.run()
+	r.flush()
+	return r.out.String(), r.pics, nil
+}
+
 func (r *reader) run() {
 	for r.pos < len(r.src) {
 		c := r.src[r.pos]
@@ -79,14 +120,25 @@ func (r *reader) run() {
 		switch c {
 		case '{':
 			r.stack = append(r.stack, r.st)
+			if r.st.pict {
+				r.st.pictNested = true
+			}
 			if r.pos+1 < len(r.src) && r.src[r.pos] == '\\' && r.src[r.pos+1] == '*' {
 				r.st.skip = true
+				// \*\shppict holds the body's picture; any other \* destination is not body.
+				if !bytes.HasPrefix(r.src[r.pos+2:], []byte(`\shppict`)) {
+					r.st.hidden = true
+				}
 			}
 		case '}':
 			if n := len(r.stack); n > 0 {
 				r.flush()
+				closed := r.st
 				r.st = r.stack[n-1]
 				r.stack = r.stack[:n-1]
+				if closed.pict && !r.st.pict {
+					r.endPicture(closed)
+				}
 			}
 		case '\\':
 			r.control()
@@ -146,11 +198,32 @@ func (r *reader) control() {
 }
 
 func (r *reader) word(word string, num int) {
+	if word == "pict" && r.images {
+		r.st.skip, r.st.pict = true, true
+		r.pic = &picture{}
+		return
+	}
 	if skipped[word] {
 		if word == "fonttbl" {
 			r.st.inFontTable = true
 		} else {
-			r.st.skip = true
+			r.st.skip, r.st.hidden = true, true
+		}
+		return
+	}
+	if r.st.pict {
+		if r.st.pictNested {
+			return
+		}
+		switch word {
+		case "pngblip":
+			r.pic.ext = "png"
+		case "jpegblip":
+			r.pic.ext = "jpg"
+		case "bin":
+			end := min(len(r.src), r.pos+max(num, 0))
+			r.pic.bin = append(r.pic.bin, r.src[r.pos:end]...)
+			r.pos = end
 		}
 		return
 	}
@@ -206,6 +279,12 @@ func (r *reader) word(word string, num int) {
 }
 
 func (r *reader) text(c byte) {
+	if r.st.pict {
+		if isHex(c) && !r.st.pictNested {
+			r.pic.hex = append(r.pic.hex, c)
+		}
+		return
+	}
 	if r.toSkip > 0 {
 		r.toSkip--
 		return
@@ -255,5 +334,33 @@ func (r *reader) flush() {
 	}
 	r.pending = r.pending[:0]
 }
+
+// endPicture keeps the \pict group just closed when it is a body picture a
+// browser draws, and writes its directive where it stood.
+func (r *reader) endPicture(st state) {
+	pic := r.pic
+	r.pic = nil
+	if pic == nil || pic.ext == "" || st.hidden || r.st.inFontTable {
+		return
+	}
+	data := pic.bin
+	if len(data) == 0 {
+		if len(pic.hex)%2 == 1 {
+			pic.hex = pic.hex[:len(pic.hex)-1]
+		}
+		data = make([]byte, len(pic.hex)/2)
+		if _, err := hex.Decode(data, pic.hex); err != nil {
+			return
+		}
+	}
+	if len(data) == 0 {
+		return
+	}
+	name := r.prefix + "image" + strconv.Itoa(len(r.pics)+1) + "." + pic.ext
+	r.pics = append(r.pics, Image{Name: name, Data: data})
+	r.out.WriteString("(img " + name + ")")
+}
+
+func isHex(c byte) bool { return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F' }
 
 func isLetter(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
