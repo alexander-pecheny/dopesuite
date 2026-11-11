@@ -90,6 +90,8 @@ type Options struct {
 	// PDFToText is the pdftotext binary (poppler) PDFs are read with; empty
 	// means "pdftotext" on PATH. With none available, PDFs are skipped.
 	PDFToText string
+	// images keeps the files' pictures (Question).
+	images bool
 }
 
 // maxInflated bounds the total uncompressed size of the documents read out of a
@@ -155,6 +157,9 @@ type file struct {
 	paragraphs []Paragraph
 	authors    []Author
 	doc        fsource.Doc // the file as chgksuite parsed it; Question reads it
+	// images are the pictures the file carries (a .docx), or the archive beside
+	// it: read only for Question.
+	images []chgkimport.Image
 }
 
 // Uzbek Cyrillic writes ў, қ, ғ and ҳ. Belarusian has ў but none of the others;
@@ -234,6 +239,7 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		}
 		text = t
 	}
+	var images []chgkimport.Image
 	if isSI(text) {
 		// Not a ЧГК packet: it credits nobody and, in a zip, is not picked.
 		return file{name: name, format: format}, nil
@@ -249,10 +255,13 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 			return file{}, err
 		}
 		source = res.Source
+		if opt.images {
+			images = res.Images
+		}
 	}
 	doc := fsource.Parse(source, "chgk")
 	f := dropLeadingWarmup(fromDoc(doc), opt.Questions)
-	f.name, f.format, f.language, f.doc = name, format, lang, doc
+	f.name, f.format, f.language, f.doc, f.images = name, format, lang, doc, images
 	return f, nil
 }
 

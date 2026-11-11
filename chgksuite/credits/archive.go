@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/chgkimport"
 	"github.com/bodgit/sevenzip"
 	"github.com/nwaples/rardecode/v2"
 )
@@ -47,7 +48,16 @@ func archiveFiles(ext string, data []byte, opt Options) ([]file, error) {
 		err                    error
 	)
 	budget := int64(maxInflated)
+	var images []chgkimport.Image
 	visit := func(m member) error {
+		if opt.images && !m.encrypted && pictureMIME(m.name) != "" && !strings.HasPrefix(m.name, "__MACOSX/") {
+			if body, err := m.read(&budget); err == nil {
+				images = append(images, chgkimport.Image{Name: path.Base(m.name), MIME: pictureMIME(m.name), Data: body})
+			} else if errors.Is(err, errTooLarge) {
+				return err
+			}
+			return nil
+		}
 		if !mayBePacket(m.name) {
 			return nil
 		}
@@ -94,7 +104,12 @@ func archiveFiles(ext string, data []byte, opt Options) ([]file, error) {
 	}
 	switch {
 	case len(files) > 0:
-		return pick(files, opt.Questions), nil
+		picked := pick(files, opt.Questions)
+		// A .4s names pictures it does not hold: the archive's, beside it.
+		for i := range picked {
+			picked[i].images = append(slices.Clip(picked[i].images), images...)
+		}
+		return picked, nil
 	case candidates > 0 && locked == candidates:
 		return nil, fmt.Errorf("%w: the archive's documents are password-protected", ErrEncrypted)
 	case candidates > 0 && ok == 0:
