@@ -81,6 +81,9 @@
   --venue-schedule-game-col: 200px;
   /* The venues table: the title (a room, usually) and the hosts' names. */
   --venue-title-col: 280px;
+  /* Room under a clipped line for its descenders (у, д, р): overflow:hidden
+     cuts at the padding edge, which a tight line-height puts on the glyphs. */
+  --descender-room: 0.2em;
   --venue-hosts-col: 380px;
 }
 
@@ -479,6 +482,14 @@
 .venue-label .name-cell-text {
   color: var(--muted);
   font-weight: var(--fw-regular);
+}
+
+/* A venue's title clips at its box; the box keeps room for the descenders
+   and gives it back below, so the head's height does not change. */
+.grid-match-venue,
+.venue-label .name-cell-text {
+  padding-bottom: var(--descender-room);
+  margin-bottom: calc(-1 * var(--descender-room));
 }
 
 /* The host's sheet head with its venue: the frozen name column is too narrow
