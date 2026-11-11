@@ -49,6 +49,10 @@ type Result struct {
 	Source string
 	// Images are the images the source references, if any.
 	Images []Image
+	// Doc is a .docx's structure as the text parser read it, before Source
+	// writes it out: its questions carry the numbers the packet writes, which
+	// Source keeps only where they break the count (NumbersDefault).
+	Doc fsource.Doc
 }
 
 // ErrUnsupported is returned for a file extension we can't import.
@@ -110,8 +114,15 @@ func ParseText(text string) string {
 // --language codes: "ua" reads the Ukrainian question and answer labels); "" is
 // Russian.
 func ParseTextIn(text, language string) string {
-	doc := textparse.Parse(normalizeNewlines(text), textparse.Options{Language: language})
-	return strings.TrimSpace(fsource.Compose(doc, fsource.NumbersDefault))
+	return strings.TrimSpace(fsource.Compose(ParseTextDocIn(text, language), fsource.NumbersDefault))
+}
+
+// ParseTextDocIn is ParseTextIn's structure before it is written out as 4s:
+// each question with the number the packet writes for it ("0" for a warm-up
+// named so, none for one the packet leaves unnumbered). Written out and read
+// back, the 4s numbers the questions by counting them instead.
+func ParseTextDocIn(text, language string) fsource.Doc {
+	return textparse.Parse(normalizeNewlines(text), textparse.Options{Language: language})
 }
 
 // DocxText is the plain text of a .docx, as the import pipeline reads it — for
@@ -180,12 +191,14 @@ func parseDocx(base string, data []byte, game, language string) (*Result, error)
 		return nil, fmt.Errorf("read docx: %w", err)
 	}
 	var source string
+	var doc fsource.Doc
 	if themed(game) {
 		source = parseThemed(text, game)
 	} else {
-		source = fsource.Compose(textparse.Parse(text, textparse.Options{Language: language}), fsource.NumbersDefault)
+		doc = textparse.Parse(text, textparse.Options{Language: language})
+		source = fsource.Compose(doc, fsource.NumbersDefault)
 	}
-	res := &Result{Name: base, Source: source}
+	res := &Result{Name: base, Source: source, Doc: doc}
 	for _, img := range imgs {
 		res.Images = append(res.Images, Image{
 			Name: img.Name,

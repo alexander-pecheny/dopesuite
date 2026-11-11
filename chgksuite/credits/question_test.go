@@ -187,3 +187,32 @@ func TestQuestionImagesOfAPDF(t *testing.T) {
 		t.Errorf("question 1: %+v, %v", q, err)
 	}
 }
+
+// The number is the one the packet writes, as the text parser reads it, never
+// a count: notes to the narrator and a warm-up (chgksuite's 0) before question
+// 1 do not push it to 2, and two tours numbered from 1 each hold two questions
+// 1, neither given.
+func TestQuestionNumberIsTheWrittenOne(t *testing.T) {
+	// As WitchCraft №2 writes it: a numbered note to the narrator that quotes
+	// an «Ответ:» is read as a question without a number, then the warm-up
+	// (its label on a line of its own) and question 1. Counted, question 1 is 2.
+	warmup := doctest.Doc("3. В ответах к вопросам пакета необязательная их часть указана в круглых скобках. Например: «Ответ: (Александр) Пушкин».\r\r" +
+		"Разминочный вопрос\r\rТекст разминки.\rОтвет: о\r\rВопрос 1.\r\rТекст первого.\rОтвет: Макбет.\r\rВопрос 2.\r\rТекст второго.\rОтвет: о\r")
+	for number, want := range map[string]string{"0": "Текст разминки.", "1": "Текст первого.", "2": "Текст второго."} {
+		q, err := Question("p.doc", warmup, number, Options{})
+		if err != nil || !strings.HasPrefix(q.Source, "? "+want) {
+			t.Errorf("question %s: %+v, %v", number, q, err)
+		}
+	}
+	if _, err := Question("p.doc", warmup, "3", Options{}); !errors.Is(err, ErrNoQuestion) {
+		t.Errorf("question 3 of a packet of 0–2: %v", err)
+	}
+
+	tours := doctest.Doc("Тур 1\r\rВопрос 1. Первый первого.\rОтвет: о\r\rТур 2\r\rВопрос 1. Первый второго.\rОтвет: о\r\rВопрос 2. Второй второго.\rОтвет: о\r")
+	if _, err := Question("p.doc", tours, "1", Options{}); !errors.Is(err, ErrNoQuestion) {
+		t.Errorf("two questions 1: %v", err)
+	}
+	if q, err := Question("p.doc", tours, "2", Options{}); err != nil || !strings.Contains(q.Source, "Второй второго.") {
+		t.Errorf("question 2: %+v, %v", q, err)
+	}
+}

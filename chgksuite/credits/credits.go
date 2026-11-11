@@ -275,21 +275,27 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 	// Field markers differ by language («Вопрос» / «Запитання» / «Пытанне»):
 	// parse in the language the packet is written in.
 	lang := language(text)
+	// written is the text parser's structure: Question finds a question by the
+	// number the packet writes for it there. The credits read the 4s, which
+	// numbers the questions by counting them (a warm-up without a number
+	// would push every number one up).
+	var written fsource.Doc
 	if format != "docx" {
-		source = chgkimport.ParseTextIn(text, lang)
+		written = chgkimport.ParseTextDocIn(text, lang)
+		source = strings.TrimSpace(fsource.Compose(written, fsource.NumbersDefault))
 	} else {
 		res, err := chgkimport.ParseDocxIn(name, data, lang)
 		if err != nil {
 			return file{}, err
 		}
-		source = res.Source
+		source, written = res.Source, res.Doc
 		if opt.images {
 			images = res.Images
 		}
 	}
 	doc := fsource.Parse(source, "chgk")
 	f := dropLeadingWarmup(fromDoc(doc), opt.Questions)
-	f.name, f.format, f.language, f.doc, f.images = name, format, lang, doc, images
+	f.name, f.format, f.language, f.doc, f.images = name, format, lang, written, images
 	return f, nil
 }
 
