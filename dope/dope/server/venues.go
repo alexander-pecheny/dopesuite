@@ -100,7 +100,9 @@ where fest_id = ? and number = ?`, append(args, util.UtcNow(), festID, number)..
 // createVenue adds venue number (the next free one when number is 0) to the
 // fest, and seats there every bout a Game's scheme puts at that table and
 // that sits at no venue yet.
-func (s *server) createVenue(reqCtx context.Context, festID int64, req venueCreateRequest) (venueChange, error) {
+// A gameID other than 0 makes the venue that Game's own: no other Game lists
+// it, and only that Game's bouts are seated there.
+func (s *server) createVenue(reqCtx context.Context, festID, gameID int64, req venueCreateRequest) (venueChange, error) {
 	number, title := req.Number, strings.TrimSpace(req.Title)
 	hosts := strings.TrimSpace(req.Hosts)
 	if title == "" {
@@ -127,23 +129,25 @@ func (s *server) createVenue(reqCtx context.Context, festID int64, req venueCrea
 		}
 		now := util.UtcNow()
 		venueID, err := store.InsertReturningID(ctx, tx, `
-insert into venues(fest_id, number, title, hosts, created_at, updated_at) values(?, ?, ?, ?, ?, ?)`, festID, number, title, hosts, now, now)
+insert into venues(fest_id, number, title, hosts, game_id, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?)`,
+			festID, number, title, hosts, util.NullableInt64(gameID), now, now)
 		if err != nil {
 			return nil, err
 		}
-		return seatSchemeBoutsTx(ctx, tx, festID, number, venueID)
+		return seatSchemeBoutsTx(ctx, tx, festID, gameID, number, venueID)
 	})
 }
 
 // seatSchemeBoutsTx seats at venueID every bout of the fest whose Game's
 // scheme puts it at table number and that sits at no venue, and returns them.
-func seatSchemeBoutsTx(ctx context.Context, tx *sql.Tx, festID int64, number int, venueID int64) ([]matchScope, error) {
+// A gameID other than 0 seats that Game's bouts alone.
+func seatSchemeBoutsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, number int, venueID int64) ([]matchScope, error) {
 	type game struct {
 		id     int64
 		scheme string
 	}
-	games, err := store.CollectRows(ctx, tx, `select id, coalesce(scheme_json, '{}') from games where fest_id = ? order by id`,
-		[]any{festID}, func(rows *sql.Rows) (game, error) {
+	games, err := store.CollectRows(ctx, tx, `select id, coalesce(scheme_json, '{}') from games where fest_id = ? and (? = 0 or id = ?) order by id`,
+		[]any{festID, gameID, gameID}, func(rows *sql.Rows) (game, error) {
 			var g game
 			return g, rows.Scan(&g.id, &g.scheme)
 		})
@@ -186,12 +190,14 @@ returning id`, venueID, g.id, match.Code).Scan(&matchID)
 	return seated, nil
 }
 
-// deleteVenue removes a venue no bout plays at.
-func (s *server) deleteVenue(reqCtx context.Context, festID int64, number int) (venueChange, error) {
-	return s.writeVenues(reqCtx, festID, "venue-delete", map[string]any{"action": "delete", "number": number},
+// deleteVenue removes a venue no bout plays at. A gameID other than 0
+// removes only that Game's own venue.
+func (s *server) deleteVenue(reqCtx context.Context, festID, gameID int64, number int) (venueChange, error) {
+	return s.writeVenues(reqCtx, festID, "venue-delete", map[string]any{"action": "delete", "number": number, "game": gameID},
 		func(ctx context.Context, tx *sql.Tx) ([]matchScope, error) {
 			var venueID int64
-			err := tx.QueryRowContext(ctx, `select id from venues where fest_id = ? and number = ?`, festID, number).Scan(&venueID)
+			err := tx.QueryRowContext(ctx, `select id from venues where fest_id = ? and number = ? and (? = 0 or game_id = ?)`,
+				festID, number, gameID, gameID).Scan(&venueID)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, venueUserError(dopestrings.Default.Server.Venue.Unknown(strconv.Itoa(number)))
 			}
@@ -233,12 +239,12 @@ func (s *server) broadcastVenues(festID int64, change venueChange) []byte {
 	return data
 }
 
-// updateGameVenue gives one Game its own title or hosts for a fest venue.
-// A field the request names and leaves empty goes back to the fest's. It
-// answers with the change, whose Seated are the Game's bouts at the venue,
-// which read the new title.
+// updateGameVenue gives one Game its own title or hosts for a fest venue,
+// or hides it from the Game; a field the request names and leaves empty goes
+// back to the fest's. On the Game's own venue it changes the venue itself.
+// Its Seated are the Game's bouts at the venue, which read the change.
 func (s *server) updateGameVenue(reqCtx context.Context, festID, gameID int64, number int, req venueUpdateRequest) (venueChange, error) {
-	if req.Title == nil && req.Hosts == nil {
+	if req.Title == nil && req.Hosts == nil && req.Hidden == nil {
 		return venueChange{}, errors.New("venue update names no field")
 	}
 	payload := map[string]any{"action": "game", "game": gameID, "number": number}
@@ -252,31 +258,63 @@ func (s *server) updateGameVenue(reqCtx context.Context, festID, gameID int64, n
 	}
 	title, setTitle := own(req.Title, "title")
 	hosts, setHosts := own(req.Hosts, "hosts")
+	hidden := req.Hidden != nil && *req.Hidden
+	if req.Hidden != nil {
+		payload["hidden"] = hidden
+	}
 	return s.writeVenues(reqCtx, festID, "game-venue", payload, func(ctx context.Context, tx *sql.Tx) ([]matchScope, error) {
 		var venueID int64
-		err := tx.QueryRowContext(ctx, `select id from venues where fest_id = ? and number = ?`, festID, number).Scan(&venueID)
-		if errors.Is(err, sql.ErrNoRows) {
+		var venueGame sql.NullInt64
+		err := tx.QueryRowContext(ctx, `select id, game_id from venues where fest_id = ? and number = ?`, festID, number).Scan(&venueID, &venueGame)
+		if errors.Is(err, sql.ErrNoRows) || (venueGame.Valid && venueGame.Int64 != gameID) {
 			return nil, venueUserError(dopestrings.Default.Server.Venue.Unknown(strconv.Itoa(number)))
 		}
 		if err != nil {
 			return nil, err
 		}
-		if _, err := tx.ExecContext(ctx, `
-insert into game_venues(game_id, venue_id, title, hosts, updated_at) values(?, ?, ?, ?, ?)
-on conflict(game_id, venue_id) do update set
-  title = case when ? then excluded.title else title end,
-  hosts = case when ? then excluded.hosts else hosts end,
-  updated_at = excluded.updated_at`,
-			gameID, venueID, title, hosts, util.UtcNow(), setTitle, setHosts); err != nil {
-			return nil, err
-		}
-		if _, err := tx.ExecContext(ctx, `delete from game_venues where game_id = ? and venue_id = ? and title is null and hosts is null`, gameID, venueID); err != nil {
-			return nil, err
-		}
-		return store.CollectRows(ctx, tx, `select id, code from matches where game_id = ? and venue_id = ?`, []any{gameID, venueID},
+		bouts, err := store.CollectRows(ctx, tx, `select id, code from matches where game_id = ? and venue_id = ?`, []any{gameID, venueID},
 			func(rows *sql.Rows) (matchScope, error) {
 				m := matchScope{festScope: festScope{FestID: festID, GameID: gameID}}
 				return m, rows.Scan(&m.MatchID, &m.Code)
 			})
+		if err != nil {
+			return nil, err
+		}
+		if hidden && len(bouts) > 0 {
+			return nil, venueUserError(dopestrings.Default.Server.Venue.InUse(strconv.Itoa(number)))
+		}
+		if venueGame.Valid {
+			return bouts, updateOwnVenueTx(ctx, tx, venueID, title, setTitle, hosts, setHosts)
+		}
+		if _, err := tx.ExecContext(ctx, `
+insert into game_venues(game_id, venue_id, title, hosts, hidden, updated_at) values(?, ?, ?, ?, ?, ?)
+on conflict(game_id, venue_id) do update set
+  title = case when ? then excluded.title else title end,
+  hosts = case when ? then excluded.hosts else hosts end,
+  hidden = case when ? then excluded.hidden else hidden end,
+  updated_at = excluded.updated_at`,
+			gameID, venueID, title, hosts, util.BoolToInt(hidden), util.UtcNow(), setTitle, setHosts, req.Hidden != nil); err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `
+delete from game_venues where game_id = ? and venue_id = ? and title is null and hosts is null and hidden = 0`, gameID, venueID); err != nil {
+			return nil, err
+		}
+		return bouts, nil
 	})
+}
+
+// updateOwnVenueTx changes a Game's own venue: its title, which may not be
+// emptied, and its hosts.
+func updateOwnVenueTx(ctx context.Context, tx *sql.Tx, venueID int64, title sql.NullString, setTitle bool, hosts sql.NullString, setHosts bool) error {
+	if setTitle && !title.Valid {
+		return venueUserError(dopestrings.Default.Server.Venue.TitleEmpty())
+	}
+	_, err := tx.ExecContext(ctx, `
+update venues set
+  title = case when ? then ? else title end,
+  hosts = case when ? then ? else hosts end,
+  updated_at = ?
+where id = ?`, setTitle, title.String, setHosts, hosts.String, util.UtcNow(), venueID)
+	return err
 }

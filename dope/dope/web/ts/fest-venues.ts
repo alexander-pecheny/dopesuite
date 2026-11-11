@@ -4,7 +4,7 @@
 // A host edits the venues here; a bout's venue is still moved from the bout
 // itself.
 
-import {buildVenuesTable} from "./venue.js";
+import {buildVenuesTable, nextVenueNumber} from "./venue.js";
 import type {Venue, VenueFields} from "./venue.js";
 import {standingsTable} from "./standings.js";
 import {td} from "./cells.js";
@@ -81,7 +81,9 @@ export function byVenue(bouts: readonly VenueBout[]): Map<number, VenueBout[]> {
     section.className = "u-col u-gap-xs";
     const head = document.createElement("h3");
     head.className = "subhead";
-    head.textContent = S.widgets.venue.scheduleHead(String(venue.number), venue.title);
+    head.textContent = venue.gameTitle
+      ? S.widgets.venue.scheduleHeadGame(String(venue.number), venue.title, venue.gameTitle)
+      : S.widgets.venue.scheduleHead(String(venue.number), venue.title);
     section.appendChild(head);
     if (venue.hosts) {
       const line = document.createElement("p");
@@ -120,8 +122,10 @@ export function byVenue(bouts: readonly VenueBout[]): Map<number, VenueBout[]> {
     };
     // A host edits the venues in their table; a spectator reads each one's
     // title and hosts over its bouts.
-    const table = !data.editable ? null : buildVenuesTable(data.venues, {
+    // A Game's own venues are edited on that Game's venues tab.
+    const table = !data.editable ? null : buildVenuesTable(data.venues.filter((venue) => !venue.gameOnly), {
       editable: true,
+      nextNumber: nextVenueNumber(data.venues),
       onChange: (number: number, fields: VenueFields) => void edit(request(`${api}/venues/${number}`, "PUT", fields)),
       onAdd: (title: string, number: number) => edit(request(`${api}/venues`, "POST", number > 0 ? {title, number} : {title})),
       onDelete: (number: number) => edit(request(`${api}/venues/${number}`, "DELETE")),

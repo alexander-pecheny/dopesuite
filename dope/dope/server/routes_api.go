@@ -82,6 +82,8 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("POST "+game+"/matches/{code}/venue", route.Editor, s.scopedMatchVenue)
 	t.Handle("GET "+game+"/venues", route.Read, s.scopedGameVenues)
 	t.Handle("PUT "+game+"/venues/{n}", route.Editor, s.scopedGameVenuePut)
+	t.Handle("POST "+game+"/venues", route.Editor, s.scopedGameVenueCreate)
+	t.Handle("DELETE "+game+"/venues/{n}", route.Editor, s.scopedGameVenueDelete)
 	t.Handle("POST "+game+"/matches/{code}/starts-at", route.Editor, s.scopedMatchStartsAt)
 	t.Handle("GET "+game+"/stages/matches", route.Read, s.scopedAllStageMatches)
 	t.Handle("GET "+game+"/stages/{stage}/matches", route.Read, s.scopedStageMatches)
@@ -276,7 +278,7 @@ func (s *server) scopedVenueCreate(w http.ResponseWriter, r *http.Request, sc ro
 	if req.Number < 0 {
 		return route.BadRequest("bad venue number")
 	}
-	change, err := s.createVenue(r.Context(), sc.FestID, req)
+	change, err := s.createVenue(r.Context(), sc.FestID, 0, req)
 	if err != nil {
 		return route.BadUser(err)
 	}
@@ -290,7 +292,7 @@ func (s *server) scopedVenueDelete(w http.ResponseWriter, r *http.Request, sc ro
 	if err != nil || number <= 0 {
 		return route.BadRequest("bad venue number")
 	}
-	change, err := s.deleteVenue(r.Context(), sc.FestID, number)
+	change, err := s.deleteVenue(r.Context(), sc.FestID, 0, number)
 	if err != nil {
 		return route.BadUser(err)
 	}
@@ -319,6 +321,40 @@ func (s *server) scopedGameVenuePut(w http.ResponseWriter, r *http.Request, sc r
 		return err
 	}
 	change, err := s.updateGameVenue(r.Context(), sc.FestID, sc.GameID, number, req)
+	if err != nil {
+		return route.BadUser(err)
+	}
+	s.broadcastVenues(sc.FestID, change)
+	return s.scopedGameVenues(w, r, sc)
+}
+
+// scopedGameVenueCreate adds a venue of the Game's own and seats there the
+// Game's bouts its scheme puts at that number. It answers with the Game's
+// venues.
+func (s *server) scopedGameVenueCreate(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req venueCreateRequest
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	if req.Number < 0 {
+		return route.BadRequest("bad venue number")
+	}
+	change, err := s.createVenue(r.Context(), sc.FestID, sc.GameID, req)
+	if err != nil {
+		return route.BadUser(err)
+	}
+	s.broadcastVenues(sc.FestID, change)
+	return s.scopedGameVenues(w, r, sc)
+}
+
+// scopedGameVenueDelete removes a venue of the Game's own that no bout plays
+// at, and answers with the Game's venues.
+func (s *server) scopedGameVenueDelete(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	number, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || number <= 0 {
+		return route.BadRequest("bad venue number")
+	}
+	change, err := s.deleteVenue(r.Context(), sc.FestID, sc.GameID, number)
 	if err != nil {
 		return route.BadUser(err)
 	}

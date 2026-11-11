@@ -19,6 +19,8 @@ import (
 type venueUpdateRequest struct {
 	Title *string `json:"title,omitempty"`
 	Hosts *string `json:"hosts,omitempty"`
+	// Hidden, on a Game's venue, says whether the Game plays at it.
+	Hidden *bool `json:"hidden,omitempty"`
 }
 
 type matchVenueRequest struct {

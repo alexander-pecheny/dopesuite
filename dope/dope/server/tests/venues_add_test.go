@@ -306,6 +306,53 @@ func TestGameVenueOverride(t *testing.T) {
 	if resp := scopedAPIRequest(t, srv, http.MethodPut, gamePath+"/9", map[string]any{"title": "x"}, hostToken); resp.Code != http.StatusBadRequest {
 		t.Fatalf("unknown venue status = %d", resp.Code)
 	}
+
+	// A Game plays at fewer venues: it hides one its bouts do not play at.
+	if resp := scopedAPIRequest(t, srv, http.MethodPut, gamePath+"/1", map[string]any{"hidden": true}, hostToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("hiding a venue in use: status = %d", resp.Code)
+	}
+	if resp := scopedAPIRequest(t, srv, http.MethodPost, festPath, map[string]any{"number": 2, "title": "ауд. 310"}, hostToken); resp.Code != http.StatusOK {
+		t.Fatalf("add 2: %d %s", resp.Code, resp.Body.String())
+	}
+	v = decode(scopedAPIRequest(t, srv, http.MethodPut, gamePath+"/2", map[string]any{"hidden": true}, hostToken).Body)
+	if len(v) != 2 || !v[1].Hidden {
+		t.Fatalf("after hiding 2: %#v", v)
+	}
+	// And at more: a venue of its own, which the fest's list names it by
+	// and no other Game lists.
+	resp = scopedAPIRequest(t, srv, http.MethodPost, gamePath, map[string]any{"title": "ауд. 999", "hosts": "Сидоров"}, hostToken)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("game venue add: %d %s", resp.Code, resp.Body.String())
+	}
+	v = decode(resp.Body)
+	if len(v) != 3 || v[2].Number != 3 || !v[2].GameOnly || v[2].Title != "ауд. 999" || v[2].Hosts != "Сидоров" {
+		t.Fatalf("game venues with its own: %#v", v)
+	}
+	f := decode(scopedAPIRequest(t, srv, http.MethodGet, festPath, nil, hostToken).Body)
+	if len(f) != 3 || !f[2].GameOnly || f[2].GameTitle == "" {
+		t.Fatalf("fest venues = %#v", f)
+	}
+	var otherGame int64
+	if err := db.QueryRow(`select coalesce(max(id), 0) from games where fest_id = ? and id != ?`, festID, gameID).Scan(&otherGame); err != nil {
+		t.Fatal(err)
+	}
+	if otherGame > 0 {
+		other := decode(scopedAPIRequest(t, srv, http.MethodGet, fmt.Sprintf("/api/fest/%d/games/%d/venues", festID, otherGame), nil, hostToken).Body)
+		if len(other) != 2 {
+			t.Fatalf("another game lists %#v", other)
+		}
+	}
+	v = decode(scopedAPIRequest(t, srv, http.MethodPut, gamePath+"/3", map[string]any{"title": "ауд. 998"}, hostToken).Body)
+	if v[2].Title != "ауд. 998" || v[2].OwnTitle != nil {
+		t.Fatalf("renaming its own venue: %#v", v)
+	}
+	v = decode(scopedAPIRequest(t, srv, http.MethodDelete, gamePath+"/3", nil, hostToken).Body)
+	if len(v) != 2 {
+		t.Fatalf("after deleting its own venue: %#v", v)
+	}
+	if resp := scopedAPIRequest(t, srv, http.MethodDelete, gamePath+"/2", nil, hostToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("a game deleting a fest venue: status = %d", resp.Code)
+	}
 }
 
 // The fest's venues page lists every bout at each venue across its Games, and

@@ -255,7 +255,7 @@ CREATE TABLE game_venues(
   venue_id integer not null references venues(id) on delete cascade,
   title text,
   hosts text,
-  updated_at text not null,
+  updated_at text not null, hidden integer not null default 0,
   primary key(game_id, venue_id)
 );
 
@@ -599,7 +599,7 @@ CREATE TABLE venues(
   number integer not null,
   title text not null,
   created_at text not null,
-  updated_at text not null, hosts text not null default '',
+  updated_at text not null, hosts text not null default '', game_id integer references games(id) on delete cascade,
   unique(fest_id, number)
 );
 

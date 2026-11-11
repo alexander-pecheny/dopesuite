@@ -3389,7 +3389,7 @@ var RU = Strings{
 			BattleShort: func(n string) string { return fmt.Sprintf("пл. %s", n) },
 			Delete:      func() string { return "Удалить площадку" },
 			GameIntro: func() string {
-				return "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры. Пустое поле берёт значение феста."
+				return "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры, снять площадку, на которой игра не идёт, и добавить свою. Пустое поле берёт значение феста."
 			},
 			HostsColumn:   func() string { return "Ведущие" },
 			NameColumn:    func() string { return "Название" },
@@ -3397,9 +3397,13 @@ var RU = Strings{
 			ScheduleEmpty: func() string { return "Боёв здесь нет." },
 			ScheduleGame:  func() string { return "Игра" },
 			ScheduleHead:  func(n string, title string) string { return fmt.Sprintf("%s. %s", n, title) },
-			ScheduleTime:  func() string { return "Время" },
-			WithTime:      func(venue string, time string) string { return fmt.Sprintf("%s %s", venue, time) },
-			WithTitle:     func(where string, title string) string { return fmt.Sprintf("%s, %s", where, title) },
+			ScheduleHeadGame: func(n string, title string, game string) string {
+				return fmt.Sprintf("%s. %s (только %s)", n, title, game)
+			},
+			ScheduleTime: func() string { return "Время" },
+			UsedColumn:   func() string { return "В этой игре" },
+			WithTime:     func(venue string, time string) string { return fmt.Sprintf("%s %s", venue, time) },
+			WithTitle:    func(where string, title string) string { return fmt.Sprintf("%s, %s", where, title) },
 		},
 		Viewers: WidgetsViewersStrings{
 			Label: func() string { return "Зрителей онлайн" },

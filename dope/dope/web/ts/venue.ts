@@ -27,6 +27,11 @@ export interface Venue {
   festHosts?: string;
   ownTitle?: string;
   ownHosts?: string;
+  // hidden: the Game does not play at this fest venue. gameOnly: the venue
+  // is one Game's own; the fest's list names that Game in gameTitle.
+  hidden?: boolean;
+  gameOnly?: boolean;
+  gameTitle?: string;
 }
 
 export function normalizeVenue(venue: VenueLike): Venue | null {
@@ -118,6 +123,11 @@ export interface VenuesTableOptions {
   // holds the Game's own value with the fest's as its placeholder, and an
   // emptied one goes back to the fest's.
   inherit?: boolean;
+  // onHide, with inherit, says whether the Game plays at a fest venue.
+  onHide?: (number: number, hidden: boolean) => void;
+  // nextNumber is the number the add row offers; by default the one after
+  // the table's highest.
+  nextNumber?: number;
 }
 
 // nextVenueNumber is the number a new venue takes when the host gives none:
@@ -151,16 +161,18 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
   const inherit = Boolean(options.inherit);
   const field = (venue: Venue, key: keyof VenueFields, label: string) => {
     if (!onChange) return venue[key] || "";
-    const value = (inherit ? venue[key === "title" ? "ownTitle" : "ownHosts"] : venue[key]) || "";
+    // A Game's own venue has no fest values under it: it is edited as is.
+    const over = inherit && !venue.gameOnly;
+    const value = (over ? venue[key === "title" ? "ownTitle" : "ownHosts"] : venue[key]) || "";
     const input = document.createElement("input");
     input.className = "venue-input";
     input.value = value;
-    if (inherit) input.placeholder = venue[key === "title" ? "festTitle" : "festHosts"] || "";
+    if (over) input.placeholder = venue[key === "title" ? "festTitle" : "festHosts"] || "";
     input.setAttribute("aria-label", label);
     input.dataset.committed = value;
     input.addEventListener("change", () => {
       const typed = input.value.trim();
-      if (!typed && key === "title" && !inherit) {
+      if (!typed && key === "title" && !over) {
         input.value = input.dataset.committed ?? "";
         return;
       }
@@ -180,6 +192,8 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
     remove.setAttribute("aria-label", S.widgets.venue.delete());
     remove.appendChild(icon("trash-2"));
     remove.disabled = !venueDeletable(venue);
+    // A Game deletes only its own venues; the fest's go on the fest's page.
+    if (inherit && !venue.gameOnly) remove.hidden = true;
     remove.addEventListener("click", () => void onDelete?.(venue.number).then(refused));
     box.appendChild(remove);
     return td(box);
@@ -189,6 +203,18 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
     {label: S.widgets.venue.nameColumn(), kind: "name"},
     {label: S.widgets.venue.hostsColumn(), className: "venue-hosts"},
   ];
+  const onHide = inherit && typeof options.onHide === "function" ? options.onHide : null;
+  // used is a fest venue's tick on a Game's tab: whether the Game plays there.
+  const used = (venue: Venue) => {
+    if (!onHide || venue.gameOnly) return "";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = !venue.hidden;
+    box.setAttribute("aria-label", S.widgets.venue.usedColumn());
+    box.addEventListener("change", () => onHide(venue.number, !box.checked));
+    return td(box);
+  };
+  if (onHide) columns.push({label: S.widgets.venue.usedColumn(), kind: "num"});
   if (onDelete) columns.push({label: ""});
   wrapper.appendChild(standingsTable({
     className: "venues-results-table",
@@ -199,10 +225,11 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
         field(venue, "title", S.widgets.venue.nameColumn()),
         field(venue, "hosts", S.widgets.venue.hostsColumn()),
       ];
-      return onDelete ? [...row, actions(venue)] : row;
+      const full = onHide ? [...row, used(venue)] : row;
+      return onDelete ? [...full, actions(venue)] : full;
     }),
   }));
-  if (onAdd) wrapper.appendChild(venueAddForm(nextVenueNumber(venues), (title, number) => void onAdd(title, number).then(refused)));
+  if (onAdd) wrapper.appendChild(venueAddForm(options.nextNumber || nextVenueNumber(venues), (title, number) => void onAdd(title, number).then(refused)));
   if (onAdd || onDelete) wrapper.appendChild(notice);
   return wrapper;
 }

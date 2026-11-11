@@ -1212,6 +1212,15 @@ create index game_venues_venue_idx on game_venues(venue_id);
 		_, err := db.Exec(`alter table fests add column venue_rooms integer not null default 0;`)
 		return err
 	}},
+	// A Game may play at fewer venues than the fest (it hides some) or at
+	// more (a venue of its own, which no other Game lists).
+	{Version: 58, Name: "game-only and hidden venues", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+alter table venues add column game_id integer references games(id) on delete cascade;
+alter table game_venues add column hidden integer not null default 0;
+`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

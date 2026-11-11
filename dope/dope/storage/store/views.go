@@ -121,6 +121,12 @@ type VenueView struct {
 	FestHosts string  `json:"festHosts,omitempty"`
 	OwnTitle  *string `json:"ownTitle,omitempty"`
 	OwnHosts  *string `json:"ownHosts,omitempty"`
+	// Hidden says the Game does not play at this fest venue; GameOnly that
+	// the venue is the Game's own, which no other Game lists. In the fest's
+	// list a Game's own venue names its Game in GameTitle.
+	Hidden    bool   `json:"hidden,omitempty"`
+	GameOnly  bool   `json:"gameOnly,omitempty"`
+	GameTitle string `json:"gameTitle,omitempty"`
 }
 
 // StageMatches is one stage's full match views (the bulk all-stages response

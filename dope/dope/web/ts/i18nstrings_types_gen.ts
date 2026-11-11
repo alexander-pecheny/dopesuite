@@ -2314,7 +2314,9 @@ export type Strings = {
       scheduleEmpty: () => string;
       scheduleGame: () => string;
       scheduleHead: (n: string, title: string) => string;
+      scheduleHeadGame: (n: string, title: string, game: string) => string;
       scheduleTime: () => string;
+      usedColumn: () => string;
       withTime: (venue: string, time: string) => string;
       withTitle: (where: string, title: string) => string;
     };

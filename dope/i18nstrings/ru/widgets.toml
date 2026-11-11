@@ -69,9 +69,13 @@ schedule_bout = "Бой"
 schedule_empty = "Боёв здесь нет."
 # The line over a Game's venues tab, for a host. An empty field there shows
 # the fest's value, which it holds as its placeholder.
-game_intro = "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры. Пустое поле берёт значение феста."
+game_intro = "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры, снять площадку, на которой игра не идёт, и добавить свою. Пустое поле берёт значение феста."
 # A venue's heading on that page: its number and title.
 schedule_head = '{{.n}}. {{.title}}'
+# The heading of a venue one game has for itself.
+schedule_head_game = '{{.n}}. {{.title}} (только {{.game}})'
+# A game's venues tab: the column that ticks the fest venues the game plays at.
+used_column = "В этой игре"
 
 [profile]
 # The host profile page's password form messages.

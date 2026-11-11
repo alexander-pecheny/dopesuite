@@ -653,6 +653,17 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     }
   }
 
+  // venueWrite sends one change to the Game's venues and draws the tab again
+  // from the answer; it resolves to why the server refused, or to "".
+  async function venueWrite(request: WriteRequest): Promise<string> {
+    const sent = await writer.send(gameVenuesScope, request);
+    // The writer has adopted the answer; the tab is drawn from it, or drawn
+    // back as it was after a refusal.
+    venuesView = null;
+    render();
+    return sent.ok ? "" : sent.error || "";
+  }
+
   // venuesTab is the fest's venues as the Game shows them. A host sets the
   // Game's own title and hosts there; the fest's venues page adds, deletes
   // and names them for the whole fest.
@@ -661,23 +672,26 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
       editable: !viewer,
       inherit: true,
       onChange: (number: number, fields: VenueFields) => void writer.send(gameVenuesScope, {url: `${apiBase}/venues/${number}`, method: "PUT", body: fields}),
+      onHide: (number: number, hidden: boolean) => void venueWrite({url: `${apiBase}/venues/${number}`, method: "PUT", body: {hidden}}),
+      onAdd: (title: string, number: number) => venueWrite({url: `${apiBase}/venues`, method: "POST", body: number > 0 ? {title, number} : {title}}),
+      onDelete: (number: number) => venueWrite({url: `${apiBase}/venues/${number}`, method: "DELETE"}),
     });
-    const head = document.createElement("div");
-    head.className = "u-row u-wrap u-gap-sm u-align-center u-justify-between";
+    const box = document.createElement("div");
+    box.className = "u-col u-gap-sm";
     if (!viewer) {
       const intro = document.createElement("p");
       intro.className = "hint";
       intro.textContent = S.widgets.venue.gameIntro();
-      head.appendChild(intro);
+      box.appendChild(intro);
     }
     const link = document.createElement("a");
     link.className = "btn";
     link.href = `/fest/${encodeURIComponent(String(route.festID || ""))}/venues`;
     link.textContent = S.host.festVenues.link();
-    head.appendChild(link);
-    const box = document.createElement("div");
-    box.className = "u-col u-gap-sm";
-    box.append(head, table);
+    const links = document.createElement("div");
+    links.className = "u-row";
+    links.appendChild(link);
+    box.append(links, table);
     return box;
   }
 
@@ -773,7 +787,8 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
       if (keepView && frame) frame.scrollTop = scrollTop;
     }, keepView);
     drawnTab = activeTab;
-    root.classList.toggle("fits-frame", spec.fitsFrame(tab, node));
+    // The venues tab is a page of its own, as wide as the frame.
+    root.classList.toggle("fits-frame", tab?.kind === "venues" || spec.fitsFrame(tab, node));
     // A grid fits the frame's width like EK's, so its columns measure the same.
     root.classList.toggle("grid-host", node.matches(".fest-grid") || Boolean(node.querySelector(".fest-grid")));
     for (const cursor of spec.cursors?.() || []) cursor.refresh();
@@ -896,7 +911,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
         venue: view?.venue,
         startsAt: view?.startsAt,
         host: viewer ? undefined : {
-          venues,
+          venues: venues.filter((venue) => !venue.hidden),
           pickVenue: (number) => void writer.send(matchScope(code), {url: matchURL(code, "venue"), body: {number}}),
           saveStartsAt: (time, wave) => void writer.send(matchScope(code), {url: matchURL(code, "starts-at"), body: {time, wave}}),
         },

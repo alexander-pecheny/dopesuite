@@ -14,13 +14,16 @@ import (
 // LoadVenues returns a fest's venues ordered by number.
 func LoadVenues(ctx context.Context, q Queryer, festID int64) ([]VenueView, error) {
 	return CollectRows(ctx, q, `
-select v.number, v.title, v.hosts, (select count(*) from matches m where m.venue_id = v.id) from venues v
+select v.number, v.title, v.hosts, (select count(*) from matches m where m.venue_id = v.id), coalesce(g.title, '')
+from venues v
+left join games g on g.id = v.game_id
 where v.fest_id = ?
 order by v.number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
 		var venue VenueView
-		if err := rows.Scan(&venue.Number, &venue.Title, &venue.Hosts, &venue.Bouts); err != nil {
+		if err := rows.Scan(&venue.Number, &venue.Title, &venue.Hosts, &venue.Bouts, &venue.GameTitle); err != nil {
 			return venue, err
 		}
+		venue.GameOnly = venue.GameTitle != ""
 		return venue, nil
 	})
 }
@@ -30,16 +33,21 @@ order by v.number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
 // bouts play at it.
 func LoadGameVenues(ctx context.Context, q Queryer, festID, gameID int64) ([]VenueView, error) {
 	return CollectRows(ctx, q, `
-select v.number, v.title, v.hosts, gv.title, gv.hosts,
+select v.number, v.title, v.hosts, gv.title, gv.hosts, coalesce(gv.hidden, 0), v.game_id is not null,
        (select count(*) from matches m where m.venue_id = v.id and m.game_id = ?)
 from venues v
 left join game_venues gv on gv.venue_id = v.id and gv.game_id = ?
-where v.fest_id = ?
-order by v.number`, []any{gameID, gameID, festID}, func(rows *sql.Rows) (VenueView, error) {
+where v.fest_id = ? and (v.game_id is null or v.game_id = ?)
+order by v.number`, []any{gameID, gameID, festID, gameID}, func(rows *sql.Rows) (VenueView, error) {
 		var venue VenueView
 		var ownTitle, ownHosts sql.NullString
-		if err := rows.Scan(&venue.Number, &venue.FestTitle, &venue.FestHosts, &ownTitle, &ownHosts, &venue.Bouts); err != nil {
+		if err := rows.Scan(&venue.Number, &venue.FestTitle, &venue.FestHosts, &ownTitle, &ownHosts, &venue.Hidden, &venue.GameOnly, &venue.Bouts); err != nil {
 			return venue, err
+		}
+		if venue.GameOnly {
+			venue.Title, venue.Hosts = venue.FestTitle, venue.FestHosts
+			venue.FestTitle, venue.FestHosts = "", ""
+			return venue, nil
 		}
 		venue.Title, venue.Hosts = venue.FestTitle, venue.FestHosts
 		if ownTitle.Valid {
