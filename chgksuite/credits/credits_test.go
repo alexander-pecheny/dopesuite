@@ -488,3 +488,34 @@ func TestNoQuestionFieldInCredits(t *testing.T) {
 		}
 	}
 }
+
+// «Предварительный вопрос» between «Вопрос 2» and «Вопрос 3» has no number
+// of the packet's: the tour after it starts at 3, and its author is not 3's.
+func TestQuestionBetweenNumbersIsNotCounted(t *testing.T) {
+	const txt = "Тур 1\n\nВопрос 1. Текст первого.\nОтвет: о\nАвтор: Иван Иванов\n\nВопрос 2. Текст второго.\nОтвет: о\nАвтор: Иван Иванов\n\n" +
+		"Тур 2\n\nПредварительный вопрос.\n\nРаздаточный материал:\n[\nкартинка\n]\nТекст предварительного.\nОтвет: о\nАвтор: Анна Аннина\n\n" +
+		"Вопрос 3. Текст третьего.\nОтвет: о\nАвтор: Пётр Петров\n\nВопрос 4. Текст четвёртого.\nОтвет: о\nАвтор: Пётр Петров\n"
+	got := read(t, "p.txt", txt)
+	if got.Questions != 4 {
+		t.Fatalf("questions: %d, want 4", got.Questions)
+	}
+	wantTours := []Tour{{Label: "Тур 1", First: 1, Last: 2}, {Label: "Тур 2", First: 3, Last: 4}}
+	if !reflect.DeepEqual(got.Tours, wantTours) {
+		t.Errorf("tours: %+v, want %+v", got.Tours, wantTours)
+	}
+	wantAuthors := []Author{{1, "Иван Иванов"}, {2, "Иван Иванов"}, {3, "Пётр Петров"}, {4, "Пётр Петров"}}
+	if !reflect.DeepEqual(got.Authors, wantAuthors) {
+		t.Errorf("authors: %+v, want %+v", got.Authors, wantAuthors)
+	}
+}
+
+// A packet that numbers nothing between is counted as before: a number that
+// skips one leaves the unnumbered question its place.
+func TestUnnumberedQuestionWithAGapKeepsItsNumber(t *testing.T) {
+	const txt = "Тур 1\n\nВопрос 1. Текст первого.\nОтвет: о\n\n" +
+		"Раздаточный материал:\n[\nкартинка\n]\nТекст второго.\nОтвет: о\n\n" +
+		"Вопрос 3. Текст третьего.\nОтвет: о\n"
+	if got := read(t, "p.txt", txt); got.Questions != 3 {
+		t.Fatalf("questions: %d, want 3", got.Questions)
+	}
+}

@@ -196,7 +196,7 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		}
 		source = res.Source
 		doc := fsource.Parse(source, "chgk")
-		f := dropLeadingWarmup(fromDoc(doc), opt.Questions)
+		f := dropLeadingWarmup(fromDoc(doc, betweenNumbers(doc)), opt.Questions)
 		f.name, f.format, f.language, f.doc = name, format, language(source), doc
 		return f, nil
 	}
@@ -294,7 +294,7 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		}
 	}
 	doc := fsource.Parse(source, "chgk")
-	f := dropLeadingWarmup(fromDoc(doc), opt.Questions)
+	f := dropLeadingWarmup(fromDoc(doc, betweenNumbers(written)), opt.Questions)
 	f.name, f.format, f.language, f.doc, f.images = name, format, lang, written, images
 	return f, nil
 }
@@ -573,10 +573,54 @@ func unwrap(text string) string {
 // not count.
 var reWarmup = regexp.MustCompile(`^(?i:разминк)`)
 
+// betweenNumbers finds the questions the packet leaves out of its own count:
+// one with no number written, standing between «Вопрос 24» and «Вопрос 25»
+// («Предварительный вопрос» at the head of a tour). It gives them by their
+// place among written's questions, counting from 0. Counting such a question
+// would push every number after it one up against the packet's.
+func betweenNumbers(written fsource.Doc) map[int]bool {
+	// 0 is no number written, -1 a number that is not one.
+	var numbers []int
+	for _, p := range written {
+		q, ok := p.Content.(*fsource.Question)
+		if !ok || p.Type != "Question" {
+			continue
+		}
+		n := 0
+		if q.Has("number") {
+			if v, err := strconv.Atoi(strings.TrimSpace(text(q.Get("number")))); err == nil && v > 0 {
+				n = v
+			} else {
+				n = -1
+			}
+		}
+		numbers = append(numbers, n)
+	}
+	out := map[int]bool{}
+	for i := 0; i < len(numbers); i++ {
+		if numbers[i] != 0 {
+			continue
+		}
+		j := i
+		for j < len(numbers) && numbers[j] == 0 {
+			j++
+		}
+		if i > 0 && j < len(numbers) && numbers[i-1] > 0 && numbers[j] == numbers[i-1]+1 {
+			for k := i; k < j; k++ {
+				out[k] = true
+			}
+		}
+		i = j
+	}
+	return out
+}
+
 // fromDoc walks one parsed file: tour headings, «meta»/«editor» paragraphs and
-// the author of each question. Nothing else of a question is read.
-func fromDoc(doc fsource.Doc) file {
+// the author of each question. Nothing else of a question is read. The
+// questions in uncounted, by their place among the file's, get no number.
+func fromDoc(doc fsource.Doc, uncounted map[int]bool) file {
 	f := file{}
+	seen := 0
 	tour := -1
 	warmup := false
 	var pending []int // paragraphs waiting for the next question's number
@@ -593,8 +637,9 @@ func fromDoc(doc fsource.Doc) file {
 				pending = append(pending, len(f.paragraphs)-1)
 			}
 		case "Question":
+			seen++
 			// «Вопрос 0» is the warm-up even outside a «Разминка» heading.
-			if q, ok := p.Content.(*fsource.Question); warmup || ok && text(q.Get("number")) == "0" {
+			if q, ok := p.Content.(*fsource.Question); warmup || uncounted[seen-1] || ok && text(q.Get("number")) == "0" {
 				continue
 			}
 			f.addQuestion(p, tour, pending)
