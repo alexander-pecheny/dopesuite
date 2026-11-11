@@ -209,9 +209,16 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 	if festRef == "" {
 		festRef = fmt.Sprintf("%d", id)
 	}
+	venues, err := multifest.List(ctx, s.eng.DB, id)
+	if err != nil {
+		return publicFestDetail{}, err
+	}
 	publicGames := make([]hostpages.PublicFestGame, len(gameRows))
 	for i, g := range gameRows {
+		// A game keeps a sheet per venue, and so is «сводная», only in a fest
+		// that has площадки: in any other it is played at the one venue.
 		_, sheets := games.As[games.VenueSheets](g.Type)
+		sheets = sheets && len(venues) > 0
 		publicGames[i] = hostpages.PublicFestGame{
 			ID:               g.ID,
 			Slug:             g.Slug,
@@ -222,10 +229,6 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 			MultiFestVenueID: g.MultiFestVenueID,
 			VenueSheets:      sheets,
 		}
-	}
-	venues, err := multifest.List(ctx, s.eng.DB, id)
-	if err != nil {
-		return publicFestDetail{}, err
 	}
 	festGames, venueGames := hostpages.SplitByVenue(publicGames, venues)
 	detail := publicFestDetail{

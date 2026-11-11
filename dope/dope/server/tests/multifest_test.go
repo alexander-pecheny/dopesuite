@@ -22,6 +22,7 @@ import (
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/roles"
+	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
@@ -695,6 +696,44 @@ func TestASynchFestPlaysOneODWithASheetPerVenue(t *testing.T) {
 	if got := state().Venues[key(minskID)].Entries[0]; !slices.Contains(got, 5) {
 		t.Fatalf("Бета's entry did not follow its new number: %v", got)
 	}
+	if page := publicFestPage(t, srv, festID); !strings.Contains(page, "ОД (сводная)") {
+		t.Fatalf("the synch fest's ОД is not shown as сводная:\n%s", page)
+	}
+}
+
+// An ОД of a fest without площадки is played at its one venue: there is
+// nothing to merge, so its public page names it as it is.
+func TestAnODWithoutVenuesIsNotSvodnaya(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, revision, created_at, updated_at) values('Кубок', 1, '2026-11-12', '2026-11-12')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		_, _, err := festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, Label: "ОД", TourComp: []int{2}})
+		return err
+	})
+	page := publicFestPage(t, srv, festID)
+	if strings.Contains(page, "сводная") || !strings.Contains(page, "ОД") {
+		t.Fatalf("the ОД of a fest without площадки:\n%s", page)
+	}
+}
+
+func publicFestPage(t *testing.T, srv *dopeserver.Server, festID int64) string {
+	t.Helper()
+	if _, err := srv.Eng().DB.Exec(`update fests set is_public = 1 where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	srv.Eng().Assets = dopeserver.StaticFiles
+	resp := httptest.NewRecorder()
+	srv.HandleFestRouter(resp, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/fest/%d", festID), nil))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("/fest/%d: %d", festID, resp.Code)
+	}
+	return resp.Body.String()
 }
 
 // Two requests the site accepted at one of its venues are two площадки, each
