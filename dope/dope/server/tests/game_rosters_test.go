@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -13,7 +12,6 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
-	"dope/dope/domain/overrides"
 	rosterpkg "dope/dope/domain/roster"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
@@ -242,11 +240,9 @@ func TestGameRosterKeptByHand(t *testing.T) {
 	}
 }
 
-// A hand roster and a player override on the same team: the hand roster wins
-// in that game, the overrides page says the override does nothing there, a
-// rating re-import leaves the hand roster alone, and giving the team back its
-// roster lets the override apply again.
-func TestGameRosterBeatsOverrides(t *testing.T) {
+// A rating re-import leaves a hand roster alone, and giving the team back its
+// roster gives it the fest's again.
+func TestGameRosterSurvivesAReimport(t *testing.T) {
 	t.Parallel()
 	db, err := dopeserver.OpenFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -338,31 +334,8 @@ values(?, 'ek', 'ЭК', 'ek', 3, '{}', '{}', 'pending', 'fest', 'fest', 1, ?, ?)
 		return rosterpkg.SaveGameRosterTx(t.Context(), tx, festID, gameID, beta, []string{"Олег Петров", "Анна Новая"})
 	})
 
-	// Сидорова moves to Бета in this game by an override: Бета's hand roster
-	// does not take her.
-	var sidorova, betaTeam int64
-	if err := db.QueryRow(`select id from fest_players where fest_id = ? and rating_id = 1001`, festID).Scan(&sidorova); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = 102`, festID).Scan(&betaTeam); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := overrides.SavePlayerTeamOverride(srv.Eng(), t.Context(), festID, sidorova, betaTeam, []int64{gameID}); err != nil {
-		t.Fatalf("save override: %v", err)
-	}
 	hand := []string{"Олег Петров", "Анна Новая"}
-	if got := rosterOf(); !got.Hand || !slices.Equal(names(got), hand) {
-		t.Fatalf("after the override: %+v, want the hand roster %v", got, hand)
-	}
-	rows, err := overrides.LoadHostPlayerOverrideRows(t.Context(), db, festID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rows) != 1 || rows[0].Shadowed == "" {
-		t.Fatalf("override rows = %+v, want one marked as not acting", rows)
-	}
-
-	// A rating re-import rebuilds the overrides' rosters and leaves this one.
+	// A rating re-import leaves the hand roster as it is.
 	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, rating, imports.RosterChoice{}); err != nil {
 		t.Fatalf("re-import roster: %v", err)
 	}
@@ -370,15 +343,12 @@ values(?, 'ek', 'ЭК', 'ek', 3, '{}', '{}', 'pending', 'fest', 'fest', 1, ?, ?)
 		t.Fatalf("after the rating re-import: %+v, want %v", got, hand)
 	}
 
-	// Given its roster back, Бета plays with the override applied.
+	// Given its roster back, Бета plays with the fest's.
 	write(func(tx *sql.Tx) error {
-		return rosterpkg.ResetGameRosterTx(t.Context(), tx, festID, gameID, beta, func(ctx context.Context, tx *sql.Tx) error {
-			return overrides.MaterializeGameRosterOverridesTx(ctx, tx, festID, gameID)
-		})
+		return rosterpkg.ResetGameRosterTx(t.Context(), tx, festID, gameID, beta)
 	})
-	got := rosterOf()
-	if got.Hand || !slices.Contains(names(got), "Мария Сидорова") || slices.Contains(names(got), "Анна Новая") {
-		t.Fatalf("after reset: %+v, want the fest roster with Сидорова", got)
+	if got := rosterOf(); got.Hand || slices.Contains(names(got), "Анна Новая") {
+		t.Fatalf("after reset: %+v, want the fest roster", got)
 	}
 }
 

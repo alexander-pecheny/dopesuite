@@ -61,7 +61,7 @@ type Definition struct {
 	Page string
 	// EKBout reports whether the format plays EK's bout: twelve themes of five
 	// questions at 10..50, edited on EK's page, with a team's game roster kept
-	// in game_team_players and open to player overrides. It is not the same
+	// in game_team_players. It is not the same
 	// fact as the Protocol's TeamBlob, which only says the document is keyed by
 	// Participant: an individual SI game has a team blob but no EK bout.
 	EKBout bool
@@ -73,15 +73,12 @@ type Definition struct {
 	Flat bool
 	// HandRoster reports whether the host may keep a team's roster by hand
 	// for one Game (CONTEXT.md, Game roster): the buzzer formats that seat
-	// teams. Its Protocol must say which players a bout used
+	// teams, and KSI. Its Protocol must say which players a bout used
 	// (PlayersUser), which is what locks them on the roster.
 	HandRoster bool
 	// Divisions reports whether the Game's settings offer the fest's divisions
 	// to show or hide: the formats whose results tabs carry the chips.
 	Divisions bool
-	// PlayerOverrides reports whether a fest player may be moved to another
-	// team for a Game of this format (the players page's overrides).
-	PlayerOverrides bool
 	// DSL is how the format takes a scheme written in the DSL.
 	DSL DSLUse
 	// DefaultDSL is the scheme the creation form prefills for a fest of so many

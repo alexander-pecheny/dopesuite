@@ -4132,7 +4132,8 @@ body.is-fullscreen.od-page .match-main {
   overflow-wrap: break-word;
 }
 
-.roster-player:not(:last-child)::after {
+/* Of type, not child: a hand roster's note line follows the last player. */
+.roster-player:not(:last-of-type)::after {
   content: ", ";
   white-space: normal;
 }

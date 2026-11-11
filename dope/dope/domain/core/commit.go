@@ -35,8 +35,6 @@ type Broadcast struct {
 	// States are the game documents the write rewrote, each sent to its
 	// Game's open pages as it is.
 	States []GameState
-	// Rosters are the EK Games whose rosters changed.
-	Rosters []int64
 	// Views are the Games whose fest view changed, so their open pages fetch
 	// it again.
 	Views []int64

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/gamebuild"
@@ -1227,6 +1228,238 @@ alter table game_venues add column hidden integer not null default 0;
 		_, err := db.Exec(`alter table games add column grid_width integer not null default 0;`)
 		return err
 	}},
+	// A player override moved one player to another team for some Games. A
+	// Game's roster tab keeps a team's whole roster in that Game by hand,
+	// which does the same and more, so the overrides become hand rosters and
+	// go (CONTEXT.md, Game roster).
+	{Version: 60, Name: "player overrides become hand rosters", Up: overridesToHandRosters},
+}
+
+// overridesToHandRosters keeps every Game's teams playing with whom they play
+// it now. A Game whose overrides were copied into its own rosters
+// (roster_source 'game') keeps by hand each team whose copy differs from the
+// roster the team brought, and reads the brought rosters for the rest. In any
+// other Game, the two teams an override moves a player between are kept by
+// hand: the one without the player, the one with them. Then the overrides
+// table is dropped.
+func overridesToHandRosters(db *sql.DB) error {
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	copied, err := store.CollectRows(ctx, tx, `select id from games where roster_source = 'game'`, nil, scanMigrationID)
+	if err != nil {
+		return err
+	}
+	for _, gameID := range copied {
+		if err := keepCopiedRostersByHand(ctx, tx, gameID); err != nil {
+			return err
+		}
+	}
+	if err := movesToHandRosters(ctx, tx); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `drop table game_player_team_overrides`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func scanMigrationID(rows *sql.Rows) (int64, error) {
+	var id int64
+	return id, rows.Scan(&id)
+}
+
+// migrationRoster is a roster's people by name, the one way a Game's players
+// and the fest's are matched.
+type migrationRoster [][2]string
+
+func (r migrationRoster) names() []string {
+	out := make([]string, len(r))
+	for i, p := range r {
+		out[i] = store.JoinPlayerName(p[0], p[1])
+	}
+	slices.Sort(out)
+	return out
+}
+
+func (r migrationRoster) sameAs(other migrationRoster) bool {
+	return slices.Equal(r.names(), other.names())
+}
+
+func loadMigrationRosters(ctx context.Context, tx *sql.Tx, query string, args ...any) (map[int64]migrationRoster, error) {
+	rows, err := store.CollectRows(ctx, tx, query, args, func(rows *sql.Rows) (struct {
+		team   int64
+		person [2]string
+	}, error) {
+		var r struct {
+			team   int64
+			person [2]string
+		}
+		return r, rows.Scan(&r.team, &r.person[0], &r.person[1])
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64]migrationRoster{}
+	for _, r := range rows {
+		out[r.team] = append(out[r.team], r.person)
+	}
+	return out, nil
+}
+
+// keepCopiedRostersByHand turns a Game's copied rosters into hand rosters
+// where they differ from what the team brought, and drops the rest.
+func keepCopiedRostersByHand(ctx context.Context, tx *sql.Tx, gameID int64) error {
+	own, err := loadMigrationRosters(ctx, tx, `
+select gtp.participant_id, p.first_name, p.last_name from game_team_players gtp join players p on p.id = gtp.player_id
+where gtp.game_id = ? and gtp.hand = 0 order by gtp.participant_id, gtp.roster_order`, gameID)
+	if err != nil {
+		return err
+	}
+	brought, err := loadMigrationRosters(ctx, tx, `
+select pp.participant_id, p.first_name, p.last_name from participant_players pp join players p on p.id = pp.player_id
+where pp.participant_id in (select participant_id from game_team_players where game_id = ? and hand = 0)
+order by pp.participant_id, pp.roster_order`, gameID)
+	if err != nil {
+		return err
+	}
+	hand, err := roster.HandRosterTeams(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	seated, err := migrationGameTeams(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	for participant, names := range own {
+		if hand[participant] || !seated[participant] || names.sameAs(brought[participant]) {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `update game_team_players set hand = 1 where game_id = ? and participant_id = ?`, gameID, participant); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `delete from game_team_players where game_id = ? and hand = 0`, gameID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `update games set roster_source = 'fest' where id = ?`, gameID)
+	return err
+}
+
+// migrationGameTeams is the teams a Game has: those it names, and those its
+// bouts seat.
+func migrationGameTeams(ctx context.Context, tx *sql.Tx, gameID int64) (map[int64]bool, error) {
+	ids, err := store.CollectRows(ctx, tx, `
+select participant_id from game_participants where game_id = ?
+union select ms.participant_id from match_slots ms join matches m on m.id = ms.match_id
+where m.game_id = ? and ms.participant_id is not null`, []any{gameID, gameID}, scanMigrationID)
+	out := map[int64]bool{}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, err
+}
+
+// movesToHandRosters keeps by hand, in each Game an override names, the two
+// teams it moves a player between, each with the fest roster of its fest team
+// and the moves applied: that is who the Game read them as.
+func movesToHandRosters(ctx context.Context, tx *sql.Tx) error {
+	type move struct {
+		festID, gameID, from, to int64
+		player                   [2]string
+	}
+	moves, err := store.CollectRows(ctx, tx, `
+select o.fest_id, o.game_id, o.source_team_id, o.override_team_id, fp.first_name, fp.last_name
+from game_player_team_overrides o join fest_players fp on fp.id = o.player_id
+join games g on g.id = o.game_id
+where g.roster_source = 'fest' order by o.game_id, o.player_id`, nil, func(rows *sql.Rows) (move, error) {
+		var m move
+		return m, rows.Scan(&m.festID, &m.gameID, &m.from, &m.to, &m.player[0], &m.player[1])
+	})
+	if err != nil {
+		return err
+	}
+	type key struct{ game, team int64 }
+	kept := map[key]migrationRoster{}
+	festOf := map[int64]int64{}
+	var order []key
+	festRoster := func(teamID int64) (migrationRoster, error) {
+		rosters, err := loadMigrationRosters(ctx, tx, `
+select ftp.team_id, p.first_name, p.last_name from fest_team_players ftp join fest_players p on p.id = ftp.player_id
+where ftp.team_id = ? order by ftp.roster_order, p.id`, teamID)
+		return rosters[teamID], err
+	}
+	for _, m := range moves {
+		festOf[m.gameID] = m.festID
+		for _, team := range []int64{m.from, m.to} {
+			k := key{m.gameID, team}
+			if _, ok := kept[k]; ok {
+				continue
+			}
+			names, err := festRoster(team)
+			if err != nil {
+				return err
+			}
+			kept[k] = names
+			order = append(order, k)
+		}
+		kept[key{m.gameID, m.from}] = slices.DeleteFunc(kept[key{m.gameID, m.from}], func(p [2]string) bool { return p == m.player })
+		if !slices.Contains(kept[key{m.gameID, m.to}], m.player) {
+			kept[key{m.gameID, m.to}] = append(kept[key{m.gameID, m.to}], m.player)
+		}
+	}
+	for _, k := range order {
+		if err := writeMigrationHandRoster(ctx, tx, festOf[k.game], k.game, k.team, kept[k]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeMigrationHandRoster keeps a fest team's roster in a Game by hand, as
+// these names, unless the Game does not seat the team or already keeps it.
+func writeMigrationHandRoster(ctx context.Context, tx *sql.Tx, festID, gameID, festTeamID int64, names migrationRoster) error {
+	participants, err := store.CollectRows(ctx, tx, `
+select p.id from participants p
+join fest_teams ft on ft.id = ?
+where p.fest_id = ? and p.roster = 'team' and p.assembled = 0
+  and (p.fest_team_id = ft.id or (p.fest_team_id is null and p.number = ft.number))
+order by p.id`, []any{festTeamID, festID}, scanMigrationID)
+	if err != nil {
+		return err
+	}
+	seated, err := migrationGameTeams(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	hand, err := roster.HandRosterTeams(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	for _, participant := range participants {
+		if !seated[participant] || hand[participant] || len(names) == 0 {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `delete from game_team_players where game_id = ? and participant_id = ?`, gameID, participant); err != nil {
+			return err
+		}
+		for at, person := range names {
+			playerID, err := roster.EnsureSeedPlayer(ctx, tx, festID, person[0], person[1])
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
+insert into game_team_players(game_id, participant_id, player_id, roster_order, hand) values(?, ?, ?, ?, 1)`,
+				gameID, participant, playerID, at); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return nil
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

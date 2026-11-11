@@ -9,7 +9,6 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
-	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
@@ -133,9 +132,7 @@ func (s *server) scopedGameRosterReset(w http.ResponseWriter, r *http.Request, s
 		return err
 	}
 	return s.writeGameRoster(w, r, sc, "game-roster:reset", participantID, func(ctx context.Context, tx *sql.Tx) error {
-		return roster.ResetGameRosterTx(ctx, tx, sc.FestID, sc.GameID, participantID, func(ctx context.Context, tx *sql.Tx) error {
-			return overrides.MaterializeGameRosterOverridesTx(ctx, tx, sc.FestID, sc.GameID)
-		})
+		return roster.ResetGameRosterTx(ctx, tx, sc.FestID, sc.GameID, participantID)
 	})
 }
 
@@ -174,5 +171,5 @@ func (s *server) writeGameRoster(w http.ResponseWriter, r *http.Request, sc rout
 }
 
 // gameRosterScope is the event scope a Game's pages listen on for its rosters
-// changing — a roster edited here, or a player override.
+// changing on the Game's roster tab.
 func gameRosterScope(gameID int64) string { return fmt.Sprintf("game-roster:%d", gameID) }

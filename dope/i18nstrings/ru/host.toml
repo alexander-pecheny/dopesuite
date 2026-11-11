@@ -191,32 +191,9 @@ players_crumb = "Игроки"
 player_label = "Игрок"
 # Empty state of the players table.
 players_empty = "Игроки пока не загружены."
-# Button opening the add-override dialog.
-add_override_btn = "Добавить оверрайд для игры"
-# Subhead of both override dialogs (add and edit).
-override_title = "Оверрайд игрока"
-# The override dialog's new-team field.
-new_team_label = "Новая команда"
-# Label of the games pickgroup in both override dialogs and the overrides
-# table's games column.
-games_label = "Игры"
 # The override dialogs' buttons.
 save_submit = "Сохранить"
 cancel_btn = "Отмена"
-# The from/to team labels: overrides table columns and the edit dialog summary.
-col_from_team = "Из команды"
-col_to_team = "В команду"
-# The add-override dialog when the fest has no KSI/EK/ES games to pick.
-no_override_games = "В фесте пока нет игр КСИ, ЭК или ЭС."
-# Icon-button label opening one override's edit dialog.
-edit_override_label = "Редактировать оверрайд"
-# Subhead of the overrides table section.
-overrides_subhead = "Оверрайды"
-# One of an override's games where it does nothing, because the host changed
-# the roster of one of its two teams by hand on that game's Составы tab.
-override_shadowed = '{{.game}} (не действует: состав команды в этой игре изменён вручную)'
-# The edit dialog's delete button and its confirm.
-delete_override_confirm = "Удалить оверрайд?"
 delete_btn = "Удалить"
 # Rating import page title and crumb: "<fest title> · импорт участников".
 rating_import_title = '{{.title}} · импорт участников'
@@ -291,11 +268,6 @@ import_unchanged_notice = 'Списки уже совпадают с турни�
 import_venues_notice = 'Новых площадок: {{.n}}.'
 import_no_teams_notice = "На турнирном сайте пока нет команд. Их можно внести вручную на странице команд."
 import_done_counts = 'Загружено команд: {{.teams}}, игроков: {{.players}}. Обновлено игр ЧГК: {{.od}}, КСИ: {{.ksi}}.'
-# Object words the override-id validation errors name ("Выберите … из
-# подсказки."): player, team, source team.
-error_obj_player = "игрока"
-error_obj_team = "команду"
-error_obj_source_team = "исходную команду"
 # The teams page's venue picker: every venue the caller edits.
 all_venues = "Все площадки"
 

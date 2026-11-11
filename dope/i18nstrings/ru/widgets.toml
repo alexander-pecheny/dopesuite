@@ -93,9 +93,6 @@ paren = "скобка"
 truncated = "обрыв"
 no_token = 'нет {{.token}}'
 
-[roster]
-# Validation error when a datalist input was not picked from suggestions (roster.ts).
-pick_suggestion = "Выберите значение из подсказки"
 
 [tab_picker]
 # The button a tab strip turns into when its tabs do not fit, which lists

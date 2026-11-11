@@ -216,7 +216,7 @@ func targets() []target {
 				// Builder-page classic scripts: self-contained IIFE bundles, one per script.
 				{
 					EntryPointsAdvanced: entries("dope/dope/web/ts/",
-						"pageforms", "menu-config", "gamecreate", "numbers", "profile", "roster", "fest-teams", "venue-page", "fest-venues"),
+						"pageforms", "menu-config", "gamecreate", "numbers", "profile", "fest-teams", "venue-page", "fest-venues"),
 					Bundle: true,
 					Format: api.FormatIIFE,
 					Outdir: "dope/dope/web/assets/static/dist",

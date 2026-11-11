@@ -79,12 +79,21 @@ type execer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
+// retiredTables are tables the journal once recorded and the schema no longer
+// has; a replay passes over their rows. game_player_team_overrides became
+// hand rosters in game_team_players (migration 60), whose own rows the journal
+// recorded from then on.
+var retiredTables = map[string]bool{"game_player_team_overrides": true}
+
 // ApplyRowMap applies one decoded row op (insert/update/delete) to tx. Shared by
 // the JSON (live) and varint (segment) decode paths.
 func (rp *Replayer) ApplyRowMap(ctx context.Context, tx interface {
 	pkQuerier
 	execer
 }, op Op, table string, row map[string]any) error {
+	if retiredTables[table] {
+		return nil
+	}
 	switch op {
 	case OpRowIns:
 		return replayInsert(ctx, tx, table, row)

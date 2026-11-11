@@ -1538,7 +1538,6 @@ var RU = Strings{
 			},
 		},
 		Roster: HostRosterStrings{
-			AddOverrideBtn:      func() string { return "Добавить оверрайд для игры" },
 			AddTeamBtn:          func() string { return "Добавить команду" },
 			AllVenues:           func() string { return "Все площадки" },
 			BadgeEdited:         func() string { return "изменена" },
@@ -1546,9 +1545,7 @@ var RU = Strings{
 			CancelBtn:           func() string { return "Отмена" },
 			ColCity:             func() string { return "Город" },
 			ColFlags:            func() string { return "Зачёты" },
-			ColFromTeam:         func() string { return "Из команды" },
 			ColPlayers:          func() string { return "Игроков" },
-			ColToTeam:           func() string { return "В команду" },
 			ConfirmSubmit:       func() string { return "Импортировать" },
 			ConflictCancel:      func() string { return "Отменить импорт" },
 			ConflictChoiceDrop:  func() string { return "Удалить команду вместе с результатами" },
@@ -1575,20 +1572,14 @@ var RU = Strings{
 			},
 			ConflictsTitle:        func() string { return "Спорные игроки" },
 			DeleteBtn:             func() string { return "Удалить" },
-			DeleteOverrideConfirm: func() string { return "Удалить оверрайд?" },
-			EditOverrideLabel:     func() string { return "Редактировать оверрайд" },
 			EditTeamLabel:         func(team string) string { return fmt.Sprintf("Изменить команду «%s»", team) },
 			ErrorFlagsForeignTeam: func(id string) string { return fmt.Sprintf("Команды %s нет в этом фесте.", id) },
-			ErrorObjPlayer:        func() string { return "игрока" },
-			ErrorObjSourceTeam:    func() string { return "исходную команду" },
-			ErrorObjTeam:          func() string { return "команду" },
 			ExportXlsxBtn:         func() string { return "Скачать xlsx" },
 			FlagsHint: func() string {
 				return "Зачёты команды пишутся через запятую: «Школ, Студ». На страницах ОД и КСИ по зачёту можно отфильтровать таблицу, а ЭС может брать в посев из ОД только команды одного зачёта. Зачёты, которые вы поменяли здесь, повторный импорт из rating.chgk.info не трогает."
 			},
 			FlagsPlaceholder: func() string { return "Школ, Студ" },
 			FlagsSavedNotice: func() string { return "Зачёты сохранены." },
-			GamesLabel:       func() string { return "Игры" },
 			ImportDoneCounts: func(teams string, players string, od string, ksi string) string {
 				return fmt.Sprintf("Загружено команд: %s, игроков: %s. Обновлено игр ЧГК: %s, КСИ: %s.", teams, players, od, ksi)
 			},
@@ -1615,17 +1606,10 @@ var RU = Strings{
 			NeedRatingNote: func() string {
 				return "Сначала сохраните rating.chgk.info ID в свойствах феста."
 			},
-			NewTeamLabel:    func() string { return "Новая команда" },
-			NoOverrideGames: func() string { return "В фесте пока нет игр КСИ, ЭК или ЭС." },
 			NumbersHint: func() string {
 				return "Номер команды стоит в столбце «№». Этот номер команда пишет на бланках. Чтобы поменять номер, исправьте его и нажмите «Сохранить»."
 			},
 			NumbersTools: func() string { return "Номера списком или по алфавиту" },
-			OverrideShadowed: func(game string) string {
-				return fmt.Sprintf("%s (не действует: состав команды в этой игре изменён вручную)", game)
-			},
-			OverrideTitle:    func() string { return "Оверрайд игрока" },
-			OverridesSubhead: func() string { return "Оверрайды" },
 			PlanAddedGames: func(games string) string {
 				return fmt.Sprintf("Новая игра для всего турнира: %s", games)
 			},
@@ -2380,31 +2364,6 @@ var RU = Strings{
 		Venues: OdVenuesStrings{
 			All:   func() string { return "Все площадки" },
 			Label: func() string { return "Площадка" },
-		},
-	},
-	Override: OverrideStrings{
-		Entry: OverrideEntryStrings{
-			GameInvalid:   func() string { return "Некорректная игра." },
-			GameTypeWrong: func() string { return "Игра для оверрайда должна быть КСИ или ЭК." },
-			PickFromHint:  func(label string) string { return fmt.Sprintf("Выберите %s из подсказки.", label) },
-			PickGames:     func() string { return "Выберите хотя бы одну игру." },
-			PickPlayer:    func() string { return "Выберите игрока из подсказки." },
-			PickTeam:      func() string { return "Выберите новую команду из подсказки." },
-		},
-		Lookup: OverrideLookupStrings{
-			NotFound:       func() string { return "Оверрайд не найден." },
-			PlayerNotFound: func() string { return "Игрок не найден в активном составе феста." },
-			TeamNotFound: func() string {
-				return "Команда не найдена в активном составе феста."
-			},
-		},
-		Save: OverrideSaveStrings{
-			TeamSame: func() string {
-				return "Новая команда совпадает с командой игрока на турнирном сайте."
-			},
-			TeamTooBig: func(team string) string {
-				return fmt.Sprintf("В команде \"%s\" после оверрайдов больше 9 игроков.", team)
-			},
 		},
 	},
 	Pages: PagesStrings{
@@ -3371,9 +3330,6 @@ var RU = Strings{
 			Title: func() string {
 				return "Скачать журнал состояния этой вкладки (для диагностики)"
 			},
-		},
-		Roster: WidgetsRosterStrings{
-			PickSuggestion: func() string { return "Выберите значение из подсказки" },
 		},
 		ScoreTable: WidgetsScoreTableStrings{
 			Place: func() string { return "М" },

@@ -63,8 +63,8 @@ concern:
 | `testapi.go` | the single exported test seam for `server/tests/` |
 
 **Dependency inversion (`host_accessors.go`).** The handler and leaf packages —
-`web/pages`, `web/hostpages`, `web/telegrambridge`, `export/gameexport` and
-`domain/overrides` — each declare a narrow `Host` interface describing what they
+`web/pages`, `web/hostpages`, `web/telegrambridge` and `export/gameexport` —
+each declare a narrow `Host` interface describing what they
 need from the server. `*server` satisfies those interfaces through thin
 accessors, all collected in `host_accessors.go`, with assertions like `var _
 gameexport.Host = (*server)(nil)`. This lets those packages stay leaves with no
@@ -102,7 +102,7 @@ here when it needs type metadata.
   A `Definition` carries every fact about a format's place in the fest that
   code elsewhere asks (ADR-0027): what it seats (`Individual`, `Troikas`,
   `Flat`, which also means it keeps no entrant list), `EKBout`, `HandRoster`,
-  `Divisions`, `PlayerOverrides`, how it takes a DSL (`DSL`, `DefaultDSL`,
+  `Divisions`, how it takes a DSL (`DSL`, `DefaultDSL`,
   `UpgradeDSL`, `LegacyPasted`), its `Title`, `Page` and `Init`, its
   `Results` view, its xlsx layout (`Sheets`), how the history page reads it
   (`Journal`), and its `Protocol`. Facts about the document a bout holds are
@@ -147,7 +147,7 @@ here when it needs type metadata.
   КСИ as a Structure. Its document has two writers, `SetStateTx` and
   `PatchStateTx`, and both of them seat the бой from the team list, score it and
   rank its Block, so `stage_standings` stays up to date for flat games too.
-- `overrides` — player-name overrides. `imports` — EK/seed/rating bulk import;
+- `imports` — EK/seed/rating bulk import;
   a seed source is `FromGame|FromFest|FromTroikas|FromRandom|FromXLSX|…`, and
   `entrants.go` holds a Game's entrant list and how it fills the Structure's
   seed numbers (ADR-0023).
@@ -272,7 +272,7 @@ something between taking the lock and beginning the transaction, or after the
 commit but still under the lock — updating the in-memory pointer to the active
 game, for instance. Every write path that runs constantly already follows this:
 game-state edits, which are batched through `web/editbatch`; match edits; the
-game-state PUT; journal revert and undo; player overrides; fest numbering;
+game-state PUT; journal revert and undo; game rosters; fest numbering;
 creating and deleting a game; and roster, reseed and rating import. The periodic
 journal archiver bounds its background pass in the same way.
 

@@ -228,18 +228,6 @@ CREATE TABLE game_participants(
   primary key(game_id, participant_id)
 );
 
--- table game_player_team_overrides
-CREATE TABLE game_player_team_overrides(
-  fest_id integer not null references fests(id) on delete cascade,
-  game_id integer not null references games(id) on delete cascade,
-  player_id integer not null references fest_players(id) on delete cascade,
-  source_team_id integer not null references fest_teams(id) on delete cascade,
-  override_team_id integer not null references fest_teams(id) on delete cascade,
-  created_at text not null,
-  updated_at text not null,
-  primary key(fest_id, game_id, player_id)
-);
-
 -- table game_team_players
 CREATE TABLE game_team_players(
   game_id integer not null references games(id) on delete cascade,
@@ -667,27 +655,6 @@ CREATE TRIGGER journal_game_participants_update after update on game_participant
 begin
   insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
   select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 2, json_object('t', 'game_participants', 'r', json_remove(json_object('game_id', new."game_id", 'participant_id', new."participant_id", 'position', new."position", 'number', new."number"), case when old."position" is new."position" then '$."position"' else '$."__dope_keep__"' end, case when old."number" is new."number" then '$."number"' else '$."__dope_keep__"' end)), strftime('%Y-%m-%dT%H:%M:%fZ','now');
-end;
-
--- trigger journal_game_player_team_overrides_delete
-CREATE TRIGGER journal_game_player_team_overrides_delete after delete on game_player_team_overrides
-begin
-  insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-  select (select fest_id from games where id = old.game_id), old.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = old.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 3, json_object('t', 'game_player_team_overrides', 'r', json_object('fest_id', old."fest_id", 'game_id', old."game_id", 'player_id', old."player_id")), strftime('%Y-%m-%dT%H:%M:%fZ','now');
-end;
-
--- trigger journal_game_player_team_overrides_insert
-CREATE TRIGGER journal_game_player_team_overrides_insert after insert on game_player_team_overrides
-begin
-  insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 1, json_object('t', 'game_player_team_overrides', 'r', json_object('fest_id', new."fest_id", 'game_id', new."game_id", 'player_id', new."player_id", 'source_team_id', new."source_team_id", 'override_team_id', new."override_team_id", 'created_at', new."created_at", 'updated_at', new."updated_at")), strftime('%Y-%m-%dT%H:%M:%fZ','now');
-end;
-
--- trigger journal_game_player_team_overrides_update
-CREATE TRIGGER journal_game_player_team_overrides_update after update on game_player_team_overrides
-begin
-  insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 2, json_object('t', 'game_player_team_overrides', 'r', json_remove(json_object('fest_id', new."fest_id", 'game_id', new."game_id", 'player_id', new."player_id", 'source_team_id', new."source_team_id", 'override_team_id', new."override_team_id", 'created_at', new."created_at", 'updated_at', new."updated_at"), case when old."source_team_id" is new."source_team_id" then '$."source_team_id"' else '$."__dope_keep__"' end, case when old."override_team_id" is new."override_team_id" then '$."override_team_id"' else '$."__dope_keep__"' end, case when old."created_at" is new."created_at" then '$."created_at"' else '$."__dope_keep__"' end, case when old."updated_at" is new."updated_at" then '$."updated_at"' else '$."__dope_keep__"' end)), strftime('%Y-%m-%dT%H:%M:%fZ','now');
 end;
 
 -- trigger journal_game_team_players_delete

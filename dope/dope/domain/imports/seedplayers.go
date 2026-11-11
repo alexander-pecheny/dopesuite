@@ -496,17 +496,17 @@ type seedEntry struct {
 	players []seedPlayer
 }
 
-// gameRoster is who played a Game and for whom: fest team by player, the
-// Game's own overrides applied. A player overridden into a team plays for
-// that team and no longer for the one the registry lists them under — which
-// is how three people from three teams come to be one Troika team, and how
-// the same three are still found on their own teams in the source Games.
 // scanIDPair reads a row of two ids.
 func scanIDPair(rs *sql.Rows) ([2]int64, error) {
 	var pair [2]int64
 	return pair, rs.Scan(&pair[0], &pair[1])
 }
 
+// gameRoster is who played a Game and for whom: fest team by fest player. A
+// team plays with its fest roster, unless the host kept its roster in this
+// Game by hand (CONTEXT.md, Game roster): then exactly those people played
+// for it, and a person it took from another team played for it and not for
+// the one the fest roster lists them under.
 func gameRoster(ctx context.Context, q store.Queryer, festID, gameID int64) (map[int64]int64, error) {
 	teamOf, err := store.CollectRows(ctx, q, `
 select ftp.player_id, ftp.team_id
@@ -523,16 +523,79 @@ join game_assignments ga on ga.participant_id = p.id and ga.game_id = ?`,
 			roster[pair[0]] = pair[1]
 		}
 	}
-	overrides, err := store.CollectRows(ctx, q, `
-select player_id, override_team_id from game_player_team_overrides where game_id = ?`,
-		[]any{gameID}, scanIDPair)
+	if err := applyHandRosters(ctx, q, festID, gameID, roster); err != nil {
+		return nil, err
+	}
+	return roster, nil
+}
+
+// applyHandRosters lays a Game's hand-kept rosters over roster (fest team by
+// fest player): a team kept by hand has exactly its hand roster's people.
+func applyHandRosters(ctx context.Context, q store.Queryer, festID, gameID int64, roster map[int64]int64) error {
+	type member struct {
+		team        int64
+		first, last string
+	}
+	rows, err := store.CollectRows(ctx, q, `
+select coalesce(`+participantFestTeam+`, 0), pl.first_name, pl.last_name
+from game_team_players gtp
+join participants p on p.id = gtp.participant_id
+join players pl on pl.id = gtp.player_id
+where gtp.game_id = ? and gtp.hand = 1
+order by gtp.participant_id, gtp.roster_order`, []any{gameID}, func(rs *sql.Rows) (member, error) {
+		var m member
+		return m, rs.Scan(&m.team, &m.first, &m.last)
+	})
+	if err != nil || len(rows) == 0 {
+		return err
+	}
+	byName, err := festPlayersByName(ctx, q, festID)
+	if err != nil {
+		return err
+	}
+	kept := map[int64]bool{}
+	for _, m := range rows {
+		kept[m.team] = m.team > 0
+	}
+	for player, team := range roster {
+		if kept[team] {
+			delete(roster, player)
+		}
+	}
+	for _, m := range rows {
+		if id, ok := byName[util.AlphaKey(store.JoinPlayerName(m.first, m.last))]; ok && m.team > 0 {
+			roster[id] = m.team
+		}
+	}
+	return nil
+}
+
+// festPlayersByName finds a fest player by their name, the way a Game's
+// players (who carry no fest id) are matched to the fest's.
+func festPlayersByName(ctx context.Context, q store.Queryer, festID int64) (map[string]int64, error) {
+	festPlayers, err := store.CollectRows(ctx, q, `
+select id, first_name, last_name from fest_players where fest_id = ? order by id`,
+		[]any{festID}, func(rs *sql.Rows) (struct {
+			id          int64
+			first, last string
+		}, error) {
+			var row struct {
+				id          int64
+				first, last string
+			}
+			return row, rs.Scan(&row.id, &row.first, &row.last)
+		})
 	if err != nil {
 		return nil, err
 	}
-	for _, pair := range overrides {
-		roster[pair[0]] = pair[1]
+	byName := map[string]int64{}
+	for _, fp := range festPlayers {
+		key := util.AlphaKey(store.JoinPlayerName(fp.first, fp.last))
+		if _, seen := byName[key]; !seen {
+			byName[key] = fp.id
+		}
 	}
-	return roster, nil
+	return byName, nil
 }
 
 // seedParticipantPlayers lists this Game's Participants with their people and
@@ -615,27 +678,9 @@ type seedSourceGame struct {
 // is left out (their places are unknown), and a namesake resolves to the
 // first fest player of that name.
 func assembledFestPlayers(ctx context.Context, q store.Queryer, scope core.FestScope) (map[int64][]int64, error) {
-	festPlayers, err := store.CollectRows(ctx, q, `
-select id, first_name, last_name from fest_players where fest_id = ? order by id`,
-		[]any{scope.FestID}, func(rs *sql.Rows) (struct {
-			id          int64
-			first, last string
-		}, error) {
-			var row struct {
-				id          int64
-				first, last string
-			}
-			return row, rs.Scan(&row.id, &row.first, &row.last)
-		})
+	byName, err := festPlayersByName(ctx, q, scope.FestID)
 	if err != nil {
 		return nil, err
-	}
-	byName := map[string]int64{}
-	for _, fp := range festPlayers {
-		key := util.AlphaKey(store.JoinPlayerName(fp.first, fp.last))
-		if _, seen := byName[key]; !seen {
-			byName[key] = fp.id
-		}
 	}
 	rows, err := store.CollectRows(ctx, q, `
 select pp.participant_id, pl.first_name, pl.last_name

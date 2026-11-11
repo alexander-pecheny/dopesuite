@@ -344,11 +344,9 @@ func TestAPITokenRoster(t *testing.T) {
 	resp = bearerRequest(t, srv, http.MethodGet, fest+"/players", nil, token)
 	wantStatus(t, resp, http.StatusOK, "players")
 	players := decodeInto[struct {
-		Players   []any       `json:"players"`
-		PlayerIDs []apiOption `json:"player_ids"`
-		TeamIDs   []apiOption `json:"team_ids"`
+		Players []any `json:"players"`
 	}](t, resp)
-	if len(players.Players) != 4 || len(players.PlayerIDs) == 0 || len(players.TeamIDs) != 2 {
+	if len(players.Players) != 4 {
 		t.Fatalf("players = %+v", players)
 	}
 	resp = bearerRequest(t, srv, http.MethodPost, fest+"/numbers/assign", map[string]any{
@@ -364,49 +362,6 @@ func TestAPITokenRoster(t *testing.T) {
 		}
 	}
 
-	resp = bearerRequest(t, srv, http.MethodPost, fest+"/games", map[string]any{"game_type": "ksi", "ksi_themes": 5}, token)
-	wantStatus(t, resp, http.StatusOK, "create a KSI game to override in")
-	gameID := decodeInto[struct {
-		ID int64 `json:"id"`
-	}](t, resp).ID
-	var anna int64
-	for _, o := range players.PlayerIDs {
-		if strings.Contains(o.Label, "Иванова") {
-			anna = o.ID
-		}
-	}
-	override := map[string]any{"player_id": anna, "team_id": byName["Бета"]}
-	wantStatus(t, bearerRequest(t, srv, http.MethodPost, fest+"/players/overrides", override, token), http.StatusBadRequest, "an override without games")
-	override["game_ids"] = []int64{gameID}
-	resp = bearerRequest(t, srv, http.MethodPost, fest+"/players/overrides", override, token)
-	wantStatus(t, resp, http.StatusOK, "add an override")
-	overrides := decodeInto[struct {
-		Overrides []struct {
-			SourceTeamID int64   `json:"source_team_id"`
-			TeamID       int64   `json:"team_id"`
-			GameIDs      []int64 `json:"game_ids"`
-		} `json:"overrides"`
-	}](t, resp).Overrides
-	if len(overrides) != 1 || overrides[0].SourceTeamID != byName["Альфа"] || overrides[0].TeamID != byName["Бета"] {
-		t.Fatalf("overrides = %+v", overrides)
-	}
-	replace := map[string]any{"player_id": anna, "source_team_id": byName["Альфа"], "team_id": byName["Бета"], "game_ids": []int64{}}
-	wantStatus(t, bearerRequest(t, srv, http.MethodPut, fest+"/players/overrides", replace, token), http.StatusBadRequest, "a replace that would delete")
-	replace["game_ids"] = []int64{gameID}
-	wantStatus(t, bearerRequest(t, srv, http.MethodPut, fest+"/players/overrides", replace, token), http.StatusOK, "replace an override")
-	resp = bearerRequest(t, srv, http.MethodDelete, fmt.Sprintf("%s/players/overrides?player_id=%d&source_team_id=%d&team_id=%d", fest, anna, byName["Альфа"], byName["Бета"]), nil, token)
-	wantStatus(t, resp, http.StatusOK, "delete an override")
-	if left := decodeInto[struct {
-		Overrides []any `json:"overrides"`
-	}](t, resp).Overrides; len(left) != 0 {
-		t.Fatalf("overrides after delete = %+v", left)
-	}
-
 	resp = bearerRequest(t, srv, http.MethodPost, fest+"/numbers/clear", nil, token)
 	wantStatus(t, resp, http.StatusOK, "clear numbers")
-}
-
-type apiOption struct {
-	ID    int64  `json:"id"`
-	Label string `json:"label"`
 }

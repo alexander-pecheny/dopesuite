@@ -34,7 +34,6 @@ var gameScopedTables = []struct {
 	{"game_assignments", "game_id = ?"},
 	{"game_participants", "game_id = ?"},
 	{"game_team_players", "game_id = ?"},
-	{"game_player_team_overrides", "game_id = ?"},
 }
 
 // GameCheckpoint is the decoded snapshot of one game's state.

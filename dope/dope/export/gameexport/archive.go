@@ -84,7 +84,6 @@ var gameRelSpecs = []gameRelSpec{
 	{"game_participants", `select * from game_participants where game_id = ?`, []string{"game_id", "participant_id"}},
 	{"game_team_players", `select * from game_team_players where game_id = ?`, []string{"game_id", "participant_id", "player_id"}},
 	{"game_assignments", `select * from game_assignments where game_id = ?`, []string{"game_id", "basket", "number"}},
-	{"game_player_team_overrides", `select * from game_player_team_overrides where game_id = ?`, []string{"fest_id", "game_id", "player_id"}},
 }
 
 // festContextSpecs are fest-level tables included so names/venues referenced by

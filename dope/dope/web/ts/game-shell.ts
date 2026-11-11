@@ -229,6 +229,9 @@ export interface GameDocumentSpec {
   // sent now (ScopedWriterOptions).
   pendingTTLMs?: () => number | undefined;
   before?: () => Promise<boolean>;
+  // A team's roster in this Game changed (its roster tab): when given, the
+  // page listens on the Game's roster scope and is told.
+  onRoster?: () => void;
 }
 
 export interface GameDocument {
@@ -305,7 +308,12 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
           spec.apply(overlay(base(view.data)));
         },
         stateURL: () => `${route.apiBase}/state`,
-      }],
+      }, ...(spec.onRoster ? [{
+        prefix: `game-roster:${shell.scopeGameID}`,
+        adopt: (changed: string) => {
+          if (changed === `game-roster:${shell.scopeGameID}`) spec.onRoster?.();
+        },
+      }] : [])],
       indicator: shell.indicator,
       onViewers: (count) => shell.viewerCounter.setCount(count),
       onLockdown: scheduleStaticReload,

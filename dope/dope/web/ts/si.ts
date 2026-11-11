@@ -10,7 +10,7 @@ import {resultsPins, resultsTeamCell} from "./standings.js";
 import {sheetHead} from "./sheet-pins.js";
 import {createTeamLens} from "./team-lens.js";
 import type {TeamSort} from "./team-lens.js";
-import {buildRosterView} from "./fest-roster.js";
+import {buildGameRosterView} from "./fest-roster.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
@@ -152,6 +152,10 @@ const doc = mountGameDocument({
   adopt: adoptGameSnapshot,
   apply: applyRemoteState,
   current: () => ({scheme, state, fest}),
+  onRoster: () => {
+    siRosterView = null;
+    if (activeTab === "roster") render();
+  },
 });
 
 // adoptGameSnapshot takes a fresh document — the first snapshot, or a
@@ -392,13 +396,14 @@ function buildResultsTable(): HTMLElement {
   return wrapper;
 }
 
-// The roster tab: the fest-level team→players roster (read-only, visible to
-// all visitors). Its content never depends on game state, so the view node is
-// built once and reused across renders — avoiding a re-fetch flash on every SSE
-// delta while this tab is open.
+// The roster tab: the roster each team plays this Game with, which a host
+// keeps by hand there (CONTEXT.md, Game roster). Its content never depends
+// on the game state, so the view node is built once and reused across renders
+// (no re-fetch flash on every SSE delta while this tab is open) until a
+// roster changes.
 let siRosterView: HTMLElement | null = null;
 function rosterView(): HTMLElement {
-  if (!siRosterView) siRosterView = buildRosterView(route.festID, route.gameID);
+  if (!siRosterView) siRosterView = buildGameRosterView(route.apiBase || "", {editable: !viewer});
   return siRosterView;
 }
 

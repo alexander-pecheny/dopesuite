@@ -8,7 +8,6 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
-	"dope/dope/domain/overrides"
 	rosterpkg "dope/dope/domain/roster"
 	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
@@ -514,16 +513,6 @@ where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&gameType, &rawS
 	return gameType, rawState, err
 }
 
-// materializeRosterOverridesTx reapplies the Game's player overrides, if it
-// has any, to the roster the list just seated.
-func materializeRosterOverridesTx(ctx context.Context, tx *sql.Tx, scope core.FestScope) error {
-	hasRosterOverrides, err := overrides.GameHasPlayerOverridesTx(ctx, tx, scope.FestID, scope.GameID)
-	if err != nil || !hasRosterOverrides {
-		return err
-	}
-	return overrides.MaterializeGameRosterOverridesTx(ctx, tx, scope.FestID, scope.GameID)
-}
-
 // SaveListTx writes the Game's Entrant list and seats it (seatListTx), records
 // the event and returns the list as the entrants tab shows it, with the
 // document the game-state scope broadcasts. current is the list as it was
@@ -539,9 +528,6 @@ where fest_id = ? and id = ?`, string(stateJSON), util.UtcNow(), scope.FestID, s
 		return SeedImportView{}, 0, nil, err
 	}
 	if err := seatListTx(ctx, tx, scope, current.GameType, next.State.Rows); err != nil {
-		return SeedImportView{}, 0, nil, err
-	}
-	if err := materializeRosterOverridesTx(ctx, tx, scope); err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
 	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, eventType, util.MustJSON(map[string]any{

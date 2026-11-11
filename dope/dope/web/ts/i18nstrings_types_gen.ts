@@ -1075,7 +1075,6 @@ export type Strings = {
       venueUnfinished: (venue: string, done: string, total: string) => string;
     };
     roster: {
-      addOverrideBtn: () => string;
       addTeamBtn: () => string;
       allVenues: () => string;
       badgeEdited: () => string;
@@ -1083,9 +1082,7 @@ export type Strings = {
       cancelBtn: () => string;
       colCity: () => string;
       colFlags: () => string;
-      colFromTeam: () => string;
       colPlayers: () => string;
-      colToTeam: () => string;
       confirmSubmit: () => string;
       conflictCancel: () => string;
       conflictChoiceDrop: () => string;
@@ -1102,18 +1099,12 @@ export type Strings = {
       conflictsHint: () => string;
       conflictsTitle: () => string;
       deleteBtn: () => string;
-      deleteOverrideConfirm: () => string;
-      editOverrideLabel: () => string;
       editTeamLabel: (team: string) => string;
       errorFlagsForeignTeam: (id: string) => string;
-      errorObjPlayer: () => string;
-      errorObjSourceTeam: () => string;
-      errorObjTeam: () => string;
       exportXlsxBtn: () => string;
       flagsHint: () => string;
       flagsPlaceholder: () => string;
       flagsSavedNotice: () => string;
-      gamesLabel: () => string;
       importDoneCounts: (teams: string, players: string, od: string, ksi: string) => string;
       importMergedNotice: (n: string) => string;
       importNoTeamsNotice: () => string;
@@ -1128,13 +1119,8 @@ export type Strings = {
       keptRemovedTeams: (n: string) => string;
       keptRenamed: (n: string) => string;
       needRatingNote: () => string;
-      newTeamLabel: () => string;
-      noOverrideGames: () => string;
       numbersHint: () => string;
       numbersTools: () => string;
-      overrideShadowed: (game: string) => string;
-      overrideTitle: () => string;
-      overridesSubhead: () => string;
       planAddedGames: (games: string) => string;
       planAddedTeams: (teams: string) => string;
       planAddedVenues: (venues: string) => string;
@@ -1661,25 +1647,6 @@ export type Strings = {
     venues: {
       all: () => string;
       label: () => string;
-    };
-  };
-  override: {
-    entry: {
-      gameInvalid: () => string;
-      gameTypeWrong: () => string;
-      pickFromHint: (label: string) => string;
-      pickGames: () => string;
-      pickPlayer: () => string;
-      pickTeam: () => string;
-    };
-    lookup: {
-      notFound: () => string;
-      playerNotFound: () => string;
-      teamNotFound: () => string;
-    };
-    save: {
-      teamSame: () => string;
-      teamTooBig: (team: string) => string;
     };
   };
   pages: {
@@ -2286,9 +2253,6 @@ export type Strings = {
     recorder: {
       label: () => string;
       title: () => string;
-    };
-    roster: {
-      pickSuggestion: () => string;
     };
     scoreTable: {
       place: () => string;

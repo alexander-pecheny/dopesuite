@@ -11,7 +11,7 @@ import (
 
 // ksiFormat is team jeopardy: one flat sheet of themes.
 var ksiFormat = Definition{Code: KSI, Label: dopestrings.Default.Games.Ksi.Label(), Title: dopestrings.Default.Host.Games.TypeKsi(),
-	Page: "static/si.html", Flat: true, Divisions: true, PlayerOverrides: true, DSL: DSLAccepted,
+	Page: "static/si.html", Flat: true, Divisions: true, HandRoster: true, DSL: DSLAccepted,
 	Sheets: SheetsKSI, Journal: JournalKSIPatches, Protocol: ksi{}}
 
 // ksi wraps ComputeKSIResults: state is KSIState, the match config
@@ -24,6 +24,10 @@ func (ksi) Code() string { return "ksi" }
 func (ksi) Params() []Param { return []Param{{Key: "themes", Config: "themes"}} }
 
 func (ksi) TeamBlob() bool { return false }
+
+// UsedPlayers: a KSI sheet scores teams, never a player, so no player's
+// results keep them on a team's roster in this Game.
+func (ksi) UsedPlayers(json.RawMessage, []int64) []UsedPlayer { return nil }
 
 func (ksi) Started(state json.RawMessage) bool { return false }
 

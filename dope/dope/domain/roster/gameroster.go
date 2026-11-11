@@ -18,12 +18,11 @@ import (
 
 // A game roster (CONTEXT.md, Game roster) is who a team plays one Game with.
 // By default it is what the team brought: the fest roster, copied at the seed
-// import, with the fest's player overrides for that Game applied. The host can
-// keep it by hand instead, on the Game's roster tab, and then exactly those
-// players play for the team in this Game: the fest roster, a seed import, a
-// rating import and the overrides no longer reach it. The hand roster lives in
-// game_team_players with hand = 1 (store.GameRosters reads it), and clearing
-// the Game drops it together with the overrides.
+// import. The host can keep it by hand instead, on the Game's roster tab, and
+// then exactly those players play for the team in this Game: the fest roster,
+// a seed import and a rating import no longer reach it. The hand roster lives
+// in game_team_players with hand = 1 (store.GameRosters reads it), and
+// clearing the Game drops it.
 
 // HandRoster reports whether the host edits a team's roster per Game in this
 // format (games.Definition.HandRoster): the buzzer formats that seat teams.
@@ -388,9 +387,9 @@ insert into game_team_players(game_id, participant_id, player_id, roster_order, 
 }
 
 // ResetGameRosterTx gives a team back the roster it brought: the host's hand
-// roster goes, and the fest roster with the Game's overrides applies again. It
+// roster goes, and the roster it brought applies again. It
 // is refused when that would drop a player who has something entered.
-func ResetGameRosterTx(ctx context.Context, tx *sql.Tx, festID, gameID, participantID int64, materialize func(ctx context.Context, tx *sql.Tx) error) error {
+func ResetGameRosterTx(ctx context.Context, tx *sql.Tx, festID, gameID, participantID int64) error {
 	game, err := editableTeam(ctx, tx, festID, gameID, participantID)
 	if err != nil {
 		return err
@@ -404,11 +403,6 @@ func ResetGameRosterTx(ctx context.Context, tx *sql.Tx, festID, gameID, particip
 	}
 	if _, err := tx.ExecContext(ctx, `delete from game_team_players where game_id = ? and participant_id = ? and hand = 1`, gameID, participantID); err != nil {
 		return err
-	}
-	if game.rosterSource == "game" && materialize != nil {
-		if err := materialize(ctx, tx); err != nil {
-			return err
-		}
 	}
 	after, err := currentRoster(ctx, tx, gameID, game, participantID)
 	if err != nil {
@@ -430,7 +424,7 @@ func touchGame(ctx context.Context, tx *sql.Tx, gameID int64) error {
 }
 
 // HandRosterTeams lists the teams of a Game whose roster the host keeps by
-// hand, for the overrides that cannot reach them.
+// hand.
 func HandRosterTeams(ctx context.Context, q store.Queryer, gameID int64) (map[int64]bool, error) {
 	ids, err := store.CollectRows(ctx, q, `
 select distinct participant_id from game_team_players where game_id = ? and hand = 1`, []any{gameID}, scanID)

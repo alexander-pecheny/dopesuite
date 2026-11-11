@@ -31,7 +31,7 @@ dope/                    # module root (go.mod: module "dope")
     cmd/                 # entry points: dope-server (thin main)
     server/              # package dopeserver — the orchestration trunk + server/tests/ (integration)
     web/                 # HTTP/UI: route (the one dispatcher), pages, hostpages, editbatch, telegrambridge, assets (embed), jstest
-    domain/              # game/fest logic: games, core, gamebuild, flatgame, resolver, roster, overrides, imports, entrants, numbering, towns, edit, view
+    domain/              # game/fest logic: games, core, gamebuild, flatgame, resolver, roster, imports, entrants, numbering, towns, edit, view
     storage/             # persistence: store, journal, migrate, festwrite, festaccess, auditmw, storeutil, sqlitez, buffdb, ratingsite
     export/              # output: xlsxexport, gameexport
     platform/            # cross-cutting leaves: realtime, roles, markdown, session, metrics, util
@@ -55,7 +55,7 @@ directly. Each of its files covers one concern:
 | `server/main.go` | ~830 | Entry point, mux wiring, HTTP server, SSE event handlers |
 | `server/routes_api.go` | ~500 | The **route table** for `/api/fest/` and `/api/auth/` (ADR-0016). Each endpoint is one row: the mux pattern, its `route.Access` level (Read, Editor, Manager and so on, with `.Numbered()` to add the numbering guard), and the handler. The handlers are in the same file and all look like `func(w, r, route.Scope) error`. A handler never checks the method, never checks a guard and never calls `http.Error`: the dispatcher in `web/route` resolves `{fest}` and `{game}`, the session and the role, and writes out whatever error the handler returns |
 | `server/routes_api_tokens.go` | ~50 | `/api/auth/tokens`: the caller's API tokens (ADR-0021). The tokens themselves live in `domain/core/apitoken.go`, and `Engine.LookupSession` reads `Authorization: Bearer …` before the cookie |
-| `web/hostpages/api.go` | ~710 | **The host pages' JSON twins** (ADR-0021), registered into the `/api` table by `APIRoutes`: fests, access, games and their settings, teams and Flags, player overrides, troikas, rating import, numbers, the history and revert. Each route calls the same function its form does (`CreateFest`, `UpdateGameSettings`, `AssignFestNumbers`, `RevertGame`…). A new host form is not finished until its twin is here |
+| `web/hostpages/api.go` | ~710 | **The host pages' JSON twins** (ADR-0021), registered into the `/api` table by `APIRoutes`: fests, access, games and their settings, teams and Flags, players, troikas, rating import, numbers, the history and revert. Each route calls the same function its form does (`CreateFest`, `UpdateGameSettings`, `AssignFestNumbers`, `RevertGame`…). A new host form is not finished until its twin is here |
 | `server/routes_fest.go` | ~105 | The `/fest/` viewer table: the public fest page, the game pages (with the `/static` snapshot handle and the xlsx download) |
 | `server/scoped_api.go` | ~310 | What the scoped endpoints share below HTTP: match scope resolution, broadcasts, the state PUT, screen settings, match-view loaders, reseed |
 | `web/hostpages/routes.go` | ~120 | The `/host/` table (`Server.routes()`), with the host denial policy: no session or no role → back to `/host`, the wrong role → 403 |

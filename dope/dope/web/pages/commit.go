@@ -3,7 +3,6 @@ package pages
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"slices"
 
 	"dope/dope/domain/core"
@@ -37,9 +36,6 @@ func (s *Server) FanOut(festID, revision int64, b core.Broadcast) {
 	eng := s.h.Engine()
 	for _, state := range b.States {
 		eng.BroadcastState(festID, core.GameStateScope(state.GameID), revision, state.StateJSON)
-	}
-	for _, gameID := range b.Rosters {
-		eng.BroadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
 	}
 	seen := make(map[int64]bool, len(b.Views))
 	for _, gameID := range b.Views {

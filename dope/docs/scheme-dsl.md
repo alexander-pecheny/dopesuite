@@ -124,9 +124,9 @@ printed table instead writes it out in `deal:` (below).
   defines a metric per player in the scoring-rule language; `seed.<name>:
   mean(<player metric>)` folds it over the Participant's players (`mean`,
   `min`, `max`, `sum`, `count`), and `sorting` names those. Who played for whom
-  is each source Game's own roster with its overrides applied, so three people
-  from three teams are one Троечка team here and their own teams' entries
-  there; a player whose team sat a Game out counts one place behind its last.
+  is each source Game's own roster, as its Составы tab keeps it, so three
+  people from three teams are one Троечка team here and their own teams'
+  entries there; a player whose team sat a Game out counts one place behind its last.
   `tours.<game>: 1-2` keeps a source ОД to those tours (`2` is the first two,
   `1-2` a range, `[1, 3]` a list): its places are the table after them alone,
   a tie shared at the mean of the places it covers. The Троечка regulations

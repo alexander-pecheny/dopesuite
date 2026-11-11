@@ -41,7 +41,6 @@ var journalGameTables = []struct {
 	{"game_assignments", func(p string) string { return p + ".game_id" }},
 	{"game_participants", func(p string) string { return p + ".game_id" }},
 	{"game_team_players", func(p string) string { return p + ".game_id" }},
-	{"game_player_team_overrides", func(p string) string { return p + ".game_id" }},
 }
 
 // buildJournalRowTrigger emits an AFTER trigger that records a forward row-op.

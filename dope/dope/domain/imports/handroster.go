@@ -13,7 +13,6 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
-	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -61,15 +60,13 @@ func (p ImportPlan) Empty() bool {
 
 // RosterWrite is what writing a roster changed, for the caller to broadcast.
 type RosterWrite struct {
-	Updates   []roster.GameStateBroadcast
-	EKGameIDs []int64
-	odGames   int
-	ksiGames  int
+	Updates  []roster.GameStateBroadcast
+	odGames  int
+	ksiGames int
 }
 
-// writeRosterTx writes a whole fest roster: the rows that changed, the flat
-// games when the teams changed, and the player overrides against the rows
-// that stay.
+// writeRosterTx writes a whole fest roster: the rows that changed, and the
+// flat games when the teams changed.
 func writeRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster.FestRosterImportTeam, existingByRating map[int64]existingFestTeam, merges map[int64]int64, venueOf map[int64]multifest.RatingVenue, teamsChanged bool) (RosterWrite, error) {
 	var out RosterWrite
 	if err := applyFestRosterDiffTx(ctx, tx, festID, teams, existingByRating, merges); err != nil {
@@ -98,17 +95,6 @@ func writeRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster
 				out.ksiGames++
 			}
 		}
-	}
-	// Refresh EK override game rosters. With fest_players ids stable the surviving
-	// overrides still point at the right rows (orphaned ones cascaded away with
-	// their deleted player); re-resolving them re-points any moved source team and
-	// re-materializes the affected EK game_team_players caches.
-	current, err := overrides.LoadRatingPlayerTeamOverrides(ctx, tx, festID)
-	if err != nil {
-		return out, err
-	}
-	if out.EKGameIDs, err = overrides.RestoreRatingPlayerTeamOverridesTx(ctx, tx, festID, current); err != nil {
-		return out, err
 	}
 	return out, nil
 }

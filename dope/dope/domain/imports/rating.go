@@ -240,7 +240,6 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 	defer conn.Close()
 
 	var updates []roster.GameStateBroadcast
-	var ekOverrideGameIDs []int64
 	var revision int64
 	result, err := func() (RatingRosterImportResult, error) {
 		defer eng.LockWrite("rating-import")()
@@ -342,7 +341,7 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 		if err != nil {
 			return RatingRosterImportResult{}, err
 		}
-		updates, ekOverrideGameIDs = written.Updates, written.EKGameIDs
+		updates = written.Updates
 		if err := ratingsync.SaveTx(ctx, tx, festID, base); err != nil {
 			return RatingRosterImportResult{}, err
 		}
@@ -377,9 +376,6 @@ func ImportFestRoster(eng *core.Engine, ctx context.Context, festID, ratingID in
 
 	for _, update := range updates {
 		eng.BroadcastState(festID, core.GameStateScope(update.GameID), revision, update.StateJSON)
-	}
-	for _, gameID := range ekOverrideGameIDs {
-		eng.BroadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
 	}
 	return result, nil
 }

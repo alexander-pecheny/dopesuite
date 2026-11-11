@@ -177,7 +177,7 @@ func EditRosterTx(ctx context.Context, tx *sql.Tx, festID int64, event string, e
 	}
 	return core.FestWrite{
 		Event:     event,
-		Broadcast: core.Broadcast{States: gameStates(written.Updates), Rosters: written.EKGameIDs, Views: views},
+		Broadcast: core.Broadcast{States: gameStates(written.Updates), Views: views},
 	}, nil
 }
 

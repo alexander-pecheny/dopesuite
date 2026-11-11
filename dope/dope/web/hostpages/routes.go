@@ -121,7 +121,6 @@ func (s *Server) buildRoutes() *route.Table {
 	t.Handle("GET "+fest+"/players", route.Manager, s.notSynch(pageScoped(s.renderHostFestPlayers)))
 	t.Handle("GET "+fest+"/troikas", route.Manager, s.notSynch(pageScoped(s.renderHostFestTroikas)))
 	t.Handle("POST "+fest+"/troikas", route.Manager, page(s.handleHostSaveTroikas))
-	t.Handle("POST "+fest+"/players/overrides", route.Manager, page(s.handleHostAddPlayerOverride))
 	t.Handle("POST "+fest+"/access", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		s.handleHostSaveAccess(w, r, sc.FestID, sc.User.UserID)
 		return nil

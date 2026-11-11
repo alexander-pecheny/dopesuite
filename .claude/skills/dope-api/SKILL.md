@@ -1,6 +1,6 @@
 ---
 name: dope-api
-description: Change dope fests from the shell through the API with dope-cli and an API token — create fests and games, edit settings, access, teams and Flags, player overrides, troikas, numbers, enter and fix results, read the history and revert. Use this whenever a task asks to change or inspect a dope fest (dope.pecheny.me or a staging instance) without clicking through the browser.
+description: Change dope fests from the shell through the API with dope-cli and an API token — create fests and games, edit settings, access, teams and Flags, game rosters, troikas, numbers, enter and fix results, read the history and revert. Use this whenever a task asks to change or inspect a dope fest (dope.pecheny.me or a staging instance) without clicking through the browser.
 ---
 
 # Working on a dope fest through the API
@@ -102,10 +102,10 @@ created from pasted JSON. Leaving `entrants` out seats everyone.
 | `GET …/rating/teams/{id}/base` V | a site team's current base roster: `{team, players}` |
 | `GET …/teams/export.xlsx` · `POST …/teams/xlsx` A | the roster as a sheet, a row per person; a sheet loads back (multipart `file`, `?preview=1` first) and sets every team it names, leaving the rest |
 | `PATCH …/teams/flags` A | `{flags: {"<team id>": "МЮ, Студ"}}`; teams left out keep theirs |
-| `GET …/players` A | players, overrides, and the ids an override takes |
-| `POST …/players/overrides` A | `{player_id, team_id, game_ids}`: the player plays for `team_id` in those games (КСИ and ЭК games only; at least one) |
-| `PUT …/players/overrides` A | `{player_id, source_team_id, team_id, game_ids}`: the three ids name an existing override, `game_ids` becomes its new list (not empty). To move the player to another team, delete and add |
-| `DELETE …/players/overrides?player_id=&source_team_id=&team_id=` A | |
+| `GET …/players` A | every fest player and the team they play for |
+| `GET …/games/<game>/roster` R | the roster each team plays this Game with, `hand` for one the host keeps by hand; `?choices=1` adds the fest's players to suggest |
+| `PUT …/games/<game>/rosters/<participant>` M | `{players: ["Имя Фамилия", …]}` keeps that team's roster in this Game by hand (ЭК, ЭС, брейн, Хамса, КСИ): exactly these people. A person from another team plays this Game for this one, and a seed by players' places counts them here. Not empty, nobody twice, nobody dropped who has something entered for the team |
+| `DELETE …/games/<game>/rosters/<participant>` M | gives the team back the roster it brought, under the same rule |
 | `GET\|POST …/troikas` A | list / add `{lines: "Имя: Игрок, Игрок, Игрок\n…"}` |
 | `PUT\|DELETE …/troikas/<id>` A | `{name, players: [...], applied?}`; `applied` moves the troika to that place in the order of applications (the list's `applied`), which a troikas list follows and `seed: players` breaks its last tie by |
 | `GET …/numbers` V | teams with numbers. In a fest with площадки each numbers its own teams, and every numbers call there needs `?venue=<id>` (the ids are in `…/settings` → `multifest_venues`) |

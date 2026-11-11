@@ -39,13 +39,13 @@ func TestPageOfEveryGameType(t *testing.T) {
 // format must add its row here, which makes whoever adds it decide each one
 // rather than inherit a zero value.
 var formatFacts = map[string]struct {
-	individual, troikas, ekBout, flat, handRoster, divisions, overrides, pasted, toursSeed bool
+	individual, troikas, ekBout, flat, handRoster, divisions, pasted, toursSeed bool
 }{
 	OD:     {flat: true, divisions: true, toursSeed: true},
-	KSI:    {flat: true, divisions: true, overrides: true},
+	KSI:    {flat: true, handRoster: true, divisions: true},
 	Brain:  {handRoster: true},
-	EK:     {ekBout: true, handRoster: true, overrides: true, pasted: true},
-	ES:     {ekBout: true, handRoster: true, overrides: true, pasted: true},
+	EK:     {ekBout: true, handRoster: true, pasted: true},
+	ES:     {ekBout: true, handRoster: true, pasted: true},
 	SI:     {individual: true},
 	Multi:  {flat: true, divisions: true},
 	Troika: {troikas: true},
@@ -67,8 +67,8 @@ func TestEveryFormatDeclaresItsFacts(t *testing.T) {
 			continue
 		}
 		got := struct {
-			individual, troikas, ekBout, flat, handRoster, divisions, overrides, pasted, toursSeed bool
-		}{d.Individual, d.Troikas, d.EKBout, d.Flat, d.HandRoster, d.Divisions, d.PlayerOverrides, d.LegacyPasted, d.ToursSeed}
+			individual, troikas, ekBout, flat, handRoster, divisions, pasted, toursSeed bool
+		}{d.Individual, d.Troikas, d.EKBout, d.Flat, d.HandRoster, d.Divisions, d.LegacyPasted, d.ToursSeed}
 		if got != want {
 			t.Errorf("%s: facts %+v, want %+v", d.Code, got, want)
 		}
@@ -79,8 +79,8 @@ func TestEveryFormatDeclaresItsFacts(t *testing.T) {
 			t.Errorf("%s: DSL %d, Sheets %d, Journal %d: each must be declared", d.Code, d.DSL, d.Sheets, d.Journal)
 		}
 		// A flat Game is built from its own knobs: it has no scheme to
-		// prefill, paste or upgrade, and keeps no entrant list to hand-roster.
-		if d.Flat && (d.DefaultDSL != nil || d.UpgradeDSL != nil || d.LegacyPasted || d.HandRoster || d.DSL == DSLEditable) {
+		// prefill, paste or upgrade.
+		if d.Flat && (d.DefaultDSL != nil || d.UpgradeDSL != nil || d.LegacyPasted || d.DSL == DSLEditable) {
 			t.Errorf("%s: a flat format declares a scheme-format fact", d.Code)
 		}
 		if d.HandRoster && (d.Individual || d.Troikas) {
@@ -109,9 +109,11 @@ func TestTheFormatListsThatUsedToDisagree(t *testing.T) {
 		{"entrant list", func(d Definition) bool { return KeepsEntrantList(d.Code) }, []string{Brain, EK, ES, SI, Troika, Hamsa}},
 		// A flat format refuses a chosen entrant list.
 		{"flat", func(d Definition) bool { return d.Flat }, []string{OD, KSI, Multi, KD}},
-		// CONTEXT.md, Состав в игре: the team buzzer formats. Личная СИ seats
-		// players and Тройка troikas, whose people the troikas page edits.
-		{"hand roster", func(d Definition) bool { return d.HandRoster }, []string{Brain, EK, ES, Hamsa}},
+		// CONTEXT.md, Состав в игре: the team buzzer formats and КСИ. Личная
+		// СИ seats players and Тройка troikas, whose people the troikas page
+		// edits. ОД and Мультиигры score no player, and nothing reads who
+		// played them.
+		{"hand roster", func(d Definition) bool { return d.HandRoster }, []string{KSI, Brain, EK, ES, Hamsa}},
 		// The formats whose results carry зачёт chips. A friendship cup's
 		// tables carry no Flags.
 		{"divisions", func(d Definition) bool { return d.Divisions }, []string{OD, KSI, Multi}},

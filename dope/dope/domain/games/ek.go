@@ -13,7 +13,7 @@ import (
 
 // ekFormat is erudit-quartet: a bracket of EK bouts on EK's page.
 var ekFormat = Definition{Code: EK, Label: dopestrings.Default.Games.Ek.Label(), Title: dopestrings.Default.Host.Games.TypeEk(),
-	Page: "static/ek.html", EKBout: true, HandRoster: true, PlayerOverrides: true,
+	Page: "static/ek.html", EKBout: true, HandRoster: true,
 	DSL: DSLEditable, LegacyPasted: true, Sheets: SheetsEK, Journal: JournalEKRows, Protocol: ek{}}
 
 // ek wraps the existing EK (erudit-quartet) pure scoring: state is

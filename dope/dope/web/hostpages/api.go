@@ -14,7 +14,6 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
-	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/roles"
 	"dope/dope/storage/festaccess"
@@ -99,9 +98,6 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("PUT "+fest+"/teams/{id}", route.Roster, s.apiSaveTeam)
 	t.Handle("DELETE "+fest+"/teams/{id}", route.Roster, s.apiRemoveTeam)
 	t.Handle("GET "+fest+"/players", route.Manager, s.apiPlayers)
-	t.Handle("POST "+fest+"/players/overrides", route.Manager, s.apiAddOverride)
-	t.Handle("PUT "+fest+"/players/overrides", route.Manager, s.apiReplaceOverride)
-	t.Handle("DELETE "+fest+"/players/overrides", route.Manager, s.apiDeleteOverride)
 	t.Handle("GET "+fest+"/troikas", route.Manager, s.apiTroikas)
 	t.Handle("POST "+fest+"/troikas", route.Manager, s.apiAddTroikas)
 	t.Handle("PUT "+fest+"/troikas/{id}", route.Manager, s.apiSaveTroika)
@@ -555,29 +551,9 @@ func (s *Server) apiTeamFlags(w http.ResponseWriter, r *http.Request, sc route.S
 	return s.apiTeams(w, r, sc)
 }
 
-type apiOption struct {
-	ID    int64  `json:"id"`
-	Label string `json:"label"`
-}
-
-type apiOverride struct {
-	PlayerID       int64   `json:"player_id"`
-	SourceTeamID   int64   `json:"source_team_id"`
-	TeamID         int64   `json:"team_id"`
-	Player         string  `json:"player"`
-	SourceTeam     string  `json:"source_team"`
-	Team           string  `json:"team"`
-	GameIDs        []int64 `json:"game_ids"`
-	GamesDescribed string  `json:"games"`
-}
-
+// apiPlayers lists the fest's players with the team each plays for.
 func (s *Server) apiPlayers(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	ctx := r.Context()
-	players, err := s.loadHostFestPlayers(ctx, sc.FestID)
-	if err != nil {
-		return err
-	}
-	pl, teams, gameOpts, rows, err := overrides.LoadHostPlayerOverrideOptions(ctx, s.h.Engine().DB, sc.FestID)
+	players, err := s.loadHostFestPlayers(r.Context(), sc.FestID)
 	if err != nil {
 		return err
 	}
@@ -587,81 +563,12 @@ func (s *Server) apiPlayers(w http.ResponseWriter, r *http.Request, sc route.Sco
 		Team     string `json:"team"`
 	}
 	out := struct {
-		Players   []player      `json:"players"`
-		Overrides []apiOverride `json:"overrides"`
-		// The ids an override takes: players and teams by fest id, games.
-		PlayerIDs []apiOption `json:"player_ids"`
-		TeamIDs   []apiOption `json:"team_ids"`
-		GameIDs   []apiOption `json:"game_ids"`
-	}{Players: make([]player, len(players)), Overrides: make([]apiOverride, len(rows))}
+		Players []player `json:"players"`
+	}{Players: make([]player, len(players))}
 	for i, p := range players {
 		out.Players[i] = player{RatingID: p.RatingID, Name: p.Name, Team: p.Team}
 	}
-	for i, o := range rows {
-		ids := o.GameIDs
-		if ids == nil {
-			ids = []int64{}
-		}
-		out.Overrides[i] = apiOverride{PlayerID: o.PlayerID, SourceTeamID: o.SourceTeamID, TeamID: o.OverrideTeamID,
-			Player: o.Player, SourceTeam: o.SourceTeam, Team: o.OverrideTeam, GameIDs: ids, GamesDescribed: o.Games}
-	}
-	for _, o := range pl {
-		out.PlayerIDs = append(out.PlayerIDs, apiOption{o.ID, o.Label})
-	}
-	for _, o := range teams {
-		out.TeamIDs = append(out.TeamIDs, apiOption{o.ID, o.Label})
-	}
-	for _, o := range gameOpts {
-		out.GameIDs = append(out.GameIDs, apiOption{o.ID, o.Label})
-	}
 	return route.JSON(w, out)
-}
-
-type overrideRequest struct {
-	PlayerID     int64   `json:"player_id"`
-	SourceTeamID int64   `json:"source_team_id"`
-	TeamID       int64   `json:"team_id"`
-	GameIDs      []int64 `json:"game_ids"`
-}
-
-// apiAddOverride moves a player to another team for the listed games; like
-// the form, it needs at least one.
-func (s *Server) apiAddOverride(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	var req overrideRequest
-	if err := route.DecodeJSON(r, &req); err != nil {
-		return err
-	}
-	if err := s.AddPlayerOverride(r.Context(), sc.FestID, req.PlayerID, req.TeamID, req.GameIDs); err != nil {
-		return err
-	}
-	return s.apiPlayers(w, r, sc)
-}
-
-func (s *Server) apiReplaceOverride(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	var req overrideRequest
-	if err := route.DecodeJSON(r, &req); err != nil {
-		return err
-	}
-	// An empty list would delete the override, which the edit form only does
-	// on its delete button; here that is DELETE.
-	if len(req.GameIDs) == 0 {
-		return corei18n.User(dopestrings.Default.Override.Entry.PickGames())
-	}
-	if err := s.ReplacePlayerOverride(r.Context(), sc.FestID, req.PlayerID, req.SourceTeamID, req.TeamID, req.GameIDs); err != nil {
-		return err
-	}
-	return s.apiPlayers(w, r, sc)
-}
-
-// apiDeleteOverride names the override in the query: player_id,
-// source_team_id and team_id, as GET …/players lists them.
-func (s *Server) apiDeleteOverride(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	q := r.URL.Query()
-	id := func(key string) int64 { v, _ := idstr.Parse(q.Get(key)); return v }
-	if err := s.ReplacePlayerOverride(r.Context(), sc.FestID, id("player_id"), id("source_team_id"), id("team_id"), nil); err != nil {
-		return err
-	}
-	return s.apiPlayers(w, r, sc)
 }
 
 // apiTroika is one troika: team is its head team's name, headTeamID 0 for

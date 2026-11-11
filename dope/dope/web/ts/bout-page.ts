@@ -148,7 +148,7 @@ export interface BoutPageSpec<V extends BoutView, S> {
   onNavigate?: () => void;
   // The fest view arrived, after the module adopted its stages.
   onFest?: () => void;
-  // A team's roster in this Game changed (the roster tab, a player override).
+  // A team's roster in this Game changed (its roster tab).
   onRoster?: () => void;
   // Test seams: the shell, the route, the stream.
   shell?: GameShell;

@@ -532,9 +532,10 @@ type GameRoster struct {
 
 // GameRosters reads the roster each of the given Participants plays a Game
 // with. A roster the host kept by hand (game_team_players rows with hand = 1)
-// wins over everything. Otherwise a Game whose player overrides materialised
-// its own rosters (roster_source 'game') reads those, and any other Game reads
-// the Participant's roster, which a seed import copies from the fest's.
+// wins over everything. Otherwise a Game with roster_source 'game' reads its
+// own copied rows (the player overrides wrote them until migration 60 made
+// them hand rosters; nothing writes them now), and any other Game reads the
+// Participant's roster, which a seed import copies from the fest's.
 func GameRosters(ctx context.Context, q Queryer, gameID int64, rosterSource string, ids []int64) (map[int64]GameRoster, error) {
 	out := make(map[int64]GameRoster, len(ids))
 	if len(ids) == 0 {

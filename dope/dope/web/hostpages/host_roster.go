@@ -8,7 +8,6 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/numbering"
-	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
@@ -17,7 +16,6 @@ import (
 	dopeui "dope/dope/web/ui"
 	dopestrings "dope/i18nstrings"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -65,16 +63,12 @@ type hostFestRosterData struct {
 	// Venues are the venues whose teams the caller edits, Venue the one the
 	// page shows (0 for all of them), and AllVenues says the caller edits
 	// every team: the sheet export and upload are the whole fest's.
-	Venues          []multifest.Venue
-	Venue           int64
-	AllVenues       bool
-	Players         []hostFestPlayer
-	OverridePlayers []overrides.HostPlayerOverrideOption
-	OverrideTeams   []overrides.HostTeamOverrideOption
-	OverrideGames   []overrides.HostGameOverrideOption
-	Overrides       []overrides.HostPlayerOverrideRow
-	Error           string
-	Notice          string
+	Venues    []multifest.Venue
+	Venue     int64
+	AllVenues bool
+	Players   []hostFestPlayer
+	Error     string
+	Notice    string
 	// Numbers holds the numbers typed when a save was refused, by team id.
 	Numbers map[int64]string
 	// Instant says the rating search reads buff, which answers every letter.
@@ -229,15 +223,14 @@ func optionalID(id int64) string {
 	return idstr.Format(id)
 }
 
-// hostPlayersDoc builds the fest players page: the add-override dialog (datalist
-// autocomplete + game picker), the overrides table with per-row edit dialogs, and
-// the players table. Dialog open/close, the delete confirm, and the datalist →
-// hidden-id validation run through pageforms.js / roster.js data-attributes.
+// hostPlayersDoc builds the fest players page: every player of the fest and
+// the team they play for. A team's roster in one Game is kept on that Game's
+// roster tab.
 func hostPlayersDoc(data hostFestRosterData) *dopeui.Doc {
 	s := dopestrings.Default
 	ref := data.Fest.Ref()
 	page := []dopeui.Item{
-		dopeui.Title(s.Host.Roster.PlayersTitle(data.Fest.Title)), dopeui.PagePublic, dopeui.Classicscripts("dist/pageforms.js dist/roster.js"),
+		dopeui.Title(s.Host.Roster.PlayersTitle(data.Fest.Title)), dopeui.PagePublic, dopeui.Classicscripts("dist/pageforms.js"),
 		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), s.Host.Roster.PlayersCrumb())),
 	}
 	if data.Error != "" {
@@ -245,13 +238,6 @@ func hostPlayersDoc(data hostFestRosterData) *dopeui.Doc {
 	}
 	if data.Notice != "" {
 		page = append(page, dopeui.Note(dopeui.Text(data.Notice)))
-	}
-	page = append(page,
-		dopeui.Row(dopeui.Button(dopeui.Data("dialog-open", "playerOverrideDialog"), dopeui.Text(s.Host.Roster.AddOverrideBtn()))),
-		hostAddOverrideDialog(data, ref),
-	)
-	if len(data.Overrides) > 0 {
-		page = append(page, hostOverridesSection(data, ref))
 	}
 	if len(data.Players) > 0 {
 		rows := []dopeui.Item{dopeui.Trow(dopeui.Hcell(dopeui.Text("ID")), dopeui.Hcell(dopeui.Text(s.Host.Roster.PlayerLabel())), dopeui.Hcell(dopeui.Text(s.Host.Roster.TeamLabel())))}
@@ -263,111 +249,6 @@ func hostPlayersDoc(data hostFestRosterData) *dopeui.Doc {
 		page = append(page, dopeui.Empty(dopeui.Text(s.Host.Roster.PlayersEmpty())))
 	}
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
-}
-
-func hostAddOverrideDialog(data hostFestRosterData, ref string) *dopeui.Element {
-	s := dopestrings.Default
-	playerOpts := make([]dopeui.Item, 0, len(data.OverridePlayers))
-	for _, o := range data.OverridePlayers {
-		playerOpts = append(playerOpts, dopeui.Option(dopeui.Value(o.Label), dopeui.Data("id", idstr.Format(o.ID))))
-	}
-	teamOpts := make([]dopeui.Item, 0, len(data.OverrideTeams))
-	for _, o := range data.OverrideTeams {
-		teamOpts = append(teamOpts, dopeui.Option(dopeui.Value(o.Label), dopeui.Data("id", idstr.Format(o.ID))))
-	}
-	var gamePicker dopeui.Item
-	if len(data.OverrideGames) > 0 {
-		boxes := make([]dopeui.Item, 0, len(data.OverrideGames))
-		for _, g := range data.OverrideGames {
-			boxes = append(boxes, dopeui.Checkbox(dopeui.Name("game_id"), dopeui.Value(idstr.Format(g.ID)), dopeui.Text(g.Label)))
-		}
-		gamePicker = dopeui.Col(append([]dopeui.Item{dopeui.SpaceSM}, boxes...)...)
-	} else {
-		gamePicker = dopeui.Empty(dopeui.Text(s.Host.Roster.NoOverrideGames()))
-	}
-	return dopeui.Dialog(dopeui.ID("playerOverrideDialog"),
-		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/players/overrides"), dopeui.Autocomplete("off"), dopeui.Data("player-override-form", ""),
-			dopeui.Subhead(dopeui.Text(s.Host.Roster.OverrideTitle())),
-			dopeui.Hiddenfield(dopeui.Name("player_id"), dopeui.Data("player-override-player-id", "")),
-			dopeui.Hiddenfield(dopeui.Name("team_id"), dopeui.Data("player-override-team-id", "")),
-			dopeui.Field(dopeui.Label(s.Host.Roster.PlayerLabel()),
-				dopeui.Textfield(dopeui.Name("player_label"), dopeui.InputList("playerOverridePlayers"), dopeui.Required(), dopeui.Data("player-override-player", ""))),
-			dopeui.Datalist(append([]dopeui.Item{dopeui.ID("playerOverridePlayers")}, playerOpts...)...),
-			dopeui.Field(dopeui.Label(s.Host.Roster.NewTeamLabel()),
-				dopeui.Textfield(dopeui.Name("team_label"), dopeui.InputList("playerOverrideTeams"), dopeui.Required(), dopeui.Data("player-override-team", ""))),
-			dopeui.Datalist(append([]dopeui.Item{dopeui.ID("playerOverrideTeams")}, teamOpts...)...),
-			dopeui.Pickgroup(dopeui.Label(s.Host.Roster.GamesLabel()), gamePicker),
-			dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
-				dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.SaveSubmit())),
-				dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text(s.Host.Roster.CancelBtn())),
-			),
-		),
-	)
-}
-
-func hostOverridesSection(data hostFestRosterData, ref string) *dopeui.Element {
-	s := dopestrings.Default
-	rows := []dopeui.Item{dopeui.Trow(
-		dopeui.Hcell(dopeui.Text(s.Host.Roster.PlayerLabel())), dopeui.Hcell(dopeui.Text(s.Host.Roster.ColFromTeam())),
-		dopeui.Hcell(dopeui.Text(s.Host.Roster.ColToTeam())), dopeui.Hcell(dopeui.Text(s.Host.Roster.GamesLabel())), dopeui.Hcell(),
-	)}
-	for _, o := range data.Overrides {
-		games := dopeui.Cell(dopeui.Text(o.Games))
-		rows = append(rows, dopeui.Trow(
-			dopeui.Cell(dopeui.Text(o.Player)), dopeui.Cell(dopeui.Text(o.SourceTeam)),
-			dopeui.Cell(dopeui.Text(o.OverrideTeam)), games,
-			dopeui.Cell(dopeui.Iconbtn(dopeui.IconPencil, dopeui.Label(s.Host.Roster.EditOverrideLabel()), dopeui.Data("dialog-open", o.DialogID()))),
-		))
-	}
-	sect := []dopeui.Item{
-		dopeui.ID("overrides"),
-		dopeui.Subhead(dopeui.Text(s.Host.Roster.OverridesSubhead())),
-		dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
-	}
-	for _, o := range data.Overrides {
-		sect = append(sect, hostOverrideEditDialog(data, ref, o))
-	}
-	return dopeui.Section(sect...)
-}
-
-// overrideGameBoxes is a checkbox per game, ticked for the games o covers.
-func overrideGameBoxes(data hostFestRosterData, o overrides.HostPlayerOverrideRow) []dopeui.Item {
-	boxes := make([]dopeui.Item, 0, len(data.OverrideGames))
-	for _, g := range data.OverrideGames {
-		items := []dopeui.Item{dopeui.Name("game_id"), dopeui.Value(idstr.Format(g.ID))}
-		if o.HasGame(g.ID) {
-			items = append(items, dopeui.Checked())
-		}
-		boxes = append(boxes, dopeui.Checkbox(append(items, dopeui.Text(g.Label))...))
-	}
-	return boxes
-}
-
-func hostOverrideEditDialog(data hostFestRosterData, ref string, o overrides.HostPlayerOverrideRow) *dopeui.Element {
-	s := dopestrings.Default
-	boxes := overrideGameBoxes(data, o)
-	summary := dopeui.Row(dopeui.SpaceMD, dopeui.Wrap(),
-		dopeui.Col(dopeui.SpaceNone, dopeui.Muted(dopeui.Text(s.Host.Roster.PlayerLabel())), dopeui.Strong(dopeui.Text(o.Player))),
-		dopeui.Col(dopeui.SpaceNone, dopeui.Muted(dopeui.Text(s.Host.Roster.ColFromTeam())), dopeui.Strong(dopeui.Text(o.SourceTeam))),
-		dopeui.Col(dopeui.SpaceNone, dopeui.Muted(dopeui.Text(s.Host.Roster.ColToTeam())), dopeui.Strong(dopeui.Text(o.OverrideTeam))),
-	)
-	return dopeui.Dialog(dopeui.ID(o.DialogID()),
-		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/players/overrides"), dopeui.Autocomplete("off"),
-			dopeui.Subhead(dopeui.Text(s.Host.Roster.OverrideTitle())),
-			dopeui.Hiddenfield(dopeui.Name("mode"), dopeui.Value("edit")),
-			dopeui.Hiddenfield(dopeui.Name("player_id"), dopeui.Value(idstr.Format(o.PlayerID))),
-			dopeui.Hiddenfield(dopeui.Name("source_team_id"), dopeui.Value(idstr.Format(o.SourceTeamID))),
-			dopeui.Hiddenfield(dopeui.Name("team_id"), dopeui.Value(idstr.Format(o.OverrideTeamID))),
-			summary,
-			dopeui.Pickgroup(append([]dopeui.Item{dopeui.Label(s.Host.Roster.GamesLabel())}, dopeui.Col(append([]dopeui.Item{dopeui.SpaceSM}, boxes...)...))...),
-			dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
-				dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Roster.SaveSubmit())),
-				dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Name("delete"), dopeui.Value("1"), dopeui.Formnovalidate(),
-					dopeui.Data("confirm", s.Host.Roster.DeleteOverrideConfirm()), dopeui.Text(s.Host.Roster.DeleteBtn())),
-				dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text(s.Host.Roster.CancelBtn())),
-			),
-		),
-	)
 }
 
 // hostRatingImportDoc builds the rating.chgk.info roster-import page: when the
@@ -804,105 +685,8 @@ func (s *Server) renderHostFestPlayersWithMessage(w http.ResponseWriter, r *http
 		if err != nil {
 			return nil, err
 		}
-		overridePlayers, overrideTeams, overrideGames, overrides, err := overrides.LoadHostPlayerOverrideOptions(r.Context(), s.h.Engine().DB, festID)
-		if err != nil {
-			return nil, err
-		}
-		return hostPlayersDoc(hostFestRosterData{
-			Fest:            fest,
-			Players:         players,
-			OverridePlayers: overridePlayers,
-			OverrideTeams:   overrideTeams,
-			OverrideGames:   overrideGames,
-			Overrides:       overrides,
-			Error:           errMsg,
-			Notice:          notice,
-		}), nil
+		return hostPlayersDoc(hostFestRosterData{Fest: fest, Players: players, Error: errMsg, Notice: notice}), nil
 	})
-}
-
-// AddPlayerOverride moves a player to another team for the given games (none
-// means every game) and tells the bracket pages their rosters changed.
-func (s *Server) AddPlayerOverride(ctx context.Context, festID, playerID, teamID int64, gameIDs []int64) error {
-	revision, ekGameIDs, err := overrides.SavePlayerTeamOverride(s.h.Engine(), ctx, festID, playerID, teamID, gameIDs)
-	if err != nil {
-		return err
-	}
-	s.fanOut(festID, revision, core.Broadcast{Rosters: ekGameIDs})
-	return nil
-}
-
-// ReplacePlayerOverride rewrites the override that moved playerID from
-// sourceTeamID. A nil gameIDs deletes it.
-func (s *Server) ReplacePlayerOverride(ctx context.Context, festID, playerID, sourceTeamID, teamID int64, gameIDs []int64) error {
-	revision, ekGameIDs, err := overrides.ReplacePlayerTeamOverride(s.h.Engine(), ctx, festID, playerID, sourceTeamID, teamID, gameIDs)
-	if err != nil {
-		return err
-	}
-	s.fanOut(festID, revision, core.Broadcast{Rosters: ekGameIDs})
-	return nil
-}
-
-func (s *Server) handleHostAddPlayerOverride(w http.ResponseWriter, r *http.Request, festID int64) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	if r.Form.Get("mode") == "edit" || r.Form.Get("delete") == "1" {
-		s.handleHostEditPlayerOverride(w, r, festID)
-		return
-	}
-	playerID, err := overrides.ParseHostOverrideID(r.Form.Get("player_id"), dopestrings.Default.Host.Roster.ErrorObjPlayer())
-	if err != nil {
-		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
-		return
-	}
-	teamID, err := overrides.ParseHostOverrideID(r.Form.Get("team_id"), dopestrings.Default.Host.Roster.ErrorObjTeam())
-	if err != nil {
-		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
-		return
-	}
-	gameIDs, err := overrides.ParseHostOverrideGameIDs(r.Form["game_id"])
-	if err != nil {
-		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
-		return
-	}
-	if err := s.AddPlayerOverride(r.Context(), festID, playerID, teamID, gameIDs); err != nil {
-		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/players#overrides", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
-}
-
-func (s *Server) handleHostEditPlayerOverride(w http.ResponseWriter, r *http.Request, festID int64) {
-	playerID, err := overrides.ParseHostOverrideID(r.Form.Get("player_id"), dopestrings.Default.Host.Roster.ErrorObjPlayer())
-	if err != nil {
-		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
-		return
-	}
-	sourceTeamID, err := overrides.ParseHostOverrideID(r.Form.Get("source_team_id"), dopestrings.Default.Host.Roster.ErrorObjSourceTeam())
-	if err != nil {
-		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
-		return
-	}
-	teamID, err := overrides.ParseHostOverrideID(r.Form.Get("team_id"), dopestrings.Default.Host.Roster.ErrorObjTeam())
-	if err != nil {
-		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
-		return
-	}
-	var gameIDs []int64
-	if r.Form.Get("delete") != "1" {
-		gameIDs, err = overrides.ParseHostOverrideGameIDs(r.Form["game_id"])
-		if err != nil {
-			s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
-			return
-		}
-	}
-	if err := s.ReplacePlayerOverride(r.Context(), festID, playerID, sourceTeamID, teamID, gameIDs); err != nil {
-		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/players#overrides", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
 }
 
 func (s *Server) renderHostRatingImportPage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
