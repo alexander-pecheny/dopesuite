@@ -29,11 +29,11 @@ func Load(ctx context.Context, q store.Queryer, festID, gameID int64) (store.Fes
 	var updatedAt, hidden string
 	if err := q.QueryRowContext(ctx, `
 select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, ''), coalesce(g.title, ''), coalesce(g.game_type, ''),
-  coalesce(g.hidden_divisions, ''), t.venue_rooms
+  coalesce(g.hidden_divisions, ''), t.venue_rooms, coalesce(g.grid_width, 0)
 from fests t
 left join games g on g.fest_id = t.id and g.id = ?
 where t.id = ?`, gameID, festID).
-		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON, &view.GameName, &view.GameType, &hidden, &view.VenueRooms); err != nil {
+		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON, &view.GameName, &view.GameType, &hidden, &view.VenueRooms, &view.GridWidth); err != nil {
 		return store.FestView{}, err
 	}
 	view.HiddenDivisions = store.ParseHiddenDivisions(hidden)

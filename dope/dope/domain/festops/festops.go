@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 
 	"dope/dope/domain/core"
@@ -76,7 +77,16 @@ type Settings struct {
 	// hidden before that it no longer offers stays hidden. When it is set,
 	// HiddenDivisions is not read.
 	ShownDivisions *[]string `json:"shown_divisions"`
+	// GridWidth is the width of a column of the Game's grid in pixels, 0
+	// for the default; nil leaves it as it is.
+	GridWidth *int `json:"grid_width"`
 }
+
+// MinGridWidth and MaxGridWidth bound a Game's grid column width, in pixels.
+const (
+	MinGridWidth = 160
+	MaxGridWidth = 600
+)
 
 // storedSettings is what UpdateSettingsTx checks Settings against.
 type storedSettings struct {
@@ -121,6 +131,15 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 	}
 	if err := writeHiddenDivisionsTx(ctx, tx, festID, gameID, g, stored); err != nil {
 		return core.FestWrite{}, err
+	}
+	if g.GridWidth != nil {
+		width := max(*g.GridWidth, 0)
+		if width != 0 && (width < MinGridWidth || width > MaxGridWidth) {
+			return core.FestWrite{}, corei18n.User(s.Host.Games.ErrorGridWidth(strconv.Itoa(MinGridWidth), strconv.Itoa(MaxGridWidth)))
+		}
+		if _, err := tx.ExecContext(ctx, `update games set grid_width = ? where id = ? and fest_id = ?`, width, gameID, festID); err != nil {
+			return core.FestWrite{}, err
+		}
 	}
 	written := core.FestWrite{Event: "game:settings", Payload: map[string]any{"gameID": gameID}}
 	if !schemeChanged {

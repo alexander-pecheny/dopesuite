@@ -153,6 +153,8 @@ type FestView struct {
 	Stages            []StageView `json:"stages"`
 	// VenueRooms names a bout's venue by its title (the room), not its number.
 	VenueRooms bool `json:"venueRooms,omitempty"`
+	// GridWidth is the Game's grid column width in pixels, 0 for the default.
+	GridWidth int `json:"gridWidth,omitempty"`
 	// HiddenDivisions are the Flags whose divisions this game does not show.
 	HiddenDivisions []string `json:"hiddenDivisions,omitempty"`
 }

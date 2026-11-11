@@ -1221,6 +1221,12 @@ alter table game_venues add column hidden integer not null default 0;
 `)
 		return err
 	}},
+	// A Game may draw its Сетка's columns wider (or narrower) than the
+	// default; 0 keeps the default.
+	{Version: 59, Name: "game grid width", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`alter table games add column grid_width integer not null default 0;`)
+		return err
+	}},
 }
 
 // bracketsBackfill gives the bouts of every double elimination compiled

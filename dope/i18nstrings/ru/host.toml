@@ -7,6 +7,10 @@
 # The game settings page's зачёты field: one box per Flag the fest's teams
 # carry. A ticked one is a зачёт this game's results can be looked at in.
 divisions_label = "Зачёты"
+# The settings page's width of a бой's box on the game's Сетка, in pixels;
+# empty keeps the default.
+grid_width_label = "Ширина боя на Сетке, px (пусто — по умолчанию, 240)"
+error_grid_width = 'Ширина боя на Сетке должна быть от {{.min}} до {{.max}}.'
 divisions_hint = "Отмеченные зачёты можно выбрать на страницах этой игры. Снимите отметку с зачёта, который в этой игре не нужен."
 # A troika in the new game's entrant picker, set apart from the teams.
 entrant_troika = '{{.name}} · тройка'

@@ -110,6 +110,9 @@ export interface FestGridStage {
 export interface FestGridData {
   schemaJson?: unknown;
   stages?: FestGridStage[];
+  // gridWidth is the Game's column width in pixels, set in its settings; 0
+  // or none keeps the default.
+  gridWidth?: number;
 }
 
 export interface FestScheme {
@@ -186,6 +189,11 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
   const root = document.createElement("div");
   root.className = "fest-grid";
   root.style.setProperty("--grid-unit-rows", String(plan.unitRows));
+  const width = Number(data.gridWidth) || 0;
+  if (width > 0) {
+    root.style.setProperty("--fest-col-min", `${width}px`);
+    root.style.setProperty("--fest-col-max", `${width}px`);
+  }
   const columns = document.createElement("div");
   columns.className = "fest-columns";
   const grid: Grid = {root, blocks: [], frame: 0};

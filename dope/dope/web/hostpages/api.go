@@ -429,11 +429,15 @@ type apiGameSettings struct {
 	// HiddenDivisions the ones the game does not show.
 	Divisions       []string `json:"divisions"`
 	HiddenDivisions []string `json:"hidden_divisions"`
+	// GridWidth is the width of a column of the Game's grid in pixels, 0
+	// for the default.
+	GridWidth int `json:"grid_width"`
 }
 
 func (g apiGameSettings) settings() GameSettings {
 	hidden := append([]string{}, g.HiddenDivisions...)
-	return GameSettings{Title: g.Title, Slug: g.Slug, SchemeDSL: g.SchemeDSL, HiddenDivisions: &hidden}
+	width := g.GridWidth
+	return GameSettings{Title: g.Title, Slug: g.Slug, SchemeDSL: g.SchemeDSL, HiddenDivisions: &hidden, GridWidth: &width}
 }
 
 func (s *Server) loadGameSettings(ctx context.Context, festID, gameID int64) (apiGameSettings, error) {
@@ -441,8 +445,8 @@ func (s *Server) loadGameSettings(ctx context.Context, festID, gameID int64) (ap
 	var slug sql.NullString
 	var hidden string
 	err := s.h.Engine().DB.QueryRowContext(ctx, `
-select id, code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, '') from games where id = ? and fest_id = ?`, gameID, festID).
-		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden)
+select id, code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, ''), grid_width from games where id = ? and fest_id = ?`, gameID, festID).
+		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden, &g.GridWidth)
 	if err != nil {
 		return g, err
 	}

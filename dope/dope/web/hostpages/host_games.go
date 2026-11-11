@@ -60,6 +60,10 @@ type hostGameSettingsData struct {
 	// does not show; nil Divisions draws no divisions field.
 	Divisions []string
 	Hidden    []string
+	// Grid says the Game draws a grid, GridWidth its column width (0 for
+	// the default).
+	Grid      bool
+	GridWidth int
 }
 
 type hostGameCreateData struct {
@@ -446,6 +450,14 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 			dopeui.Hint(dopeui.Text(s.Host.Games.DivisionsHint())),
 		)
 	}
+	if data.Grid {
+		width := ""
+		if data.GridWidth > 0 {
+			width = strconv.Itoa(data.GridWidth)
+		}
+		form = append(form, dopeui.Field(dopeui.Label(s.Host.Games.GridWidthLabel()),
+			dopeui.Textfield(dopeui.Name("grid_width"), dopeui.Value(width), dopeui.Inputmode("numeric"))))
+	}
 	if data.HasDSL {
 		form = append(form,
 			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
@@ -470,9 +482,10 @@ func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, 
 			slug      sql.NullString
 			schemeDSL string
 			hidden    string
+			gridWidth int
 		)
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden); err != nil {
+select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, ''), grid_width from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden, &gridWidth); err != nil {
 			return nil, err
 		}
 		divisions, err := festops.OfferedDivisions(r.Context(), s.h.Engine().DB, festID, gameType)
@@ -500,6 +513,8 @@ select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_d
 			Pasted:    editable && !hasDSL,
 			Divisions: divisions,
 			Hidden:    store.ParseHiddenDivisions(hidden),
+			Grid:      editable,
+			GridWidth: gridWidth,
 		}), nil
 	})
 }
@@ -523,6 +538,13 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		return
 	}
 	g := GameSettings{Title: r.Form.Get("title"), Slug: r.Form.Get("slug"), SchemeDSL: r.Form.Get("scheme_dsl")}
+	if r.Form.Has("grid_width") {
+		width, err := strconv.Atoi(strings.TrimSpace(r.Form.Get("grid_width")))
+		if err != nil {
+			width = 0
+		}
+		g.GridWidth = &width
+	}
 	if r.Form.Get("divisions_present") != "" {
 		// The boxes say which offered Divisions are shown (festops.Settings).
 		shown := r.Form["division_shown"]

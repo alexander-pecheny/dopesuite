@@ -1078,7 +1078,10 @@ var RU = Strings{
 				return "Отметьте, кто играет в этой игре. Если никого не отметить, играют все. Номера эта игра раздаёт свои, начиная с единицы, поэтому одна и та же команда может быть второй в ЭК и четвёртой в брейне. Командная игра сажает за стол команды, личная — игроков: сначала идут команды, потом игроки."
 			},
 			EntrantsSummary: func() string { return "Состав игры" },
-			ErrorMinigames:  func(err string) string { return fmt.Sprintf("Мини-игры: %s", err) },
+			ErrorGridWidth: func(min string, max string) string {
+				return fmt.Sprintf("Ширина боя на Сетке должна быть от %s до %s.", min, max)
+			},
+			ErrorMinigames: func(err string) string { return fmt.Sprintf("Мини-игры: %s", err) },
 			ErrorMultiSorting: func(err string) string {
 				return fmt.Sprintf("Что решает при равном итоге: %s", err)
 			},
@@ -1091,6 +1094,9 @@ var RU = Strings{
 			ErrorTypeMissing:   func() string { return "выберите тип игры" },
 			EsHint: func() string {
 				return "Тот же язык схем, что у ЭК. players — сколько игроков команда выводит на тему (по умолчанию 3, можно по раундам: players.r3: 2)."
+			},
+			GridWidthLabel: func() string {
+				return "Ширина боя на Сетке, px (пусто — по умолчанию, 240)"
 			},
 			HamsaHint: func() string {
 				return "Тот же язык схем. kind: placement — групповой этап, где команды не вылетают, а везут места дальше: раунд 1 сеет полосами посева, каждый следующий сажает за стол k места k всех столов, а остатки разыгрываются жребием на Сетке. Письменный отбор играется отдельной игрой КСИ; чтобы посеять отсюда, добавьте [init] seed: <код той игры>."

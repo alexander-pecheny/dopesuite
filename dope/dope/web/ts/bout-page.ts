@@ -102,6 +102,8 @@ export interface BoutFest {
   stages?: Array<FestGridStage | null>;
   // venueRooms names the bouts' venues by their titles, not their numbers.
   venueRooms?: boolean;
+  // gridWidth is the Game's grid column width in pixels; 0 is the default.
+  gridWidth?: number;
 }
 
 export interface BoutPageSpec<V extends BoutView, S> {
@@ -696,7 +698,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   }
 
   function grid(data?: FestGridData): HTMLElement {
-    return buildFestGrid(data || {schemaJson: fest?.schemaJson, stages: gridStages()}, {
+    return buildFestGrid(data ? {gridWidth: fest?.gridWidth, ...data} : {schemaJson: fest?.schemaJson, stages: gridStages(), gridWidth: fest?.gridWidth}, {
       letters,
       editable: !viewer,
       onDraw: (slot, participant) => void draw(slot, participant),
