@@ -216,3 +216,17 @@ func TestQuestionNumberIsTheWrittenOne(t *testing.T) {
 		t.Errorf("question 2: %+v, %v", q, err)
 	}
 }
+
+// A packet whose numbers the text parser reads none of (Top-1000 XXVI: each
+// number on a line of its own, which chgksuite's «smart» mode leaves alone
+// once a question is marked otherwise) is numbered as chgksuite numbers it:
+// its 4s counts on from the written numbers, here from none.
+func TestQuestionUnnumberedTakesChgksuitesCount(t *testing.T) {
+	doc := doctest.Doc("= Тур 1 =\r\rРедактор: Борис Моносов.\r\r1.\r\rТекст первого.\r\rОтвет: Аэропорт.\r\r2.\r\rТекст второго.\r\rОтвет: Второй.\r\r3.\r\rТекст третьего.\r\rОтвет: Третий.\r")
+	for number, want := range map[string]string{"1": "Текст первого.", "2": "Текст второго.", "3": "Текст третьего."} {
+		q, err := Question("p.doc", doc, number, Options{})
+		if err != nil || !strings.HasPrefix(q.Source, "? "+want) {
+			t.Errorf("question %s: %+v, %v", number, q, err)
+		}
+	}
+}

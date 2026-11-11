@@ -90,8 +90,12 @@ func questionImages(source string, f file) []QuestionImage {
 
 // Question reads the question numbered number out of an uploaded file, read as
 // Read reads it: the same formats, and in an archive the same files picked as
-// the packet. The number must equal the packet's own, as parsed; questions are
-// never counted.
+// the packet. The number is chgksuite's own: the one the packet writes, as its
+// text parser reads it; for a question it reads none for (a number Word's list
+// numbering draws, a number on a line of its own that chgksuite's «smart» mode
+// leaves alone), the one chgksuite's 4s gives it, counting on from the written
+// numbers. A written number wins over a counted one: a note to the narrator
+// read as an unnumbered question does not take «Вопрос 1.»'s number.
 func Question(name string, data []byte, number string, opt Options) (*QuestionText, error) {
 	opt.images = true
 	files, err := packetFiles(name, data, opt)
@@ -99,19 +103,24 @@ func Question(name string, data []byte, number string, opt Options) (*QuestionTe
 		return nil, err
 	}
 	number = strings.TrimSpace(number)
-	var found []QuestionText
+	var written, counted []QuestionText
 	for _, f := range files {
-		for _, p := range f.doc {
-			q, ok := p.Content.(*fsource.Question)
-			if p.Type != "Question" || !ok || !q.Has("number") || strings.TrimSpace(fmt.Sprint(q.Get("number"))) != number {
+		language := f.language
+		if language == "" {
+			language = "ru"
+		}
+		for _, nq := range numberedQuestions(f.doc) {
+			var into *[]QuestionText
+			switch {
+			case nq.written == number:
+				into = &written
+			case nq.written == "" && nq.counted == number:
+				into = &counted
+			default:
 				continue
 			}
-			language := f.language
-			if language == "" {
-				language = "ru"
-			}
-			source := strings.TrimSpace(fsource.Compose(fsource.Doc{p}, fsource.NumbersNone))
-			found = append(found, QuestionText{
+			source := strings.TrimSpace(fsource.Compose(fsource.Doc{nq.pair}, fsource.NumbersNone))
+			*into = append(*into, QuestionText{
 				Number:   number,
 				Source:   source,
 				Language: language,
@@ -120,10 +129,52 @@ func Question(name string, data []byte, number string, opt Options) (*QuestionTe
 			})
 		}
 	}
+	found := written
+	if len(found) == 0 {
+		found = counted
+	}
 	if len(found) != 1 {
 		return nil, fmt.Errorf("%w: %d questions numbered %q", ErrNoQuestion, len(found), number)
 	}
 	return &found[0], nil
+}
+
+// numberedQuestion is a question of a file with its numbers: written, the one
+// the text parser read ("" for none), and counted, the one chgksuite's 4s gives
+// it ("" when the 4s does not line up with the parse).
+type numberedQuestion struct {
+	pair             fsource.Pair
+	written, counted string
+}
+
+// numberedQuestions numbers doc's questions as chgksuite does: doc written out
+// as 4s with every written number (NumbersAll) and read back, so a question with
+// no number of its own takes the next after the one before it.
+func numberedQuestions(doc fsource.Doc) []numberedQuestion {
+	var out []numberedQuestion
+	for _, p := range doc {
+		if q, ok := p.Content.(*fsource.Question); ok && p.Type == "Question" {
+			nq := numberedQuestion{pair: p}
+			if q.Has("number") {
+				nq.written = strings.TrimSpace(fmt.Sprint(q.Get("number")))
+			}
+			out = append(out, nq)
+		}
+	}
+	var counted []string
+	for _, p := range fsource.Parse(fsource.Compose(doc, fsource.NumbersAll), "chgk") {
+		if q, ok := p.Content.(*fsource.Question); ok && p.Type == "Question" && q.Has("number") {
+			counted = append(counted, strings.TrimSpace(fmt.Sprint(q.Get("number"))))
+		} else if ok && p.Type == "Question" {
+			counted = append(counted, "")
+		}
+	}
+	if len(counted) == len(out) {
+		for i := range out {
+			out[i].counted = counted[i]
+		}
+	}
+	return out
 }
 
 // packetFiles are the files Read takes the credits from.
