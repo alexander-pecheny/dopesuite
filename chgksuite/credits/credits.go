@@ -4,8 +4,11 @@
 // It returns the packet's shape (tours and their question numbers), every
 // credits paragraph — the meta and editor-line paragraphs, wherever they stand —
 // with its position, and each question's «Автор:» field. No other question
-// field is ever read. The site turns this into player links and question
-// numbers; none of the text is published.
+// field is read for the credits. The site turns this into player links and
+// question numbers; none of the text is published.
+//
+// Question is the one exception: it gives one question whole, for the site's
+// appeal jury, who rule on that question.
 package credits
 
 import (
@@ -151,6 +154,7 @@ type file struct {
 	tours      []Tour
 	paragraphs []Paragraph
 	authors    []Author
+	doc        fsource.Doc // the file as chgksuite parsed it; Question reads it
 }
 
 // Uzbek Cyrillic writes ў, қ, ғ and ҳ. Belarusian has ў but none of the others;
@@ -186,8 +190,9 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 			return file{}, err
 		}
 		source = res.Source
-		f := dropLeadingWarmup(fromDoc(fsource.Parse(source, "chgk")), opt.Questions)
-		f.name, f.format, f.language = name, format, language(source)
+		doc := fsource.Parse(source, "chgk")
+		f := dropLeadingWarmup(fromDoc(doc), opt.Questions)
+		f.name, f.format, f.language, f.doc = name, format, language(source), doc
 		return f, nil
 	}
 	var text string
@@ -245,8 +250,9 @@ func readOne(name string, data []byte, opt Options) (file, error) {
 		}
 		source = res.Source
 	}
-	f := dropLeadingWarmup(fromDoc(fsource.Parse(source, "chgk")), opt.Questions)
-	f.name, f.format, f.language = name, format, lang
+	doc := fsource.Parse(source, "chgk")
+	f := dropLeadingWarmup(fromDoc(doc), opt.Questions)
+	f.name, f.format, f.language, f.doc = name, format, lang, doc
 	return f, nil
 }
 

@@ -68,6 +68,8 @@ func main() {
 		err = specCmd()
 	case "credits":
 		err = creditsCmd(os.Args[2:])
+	case "question":
+		err = questionCmd(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -81,9 +83,15 @@ func main() {
 			// The rating site tells a locked packet from a broken one by this code.
 			os.Exit(exitEncrypted)
 		}
+		if errors.Is(err, credits.ErrNoQuestion) {
+			os.Exit(exitNoQuestion)
+		}
 		os.Exit(1)
 	}
 }
 
 // exitEncrypted is `credits` refusing a password-protected file.
 const exitEncrypted = 3
+
+// exitNoQuestion is `question` finding no question, or two, under the number.
+const exitNoQuestion = 4

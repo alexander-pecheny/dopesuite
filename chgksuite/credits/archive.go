@@ -27,6 +27,20 @@ type member struct {
 // readArchive reads the packet out of a .zip, .rar or .7z. A member that can't be
 // unpacked or parsed is skipped: the packet is often another file beside it.
 func readArchive(ext string, data []byte, opt Options) (*Credits, error) {
+	files, err := archiveFiles(ext, data, opt)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) > 0 {
+		return merge(files), nil
+	}
+	// Handouts, audio, pictures, or documents without questions: not a packet.
+	return &Credits{Tours: []Tour{}, Paragraphs: []Paragraph{}, Authors: []Author{}, Sources: []string{}}, nil
+}
+
+// archiveFiles gives the files of an archive picked as the packet, none when it
+// holds no packet.
+func archiveFiles(ext string, data []byte, opt Options) ([]file, error) {
 	var (
 		files                  []file
 		candidates, locked, ok int
@@ -80,14 +94,13 @@ func readArchive(ext string, data []byte, opt Options) (*Credits, error) {
 	}
 	switch {
 	case len(files) > 0:
-		return merge(pick(files, opt.Questions)), nil
+		return pick(files, opt.Questions), nil
 	case candidates > 0 && locked == candidates:
 		return nil, fmt.Errorf("%w: the archive's documents are password-protected", ErrEncrypted)
 	case candidates > 0 && ok == 0:
 		return nil, fmt.Errorf("no packet in the archive: no document in it could be read")
 	}
-	// Handouts, audio, pictures, or documents without questions: not a packet.
-	return &Credits{Tours: []Tour{}, Paragraphs: []Paragraph{}, Authors: []Author{}, Sources: []string{}}, nil
+	return nil, nil
 }
 
 // mayBePacket skips the members of an archive that cannot be a packet:
