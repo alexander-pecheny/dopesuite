@@ -71,6 +71,9 @@ export interface GroupStandingsOptions {
   boutBox?: (bout: GroupBout) => HTMLElement;
   // boutHref links a player's block round to the bout he played it in.
   boutHref?: (code: string) => string;
+  // roundOrder is the host's button under a round's label that opens the
+  // order of its bouts (round-order-dialog.ts); null where there is none.
+  roundOrder?: (codes: string[], round: number) => HTMLElement | null;
 }
 
 export interface TeamCellOptions {
@@ -328,7 +331,7 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[], options: 
         item.classList.add("group-standings-wide");
         const side = document.createElement("div");
         side.className = "u-row u-wrap u-gap-lg u-align-start";
-        side.append(wrapper, groupBoutCards(group.groupBouts, boutBox));
+        side.append(wrapper, groupBoutCards(group.groupBouts, boutBox, options.roundOrder));
         item.appendChild(side);
       } else {
         item.appendChild(groupBoutsTable(group.groupBouts));
@@ -367,7 +370,8 @@ export function groupBoutsTable(bouts: readonly GroupBout[]): HTMLElement {
 // groupBoutCards lays a group's bouts out the way the sheets do: a row per
 // round, its bouts side by side in one line that scrolls, each the box the
 // page draws for it (the grid's, with the venue and the time in its head).
-function groupBoutCards(bouts: readonly GroupBout[], boutBox: (bout: GroupBout) => HTMLElement): HTMLElement {
+function groupBoutCards(bouts: readonly GroupBout[], boutBox: (bout: GroupBout) => HTMLElement,
+  roundOrder?: (codes: string[], round: number) => HTMLElement | null): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "u-col u-gap-md";
   const rounds = new Map<number, GroupBout[]>();
@@ -378,9 +382,13 @@ function groupBoutCards(bouts: readonly GroupBout[], boutBox: (bout: GroupBout) 
   for (const [round, list] of [...rounds.entries()].sort((a, b) => a[0] - b[0])) {
     const row = document.createElement("div");
     row.className = "group-bout-row u-row u-gap-md u-align-start";
-    const label = document.createElement("strong");
-    label.className = "group-bout-round";
-    label.textContent = S.standings.columns.blockRound(String(round));
+    const label = document.createElement("div");
+    label.className = "group-bout-round u-col u-gap-xs";
+    const name = document.createElement("strong");
+    name.textContent = S.standings.columns.blockRound(String(round));
+    label.appendChild(name);
+    const order = roundOrder?.(list.map((bout) => bout.code || "").filter(Boolean), round);
+    if (order) label.appendChild(order);
     row.appendChild(label);
     for (const bout of list) row.appendChild(boutBox(bout));
     wrap.appendChild(row);

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"dope/dope/domain/boutslot"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
@@ -570,6 +571,9 @@ type liveStructure struct {
 	matches map[string]liveMatch
 	// grown is the bouts that grow, with the document their Protocol grew.
 	grown map[string]json.RawMessage
+	// slots is the bouts a host moved to another bout's slot, by code, with the
+	// code of the bout the compiler deals that slot to (boutslot).
+	slots map[string]string
 }
 
 type liveMatch struct {
@@ -592,7 +596,7 @@ type matchRow struct {
 }
 
 func loadLiveStructureTx(ctx context.Context, tx *sql.Tx, gameID int64) (*liveStructure, error) {
-	live := &liveStructure{stages: map[string]int64{}, matches: map[string]liveMatch{}, grown: map[string]json.RawMessage{}}
+	live := &liveStructure{stages: map[string]int64{}, matches: map[string]liveMatch{}, grown: map[string]json.RawMessage{}, slots: map[string]string{}}
 	type stageRow struct {
 		id   int64
 		code string
@@ -609,20 +613,24 @@ func loadLiveStructureTx(ctx context.Context, tx *sql.Tx, gameID int64) (*liveSt
 		live.stages[r.code] = r.id
 	}
 	type liveRow struct {
-		code string
-		m    liveMatch
+		code   string
+		slotOf string
+		m      liveMatch
 	}
 	matches, err := store.CollectRows(ctx, tx, `
-select id, code, status, coalesce(state_json, '{}') from matches where game_id = ?`, []any{gameID},
+select id, code, status, coalesce(state_json, '{}'), slot_of from matches where game_id = ?`, []any{gameID},
 		func(rows *sql.Rows) (liveRow, error) {
 			var r liveRow
-			return r, rows.Scan(&r.m.id, &r.code, &r.m.status, &r.m.state)
+			return r, rows.Scan(&r.m.id, &r.code, &r.m.status, &r.m.state, &r.slotOf)
 		})
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range matches {
 		live.matches[r.code] = r.m
+		if r.slotOf != "" {
+			live.slots[r.code] = r.slotOf
+		}
 	}
 	return live, nil
 }
@@ -682,8 +690,8 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
 		// The seats it had stay where they are, results and all; the new ones
 		// are added after them.
 		if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, state_json = ? where id = ?`,
-			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, seats, string(state), existing.id); err != nil {
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, slot_of = ?, participant_count = ?, state_json = ? where id = ?`,
+			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, live.slots[match.Code], seats, string(state), existing.id); err != nil {
 			return err
 		}
 		var have int
@@ -694,8 +702,8 @@ update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?,
 	}
 	if existing.begun(gameType) {
 		_, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ? where id = ?`,
-			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, existing.id)
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, slot_of = ? where id = ?`,
+			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, live.slots[match.Code], existing.id)
 		return err
 	}
 	// A team-blob бой keys its marks by Participant, and its Protocol calls it
@@ -707,8 +715,8 @@ update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?,
 		state = existing.state
 	}
 	if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
-		row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, seats, state, existing.id); err != nil {
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, slot_of = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
+		row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, live.slots[match.Code], seats, state, existing.id); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `delete from match_slots where match_id = ?`, existing.id); err != nil {
@@ -786,6 +794,9 @@ select coalesce(scheme_json, '{}'), game_type, coalesce(scheme_dsl, '') from gam
 	if err != nil {
 		return err
 	}
+	// The bouts a host moved play in the slots they were moved to; a stage
+	// whose slots the edit changed is dealt afresh.
+	live.slots = boutslot.ApplyMoves(&scheme, live.slots)
 	if err := planGrowthTx(ctx, tx, gameType, scheme, live); err != nil {
 		return err
 	}

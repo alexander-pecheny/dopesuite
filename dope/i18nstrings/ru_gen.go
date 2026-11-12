@@ -91,6 +91,19 @@ var RU = Strings{
 			Taken:      func() string { return "имя пользователя занято" },
 		},
 	},
+	Boutslot: BoutslotStrings{
+		Begun: func(name string) string {
+			return fmt.Sprintf("Бой %s уже начат: его не переставить", name)
+		},
+		OtherRound: func(a string, b string) string {
+			return fmt.Sprintf("Бои %s и %s из разных кругов: переставлять можно только бои одного круга", a, b)
+		},
+		Same: func() string { return "Выберите два разных боя" },
+		Twice: func(player string, other string, name string) string {
+			return fmt.Sprintf("%s уже играет в заходе бой %s: бой %s туда не переставить", player, other, name)
+		},
+		Unknown: func(code string) string { return fmt.Sprintf("Боя %s нет в этой игре", code) },
+	},
 	Brain: BrainStrings{
 		Bout: BrainBoutStrings{
 			Finished: func() string { return "Закончен" },
@@ -1940,12 +1953,15 @@ var RU = Strings{
 			},
 		},
 		Event: JournalEventStrings{
-			FestAccess:     func() string { return "изменение доступа" },
-			FestNumbers:    func() string { return "изменены номера команд" },
-			GameClear:      func() string { return "игра очищена" },
-			GameCreate:     func() string { return "игра создана" },
-			GameDelete:     func() string { return "игра удалена" },
-			GameRevert:     func() string { return "откат игры к более раннему состоянию" },
+			FestAccess:  func() string { return "изменение доступа" },
+			FestNumbers: func() string { return "изменены номера команд" },
+			GameClear:   func() string { return "игра очищена" },
+			GameCreate:  func() string { return "игра создана" },
+			GameDelete:  func() string { return "игра удалена" },
+			GameRevert:  func() string { return "откат игры к более раннему состоянию" },
+			MatchSlot: func(a string, b string) string {
+				return fmt.Sprintf("бои %s и %s поменялись местами", a, b)
+			},
 			PlayerOverride: func() string { return "переопределение игрока в составе" },
 			RatingImport:   func() string { return "импорт ростера из rating.chgk.info" },
 			Reseed:         func() string { return "пересчёт посева этапа" },
@@ -2650,6 +2666,23 @@ var RU = Strings{
 			},
 			FormatExpected: func(n string) string { return fmt.Sprintf("строка %s: нужен формат username:role", n) },
 		},
+	},
+	RoundOrder: RoundOrderStrings{
+		Begun:  func() string { return "начат" },
+		Button: func() string { return "Порядок боёв" },
+		ButtonHint: func() string {
+			return "Поменять бои местами: заходом, площадкой и временем"
+		},
+		Done:   func() string { return "Готово" },
+		Failed: func() string { return "Не удалось поменять бои местами" },
+		Hint: func() string {
+			return "Перетащите бой на место другого или нажмите на два боя по очереди: они поменяются заходом, площадкой и временем. Участники и названия боёв остаются прежними, на сетку это не влияет."
+		},
+		Locked: func(name string) string {
+			return fmt.Sprintf("Бой %s уже начат: его не переставить", name)
+		},
+		Title: func(round string) string { return fmt.Sprintf("%s: порядок боёв", round) },
+		Wave:  func(n string) string { return fmt.Sprintf("Заход %s", n) },
 	},
 	Route: RouteStrings{
 		Guard: RouteGuardStrings{

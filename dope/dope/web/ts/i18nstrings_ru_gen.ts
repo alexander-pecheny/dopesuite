@@ -71,6 +71,13 @@ export const RU: Strings = {
       taken: () => "имя пользователя занято",
     },
   },
+  boutslot: {
+    begun: (name: string) => `Бой ${name} уже начат: его не переставить`,
+    otherRound: (a: string, b: string) => `Бои ${a} и ${b} из разных кругов: переставлять можно только бои одного круга`,
+    same: () => "Выберите два разных боя",
+    twice: (player: string, other: string, name: string) => `${player} уже играет в заходе бой ${other}: бой ${name} туда не переставить`,
+    unknown: (code: string) => `Боя ${code} нет в этой игре`,
+  },
   brain: {
     bout: {
       finished: () => "Закончен",
@@ -1341,6 +1348,7 @@ shootout: true
       gameCreate: () => "игра создана",
       gameDelete: () => "игра удалена",
       gameRevert: () => "откат игры к более раннему состоянию",
+      matchSlot: (a: string, b: string) => `бои ${a} и ${b} поменялись местами`,
       playerOverride: () => "переопределение игрока в составе",
       ratingImport: () => "импорт ростера из rating.chgk.info",
       reseed: () => "пересчёт посева этапа",
@@ -1817,6 +1825,17 @@ shootout: true
       actionUnknown: (n: string) => `строка ${n}: действие должно быть host, admin, game_jury или remove`,
       formatExpected: (n: string) => `строка ${n}: нужен формат username:role`,
     },
+  },
+  roundOrder: {
+    begun: () => "начат",
+    button: () => "Порядок боёв",
+    buttonHint: () => "Поменять бои местами: заходом, площадкой и временем",
+    done: () => "Готово",
+    failed: () => "Не удалось поменять бои местами",
+    hint: () => "Перетащите бой на место другого или нажмите на два боя по очереди: они поменяются заходом, площадкой и временем. Участники и названия боёв остаются прежними, на сетку это не влияет.",
+    locked: (name: string) => `Бой ${name} уже начат: его не переставить`,
+    title: (round: string) => `${round}: порядок боёв`,
+    wave: (n: string) => `Заход ${n}`,
   },
   route: {
     guard: {

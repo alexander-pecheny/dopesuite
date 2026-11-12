@@ -5168,3 +5168,103 @@ body.is-fullscreen.od-page .match-main {
 }
 
 .offline-bar[hidden] { display: none; }
+
+/* ── the order of a Round's бои (round-order-dialog.ts) ─────────────────────
+   The host's button over a tab of a Round's бои, and the dialog: a Round to a
+   section, its заходы rows of cards that a mouse or a finger drags onto each
+   other. */
+.round-order-bar {
+  display: flex;
+  margin-bottom: var(--space-2);
+}
+
+.round-order-button.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.round-order-dialog {
+  width: min(760px, calc(100vw - var(--space-6)));
+}
+
+.round-order-dialog.is-busy .round-order-card {
+  cursor: progress;
+}
+
+.round-order-round {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.round-order-wave {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.round-order-wave-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.round-order-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-2);
+}
+
+.round-order-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-0-5);
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--structure);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.round-order-card-head {
+  display: flex;
+  gap: var(--space-1);
+  align-items: baseline;
+}
+
+.round-order-card-venue {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.round-order-card-seat {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.round-order-card.is-dragging {
+  position: relative;
+  z-index: 1;
+  cursor: grabbing;
+  box-shadow: var(--shadow-modal);
+}
+
+.round-order-card.is-picked,
+.round-order-card.is-over {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.round-order-card.is-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

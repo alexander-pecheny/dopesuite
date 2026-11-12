@@ -124,6 +124,7 @@ created from pasted JSON. Leaving `entrants` out seats everyone.
 | `PATCH …/matches/<code>/state` M ⓝ | ops into the бой: `path: ["participants", <slot>, …]` |
 | `POST …/matches/<code>/finish` M ⓝ | `{finished: true\|false}` |
 | `POST …/matches/<code>/venue` M | `{number}` |
+| `POST …/matches/<code>/slot` M | `{with: "<code>"}`: the two бои of one Round swap their slots — заход, venue, time and place in the order; each keeps its letter and seats, so the bracket is untouched. Refused for a бой that has begun, бои of different Rounds (or groups), and a swap that seats someone twice in one заход |
 | `POST …/stages/<stage>/reseed` M ⓝ · `PUT …/draw` A ⓝ | reseed a stage / seat a drawn slot `{slot, participant}` |
 | `GET …/seed-import` M · `POST …/seed-import/{ksi,run,xlsx,decline}` M | seeds |
 | `GET\|PUT …/games/<game>/screen-settings` | the projector board |

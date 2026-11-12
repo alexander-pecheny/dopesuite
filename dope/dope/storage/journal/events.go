@@ -35,6 +35,7 @@ const (
 	OpEvSeedImportKSI      Op = 80
 	OpEvSeedImportDecline  Op = 81
 	OpEvGameRevert         Op = 82
+	OpEvMatchSlot          Op = 83
 
 	// OpEvGeneric carries an unmapped event type; its payload is prefixed with
 	// the type string (see EncodeGenericPayload) so the type survives.
@@ -58,6 +59,7 @@ var eventTypeToOp = map[string]Op{
 	"game:create":                 OpEvGameCreate,
 	"rating:roster-import":        OpEvRatingImport,
 	"reseed:calculate":            OpEvReseedCalculate,
+	"match:slot":                  OpEvMatchSlot,
 	"seed-import:ksi":             OpEvSeedImportKSI,
 	"seed-import:decline":         OpEvSeedImportDecline,
 	"game:revert":                 OpEvGameRevert,

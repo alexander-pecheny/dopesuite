@@ -1233,6 +1233,14 @@ alter table game_venues add column hidden integer not null default 0;
 	// which does the same and more, so the overrides become hand rosters and
 	// go (CONTEXT.md, Game roster).
 	{Version: 60, Name: "player overrides become hand rosters", Up: overridesToHandRosters},
+	// A host may move a bout to another bout's slot of its Round: its wave,
+	// its venue and its place in the order (CONTEXT.md, Bout slot). slot_of
+	// names the compiled bout whose slot it plays in, '' for its own, so a
+	// recompile deals the slots again and keeps the moves.
+	{Version: 61, Name: "bout slot moves", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`alter table matches add column slot_of text not null default '';`)
+		return err
+	}},
 }
 
 // overridesToHandRosters keeps every Game's teams playing with whom they play

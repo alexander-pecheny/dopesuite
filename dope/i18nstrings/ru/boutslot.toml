@@ -1,0 +1,13 @@
+# Moving a бой to another бой's slot of its Round (dope/dope/domain/boutslot):
+# the errors a host reads when a swap is refused.
+
+# Swapping a бой with itself.
+same = "Выберите два разных боя"
+# A бой the Game does not have.
+unknown = 'Боя {{.code}} нет в этой игре'
+# The two бои are not of one Round: only a Round's бои share its slots.
+other_round = 'Бои {{.a}} и {{.b}} из разных кругов: переставлять можно только бои одного круга'
+# A бой that has begun or is finished keeps its slot.
+begun = 'Бой {{.name}} уже начат: его не переставить'
+# The move would seat someone twice in one заход.
+twice = '{{.player}} уже играет в заходе бой {{.other}}: бой {{.name}} туда не переставить'

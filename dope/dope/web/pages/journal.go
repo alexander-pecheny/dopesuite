@@ -704,6 +704,13 @@ func describeEvent(op journal.Op, payload []byte) []string {
 		return []string{s.Journal.Event.SchemeImport()}
 	case journal.OpEvGameRevert:
 		return []string{s.Journal.Event.GameRevert()}
+	case journal.OpEvMatchSlot:
+		var swap struct {
+			Code string `json:"code"`
+			With string `json:"with"`
+		}
+		_ = json.Unmarshal(payload, &swap)
+		return []string{s.Journal.Event.MatchSlot(swap.Code, swap.With)}
 	default:
 		return nil
 	}

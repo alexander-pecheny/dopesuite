@@ -1134,6 +1134,12 @@ function venueText(venue: FestGridVenue | Venue | null): string {
     : S.fest.grid.venue(String(normalized.number));
 }
 
+// boutVenueText is a bout's venue as its head names it: the first of the
+// venues given that names one, "" when none does.
+export function boutVenueText(...venues: FestGridVenue[]): string {
+  return venueText(firstVenue(...venues));
+}
+
 function firstVenue(...venues: FestGridVenue[]): Venue | null {
   for (const venue of venues) {
     const normalized = normalizeVenue(venue);

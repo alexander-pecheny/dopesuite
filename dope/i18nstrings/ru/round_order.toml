@@ -1,0 +1,21 @@
+# The order of a Round's бои (web/ts/round-order-dialog.ts): the host swaps two
+# бои between their slots — заход, venue and time.
+
+# The small button under a Round's label, and the dialog's title.
+button = "Порядок боёв"
+# The button's tooltip.
+button_hint = "Поменять бои местами: заходом, площадкой и временем"
+# The dialog's title for one Round: Круг 1 — порядок боёв.
+title = '{{.round}}: порядок боёв'
+# Under the title: what a swap does and how to make one.
+hint = "Перетащите бой на место другого или нажмите на два боя по очереди: они поменяются заходом, площадкой и временем. Участники и названия боёв остаются прежними, на сетку это не влияет."
+# A заход's row.
+wave = 'Заход {{.n}}'
+# On a бой that has begun.
+begun = "начат"
+# Dropping on, or picking, a бой that has begun.
+locked = 'Бой {{.name}} уже начат: его не переставить'
+# A swap the server did not answer.
+failed = "Не удалось поменять бои местами"
+# The dialog's close button.
+done = "Готово"

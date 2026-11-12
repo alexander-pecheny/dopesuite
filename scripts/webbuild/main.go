@@ -234,7 +234,7 @@ func targets() []target {
 						"entry-model", "sheet-cursor", "game-shell", "cells", "name-cell", "score-table", "venue", "standings", "fest-roster", "ek-stats", "ek-seating", "state-sync", "game-page", "widgets", "fest-grid", "brain-stats", "group-stats", "game-tabs", "multi-protocol", "troika-protocol", "troika-stats", "crosstable", "hamsa-protocol", "hamsa-stats",
 						"od-protocol", "kd-protocol", "ksi-protocol", "brain-protocol", "ek-protocol", "screen-board", "url-state", "divisions", "team-lens", "sheet-pins", "seat-picker",
 						// the bout page and what it mounts
-						"bout-page", "entrants", "steady-redraw", "undo", "stacked-sheet",
+						"bout-page", "entrants", "steady-redraw", "undo", "stacked-sheet", "round-order-dialog",
 						// a venue offline
 						"offline",
 						// game-page draws the 🏠 crumb through it

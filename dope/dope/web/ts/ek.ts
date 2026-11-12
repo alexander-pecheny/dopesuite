@@ -668,7 +668,11 @@ function buildGroupTable(tab: GameTab | undefined): HTMLElement {
     const groupBouts = planned.map((match, index) => groupBout(match, matches[index], pointsRule));
     return {title: stage ? groupLabel(stage as StageRef) : code, anchor: groupAnchorID(code), blockRoundCount, rows, groupBouts};
   });
-  return buildGroupStandingsView(groups, {boutHref: page.boutHref, boutBox: groupBoutBox});
+  return buildGroupStandingsView(groups, {
+    boutHref: page.boutHref,
+    boutBox: groupBoutBox,
+    roundOrder: (codes, round) => page.roundOrder(codes, S.standings.columns.blockRound(String(round)), {compact: true}),
+  });
 }
 
 // buildRankedStageTable draws a ranked stage's table: place, team, and the

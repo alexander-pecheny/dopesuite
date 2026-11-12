@@ -44,9 +44,12 @@ import {hashAnchor, onNavigate, setHashTab, tabFromHash, tabHref} from "./url-st
 import {redrawSteady, scrollIntoViewSteady} from "./steady-redraw.js";
 import {festLetters} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
+import {boutVenueText, buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
+import {openRoundOrderDialog} from "./round-order-dialog.js";
+import type {SlotRound} from "./round-order-dialog.js";
 import type {FestGridData, FestGridStage} from "./fest-grid.js";
 import S from "./i18nstrings.js";
+import {icon} from "./icons_gen.js";
 import {boutWhereWhen, buildVenuesTable, nameVenuesByRoom} from "./venue.js";
 import type {Venue, VenueFields} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
@@ -212,6 +215,11 @@ export interface BoutPage<V extends BoutView, S> {
   // Where a link to a bout leads: the tab that holds it, at the bout's box,
   // by its letter. "" when no tab holds it.
   boutHref(code: string): string;
+  // The host's button that opens the order of the given bouts' Rounds, a
+  // section per Round of two or more (round-order-dialog.ts); null for a
+  // viewer and where no Round has two bouts to swap.
+  // compact draws it as its icon alone, for a narrow column.
+  roundOrder(codes: readonly string[], title: string, options?: {compact?: boolean}): HTMLElement | null;
   // Where a link to a group leads: the tab with the group's table, at it.
   groupHref(code: string): string;
   // A grid with the module's links and draw panel: the whole Game's, or the
@@ -381,6 +389,12 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   function adoptFest(view: BoutFest | null | undefined): void {
     if (view) nameVenuesByRoom(Boolean(view.venueRooms));
     for (const stage of view?.stages || []) if (stage?.code) festStages.set(stage.code, stage);
+    // A host moved a bout to another slot of its Round: the scheme the fest
+    // view carries has it in its new place, and the page draws that order.
+    if (view?.schemaJson && fest) {
+      fest.schemaJson = view.schemaJson;
+      followSchemeOrder(scheme, view.schemaJson);
+    }
   }
 
   // adoptView takes a bout's view from wherever it arrives — the fetch, a
@@ -774,6 +788,16 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     const tab = currentTab();
     drawing = new Set();
     const node = buildTab(tab);
+    // A tab of a Round's bouts, or of a Block's, opens their order for the host,
+    // from a bar above the tab.
+    const order = tabRoundOrder(tab);
+    const drawnNodes: HTMLElement[] = [node];
+    if (order) {
+      const bar = document.createElement("div");
+      bar.className = "round-order-bar";
+      bar.appendChild(order);
+      drawnNodes.unshift(bar);
+    }
     drawn.clear();
     for (const code of drawing) drawn.set(code, spec.shape?.(code) ?? "");
     const keepView = drawnTab === activeTab;
@@ -785,7 +809,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     redrawSteady(root, BOUT_BOX_SELECTOR, () => {
       // A tab kept whole (the venues, the rosters) stays mounted, so a
       // field a host is typing in keeps its focus.
-      if (root.firstChild !== node || root.childNodes.length !== 1) root.replaceChildren(node);
+      if (root.firstChild !== drawnNodes[0] || root.childNodes.length !== drawnNodes.length) root.replaceChildren(...drawnNodes);
       if (keepView && frame) frame.scrollTop = scrollTop;
     }, keepView);
     drawnTab = activeTab;
@@ -798,6 +822,97 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     flash.redraw();
     showAnchor();
     notifyEmbeddedResize(embedded);
+  }
+
+  // ---- the order of a Round's bouts ----
+
+  // slotRounds is the given bouts' Rounds as the order dialog shows them: by
+  // stage and Round, in the scheme's order, each bout with its wave, venue,
+  // time and seats from the fest view.
+  function slotRounds(codes: readonly string[]): SlotRound[] {
+    type Section = SlotRound & {stage: string; round: number};
+    type Planned = {code?: string; round?: number; wave?: number; venue?: number; slots?: Array<{label?: string}>};
+    type Stage = {code?: string; title?: string; matches?: Planned[]};
+    const wanted = new Set(codes);
+    const rounds: Section[] = [];
+    for (const stage of (scheme.stages || []) as Stage[]) {
+      const live = new Map((festStages.get(stage.code || "")?.matches || []).map((match) => [match.code || "", match]));
+      const byRound = new Map<number, Planned[]>();
+      for (const match of stage.matches || []) {
+        if (!wanted.has(match.code || "")) continue;
+        const round = Number(match.round) || 0;
+        byRound.set(round, [...(byRound.get(round) || []), match]);
+      }
+      const several = new Set((stage.matches || []).map((match) => Number(match.round) || 0)).size > 1;
+      for (const [round, matches] of byRound) {
+        if (matches.length < 2) continue;
+        const title = [stage.title || "", several && round ? S.standings.columns.blockRound(String(round)) : ""].filter(Boolean).join(" · ");
+        rounds.push({stage: stage.code || "", round: several ? round : 0, title, bouts: matches.map((match) => {
+          const code = match.code || "";
+          const festMatch = live.get(code);
+          const view = views.get(code);
+          const seats = (festMatch?.participants || []).map((p) => p.name || p.source || "").filter(Boolean);
+          return {
+            code,
+            label: letters.get(code) || festMatch?.letter || code,
+            wave: Number(match.wave) || 1,
+            venue: boutVenueText(view?.venue, festMatch?.venue, match.venue),
+            time: view?.startsAt || festMatch?.startsAt || "",
+            seats: seats.length ? seats : (match.slots || []).map((slot) => slot.label || "").filter(Boolean),
+            locked: Boolean(view?.finished) || festMatch?.status === "finished",
+          };
+        })});
+      }
+    }
+    // One stage's Rounds go by their own names: the title says the stage.
+    const stageTitles = new Set(rounds.map((round) => round.stage));
+    return rounds.map(({round, title, bouts}) => ({
+      title: stageTitles.size > 1 ? title : (round ? S.standings.columns.blockRound(String(round)) : ""),
+      bouts,
+    }));
+  }
+
+  function tabRoundOrder(tab: GameTab | undefined): HTMLElement | null {
+    if (viewer || !tab) return null;
+    type Stage = {code?: string; matches?: Array<{code?: string}>};
+    let codes: string[] = [];
+    if (tab.kind === "round") codes = (tab.stage?.matches || []).map((match) => match.code || "");
+    else if (tab.kind === "stage" || tab.kind === "protocol") {
+      codes = ((scheme.stages || []) as Stage[]).filter((stage) => tab.stages.includes(stage.code || ""))
+        .flatMap((stage) => (stage.matches || []).map((match) => match.code || ""));
+    }
+    return codes.length ? roundOrder(codes, tab.label) : null;
+  }
+
+  function roundOrder(codes: readonly string[], title: string, options: {compact?: boolean} = {}): HTMLElement | null {
+    if (viewer || !slotRounds(codes).length) return null;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = options.compact ? "action-icon round-order-button" : "btn btn-xs round-order-button";
+    button.appendChild(icon("arrow-up-down"));
+    if (!options.compact) button.append(" ", S.roundOrder.button());
+    button.title = S.roundOrder.buttonHint();
+    button.setAttribute("aria-label", S.roundOrder.title(title));
+    button.addEventListener("click", () => {
+      openRoundOrderDialog(S.roundOrder.title(title), slotRounds(codes), async (code, withCode) => {
+        try {
+          const response = await fetch(matchURL(code, "slot"), {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({with: withCode}),
+          });
+          if (response.ok) return "";
+          return (await response.text()).trim() || S.roundOrder.failed();
+        } catch {
+          return S.roundOrder.failed();
+        }
+      }, () => {
+        // The stream brings the fest view too; this host sees the move at once.
+        refreshFest();
+        resync();
+      });
+    });
+    return button;
   }
 
   // ---- the host's writes ----
@@ -930,6 +1045,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     draw,
     reseed,
     boutHref,
+    roundOrder,
     groupHref,
     grid,
     start,
@@ -1049,4 +1165,35 @@ export function finishControl(options: FinishControlOptions): HTMLLabelElement {
     label.append(text);
   }
   return label;
+}
+
+// followSchemeOrder puts each stage's bouts of the page's scheme in the order,
+// waves and venues of a fresher copy of the scheme (raw: its JSON, or the
+// object), in place, so every drawing that holds the scheme follows. A bout
+// keeps its own object: only its place in the stage and its slot change.
+export function followSchemeOrder(scheme: BoutScheme, raw: unknown): void {
+  let fresh: BoutScheme | null = null;
+  try {
+    fresh = (typeof raw === "string" ? JSON.parse(raw) : raw) as BoutScheme | null;
+  } catch {
+    return;
+  }
+  type Match = {code?: string; venue?: number; wave?: number};
+  type Stage = {code?: string; matches?: Match[]};
+  const freshStages = new Map<string, Stage>();
+  for (const stage of (fresh?.stages || []) as Stage[]) if (stage?.code) freshStages.set(stage.code, stage);
+  for (const stage of (scheme.stages || []) as Stage[]) {
+    const next = stage?.code ? freshStages.get(stage.code) : undefined;
+    if (!stage?.matches || !next?.matches || next.matches.length !== stage.matches.length) continue;
+    const held = new Map(stage.matches.map((match) => [match.code || "", match]));
+    const ordered: Match[] = [];
+    for (const match of next.matches) {
+      const mine = held.get(match.code || "");
+      if (!mine) return;
+      mine.venue = match.venue;
+      mine.wave = match.wave;
+      ordered.push(mine);
+    }
+    stage.matches.splice(0, stage.matches.length, ...ordered);
+  }
 }

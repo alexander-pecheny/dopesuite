@@ -70,6 +70,13 @@ export type Strings = {
       taken: () => string;
     };
   };
+  boutslot: {
+    begun: (name: string) => string;
+    otherRound: (a: string, b: string) => string;
+    same: () => string;
+    twice: (player: string, other: string, name: string) => string;
+    unknown: (code: string) => string;
+  };
   brain: {
     bout: {
       finished: () => string;
@@ -1319,6 +1326,7 @@ export type Strings = {
       gameCreate: () => string;
       gameDelete: () => string;
       gameRevert: () => string;
+      matchSlot: (a: string, b: string) => string;
       playerOverride: () => string;
       ratingImport: () => string;
       reseed: () => string;
@@ -1795,6 +1803,17 @@ export type Strings = {
       actionUnknown: (n: string) => string;
       formatExpected: (n: string) => string;
     };
+  };
+  roundOrder: {
+    begun: () => string;
+    button: () => string;
+    buttonHint: () => string;
+    done: () => string;
+    failed: () => string;
+    hint: () => string;
+    locked: (name: string) => string;
+    title: (round: string) => string;
+    wave: (n: string) => string;
   };
   route: {
     guard: {

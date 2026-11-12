@@ -63,6 +63,8 @@ fest_access = "изменение доступа"
 scheme_import = "импорт схемы"
 # A game was reverted to an earlier state.
 game_revert = "откат игры к более раннему состоянию"
+# Two бои of a Round swapped their slots: заход, venue and time.
+match_slot = 'бои {{.a}} и {{.b}} поменялись местами'
 
 [patch]
 # The fallback line when a game-state patch payload fails to parse.

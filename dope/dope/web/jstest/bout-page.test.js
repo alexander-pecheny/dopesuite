@@ -68,8 +68,10 @@ function fakeNode() {
 
 function fakeRoot() {
   return {
+    // The tab, and before it the host's bar over a tab of a Round's бои.
     node: null,
-    replaceChildren(node) { this.node = node; },
+    nodes: [],
+    replaceChildren(...nodes) { this.nodes = nodes; this.node = nodes[nodes.length - 1]; },
     classList: {toggle() {}},
     closest: () => null,
     querySelectorAll: () => [],
