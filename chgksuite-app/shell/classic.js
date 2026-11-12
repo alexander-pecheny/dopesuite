@@ -154,7 +154,7 @@ Events.On("classic:line", (ev) => log(ev.data));
 // unattended, so the question is asked here and the run is repeated with the
 // answer added.
 const questions = {
-  5: { text: "В пакете нет «Взятий». Всё равно опубликовать?", ok: "Опубликовать", extra: () => ["--stop_if_no_stats=false"] },
+  5: { text: "В пакете нет статистики взятий. Всё равно опубликовать?", ok: "Опубликовать", extra: () => ["--stop_if_no_stats=false"] },
   6: { text: "Нужен токен бота от @BotFather. Он сохранится, и в следующий раз спрашивать не придётся.", ok: "Запустить", secret: true, extra: (v) => ["--token", v] },
 };
 
