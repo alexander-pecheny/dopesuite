@@ -112,7 +112,7 @@ function renderRun() {
   const spec = current();
   $("classic-run").disabled = running || !spec || !ready(spec);
   $("classic-stop").hidden = !running;
-  $("classic-answer").hidden = !running;
+  if (!running) $("classic-answer").hidden = true;
 }
 
 function render() {
@@ -149,6 +149,14 @@ function log(text) {
 }
 
 Events.On("classic:line", (ev) => log(ev.data));
+// Only a prompt the command waits at gets a field to answer in.
+Events.On("classic:prompt", (ev) => {
+  log(ev.data);
+  const a = $("classic-answer");
+  a.placeholder = ev.data.trim();
+  a.hidden = false;
+  a.focus();
+});
 // The codes `compose telegram` stops on for want of an answer (exitNoStats and
 // exitNoToken in the CLI's main.go). The CLI never asks, since agents run it
 // unattended, so the question is asked here and the run is repeated with the
@@ -209,6 +217,7 @@ $("classic-answer").onkeydown = async (e) => {
   const a = $("classic-answer");
   await call("Send", a.value);
   a.value = "";
+  a.hidden = true;
 };
 
 // The CLI speaks English, and the Russian names of its flags and inputs are

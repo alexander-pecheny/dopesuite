@@ -16,10 +16,12 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// The classic tab's events: each line the command prints, then how it ended.
+// The classic tab's events: each line the command prints, a prompt it waits
+// at, then how it ended.
 const (
-	lineEvent = "classic:line"
-	doneEvent = "classic:done"
+	lineEvent   = "classic:line"
+	promptEvent = "classic:prompt"
+	doneEvent   = "classic:done"
 )
 
 // An Exit is how a command ended: 0 and "" when it succeeded. The page asks
@@ -131,8 +133,8 @@ func (c *Classic) Run(args []string) error {
 }
 
 // stream sends the output a line at a time. A read that leaves a line
-// unfinished means the CLI has stopped to wait, as after a prompt, so that
-// part goes out too.
+// unfinished means the CLI has stopped to wait at a prompt, and the page
+// shows a field to answer it in only then.
 func (c *Classic) stream(cmd *exec.Cmd, read *os.File) {
 	buf := make([]byte, readBuf)
 	var pending []byte
@@ -148,7 +150,11 @@ func (c *Classic) stream(cmd *exec.Cmd, read *os.File) {
 			pending = pending[i+1:]
 		}
 		if len(pending) > 0 && (n < len(buf) || err != nil) {
-			c.emit(lineEvent, string(pending))
+			event := promptEvent
+			if err != nil {
+				event = lineEvent
+			}
+			c.emit(event, string(pending))
 			pending = nil
 		}
 		if err != nil {
