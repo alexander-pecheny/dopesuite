@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/stats"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/tg"
 )
@@ -22,7 +21,6 @@ var errNoStats = errors.New("don't publish questions without stats")
 // question by question, with its comments in the linked discussion group.
 func composeTelegram(args []string) error {
 	fs := newFlagSet("compose telegram")
-	s := chgkstrings.Default
 	channel := fs.String("tgchannel", "", "channel to post to: an id, a t.me link or @username")
 	dryRun := fs.Bool("dry_run", false, "print what would be posted, post nothing")
 	noSpoilers := fs.Bool("nospoilers", false, "print the answers openly")
@@ -33,7 +31,7 @@ func composeTelegram(args []string) error {
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	account := fs.String("tgaccount", override("tgaccount", defaultAccount), "which of the bot tokens saved in ~/.chgksuite/telegram.toml to post with")
 	token := fs.String("token", "", "bot token, saved in ~/.chgksuite/telegram.toml when the account has none yet; empty is $CHGKSUITE_TG_TOKEN or the saved one")
-	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", s.Chgkcli.Telegram.StopIfNoStatsFlag())
+	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", "refuse to publish a package whose questions carry no stats line")
 	language := languageFlag(fs)
 	config := configFlag(fs)
 	if err := parseConfigured(fs, args, *config); err != nil {
@@ -119,11 +117,11 @@ func composeTelegram(args []string) error {
 		return err
 	}
 	req.Target = target
-	reportNote("%s", s.Chgkcli.Telegram.Posting(target.ChannelID, target.ChatID))
+	reportNote("%s", fmt.Sprintf("posting to %s, comments in %s", target.ChannelID, target.ChatID))
 	start := time.Now()
 	if err := tg.Export(ctx, poster, req); err != nil {
 		return err
 	}
-	reportDone("%s", s.Chgkcli.Telegram.Done(time.Since(start).Round(time.Second).String()))
+	reportDone("%s", fmt.Sprintf("done in %s", time.Since(start).Round(time.Second).String()))
 	return nil
 }

@@ -14,7 +14,6 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/htmlshot"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/i18n"
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/typstinstall"
 )
 
@@ -86,7 +85,7 @@ func handoutsGenerate(args []string) error {
 // .hndt files it made into dir.
 func writeGenerated(dir string, files []handout.File, warnings []handout.Warning) error {
 	for _, w := range warnings {
-		warn("%s", chgkstrings.Default.Chgkcli.Handouts.WarnQuestion(w.Number, w.Text))
+		warn("%s", fmt.Sprintf("question %s: %s", w.Number, w.Text))
 	}
 	for _, f := range files {
 		out := filepath.Join(dir, f.Name)
@@ -176,7 +175,7 @@ func handoutsRun(args []string) error {
 	}
 	// chgksuite watches with watchdog; a second's poll on the file's own
 	// timestamp is the same thing for one file, and needs nothing.
-	reportNote("%s", chgkstrings.Default.Chgkcli.Handouts.WatchNote(in))
+	reportNote("%s", fmt.Sprintf("watching %s; Ctrl-C to stop", in))
 	last := modTime(in)
 	for {
 		time.Sleep(time.Second)
@@ -261,7 +260,7 @@ func handoutsCreateHTML(args []string) error {
 		name = "handout_" + strings.ReplaceAll(fs.Arg(0), "/", "_") + ".html"
 	}
 	if _, err := os.Stat(name); err == nil {
-		return fmt.Errorf("%s", chgkstrings.Default.Chgkcli.Handouts.AlreadyExists(name))
+		return fmt.Errorf("%s", fmt.Sprintf("%s exists already: delete it or pick another name", name))
 	}
 	return writeHandoutHTML(name, *font, widthMM, fs.Arg(0))
 }
@@ -278,7 +277,7 @@ func writeHandoutHTML(name, family string, widthMM float64, fraction string) err
 		return err
 	}
 	reportOutput(name)
-	reportNote("%s", chgkstrings.Default.Chgkcli.Handouts.HtmlGeometryNote(width, fraction))
+	reportNote("%s", fmt.Sprintf("width %s mm, %s of an A4 sheet", width, fraction))
 	return nil
 }
 
@@ -304,9 +303,9 @@ func handoutsHTML2Img(args []string) error {
 		return err
 	}
 	reportOutput(res.PDF)
-	reportNote("%s", chgkstrings.Default.Chgkcli.Handouts.DimensionsNote(strconv.FormatFloat(res.WidthMM, 'f', 1, floatBits), strconv.FormatFloat(res.HeightMM, 'f', 1, floatBits)))
+	reportNote("%s", fmt.Sprintf("%s × %s mm", strconv.FormatFloat(res.WidthMM, 'f', 1, floatBits), strconv.FormatFloat(res.HeightMM, 'f', 1, floatBits)))
 	reportOutput(res.PNG)
-	reportNote("%s", chgkstrings.Default.Chgkcli.Handouts.ScaleNote(strconv.FormatFloat(*scale, 'g', -1, floatBits)))
+	reportNote("%s", fmt.Sprintf("scale ×%s", strconv.FormatFloat(*scale, 'g', -1, floatBits)))
 	return nil
 }
 
@@ -470,19 +469,19 @@ func handoutsPack(args []string) error {
 		path := filepath.Join(folder, name)
 		hndt, images, err := readHandoutSource(path)
 		if err != nil {
-			warn("%s", chgkstrings.Default.Chgkcli.Handouts.SkipWarning(name, err.Error()))
+			warn("%s", fmt.Sprintf("%s: %s; skipped", name, err.Error()))
 			continue
 		}
 		pages, isColour, err := handout.PackPages(hndt, *nTeams)
 		if err != nil {
-			warn("%s", chgkstrings.Default.Chgkcli.Handouts.SkipWarning(name, err.Error()))
+			warn("%s", fmt.Sprintf("%s: %s; skipped", name, err.Error()))
 			continue
 		}
 		pdf, err := handout.Render(context.Background(), hndt, images, a, ts)
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
-		reportNote("%s", chgkstrings.Default.Chgkcli.Handouts.PagesNote(name, strconv.Itoa(pages), colourNote(isColour)))
+		reportNote("%s", fmt.Sprintf("%s: %s pages%s", name, strconv.Itoa(pages), colourNote(isColour)))
 		for range pages {
 			if isColour {
 				colour = append(colour, pdf)
@@ -513,7 +512,7 @@ func handoutsPack(args []string) error {
 
 func colourNote(colour bool) string {
 	if colour {
-		return chgkstrings.Default.Chgkcli.Handouts.ColourSuffix()
+		return ", in colour"
 	}
 	return ""
 }

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
@@ -56,7 +55,6 @@ func CacheDir() string {
 // executable. progress, if set, is told what is happening — it is a hundred
 // megabytes, and a silent minute looks like a hang.
 func Install(ctx context.Context, progress func(string)) (string, error) {
-	s := chgkstrings.Default
 	platform, err := chromePlatform()
 	if err != nil {
 		return "", err
@@ -75,7 +73,7 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	if exe := headlessShellIn(root); exe != "" {
 		return exe, nil
 	}
-	say("%s", s.Install.Browser.Downloading(version, platform))
+	say("%s", fmt.Sprintf("downloading chromium %s for %s…", version, platform))
 	archive, err := download(ctx, url)
 	if err != nil {
 		return "", err
@@ -100,9 +98,9 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	}
 	exe := headlessShellIn(root)
 	if exe == "" {
-		return "", corei18n.User(s.Install.Browser.ArchiveNoShell())
+		return "", corei18n.User("no chrome-headless-shell in the archive")
 	}
-	say("%s", s.Install.Installed(exe))
+	say("%s", fmt.Sprintf("installed: %s", exe))
 	return exe, nil
 }
 
@@ -117,7 +115,7 @@ func latestHeadlessShell(ctx context.Context, platform string) (version, url str
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", "", corei18n.User(chgkstrings.Default.Install.Browser.ReleasesFailed(resp.Status))
+		return "", "", corei18n.User(fmt.Sprintf("chromium releases: %s", resp.Status))
 	}
 	var body struct {
 		Channels map[string]struct {
@@ -133,14 +131,14 @@ func latestHeadlessShell(ctx context.Context, platform string) (version, url str
 	}
 	stable, ok := body.Channels["Stable"]
 	if !ok {
-		return "", "", corei18n.User(chgkstrings.Default.Install.Browser.ReleasesNoStable())
+		return "", "", corei18n.User("chromium releases: no stable channel")
 	}
 	for _, d := range stable.Downloads["chrome-headless-shell"] {
 		if d.Platform == platform {
 			return stable.Version, d.URL, nil
 		}
 	}
-	return "", "", corei18n.User(chgkstrings.Default.Install.Browser.PlatformMissing(platform))
+	return "", "", corei18n.User(fmt.Sprintf("no chromium build for %s", platform))
 }
 
 // chromePlatform is the name Chrome for Testing publishes this machine under.
@@ -159,7 +157,7 @@ func chromePlatform() (string, error) {
 	}
 	// Chrome for Testing publishes x86-64 and Apple silicon only; a Linux ARM
 	// machine has to use its distribution's chromium.
-	return "", corei18n.User(chgkstrings.Default.Install.Browser.NoBuild(runtime.GOOS + "/" + runtime.GOARCH))
+	return "", corei18n.User(fmt.Sprintf("no ready chromium build for %s: install a browser with the system (apt install chromium / brew install chromium) and name it with --browser or $CHGKSUITE_BROWSER", runtime.GOOS+"/"+runtime.GOARCH))
 }
 
 func download(ctx context.Context, url string) (string, error) {
@@ -200,7 +198,7 @@ func unzip(archive, dir string) error {
 	for _, f := range zr.File {
 		target := filepath.Join(dir, filepath.FromSlash(f.Name)) //nolint:gosec // checked below
 		if !strings.HasPrefix(target, filepath.Clean(dir)+string(os.PathSeparator)) {
-			return corei18n.User(chgkstrings.Default.Install.ArchiveEscape(f.Name))
+			return corei18n.User(fmt.Sprintf("the archive writes outside its folder: %s", f.Name))
 		}
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, cacheDirMode); err != nil {
@@ -264,7 +262,7 @@ func writeSymlink(f *zip.File, dir, target string) error {
 		resolved = filepath.Join(filepath.Dir(target), dest)
 	}
 	if !strings.HasPrefix(filepath.Clean(resolved), filepath.Clean(dir)+string(os.PathSeparator)) {
-		return corei18n.User(chgkstrings.Default.Install.Browser.SymlinkEscape(f.Name, dest))
+		return corei18n.User(fmt.Sprintf("the archive links outside its folder: %s → %s", f.Name, dest))
 	}
 	return os.Symlink(dest, target)
 }

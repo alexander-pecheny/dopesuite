@@ -13,7 +13,6 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/docxread"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/i18n"
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/textenc"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/textparse"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/typo"
@@ -29,7 +28,7 @@ func parseCmd(args []string) error {
 	numbers := fs.String("numbers_handling", override("numbers_handling", "default"), "question numbers written out: default, all or none")
 	preserveFormatting := fs.Bool("preserve_formatting", false, "keep bold and italic")
 	singleNumberLines := fs.String("single_number_line_handling", override("single_number_line_handling", "smart"), "a line that is only a number: smart, on or off")
-	tourNumbersAsWords := fs.String("tour_numbers_as_words", override("tour_numbers_as_words", "off"), chgkstrings.Default.Chgkcli.Parse.TourNumbersAsWordsFlag())
+	tourNumbersAsWords := fs.String("tour_numbers_as_words", override("tour_numbers_as_words", "off"), "spell the tour numbers in the tour headings as words: on|off")
 	linksOld := fs.String("links", override("links", "unwrap"), "hyperlinks: unwrap (text, then the URL) or old (the URL alone)")
 	noImagePrefix := fs.Bool("no_image_prefix", false, "name extracted images without the file's name in front")
 	addTS := fs.String("add_ts", override("add_ts", "off"), "append a timestamp to the output filename: on|off")

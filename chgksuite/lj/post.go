@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
@@ -67,7 +66,7 @@ type Result struct {
 // on it.
 func (c *Client) Publish(ctx context.Context, posts []Post) (Result, error) {
 	if len(posts) == 0 {
-		return Result{}, corei18n.User(chgkstrings.Default.Lj.Error.Nothing())
+		return Result{}, corei18n.User("nothing to publish")
 	}
 	res, err := c.postEvent(ctx, posts[0], 0)
 	if err != nil {
@@ -165,7 +164,7 @@ func (c *Client) challenge(ctx context.Context) (string, string, error) {
 	}
 	chal := fields["challenge"]
 	if chal == "" {
-		return "", "", corei18n.User(chgkstrings.Default.Lj.Error.NoChallenge())
+		return "", "", corei18n.User("livejournal gave no challenge")
 	}
 	pw := md5.Sum([]byte(c.account.Password))                //nolint:gosec // the scheme is theirs
 	sum := md5.Sum([]byte(chal + hex.EncodeToString(pw[:]))) //nolint:gosec
@@ -194,7 +193,7 @@ func (c *Client) call(ctx context.Context, method string, params map[string]any)
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, corei18n.User(chgkstrings.Default.Lj.Error.Status(resp.Status))
+		return nil, corei18n.User(fmt.Sprintf("livejournal answered %s", resp.Status))
 	}
 	if c.Pause > 0 {
 		select {
@@ -249,11 +248,11 @@ func decodeResponse(raw []byte) (map[string]string, error) {
 		Members []member `xml:"params>param>value>struct>member"`
 	}
 	if err := xml.Unmarshal(raw, &doc); err != nil {
-		return nil, corei18n.User(chgkstrings.Default.Lj.Error.Malformed(err.Error()))
+		return nil, corei18n.User(fmt.Sprintf("livejournal's answer: %s", err.Error()))
 	}
 	if doc.Fault != nil {
 		fields := flatten(doc.Fault.Members)
-		return nil, corei18n.User(chgkstrings.Default.Lj.Error.Fault(fields["faultString"], fields["faultCode"]))
+		return nil, corei18n.User(fmt.Sprintf("livejournal: %s (code %s)", fields["faultString"], fields["faultCode"]))
 	}
 	return flatten(doc.Members), nil
 }

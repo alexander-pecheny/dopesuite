@@ -34,10 +34,11 @@ one per server the user has added.
   `shell/index.html`.
 - The classic tab (`classic.go`, `shell/classic.js`) is the old chgksuite
   window: a form over the CLI, drawn from `chgksuite-cli spec`, so a flag added
-  to the CLI appears there with nothing edited here. The captions are in
-  `chgksuite/i18nstrings/ru/cliform.toml`. The CLI ships beside the app as
+  to the CLI appears there once it has a caption. The CLI speaks English, so
+  the Russian captions are the app's own, in `shell/captions.json`;
+  `classic_test.go` fails on a flag or input that has none. The CLI ships beside the app as
   `chgksuite-cli` (plain `chgksuite` is the app itself) and runs as a
-  subprocess, so Stop kills it, it can ask for input, and agents can run it on
+  subprocess, so Stop kills it and agents can run it on
   their own. `$CHGKSUITE_CLI` points the tab at another build. Like the
   Python window, it shares `~/.chgksuite` with chgksuite: its dialogs open at
   `lastdir`, and the CLI keeps the bot tokens in `telegram.toml` and the

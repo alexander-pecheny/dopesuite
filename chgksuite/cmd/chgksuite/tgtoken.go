@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 )
 
 // The bot tokens live where chgksuite keeps them, in ~/.chgksuite/telegram.toml,
@@ -87,7 +85,7 @@ func botToken(flag, account string) (string, error) {
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		return "", err
 	}
-	reportNote("%s", chgkstrings.Default.Chgkcli.Telegram.TokenSaved(path))
+	reportNote("%s", fmt.Sprintf("token saved to %s", path))
 	return given, nil
 }
 

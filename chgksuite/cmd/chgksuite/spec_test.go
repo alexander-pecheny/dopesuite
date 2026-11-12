@@ -107,16 +107,3 @@ func TestEveryFlagIsInTheDeclaredOrder(t *testing.T) {
 		}
 	}
 }
-
-// The app's form names a flag by its caption, so a flag without one would be
-// a bare English name among Russian ones.
-func TestEveryFlagHasACaption(t *testing.T) {
-	for _, r := range runnables {
-		flags, _ := flagsOf(r.verb, r.run)
-		for _, f := range flags {
-			if f.Caption == "" {
-				t.Errorf("%s --%s: no caption in i18nstrings/ru/cliform.toml", r.verb, f.Name)
-			}
-		}
-	}
-}

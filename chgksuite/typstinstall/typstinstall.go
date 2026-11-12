@@ -20,7 +20,6 @@ import (
 
 	"github.com/ulikunitz/xz"
 
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
@@ -85,7 +84,6 @@ func works(path string) bool {
 // Install downloads the latest typst release into the utils dir and returns the
 // binary. progress, if set, is told what is happening.
 func Install(ctx context.Context, progress func(string)) (string, error) {
-	s := chgkstrings.Default
 	say := func(format string, a ...any) {
 		if progress != nil {
 			progress(fmt.Sprintf(format, a...))
@@ -99,7 +97,7 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	say("%s", s.Install.Typst.Downloading(version))
+	say("%s", fmt.Sprintf("downloading typst %s…", version))
 	archive, err := download(ctx, url, dir)
 	if err != nil {
 		return "", err
@@ -110,7 +108,7 @@ func Install(ctx context.Context, progress func(string)) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	say("%s", s.Install.Installed(target))
+	say("%s", fmt.Sprintf("installed: %s", target))
 	return target, nil
 }
 
@@ -128,7 +126,7 @@ func installFrom(archive, dir string) (string, error) {
 	// The binary sits inside a per-target directory in the archive.
 	found := findBinary(staging)
 	if found == "" {
-		return "", corei18n.User(chgkstrings.Default.Install.Typst.ArchiveNoBinary(binaryName()))
+		return "", corei18n.User(fmt.Sprintf("no %s in the archive", binaryName()))
 	}
 	target := filepath.Join(dir, binaryName())
 	if err := move(found, target); err != nil {
@@ -146,7 +144,7 @@ func FindOrInstall(ctx context.Context, progress func(string)) (string, error) {
 		return path, nil
 	}
 	if progress != nil {
-		progress(chgkstrings.Default.Install.Typst.NotFound())
+		progress("no typst on this machine")
 	}
 	return Install(ctx, progress)
 }
@@ -168,7 +166,7 @@ func latestAsset(ctx context.Context) (version, url string, err error) {
 			return body.Tag, a.URL, nil
 		}
 	}
-	return "", "", corei18n.User(chgkstrings.Default.Install.Typst.ReleaseNoBuild(want))
+	return "", "", corei18n.User(fmt.Sprintf("the typst release has no %s build", want))
 }
 
 type releaseInfo struct {
@@ -192,7 +190,7 @@ func fetchLatestRelease(ctx context.Context) (releaseInfo, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return body, corei18n.User(chgkstrings.Default.Install.Typst.ReleasesFailed(resp.Status))
+		return body, corei18n.User(fmt.Sprintf("typst releases: %s", resp.Status))
 	}
 	err = json.NewDecoder(resp.Body).Decode(&body)
 	return body, err
@@ -210,7 +208,7 @@ func typstArch() (string, error) {
 	case "riscv64":
 		return "riscv64gc", nil
 	}
-	return "", corei18n.User(chgkstrings.Default.Install.Typst.PlatformMissing(runtime.GOARCH))
+	return "", corei18n.User(fmt.Sprintf("no typst build for %s", runtime.GOARCH))
 }
 
 // assetPrefix is the "typst-<arch>-<target>" a release asset is named by.
@@ -233,7 +231,7 @@ func assetPrefix() (string, error) {
 		}
 		return "typst-" + arch + "-unknown-linux-musl", nil
 	}
-	return "", corei18n.User(chgkstrings.Default.Install.Typst.PlatformMissing(runtime.GOOS))
+	return "", corei18n.User(fmt.Sprintf("no typst build for %s", runtime.GOOS))
 }
 
 func isArchive(name string) bool {
@@ -282,7 +280,7 @@ func extract(archive, dir string) error {
 	case strings.HasSuffix(archive, ".tar.xz"), strings.HasSuffix(archive, ".tar.gz"):
 		return extractTar(archive, dir)
 	}
-	return corei18n.User(chgkstrings.Default.Install.Typst.UnknownArchive(archive))
+	return corei18n.User(fmt.Sprintf("unknown archive: %s", archive))
 }
 
 // extractTar unpacks the .tar.xz every platform but Windows publishes. Go has
@@ -370,7 +368,7 @@ func extractZip(archive, dir string) error {
 func safeJoin(dir, name string) (string, error) {
 	target := filepath.Join(dir, filepath.FromSlash(name)) //nolint:gosec // checked here
 	if !strings.HasPrefix(target, filepath.Clean(dir)+string(os.PathSeparator)) {
-		return "", corei18n.User(chgkstrings.Default.Install.ArchiveEscape(name))
+		return "", corei18n.User(fmt.Sprintf("the archive writes outside its folder: %s", name))
 	}
 	return target, nil
 }

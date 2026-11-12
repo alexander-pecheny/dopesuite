@@ -11,7 +11,6 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/docx"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/i18n"
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/inline"
 )
 
@@ -45,8 +44,8 @@ func composeDocx(args []string) error {
 	spoilers := fs.String("spoilers", override("spoilers", "off"), "hide answers: off|whiten|pagebreak|dots")
 	screenMode := fs.String("screen_mode", override("screen_mode", "off"), "export for screen: off|replace_all|add_versions|add_versions_columns")
 	noAnswers := fs.Bool("noanswers", false, "do not print answers")
-	noParagraph := fs.Bool("noparagraph", false, chgkstrings.Default.Chgkcli.Docx.NoParagraphFlag())
-	onlyNumber := fs.Bool("only_question_number", false, chgkstrings.Default.Chgkcli.Docx.OnlyQuestionNumberFlag())
+	noParagraph := fs.Bool("noparagraph", false, "no line break after the question's number")
+	onlyNumber := fs.Bool("only_question_number", false, "label questions with the bare number, without the word \"Question\"")
 	smallerSource := fs.String("smaller_source_and_author", override("smaller_source_and_author", "on"), "set source and author 2pt below the body: on|off")
 	commentFirst := commentFirstFlag(fs)
 	randomize := fs.Bool("randomize", false, "shuffle the questions")
@@ -197,7 +196,7 @@ func commentFirstFlag(fs *flagSet) *bool {
 
 func noBreakFlags(fs *flagSet) func() inline.NoBreak {
 	spaces := fs.String("replace_no_break_spaces", override("replace_no_break_spaces", "on"), "glue short words to what follows with a non-breaking space: on|off")
-	hyphens := fs.String("replace_no_break_hyphens", override("replace_no_break_hyphens", "on"), chgkstrings.Default.Chgkcli.Shared.ReplaceNoBreakHyphensFlag())
+	hyphens := fs.String("replace_no_break_hyphens", override("replace_no_break_hyphens", "on"), "make the hyphen of a short hyphenated word non-breaking: on|off")
 	return func() inline.NoBreak {
 		return inline.NoBreak{NoSpaces: *spaces == "off", NoHyphens: *hyphens == "off"}
 	}

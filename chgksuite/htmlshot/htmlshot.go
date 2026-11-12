@@ -208,7 +208,7 @@ func FindBrowser(named string) (string, error) {
 	if path, ok := findBrowser(named); ok {
 		return path, nil
 	}
-	return "", corei18n.User(chgkstrings.Default.Install.Browser.NotFound())
+	return "", corei18n.User("no browser found: install chromium and name it with --browser or $CHGKSUITE_BROWSER")
 }
 
 func findBrowser(named string) (string, bool) {
@@ -248,7 +248,7 @@ func FindOrInstall(ctx context.Context, named string, progress func(string)) (st
 		return path, nil
 	}
 	if progress != nil {
-		progress(chgkstrings.Default.Install.Browser.NotInstalled())
+		progress("no browser on this machine")
 	}
 	return Install(ctx, progress)
 }
@@ -361,7 +361,7 @@ func output(ctx context.Context, browser string, o *Options, args []string) (str
 	if !o.NoSandbox && strings.Contains(stderr, "No usable sandbox") {
 		o.NoSandbox = true
 		if o.Say != nil {
-			o.Say(chgkstrings.Default.Install.Browser.NoSandbox())
+			o.Say("the system forbids chromium's sandbox; running with --no-sandbox")
 		}
 		out, stderr, err = runOnce(ctx, browser, *o, args)
 		if err == nil {

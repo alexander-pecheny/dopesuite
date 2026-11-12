@@ -5,13 +5,13 @@
 package board
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 )
 
@@ -51,7 +51,7 @@ var reXYBoard = regexp.MustCompile(`/board/([^/?#]+)`)
 func ParseURL(raw string) (Board, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return Board{}, corei18n.User(chgkstrings.Default.Boardsync.Config.EmptyUrl())
+		return Board{}, corei18n.User("empty board link")
 	}
 	if !strings.Contains(raw, "/") && !strings.Contains(raw, ".") {
 		return Board{Service: Trello, Host: trelloHost, ID: raw, BaseURL: "https://trello.com"}, nil
@@ -70,7 +70,7 @@ func ParseURL(raw string) (Board, error) {
 	}
 	m := reXYBoard.FindStringSubmatch(u.Path)
 	if m == nil {
-		return Board{}, corei18n.User(chgkstrings.Default.Boardsync.Config.Unrecognized(raw))
+		return Board{}, corei18n.User(fmt.Sprintf("not a board link: %s", raw))
 	}
 	return Board{Service: XY, Host: host, ID: m[1], BaseURL: u.Scheme + "://" + u.Host}, nil
 }

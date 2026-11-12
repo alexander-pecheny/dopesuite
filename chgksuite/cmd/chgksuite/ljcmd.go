@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/imghost"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/lj"
 )
@@ -19,7 +18,7 @@ func composeLJ(args []string) error {
 	fs := newFlagSet("compose lj")
 	noSpoilers := fs.Bool("nospoilers", false, "print the answers openly instead of behind <lj-spoiler>")
 	splitTours := fs.Bool("splittours", false, "a post per tour")
-	genimp := fs.Bool("genimp", false, chgkstrings.Default.Chgkcli.Lj.GenimpFlag())
+	genimp := fs.Bool("genimp", false, "add the closing \"general impressions\" post")
 	navigation := fs.Bool("navigation", false, "link the tours' posts to each other (needs --login)")
 	commentFirst := commentFirstFlag(fs)
 	login := fs.String("login", "", "livejournal user to post as; empty writes the HTML to files instead")

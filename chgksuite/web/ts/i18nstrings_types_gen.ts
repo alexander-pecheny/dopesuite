@@ -4,20 +4,8 @@
  * a function per string. */
 export type Strings = {
   boardsync: {
-    config: {
-      emptyUrl: () => string;
-      unrecognized: (url: string) => string;
-    };
-    fetch: {
-      card: (id: string, err: string) => string;
-      list: (id: string, err: string) => string;
-    };
     upload: {
       defaultCaption: () => string;
-      listMissing: (name: string, known: string) => string;
-      noLists: () => string;
-      posted: (caption: string) => string;
-      uploading: (name: string) => string;
     };
   };
   chgk: {
@@ -54,176 +42,11 @@ export type Strings = {
       imageMissing: (name: string) => string;
     };
   };
-  chgkcli: {
-    addStats: {
-      customCsvFlag: () => string;
-    };
-    board: {
-      boardUrlPrompt: () => string;
-      emptyToken: () => string;
-      initialPassphrasePrompt: () => string;
-      needBoardUrl: () => string;
-      noAnswersFlag: () => string;
-      noToken: (host: string, url: string) => string;
-      nothingToUpload: () => string;
-      onlyAnswersFlag: () => string;
-      openBrowser: () => string;
-      openBrowserTokens: (url: string) => string;
-      passphrasePrompt: () => string;
-      tokenPrompt: () => string;
-    };
-    docx: {
-      noParagraphFlag: () => string;
-      onlyQuestionNumberFlag: () => string;
-    };
-    handouts: {
-      alreadyExists: (file: string) => string;
-      colourSuffix: () => string;
-      dimensionsNote: (width: string, height: string) => string;
-      htmlGeometryNote: (width: string, share: string) => string;
-      pagesNote: (file: string, pages: string, colour: string) => string;
-      scaleNote: (scale: string) => string;
-      skipWarning: (file: string, err: string) => string;
-      warnQuestion: (number: string, text: string) => string;
-      watchNote: (file: string) => string;
-    };
-    lj: {
-      genimpFlag: () => string;
-    };
-    parse: {
-      tourNumbersAsWordsFlag: () => string;
-    };
-    shared: {
-      replaceNoBreakHyphensFlag: () => string;
-    };
-    telegram: {
-      done: (duration: string) => string;
-      posting: (channel: string, chat: string) => string;
-      stopIfNoStatsFlag: () => string;
-      tokenSaved: (file: string) => string;
-    };
-  };
   chgkimport: {
     error: {
       no4s: () => string;
       noQuestions: () => string;
       tooBig: () => string;
-    };
-  };
-  cliform: {
-    flags: {
-      addPolls: () => string;
-      addTs: () => string;
-      author: () => string;
-      boxwidth: () => string;
-      browser: () => string;
-      commentFirst: () => string;
-      community: () => string;
-      compressPdf: () => string;
-      config: () => string;
-      customCsv: () => string;
-      customCsvArgs: () => string;
-      defaultauthor: () => string;
-      device: () => string;
-      disableAsterisksProcessing: () => string;
-      disableNumbers: () => string;
-      doNotRemoveAccents: () => string;
-      docxTemplate: () => string;
-      dryRun: () => string;
-      encoding: () => string;
-      fixTrelloNewEditor: () => string;
-      font: () => string;
-      fontDir: () => string;
-      fontSize: () => string;
-      game: () => string;
-      genimp: () => string;
-      imageBottomSpaceRowRatio: () => string;
-      imageShrinkPercent: () => string;
-      imgurClientId: () => string;
-      labels: () => string;
-      labelsFile: () => string;
-      language: () => string;
-      links: () => string;
-      listHandouts: () => string;
-      listName: () => string;
-      lists: () => string;
-      login: () => string;
-      marginBottom: () => string;
-      marginLeft: () => string;
-      marginRight: () => string;
-      marginTop: () => string;
-      merge: () => string;
-      minResizeImage: () => string;
-      nTeams: () => string;
-      navigation: () => string;
-      noAutoResizeImages: () => string;
-      noBrowser: () => string;
-      noImagePrefix: () => string;
-      noanswers: () => string;
-      noparagraph: () => string;
-      nospoilers: () => string;
-      numbersHandling: () => string;
-      onlyQuestionNumber: () => string;
-      onlyanswers: () => string;
-      optimizeSize: () => string;
-      output: () => string;
-      outputDir: () => string;
-      outputFilenamePrefix: () => string;
-      paperheight: () => string;
-      paperwidth: () => string;
-      password: () => string;
-      pdfConfig: () => string;
-      pollConfig: () => string;
-      pptxConfig: () => string;
-      preserveFormatting: () => string;
-      qb: () => string;
-      questionRange: () => string;
-      randomize: () => string;
-      ratingIds: () => string;
-      rawtypst: () => string;
-      removeAccents: () => string;
-      replaceDoubleLineBreaks: () => string;
-      replaceNoBreakHyphens: () => string;
-      replaceNoBreakSpaces: () => string;
-      scale: () => string;
-      screenMode: () => string;
-      security: () => string;
-      separate: () => string;
-      si: () => string;
-      singleNumberLineHandling: () => string;
-      singlefile: () => string;
-      skipUntil: () => string;
-      smallerSourceAndAuthor: () => string;
-      splittours: () => string;
-      spoilers: () => string;
-      stopIfNoStats: () => string;
-      teamNamingThreshold: () => string;
-      template: () => string;
-      tgaccount: () => string;
-      tgchannel: () => string;
-      tikzMm: () => string;
-      token: () => string;
-      tourNumbersAsWords: () => string;
-      typographyAccents: () => string;
-      typographyDashes: () => string;
-      typographyPercent: () => string;
-      typographyQuotes: () => string;
-      typographyWhitespace: () => string;
-      typst: () => string;
-      watch: () => string;
-    };
-    inputs: {
-      boardUrl: () => string;
-      docxPackets: () => string;
-      downloadFolder: () => string;
-      fraction: () => string;
-      handoutFile: () => string;
-      handoutsFolder: () => string;
-      htmlFile: () => string;
-      packet: () => string;
-      packets: () => string;
-      serviceUrl: () => string;
-      uploadPackets: () => string;
     };
   };
   docs: {
@@ -288,40 +111,6 @@ export type Strings = {
       head: (n: string) => string;
       label: (n: string) => string;
       question: (n: string, question: string) => string;
-    };
-  };
-  install: {
-    archiveEscape: (name: string) => string;
-    browser: {
-      archiveNoShell: () => string;
-      downloading: (version: string, platform: string) => string;
-      noBuild: (platform: string) => string;
-      noSandbox: () => string;
-      notFound: () => string;
-      notInstalled: () => string;
-      platformMissing: (platform: string) => string;
-      releasesFailed: (status: string) => string;
-      releasesNoStable: () => string;
-      symlinkEscape: (name: string, dest: string) => string;
-    };
-    installed: (path: string) => string;
-    typst: {
-      archiveNoBinary: (binary: string) => string;
-      downloading: (version: string) => string;
-      notFound: () => string;
-      platformMissing: (platform: string) => string;
-      releaseNoBuild: (build: string) => string;
-      releasesFailed: (status: string) => string;
-      unknownArchive: (archive: string) => string;
-    };
-  };
-  lj: {
-    error: {
-      fault: (message: string, code: string) => string;
-      malformed: (err: string) => string;
-      noChallenge: () => string;
-      nothing: () => string;
-      status: (status: string) => string;
     };
   };
   stats: {

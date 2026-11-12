@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,7 +13,6 @@ import (
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/board"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/docx"
-	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 )
 
 // board runs `chgksuite board <subcommand>` (`trello` is the old name for it).
@@ -47,20 +47,20 @@ func boardToken(args []string) error {
 	host := board.ServiceHost(serviceURL)
 	if host == "trello.com" {
 		if *noBrowser {
-			fmt.Println(chgkstrings.Default.Chgkcli.Board.OpenBrowser(), board.TrelloConnectURL)
+			fmt.Println("Open in a browser:", board.TrelloConnectURL)
 		} else {
 			openBrowser(board.TrelloConnectURL)
 		}
 	} else {
 		base := strings.TrimSuffix(withScheme(serviceURL), "/")
-		fmt.Print(chgkstrings.Default.Chgkcli.Board.OpenBrowserTokens(base))
+		fmt.Print(fmt.Sprintf("Open %s/profile/tokens in a browser,\nmake a token and paste it here.\n", base))
 	}
-	token, err := prompt(chgkstrings.Default.Chgkcli.Board.TokenPrompt())
+	token, err := prompt("Token: ")
 	if err != nil {
 		return err
 	}
 	if token == "" {
-		return fmt.Errorf("%s", chgkstrings.Default.Chgkcli.Board.EmptyToken())
+		return errors.New("empty token")
 	}
 	return board.SetTokenFor(host, token)
 }
@@ -70,8 +70,8 @@ func boardDownload(args []string) error {
 	lists := fs.String("lists", "", "download only these lists, comma-separated")
 	si := fs.Bool("si", false, "also write a .docx per list, with the card captions as headings")
 	qb := fs.String("qb", "", "pair two lists into a quizbowl .docx: --qb tossups,bonuses")
-	onlyAnswers := fs.Bool("onlyanswers", false, chgkstrings.Default.Chgkcli.Board.OnlyAnswersFlag())
-	noAnswers := fs.Bool("noanswers", false, chgkstrings.Default.Chgkcli.Board.NoAnswersFlag())
+	onlyAnswers := fs.Bool("onlyanswers", false, "SI .docx: keep only the answer lines")
+	noAnswers := fs.Bool("noanswers", false, "SI .docx: drop the answer lines")
 	singleFile := fs.Bool("singlefile", false, "one .4s for the whole board")
 	labels := fs.Bool("labels", false, "also write a file per label")
 	replaceBreaks := fs.Bool("replace_double_line_breaks", false, "collapse the double line breaks Trello's editor added")
@@ -159,7 +159,7 @@ func boardUpload(args []string) error {
 		return err
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("%s", chgkstrings.Default.Chgkcli.Board.NothingToUpload())
+		return errors.New("nothing to upload")
 	}
 	ctx := context.Background()
 	for _, path := range files {
@@ -220,11 +220,11 @@ func resolveBoard(folder string) (board.Board, error) {
 		return board.Board{}, err
 	}
 	if !ok {
-		fmt.Println(chgkstrings.Default.Chgkcli.Board.NeedBoardUrl())
+		fmt.Println("The board's link is needed to work with it. For example:")
 		fmt.Println("  https://trello.com/b/Bi0z2H49/title-of-your-board")
 		fmt.Println("  https://xy.pecheny.me/board/2")
 		fmt.Println()
-		url, err := prompt(chgkstrings.Default.Chgkcli.Board.BoardUrlPrompt())
+		url, err := prompt("Paste the board's link: ")
 		if err != nil {
 			return board.Board{}, err
 		}
@@ -239,7 +239,7 @@ func resolveBoard(folder string) (board.Board, error) {
 		return board.Board{}, err
 	}
 	if b.Service == board.XY && b.Passphrase == "" {
-		if b.Passphrase, err = prompt(chgkstrings.Default.Chgkcli.Board.InitialPassphrasePrompt()); err != nil {
+		if b.Passphrase, err = prompt("xy board passphrase (it is saved to board_metadata.toml): "); err != nil {
 			return board.Board{}, err
 		}
 	}
@@ -259,7 +259,7 @@ func attachToken(b *board.Board) error {
 		return err
 	}
 	if token == "" {
-		return fmt.Errorf("%s", chgkstrings.Default.Chgkcli.Board.NoToken(b.Host, b.BaseURL))
+		return fmt.Errorf("%s", fmt.Sprintf("no saved token for %s. Run this first:\n  chgksuite board token %s", b.Host, b.BaseURL))
 	}
 	b.Token = token
 	if b.Service == board.Trello {
@@ -278,7 +278,7 @@ func unlockXY(c *board.Client, b *board.Board, passphrase string) error {
 		passphrase = b.Passphrase
 	}
 	if passphrase == "" {
-		if passphrase, err = prompt(chgkstrings.Default.Chgkcli.Board.PassphrasePrompt()); err != nil {
+		if passphrase, err = prompt("xy board passphrase: "); err != nil {
 			return err
 		}
 	}
@@ -326,6 +326,6 @@ func openBrowser(url string) {
 		cmd = "xdg-open"
 	}
 	if err := exec.Command(cmd, url).Start(); err != nil {
-		fmt.Println(chgkstrings.Default.Chgkcli.Board.OpenBrowser(), url)
+		fmt.Println("Open in a browser:", url)
 	}
 }

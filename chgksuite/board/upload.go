@@ -2,6 +2,7 @@ package board
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -51,13 +52,12 @@ func (c *Client) Upload(ctx context.Context, b Board, source, listName string, w
 	if err != nil {
 		return err
 	}
-	s := chgkstrings.Default
-	say(s.Boardsync.Upload.Uploading(target.Name))
+	say(fmt.Sprintf("uploading into the list %q", target.Name))
 	for _, card := range Cards(source, withAuthor) {
 		if err := c.PostCard(ctx, b, target.ID, card.Caption, card.Text); err != nil {
 			return err
 		}
-		say(s.Boardsync.Upload.Posted(card.Caption))
+		say(fmt.Sprintf("posted: %s", card.Caption))
 	}
 	return nil
 }
@@ -86,9 +86,9 @@ type missingListError struct {
 
 func (e *missingListError) Error() string {
 	if e.name == "" {
-		return chgkstrings.Default.Boardsync.Upload.NoLists()
+		return "the board has no lists"
 	}
-	return chgkstrings.Default.Boardsync.Upload.ListMissing(e.name, strings.Join(e.known, ", "))
+	return fmt.Sprintf("no list %q; the board has: %s", e.name, strings.Join(e.known, ", "))
 }
 
 func listNames(lists []List) []string {

@@ -211,8 +211,19 @@ $("classic-answer").onkeydown = async (e) => {
   a.value = "";
 };
 
+// The CLI speaks English, and the Russian names of its flags and inputs are
+// the app's own (captions.json, which classic_test.go holds to the CLI).
+function caption(specs, captions) {
+  for (const spec of specs) {
+    for (const f of spec.flags) f.caption = captions.flags[f.name] ?? f.name;
+    for (const inp of spec.inputs ?? []) inp.caption = captions.inputs[inp.label] ?? inp.label;
+  }
+  return specs;
+}
+
 try {
-  specs = await call("Spec");
+  const [spec, captions] = await Promise.all([call("Spec"), fetch("captions.json").then((r) => r.json())]);
+  specs = caption(spec, captions);
   render();
 } catch (err) {
   $("classic-form").replaceChildren(el("p", { className: "hint hint-danger", textContent: err.message ?? String(err) }));

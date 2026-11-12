@@ -7,14 +7,10 @@ package i18nstrings
 type Strings struct {
 	Boardsync  BoardsyncStrings
 	Chgk       ChgkStrings
-	Chgkcli    ChgkcliStrings
 	Chgkimport ChgkimportStrings
-	Cliform    CliformStrings
 	Docs       DocsStrings
 	Fsource    FsourceStrings
 	Import     ImportStrings
-	Install    InstallStrings
-	Lj         LjStrings
 	Stats      StatsStrings
 	Tg         TgStrings
 	Xyenvelope XyenvelopeStrings
@@ -22,27 +18,11 @@ type Strings struct {
 
 // BoardsyncStrings is the boardsync Surface.
 type BoardsyncStrings struct {
-	Config BoardsyncConfigStrings
-	Fetch  BoardsyncFetchStrings
 	Upload BoardsyncUploadStrings
-}
-
-type BoardsyncConfigStrings struct {
-	EmptyUrl     func() string
-	Unrecognized func(url string) string
-}
-
-type BoardsyncFetchStrings struct {
-	Card func(id string, err string) string
-	List func(id string, err string) string
 }
 
 type BoardsyncUploadStrings struct {
 	DefaultCaption func() string
-	ListMissing    func(name string, known string) string
-	NoLists        func() string
-	Posted         func(caption string) string
-	Uploading      func(name string) string
 }
 
 // ChgkStrings is the chgk Surface.
@@ -89,73 +69,6 @@ type ChgkPreviewStrings struct {
 	ImageMissing func(name string) string
 }
 
-// ChgkcliStrings is the chgkcli Surface.
-type ChgkcliStrings struct {
-	AddStats ChgkcliAddStatsStrings
-	Board    ChgkcliBoardStrings
-	Docx     ChgkcliDocxStrings
-	Handouts ChgkcliHandoutsStrings
-	Lj       ChgkcliLjStrings
-	Parse    ChgkcliParseStrings
-	Shared   ChgkcliSharedStrings
-	Telegram ChgkcliTelegramStrings
-}
-
-type ChgkcliAddStatsStrings struct {
-	CustomCsvFlag func() string
-}
-
-type ChgkcliBoardStrings struct {
-	BoardUrlPrompt          func() string
-	EmptyToken              func() string
-	InitialPassphrasePrompt func() string
-	NeedBoardUrl            func() string
-	NoAnswersFlag           func() string
-	NoToken                 func(host string, url string) string
-	NothingToUpload         func() string
-	OnlyAnswersFlag         func() string
-	OpenBrowser             func() string
-	OpenBrowserTokens       func(url string) string
-	PassphrasePrompt        func() string
-	TokenPrompt             func() string
-}
-
-type ChgkcliDocxStrings struct {
-	NoParagraphFlag        func() string
-	OnlyQuestionNumberFlag func() string
-}
-
-type ChgkcliHandoutsStrings struct {
-	AlreadyExists    func(file string) string
-	ColourSuffix     func() string
-	DimensionsNote   func(width string, height string) string
-	HtmlGeometryNote func(width string, share string) string
-	PagesNote        func(file string, pages string, colour string) string
-	ScaleNote        func(scale string) string
-	SkipWarning      func(file string, err string) string
-	WarnQuestion     func(number string, text string) string
-	WatchNote        func(file string) string
-}
-
-type ChgkcliLjStrings struct {
-	GenimpFlag func() string
-}
-
-type ChgkcliParseStrings struct {
-	TourNumbersAsWordsFlag func() string
-}
-
-type ChgkcliSharedStrings struct {
-	ReplaceNoBreakHyphensFlag func() string
-}
-
-type ChgkcliTelegramStrings struct {
-	Done              func(duration string) string
-	Posting           func(channel string, chat string) string
-	StopIfNoStatsFlag func() string
-	TokenSaved        func(file string) string
-}
-
 // ChgkimportStrings is the chgkimport Surface.
 type ChgkimportStrings struct {
 	Error ChgkimportErrorStrings
@@ -165,128 +78,6 @@ type ChgkimportErrorStrings struct {
 	No4s        func() string
 	NoQuestions func() string
 	TooBig      func() string
-}
-
-// CliformStrings is the cliform Surface.
-type CliformStrings struct {
-	Flags  CliformFlagsStrings
-	Inputs CliformInputsStrings
-}
-
-type CliformFlagsStrings struct {
-	AddPolls                   func() string
-	AddTs                      func() string
-	Author                     func() string
-	Boxwidth                   func() string
-	Browser                    func() string
-	CommentFirst               func() string
-	Community                  func() string
-	CompressPdf                func() string
-	Config                     func() string
-	CustomCsv                  func() string
-	CustomCsvArgs              func() string
-	Defaultauthor              func() string
-	Device                     func() string
-	DisableAsterisksProcessing func() string
-	DisableNumbers             func() string
-	DoNotRemoveAccents         func() string
-	DocxTemplate               func() string
-	DryRun                     func() string
-	Encoding                   func() string
-	FixTrelloNewEditor         func() string
-	Font                       func() string
-	FontDir                    func() string
-	FontSize                   func() string
-	Game                       func() string
-	Genimp                     func() string
-	ImageBottomSpaceRowRatio   func() string
-	ImageShrinkPercent         func() string
-	ImgurClientId              func() string
-	Labels                     func() string
-	LabelsFile                 func() string
-	Language                   func() string
-	Links                      func() string
-	ListHandouts               func() string
-	ListName                   func() string
-	Lists                      func() string
-	Login                      func() string
-	MarginBottom               func() string
-	MarginLeft                 func() string
-	MarginRight                func() string
-	MarginTop                  func() string
-	Merge                      func() string
-	MinResizeImage             func() string
-	NTeams                     func() string
-	Navigation                 func() string
-	NoAutoResizeImages         func() string
-	NoBrowser                  func() string
-	NoImagePrefix              func() string
-	Noanswers                  func() string
-	Noparagraph                func() string
-	Nospoilers                 func() string
-	NumbersHandling            func() string
-	OnlyQuestionNumber         func() string
-	Onlyanswers                func() string
-	OptimizeSize               func() string
-	Output                     func() string
-	OutputDir                  func() string
-	OutputFilenamePrefix       func() string
-	Paperheight                func() string
-	Paperwidth                 func() string
-	Password                   func() string
-	PdfConfig                  func() string
-	PollConfig                 func() string
-	PptxConfig                 func() string
-	PreserveFormatting         func() string
-	Qb                         func() string
-	QuestionRange              func() string
-	Randomize                  func() string
-	RatingIds                  func() string
-	Rawtypst                   func() string
-	RemoveAccents              func() string
-	ReplaceDoubleLineBreaks    func() string
-	ReplaceNoBreakHyphens      func() string
-	ReplaceNoBreakSpaces       func() string
-	Scale                      func() string
-	ScreenMode                 func() string
-	Security                   func() string
-	Separate                   func() string
-	Si                         func() string
-	SingleNumberLineHandling   func() string
-	Singlefile                 func() string
-	SkipUntil                  func() string
-	SmallerSourceAndAuthor     func() string
-	Splittours                 func() string
-	Spoilers                   func() string
-	StopIfNoStats              func() string
-	TeamNamingThreshold        func() string
-	Template                   func() string
-	Tgaccount                  func() string
-	Tgchannel                  func() string
-	TikzMm                     func() string
-	Token                      func() string
-	TourNumbersAsWords         func() string
-	TypographyAccents          func() string
-	TypographyDashes           func() string
-	TypographyPercent          func() string
-	TypographyQuotes           func() string
-	TypographyWhitespace       func() string
-	Typst                      func() string
-	Watch                      func() string
-}
-
-type CliformInputsStrings struct {
-	BoardUrl       func() string
-	DocxPackets    func() string
-	DownloadFolder func() string
-	Fraction       func() string
-	HandoutFile    func() string
-	HandoutsFolder func() string
-	HtmlFile       func() string
-	Packet         func() string
-	Packets        func() string
-	ServiceUrl     func() string
-	UploadPackets  func() string
 }
 
 // DocsStrings is the docs Surface.
@@ -379,50 +170,6 @@ type ImportVersionsStrings struct {
 	Question func(n string, question string) string
 }
 
-// InstallStrings is the install Surface.
-type InstallStrings struct {
-	ArchiveEscape func(name string) string
-	Browser       InstallBrowserStrings
-	Installed     func(path string) string
-	Typst         InstallTypstStrings
-}
-
-type InstallBrowserStrings struct {
-	ArchiveNoShell   func() string
-	Downloading      func(version string, platform string) string
-	NoBuild          func(platform string) string
-	NoSandbox        func() string
-	NotFound         func() string
-	NotInstalled     func() string
-	PlatformMissing  func(platform string) string
-	ReleasesFailed   func(status string) string
-	ReleasesNoStable func() string
-	SymlinkEscape    func(name string, dest string) string
-}
-
-type InstallTypstStrings struct {
-	ArchiveNoBinary func(binary string) string
-	Downloading     func(version string) string
-	NotFound        func() string
-	PlatformMissing func(platform string) string
-	ReleaseNoBuild  func(build string) string
-	ReleasesFailed  func(status string) string
-	UnknownArchive  func(archive string) string
-}
-
-// LjStrings is the lj Surface.
-type LjStrings struct {
-	Error LjErrorStrings
-}
-
-type LjErrorStrings struct {
-	Fault       func(message string, code string) string
-	Malformed   func(err string) string
-	NoChallenge func() string
-	Nothing     func() string
-	Status      func(status string) string
-}
-
 // StatsStrings is the stats Surface.
 type StatsStrings struct {
 	Options  StatsOptionsStrings
@@ -496,12 +243,8 @@ type XyenvelopeUnlockStrings struct {
 // in a .dopeui page.
 func (s Strings) Lookup(id string) (string, bool) {
 	switch id {
-	case "boardsync.config.empty_url":
-		return s.Boardsync.Config.EmptyUrl(), true
 	case "boardsync.upload.default_caption":
 		return s.Boardsync.Upload.DefaultCaption(), true
-	case "boardsync.upload.no_lists":
-		return s.Boardsync.Upload.NoLists(), true
 	case "chgk.author.default":
 		return s.Chgk.Author.Default(), true
 	case "chgk.author.feminine":
@@ -542,268 +285,12 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Chgk.Label.SourcePlural(), true
 	case "chgk.label.zachet":
 		return s.Chgk.Label.Zachet(), true
-	case "chgkcli.add_stats.custom_csv_flag":
-		return s.Chgkcli.AddStats.CustomCsvFlag(), true
-	case "chgkcli.board.board_url_prompt":
-		return s.Chgkcli.Board.BoardUrlPrompt(), true
-	case "chgkcli.board.empty_token":
-		return s.Chgkcli.Board.EmptyToken(), true
-	case "chgkcli.board.initial_passphrase_prompt":
-		return s.Chgkcli.Board.InitialPassphrasePrompt(), true
-	case "chgkcli.board.need_board_url":
-		return s.Chgkcli.Board.NeedBoardUrl(), true
-	case "chgkcli.board.no_answers_flag":
-		return s.Chgkcli.Board.NoAnswersFlag(), true
-	case "chgkcli.board.nothing_to_upload":
-		return s.Chgkcli.Board.NothingToUpload(), true
-	case "chgkcli.board.only_answers_flag":
-		return s.Chgkcli.Board.OnlyAnswersFlag(), true
-	case "chgkcli.board.open_browser":
-		return s.Chgkcli.Board.OpenBrowser(), true
-	case "chgkcli.board.passphrase_prompt":
-		return s.Chgkcli.Board.PassphrasePrompt(), true
-	case "chgkcli.board.token_prompt":
-		return s.Chgkcli.Board.TokenPrompt(), true
-	case "chgkcli.docx.no_paragraph_flag":
-		return s.Chgkcli.Docx.NoParagraphFlag(), true
-	case "chgkcli.docx.only_question_number_flag":
-		return s.Chgkcli.Docx.OnlyQuestionNumberFlag(), true
-	case "chgkcli.handouts.colour_suffix":
-		return s.Chgkcli.Handouts.ColourSuffix(), true
-	case "chgkcli.lj.genimp_flag":
-		return s.Chgkcli.Lj.GenimpFlag(), true
-	case "chgkcli.parse.tour_numbers_as_words_flag":
-		return s.Chgkcli.Parse.TourNumbersAsWordsFlag(), true
-	case "chgkcli.shared.replace_no_break_hyphens_flag":
-		return s.Chgkcli.Shared.ReplaceNoBreakHyphensFlag(), true
-	case "chgkcli.telegram.stop_if_no_stats_flag":
-		return s.Chgkcli.Telegram.StopIfNoStatsFlag(), true
 	case "chgkimport.error.no_4s":
 		return s.Chgkimport.Error.No4s(), true
 	case "chgkimport.error.no_questions":
 		return s.Chgkimport.Error.NoQuestions(), true
 	case "chgkimport.error.too_big":
 		return s.Chgkimport.Error.TooBig(), true
-	case "cliform.flags.add_polls":
-		return s.Cliform.Flags.AddPolls(), true
-	case "cliform.flags.add_ts":
-		return s.Cliform.Flags.AddTs(), true
-	case "cliform.flags.author":
-		return s.Cliform.Flags.Author(), true
-	case "cliform.flags.boxwidth":
-		return s.Cliform.Flags.Boxwidth(), true
-	case "cliform.flags.browser":
-		return s.Cliform.Flags.Browser(), true
-	case "cliform.flags.comment_first":
-		return s.Cliform.Flags.CommentFirst(), true
-	case "cliform.flags.community":
-		return s.Cliform.Flags.Community(), true
-	case "cliform.flags.compress_pdf":
-		return s.Cliform.Flags.CompressPdf(), true
-	case "cliform.flags.config":
-		return s.Cliform.Flags.Config(), true
-	case "cliform.flags.custom_csv":
-		return s.Cliform.Flags.CustomCsv(), true
-	case "cliform.flags.custom_csv_args":
-		return s.Cliform.Flags.CustomCsvArgs(), true
-	case "cliform.flags.defaultauthor":
-		return s.Cliform.Flags.Defaultauthor(), true
-	case "cliform.flags.device":
-		return s.Cliform.Flags.Device(), true
-	case "cliform.flags.disable_asterisks_processing":
-		return s.Cliform.Flags.DisableAsterisksProcessing(), true
-	case "cliform.flags.disable_numbers":
-		return s.Cliform.Flags.DisableNumbers(), true
-	case "cliform.flags.do_not_remove_accents":
-		return s.Cliform.Flags.DoNotRemoveAccents(), true
-	case "cliform.flags.docx_template":
-		return s.Cliform.Flags.DocxTemplate(), true
-	case "cliform.flags.dry_run":
-		return s.Cliform.Flags.DryRun(), true
-	case "cliform.flags.encoding":
-		return s.Cliform.Flags.Encoding(), true
-	case "cliform.flags.fix_trello_new_editor":
-		return s.Cliform.Flags.FixTrelloNewEditor(), true
-	case "cliform.flags.font":
-		return s.Cliform.Flags.Font(), true
-	case "cliform.flags.font_dir":
-		return s.Cliform.Flags.FontDir(), true
-	case "cliform.flags.font_size":
-		return s.Cliform.Flags.FontSize(), true
-	case "cliform.flags.game":
-		return s.Cliform.Flags.Game(), true
-	case "cliform.flags.genimp":
-		return s.Cliform.Flags.Genimp(), true
-	case "cliform.flags.image_bottom_space_row_ratio":
-		return s.Cliform.Flags.ImageBottomSpaceRowRatio(), true
-	case "cliform.flags.image_shrink_percent":
-		return s.Cliform.Flags.ImageShrinkPercent(), true
-	case "cliform.flags.imgur_client_id":
-		return s.Cliform.Flags.ImgurClientId(), true
-	case "cliform.flags.labels":
-		return s.Cliform.Flags.Labels(), true
-	case "cliform.flags.labels_file":
-		return s.Cliform.Flags.LabelsFile(), true
-	case "cliform.flags.language":
-		return s.Cliform.Flags.Language(), true
-	case "cliform.flags.links":
-		return s.Cliform.Flags.Links(), true
-	case "cliform.flags.list_handouts":
-		return s.Cliform.Flags.ListHandouts(), true
-	case "cliform.flags.list_name":
-		return s.Cliform.Flags.ListName(), true
-	case "cliform.flags.lists":
-		return s.Cliform.Flags.Lists(), true
-	case "cliform.flags.login":
-		return s.Cliform.Flags.Login(), true
-	case "cliform.flags.margin_bottom":
-		return s.Cliform.Flags.MarginBottom(), true
-	case "cliform.flags.margin_left":
-		return s.Cliform.Flags.MarginLeft(), true
-	case "cliform.flags.margin_right":
-		return s.Cliform.Flags.MarginRight(), true
-	case "cliform.flags.margin_top":
-		return s.Cliform.Flags.MarginTop(), true
-	case "cliform.flags.merge":
-		return s.Cliform.Flags.Merge(), true
-	case "cliform.flags.min_resize_image":
-		return s.Cliform.Flags.MinResizeImage(), true
-	case "cliform.flags.n_teams":
-		return s.Cliform.Flags.NTeams(), true
-	case "cliform.flags.navigation":
-		return s.Cliform.Flags.Navigation(), true
-	case "cliform.flags.no_auto_resize_images":
-		return s.Cliform.Flags.NoAutoResizeImages(), true
-	case "cliform.flags.no_browser":
-		return s.Cliform.Flags.NoBrowser(), true
-	case "cliform.flags.no_image_prefix":
-		return s.Cliform.Flags.NoImagePrefix(), true
-	case "cliform.flags.noanswers":
-		return s.Cliform.Flags.Noanswers(), true
-	case "cliform.flags.noparagraph":
-		return s.Cliform.Flags.Noparagraph(), true
-	case "cliform.flags.nospoilers":
-		return s.Cliform.Flags.Nospoilers(), true
-	case "cliform.flags.numbers_handling":
-		return s.Cliform.Flags.NumbersHandling(), true
-	case "cliform.flags.only_question_number":
-		return s.Cliform.Flags.OnlyQuestionNumber(), true
-	case "cliform.flags.onlyanswers":
-		return s.Cliform.Flags.Onlyanswers(), true
-	case "cliform.flags.optimize_size":
-		return s.Cliform.Flags.OptimizeSize(), true
-	case "cliform.flags.output":
-		return s.Cliform.Flags.Output(), true
-	case "cliform.flags.output_dir":
-		return s.Cliform.Flags.OutputDir(), true
-	case "cliform.flags.output_filename_prefix":
-		return s.Cliform.Flags.OutputFilenamePrefix(), true
-	case "cliform.flags.paperheight":
-		return s.Cliform.Flags.Paperheight(), true
-	case "cliform.flags.paperwidth":
-		return s.Cliform.Flags.Paperwidth(), true
-	case "cliform.flags.password":
-		return s.Cliform.Flags.Password(), true
-	case "cliform.flags.pdf_config":
-		return s.Cliform.Flags.PdfConfig(), true
-	case "cliform.flags.poll_config":
-		return s.Cliform.Flags.PollConfig(), true
-	case "cliform.flags.pptx_config":
-		return s.Cliform.Flags.PptxConfig(), true
-	case "cliform.flags.preserve_formatting":
-		return s.Cliform.Flags.PreserveFormatting(), true
-	case "cliform.flags.qb":
-		return s.Cliform.Flags.Qb(), true
-	case "cliform.flags.question_range":
-		return s.Cliform.Flags.QuestionRange(), true
-	case "cliform.flags.randomize":
-		return s.Cliform.Flags.Randomize(), true
-	case "cliform.flags.rating_ids":
-		return s.Cliform.Flags.RatingIds(), true
-	case "cliform.flags.rawtypst":
-		return s.Cliform.Flags.Rawtypst(), true
-	case "cliform.flags.remove_accents":
-		return s.Cliform.Flags.RemoveAccents(), true
-	case "cliform.flags.replace_double_line_breaks":
-		return s.Cliform.Flags.ReplaceDoubleLineBreaks(), true
-	case "cliform.flags.replace_no_break_hyphens":
-		return s.Cliform.Flags.ReplaceNoBreakHyphens(), true
-	case "cliform.flags.replace_no_break_spaces":
-		return s.Cliform.Flags.ReplaceNoBreakSpaces(), true
-	case "cliform.flags.scale":
-		return s.Cliform.Flags.Scale(), true
-	case "cliform.flags.screen_mode":
-		return s.Cliform.Flags.ScreenMode(), true
-	case "cliform.flags.security":
-		return s.Cliform.Flags.Security(), true
-	case "cliform.flags.separate":
-		return s.Cliform.Flags.Separate(), true
-	case "cliform.flags.si":
-		return s.Cliform.Flags.Si(), true
-	case "cliform.flags.single_number_line_handling":
-		return s.Cliform.Flags.SingleNumberLineHandling(), true
-	case "cliform.flags.singlefile":
-		return s.Cliform.Flags.Singlefile(), true
-	case "cliform.flags.skip_until":
-		return s.Cliform.Flags.SkipUntil(), true
-	case "cliform.flags.smaller_source_and_author":
-		return s.Cliform.Flags.SmallerSourceAndAuthor(), true
-	case "cliform.flags.splittours":
-		return s.Cliform.Flags.Splittours(), true
-	case "cliform.flags.spoilers":
-		return s.Cliform.Flags.Spoilers(), true
-	case "cliform.flags.stop_if_no_stats":
-		return s.Cliform.Flags.StopIfNoStats(), true
-	case "cliform.flags.team_naming_threshold":
-		return s.Cliform.Flags.TeamNamingThreshold(), true
-	case "cliform.flags.template":
-		return s.Cliform.Flags.Template(), true
-	case "cliform.flags.tgaccount":
-		return s.Cliform.Flags.Tgaccount(), true
-	case "cliform.flags.tgchannel":
-		return s.Cliform.Flags.Tgchannel(), true
-	case "cliform.flags.tikz_mm":
-		return s.Cliform.Flags.TikzMm(), true
-	case "cliform.flags.token":
-		return s.Cliform.Flags.Token(), true
-	case "cliform.flags.tour_numbers_as_words":
-		return s.Cliform.Flags.TourNumbersAsWords(), true
-	case "cliform.flags.typography_accents":
-		return s.Cliform.Flags.TypographyAccents(), true
-	case "cliform.flags.typography_dashes":
-		return s.Cliform.Flags.TypographyDashes(), true
-	case "cliform.flags.typography_percent":
-		return s.Cliform.Flags.TypographyPercent(), true
-	case "cliform.flags.typography_quotes":
-		return s.Cliform.Flags.TypographyQuotes(), true
-	case "cliform.flags.typography_whitespace":
-		return s.Cliform.Flags.TypographyWhitespace(), true
-	case "cliform.flags.typst":
-		return s.Cliform.Flags.Typst(), true
-	case "cliform.flags.watch":
-		return s.Cliform.Flags.Watch(), true
-	case "cliform.inputs.board_url":
-		return s.Cliform.Inputs.BoardUrl(), true
-	case "cliform.inputs.docx_packets":
-		return s.Cliform.Inputs.DocxPackets(), true
-	case "cliform.inputs.download_folder":
-		return s.Cliform.Inputs.DownloadFolder(), true
-	case "cliform.inputs.fraction":
-		return s.Cliform.Inputs.Fraction(), true
-	case "cliform.inputs.handout_file":
-		return s.Cliform.Inputs.HandoutFile(), true
-	case "cliform.inputs.handouts_folder":
-		return s.Cliform.Inputs.HandoutsFolder(), true
-	case "cliform.inputs.html_file":
-		return s.Cliform.Inputs.HtmlFile(), true
-	case "cliform.inputs.packet":
-		return s.Cliform.Inputs.Packet(), true
-	case "cliform.inputs.packets":
-		return s.Cliform.Inputs.Packets(), true
-	case "cliform.inputs.service_url":
-		return s.Cliform.Inputs.ServiceUrl(), true
-	case "cliform.inputs.upload_packets":
-		return s.Cliform.Inputs.UploadPackets(), true
 	case "docs.docx.host_version":
 		return s.Docs.Docx.HostVersion(), true
 	case "docs.docx.screen_version":
@@ -844,22 +331,6 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Docs.Print.MeasureZeroHeight(), true
 	case "docs.print.width_missing":
 		return s.Docs.Print.WidthMissing(), true
-	case "install.browser.archive_no_shell":
-		return s.Install.Browser.ArchiveNoShell(), true
-	case "install.browser.no_sandbox":
-		return s.Install.Browser.NoSandbox(), true
-	case "install.browser.not_found":
-		return s.Install.Browser.NotFound(), true
-	case "install.browser.not_installed":
-		return s.Install.Browser.NotInstalled(), true
-	case "install.browser.releases_no_stable":
-		return s.Install.Browser.ReleasesNoStable(), true
-	case "install.typst.not_found":
-		return s.Install.Typst.NotFound(), true
-	case "lj.error.no_challenge":
-		return s.Lj.Error.NoChallenge(), true
-	case "lj.error.nothing":
-		return s.Lj.Error.Nothing(), true
 	case "stats.options.label":
 		return s.Stats.Options.Label(), true
 	case "stats.results.empty":
@@ -887,7 +358,7 @@ func (s Strings) Lookup(id string) (string, bool) {
 // Defines reports whether the Catalog holds the id at all, templated or not.
 func (Strings) Defines(id string) bool {
 	switch id {
-	case "boardsync.config.empty_url", "boardsync.config.unrecognized", "boardsync.fetch.card", "boardsync.fetch.list", "boardsync.upload.default_caption", "boardsync.upload.list_missing", "boardsync.upload.no_lists", "boardsync.upload.posted", "boardsync.upload.uploading", "chgk.author.default", "chgk.author.feminine", "chgk.author.feminine_plural", "chgk.author.plural", "chgk.copy.handout", "chgk.copy.image_handout_note", "chgk.copy.question", "chgk.copy.question_numbered", "chgk.copy.question_piece", "chgk.copy.question_unnumbered", "chgk.copy.question_whole", "chgk.copy.question_with_answer", "chgk.label.answer", "chgk.label.author", "chgk.label.comment", "chgk.label.date", "chgk.label.editor", "chgk.label.handout", "chgk.label.nezachet", "chgk.label.question", "chgk.label.source", "chgk.label.source_plural", "chgk.label.zachet", "chgk.preview.image_missing", "chgkcli.add_stats.custom_csv_flag", "chgkcli.board.board_url_prompt", "chgkcli.board.empty_token", "chgkcli.board.initial_passphrase_prompt", "chgkcli.board.need_board_url", "chgkcli.board.no_answers_flag", "chgkcli.board.no_token", "chgkcli.board.nothing_to_upload", "chgkcli.board.only_answers_flag", "chgkcli.board.open_browser", "chgkcli.board.open_browser_tokens", "chgkcli.board.passphrase_prompt", "chgkcli.board.token_prompt", "chgkcli.docx.no_paragraph_flag", "chgkcli.docx.only_question_number_flag", "chgkcli.handouts.already_exists", "chgkcli.handouts.colour_suffix", "chgkcli.handouts.dimensions_note", "chgkcli.handouts.html_geometry_note", "chgkcli.handouts.pages_note", "chgkcli.handouts.scale_note", "chgkcli.handouts.skip_warning", "chgkcli.handouts.warn_question", "chgkcli.handouts.watch_note", "chgkcli.lj.genimp_flag", "chgkcli.parse.tour_numbers_as_words_flag", "chgkcli.shared.replace_no_break_hyphens_flag", "chgkcli.telegram.done", "chgkcli.telegram.posting", "chgkcli.telegram.stop_if_no_stats_flag", "chgkcli.telegram.token_saved", "chgkimport.error.no_4s", "chgkimport.error.no_questions", "chgkimport.error.too_big", "cliform.flags.add_polls", "cliform.flags.add_ts", "cliform.flags.author", "cliform.flags.boxwidth", "cliform.flags.browser", "cliform.flags.comment_first", "cliform.flags.community", "cliform.flags.compress_pdf", "cliform.flags.config", "cliform.flags.custom_csv", "cliform.flags.custom_csv_args", "cliform.flags.defaultauthor", "cliform.flags.device", "cliform.flags.disable_asterisks_processing", "cliform.flags.disable_numbers", "cliform.flags.do_not_remove_accents", "cliform.flags.docx_template", "cliform.flags.dry_run", "cliform.flags.encoding", "cliform.flags.fix_trello_new_editor", "cliform.flags.font", "cliform.flags.font_dir", "cliform.flags.font_size", "cliform.flags.game", "cliform.flags.genimp", "cliform.flags.image_bottom_space_row_ratio", "cliform.flags.image_shrink_percent", "cliform.flags.imgur_client_id", "cliform.flags.labels", "cliform.flags.labels_file", "cliform.flags.language", "cliform.flags.links", "cliform.flags.list_handouts", "cliform.flags.list_name", "cliform.flags.lists", "cliform.flags.login", "cliform.flags.margin_bottom", "cliform.flags.margin_left", "cliform.flags.margin_right", "cliform.flags.margin_top", "cliform.flags.merge", "cliform.flags.min_resize_image", "cliform.flags.n_teams", "cliform.flags.navigation", "cliform.flags.no_auto_resize_images", "cliform.flags.no_browser", "cliform.flags.no_image_prefix", "cliform.flags.noanswers", "cliform.flags.noparagraph", "cliform.flags.nospoilers", "cliform.flags.numbers_handling", "cliform.flags.only_question_number", "cliform.flags.onlyanswers", "cliform.flags.optimize_size", "cliform.flags.output", "cliform.flags.output_dir", "cliform.flags.output_filename_prefix", "cliform.flags.paperheight", "cliform.flags.paperwidth", "cliform.flags.password", "cliform.flags.pdf_config", "cliform.flags.poll_config", "cliform.flags.pptx_config", "cliform.flags.preserve_formatting", "cliform.flags.qb", "cliform.flags.question_range", "cliform.flags.randomize", "cliform.flags.rating_ids", "cliform.flags.rawtypst", "cliform.flags.remove_accents", "cliform.flags.replace_double_line_breaks", "cliform.flags.replace_no_break_hyphens", "cliform.flags.replace_no_break_spaces", "cliform.flags.scale", "cliform.flags.screen_mode", "cliform.flags.security", "cliform.flags.separate", "cliform.flags.si", "cliform.flags.single_number_line_handling", "cliform.flags.singlefile", "cliform.flags.skip_until", "cliform.flags.smaller_source_and_author", "cliform.flags.splittours", "cliform.flags.spoilers", "cliform.flags.stop_if_no_stats", "cliform.flags.team_naming_threshold", "cliform.flags.template", "cliform.flags.tgaccount", "cliform.flags.tgchannel", "cliform.flags.tikz_mm", "cliform.flags.token", "cliform.flags.tour_numbers_as_words", "cliform.flags.typography_accents", "cliform.flags.typography_dashes", "cliform.flags.typography_percent", "cliform.flags.typography_quotes", "cliform.flags.typography_whitespace", "cliform.flags.typst", "cliform.flags.watch", "cliform.inputs.board_url", "cliform.inputs.docx_packets", "cliform.inputs.download_folder", "cliform.inputs.fraction", "cliform.inputs.handout_file", "cliform.inputs.handouts_folder", "cliform.inputs.html_file", "cliform.inputs.packet", "cliform.inputs.packets", "cliform.inputs.service_url", "cliform.inputs.upload_packets", "docs.docx.host_version", "docs.docx.screen_version", "docs.handout.bad_markup", "docs.handout.image_missing", "docs.handout.language_missing", "docs.handout.pack_multiple", "docs.handout.pack_no_grid", "docs.handout.pack_none", "docs.handout.preamble_setting", "docs.handout.rotate_image_missing", "docs.handout_list.by_number_lead", "docs.handout_list.by_tour_lead", "docs.handout_list.heading", "docs.handout_list.tour_none", "docs.handout_list.tour_numbers", "docs.image.missing", "docs.markdown.answer", "docs.markdown.author", "docs.markdown.comment", "docs.markdown.image_link", "docs.markdown.nezachet", "docs.markdown.question", "docs.markdown.source", "docs.markdown.zachet", "docs.pptx.question_caps", "docs.print.measure", "docs.print.measure_no_size", "docs.print.measure_zero_height", "docs.print.pdf", "docs.print.png", "docs.print.width_missing", "docs.typst.line_error", "docs.typst.line_not_pair", "fsource.theme.default_label", "fsource.theme.reserve_number", "import.versions.head", "import.versions.label", "import.versions.question", "install.archive_escape", "install.browser.archive_no_shell", "install.browser.downloading", "install.browser.no_build", "install.browser.no_sandbox", "install.browser.not_found", "install.browser.not_installed", "install.browser.platform_missing", "install.browser.releases_failed", "install.browser.releases_no_stable", "install.browser.symlink_escape", "install.installed", "install.typst.archive_no_binary", "install.typst.downloading", "install.typst.not_found", "install.typst.platform_missing", "install.typst.release_no_build", "install.typst.releases_failed", "install.typst.unknown_archive", "lj.error.fault", "lj.error.malformed", "lj.error.no_challenge", "lj.error.nothing", "lj.error.status", "stats.options.label", "stats.question.line", "stats.question.takers", "stats.range.bad", "stats.rating.decode", "stats.rating.status", "stats.results.empty", "stats.table.disputed", "stats.table.header_missing", "stats.xlsx.no_sheets", "stats.xlsx.part_missing", "stats.xlsx.sheet_missing", "tg.verify.no_discussion", "tg.verify.not_admin", "tg.verify.not_found", "tg.verify.not_member", "tg.verify.of_channel", "tg.verify.of_chat", "tg.verify.what_channel", "tg.verify.what_chat", "xyenvelope.unlock.wrong_passphrase":
+	case "boardsync.upload.default_caption", "chgk.author.default", "chgk.author.feminine", "chgk.author.feminine_plural", "chgk.author.plural", "chgk.copy.handout", "chgk.copy.image_handout_note", "chgk.copy.question", "chgk.copy.question_numbered", "chgk.copy.question_piece", "chgk.copy.question_unnumbered", "chgk.copy.question_whole", "chgk.copy.question_with_answer", "chgk.label.answer", "chgk.label.author", "chgk.label.comment", "chgk.label.date", "chgk.label.editor", "chgk.label.handout", "chgk.label.nezachet", "chgk.label.question", "chgk.label.source", "chgk.label.source_plural", "chgk.label.zachet", "chgk.preview.image_missing", "chgkimport.error.no_4s", "chgkimport.error.no_questions", "chgkimport.error.too_big", "docs.docx.host_version", "docs.docx.screen_version", "docs.handout.bad_markup", "docs.handout.image_missing", "docs.handout.language_missing", "docs.handout.pack_multiple", "docs.handout.pack_no_grid", "docs.handout.pack_none", "docs.handout.preamble_setting", "docs.handout.rotate_image_missing", "docs.handout_list.by_number_lead", "docs.handout_list.by_tour_lead", "docs.handout_list.heading", "docs.handout_list.tour_none", "docs.handout_list.tour_numbers", "docs.image.missing", "docs.markdown.answer", "docs.markdown.author", "docs.markdown.comment", "docs.markdown.image_link", "docs.markdown.nezachet", "docs.markdown.question", "docs.markdown.source", "docs.markdown.zachet", "docs.pptx.question_caps", "docs.print.measure", "docs.print.measure_no_size", "docs.print.measure_zero_height", "docs.print.pdf", "docs.print.png", "docs.print.width_missing", "docs.typst.line_error", "docs.typst.line_not_pair", "fsource.theme.default_label", "fsource.theme.reserve_number", "import.versions.head", "import.versions.label", "import.versions.question", "stats.options.label", "stats.question.line", "stats.question.takers", "stats.range.bad", "stats.rating.decode", "stats.rating.status", "stats.results.empty", "stats.table.disputed", "stats.table.header_missing", "stats.xlsx.no_sheets", "stats.xlsx.part_missing", "stats.xlsx.sheet_missing", "tg.verify.no_discussion", "tg.verify.not_admin", "tg.verify.not_found", "tg.verify.not_member", "tg.verify.of_channel", "tg.verify.of_chat", "tg.verify.what_channel", "tg.verify.what_chat", "xyenvelope.unlock.wrong_passphrase":
 		return true
 	}
 	return false
