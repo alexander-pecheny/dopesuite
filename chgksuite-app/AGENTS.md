@@ -42,6 +42,10 @@ one per server the user has added.
   Python window, it shares `~/.chgksuite` with chgksuite: its dialogs open at
   `lastdir`, and the CLI keeps the bot tokens in `telegram.toml` and the
   channels it resolved in `resolve.db`, which `spec` offers as suggestions.
+- The CLI never asks a question, since agents run it unattended. Where it
+  needs an answer it exits with a code of its own (`exitNoStats`,
+  `exitNoToken` in its `main.go`), and the tab asks and runs it again with the
+  answer as a flag (`questions` in `shell/classic.js`).
 - This module needs cgo and stays out of the root
   justfile's cross-module recipes. `just build` first builds xy's web dist.
 - It renders with the typst release (`typst_version` in the justfile, its

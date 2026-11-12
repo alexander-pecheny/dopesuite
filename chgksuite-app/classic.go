@@ -16,12 +16,19 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// The classic tab's events: each line the command prints, then how it ended
-// ("" when it succeeded).
+// The classic tab's events: each line the command prints, then how it ended.
 const (
 	lineEvent = "classic:line"
 	doneEvent = "classic:done"
 )
+
+// An Exit is how a command ended: 0 and "" when it succeeded. The page asks
+// the user about the codes the CLI stops on for want of an answer (its
+// exitNoStats and exitNoToken) and runs it again.
+type Exit struct {
+	Code  int    `json:"code"`
+	Error string `json:"error"`
+}
 
 // readBuf is how much of the CLI's output is read at a time.
 const readBuf = 64 << 10
@@ -153,11 +160,15 @@ func (c *Classic) stream(cmd *exec.Cmd, read *os.File) {
 	c.mu.Lock()
 	c.proc, c.stdin = nil, nil
 	c.mu.Unlock()
-	msg := ""
+	exit := Exit{}
 	if err != nil {
-		msg = err.Error()
+		exit.Code, exit.Error = -1, err.Error()
+		var e *exec.ExitError
+		if errors.As(err, &e) {
+			exit.Code = e.ExitCode()
+		}
 	}
-	c.emit(doneEvent, msg)
+	application.Get().Event.Emit(doneEvent, exit)
 }
 
 func (c *Classic) emit(name, data string) { application.Get().Event.Emit(name, data) }

@@ -86,6 +86,12 @@ func main() {
 		if errors.Is(err, credits.ErrNoQuestion) {
 			os.Exit(exitNoQuestion)
 		}
+		if errors.Is(err, errNoStats) {
+			os.Exit(exitNoStats)
+		}
+		if errors.Is(err, errNoToken) {
+			os.Exit(exitNoToken)
+		}
 		os.Exit(1)
 	}
 }
@@ -95,3 +101,10 @@ const exitEncrypted = 3
 
 // exitNoQuestion is `question` finding no question, or two, under the number.
 const exitNoQuestion = 4
+
+// exitNoStats and exitNoToken are `compose telegram` stopping for what
+// chgksuite-app then asks the user about (classic.go has the same numbers).
+const (
+	exitNoStats = 5
+	exitNoToken = 6
+)

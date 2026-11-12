@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,10 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/stats"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/tg"
 )
+
+// errNoStats is --stop_if_no_stats refusing a packet. chgksuite-app answers it
+// by asking whether to publish anyway, and runs again with the check off.
+var errNoStats = errors.New("don't publish questions without stats")
 
 // composeTelegram is `chgksuite compose telegram`: post a packet to a channel,
 // question by question, with its comments in the linked discussion group.
@@ -27,7 +32,7 @@ func composeTelegram(args []string) error {
 	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the packet")
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
 	account := fs.String("tgaccount", override("tgaccount", defaultAccount), "which of the bot tokens saved in ~/.chgksuite/telegram.toml to post with")
-	token := fs.String("token", "", "bot token; empty is $CHGKSUITE_TG_TOKEN or the one saved in ~/.chgksuite/telegram.toml, asked for and saved on the first run")
+	token := fs.String("token", "", "bot token, saved in ~/.chgksuite/telegram.toml when the account has none yet; empty is $CHGKSUITE_TG_TOKEN or the saved one")
 	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", s.Chgkcli.Telegram.StopIfNoStatsFlag())
 	language := languageFlag(fs)
 	config := configFlag(fs)
@@ -78,7 +83,7 @@ func composeTelegram(args []string) error {
 	}
 	doc := fsource.Parse(string(src), "chgk")
 	if *stopIfNoStats && !stats.HasStats(doc) {
-		return fmt.Errorf("don't publish questions without stats")
+		return errNoStats
 	}
 	images, err := loadImages(doc, filepath.Dir(in))
 	if err != nil {

@@ -101,10 +101,8 @@ export const RU: Strings = {
     },
     telegram: {
       done: (duration: string) => `готово за ${duration}`,
-      noToken: () => "нет токена бота",
       posting: (channel: string, chat: string) => `публикую в ${channel}, комментарии в ${chat}`,
       stopIfNoStatsFlag: () => "refuse to publish a package whose questions carry no «Взятия:»",
-      tokenPrompt: () => "Токен бота (от @BotFather): ",
       tokenSaved: (file: string) => `токен сохранён в ${file}`,
     },
   },

@@ -122,13 +122,11 @@ var RU = Strings{
 			ReplaceNoBreakHyphensFlag: func() string { return "make the hyphen of а short word non-breaking: on|off" },
 		},
 		Telegram: ChgkcliTelegramStrings{
-			Done:    func(duration string) string { return fmt.Sprintf("готово за %s", duration) },
-			NoToken: func() string { return "нет токена бота" },
+			Done: func(duration string) string { return fmt.Sprintf("готово за %s", duration) },
 			Posting: func(channel string, chat string) string {
 				return fmt.Sprintf("публикую в %s, комментарии в %s", channel, chat)
 			},
 			StopIfNoStatsFlag: func() string { return "refuse to publish a package whose questions carry no «Взятия:»" },
-			TokenPrompt:       func() string { return "Токен бота (от @BotFather): " },
 			TokenSaved:        func(file string) string { return fmt.Sprintf("токен сохранён в %s", file) },
 		},
 	},

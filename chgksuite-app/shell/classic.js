@@ -92,8 +92,10 @@ function inputRow(spec, i) {
 
 // argv is what the form adds up to. A flag left at its default is left out, so
 // the log reads like what someone would have typed.
-function argv(spec) {
-  const args = spec.verb.split(" ");
+// extra is what a run asked about adds, such as --token. Flags have to come
+// before the files, where the CLI stops reading them.
+function argv(spec, extra = []) {
+  const args = [...spec.verb.split(" "), ...extra];
   for (const f of spec.flags) {
     const v = value(f);
     if (v === f.default || v === "") continue;
@@ -147,23 +149,59 @@ function log(text) {
 }
 
 Events.On("classic:line", (ev) => log(ev.data));
+// The codes `compose telegram` stops on for want of an answer (exitNoStats and
+// exitNoToken in the CLI's main.go). The CLI never asks, since agents run it
+// unattended, so the question is asked here and the run is repeated with the
+// answer added.
+const questions = {
+  5: { text: "В пакете нет «Взятий». Всё равно опубликовать?", ok: "Опубликовать", extra: () => ["--stop_if_no_stats=false"] },
+  6: { text: "Нужен токен бота от @BotFather. Он сохранится, и в следующий раз спрашивать не придётся.", ok: "Запустить", secret: true, extra: (v) => ["--token", v] },
+};
+
+let extra = [];
+
+function ask(q) {
+  const input = q.secret ? el("input", { type: "password", autocomplete: "off", className: "input u-grow" }) : null;
+  const ok = el("button", { type: "button", className: "btn btn-primary", textContent: q.ok });
+  const cancel = el("button", { type: "button", className: "btn", textContent: "Отмена" });
+  const close = () => { $("classic-ask").hidden = true; };
+  ok.onclick = () => {
+    if (input && !input.value.trim()) return input.focus();
+    close();
+    run(extra.concat(q.extra(input?.value.trim())));
+  };
+  cancel.onclick = close;
+  if (input) input.onkeydown = (e) => { if (e.key === "Enter") ok.click(); };
+  $("classic-ask").hidden = false;
+  $("classic-ask").replaceChildren(el("div", { className: "card u-col u-gap-sm" },
+    el("p", { className: "subhead", textContent: q.text }),
+    el("div", { className: "u-row u-gap-sm u-align-center" }, ...[input, ok, cancel].filter(Boolean))));
+  (input ?? ok).focus();
+}
+
 Events.On("classic:done", (ev) => {
-  log(ev.data ? `Ошибка: ${ev.data}` : "Готово.");
+  const { code, error } = ev.data;
   running = false;
   renderRun();
+  if (questions[code]) return ask(questions[code]);
+  log(code ? `Ошибка: ${error}` : "Готово.");
 });
 
-$("classic-run").onclick = async () => {
+async function run(more = []) {
+  extra = more;
+  $("classic-ask").hidden = true;
   try {
     running = true;
     renderRun();
-    await call("Run", argv(current()));
+    await call("Run", argv(current(), extra));
   } catch (err) {
     running = false;
     renderRun();
     log(err.message ?? String(err));
   }
-};
+}
+
+$("classic-run").onclick = () => run();
 $("classic-stop").onclick = () => call("Stop");
 $("classic-answer").onkeydown = async (e) => {
   if (e.key !== "Enter") return;

@@ -34,11 +34,7 @@ posting = 'публикую в {{.channel}}, комментарии в {{.chat}}
 # Closing line of a successful publish (reportDone): the wall-clock time the
 # export took, rounded to whole seconds.
 done = 'готово за {{.duration}}'
-# Prompt for the bot token on the first run without one; it is saved after.
-token_prompt = "Токен бота (от @BotFather): "
-# Error when that prompt got no answer.
-no_token = "нет токена бота"
-# Note once the token is saved, so that it is not asked for again.
+# Note once a --token is saved, so that it need not be given again.
 token_saved = "токен сохранён в {{.file}}"
 
 

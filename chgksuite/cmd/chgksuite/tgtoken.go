@@ -1,6 +1,8 @@
 package main
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,8 +13,12 @@ import (
 
 // The bot tokens live where chgksuite keeps them, in ~/.chgksuite/telegram.toml,
 // so the two tools share them: bot_token at the top for the default account,
-// and a [bot_tokens] table for the others --tgaccount names. A run without one
-// asks for it once and saves it there.
+// and a [bot_tokens] table for the others --tgaccount names. The CLI never asks
+// for one, since agents run it unattended: a --token for an account with none
+// saved is saved, and a run with no token at all fails with errNoToken, which
+// chgksuite-app answers by asking and running again with --token.
+
+var errNoToken = errors.New("no bot token: pass --token, which is saved for next time, or set CHGKSUITE_TG_TOKEN")
 
 const (
 	defaultAccount = "my_account"
@@ -20,13 +26,10 @@ const (
 	tokensTable    = "[bot_tokens]"
 )
 
-// botToken is --token, then $CHGKSUITE_TG_TOKEN, then the account's saved one,
-// and failing those it asks.
+// botToken is --token, then $CHGKSUITE_TG_TOKEN, then the account's saved one.
 func botToken(flag, account string) (string, error) {
-	if t := strings.TrimSpace(flag); t != "" {
-		return t, nil
-	}
-	if t := strings.TrimSpace(os.Getenv("CHGKSUITE_TG_TOKEN")); t != "" {
+	given := strings.TrimSpace(flag)
+	if t := strings.TrimSpace(os.Getenv("CHGKSUITE_TG_TOKEN")); given == "" && t != "" {
 		return t, nil
 	}
 	home, err := os.UserHomeDir()
@@ -56,19 +59,17 @@ func botToken(flag, account string) (string, error) {
 		}
 		if k, v, ok := strings.Cut(line, "="); in && ok && unquote(strings.TrimSpace(k)) == key {
 			if t := unquote(strings.TrimSpace(v)); t != "" {
-				return t, nil
+				return cmp.Or(given, t), nil
 			}
 		}
 	}
 	if at < 0 && in {
 		at = len(lines)
 	}
-	s := chgkstrings.Default
-	t, err := prompt(s.Chgkcli.Telegram.TokenPrompt())
-	if err != nil || t == "" {
-		return "", fmt.Errorf("%s", s.Chgkcli.Telegram.NoToken())
+	if given == "" {
+		return "", errNoToken
 	}
-	entry := fmt.Sprintf("%s = %q", tomlKey(key), t)
+	entry := fmt.Sprintf("%s = %q", tomlKey(key), given)
 	if at < 0 {
 		if len(lines) > 0 {
 			lines = append(lines, "")
@@ -86,8 +87,8 @@ func botToken(flag, account string) (string, error) {
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		return "", err
 	}
-	reportNote("%s", s.Chgkcli.Telegram.TokenSaved(path))
-	return t, nil
+	reportNote("%s", chgkstrings.Default.Chgkcli.Telegram.TokenSaved(path))
+	return given, nil
 }
 
 // tomlKey quotes an account name that a bare TOML key cannot spell.
