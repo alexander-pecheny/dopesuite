@@ -236,6 +236,7 @@ var advanced = map[string]bool{
 	"smaller_source_and_author":    true,
 	"stop_if_no_stats":             true,
 	"template":                     true,
+	"token":                        true,
 	"tikz_mm":                      true,
 	"tour_numbers_as_words":        true,
 	"typography_accents":           true,

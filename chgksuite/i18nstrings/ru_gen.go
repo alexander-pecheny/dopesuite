@@ -122,11 +122,14 @@ var RU = Strings{
 			ReplaceNoBreakHyphensFlag: func() string { return "make the hyphen of а short word non-breaking: on|off" },
 		},
 		Telegram: ChgkcliTelegramStrings{
-			Done: func(duration string) string { return fmt.Sprintf("готово за %s", duration) },
+			Done:    func(duration string) string { return fmt.Sprintf("готово за %s", duration) },
+			NoToken: func() string { return "нет токена бота" },
 			Posting: func(channel string, chat string) string {
 				return fmt.Sprintf("публикую в %s, комментарии в %s", channel, chat)
 			},
 			StopIfNoStatsFlag: func() string { return "refuse to publish a package whose questions carry no «Взятия:»" },
+			TokenPrompt:       func() string { return "Токен бота (от @BotFather): " },
+			TokenSaved:        func(file string) string { return fmt.Sprintf("токен сохранён в %s", file) },
 		},
 	},
 	Chgkimport: ChgkimportStrings{
@@ -255,14 +258,14 @@ var RU = Strings{
 		},
 		Inputs: CliformInputsStrings{
 			BoardUrl:       func() string { return "Ссылка на доску" },
-			DocxPackets:    func() string { return "Файлы с пакетом" },
+			DocxPackets:    func() string { return "Файл с пакетом" },
 			DownloadFolder: func() string { return "Папка для скачивания" },
 			Fraction:       func() string { return "Доля ширины A4" },
 			HandoutFile:    func() string { return "Файл с раздатками" },
 			HandoutsFolder: func() string { return "Папка с раздатками" },
 			HtmlFile:       func() string { return "HTML-файл для конвертации" },
 			Packet:         func() string { return "4s-файл" },
-			Packets:        func() string { return "4s-файлы" },
+			Packets:        func() string { return "4s-файл" },
 			ServiceUrl:     func() string { return "Адрес сервиса доски (пусто — Трелло)" },
 			UploadPackets:  func() string { return "4s-файлы для загрузки" },
 		},

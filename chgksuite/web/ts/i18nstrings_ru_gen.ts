@@ -101,8 +101,11 @@ export const RU: Strings = {
     },
     telegram: {
       done: (duration: string) => `готово за ${duration}`,
+      noToken: () => "нет токена бота",
       posting: (channel: string, chat: string) => `публикую в ${channel}, комментарии в ${chat}`,
       stopIfNoStatsFlag: () => "refuse to publish a package whose questions carry no «Взятия:»",
+      tokenPrompt: () => "Токен бота (от @BotFather): ",
+      tokenSaved: (file: string) => `токен сохранён в ${file}`,
     },
   },
   chgkimport: {
@@ -215,14 +218,14 @@ export const RU: Strings = {
     },
     inputs: {
       boardUrl: () => "Ссылка на доску",
-      docxPackets: () => "Файлы с пакетом",
+      docxPackets: () => "Файл с пакетом",
       downloadFolder: () => "Папка для скачивания",
       fraction: () => "Доля ширины A4",
       handoutFile: () => "Файл с раздатками",
       handoutsFolder: () => "Папка с раздатками",
       htmlFile: () => "HTML-файл для конвертации",
       packet: () => "4s-файл",
-      packets: () => "4s-файлы",
+      packets: () => "4s-файл",
       serviceUrl: () => "Адрес сервиса доски (пусто — Трелло)",
       uploadPackets: () => "4s-файлы для загрузки",
     },

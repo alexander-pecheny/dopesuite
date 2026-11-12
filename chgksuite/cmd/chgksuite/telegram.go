@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
@@ -27,7 +26,7 @@ func composeTelegram(args []string) error {
 	commentFirst := commentFirstFlag(fs)
 	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the packet")
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
-	token := fs.String("token", "", "bot token; defaults to $CHGKSUITE_TG_TOKEN")
+	token := fs.String("token", "", "bot token; empty is $CHGKSUITE_TG_TOKEN or the one saved in ~/.chgksuite/telegram.toml, asked for and saved on the first run")
 	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", s.Chgkcli.Telegram.StopIfNoStatsFlag())
 	language := languageFlag(fs)
 	config := configFlag(fs)
@@ -94,14 +93,11 @@ func composeTelegram(args []string) error {
 		return tg.Export(ctx, tg.NewDryRunPoster(), req)
 	}
 
-	botToken := strings.TrimSpace(*token)
-	if botToken == "" {
-		botToken = strings.TrimSpace(os.Getenv("CHGKSUITE_TG_TOKEN"))
+	tok, err := botToken(*token)
+	if err != nil {
+		return err
 	}
-	if botToken == "" {
-		return fmt.Errorf("no bot token: pass --token or set CHGKSUITE_TG_TOKEN")
-	}
-	bot := tg.NewBot(botToken)
+	bot := tg.NewBot(tok)
 	stop, err := bot.Start(ctx)
 	if err != nil {
 		return err

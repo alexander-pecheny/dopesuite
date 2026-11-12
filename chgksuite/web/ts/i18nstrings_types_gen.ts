@@ -98,8 +98,11 @@ export type Strings = {
     };
     telegram: {
       done: (duration: string) => string;
+      noToken: () => string;
       posting: (channel: string, chat: string) => string;
       stopIfNoStatsFlag: () => string;
+      tokenPrompt: () => string;
+      tokenSaved: (file: string) => string;
     };
   };
   chgkimport: {

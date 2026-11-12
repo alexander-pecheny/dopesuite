@@ -4,8 +4,8 @@
 # words; the flags only the Go CLI has are captioned in the same manner.
 
 [inputs]
-docx_packets = "Файлы с пакетом"
-packets = "4s-файлы"
+docx_packets = "Файл с пакетом"
+packets = "4s-файл"
 packet = "4s-файл"
 handout_file = "Файл с раздатками"
 handouts_folder = "Папка с раздатками"

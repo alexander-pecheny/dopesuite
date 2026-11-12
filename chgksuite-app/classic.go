@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,12 +23,8 @@ const (
 	doneEvent = "classic:done"
 )
 
-// The CLI may print a long line (a whole question as JSON), so the scanner
-// may grow its buffer well past bufio's default.
-const (
-	initialLineBuf = 64 << 10
-	maxLineBytes   = 4 << 20
-)
+// readBuf is how much of the CLI's output is read at a time.
+const readBuf = 64 << 10
 
 // cliName is the CLI the app ships beside its own executable. It cannot be
 // plain chgksuite, which is the app's own name.
@@ -118,11 +114,30 @@ func (c *Classic) Run(args []string) error {
 	return nil
 }
 
+// stream sends the output a line at a time. A read that leaves a line
+// unfinished means the CLI has stopped to wait, as after a prompt, so that
+// part goes out too.
 func (c *Classic) stream(cmd *exec.Cmd, read *os.File) {
-	scanner := bufio.NewScanner(read)
-	scanner.Buffer(make([]byte, 0, initialLineBuf), maxLineBytes)
-	for scanner.Scan() {
-		c.emit(lineEvent, scanner.Text())
+	buf := make([]byte, readBuf)
+	var pending []byte
+	for {
+		n, err := read.Read(buf)
+		pending = append(pending, buf[:n]...)
+		for {
+			i := bytes.IndexByte(pending, '\n')
+			if i < 0 {
+				break
+			}
+			c.emit(lineEvent, string(pending[:i]))
+			pending = pending[i+1:]
+		}
+		if len(pending) > 0 && (n < len(buf) || err != nil) {
+			c.emit(lineEvent, string(pending))
+			pending = nil
+		}
+		if err != nil {
+			break
+		}
 	}
 	err := cmd.Wait()
 	read.Close()
