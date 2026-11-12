@@ -112,7 +112,6 @@ function renderRun() {
   const spec = current();
   $("classic-run").disabled = running || !spec || !ready(spec);
   $("classic-stop").hidden = !running;
-  if (!running) $("classic-answer").hidden = true;
 }
 
 function render() {
@@ -149,13 +148,14 @@ function log(text) {
 }
 
 Events.On("classic:line", (ev) => log(ev.data));
-// Only a prompt the command waits at gets a field to answer in.
-Events.On("classic:prompt", (ev) => {
+// A prompt the command waits at is answered in a modal; cancelling it stops
+// the command, which would otherwise wait for good. What is typed may be a
+// passphrase, so it stays out of the log.
+Events.On("classic:prompt", async (ev) => {
   log(ev.data);
-  const a = $("classic-answer");
-  a.placeholder = ev.data.trim();
-  a.hidden = false;
-  a.focus();
+  const answer = await modal({ title: ev.data.trim(), ok: "Ответить", input: true, secret: /passphrase|token/i.test(ev.data) });
+  if (answer === null) call("Stop");
+  else call("Send", answer);
 });
 // The codes `compose telegram` stops on for want of an answer (exitNoStats and
 // exitNoToken in the CLI's main.go). The CLI never asks, since agents run it
@@ -168,23 +168,30 @@ const questions = {
 
 let extra = [];
 
-function ask(q) {
-  const input = q.secret ? el("input", { type: "password", autocomplete: "off", className: "input u-grow" }) : null;
-  const ok = el("button", { type: "button", className: "btn btn-primary", textContent: q.ok });
-  const cancel = el("button", { type: "button", className: "btn", textContent: "Отмена" });
-  const close = () => { $("classic-ask").hidden = true; };
-  ok.onclick = () => {
-    if (input && !input.value.trim()) return input.focus();
-    close();
-    run(extra.concat(q.extra(input?.value.trim())));
-  };
-  cancel.onclick = close;
-  if (input) input.onkeydown = (e) => { if (e.key === "Enter") ok.click(); };
-  $("classic-ask").hidden = false;
-  $("classic-ask").replaceChildren(el("div", { className: "card u-col u-gap-sm" },
-    el("p", { className: "subhead", textContent: q.text }),
-    el("div", { className: "u-row u-gap-sm u-align-center" }, ...[input, ok, cancel].filter(Boolean))));
-  (input ?? ok).focus();
+// modal asks one thing in the kit's dialog: a question, and a field when an
+// answer is to be typed (secret hides it). It resolves to the answer, "" for a
+// plain yes, or null when cancelled.
+function modal({ title, ok, input = false, secret = false }) {
+  return new Promise((resolve) => {
+    const dialog = el("dialog", { className: "modal-dialog" });
+    const field = input ? el("input", { type: secret ? "password" : "text", autocomplete: "off", className: "input", required: true }) : null;
+    const cancel = el("button", { type: "button", className: "btn", textContent: "Отмена" });
+    const submit = el("button", { type: "submit", className: "btn btn-primary", textContent: ok });
+    const form = el("form", { className: "u-col u-gap-md", method: "dialog" },
+      el("h2", { textContent: title }), ...(field ? [field] : []), el("div", { className: "modal-actions" }, cancel, submit));
+    let answer = null;
+    cancel.onclick = () => dialog.close();
+    form.onsubmit = () => { answer = field ? field.value.trim() : ""; };
+    dialog.addEventListener("close", () => { dialog.remove(); resolve(answer); }, { once: true });
+    dialog.append(form);
+    document.body.append(dialog);
+    dialog.showModal();
+  });
+}
+
+async function ask(q) {
+  const answer = await modal({ title: q.text, ok: q.ok, input: !!q.secret, secret: q.secret });
+  if (answer !== null) run(extra.concat(q.extra(answer)));
 }
 
 Events.On("classic:done", (ev) => {
@@ -197,7 +204,6 @@ Events.On("classic:done", (ev) => {
 
 async function run(more = []) {
   extra = more;
-  $("classic-ask").hidden = true;
   try {
     running = true;
     renderRun();
@@ -211,14 +217,6 @@ async function run(more = []) {
 
 $("classic-run").onclick = () => run();
 $("classic-stop").onclick = () => call("Stop");
-$("classic-answer").onkeydown = async (e) => {
-  if (e.key !== "Enter") return;
-  // What is typed may be a passphrase, so it stays out of the log.
-  const a = $("classic-answer");
-  await call("Send", a.value);
-  a.value = "";
-  a.hidden = true;
-};
 
 // The CLI speaks English, and the Russian names of its flags and inputs are
 // the app's own (captions.json, which classic_test.go holds to the CLI).
