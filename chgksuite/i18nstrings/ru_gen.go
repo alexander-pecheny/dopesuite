@@ -244,6 +244,7 @@ var RU = Strings{
 			StopIfNoStats:          func() string { return "Не публиковать пакет без «Взятий»" },
 			TeamNamingThreshold:    func() string { return "Граница вывода названий команд" },
 			Template:               func() string { return "Файл-образец" },
+			Tgaccount:              func() string { return "Аккаунт для постинга" },
 			Tgchannel:              func() string { return "Канал, в который постим (@username, ссылка или ID)" },
 			TikzMm:                 func() string { return "Ширина tikz_mm" },
 			Token:                  func() string { return "Токен бота" },

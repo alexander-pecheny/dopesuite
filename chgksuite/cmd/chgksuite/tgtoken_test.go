@@ -6,33 +6,45 @@ import (
 	"testing"
 )
 
-func TestBotTokenIsAskedForOnceAndSaved(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("CHGKSUITE_TG_TOKEN", "")
-	path := filepath.Join(home, ".chgksuite", "telegram.toml")
-	os.MkdirAll(filepath.Dir(path), 0o700)
-	os.WriteFile(path, []byte("[bot_tokens]\nother = \"x\"\n"), 0o600)
-
+// answer puts text on stdin for the prompt to read.
+func answer(t *testing.T, text string) {
 	read, write, _ := os.Pipe()
-	write.WriteString("123:abc\n")
+	write.WriteString(text)
 	write.Close()
 	stdin := os.Stdin
 	os.Stdin = read
-	defer func() { os.Stdin = stdin }()
+	t.Cleanup(func() { os.Stdin = stdin })
+}
 
-	if got, err := botToken(""); err != nil || got != "123:abc" {
-		t.Fatalf("asked: %q, %v", got, err)
-	}
-	saved, _ := os.ReadFile(path)
-	if want := "bot_token = \"123:abc\"\n[bot_tokens]\nother = \"x\"\n"; string(saved) != want {
-		t.Fatalf("saved %q, want %q", saved, want)
-	}
-	// Nothing is left on stdin, so a second ask would fail.
-	if got, err := botToken(""); err != nil || got != "123:abc" {
-		t.Fatalf("saved: %q, %v", got, err)
-	}
-	if got, _ := botToken("flag"); got != "flag" {
-		t.Fatalf("--token: %q", got)
+// The file is chgksuite's own telegram.toml, so what is saved has to read back
+// in Python's layout: bot_token at the top, the other accounts in [bot_tokens].
+func TestBotTokenIsAskedForOnceAndSaved(t *testing.T) {
+	for _, c := range []struct{ name, before, account, after string }{
+		{"no file", "", defaultAccount, "bot_token = \"1:a\"\n"},
+		{"above a table", "[bot_tokens]\nother = \"x\"\n", defaultAccount, "bot_token = \"1:a\"\n[bot_tokens]\nother = \"x\"\n"},
+		{"into the table", "bot_token = \"0:z\"\n\n[bot_tokens]\nother = \"x\"\n", "test", "bot_token = \"0:z\"\n\n[bot_tokens]\nother = \"x\"\ntest = \"1:a\"\n"},
+		{"a new table", "bot_token = \"0:z\"\n", "test", "bot_token = \"0:z\"\n\n[bot_tokens]\ntest = \"1:a\"\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("CHGKSUITE_TG_TOKEN", "")
+			path := filepath.Join(home, ".chgksuite", "telegram.toml")
+			if c.before != "" {
+				os.MkdirAll(filepath.Dir(path), 0o700)
+				os.WriteFile(path, []byte(c.before), 0o600)
+			}
+			answer(t, "1:a\n")
+			if got, err := botToken("", c.account); err != nil || got != "1:a" {
+				t.Fatalf("asked: %q, %v", got, err)
+			}
+			if saved, _ := os.ReadFile(path); string(saved) != c.after {
+				t.Fatalf("saved %q, want %q", saved, c.after)
+			}
+			// stdin is spent, so this one must come from the file.
+			if got, err := botToken("", c.account); err != nil || got != "1:a" {
+				t.Fatalf("read back: %q, %v", got, err)
+			}
+		})
 	}
 }

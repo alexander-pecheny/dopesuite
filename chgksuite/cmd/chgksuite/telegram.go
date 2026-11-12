@@ -26,6 +26,7 @@ func composeTelegram(args []string) error {
 	commentFirst := commentFirstFlag(fs)
 	addPolls := fs.Bool("add_polls", false, "post a poll after each question, tour and the packet")
 	pollConfig := fs.String("poll_config", "", "poll config TOML (required with --add_polls)")
+	account := fs.String("tgaccount", override("tgaccount", defaultAccount), "which of the bot tokens saved in ~/.chgksuite/telegram.toml to post with")
 	token := fs.String("token", "", "bot token; empty is $CHGKSUITE_TG_TOKEN or the one saved in ~/.chgksuite/telegram.toml, asked for and saved on the first run")
 	stopIfNoStats := fs.Bool("stop_if_no_stats", setting("stop_if_no_stats") == "true", s.Chgkcli.Telegram.StopIfNoStatsFlag())
 	language := languageFlag(fs)
@@ -93,7 +94,7 @@ func composeTelegram(args []string) error {
 		return tg.Export(ctx, tg.NewDryRunPoster(), req)
 	}
 
-	tok, err := botToken(*token)
+	tok, err := botToken(*token, *account)
 	if err != nil {
 		return err
 	}

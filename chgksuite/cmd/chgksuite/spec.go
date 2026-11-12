@@ -11,6 +11,7 @@ import (
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/i18n"
 	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/tg"
 )
 
 // `chgksuite spec` prints, as JSON, every command this tool has: what it takes,
@@ -83,6 +84,9 @@ type flagSpec struct {
 	Caption  string   `json:"caption"`
 	Choices  []string `json:"choices,omitempty"`
 	Path     string   `json:"path,omitempty"` // "file" or "folder", for the ones that name one
+	// Suggestions are values used before, which the form offers without
+	// limiting the flag to them.
+	Suggestions []string `json:"suggestions,omitempty"`
 }
 
 // input is a positional argument, or the run of them a command ends with.
@@ -236,6 +240,7 @@ var advanced = map[string]bool{
 	"smaller_source_and_author":    true,
 	"stop_if_no_stats":             true,
 	"template":                     true,
+	"tgaccount":                    true,
 	"token":                        true,
 	"tikz_mm":                      true,
 	"tour_numbers_as_words":        true,
@@ -296,19 +301,21 @@ func flagsOf(verb string, run func([]string) error) ([]flagSpec, error) {
 		return nil, fmt.Errorf("stopped at %v rather than at its flags", err)
 	}
 	caption := captions()
+	suggestions := map[string][]string{"tgchannel": tg.SavedChannels()}
 	out := make([]flagSpec, 0, len(set.order))
 	for _, name := range set.order {
 		f := set.Lookup(name)
 		b, ok := f.Value.(interface{ IsBoolFlag() bool })
 		out = append(out, flagSpec{
-			Name:     f.Name,
-			Usage:    f.Usage,
-			Default:  f.DefValue,
-			Caption:  caption[f.Name],
-			Bool:     ok && b.IsBoolFlag(),
-			Choices:  choicesOf(f),
-			Path:     paths[f.Name],
-			Advanced: isAdvanced(verb, f.Name),
+			Name:        f.Name,
+			Usage:       f.Usage,
+			Default:     f.DefValue,
+			Caption:     caption[f.Name],
+			Bool:        ok && b.IsBoolFlag(),
+			Choices:     choicesOf(f),
+			Path:        paths[f.Name],
+			Suggestions: suggestions[f.Name],
+			Advanced:    isAdvanced(verb, f.Name),
 		})
 	}
 	return out, nil

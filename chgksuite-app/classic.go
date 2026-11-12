@@ -34,10 +34,12 @@ const cliName = "chgksuite-cli"
 // CLI, drawn from what `chgksuite-cli spec` says about its commands. The CLI
 // runs as a subprocess, so Stop can kill it and it can ask for input.
 type Classic struct {
-	cli     string
-	typst   string
-	window  *application.WebviewWindow
-	lastDir string
+	cli    string
+	typst  string
+	window *application.WebviewWindow
+	// lastDir is where a dialog opens: the folder of the last file picked,
+	// kept in chgksuite's own lastdir file, as its window did.
+	lastDir, lastDirFile string
 
 	mu    sync.Mutex
 	proc  *exec.Cmd
@@ -45,7 +47,14 @@ type Classic struct {
 }
 
 func newClassic(typst string) *Classic {
-	return &Classic{cli: findCLI(), typst: typst}
+	c := &Classic{cli: findCLI(), typst: typst}
+	if home, err := os.UserHomeDir(); err == nil {
+		c.lastDirFile = filepath.Join(home, ".chgksuite", "lastdir")
+		if b, err := os.ReadFile(c.lastDirFile); err == nil {
+			c.lastDir = strings.TrimSpace(string(b))
+		}
+	}
+	return c
 }
 
 // findCLI is $CHGKSUITE_CLI, the CLI beside this executable, or the one on
@@ -196,7 +205,7 @@ func (c *Classic) PickFiles(exts []string, multiple bool) ([]string, error) {
 		}
 	}
 	if len(paths) > 0 {
-		c.lastDir = filepath.Dir(paths[0])
+		c.remember(filepath.Dir(paths[0]))
 	}
 	return paths, err
 }
@@ -205,9 +214,16 @@ func (c *Classic) PickFiles(exts []string, multiple bool) ([]string, error) {
 func (c *Classic) PickFolder() (string, error) {
 	p, err := c.dialog().CanChooseDirectories(true).CanCreateDirectories(true).PromptForSingleSelection()
 	if p != "" {
-		c.lastDir = p
+		c.remember(p)
 	}
 	return p, err
+}
+
+func (c *Classic) remember(dir string) {
+	c.lastDir = dir
+	if c.lastDirFile != "" && os.MkdirAll(filepath.Dir(c.lastDirFile), 0o755) == nil {
+		_ = os.WriteFile(c.lastDirFile, []byte(dir), 0o644)
+	}
 }
 
 // dialog opens where the last one was left.

@@ -2,16 +2,20 @@ package tg
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+
+	_ "modernc.org/sqlite"
 )
 
 // A channel is given as a numeric id, a t.me link or an @username. getChat
@@ -74,7 +78,7 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef string) (Target, er
 		return t, fmt.Errorf("channel: %w", err)
 	}
 	if channelID == 0 {
-		channelID = loadResolveCache()[channelName]
+		channelID = savedID(channelName)
 	}
 	if channelID == 0 {
 		if channelID, err = lookUpUsername(ctx, bot, channelName); err != nil {
@@ -86,6 +90,7 @@ func ResolveTarget(ctx context.Context, bot *Bot, channelRef string) (Target, er
 	if err := verifyAccess(ctx, bot, t.ChannelID, s.Tg.Verify.WhatChannel(), s.Tg.Verify.OfChannel()); err != nil {
 		return t, err
 	}
+	saveID(channelName, t.ChannelID)
 	if t.ChatID, err = discussionGroup(ctx, bot, t.ChannelID); err != nil {
 		return t, err
 	}
@@ -159,24 +164,85 @@ func verifyAccess(ctx context.Context, bot *Bot, chatID, dative, genitive string
 	return corei18n.User(chgkstrings.Default.Tg.Verify.NotAdmin(genitive))
 }
 
-// resolveCachePath holds the ids that earlier versions saved for the names
-// people typed, which need not be usernames, so they are still read.
-func resolveCachePath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
+// savedID is the id chgksuite saved for a name typed before, which need not be
+// a username: a private channel's name is the only way to find it again. The
+// Python tool keeps them in ~/.chgksuite/resolve.db, which this shares, and
+// earlier Go versions in tg-resolve.json, which is still read.
+func savedID(name string) int64 {
+	dir := chgksuiteDir()
+	var cache map[string]int64
+	if data, err := os.ReadFile(filepath.Join(dir, "tg-resolve.json")); err == nil {
+		_ = json.Unmarshal(data, &cache)
 	}
-	return filepath.Join(home, ".chgksuite", "tg-resolve.json")
+	if id := cache[name]; id != 0 {
+		return id
+	}
+	db, err := openResolveDB(dir)
+	if err != nil {
+		return 0
+	}
+	defer db.Close()
+	var id int64
+	_ = db.QueryRow("SELECT id FROM resolve WHERE username = ? AND id > 0", name).Scan(&id)
+	return id
 }
 
-func loadResolveCache() map[string]int64 {
-	cache := map[string]int64{}
-	data, err := os.ReadFile(resolveCachePath())
-	if err != nil {
-		return cache
+// saveID remembers the channel a name resolved to, as chgksuite does: the id
+// without its -100.
+func saveID(name, channelID string) {
+	id, err := strconv.ParseInt(strings.TrimPrefix(channelID, "-100"), 10, 64)
+	if name == "" || err != nil {
+		return
 	}
-	_ = json.Unmarshal(data, &cache)
-	return cache
+	db, err := openResolveDB(chgksuiteDir())
+	if err != nil {
+		return
+	}
+	defer db.Close()
+	_, _ = db.Exec("INSERT OR REPLACE INTO resolve VALUES (?, ?)", name, id)
+}
+
+// SavedChannels are the names saved in resolve.db, which the app offers for
+// --tgchannel as chgksuite's own window did.
+func SavedChannels() []string {
+	db, err := openResolveDB(chgksuiteDir())
+	if err != nil {
+		return nil
+	}
+	defer db.Close()
+	rows, err := db.Query("SELECT username FROM resolve WHERE id > 0 ORDER BY username")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) == nil {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func openResolveDB(dir string) (*sql.DB, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", filepath.Join(dir, "resolve.db"))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec("CREATE TABLE IF NOT EXISTS resolve (username TEXT PRIMARY KEY, id INTEGER)"); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+func chgksuiteDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".chgksuite")
 }
 
 // DryRunTarget is where a dry run pretends to post: the channel id it was

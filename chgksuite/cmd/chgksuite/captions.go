@@ -94,6 +94,7 @@ func captions() map[string]string {
 		"stop_if_no_stats":             s.Cliform.Flags.StopIfNoStats(),
 		"team_naming_threshold":        s.Cliform.Flags.TeamNamingThreshold(),
 		"template":                     s.Cliform.Flags.Template(),
+		"tgaccount":                    s.Cliform.Flags.Tgaccount(),
 		"tgchannel":                    s.Cliform.Flags.Tgchannel(),
 		"tikz_mm":                      s.Cliform.Flags.TikzMm(),
 		"token":                        s.Cliform.Flags.Token(),

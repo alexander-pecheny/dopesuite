@@ -201,6 +201,7 @@ export type Strings = {
       stopIfNoStats: () => string;
       teamNamingThreshold: () => string;
       template: () => string;
+      tgaccount: () => string;
       tgchannel: () => string;
       tikzMm: () => string;
       token: () => string;

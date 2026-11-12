@@ -38,7 +38,10 @@ one per server the user has added.
   `chgksuite/i18nstrings/ru/cliform.toml`. The CLI ships beside the app as
   `chgksuite-cli` (plain `chgksuite` is the app itself) and runs as a
   subprocess, so Stop kills it, it can ask for input, and agents can run it on
-  their own. `$CHGKSUITE_CLI` points the tab at another build.
+  their own. `$CHGKSUITE_CLI` points the tab at another build. Like the
+  Python window, it shares `~/.chgksuite` with chgksuite: its dialogs open at
+  `lastdir`, and the CLI keeps the bot tokens in `telegram.toml` and the
+  channels it resolved in `resolve.db`, which `spec` offers as suggestions.
 - This module needs cgo and stays out of the root
   justfile's cross-module recipes. `just build` first builds xy's web dist.
 - It renders with the typst release (`typst_version` in the justfile, its

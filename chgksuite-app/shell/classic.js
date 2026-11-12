@@ -54,6 +54,11 @@ function flagRow(f) {
   const input = el("input", { value: v, type: secret ? "password" : "text", autocomplete: "off", placeholder: f.usage, title: f.usage });
   input.className = "input u-grow";
   input.oninput = () => setValue(f, input.value);
+  if (f.suggestions) {
+    const list = el("datalist", { id: "suggest-" + f.name }, ...f.suggestions.map((v) => el("option", { value: v })));
+    input.setAttribute("list", list.id);
+    return line(f.caption, input, list);
+  }
   if (!f.path) return line(f.caption, input);
   const pick = el("button", { type: "button", className: "btn", textContent: "Выбрать…" });
   pick.onclick = async () => {

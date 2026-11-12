@@ -204,6 +204,7 @@ export const RU: Strings = {
       stopIfNoStats: () => "Не публиковать пакет без «Взятий»",
       teamNamingThreshold: () => "Граница вывода названий команд",
       template: () => "Файл-образец",
+      tgaccount: () => "Аккаунт для постинга",
       tgchannel: () => "Канал, в который постим (@username, ссылка или ID)",
       tikzMm: () => "Ширина tikz_mm",
       token: () => "Токен бота",
