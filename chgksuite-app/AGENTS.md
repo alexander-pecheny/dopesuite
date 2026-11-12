@@ -1,9 +1,10 @@
 # chgksuite-app — agent notes
 
 This is chgksuite v2, the desktop app described in
-`../docs/chgksuite-v2-plan.md`. It is one Wails window with a tab strip. Each
-tab is a native `WebviewPanel` under the strip: the first tab is the Local xy
-(`xy/localserver`), and each server the user has added gets a tab of its own.
+`../docs/chgksuite-v2-plan.md`. It is one Wails window with a tab strip. The first
+tab, «Классический UI», is drawn by the strip's own page; each other tab is a
+native `WebviewPanel` under the strip: the Local xy (`xy/localserver`), then
+one per server the user has added.
 
 - The Wails fork lives at `code.pecheny.me/pecheny/wails`, branch
   `webview-panel`, and `go.mod` replaces upstream with it at a pseudo-version.
@@ -31,7 +32,14 @@ tab is a native `WebviewPanel` under the strip: the first tab is the Local xy
   traffic lights in it after every resize, since AppKit puts them back each
   time; its `stripHeight` must match the strip's height in
   `shell/index.html`.
-- Like `chgksuite-gui`, this module needs cgo and stays out of the root
+- The classic tab (`classic.go`, `shell/classic.js`) is the old chgksuite
+  window: a form over the CLI, drawn from `chgksuite-cli spec`, so a flag added
+  to the CLI appears there with nothing edited here. The captions are in
+  `chgksuite/i18nstrings/ru/cliform.toml`. The CLI ships beside the app as
+  `chgksuite-cli` (plain `chgksuite` is the app itself) and runs as a
+  subprocess, so Stop kills it, it can ask for input, and agents can run it on
+  their own. `$CHGKSUITE_CLI` points the tab at another build.
+- This module needs cgo and stays out of the root
   justfile's cross-module recipes. `just build` first builds xy's web dist.
 - It renders with the typst release (`typst_version` in the justfile, its
   sums in `typst.sha256`), which `just app` and `just exe` put beside the

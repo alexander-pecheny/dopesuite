@@ -37,7 +37,7 @@ the standalone tool's workflow (a shell, a filesystem, an interactive account)
 | `htmlshot/` | `handouter/html_handout.py` | done; a Chromium off the command line, not Playwright |
 | `typstinstall/` | `handouter/installer.py` | done; the same release into the same `~/.pecheny_utils` |
 | `cmd/chgksuite/` | `cli.py` | `parse`, `compose docx|pptx|telegram|markdown|redditmd|base|openquiz|add_stats` |
-| `../chgksuite-gui/` | `chgksuite_qt/`, `chgksuite_tk/` | a Fyne window, generated from `chgksuite spec` |
+| `../chgksuite-app/` (classic tab) | `chgksuite_qt/`, `chgksuite_tk/` | a form generated from `chgksuite spec` |
 
 ## Done
 

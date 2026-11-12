@@ -29,6 +29,10 @@
   .mac .strip { padding-left: 80px; }
   .room { flex: 1 1 auto; min-height: 0; overflow: auto; }
   .servers { max-width: 32rem; margin: 0 auto; padding: var(--space-6) var(--space-4); }
+  .classic { max-width: 64rem; margin: 0 auto; padding: var(--space-4); font-size: var(--text-sm); }
+  .classic .seg { flex-wrap: wrap; align-self: flex-start; }
+  .classic-caption { flex: none; width: 14rem; }
+  .classic-log { height: 16rem; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>
 </head>
 <body class="u-col">
@@ -38,6 +42,15 @@
   <button class="btn btn-primary btn-xs" id="update" type="button" hidden></button>
 </nav>
 <main class="room" id="room">
+  <section class="classic u-col u-gap-md" id="classic" hidden>
+    <div class="u-col u-gap-md" id="classic-form"></div>
+    <div class="u-row u-gap-sm">
+      <button class="btn btn-primary u-grow" id="classic-run" type="button">Запустить</button>
+      <button class="btn" id="classic-stop" type="button" hidden>Остановить</button>
+    </div>
+    <pre class="card classic-log" id="classic-log"></pre>
+    <input class="input" id="classic-answer" placeholder="Ответ на вопрос команды, затем Enter" autocomplete="off" hidden>
+  </section>
   <section class="servers u-col u-gap-lg" id="servers" hidden>
     <form class="u-col u-gap-sm" id="add">
       <label class="field">Адрес сервера xy
@@ -50,5 +63,6 @@
   </section>
 </main>
 <script type="module" src="shell.js"></script>
+<script type="module" src="classic.js"></script>
 </body>
 </html>

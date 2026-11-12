@@ -10,12 +10,13 @@ import (
 	"strings"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/i18n"
+	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 )
 
 // `chgksuite spec` prints, as JSON, every command this tool has: what it takes,
 // and every flag it declares with that flag's help, default and choices. It is
-// how chgksuite-gui draws its form, so a flag added here appears there without
-// anyone editing the GUI. It is not in the usage table because it is for that
+// how chgksuite-app draws its classic form, so a flag added here appears there
+// without anyone editing the app. It is not in the usage table because it is for that
 // program to read rather than for a person.
 //
 // Collecting the flags works because every command declares them and then calls
@@ -79,6 +80,7 @@ type flagSpec struct {
 	Default  string   `json:"default"`
 	Bool     bool     `json:"bool,omitempty"`
 	Advanced bool     `json:"advanced,omitempty"`
+	Caption  string   `json:"caption"`
 	Choices  []string `json:"choices,omitempty"`
 	Path     string   `json:"path,omitempty"` // "file" or "folder", for the ones that name one
 }
@@ -86,7 +88,7 @@ type flagSpec struct {
 // input is a positional argument, or the run of them a command ends with.
 type input struct {
 	Kind     string   `json:"kind"` // file, files, folder, text or choice
-	Label    string   `json:"label"`
+	Caption  string   `json:"caption"`
 	Ext      []string `json:"ext,omitempty"`
 	Choices  []string `json:"choices,omitempty"`
 	Optional bool     `json:"optional,omitempty"`
@@ -108,10 +110,11 @@ const (
 )
 
 var (
+	strs       = chgkstrings.Default
 	packetExt  = []string{".4s", ".si4s", ".br4s", ".tr4s"}
-	packets    = []input{{Kind: kindFiles, Label: "packets", Ext: packetExt}}
-	onePacket  = []input{{Kind: kindFile, Label: "packet", Ext: packetExt}}
-	oneHandout = []input{{Kind: kindFile, Label: "handout file", Ext: []string{".hndt"}}}
+	packets    = []input{{Kind: kindFiles, Caption: strs.Cliform.Inputs.Packets(), Ext: packetExt}}
+	onePacket  = []input{{Kind: kindFile, Caption: strs.Cliform.Inputs.Packet(), Ext: packetExt}}
+	oneHandout = []input{{Kind: kindFile, Caption: strs.Cliform.Inputs.HandoutFile(), Ext: []string{".hndt"}}}
 )
 
 // runnables is every command that can be run, with what its positional
@@ -122,7 +125,7 @@ var runnables = []struct {
 	inputs []input
 	run    func([]string) error
 }{
-	{"parse", []input{{Kind: kindFiles, Label: "packets", Ext: []string{".docx", ".txt"}}}, parseCmd},
+	{"parse", []input{{Kind: kindFiles, Caption: strs.Cliform.Inputs.DocxPackets(), Ext: []string{".docx", ".txt"}}}, parseCmd},
 	{"compose docx", packets, composeDocx},
 	{"compose pdf", packets, composePDF},
 	{"compose pptx", packets, composePptx},
@@ -136,15 +139,15 @@ var runnables = []struct {
 	{"handouts generate", onePacket, handoutsGenerate},
 	{"handouts run", oneHandout, handoutsRun},
 	{"handouts split_fit", oneHandout, handoutsSplitFit},
-	{"handouts pack", []input{{Kind: kindFolder, Label: "folder of split-fitted PDFs", Optional: true}}, handoutsPack},
-	{"handouts create_html", []input{{Kind: kindChoice, Label: "share of an A4 sheet", Choices: []string{"1/6", "1/3", "1/2", "1"}}}, handoutsCreateHTML},
-	{"handouts html2img", []input{{Kind: kindFile, Label: "HTML file", Ext: []string{".html"}}}, handoutsHTML2Img},
+	{"handouts pack", []input{{Kind: kindFolder, Caption: strs.Cliform.Inputs.HandoutsFolder(), Optional: true}}, handoutsPack},
+	{"handouts create_html", []input{{Kind: kindChoice, Caption: strs.Cliform.Inputs.Fraction(), Choices: []string{"1/6", "1/3", "1/2", "1"}}}, handoutsCreateHTML},
+	{"handouts html2img", []input{{Kind: kindFile, Caption: strs.Cliform.Inputs.HtmlFile(), Ext: []string{".html"}}}, handoutsHTML2Img},
 	{"handouts install", nil, handoutsInstall},
-	{"board token", []input{{Kind: kindText, Label: "service URL; empty is trello", Optional: true}}, boardToken},
-	{"board download", []input{{Kind: kindFolder, Label: "folder to download into"}}, boardDownload},
+	{"board token", []input{{Kind: kindText, Caption: strs.Cliform.Inputs.ServiceUrl(), Optional: true}}, boardToken},
+	{"board download", []input{{Kind: kindFolder, Caption: strs.Cliform.Inputs.DownloadFolder()}}, boardDownload},
 	{"board upload", []input{
-		{Kind: kindText, Label: "board URL"},
-		{Kind: kindFiles, Label: "packets to upload", Ext: packetExt},
+		{Kind: kindText, Caption: strs.Cliform.Inputs.BoardUrl()},
+		{Kind: kindFiles, Caption: strs.Cliform.Inputs.UploadPackets(), Ext: packetExt},
 	}, boardUpload},
 }
 
@@ -291,6 +294,7 @@ func flagsOf(verb string, run func([]string) error) ([]flagSpec, error) {
 	if err := run(nil); !errors.Is(err, errFlagsCollected) {
 		return nil, fmt.Errorf("stopped at %v rather than at its flags", err)
 	}
+	caption := captions()
 	out := make([]flagSpec, 0, len(set.order))
 	for _, name := range set.order {
 		f := set.Lookup(name)
@@ -299,6 +303,7 @@ func flagsOf(verb string, run func([]string) error) ([]flagSpec, error) {
 			Name:     f.Name,
 			Usage:    f.Usage,
 			Default:  f.DefValue,
+			Caption:  caption[f.Name],
 			Bool:     ok && b.IsBoolFlag(),
 			Choices:  choicesOf(f),
 			Path:     paths[f.Name],

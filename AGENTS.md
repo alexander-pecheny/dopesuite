@@ -26,12 +26,10 @@ qy/          «Вопрос года», the question-of-the-year contest at qy.p
              vote, the results and the CMS that holds every year's pages
 spliff/      shared expenses: who paid for whom, in any currency, and who owes
              whom. This is the only module whose UI is in English.
-chgksuite-gui/
-             a Fyne window over the chgksuite CLI, generated from the flags
-             that CLI declares (`chgksuite spec`)
 chgksuite-app/
-             chgksuite v2 (docs/chgksuite-v2-plan.md): a Wails window of tabs,
-             the first a local xy served in-process, the others xy servers
+             chgksuite v2 (docs/chgksuite-v2-plan.md): a Wails window of tabs:
+             a classic form over the chgksuite CLI, a local xy served
+             in-process, and xy servers
 ```
 
 - xy, dope, spliff and qy use the shared layers through `replace
@@ -41,10 +39,9 @@ chgksuite-app/
   keeps the modules as siblings, which is the layout those paths expect, so a
   build needs no extra setup. The kit and chgksuite import dopecore the same
   way. dopecore imports no other module of ours (`docs/adr/0004`).
-- `chgksuite-gui` and `chgksuite-app` are deliberately left out of the
-  cross-module recipes below. They need cgo and a desktop toolchain, and
-  neither server depends on them. Build and test each with its own `just
-  check`; `chgksuite-gui`'s also checks that it still matches the CLI it wraps.
+- `chgksuite-app` is deliberately left out of the cross-module recipes below.
+  It needs cgo and a desktop toolchain, and no server depends on it. Build and
+  test it with its own `just check`.
 - xy, dope, spliff and qy each have a `justfile` with `just dev`, `just test` and
   `just check`, and chgksuite has one with `just test` and `just check`.
   dopeuikit and dopecore have none: their recipes live in the root `justfile`,

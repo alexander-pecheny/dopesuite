@@ -3,13 +3,18 @@ import { Call } from "/wails/runtime.js";
 const call = (method, ...args) => Call.ByName(`main.Shell.${method}`, ...args);
 const $ = (id) => document.getElementById(id);
 
-// "" is the server list, which the strip's own page draws below it.
-let selected = "local";
+// The classic form and the server list are drawn by the strip's own page, below
+// it; every other tab is a panel. The last tab chosen is the one that opens.
+const pages = { classic: $("classic"), "": $("servers") };
+let selected = "classic";
+try { selected = localStorage.getItem("chgksuite-tab") ?? selected; } catch {}
 
 async function render() {
   const tabs = await call("Tabs");
+  const classic = { id: "classic", title: "Классический UI", url: "" };
   const servers = { id: "", title: "Добавить сервер xy…", url: "" };
-  $("tabs").replaceChildren(...[...tabs, servers].map((tab) => {
+  if (!(selected in pages) && !tabs.some((t) => t.id === selected)) selected = "classic";
+  $("tabs").replaceChildren(...[classic, ...tabs, servers].map((tab) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "seg-btn" + (tab.id === selected ? " active" : "");
@@ -31,12 +36,13 @@ async function render() {
     row.append(name, remove);
     return row;
   }));
-  $("servers").hidden = selected !== "";
+  for (const [id, page] of Object.entries(pages)) page.hidden = selected !== id;
 }
 
 async function select(id) {
   selected = id;
-  await call("Select", id);
+  try { localStorage.setItem("chgksuite-tab", id); } catch {}
+  await call("Select", id in pages ? "" : id);
   render();
 }
 

@@ -1,6 +1,7 @@
-// chgksuite is the desktop app: a window of tabs, each a native webview. The
-// Local tab is xy in local mode, served from this process with no port; every
-// other tab is an xy server the user has added.
+// chgksuite is the desktop app: a window of tabs. The classic tab is a form
+// over the chgksuite CLI, drawn by the strip's own page. The Local tab is xy in
+// local mode, served from this process with no port, and every other tab is an
+// xy server the user has added; each of those is a native webview.
 package main
 
 import (
@@ -37,6 +38,7 @@ func main() {
 		log.Fatal(err)
 	}
 	local.SetFilePicker(shell.pickFile)
+	classic := newClassic(typstBinary())
 
 	// The tab strip and the Wails runtime have paths of their own; everything
 	// else is the Local tab's xy. The fork refuses a panel's request for
@@ -49,7 +51,7 @@ func main() {
 	app := application.New(application.Options{
 		Name:     "chgksuite",
 		Assets:   application.AssetOptions{Handler: mux},
-		Services: []application.Service{application.NewService(shell)},
+		Services: []application.Service{application.NewService(shell), application.NewService(classic)},
 		Mac:      application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 	})
 	shell.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -60,6 +62,7 @@ func main() {
 		// The tab strip is the title bar, beside the traffic lights.
 		Mac: application.MacWindow{TitleBar: application.MacTitleBarHidden},
 	})
+	classic.window = shell.window
 	shell.updates = newUpdates(app, filepath.Join(dir, "update.json"))
 	centreTrafficLights(shell.window)
 	if err := app.Run(); err != nil {

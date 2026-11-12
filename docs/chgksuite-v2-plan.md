@@ -7,8 +7,8 @@ exporter of the Python tool as ported and checked against its output: every
 import (docx, txt, db.chgk.info, СИ, Тройка, zip) and every export (docx, pdf,
 pptx, telegram, markdown, redditmd, base, openquiz, lj, add_stats, handouts).
 The only things left out on purpose are the pandoc and mammoth docx engines.
-`chgksuite/cmd/chgksuite` runs all of it from the shell, and `chgksuite-gui` draws Fyne
-forms for it from `chgksuite spec`.
+`chgksuite/cmd/chgksuite` runs all of it from the shell, and the app's classic
+tab draws forms for it from `chgksuite spec`.
 
 So v2 is mostly an application problem, not a format problem. It needs a window,
 a local storage backend, and a way to reach the exporters from the UI.
@@ -99,8 +99,8 @@ These are small, because the seams already exist.
   through `chgkimport`, as xy's import does, and a whole folder of `.4s` files
   becomes a board.
 - **Export** works on one list, or on several lists merged, in every format.
-  The forms are generated from the same flag spec the CLI prints, as in
-  `chgksuite-gui`, but they are drawn in the webview and call the exporters in
+  The forms are generated from the same flag spec the CLI prints, as in the
+  classic tab, but they are drawn in the webview and call the exporters in
   process instead of running a subprocess. The last used values are saved as
   presets in the local database. A board can also be exported to a folder of
   `.4s` files.
@@ -108,8 +108,6 @@ These are small, because the seams already exist.
   out (`-tags nowasmtypst`). Its boards are plaintext on the user's own disk,
   so the wasm's reason to exist does not apply, and the binary is faster.
   html2img still needs a Chromium, as the CLI does.
-
-Once this covers what the Fyne window does, `chgksuite-gui` is retired.
 
 ## Automatic backups of server boards
 
@@ -148,7 +146,7 @@ imports, becomes `code.pecheny.me/pecheny/dopesuite/dopecore`, so that `go get`
 can resolve both. The forge answers `?go-get=1` only for the repo root, so a
 Caddy rule answers it for every path under `/pecheny/dopesuite/`. Releases are
 tagged `chgksuite/vX.Y.Z` and `dopecore/vX.Y.Z`. The app is a third module,
-`chgksuite-app/`, kept out of the cross-module recipes like `chgksuite-gui`.
+`chgksuite-app/`, kept out of the cross-module recipes because it needs cgo.
 
 ## Steps
 

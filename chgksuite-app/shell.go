@@ -29,7 +29,7 @@ type Tab struct {
 	URL   string `json:"url"`
 }
 
-var localTab = Tab{ID: localID, Title: "Локальный режим", URL: "/"}
+var localTab = Tab{ID: localID, Title: "Локальные доски", URL: "/"}
 
 // Shell is the service the tab strip calls. It owns the panels, so the strip
 // names a tab and never hands a URL to a panel itself.

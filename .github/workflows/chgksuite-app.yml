@@ -130,9 +130,9 @@ jobs:
 
           for arch in arm64 amd64; do
             app=chgksuite-app/build/$arch/chgksuite.app
-            # The bundled typst is signed first: a bundle's signature covers its
-            # nested code, and notarisation wants each part on the hardened runtime.
-            for target in "$app/Contents/MacOS/typst" "$app"; do
+            # The bundled typst and CLI are signed first: a bundle's signature covers
+            # its nested code, and notarisation wants each part on the hardened runtime.
+            for target in "$app/Contents/MacOS/typst" "$app/Contents/MacOS/chgksuite-cli" "$app"; do
               codesign --force --options runtime --timestamp --keychain "$KEYCHAIN" \
                 --sign "Developer ID Application" "$target"
             done

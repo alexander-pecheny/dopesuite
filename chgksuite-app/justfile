@@ -9,9 +9,12 @@ export MACOSX_DEPLOYMENT_TARGET := "11.0"
 default:
     @just --list
 
+# The classic tab runs the chgksuite CLI, which ships beside the app as
+# chgksuite-cli, so that it can also be run on its own.
 build:
     cd ../xy && just build-web
     go build -o build/chgksuite .
+    go build -C ../chgksuite -o ../chgksuite-app/build/chgksuite-cli ./cmd/chgksuite
 
 run: build
     ./build/chgksuite
@@ -51,6 +54,7 @@ app arch=arch():
     mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" build/icon.iconset
     CGO_ENABLED=1 GOARCH=$goarch go build -trimpath -ldflags "{{ldflags}}" -o "$app/Contents/MacOS/chgksuite" .
     cp build/typst-$target/typst "$app/Contents/MacOS/"
+    CGO_ENABLED=0 GOARCH=$goarch go build -C ../chgksuite -trimpath -ldflags "-s -w" -o "$PWD/$app/Contents/MacOS/chgksuite-cli" ./cmd/chgksuite
     for s in 16 32 128 256 512; do
         sips -z $s $s icon-mac.png --out "build/icon.iconset/icon_${s}x${s}.png" >/dev/null
         sips -z $((s*2)) $((s*2)) icon-mac.png --out "build/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null
@@ -76,6 +80,7 @@ exe:
     rm -rf build/windows
     go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64
     GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "{{ldflags}} -H windowsgui" -o build/windows/chgksuite.exe .
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -C ../chgksuite -trimpath -ldflags "-s -w" -o ../chgksuite-app/build/windows/chgksuite-cli.exe ./cmd/chgksuite
     rm rsrc_windows_amd64.syso
     cp build/typst-x86_64-pc-windows-msvc/typst.exe ../LICENSE ../NOTICE build/windows/
     cp build/typst-x86_64-pc-windows-msvc/LICENSE build/windows/typst-LICENSE
@@ -89,6 +94,7 @@ linux:
     just typst {{linux_typst}}
     rm -rf build/linux
     CGO_ENABLED=1 go build -trimpath -ldflags "{{ldflags}}" -o build/linux/chgksuite .
+    CGO_ENABLED=0 go build -C ../chgksuite -trimpath -ldflags "-s -w" -o ../chgksuite-app/build/linux/chgksuite-cli ./cmd/chgksuite
     cp build/typst-{{linux_typst}}/typst ../LICENSE ../NOTICE build/linux/
     cp build/typst-{{linux_typst}}/LICENSE build/linux/typst-LICENSE
     cp build/typst-{{linux_typst}}/NOTICE build/linux/typst-NOTICE
