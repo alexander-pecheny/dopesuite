@@ -2950,9 +2950,32 @@ body:not(.embedded-match) .grid-match {
   line-height: var(--leading-tight);
 }
 
-.match-table .name-cell-wrap:has(> .team-flags-compact) {
+.name-cell-wrap:has(> .team-flags-compact) {
   --name-fade-on-wrap: none;
   --name-fade-on-text: "";
+}
+
+/* A results row with badges: the name over its city on the left, the badges
+   at the right end, centred on the two. A phone's column is too narrow to
+   give them a column of their own: there the name takes the whole width and
+   the badges, on one line, end the city's line. */
+.results-team .name-cell-wrap:has(> .team-flags-compact) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.results-team .name-cell-wrap:has(> .team-flags-compact) > .name-cell-text { grid-area: 1 / 1; }
+.results-team .name-cell-wrap:has(> .team-flags-compact) > .results-team-city { grid-area: 2 / 1; min-width: 0; }
+.results-team .name-cell-wrap:has(> .team-flags-compact) > .team-flags-compact { grid-area: 1 / 2 / 3 / 3; }
+
+@media (max-width: 760px) {
+  .results-team .name-cell-wrap:has(> .team-flags-compact) > .name-cell-text { grid-column: 1 / -1; }
+  .results-team .name-cell-wrap:has(> .team-flags-compact) > .team-flags-compact {
+    grid-area: 2 / 2;
+    flex-direction: row;
+    gap: var(--space-1);
+  }
 }
 
 .match-table .ek-team-cell .od-detailed-team-layout {

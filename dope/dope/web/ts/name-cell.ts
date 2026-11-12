@@ -71,9 +71,11 @@ export function nameCell(text: string, options: NameCellOptions = {}): HTMLEleme
   const name = nameNode(text, options.href || "", options.textClassName ? `${NAME_TEXT} ${options.textClassName}` : NAME_TEXT);
   name.tabIndex = 0;
   name.setAttribute("aria-label", options.ariaLabel ?? text);
-  wrap.appendChild(name);
 
-  const badges = options.layout ? null : teamFlagBadges(options.badges);
+  // The badges sit at the name's right end, two to a line in small type, and
+  // the name clips and fades before them: in a sheet's pill and in a results
+  // row alike.
+  const compact = compactFlagBadges(options.badges);
   if (options.layout) {
     const layout = document.createElement("span");
     layout.className = "od-detailed-team-layout";
@@ -83,23 +85,17 @@ export function nameCell(text: string, options: NameCellOptions = {}): HTMLEleme
       number.textContent = options.number.text;
       layout.appendChild(number);
     }
-    // The badges sit at the pill's right end, two to a line in small type,
-    // and the name clips and fades before them.
-    const compact = compactFlagBadges(options.badges);
+    wrap.appendChild(name);
     if (compact) wrap.appendChild(compact);
     layout.appendChild(wrap);
     cell.appendChild(layout);
   } else {
-    const city = options.city ? cityNode(options.city) : null;
-    if (badges && city) {
-      const line = document.createElement("span");
-      line.className = "u-row u-gap-xs u-align-center";
-      line.appendChild(badges);
-      line.appendChild(city);
-      wrap.appendChild(line);
-    } else if (badges || city) {
-      wrap.appendChild((badges || city)!);
-    }
+    // In a results row the city goes under the name. The stylesheet stands
+    // the badges beside the two, or, on a phone, at the end of the city's
+    // line, so the name keeps the column's whole width.
+    wrap.appendChild(name);
+    if (options.city) wrap.appendChild(cityNode(options.city));
+    if (compact) wrap.appendChild(compact);
     cell.appendChild(wrap);
   }
 
@@ -119,28 +115,13 @@ export function markNameControl(cell: HTMLElement, control: HTMLElement): void {
   control.setAttribute(NAME_CONTROL_ATTR, "");
 }
 
-// teamFlagBadges is a team's Flags after its name: small, quiet pills stating a
-// fact about the team. Null when it carries none, so a cell that has nothing to
-// say adds no node.
-export function teamFlagBadges(flags: readonly string[] | undefined): HTMLElement | null {
-  if (!flags || flags.length === 0) return null;
-  const wrap = document.createElement("span");
-  wrap.className = "u-row u-gap-xs u-align-center team-flags";
-  for (const flag of flags) {
-    const badge = document.createElement("span");
-    badge.className = "team-flag";
-    badge.textContent = flag;
-    wrap.appendChild(badge);
-  }
-  return wrap;
-}
-
 // FLAGS_PER_LINE is how many Flags share a line inside a sheet's name pill.
 const FLAGS_PER_LINE = 2;
 
-// compactFlagBadges is a team's Flags inside a sheet's name pill: small type,
-// no pills of their own, two to a line, each line flush right.
-function compactFlagBadges(flags: readonly string[] | undefined): HTMLElement | null {
+// compactFlagBadges is a team's Flags at the end of its name: small type, no
+// pills of their own, two to a line, each line flush right. Null when it
+// carries none, so a cell that has nothing to say adds no node.
+export function compactFlagBadges(flags: readonly string[] | undefined): HTMLElement | null {
   if (!flags || flags.length === 0) return null;
   const wrap = document.createElement("span");
   wrap.className = "team-flags team-flags-compact";

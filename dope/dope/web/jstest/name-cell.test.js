@@ -95,7 +95,7 @@ globalThis.document = {
     : tag === "select" ? new FakeSelect() : new FakeElement(tag),
 };
 
-const {nameCell, bindNameCells, markNameControl, teamFlagBadges} = await import("./dist/name-cell.js");
+const {nameCell, bindNameCells, markNameControl, compactFlagBadges} = await import("./dist/name-cell.js");
 
 function nextFrame() {
   const run = frames;
@@ -152,13 +152,14 @@ test("the detailed sheets set number and name side by side, the badges inside th
   assert.equal(popover.textContent, "7. Ктулху");
 });
 
-test("without a layout the city and the badges sit under the name, inside the wrap", () => {
-  const cell = nameCell("Ктулху", {city: "Москва", badges: ["Е"]});
+test("a results row has the name, then its city, then the badges, two to a line", () => {
+  const cell = nameCell("Ктулху", {city: "Москва", badges: ["СЧР", "Мол", "Студ"]});
   const [wrap] = cell.children;
-  const [name, line] = wrap.children;
-  assert.equal(name.className, "name-cell-text");
-  assert.deepEqual(line.children.map((c) => c.className), ["u-row u-gap-xs u-align-center team-flags", "results-team-city u-clip-fade"]);
-  assert.equal(teamFlagBadges([]), null, "no badges, no node");
+  assert.deepEqual(wrap.children.map((c) => c.className),
+    ["name-cell-text", "results-team-city u-clip-fade", "team-flags team-flags-compact"]);
+  const flags = wrap.children[2];
+  assert.deepEqual(flags.children.map((line) => line.children.map((f) => f.textContent)), [["СЧР", "Мол"], ["Студ"]]);
+  assert.equal(compactFlagBadges([]), null, "no badges, no node");
   assert.equal(cell.querySelector(".popover-inline").textContent, "Ктулху", "the city is not part of the name");
 });
 

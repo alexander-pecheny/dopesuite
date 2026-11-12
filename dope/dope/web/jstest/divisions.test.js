@@ -55,7 +55,7 @@ globalThis.Node = class {};
 
 const divisions = await import("./dist/divisions.js");
 const {resultsTeamCell} = await import("./dist/standings.js");
-const {teamFlagBadges} = await import("./dist/name-cell.js");
+const {compactFlagBadges} = await import("./dist/name-cell.js");
 
 const walk = (root, out = []) => {
   out.push(root);
@@ -109,13 +109,13 @@ test("the chip row is «Все» first, then one .match-tab per зачёт", () 
 });
 
 test("the badges hang off a team name; a team with no зачёт adds no node", () => {
-  assert.equal(teamFlagBadges(undefined), null);
-  assert.equal(teamFlagBadges([]), null);
-  const badges = teamFlagBadges(["Школ", "Е"]);
-  assert.deepEqual(badges.children.map((c) => [c.className, c.textContent]), [
+  assert.equal(compactFlagBadges(undefined), null);
+  assert.equal(compactFlagBadges([]), null);
+  const badges = compactFlagBadges(["Школ", "Е"]);
+  assert.deepEqual(badges.children.map((line) => line.children.map((c) => [c.className, c.textContent])), [[
     ["team-flag", "Школ"],
     ["team-flag", "Е"],
-  ]);
+  ]]);
 
   const cell = resultsTeamCell("Команда", {city: "Ереван", badges: ["Школ"]});
   const nodes = walk(cell);
