@@ -33,12 +33,15 @@ type Target struct {
 
 // exporter is one run of the export.
 type exporter struct {
-	f      *formatter
-	p      Poster
-	t      Target
-	polls  *PollConfig
-	opts   Options
-	buffer []string // headings and loose text, waiting for the next post
+	f     *formatter
+	p     Poster
+	t     Target
+	polls *PollConfig
+	opts  Options
+	// nth is the question being posted, counting from 1, of total.
+	nth, total int
+	posted     func(number string, nth, total int)
+	buffer     []string // headings and loose text, waiting for the next post
 
 	heading          string // the package's title, for the navigation post
 	section          bool   // the next post opens a section, so it gets a nav link
@@ -68,6 +71,9 @@ type Request struct {
 	// Polls, when set, adds a poll after each question, each tour and the
 	// package itself.
 	Polls *PollConfig
+	// Posted, when set, hears of each question once it is in the channel: its
+	// number, and its place among the package's questions.
+	Posted func(number string, nth, total int)
 }
 
 // Export posts a parsed package to a channel.
@@ -75,7 +81,12 @@ func Export(ctx context.Context, p Poster, r Request) error {
 	t, polls := r.Target, r.Polls
 	e := &exporter{
 		f: &formatter{opts: r.Options, images: r.Images, labels: i18n.LabelsForOrDefault(r.Options.Language, r.Options.LabelsFile)}, p: p, t: t, polls: polls,
-		opts: r.Options, qcount: 1, lastNumber: 1,
+		opts: r.Options, qcount: 1, lastNumber: 1, posted: r.Posted,
+	}
+	for _, el := range r.Doc {
+		if _, ok := el.Content.(*fsource.Question); ok && el.Type == "Question" {
+			e.total++
+		}
 	}
 	if polls != nil {
 		if err := p.Call(ctx, "setChatAvailableReactions", map[string]any{
@@ -162,6 +173,7 @@ func (e *exporter) question(ctx context.Context, q *fsource.Question) error {
 		e.qcount++
 	}
 	e.qcount++
+	e.nth++
 	n, err := strconv.Atoi(number)
 	e.lastNumber = 0
 	if err == nil {
@@ -179,6 +191,9 @@ func (e *exporter) question(ctx context.Context, q *fsource.Question) error {
 	}
 	if err := e.postGroup(ctx, html); err != nil {
 		return err
+	}
+	if e.posted != nil {
+		e.posted(number, e.nth, e.total)
 	}
 	return e.questionPoll(ctx, number)
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
@@ -54,6 +55,12 @@ func reportOutput(path string) {
 // reportNote is a line about what the command is doing rather than what it made.
 func reportNote(format string, a ...any) {
 	fmt.Println(paint(styleNote, fmt.Sprintf(format, a...)))
+}
+
+// reportProgress is a step of a long run, stamped with when it happened, so
+// whoever watches it can tell it is moving and how fast.
+func reportProgress(format string, a ...any) {
+	fmt.Println(paint(styleNote, time.Now().Format("[2006-01-02 15:04:05] ")+fmt.Sprintf(format, a...)))
 }
 
 // reportDone closes a run that had something to say about how it went.

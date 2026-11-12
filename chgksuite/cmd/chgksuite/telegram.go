@@ -90,6 +90,9 @@ func composeTelegram(args []string) error {
 
 	ctx := context.Background()
 	req := tg.Request{Doc: doc, Images: images, Options: opts, Polls: polls}
+	req.Posted = func(number string, nth, total int) {
+		reportProgress("posted question %s (%d of %d)", number, nth, total)
+	}
 	if *dryRun {
 		// The id given, so the links in the navigation post look like the ones a
 		// real run would write; placeholders otherwise.
@@ -117,11 +120,11 @@ func composeTelegram(args []string) error {
 		return err
 	}
 	req.Target = target
-	reportNote("%s", fmt.Sprintf("posting to %s, comments in %s", target.ChannelID, target.ChatID))
+	reportProgress("posting to %s, comments in %s", target.ChannelID, target.ChatID)
 	start := time.Now()
 	if err := tg.Export(ctx, poster, req); err != nil {
 		return err
 	}
-	reportDone("%s", fmt.Sprintf("done in %s", time.Since(start).Round(time.Second).String()))
+	reportProgress("done in %s", time.Since(start).Round(time.Second))
 	return nil
 }
