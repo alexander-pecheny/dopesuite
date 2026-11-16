@@ -270,8 +270,10 @@ function buildTab(tab: GameTab | undefined): HTMLElement {
   switch (tab?.kind) {
   case "stats":
     return buildStatsView();
-  case "block":
-    return buildCrosstable(tabStages(scheme.stages, tab));
+  case "block": {
+    const stages = tabStages(scheme.stages, tab);
+    return stages.some((stage) => stageKind(stage) === "swiss_classic") ? buildSwissBlock(stages) : buildCrosstable(stages);
+  }
   case "pods":
     return buildPodBoard(tabStages(scheme.stages, tab));
   default:
@@ -616,6 +618,35 @@ function buildCrosstable(stages: BrainSchemeStage[]): HTMLElement {
       }),
       standings: standingsByParticipant(page.festStage(stage.code || "")),
     })),
+  });
+}
+
+// buildSwissBlock is a Swiss Block's tab: its table beside its rounds, who
+// stands where and how each round got them there, read across one line.
+function buildSwissBlock(stages: BrainSchemeStage[]): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "u-row u-gap-lg u-align-start";
+  const rounds = stages.filter((stage) => stageKind(stage) !== "swiss_classic");
+  const codes = new Set(rounds.map((stage) => stage.code || ""));
+  const live = rounds.map((stage) => page.festStage(stage.code || "") || stage) as FestGridStage[];
+  row.append(...stages.filter((stage) => stageKind(stage) === "swiss_classic").map(swissTable),
+    page.grid({schemaJson: JSON.stringify({stages: (scheme.stages || []).filter((stage) => codes.has(stage.code || ""))}), stages: live}));
+  return row;
+}
+
+function swissTable(stage: BrainSchemeStage): HTMLElement {
+  const entries = page.festStage(stage.code || "")?.standings || [];
+  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? String(value) : "");
+  const metrics = ["points", "taken", "buchholz", "conceded", "bouts"] as const;
+  const labels = {points: S.brain.swiss.points(), taken: S.brain.swiss.taken(), buchholz: S.brain.swiss.buchholz(), conceded: S.brain.swiss.conceded(), bouts: S.brain.swiss.bouts()};
+  return standingsTable({
+    className: "swiss-table",
+    columns: [
+      {label: S.brain.swiss.place(), kind: "place"},
+      {label: S.brain.swiss.team(), kind: "name"},
+      ...metrics.map((metric) => ({label: labels[metric], kind: "num" as const})),
+    ],
+    rows: entries.map((entry) => [number(entry.rank), entry.name || "", ...metrics.map((metric) => number(entry.metrics?.[metric]))]),
   });
 }
 

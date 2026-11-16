@@ -50,3 +50,15 @@ right = "Верно"
 wrong = "Неверно"
 share = "% верных"
 empty = "Пока никто не жал на кнопку."
+
+[swiss]
+# The classic Swiss Block's table (Вопросики быстрые 3.1.8): its column heads
+# in the order the table ranks by. Бухгольц is the sum of the opponents'
+# points; «Соперникам» the answers the team's opponents gave against it.
+place = "М"
+team = "Команда"
+points = "Очки"
+taken = "Взято"
+buchholz = "Бухгольц"
+conceded = "Соперникам"
+bouts = "Бои"

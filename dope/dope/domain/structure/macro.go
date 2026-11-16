@@ -78,6 +78,10 @@ type Block interface {
 	// contenders by seed alone — the ranks of the seedFrom stage, else the
 	// Game's seed — the moment the bouts they come from are finished.
 	EmitPool(code, title string, at At, contenders []store.SchemeSlot, seedFrom string) (string, error)
+	// EmitPairing is a reseed the host calculates whose ranks are a Swiss
+	// round's seats: the swiss_pairing Ranker ranks the contenders over the
+	// sources' bouts, the config being its own.
+	EmitPairing(code, title string, at At, contenders []store.SchemeSlot, sources []string, seedFrom string, config any) (string, error)
 }
 
 // Stage is one stage a Kind emits: a scheduled one (Kind rr or flat, its typed

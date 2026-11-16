@@ -156,3 +156,17 @@ test("groupLabel is the «Группа N» tail, else the title, else the grain"
   assert.equal(groupLabel({grain: {block: "s2", group: "4"}}), "Группа 4");
 });
 
+
+test("brain: a classic Swiss Block is one table tab and one protocols tab; its pairs sit on the reseed tab", () => {
+  const round = (r) => [1, 2].map((wave) => ({code: `s1-r${r}-w${wave}`, title: `Отборочный этап. Раунд ${r}, заход ${wave}`, stage_type: "matches", kind: "matches", grain: {block: "s1", wave}}));
+  const pairs = (r) => ({code: `s1-r${r}-pairs`, title: `Пары раунда ${r}`, stage_type: "reseed", kind: "swiss_pairing", grain: {block: "s1", wave: 1}});
+  const stages = [
+    ...round(1), pairs(2), ...round(2), pairs(3), ...round(3),
+    {code: "s1-table", title: "Отборочный этап. Итоги", stage_type: "matches", kind: "swiss_classic", grain: {block: "s1", wave: 1}},
+    {code: "s2-r1", title: "Плей-офф. Раунд 1", stage_type: "matches", kind: "matches", grain: {block: "s2", wave: 1}},
+  ];
+  const tabs = gameTabs(stages, {game: "brain", viewer: true});
+  assert.deepEqual(tabs.map((tab) => tab.key), ["grid", "venues", "block:s1", "protocol:s1", "protocol:s2", "reseed", "stats", "roster"]);
+  assert.equal(tabs.find((tab) => tab.key === "block:s1").label, "Отборочный этап");
+  assert.deepEqual(tabs.find((tab) => tab.key === "reseed").stages, ["s1-r2-pairs", "s1-r3-pairs"]);
+});

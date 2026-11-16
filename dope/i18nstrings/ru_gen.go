@@ -130,6 +130,15 @@ var RU = Strings{
 			Team:     func() string { return "Команда" },
 			Wrong:    func() string { return "Неверно" },
 		},
+		Swiss: BrainSwissStrings{
+			Bouts:    func() string { return "Бои" },
+			Buchholz: func() string { return "Бухгольц" },
+			Conceded: func() string { return "Соперникам" },
+			Place:    func() string { return "М" },
+			Points:   func() string { return "Очки" },
+			Taken:    func() string { return "Взято" },
+			Team:     func() string { return "Команда" },
+		},
 		Team: BrainTeamStrings{
 			Fallback: func(n string) string { return fmt.Sprintf("Команда %s", n) },
 		},
@@ -3227,6 +3236,22 @@ var RU = Strings{
 			Pool: func(wins string, losses string) string { return fmt.Sprintf("Пул %s–%s", wins, losses) },
 			PoolRank: func(wins string, losses string, n string) string {
 				return fmt.Sprintf("Пул %s–%s, м. %s", wins, losses, n)
+			},
+			Table: func() string { return "Итоги" },
+		},
+		SwissClassic: StructureSwissClassicStrings{
+			Bye: func() string { return "Пустой стол" },
+			NeedsRanking: func() string {
+				return "swiss_classic: блок рассаживает по местам предыдущего блока — поставьте перед ним блок с одной таблицей"
+			},
+			PairSeat:        func(round string, pair string) string { return fmt.Sprintf("Раунд %s, пара %s", round, pair) },
+			Pairing:         func(round string) string { return fmt.Sprintf("Пары раунда %s", round) },
+			ParticipantsFew: func() string { return "swiss_classic: нужно хотя бы два участника" },
+			RoundsRequired: func() string {
+				return "swiss_classic: укажите rounds — сколько раундов играется"
+			},
+			RoundsTooMany: func(rounds string, participants string) string {
+				return fmt.Sprintf("swiss_classic: %s раундов на %s участников — без повторных встреч не сыграть", rounds, participants)
 			},
 			Table: func() string { return "Итоги" },
 		},

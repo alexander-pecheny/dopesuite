@@ -344,7 +344,7 @@ func calculateReadyReseedEntriesTx(ctx context.Context, tx *sql.Tx, stage resolv
 	if !state.Ready {
 		return syncReseedReadinessTx(ctx, tx, stage, gameID)
 	}
-	if err := recomputeReseedEntriesTx(ctx, tx, stage.id, stage.config, gameID); err != nil {
+	if err := recomputeReseedEntriesTx(ctx, tx, stage, gameID); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `update stages set status = 'finished' where id = ?`, stage.id)
@@ -359,7 +359,7 @@ func calculateRequiredReseedEntriesTx(ctx context.Context, tx *sql.Tx, stage res
 	if !state.Ready {
 		return reseedNotReadyError{waits: state.Waits}
 	}
-	if err := recomputeReseedEntriesTx(ctx, tx, stage.id, stage.config, gameID); err != nil {
+	if err := recomputeReseedEntriesTx(ctx, tx, stage, gameID); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `update stages set status = 'finished' where id = ?`, stage.id)
@@ -455,7 +455,8 @@ func ReseedNotReadyMessage(waits ReseedWaits) string {
 // from), and the reseed Ranker sums, orders and lots them. The table is
 // cleared until every source Match is finished, so downstream reseed slots stay
 // unresolved until then.
-func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, config []byte, gameID int64) error {
+func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
+	stageID, config := stage.id, stage.config
 	cfg := store.ParseStageConfig(string(config))
 	src := dbSources{ctx, tx, gameID}
 	who, ok, err := contenders(src, cfg)
@@ -487,7 +488,12 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 	if err != nil {
 		return err
 	}
-	ranker, _ := structure.RankerFor("reseed")
+	// A Swiss round's pairing ranks with its own Ranker; every other
+	// reseed with the reseed's.
+	ranker, ok := structure.RankerFor(stage.kind)
+	if !ok {
+		ranker, _ = structure.RankerFor("reseed")
+	}
 	ranked, err := ranker.Standings(KindConfig(config), outcomes, structure.Inputs{Seed: seed, Seeds: seeds, Contenders: who})
 	if err != nil {
 		return err

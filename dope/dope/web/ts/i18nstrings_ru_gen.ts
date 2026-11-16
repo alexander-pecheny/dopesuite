@@ -104,6 +104,15 @@ export const RU: Strings = {
       team: () => "Команда",
       wrong: () => "Неверно",
     },
+    swiss: {
+      bouts: () => "Бои",
+      buchholz: () => "Бухгольц",
+      conceded: () => "Соперникам",
+      place: () => "М",
+      points: () => "Очки",
+      taken: () => "Взято",
+      team: () => "Команда",
+    },
     team: {
       fallback: (n: string) => `Команда ${n}`,
     },
@@ -2179,6 +2188,16 @@ shootout: true
       planMismatch: (participants: string, wins: string, losses: string) => `swiss: план на ${participants} участников играется до ${wins} побед и ${losses} поражений`,
       pool: (wins: string, losses: string) => `Пул ${wins}–${losses}`,
       poolRank: (wins: string, losses: string, n: string) => `Пул ${wins}–${losses}, м. ${n}`,
+      table: () => "Итоги",
+    },
+    swissClassic: {
+      bye: () => "Пустой стол",
+      needsRanking: () => "swiss_classic: блок рассаживает по местам предыдущего блока — поставьте перед ним блок с одной таблицей",
+      pairSeat: (round: string, pair: string) => `Раунд ${round}, пара ${pair}`,
+      pairing: (round: string) => `Пары раунда ${round}`,
+      participantsFew: () => "swiss_classic: нужно хотя бы два участника",
+      roundsRequired: () => "swiss_classic: укажите rounds — сколько раундов играется",
+      roundsTooMany: (rounds: string, participants: string) => `swiss_classic: ${rounds} раундов на ${participants} участников — без повторных встреч не сыграть`,
       table: () => "Итоги",
     },
     titles: {

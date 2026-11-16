@@ -210,6 +210,26 @@ plan_mismatch = 'swiss: план на {{.participants}} участников и�
 # The block was not seeded from a ranked table: its first round pairs ranks.
 needs_ranking = "swiss: блок рассаживает по местам предыдущего блока — поставьте перед ним блок с таблицей"
 
+[swiss_classic]
+# The classic Swiss system: a fixed number of rounds, each pairing teams with
+# the same points or as close as they can be, never twice the same pair.
+# The block's own table.
+table = "Итоги"
+# The stage that ranks everyone into a round's pairs: ranks 2k−1 and 2k play
+# бой k. The host calculates it, which publishes the round.
+pairing = 'Пары раунда {{.round}}'
+# The label of a seat dealt from a round's pairs while it is still empty.
+pair_seat = 'Раунд {{.round}}, пара {{.pair}}'
+# The seat facing the team that sits out a round with an odd number of teams:
+# it plays the questions alone (Вопросики быстрые 3.1.4).
+bye = "Пустой стол"
+rounds_required = "swiss_classic: укажите rounds — сколько раундов играется"
+# rounds that cannot be paired without a rematch even in theory.
+rounds_too_many = 'swiss_classic: {{.rounds}} раундов на {{.participants}} участников — без повторных встреч не сыграть'
+participants_few = "swiss_classic: нужно хотя бы два участника"
+# The block was not seeded from one ranked table.
+needs_ranking = "swiss_classic: блок рассаживает по местам предыдущего блока — поставьте перед ним блок с одной таблицей"
+
 [macro]
 # Helpers every kind shares: seating labels and the sorting complaint.
 # The label of a seat fed from a bout: "<bout label>, м. <place>".

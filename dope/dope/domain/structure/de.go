@@ -77,7 +77,8 @@ func (pod) Expand(b Block) (Outputs, error) {
 		return Outputs{}, fmt.Errorf("%s", s.Structure.De.BadGroups(strconv.Itoa(groups), strconv.Itoa(perGroup)))
 	}
 	proceeding := 1
-	if v, ok := b.Proceeding(); ok {
+	v, declared := b.Proceeding()
+	if declared {
 		proceeding = v
 	}
 	// A reseed hands the block a ranking, so its opening round deals that
@@ -103,7 +104,7 @@ func (pod) Expand(b Block) (Outputs, error) {
 	if err != nil {
 		return Outputs{}, err
 	}
-	plan, err := planDE(b, deShape{groups: groups, perGroup: perGroup, lower: lower, size: size, winning: winning, proceeding: proceeding}, opening, written)
+	plan, err := planDE(b, deShape{groups: groups, perGroup: perGroup, lower: lower, size: size, winning: winning, proceeding: proceeding, declared: declared}, opening, written)
 	if err != nil {
 		return Outputs{}, err
 	}
@@ -154,6 +155,7 @@ func (pod) Expand(b Block) (Outputs, error) {
 // how many of them win, and how many leave the block.
 type deShape struct {
 	groups, perGroup, lower, size, winning, proceeding int
+	declared                                           bool // proceeding_participants is the scheme's
 }
 
 // planDE plans the bracket: the planner's own rounds, or its opening round
@@ -186,7 +188,7 @@ func planDE(b Block, shape deShape, opening func(n, bouts int) [][]int, written 
 	if len(written) == 0 {
 		return plan, nil
 	}
-	return plan, w.extend(written, shape.proceeding)
+	return plan, w.extend(written, shape.proceeding, shape.declared)
 }
 
 // emitLivesBracket writes one bracket's stages and returns each planned

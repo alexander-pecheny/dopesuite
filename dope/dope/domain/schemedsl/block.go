@@ -220,6 +220,30 @@ func (b *blockHandle) EmitPool(code, title string, where structure.At, contender
 	return code, nil
 }
 
+func (b *blockHandle) EmitPairing(code, title string, where structure.At, contenders []store.SchemeSlot, sources []string, seedFrom string, config any) (string, error) {
+	if !strings.HasPrefix(code, b.Code()+"-") {
+		return "", fmt.Errorf("pairing %s outside block %s", code, b.Code())
+	}
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return "", err
+	}
+	b.c.position++
+	b.c.scheme.Stages = append(b.c.scheme.Stages, store.SchemeStage{
+		Code:      code,
+		Title:     title,
+		StageType: "reseed",
+		Kind:      "swiss_pairing",
+		Position:  b.c.position,
+		Grain:     b.at(where).grain(),
+		Teams:     contenders,
+		Sources:   sources,
+		SeedFrom:  seedFrom,
+		Config:    configJSON,
+	})
+	return code, nil
+}
+
 func (b *blockHandle) at(where structure.At) at {
 	return at{block: b.Code(), blockRound: where.BlockRound, group: where.Group}
 }

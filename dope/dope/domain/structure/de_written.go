@@ -126,7 +126,7 @@ func nameOpening(plan *dePlan, names []string, named []bool) (*writtenPlan, erro
 
 // extend appends the written rounds to a plan holding the opening round
 // alone, and replaces its survivors with the last round's places.
-func (w *writtenPlan) extend(rounds [][]string, proceeding int) error {
+func (w *writtenPlan) extend(rounds [][]string, proceeding int, declared bool) error {
 	for r, items := range rounds {
 		w.key = fmt.Sprintf("%s.r%d", writtenBoutsKey, r+2)
 		if len(items) == 0 {
@@ -143,7 +143,7 @@ func (w *writtenPlan) extend(rounds [][]string, proceeding int) error {
 		w.settle()
 		w.plan.blockRounds = append(w.plan.blockRounds, round)
 	}
-	return w.finish(proceeding)
+	return w.finish(proceeding, declared)
 }
 
 func (w *writtenPlan) name(index int, name string) error {
@@ -250,14 +250,19 @@ func (w *writtenPlan) seat(token string) (deSource, int, error) {
 
 // finish checks that everyone still in before the last round plays on, and
 // makes the last round's places the block's survivors: fewer Losses first,
-// as the planner ranks them, then in the order the round lists them.
-func (w *writtenPlan) finish(proceeding int) error {
+// as the planner ranks them, then in the order the round lists them. A place
+// no later bout takes may instead wait for the next Block — the Вопросики
+// быстрые upper final's winner waits for the lower bracket's to meet it in a
+// final of three — when proceeding_participants counts it among those the
+// block sends on, so a seat the scheme forgot still fails.
+func (w *writtenPlan) finish(proceeding int, declared bool) error {
 	plan := w.plan
 	last := map[int]bool{}
 	for _, index := range plan.blockRounds[len(plan.blockRounds)-1] {
 		last[index] = true
 	}
 	plan.survivor = nil
+	var waiting []deSource
 	for index, bout := range plan.bouts {
 		for place := 1; place <= len(bout.sources); place++ {
 			source := deSource{bout: index, place: place}
@@ -266,10 +271,16 @@ func (w *writtenPlan) finish(proceeding int) error {
 			case last[index] && alive:
 				plan.survivor = append(plan.survivor, source)
 			case alive && !w.taken[source]:
-				token := plan.names[index] + placeSeparator + strconv.Itoa(place)
-				return Keyf(w.key, "%s", dopestrings.Default.Structure.De.BoutsUnused(token))
+				waiting = append(waiting, source)
 			}
 		}
+	}
+	if len(waiting) > 0 {
+		if !declared || proceeding != len(plan.survivor)+len(waiting) {
+			token := plan.names[waiting[0].bout] + placeSeparator + strconv.Itoa(waiting[0].place)
+			return Keyf(w.key, "%s", dopestrings.Default.Structure.De.BoutsUnused(token))
+		}
+		plan.survivor = append(waiting, plan.survivor...)
 	}
 	sort.SliceStable(plan.survivor, func(i, j int) bool {
 		return plan.carriedLosses(plan.survivor[i]) < plan.carriedLosses(plan.survivor[j])

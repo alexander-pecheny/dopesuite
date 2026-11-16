@@ -103,6 +103,15 @@ export type Strings = {
       team: () => string;
       wrong: () => string;
     };
+    swiss: {
+      bouts: () => string;
+      buchholz: () => string;
+      conceded: () => string;
+      place: () => string;
+      points: () => string;
+      taken: () => string;
+      team: () => string;
+    };
     team: {
       fallback: (n: string) => string;
     };
@@ -2157,6 +2166,16 @@ export type Strings = {
       planMismatch: (participants: string, wins: string, losses: string) => string;
       pool: (wins: string, losses: string) => string;
       poolRank: (wins: string, losses: string, n: string) => string;
+      table: () => string;
+    };
+    swissClassic: {
+      bye: () => string;
+      needsRanking: () => string;
+      pairSeat: (round: string, pair: string) => string;
+      pairing: (round: string) => string;
+      participantsFew: () => string;
+      roundsRequired: () => string;
+      roundsTooMany: (rounds: string, participants: string) => string;
       table: () => string;
     };
     titles: {

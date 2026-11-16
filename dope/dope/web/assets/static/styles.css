@@ -2514,7 +2514,7 @@ body:not(.embedded-match) .grid-match {
 
 .od-results-table,
 .ksi-results-table,
-.troika-swiss-table {
+.swiss-table {
   width: max-content;
 }
 
@@ -2674,8 +2674,8 @@ body:not(.embedded-match) .grid-match {
 .group-bouts-table .results-team,
 .venue-schedule-table thead th.results-team-head,
 .venue-schedule-table .results-team,
-.troika-swiss-table thead th.results-team-head,
-.troika-swiss-table .results-team {
+.swiss-table thead th.results-team-head,
+.swiss-table .results-team {
   width: var(--results-team-col);
   min-width: var(--results-team-col);
   max-width: var(--results-team-col);

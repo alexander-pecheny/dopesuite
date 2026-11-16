@@ -15,6 +15,7 @@ import (
 type Sources interface {
 	TeamAtMatchPlace(matchCode string, place int) (int64, error)
 	TeamAtReseedRank(stageCode string, rank int) (int64, error)
+	TeamAtSeed(basket, number int) (int64, error)
 }
 
 // desiredOccupant is the team a from_match/reseed slot should hold now, or 0
@@ -53,6 +54,12 @@ func eligibleTeam(src Sources, slot store.SchemeSlot) (int64, string, error) {
 	case slot.Reseed != nil:
 		teamID, err := src.TeamAtReseedRank(slot.Reseed.Stage, slot.Reseed.Rank)
 		return teamID, slot.Reseed.Stage, err
+	case slot.Seed != nil:
+		// A Swiss round's pairing on the Game's first Block ranks the
+		// Game's seeds themselves.
+		ref := store.SlotRefOf(slot)
+		teamID, err := src.TeamAtSeed(ref.Basket, ref.Number)
+		return teamID, ref.DisplayLabel(), err
 	}
 	return 0, "", nil
 }
@@ -205,6 +212,19 @@ where m.game_id = ? and m.code = ? and m.status = 'finished' and `+store.Advance
 		return 0, err
 	}
 	return teams[0], nil
+}
+
+// TeamAtSeed returns the Participant the seed import dealt this seed, or 0
+// while nobody holds it.
+func (d dbSources) TeamAtSeed(basket, number int) (int64, error) {
+	var teamID sql.NullInt64
+	err := d.q.QueryRowContext(d.ctx, `
+select participant_id from game_assignments where game_id = ? and basket = ? and number = ?`,
+		d.gameID, basket, number).Scan(&teamID)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return teamID.Int64, err
 }
 
 // TeamAtReseedRank returns the team at a source stage's rank, or 0 when the

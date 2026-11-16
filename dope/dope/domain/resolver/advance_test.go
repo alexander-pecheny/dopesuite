@@ -18,6 +18,9 @@ func (f fakeSources) TeamAtMatchPlace(code string, place int) (int64, error) {
 func (f fakeSources) TeamAtReseedRank(stage string, rank int) (int64, error) {
 	return f[stage+"/"+itoa(rank)], nil
 }
+func (f fakeSources) TeamAtSeed(basket, number int) (int64, error) {
+	return f["seed"+itoa(basket)+"/"+itoa(number)], nil
+}
 func itoa(n int) string { return string(rune('0' + n)) }
 
 func fromMatch(code string, place int) store.SchemeSlot {

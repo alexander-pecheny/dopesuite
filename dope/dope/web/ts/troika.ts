@@ -745,7 +745,7 @@ function swissTable(stage: SchemeStage): HTMLElement {
   const entries = page.festStage(stage.code || "")?.standings || [];
   const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? String(value) : "");
   return standingsTable({
-    className: "troika-swiss-table",
+    className: "swiss-table",
     columns: [
       {label: S.troika.swiss.place(), kind: "place"},
       {label: S.troika.protocol.team(), kind: "name"},
