@@ -2,14 +2,14 @@ module spliff
 
 go 1.26.4
 
-replace pecheny.me/dopeuikit => ../dopeuikit
+replace code.pecheny.me/pecheny/dopesuite/dopeuikit => ../dopeuikit
 
 replace code.pecheny.me/pecheny/dopesuite/dopecore => ../dopecore
 
 require (
 	code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0
+	code.pecheny.me/pecheny/dopesuite/dopeuikit v0.0.0
 	modernc.org/sqlite v1.50.0
-	pecheny.me/dopeuikit v0.0.0
 )
 
 require (

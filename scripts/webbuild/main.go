@@ -254,12 +254,12 @@ func targets() []target {
 					EntryPointsAdvanced: entries("dopeuikit/assets/ts/", "menu", "login"),
 					Bundle:              true,
 					Format:              api.FormatIIFE,
-					Outdir:              "dopeuikit/assets/dist",
+					Outdir:              "dopeuikit/assets/js/dist",
 				},
 				{
 					EntryPointsAdvanced: entries("dopeuikit/assets/ts/", "menu-model", "login-model", "i18nstrings", "i18nstrings_plural_gen", "i18nstrings_ru_gen", "i18nstrings_en_gen"),
 					Format:              api.FormatESModule,
-					Outdir:              "dopeuikit/assets/dist/esm",
+					Outdir:              "dopeuikit/assets/js/dist/esm",
 				},
 			}
 		}},

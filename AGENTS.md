@@ -6,7 +6,7 @@ builds its exports on, and two desktop programs. Each app and chgksuite has its 
 `AGENTS.md`, so start there.
 
 ```
-dopeuikit/   pecheny.me/dopeuikit — the shared UI system:
+dopeuikit/   code.pecheny.me/pecheny/dopesuite/dopeuikit — the shared UI system:
              ui/ = generic DSL engine (no design opinions), kit/ = the design
              system (core vocabulary + expansions + core.css + fonts)
 dopecore/    code.pecheny.me/pecheny/dopesuite/dopecore — the shared platform layer that was extracted
@@ -33,7 +33,7 @@ chgksuite-app/
 ```
 
 - xy, dope, spliff and qy use the shared layers through `replace
-  pecheny.me/dopeuikit => ../dopeuikit` and `replace code.pecheny.me/pecheny/dopesuite/dopecore =>
+  code.pecheny.me/pecheny/dopesuite/dopeuikit => ../dopeuikit` and `replace code.pecheny.me/pecheny/dopesuite/dopecore =>
   ../dopecore`. xy also uses chgksuite through `replace
   code.pecheny.me/pecheny/dopesuite/chgksuite => ../chgksuite`. The monorepo
   keeps the modules as siblings, which is the layout those paths expect, so a

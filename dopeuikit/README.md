@@ -23,8 +23,8 @@ chrome, CSS layer).
 `DESIGN.md` is the spec. Apps consume it with a local replace:
 
 ```
-require pecheny.me/dopeuikit v0.0.0
-replace pecheny.me/dopeuikit => ../dopeuikit
+require code.pecheny.me/pecheny/dopesuite/dopeuikit v0.0.0
+replace code.pecheny.me/pecheny/dopesuite/dopeuikit => ../dopeuikit
 ```
 
 ```

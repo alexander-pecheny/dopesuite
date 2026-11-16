@@ -12,8 +12,8 @@ package ui
 import (
 	_ "embed"
 
-	kitstrings "pecheny.me/dopeuikit/i18nstrings"
-	base "pecheny.me/dopeuikit/kit"
+	kitstrings "code.pecheny.me/pecheny/dopesuite/dopeuikit/i18nstrings"
+	base "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	spliffstrings "spliff/i18nstrings"
 )

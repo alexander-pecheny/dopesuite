@@ -1,8 +1,8 @@
-module pecheny.me/dopeuikit
+module code.pecheny.me/pecheny/dopesuite/dopeuikit
 
 go 1.26.4
 
-require code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0
+require code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0-20261109000906-f09b4ac98858
 
 require (
 	github.com/tdewolff/minify/v2 v2.24.17 // indirect

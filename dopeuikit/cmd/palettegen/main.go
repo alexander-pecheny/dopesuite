@@ -22,7 +22,7 @@ import (
 	"slices"
 	"strings"
 
-	"pecheny.me/dopeuikit/palette"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/palette"
 )
 
 const (

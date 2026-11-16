@@ -1,6 +1,6 @@
 package kit
 
-import base "pecheny.me/dopeuikit/ui"
+import base "code.pecheny.me/pecheny/dopesuite/dopeuikit/ui"
 
 // The kit is the app-facing API: it re-exports the engine's expander surface so
 // app code (and app-generated builders) import this one package, never ui

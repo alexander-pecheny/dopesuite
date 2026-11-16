@@ -7,7 +7,8 @@ import (
 	"sync"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
-	"pecheny.me/dopeuikit/assets"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/assets"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/assets/js"
 )
 
 // The kit is the API for the shared static resources; the raw embed lives in the
@@ -17,9 +18,9 @@ var (
 	// CoreCSS is the shared design-system stylesheet (core.css).
 	CoreCSS = assets.CoreCSS
 	// LoginJS is the shared login page script, served at /static/login.js.
-	LoginJS = assets.LoginJS
+	LoginJS = js.LoginJS
 	// MenuJS is the site-wide chrome script (theme boot + ☰ menu), /static/menu.js.
-	MenuJS = assets.MenuJS
+	MenuJS = js.MenuJS
 	// Fonts is the font directory (the variable noto-sans-*/jetbrains-mono-*/
 	// inter-fix-ra-* woff2), served at /static/fonts/.
 	Fonts = assets.Fonts
@@ -39,10 +40,10 @@ func Assets(embedded fs.FS, diskRoots ...string) *webassets.Assets {
 // AssetsWithLayers is Assets with library stylesheets served between core.css
 // and the app layer (webassets.Config.Layers).
 func AssetsWithLayers(embedded fs.FS, layers []webassets.Layer, diskRoots ...string) *webassets.Assets {
-	js := func(name string) webassets.SharedFile {
-		return webassets.SharedFile{Path: "/static/" + name, DiskPath: kitDisk + "/dist/" + name, ContentType: "text/javascript; charset=utf-8"}
+	script := func(name string) webassets.SharedFile {
+		return webassets.SharedFile{Path: "/static/" + name, DiskPath: kitDisk + "/js/dist/" + name, ContentType: "text/javascript; charset=utf-8"}
 	}
-	login, menu := js("login.js"), js("menu.js")
+	login, menu := script("login.js"), script("menu.js")
 	login.Bytes, menu.Bytes = LoginJS, MenuJS
 	return webassets.New(webassets.Config{
 		Embedded:        embedded,

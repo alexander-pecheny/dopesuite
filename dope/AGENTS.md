@@ -186,13 +186,13 @@ commit. When a change to the UI is intended, run `just matrix --bless` to adopt
 the new screenshots, and commit them together with the change.
 
 ## UI markup (DopeUIKit)
-Never write HTML by hand. **DopeUIKit** (`pecheny.me/dopeuikit`, used through
+Never write HTML by hand. **DopeUIKit** (`code.pecheny.me/pecheny/dopesuite/dopeuikit`, used through
 `replace => ../dopeuikit`) has two layers. `ui/` is the generic DSL **engine**:
 the parser, validator, expansion framework, printer, builder and codegen. It
 knows no vocabulary and no CSS class names. `kit/` is the shared **design
 system**: the core vocabulary, the expanders, Chrome, the generated builder,
 `core.css` and the fonts. `dope/web/ui` is dope's thin **overlay** on top of the
-kit, and it imports `pecheny.me/dopeuikit/kit`.
+kit, and it imports `code.pecheny.me/pecheny/dopesuite/dopeuikit/kit`.
 
 - **Static pages** are written in `.dopeui` files, in `dope/web/assets/ui/`:
   login, ek, od, si and brain. They are made of typed primitives such as `page`,

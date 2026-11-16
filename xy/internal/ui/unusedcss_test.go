@@ -21,7 +21,7 @@ import (
 	"testing"
 	"unicode"
 
-	engine "pecheny.me/dopeuikit/ui"
+	engine "code.pecheny.me/pecheny/dopesuite/dopeuikit/ui"
 )
 
 // The vocab doesn't type props as id-minting or id-referencing, so the
@@ -188,7 +188,7 @@ func jsCorpus(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kitJS, err := filepath.Glob("../../../dopeuikit/assets/dist/*.js")
+	kitJS, err := filepath.Glob("../../../dopeuikit/assets/js/dist/*.js")
 	if err != nil || len(kitJS) == 0 {
 		t.Fatalf("no kit JS assets found: %v", err)
 	}

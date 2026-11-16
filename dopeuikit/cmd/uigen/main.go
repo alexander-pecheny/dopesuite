@@ -1,7 +1,7 @@
 // Command uigen generates a typed Go builder from a vocabulary.
 //
-//	uigen -core vocab.json -pkg kit -base pecheny.me/dopeuikit/ui -out tags_gen.go
-//	uigen -core core.json -overlay app.json -pkg ui -base pecheny.me/dopeuikit/kit -out tags_gen.go
+//	uigen -core vocab.json -pkg kit -base code.pecheny.me/pecheny/dopesuite/dopeuikit/ui -out tags_gen.go
+//	uigen -core core.json -overlay app.json -pkg ui -base code.pecheny.me/pecheny/dopesuite/dopeuikit/kit -out tags_gen.go
 //
 // Core mode emits the kit's builder over the ui engine (a constructor for every
 // primitive). Overlay mode emits an app package: the overlay's own
@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"os"
 
-	"pecheny.me/dopeuikit/ui"
-	"pecheny.me/dopeuikit/ui/uigen"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/ui"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/ui/uigen"
 )
 
 const fileMode = 0o644
@@ -25,7 +25,7 @@ func main() {
 	core := flag.String("core", "vocab.json", "core/base vocab.json path")
 	overlay := flag.String("overlay", "", "overlay vocab.json path (overlay mode)")
 	pkg := flag.String("pkg", "kit", "emitted package name")
-	base := flag.String("base", "pecheny.me/dopeuikit/ui", "base import path")
+	base := flag.String("base", "code.pecheny.me/pecheny/dopesuite/dopeuikit/ui", "base import path")
 	out := flag.String("out", "tags_gen.go", "output .go path")
 	flag.Parse()
 

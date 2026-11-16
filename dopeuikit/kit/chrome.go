@@ -1,6 +1,6 @@
 package kit
 
-import kitstrings "pecheny.me/dopeuikit/i18nstrings"
+import kitstrings "code.pecheny.me/pecheny/dopesuite/dopeuikit/i18nstrings"
 
 // PageKind maps a page `kind` to the body/main class lists plus an optional
 // frame wrapper around main's content.

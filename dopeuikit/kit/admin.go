@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
-	kitstrings "pecheny.me/dopeuikit/i18nstrings"
+	kitstrings "code.pecheny.me/pecheny/dopesuite/dopeuikit/i18nstrings"
 )
 
 // SortHeader is a sortable column heading of the /admin/users table: a small

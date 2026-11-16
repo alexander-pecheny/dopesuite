@@ -6,7 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	kitstrings "pecheny.me/dopeuikit/i18nstrings"
+	kitstrings "code.pecheny.me/pecheny/dopesuite/dopeuikit/i18nstrings"
 )
 
 func TestPageSetCachesOnlyInEmbedMode(t *testing.T) {

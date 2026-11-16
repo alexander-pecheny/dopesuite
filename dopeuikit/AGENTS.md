@@ -21,8 +21,16 @@ and the codegen. It knows no CSS class names and no vocabulary. `kit/` is the
   `kit.ChromeOf(ctx)`. An app declares its own Chrome by writing
   `kit.CoreChrome().With(delta)`. `ui/engine_test.go` tests the engine on its
   own, against a vocabulary of just two primitives.
-- Both apps consume this module via `replace pecheny.me/dopeuikit => ../dopeuikit`,
+- Both apps consume this module via `replace code.pecheny.me/pecheny/dopesuite/dopeuikit => ../dopeuikit`,
   so a change here lands in xy and dope on their next build. Check both.
+- Projects outside this repo (the СтудЧР and ОВСЧ sites) fetch the module by
+  path at a pushed commit, so `go.mod` pins dopecore at a real pseudo-version
+  as well as replacing it, the same way chgksuite does. Such a fetch has no
+  built frontend, so only packages that embed no build output compile there:
+  `assets` (core.css, the fonts, the login page source) does, while
+  `assets/js` (the built login.js and menu.js) and everything importing it,
+  `kit` included, needs `just build-web uikit` first. Keep build output out of
+  `assets`.
 - The kit imports `dopecore`, and dopecore imports neither the kit nor `ui`.
   That is why plumbing which faces the apps but needs to know about the kit lives
   in `kit/` instead of being copied into both apps (root `docs/adr/0004`). It

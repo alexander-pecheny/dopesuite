@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
-	kit "pecheny.me/dopeuikit/kit"
+	kit "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	"spliff/spliff/web/assets"
 	"spliff/spliff/web/route"

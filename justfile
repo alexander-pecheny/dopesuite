@@ -180,7 +180,7 @@ pre-commit-core: fmt-core vet-core tidy-check-core test-core
 
 ## dopeuikit ##################################################################
 
-# The kit embeds its built assets/dist (root ADR-0001), so every recipe that
+# The kit embeds its built assets/js/dist (root ADR-0001), so every recipe that
 # compiles dopeuikit depends on build-web.
 test-uikit: build-web typecheck
     cd dopeuikit && go test ./...

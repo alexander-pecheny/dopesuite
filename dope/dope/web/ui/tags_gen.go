@@ -2,7 +2,7 @@
 
 package ui
 
-import base "pecheny.me/dopeuikit/kit"
+import base "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 // Node types, re-exported so app code imports one package.
 type Doc = base.Doc

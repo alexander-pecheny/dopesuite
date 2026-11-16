@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	kit "pecheny.me/dopeuikit/kit"
+	kit "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	"dope/dope/domain/games"
 	dopeui "dope/dope/web/ui"

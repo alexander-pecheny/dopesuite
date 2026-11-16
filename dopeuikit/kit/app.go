@@ -7,8 +7,8 @@
 package kit
 
 import (
-	kitstrings "pecheny.me/dopeuikit/i18nstrings"
-	base "pecheny.me/dopeuikit/ui"
+	kitstrings "code.pecheny.me/pecheny/dopesuite/dopeuikit/i18nstrings"
+	base "code.pecheny.me/pecheny/dopesuite/dopeuikit/ui"
 )
 
 // Options configures a kit App: the app's vocab overlay (merged over the core),

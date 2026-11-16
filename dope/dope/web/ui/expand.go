@@ -3,7 +3,7 @@ package ui
 import (
 	dopestrings "dope/i18nstrings"
 
-	base "pecheny.me/dopeuikit/kit"
+	base "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 )
 
 // expandGameTopbar builds the game pages' header: the game-header-main column

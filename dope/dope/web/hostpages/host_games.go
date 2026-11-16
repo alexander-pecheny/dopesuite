@@ -24,7 +24,7 @@ import (
 
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
-	"pecheny.me/dopeuikit/palette"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/palette"
 
 	"dope/dope/domain/festops"
 	"dope/dope/web/route"

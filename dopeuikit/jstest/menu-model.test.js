@@ -10,7 +10,7 @@ import {
   menuItems,
   pickPref,
   resolveTheme,
-} from "../assets/dist/esm/menu-model.js";
+} from "../assets/js/dist/esm/menu-model.js";
 
 test("pickPref falls back on missing or unknown values", () => {
   assert.equal(pickPref(null, ["light", "dark", "system"], "system"), "system");

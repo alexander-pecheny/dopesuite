@@ -4,12 +4,12 @@
 // constructors, so qy code imports this one package.
 package ui
 
-//go:generate go run pecheny.me/dopeuikit/cmd/uigen -core ../../../../dopeuikit/kit/vocab.json -overlay vocab.json -pkg ui -base pecheny.me/dopeuikit/kit -out tags_gen.go
+//go:generate go run code.pecheny.me/pecheny/dopesuite/dopeuikit/cmd/uigen -core ../../../../dopeuikit/kit/vocab.json -overlay vocab.json -pkg ui -base code.pecheny.me/pecheny/dopesuite/dopeuikit/kit -out tags_gen.go
 
 import (
 	_ "embed"
 
-	base "pecheny.me/dopeuikit/kit"
+	base "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	qystrings "qy/i18nstrings"
 )

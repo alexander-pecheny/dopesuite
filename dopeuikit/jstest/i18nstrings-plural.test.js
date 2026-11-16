@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {plural} from "../assets/dist/esm/i18nstrings_plural_gen.js";
+import {plural} from "../assets/js/dist/esm/i18nstrings_plural_gen.js";
 
 test("the Russian rule picks one/few/many the way dopecore does", () => {
   const cases = {

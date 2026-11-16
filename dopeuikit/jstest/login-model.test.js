@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {claimOutcome, loginMethods, loginRedirect, pollTelegram, tgStartView} from "../assets/dist/esm/login-model.js";
+import {claimOutcome, loginMethods, loginRedirect, pollTelegram, tgStartView} from "../assets/js/dist/esm/login-model.js";
 
 test("tgStartView builds the deep link only when the bot is known", () => {
   const full = tgStartView({code: "AB CD", bot_username: "dope_bot"});

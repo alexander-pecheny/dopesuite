@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"pecheny.me/dopeuikit/kit"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 )
 
 func main() {

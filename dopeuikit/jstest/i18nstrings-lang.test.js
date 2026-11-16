@@ -1,8 +1,8 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import EN from "../assets/dist/esm/i18nstrings_en_gen.js";
-import RU from "../assets/dist/esm/i18nstrings_ru_gen.js";
-import {forLang} from "../assets/dist/esm/i18nstrings.js";
+import EN from "../assets/js/dist/esm/i18nstrings_en_gen.js";
+import RU from "../assets/js/dist/esm/i18nstrings_ru_gen.js";
+import {forLang} from "../assets/js/dist/esm/i18nstrings.js";
 
 // There is ONE /static/login.js for every app, so the language cannot be chosen
 // when it is built. It is chosen off the page's own <html lang>, which the

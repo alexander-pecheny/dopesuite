@@ -42,7 +42,7 @@ var (
 // kitDist holds the kit's login.js/menu.js, served under /static/ but living here.
 var kitDist = func() string {
 	_, file, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(file), "..", "assets", "dist")
+	return filepath.Join(filepath.Dir(file), "..", "assets", "js", "dist")
 }()
 
 func (c PageContract) Run(t *testing.T) {

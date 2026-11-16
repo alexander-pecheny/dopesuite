@@ -1,17 +1,17 @@
-// Package ui is dope's thin overlay over DopeUIKit's kit (pecheny.me/dopeuikit/
+// Package ui is dope's thin overlay over DopeUIKit's kit (code.pecheny.me/pecheny/dopesuite/dopeuikit/
 // kit): the dope-specific game topbar primitive, the table-host mount kind, the
 // page `init` marker prop, and dope's page chrome (sheet + the ek/od/si
 // game kinds). The shared design system + DSL engine live in the kit; tags_gen.go
 // re-exports every kit constructor/const so dope code imports this one package.
 package ui
 
-//go:generate go run pecheny.me/dopeuikit/cmd/uigen -core ../../../../dopeuikit/kit/vocab.json -overlay vocab.json -pkg ui -base pecheny.me/dopeuikit/kit -out tags_gen.go
+//go:generate go run code.pecheny.me/pecheny/dopesuite/dopeuikit/cmd/uigen -core ../../../../dopeuikit/kit/vocab.json -overlay vocab.json -pkg ui -base code.pecheny.me/pecheny/dopesuite/dopeuikit/kit -out tags_gen.go
 
 import (
 	_ "embed"
 
+	base "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 	dopestrings "dope/i18nstrings"
-	base "pecheny.me/dopeuikit/kit"
 )
 
 //go:embed vocab.json

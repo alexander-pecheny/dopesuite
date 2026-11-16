@@ -4,7 +4,7 @@ go 1.26.4
 
 replace xy => ../xy
 
-replace pecheny.me/dopeuikit => ../dopeuikit
+replace code.pecheny.me/pecheny/dopesuite/dopeuikit => ../dopeuikit
 
 replace code.pecheny.me/pecheny/dopesuite/dopecore => ../dopecore
 
@@ -18,6 +18,7 @@ require (
 
 require (
 	code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0 // indirect
+	code.pecheny.me/pecheny/dopesuite/dopeuikit v0.0.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
@@ -49,7 +50,6 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.50.0 // indirect
-	pecheny.me/dopeuikit v0.0.0 // indirect
 )
 
 replace github.com/wailsapp/wails/v3 => code.pecheny.me/pecheny/wails/v3 v3.0.0-20261019153355-d73831f9cca1

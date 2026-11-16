@@ -23,7 +23,7 @@ import (
 	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
-	kit "pecheny.me/dopeuikit/kit"
+	kit "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	dopestrings "dope/i18nstrings"
 

@@ -2,7 +2,7 @@
 
 The constrained UI DSL now lives in **DopeUIKit** (vendored via
 `replace => ../dopeuikit`), split into the generic engine (`pecheny.me/
-dopeuikit/ui`) and the shared design system (`pecheny.me/dopeuikit/kit`). Its
+dopeuikit/ui`) and the shared design system (`code.pecheny.me/pecheny/dopesuite/dopeuikit/kit`). Its
 `DESIGN.md` is the authoritative spec (grammar, validation, extension API, the
 core primitive catalog). This package is xy's thin **overlay on the kit**: it
 builds the xy `App` via `kit.NewApp` and re-exports the kit's builder so xy code

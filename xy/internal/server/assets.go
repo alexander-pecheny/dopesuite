@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	kit "pecheny.me/dopeuikit/kit"
+	kit "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	chgkweb "code.pecheny.me/pecheny/dopesuite/chgksuite/web"
 

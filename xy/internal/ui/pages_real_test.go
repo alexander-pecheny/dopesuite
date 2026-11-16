@@ -3,8 +3,8 @@ package ui
 import (
 	"testing"
 
-	kit "pecheny.me/dopeuikit/kit"
-	"pecheny.me/dopeuikit/uitest"
+	kit "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/uitest"
 )
 
 // TestRealPages runs the kit's page contract over xy's pages: every

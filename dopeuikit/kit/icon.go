@@ -3,7 +3,7 @@ package kit
 import (
 	"fmt"
 
-	"pecheny.me/dopeuikit/icons"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/icons"
 )
 
 // iconItem renders the `icon="…"` prop of a control as an inline SVG, or nil

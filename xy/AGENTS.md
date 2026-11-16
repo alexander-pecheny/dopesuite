@@ -53,13 +53,13 @@ in the dopesuite monorepo. The rules for the monorepo itself are in the root
 - **Tests**: Go (`go test`) + frontend (`bun test --parallel ./jstest/`).
 - **Build/run**: `justfile`.
 - **UI markup**: never write HTML, or a CSS class, by hand. **DopeUIKit**
-  (`pecheny.me/dopeuikit`, used through `replace => ../dopeuikit`) has two
+  (`code.pecheny.me/pecheny/dopesuite/dopeuikit`, used through `replace => ../dopeuikit`) has two
   layers. `ui/` is the generic DSL **engine**: the parser, the validator, the
   expansion framework, the printer, the builder machinery and the codegen. It
   contains no vocabulary and no CSS class names. `kit/` is the shared **design
   system**: the core vocabulary, the expanders, Chrome, the generated builder,
   `core.css` and the fonts. `internal/ui` is xy's thin **overlay** on the kit,
-  and it imports `pecheny.me/dopeuikit/kit`.
+  and it imports `code.pecheny.me/pecheny/dopesuite/dopeuikit/kit`.
 
   Pages are written in `.dopeui` files in `web/assets/ui/`, using typed
   AppKit-style primitives such as `page`, `topbar`, `crumbs`, `col`, `row`,

@@ -1,11 +1,11 @@
 package kit
 
-//go:generate go run ../cmd/uigen -core vocab.json -pkg kit -base pecheny.me/dopeuikit/ui -out tags_gen.go
+//go:generate go run ../cmd/uigen -core vocab.json -pkg kit -base code.pecheny.me/pecheny/dopesuite/dopeuikit/ui -out tags_gen.go
 
 import (
 	_ "embed"
 
-	base "pecheny.me/dopeuikit/ui"
+	base "code.pecheny.me/pecheny/dopesuite/dopeuikit/ui"
 )
 
 //go:embed vocab.json

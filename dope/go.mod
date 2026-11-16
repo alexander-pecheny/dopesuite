@@ -3,11 +3,11 @@ module dope
 go 1.26.4
 
 require (
+	code.pecheny.me/pecheny/dopesuite/dopeuikit v0.0.0
 	github.com/klauspost/compress v1.18.6
 	github.com/xuri/excelize/v2 v2.10.1
 	github.com/yuin/goldmark v1.8.2
 	modernc.org/sqlite v1.50.0
-	pecheny.me/dopeuikit v0.0.0
 )
 
 require (
@@ -16,7 +16,7 @@ require (
 	golang.org/x/crypto v0.52.0 // indirect
 )
 
-replace pecheny.me/dopeuikit => ../dopeuikit
+replace code.pecheny.me/pecheny/dopesuite/dopeuikit => ../dopeuikit
 
 require (
 	code.pecheny.me/pecheny/dopesuite/dopecore v0.0.0

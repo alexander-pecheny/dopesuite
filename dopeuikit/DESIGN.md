@@ -26,7 +26,7 @@ app adds an overlay (its own primitives, mount kinds, page chrome, CSS layer).
   and an app `Expand` override of a core primitive still wins.
 
 Apps import `kit` (which re-exports the engine types/helpers they need), never
-`ui` directly. The app-generated builder uses `-base pecheny.me/dopeuikit/kit`.
+`ui` directly. The app-generated builder uses `-base code.pecheny.me/pecheny/dopesuite/dopeuikit/kit`.
 
 ## Architecture
 
@@ -175,9 +175,9 @@ missing required prop; duplicate `id`; children-policy violation.
 Enum values are `Attr` constants; string/flag props are ctors. Two primitive
 ctors are renamed to avoid clashes (`text`→`Paragraph`, `label`→`SectionLabel`),
 the sliderrow `hint` prop is `SliderHint`, the textfield `list` prop is
-`InputList`. `cmd/uigen -core kit/vocab.json -pkg kit -base pecheny.me/dopeuikit/
+`InputList`. `cmd/uigen -core kit/vocab.json -pkg kit -base code.pecheny.me/pecheny/dopesuite/dopeuikit/
 ui` generates the kit's builder over the engine; `cmd/uigen -core <kit vocab>
--overlay app.json -pkg X -base pecheny.me/dopeuikit/kit` generates an app builder:
+-overlay app.json -pkg X -base code.pecheny.me/pecheny/dopesuite/dopeuikit/kit` generates an app builder:
 overlay ctors/consts plus re-export shims for every kit ctor/const, so app code
 imports one package. The tool reads both vocabularies from disk (it imports no
 design-system package, so it can regenerate the kit's own `tags_gen.go`).

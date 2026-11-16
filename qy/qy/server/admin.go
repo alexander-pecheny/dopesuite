@@ -11,7 +11,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
-	kit "pecheny.me/dopeuikit/kit"
+	kit "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	"qy/qy/storage/store"
 	"qy/qy/web/route"

@@ -18,7 +18,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/tgbot"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
-	kit "pecheny.me/dopeuikit/kit"
+	kit "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	"qy/qy/platform/buff"
 	"qy/qy/platform/gq"

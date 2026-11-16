@@ -1,4 +1,4 @@
-// Package ui is xy's thin overlay over DopeUIKit's kit (pecheny.me/dopeuikit/
+// Package ui is xy's thin overlay over DopeUIKit's kit (code.pecheny.me/pecheny/dopesuite/dopeuikit/
 // kit): the xy-specific primitives (docoverlay/headrow/headactions/split/pane/
 // previewtitle), the checkbox/editor expander overrides, the board mount kinds,
 // and xy's PWA page chrome. The shared design system + DSL engine live in the
@@ -6,12 +6,12 @@
 // this one package.
 package ui
 
-//go:generate go run pecheny.me/dopeuikit/cmd/uigen -core ../../../dopeuikit/kit/vocab.json -overlay vocab.json -pkg ui -base pecheny.me/dopeuikit/kit -out tags_gen.go
+//go:generate go run code.pecheny.me/pecheny/dopesuite/dopeuikit/cmd/uigen -core ../../../dopeuikit/kit/vocab.json -overlay vocab.json -pkg ui -base code.pecheny.me/pecheny/dopesuite/dopeuikit/kit -out tags_gen.go
 
 import (
 	_ "embed"
 
-	base "pecheny.me/dopeuikit/kit"
+	base "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 	xystrings "xy/i18nstrings"
 )
 

@@ -18,7 +18,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
-	kit "pecheny.me/dopeuikit/kit"
+	kit "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 )
 
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.User, bool) {

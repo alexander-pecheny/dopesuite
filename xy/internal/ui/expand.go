@@ -3,8 +3,8 @@ package ui
 import (
 	"strings"
 
-	"pecheny.me/dopeuikit/icons"
-	base "pecheny.me/dopeuikit/kit"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/icons"
+	base "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 )
 
 // expandCheckbox overrides the core (generic) checkbox with xy's attach-lossless

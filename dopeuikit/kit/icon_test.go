@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"pecheny.me/dopeuikit/icons"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/icons"
 )
 
 // A control's icon is compiled into the page, not swapped in by a boot script:

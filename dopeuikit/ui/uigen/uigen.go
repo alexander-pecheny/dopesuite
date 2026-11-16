@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"pecheny.me/dopeuikit/ui"
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/ui"
 )
 
 // Identifier overrides resolve clashes between generated names (Go has no

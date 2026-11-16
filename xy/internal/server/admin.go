@@ -15,7 +15,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sameorigin"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
-	kit "pecheny.me/dopeuikit/kit"
+	kit "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	xystrings "xy/i18nstrings"
 	"xy/internal/ui"
