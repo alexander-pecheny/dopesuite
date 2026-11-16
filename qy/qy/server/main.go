@@ -59,8 +59,10 @@ func runCommand(cmd string, args []string) {
 		runImportArchive(args)
 	case "import-gq":
 		runImportGQ(args)
+	case "import-sheet":
+		runImportSheet(args)
 	default:
-		log.Fatalf("unknown command %q (adduser, import-archive, import-gq, version)", cmd)
+		log.Fatalf("unknown command %q (adduser, import-archive, import-gq, import-sheet, version)", cmd)
 	}
 }
 

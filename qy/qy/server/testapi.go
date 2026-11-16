@@ -66,6 +66,20 @@ type Buff map[int64]string
 
 func (b Buff) Players(context.Context, []int64) map[int64]string { return b }
 
+// SheetRow is one row of the preliminary sheet, as import-sheet reads it.
+type SheetRow = sheetRow
+
+// ImportSheet runs import-sheet on rows and returns how many nominators and
+// nominations it made.
+func (ts *TestServer) ImportSheet(year int, rows []SheetRow) (int, int) {
+	ts.t.Helper()
+	people, n, err := ts.s.importSheet(ts.t.Context(), year, rows)
+	if err != nil {
+		ts.t.Fatal(err)
+	}
+	return people, n
+}
+
 // BotMessage hands the bot one message, as a private chat's update, and
 // returns what the bot kept of it: its reply, if it was a forwarded post.
 func (ts *TestServer) BotMessage(m tgbot.Message) (string, bool) {

@@ -24,8 +24,10 @@ warns. A nominator who thinks it is wrong saves the question with an
 
 **Question.** A nominated question. `orig` is what the nominator gave, parsed,
 with its credits. `clean` is the anonymised copy the jury reads. Two
-nominations of one gotquestions link share a Question; an admin merges other
-duplicates.
+nominations of one gotquestions link share a Question. The background pass
+merges two Questions whose text and answer have nearly the same words (one
+pasted, one by link, say), keeping the one with the link; an admin merges other
+duplicates by hand, and can undo either.
 
 **Suggestion.** A proposed redaction of `clean`: replace a quote in a field. The
 rule pass and the language model make them, and an admin accepts or rejects
@@ -35,6 +37,12 @@ each one.
 nominator, in the order they first nominated, keeps their first five slots that
 are neither a duplicate of someone earlier nor rejected. A reserve therefore
 counts only in place of a main pick that did not.
+
+**Preliminary sheet.** Nominations collected by a Google Form before the
+contest opened, a rating ID and a link a row, loaded by `import-sheet`. They
+count for a player only while nobody with that rating ID nominates through the
+form. A Question from the sheet that two people nominate (in the sheet or the
+form) counts outside everybody's slots.
 
 **QY number.** A counted Question's number, dealt in random order once
 nomination is over.

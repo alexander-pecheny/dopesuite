@@ -86,6 +86,12 @@ rating_named = 'Турнирный сайт: {{.name}}, {{.id}}'
 no_rating = "ID на турнирном сайте не указан"
 first = 'Первая номинация {{.date}}'
 appeal = 'Апелляция: {{.text}}'
+# A nominator from the preliminary sheet (import-sheet), whose nominations
+# count only while they have not nominated through the form.
+sheet = "Из предварительной таблицы"
+sheet_unused = "Не учитываются: этот игрок номинировал через форму."
+# A sheet question two people nominated: it counts without taking a slot.
+free = "Вне квоты: этот вопрос номинировали двое."
 slot = '{{.question}}, {{.status}}'
 
 [questions]
@@ -122,6 +128,12 @@ duplicates_hint = "У этих вопросов тот же ответ. Если
 merge_into = 'Объединить с {{.name}}'
 merge_confirm = "Объединить? Этот вопрос будет отклонён, а его номинации перейдут к выбранному."
 merge_refused = "С этим вопросом объединить нельзя."
+# A question merged into another, by hand or automatically when the two are
+# the same text: which one it went into, and the way back.
+merged_into = 'Объединён с вопросом {{.name}}: его номинации считаются за тот.'
+open_merged = 'Открыть {{.name}}'
+unmerge = "Разъединить"
+unmerge_confirm = "Разъединить? Вопрос снова станет отдельным и непроверенным, номинации вернутся к нему."
 preview = "Как его увидит жюри"
 edit = "Правка"
 orig = "Номинированный текст"

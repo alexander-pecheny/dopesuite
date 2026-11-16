@@ -106,3 +106,16 @@ func TestFormatIsReadBackByParse(t *testing.T) {
 		t.Errorf("Parse(Format(q)) = %#v, %v\nwant %#v", got, ok, q)
 	}
 }
+
+func TestSameIsOneQuestionNominatedTwice(t *testing.T) {
+	a := Question{Text: "Во время сражений при Галлиполи действовал приказ не выносить раненых с поля боя.", Answer: "слово"}
+	stressed := Question{Text: "Во время сражений при Галли́поли действовал приказ не выносить раненых с поля боя!", Answer: "Слово."}
+	other := Question{Text: "Имя великого шахматиста Вильгельма Стейница было известно повсеместно.", Answer: "шахматы"}
+	short := Question{Text: "Кто?", Answer: "я"}
+	if !Same(a, stressed) {
+		t.Error("stress marks, case and punctuation should not part two copies")
+	}
+	if Same(a, other) || Same(short, short) {
+		t.Error("different questions, or too little text, should not be one")
+	}
+}

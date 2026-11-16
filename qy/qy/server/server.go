@@ -87,7 +87,7 @@ func newServer() (*server, error) {
 }
 
 // defaultModel is the anonymisation model when QY_OPENROUTER_MODEL names none.
-const defaultModel = "anthropic/claude-haiku-4.5"
+const defaultModel = "openai/gpt-6.1-sol"
 
 func llmModel() string {
 	if m := strings.TrimSpace(os.Getenv("QY_OPENROUTER_MODEL")); m != "" {

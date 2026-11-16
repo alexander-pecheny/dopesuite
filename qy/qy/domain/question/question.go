@@ -4,6 +4,7 @@ package question
 
 import (
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 	"unicode"
@@ -161,6 +162,60 @@ func NormalAnswer(answer string) string {
 		}
 	}
 	return yo.Replace(b.String())
+}
+
+// minSameWords is how many words each question needs before Same will call
+// two of them one: a bare link or a stub is not enough to go on.
+const minSameWords = 8
+
+// sameAt is the similarity at which two questions are one. The pairs nominated
+// twice in 2026 scored 1.0, and the closest two different questions 0.45; the
+// gap leaves room for one copy with a typo fixed or a credit dropped.
+const sameAt = 0.9
+
+// Same says whether two questions are one question nominated twice: their
+// texts and answers have nearly the same words, counted as a bag (cosine of
+// the word counts), ignoring case, stress marks and the diaeresis on e.
+func Same(a, b Question) bool {
+	x, y := wordBag(a), wordBag(b)
+	if len(x) == 0 || len(y) == 0 || total(x) < minSameWords || total(y) < minSameWords {
+		return false
+	}
+	var dot, nx, ny float64
+	for w, n := range x {
+		dot += float64(n * y[w])
+		nx += float64(n * n)
+	}
+	for _, n := range y {
+		ny += float64(n * n)
+	}
+	return dot/math.Sqrt(nx*ny) >= sameAt
+}
+
+func wordBag(q Question) map[string]int {
+	bag := map[string]int{}
+	words := strings.FieldsFunc(yo.Replace(strings.ToLower(q.Text+" "+q.Answer)), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !unicode.Is(unicode.Mn, r)
+	})
+	for _, w := range words {
+		if w = strings.Map(func(r rune) rune {
+			if unicode.Is(unicode.Mn, r) {
+				return -1
+			}
+			return r
+		}, w); w != "" {
+			bag[w]++
+		}
+	}
+	return bag
+}
+
+func total(bag map[string]int) int {
+	n := 0
+	for _, c := range bag {
+		n += c
+	}
+	return n
 }
 
 // Links are the references a pasted question carries.

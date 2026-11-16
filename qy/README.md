@@ -32,7 +32,8 @@ Everything below is done by hand once; `deploy.py` only ships the binary.
 - `/etc/qy.env` from `.env.example`, a `qy` user, `/var/lib/qy`, and the unit
   from `deploy/qy.service.example`.
 - A bot from @BotFather for telegram login (`QY_BOT_TOKEN`, `QY_BOT_USERNAME`),
-  and an OpenRouter key for the model (`QY_OPENROUTER_KEY`).
+  and an OpenRouter key for the model (`QY_OPENROUTER_KEY`; the model is
+  `openai/gpt-6.1-sol` unless `QY_OPENROUTER_MODEL` names another).
 - A copy of gotquestions for nominations by link, while its API is down:
   `just import-gq <dump.sql.gz> /var/lib/qy/gq.db`, then `QY_GQ_DB` names it.
 - buff's mirror of rating.chgk.info, for the players' names on the admins'
@@ -58,3 +59,7 @@ Everything below is done by hand once; `deploy.py` only ships the binary.
   }
   ```
 - `qy-server import-archive <vopros_goda checkout>` once, to load 2021–2025.
+- `qy-server import-sheet <year> < sheet.json` loads the preliminary sheet,
+  `[{"rating", "at", "link", "tournament"}]` with every row a gotquestions or
+  telegram link; run it as the `qy` user with `QY_DB` and `QY_GQ_DB` set. A
+  second run replaces the first.

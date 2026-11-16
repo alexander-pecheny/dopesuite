@@ -85,9 +85,12 @@ export type Strings = {
       count: (people: number, n: number) => string;
       empty: () => string;
       first: (date: string) => string;
+      free: () => string;
       noRating: () => string;
       rating: (id: string) => string;
       ratingNamed: (name: string, id: string) => string;
+      sheet: () => string;
+      sheetUnused: () => string;
       slot: (question: string, status: string) => string;
       who: () => string;
     };
@@ -132,11 +135,13 @@ export type Strings = {
       mergeInto: (name: string) => string;
       mergeRefused: () => string;
       merged: () => string;
+      mergedInto: (name: string) => string;
       missing: () => string;
       new: () => string;
       noText: () => string;
       nominatedBy: (who: string, rating: string, slot: string) => string;
       openLink: () => string;
+      openMerged: (name: string) => string;
       openTournament: () => string;
       orig: () => string;
       origEmpty: () => string;
@@ -161,6 +166,8 @@ export type Strings = {
       tournament: () => string;
       tournamentId: () => string;
       tournamentStart: () => string;
+      unmerge: () => string;
+      unmergeConfirm: () => string;
       unnumbered: (id: string) => string;
     };
     questions: {

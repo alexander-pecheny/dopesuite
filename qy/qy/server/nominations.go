@@ -1,6 +1,7 @@
 package qyserver
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"slices"
@@ -25,6 +26,9 @@ type nominatorRow struct {
 	ratingName   string
 	first        string
 	slots        []nominatedSlot
+	// sheet is a nominator from the preliminary sheet; unused, one whose
+	// sheet does not count because they nominated through the form too.
+	sheet, unused bool
 }
 
 type nominatedSlot struct {
@@ -38,7 +42,7 @@ type nominatedSlot struct {
 func (s *server) nominatorRows(ctx context.Context, year int) ([]nominatorRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 select n.user_id, coalesce(u.telegram_name, ''), coalesce(u.telegram_username, u.username, ''), coalesce(u.rating_id, 0),
-  f.first, n.slot, n.question_id, n.appeal
+  f.first, n.slot, n.question_id, n.appeal, n.sheet, not `+sheetInUse+`
 from nominations n
 join users u on u.id = n.user_id
 join (select user_id, min(created_at) first, min(id) first_id from nominations where year = ? group by user_id) f on f.user_id = n.user_id
@@ -54,7 +58,7 @@ order by f.first, f.first_id, n.slot`, year, year)
 		var user int64
 		var r nominatorRow
 		var sl nominatedSlot
-		if err := rows.Scan(&user, &r.name, &r.handle, &r.rating, &r.first, &sl.slot, &sl.questionID, &sl.appeal); err != nil {
+		if err := rows.Scan(&user, &r.name, &r.handle, &r.rating, &r.first, &sl.slot, &sl.questionID, &sl.appeal, &r.sheet, &r.unused); err != nil {
 			return nil, err
 		}
 		if len(out) == 0 || user != last {
@@ -77,6 +81,10 @@ func (s *server) handleNominations(w http.ResponseWriter, r *http.Request, _ rou
 		return err
 	}
 	qs, err := store.Questions(ctx, s.db, c.Year, "id in (select question_id from nominations where year = ?)", c.Year)
+	if err != nil {
+		return err
+	}
+	free, err := freeQuestions(ctx, s.db, c.Year)
 	if err != nil {
 		return err
 	}
@@ -104,7 +112,7 @@ func (s *server) handleNominations(w http.ResponseWriter, r *http.Request, _ rou
 	rows := []ui.Item{ui.Scroll(), ui.Trow(head...)}
 	for _, p := range people {
 		n += len(p.slots)
-		rows = append(rows, ui.Trow(append([]ui.Item{ui.Cell(nominatorHead(p))}, s.slotCells(c, p, byID)...)...))
+		rows = append(rows, ui.Trow(append([]ui.Item{ui.Cell(nominatorHead(p))}, s.slotCells(c, p, byID, free)...)...))
 	}
 	y := strconv.Itoa(c.Year)
 	body := []ui.Item{ui.Section(hint(str.Admin.Nominations.Empty()))}
@@ -137,7 +145,14 @@ func nominatorHead(p nominatorRow) ui.Item {
 	default:
 		out = append(out, ratingButton(id, str.Admin.Nominations.Rating(id)))
 	}
-	return ui.Col(append(out, hint(str.Admin.Nominations.First(sinceStamp(p.first))))...)
+	out = append(out, hint(str.Admin.Nominations.First(sinceStamp(p.first))))
+	if p.sheet {
+		out = append(out, hint(str.Admin.Nominations.Sheet()))
+	}
+	if p.unused {
+		out = append(out, dangerHint(str.Admin.Nominations.SheetUnused()))
+	}
+	return ui.Col(out...)
 }
 
 func ratingButton(id, label string) ui.Item {
@@ -158,7 +173,7 @@ func sameName(a, b string) bool {
 // slotCells are the person's slots, one cell each, empty where they left the
 // slot empty. A question is shown as nominated: the text they gave, before
 // the anonymiser and the admins touched it.
-func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]store.Question) []ui.Item {
+func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]store.Question, free map[int64]bool) []ui.Item {
 	cells := make([]ui.Item, c.MainSlots+c.ReserveSlots)
 	for i := range cells {
 		cells[i] = ui.Cell()
@@ -177,6 +192,9 @@ func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]sto
 		// A long question is cut short until clicked (web/ts/fold.ts), so a
 		// screen holds a few nominators.
 		items = append(items, ui.Richtext(ui.Raw("<div data-fold>"+body+"</div>")))
+		if canonical := cmp.Or(q.MergedInto, q.ID); free[canonical] && !p.unused {
+			items = append(items, hint(str.Admin.Nominations.Free()))
+		}
 		if sl.appeal != "" {
 			items = append(items, hint(str.Admin.Nominations.Appeal(sl.appeal)))
 		}

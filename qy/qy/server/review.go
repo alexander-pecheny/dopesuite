@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math/rand/v2"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,16 +24,30 @@ import (
 
 // ---- numbering ----
 
+// sheetInUse is the condition on a nomination n by user u that it counts: one
+// made through the form always does, one from the preliminary sheet only while
+// nobody with the same rating ID has nominated through the form.
+const sheetInUse = `(n.sheet = 0 or not exists (
+  select 1 from nominations m join users mu on mu.id = m.user_id
+  where m.year = n.year and m.sheet = 0 and mu.rating_id = u.rating_id))`
+
 // counted applies the nomination rule to what is in the database. A merged
-// question counts as the one it was merged into.
+// question counts as the one it was merged into. A question from the
+// preliminary sheet that two people nominate counts outside everybody's
+// slots, after the rule has run (freeQuestions).
 func counted(ctx context.Context, q store.Querier, c contest.Contest) ([]int64, error) {
+	free, err := freeQuestions(ctx, q, c.Year)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := q.QueryContext(ctx, `
 select n.user_id, n.slot, coalesce(qq.merged_into, qq.id), coalesce(t.status, qq.status)
 from nominations n
+join users u on u.id = n.user_id
 join questions qq on qq.id = n.question_id
 left join questions t on t.id = qq.merged_into
 join (select user_id, min(created_at) first, min(id) first_id from nominations where year = ? group by user_id) f on f.user_id = n.user_id
-where n.year = ?
+where n.year = ? and `+sheetInUse+`
 order by f.first, f.first_id, n.slot`, c.Year, c.Year)
 	if err != nil {
 		return nil, err
@@ -52,12 +67,70 @@ order by f.first, f.first_id, n.slot`, c.Year, c.Year)
 			last = user
 		}
 		i := len(nominators) - 1
-		nominators[i] = append(nominators[i], contest.Slot{Question: qid, Skip: status == store.StatusRejected})
+		nominators[i] = append(nominators[i], contest.Slot{Question: qid, Skip: status == store.StatusRejected || free[qid]})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return contest.Counted(nominators, c.MainSlots), nil
+	return append(contest.Counted(nominators, c.MainSlots), sortedIDs(free)...), nil
+}
+
+func sortedIDs(set map[int64]bool) []int64 {
+	out := make([]int64, 0, len(set))
+	for id := range set {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// freeQuestions are the questions from the preliminary sheet that two people
+// nominated, in the sheet or through the form: they count without taking
+// anybody's slot. A person is their rating ID, so somebody who put a question
+// both in the sheet and in the form is one. Only nominations that count
+// (sheetInUse) are looked at, and a rejected question is not free.
+func freeQuestions(ctx context.Context, q store.Querier, year int) (map[int64]bool, error) {
+	rows, err := q.QueryContext(ctx, `
+select coalesce(qq.merged_into, qq.id), coalesce(t.status, qq.status), n.sheet,
+  case when u.rating_id > 0 then 'r' || u.rating_id else 'u' || u.id end
+from nominations n
+join users u on u.id = n.user_id
+join questions qq on qq.id = n.question_id
+left join questions t on t.id = qq.merged_into
+where n.year = ? and `+sheetInUse, year)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	type seen struct {
+		people  map[string]bool
+		sheet   bool
+		refused bool
+	}
+	by := map[int64]*seen{}
+	for rows.Next() {
+		var id int64
+		var status, person string
+		var sheet bool
+		if err := rows.Scan(&id, &status, &sheet, &person); err != nil {
+			return nil, err
+		}
+		e := by[id]
+		if e == nil {
+			e = &seen{people: map[string]bool{}}
+			by[id] = e
+		}
+		e.people[person] = true
+		e.sheet = e.sheet || sheet
+		e.refused = status == store.StatusRejected
+	}
+	out := map[int64]bool{}
+	for id, e := range by {
+		if e.sheet && !e.refused && len(e.people) >= 2 {
+			out[id] = true
+		}
+	}
+	return out, rows.Err()
 }
 
 func (s *server) numberingSection(ctx context.Context, c contest.Contest) ([]ui.Item, error) {
@@ -343,6 +416,16 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 	}
 	for _, f := range files {
 		about = append(about, ui.Row(ui.Button(ui.Href("/nominate/file/"+idstr.Format(f.ID)), ui.Ghost, ui.Small(), ui.IconPaperclip, text(f.Name))))
+	}
+	if q.MergedInto != 0 {
+		target := store.Question{ID: q.MergedInto}
+		if t, err := store.GetQuestion(ctx, s.db, q.MergedInto); err == nil {
+			target = t
+		}
+		about = append(about, hint(str.Admin.Question.MergedInto(questionName(target))), ui.Row(ui.SpaceSM, ui.AlignCenter,
+			ui.Button(ui.Href(questionHref(q.MergedInto)), ui.Ghost, ui.Small(), text(str.Admin.Question.OpenMerged(questionName(target)))),
+			ui.Form(ui.Method("post"), ui.Action(href+"/unmerge"), ui.Data("confirm", str.Admin.Question.UnmergeConfirm()),
+				ui.Button(ui.Submit(), ui.Small(), text(str.Admin.Question.Unmerge())))))
 	}
 	if q.AIStatus == store.AIFailed {
 		about = append(about, dangerHint(str.Admin.Question.AiFailed(q.AIError)))
@@ -644,17 +727,42 @@ func (s *server) handleMerge(w http.ResponseWriter, r *http.Request, _ route.Sco
 		if err != nil || t.Year != q.Year || t.ID == q.ID || t.MergedInto != 0 {
 			return userError(str.Admin.Question.MergeRefused())
 		}
-		// Whatever was merged into q follows it into t, so a chain never forms.
-		if _, err := tx.ExecContext(ctx, `update questions set merged_into = ? where merged_into = ?`, t.ID, q.ID); err != nil {
-			return err
-		}
-		q.MergedInto, q.Status = t.ID, store.StatusRejected
-		return store.SaveQuestion(ctx, tx, q, s.stamp())
+		return s.mergeInto(ctx, tx, q, t.ID)
 	})
 	if err != nil {
 		return err
 	}
 	return seeOther(w, r, questionHref(target))
+}
+
+// mergeInto makes q a copy of target: its nominations count as target's.
+func (s *server) mergeInto(ctx context.Context, tx *sql.Tx, q store.Question, target int64) error {
+	// Whatever was merged into q follows it into target, so a chain never forms.
+	if _, err := tx.ExecContext(ctx, `update questions set merged_into = ? where merged_into = ?`, target, q.ID); err != nil {
+		return err
+	}
+	q.MergedInto, q.Status = target, store.StatusRejected
+	return store.SaveQuestion(ctx, tx, q, s.stamp())
+}
+
+// handleUnmerge undoes a merge, by hand or by the background pass: the
+// question stands on its own again, unchecked.
+func (s *server) handleUnmerge(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	q, _, err := s.pathQuestion(r)
+	if err != nil {
+		return err
+	}
+	err = s.withWriteTx(r.Context(), "unmerge", func(ctx context.Context, tx *sql.Tx) error {
+		if q.MergedInto == 0 {
+			return nil
+		}
+		q.MergedInto, q.Status = 0, store.StatusNew
+		return store.SaveQuestion(ctx, tx, q, s.stamp())
+	})
+	if err != nil {
+		return err
+	}
+	return seeOther(w, r, questionHref(q.ID))
 }
 
 // handleReparse fills in a question that arrived without text it could read:

@@ -108,10 +108,15 @@ var RU = Strings{
 			},
 			Empty:    func() string { return "Пока никто ничего не номинировал." },
 			First:    func(date string) string { return fmt.Sprintf("Первая номинация %s", date) },
+			Free:     func() string { return "Вне квоты: этот вопрос номинировали двое." },
 			NoRating: func() string { return "ID на турнирном сайте не указан" },
 			Rating:   func(id string) string { return fmt.Sprintf("Турнирный сайт: %s", id) },
 			RatingNamed: func(name string, id string) string {
 				return fmt.Sprintf("Турнирный сайт: %s, %s", name, id)
+			},
+			Sheet: func() string { return "Из предварительной таблицы" },
+			SheetUnused: func() string {
+				return "Не учитываются: этот игрок номинировал через форму."
 			},
 			Slot: func(question string, status string) string { return fmt.Sprintf("%s, %s", question, status) },
 			Who:  func() string { return "Номинатор" },
@@ -175,13 +180,17 @@ var RU = Strings{
 			MergeInto:    func(name string) string { return fmt.Sprintf("Объединить с %s", name) },
 			MergeRefused: func() string { return "С этим вопросом объединить нельзя." },
 			Merged:       func() string { return "Объединён с другим" },
-			Missing:      func() string { return "Такого вопроса нет." },
-			New:          func() string { return "Не проверен" },
-			NoText:       func() string { return "Нет текста" },
+			MergedInto: func(name string) string {
+				return fmt.Sprintf("Объединён с вопросом %s: его номинации считаются за тот.", name)
+			},
+			Missing: func() string { return "Такого вопроса нет." },
+			New:     func() string { return "Не проверен" },
+			NoText:  func() string { return "Нет текста" },
 			NominatedBy: func(who string, rating string, slot string) string {
 				return fmt.Sprintf("Номинировал(а) %s, ID на турнирном сайте %s, %s.", who, rating, slot)
 			},
 			OpenLink:       func() string { return "Открыть ссылку" },
+			OpenMerged:     func(name string) string { return fmt.Sprintf("Открыть %s", name) },
 			OpenTournament: func() string { return "Открыть турнир" },
 			Orig:           func() string { return "Номинированный текст" },
 			OrigEmpty: func() string {
@@ -220,7 +229,11 @@ var RU = Strings{
 			Tournament:      func() string { return "Турнир" },
 			TournamentId:    func() string { return "ID турнира на турнирном сайте" },
 			TournamentStart: func() string { return "Начало отыгрыша" },
-			Unnumbered:      func(id string) string { return fmt.Sprintf("Без номера (№ %s)", id) },
+			Unmerge:         func() string { return "Разъединить" },
+			UnmergeConfirm: func() string {
+				return "Разъединить? Вопрос снова станет отдельным и непроверенным, номинации вернутся к нему."
+			},
+			Unnumbered: func(id string) string { return fmt.Sprintf("Без номера (№ %s)", id) },
 		},
 		Questions: AdminQuestionsStrings{
 			Answer: func() string { return "Ответ" },

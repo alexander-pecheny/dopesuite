@@ -269,6 +269,13 @@ update admins set telegram_user_id = (select u.telegram_user_id from users u
   where u.telegram_username = admins.telegram_username collate nocase and u.telegram_user_id is not null
   order by u.updated_at desc limit 1);
 `)},
+	{Version: 6, Name: "nominations from the preliminary sheet", Up: schema.Exec(`
+-- A nomination imported from the preliminary sheet (import-sheet), made
+-- before the contest opened. Its nominator is a user with a rating ID and no
+-- way to log in. It counts only while nobody with that rating ID has
+-- nominated through the form.
+alter table nominations add column sheet integer not null default 0;
+`)},
 }
 
 func Migrate(db *sql.DB) error { return schema.Apply(db, Migrations) }
