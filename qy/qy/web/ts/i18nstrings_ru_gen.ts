@@ -367,6 +367,7 @@ export const RU: Strings = {
     hideAnswers: () => "Скрыть все ответы",
     saving: () => "Сохраняю…",
     showAnswers: () => "Показать все ответы",
+    unfold: () => "Показать целиком",
   },
   nominate: {
     error: {

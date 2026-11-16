@@ -146,3 +146,28 @@ textarea[data-autogrow] {
     max-width: 8rem;
   }
 }
+
+/* Smaller type in the nominations, and a long question cut to its first
+   lines under a fade until clicked (web/ts/fold.ts), so that two or three
+   nominators fit on a screen. */
+[data-nominations] .data-table td {
+  font-size: 0.8125rem;
+}
+
+[data-fold][data-folded] {
+  max-height: 14rem;
+  overflow: hidden;
+  cursor: pointer;
+  mask-image: linear-gradient(to bottom, #000 60%, transparent);
+}
+
+/* The question list's labels and states keep to one line; the table is
+   allowed the page's width and scrolls sideways on a phone instead. */
+.wide-frame .section[data-questions] {
+  max-width: none;
+}
+
+[data-questions] .data-table .btn,
+[data-questions] .data-table td:not(:nth-child(2)) {
+  white-space: nowrap;
+}

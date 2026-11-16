@@ -366,6 +366,7 @@ export type Strings = {
     hideAnswers: () => string;
     saving: () => string;
     showAnswers: () => string;
+    unfold: () => string;
   };
   nominate: {
     error: {

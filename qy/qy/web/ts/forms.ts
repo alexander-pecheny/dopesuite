@@ -11,6 +11,8 @@
 //   - leaving a page with an unsaved form asks first (unsaved.ts).
 //   - [data-question]: a question card, drawn by chgksuite's renderer
 //     (questions.ts).
+//   - [data-fold]: a long block cut short under a fade until clicked
+//     (fold.ts); after the cards, which it measures.
 import S from "./i18nstrings.js";
 import { formBody, statusText } from "./forms-model.js";
 
@@ -57,4 +59,5 @@ if (toggleAll) {
 }
 import "./nominate.js";
 import "./questions.js";
+import "./fold.js";
 import "./unsaved.js";

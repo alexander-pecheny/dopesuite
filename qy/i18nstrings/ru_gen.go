@@ -493,6 +493,7 @@ var RU = Strings{
 		HideAnswers: func() string { return "Скрыть все ответы" },
 		Saving:      func() string { return "Сохраняю…" },
 		ShowAnswers: func() string { return "Показать все ответы" },
+		Unfold:      func() string { return "Показать целиком" },
 	},
 	Nominate: NominateStrings{
 		Error: NominateErrorStrings{

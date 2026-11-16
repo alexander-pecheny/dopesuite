@@ -5,3 +5,6 @@ failed = "Не сохранилось. Нажмите «Сохранить»."
 # The archive's results pages: the button that opens every answer at once.
 show_answers = "Показать все ответы"
 hide_answers = "Скрыть все ответы"
+
+# A long question cut short under a fade: what clicking it does.
+unfold = "Показать целиком"

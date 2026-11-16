@@ -197,7 +197,7 @@ func (s *server) handleQuestionList(w http.ResponseWriter, r *http.Request, _ ro
 	y := strconv.Itoa(c.Year)
 	body := []ui.Item{ui.Section(hint(str.Admin.Questions.Count(len(qs))))}
 	if len(qs) > 0 {
-		body = append(body, ui.Section(ui.Table(rows...)))
+		body = []ui.Item{ui.Section(ui.Data("questions", ""), hint(str.Admin.Questions.Count(len(qs))), ui.Table(rows...))}
 	}
 	return s.ok(w, r, view{
 		title: str.Admin.Contest.Questions(),
