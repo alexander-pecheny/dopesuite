@@ -21,6 +21,9 @@ export interface MultiMinigame {
   // rather than its own points — so minigames of quite different scales weigh
   // the same in the total.
   normalized: boolean;
+  // A tiebreak minigame («(вне итога)») only breaks ties: its points stay out
+  // of the total, Σ+ and the sum of places (games.MultiGame.Tiebreak).
+  tiebreak: boolean;
 }
 
 // What the best result in a normalised minigame is worth.
@@ -29,7 +32,7 @@ export const NORMAL_MAX = 100;
 export interface MultiScheme {
   gameType?: string;
   title?: string;
-  minigames?: Array<{name?: unknown; normalized?: unknown; columns?: Array<{values?: unknown; block?: unknown} | null> | null} | null>;
+  minigames?: Array<{name?: unknown; normalized?: unknown; tiebreak?: unknown; columns?: Array<{values?: unknown; block?: unknown} | null> | null} | null>;
   sorting?: unknown;
   participants?: string[];
   [key: string]: unknown;
@@ -69,6 +72,7 @@ export function rulesOf(scheme: MultiScheme): MultiRules {
     minigames.push({
       name: typeof raw.name === "string" ? raw.name : "",
       normalized: raw.normalized === true,
+      tiebreak: raw.tiebreak === true,
       columns,
     });
   }
@@ -190,7 +194,7 @@ export function scoreSheet(state: MultiState, rules: MultiRules): ScoreRow[] {
       for (let c = 0; c < game.columns.length; c++) {
         const value = cellValue(state, g, p, c);
         subtotal += value;
-        if (value > 0) row.plus += value;
+        if (value > 0 && !game.tiebreak) row.plus += value;
       }
       row.raw.push(subtotal);
     });
@@ -210,7 +214,7 @@ export function scoreSheet(state: MultiState, rules: MultiRules): ScoreRow[] {
         : best[g] > 0 && raw > 0 ? (NORMAL_MAX * raw) / best[g]
         : 0;
       row.games.push(value);
-      row.total += value;
+      if (!game.tiebreak) row.total += value;
     });
   }
   return rows;
@@ -273,11 +277,11 @@ export function rankedResultRows(
     if (participantDeclined(state, index) || (taken && !taken.has(index))) return;
     rows.push({index, placeText: "", name: label(index), ...sheet[index], places: [], placeSum: 0});
   });
-  rules.minigames.forEach((_game, g) => {
+  rules.minigames.forEach((game, g) => {
     const places = sharedPlaces(rows.map((row) => row.games[g]));
     rows.forEach((row, i) => {
       row.places.push(places[i]);
-      row.placeSum += places[i];
+      if (!game.tiebreak) row.placeSum += places[i];
     });
   });
   const level = (a: ResultRow, b: ResultRow) => rules.sorting.every((name) => metricOf(a, name) === metricOf(b, name));

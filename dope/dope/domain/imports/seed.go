@@ -740,10 +740,11 @@ type standingRow struct {
 	entry  structure.RankedEntry
 }
 
-// odTourCandidates is an OD's table counting the given tours alone, as seed
-// candidates: ranked by place, the questions of those tours taken, with the
-// OD's total and rating as the Metrics the [init] sorting may name.
-func odTourCandidates(ctx context.Context, q store.Queryer, festID int64, gameCode string, tours []int, rules []store.SchemeSortRule) (int64, []seedCandidate, error) {
+// odTourCandidates is an OD's table as a reading sees it, as seed
+// candidates: ranked by place, the questions taken, with the OD's total, its
+// rating and each tour's questions (tour1, tour2…) as the Metrics the [init]
+// sorting may name. The Вопросики быстрые break a tie by the second tour.
+func odTourCandidates(ctx context.Context, q store.Queryer, festID int64, gameCode string, reading odReading, rules []store.SchemeSortRule) (int64, []seedCandidate, error) {
 	doc, err := store.LoadGameDocByCode(ctx, q, festID, gameCode)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil, corei18n.User(dopestrings.Default.Imports.Seed.GameMissing(gameCode))
@@ -751,7 +752,7 @@ func odTourCandidates(ctx context.Context, q store.Queryer, festID int64, gameCo
 	if err != nil {
 		return 0, nil, err
 	}
-	results, err := odResultsAfterTours(gameCode, doc, tours)
+	results, err := odResultsAfterTours(gameCode, doc, reading)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -761,8 +762,11 @@ func odTourCandidates(ctx context.Context, q store.Queryer, festID int64, gameCo
 		if i > 0 && team.Total == results.Teams[i-1].Total {
 			rank = rows[i-1].entry.Rank
 		}
-		rows[i] = standingRow{name: team.Name, number: int(team.Number), entry: structure.RankedEntry{Rank: rank,
-			Metrics: map[string]float64{"total": float64(team.Total), "rating": float64(team.Rating)}}}
+		metrics := map[string]float64{"total": float64(team.Total), "rating": float64(team.Rating)}
+		for t, taken := range team.TourTotals {
+			metrics[fmt.Sprintf("tour%d", t+1)] = float64(taken)
+		}
+		rows[i] = standingRow{name: team.Name, number: int(team.Number), entry: structure.RankedEntry{Rank: rank, Metrics: metrics}}
 	}
 	candidates, err := rankedCandidates(gameCode, doc.GameType, doc.State, rows, rules)
 	return doc.GameID, candidates, err

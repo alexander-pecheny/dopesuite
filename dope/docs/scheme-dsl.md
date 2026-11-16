@@ -117,6 +117,13 @@ printed table instead writes it out in `deal:` (below).
   `sorting` may name `total`, `rating` and `rank` within it. Polyfest's КИнСбФ
   seeds on the ОД's first game day: `seed: od-1[tours 1..3]`. A Game that is
   not an ОД has no tours, and its creation is refused.
+- `before_rulings: true` beside an ОД seed reads its table as the hosts
+  entered it, without the contested answers the jury accepted: the
+  Вопросики быстрые seed «без учёта апелляций» (3.1.5). It applies when the
+  Участники tab takes the list from the Game the scheme names.
+- An ОД seed's table also carries `tour1`, `tour2`, … (the questions taken
+  in each tour) for `[init]` `sorting`: the Вопросики быстрые break a tie by
+  the rating and then by the second tour, `sorting: [total, rating, tour2]`.
 - `seed: players` — the посев a сборная format needs, composed over a
   Participant's people rather than over anything it has done itself.
   `games: [a, b]` names the source Games; each player carries `place1..placeN`,

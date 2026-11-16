@@ -392,7 +392,7 @@ order by st.stage_id, st.rank`, []any{festID, code}, func(rs *sql.Rows) (row, er
 // troika regulations seed on the question-game after its first two tours,
 // whatever has been played since.
 func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code string, doc store.GameDoc, tours []int) (map[int64]float64, error) {
-	results, err := odResultsAfterTours(code, doc, tours)
+	results, err := odResultsAfterTours(code, doc, odReading{tours: tours})
 	if err != nil {
 		return nil, err
 	}
@@ -420,12 +420,24 @@ func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code
 	return places, nil
 }
 
-// odResultsAfterTours is an OD's table counting the given tours alone: the
-// questions of the other tours are left out, the rest counted as the OD
-// counts them (by total, then the roster's order). A source that is no OD,
-// or has played none of those tours, is refused.
-func odResultsAfterTours(code string, doc store.GameDoc, tours []int) (games.ODResults, error) {
+// odReading is how a seed reads an OD's table: the tours it counts (nil is
+// every tour), and whether the jury's rulings on contested answers count.
+type odReading struct {
+	tours         []int
+	beforeRulings bool
+}
+
+// odResultsAfterTours is an OD's table as a reading sees it: the questions
+// of the other tours are left out, and before the rulings so are the
+// contested answers the jury accepted; the rest is counted as the OD counts
+// it (by total, then the roster's order). A source that is no OD, or has
+// played none of those tours, is refused.
+func odResultsAfterTours(code string, doc store.GameDoc, reading odReading) (games.ODResults, error) {
+	tours := reading.tours
 	if !games.Get(doc.GameType).ToursSeed {
+		if len(tours) == 0 {
+			return games.ODResults{}, corei18n.User(dopestrings.Default.Imports.Seed.BeforeRulingsOd(code))
+		}
 		return games.ODResults{}, corei18n.User(dopestrings.Default.Imports.Seed.ToursOd(code))
 	}
 	schemeJSON := doc.SchemeJSON
@@ -433,11 +445,14 @@ func odResultsAfterTours(code string, doc store.GameDoc, tours []int) (games.ODR
 	if err := json.Unmarshal([]byte(doc.State), &state); err != nil {
 		return games.ODResults{}, fmt.Errorf("parse OD state: %w", err)
 	}
+	if reading.beforeRulings {
+		state.Contested = nil
+	}
 	comp := games.ParseTourComp(schemeJSON)
 	counted := make([]bool, len(state.Entries))
 	base := 0
 	for t, size := range comp {
-		if slices.Contains(tours, t+1) {
+		if len(tours) == 0 || slices.Contains(tours, t+1) {
 			for i := base; i < base+size && i < len(counted); i++ {
 				counted[i] = true
 			}

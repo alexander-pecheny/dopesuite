@@ -134,3 +134,18 @@ test("rankedResultRows ranks on the sum of places, as the server does", () => {
     [["Б", 4, "1"], ["А", 5, "2"], ["В", 5.5, "3–4"], ["Г", 5.5, "3–4"]]);
   assert.deepEqual(ranked[0].places, [2.5, 1.5]);
 });
+
+test("a tiebreak minigame breaks ties alone: out of the total, Σ+ and the place sum", () => {
+  const scheme = {
+    minigames: [
+      {name: "Морской бой", normalized: true, columns: [{values: [0, 60]}]},
+      {name: "Катакана", normalized: true, columns: [{values: [0, 60]}]},
+      {name: "Медиа-Эрудит (вне итога)", tiebreak: true, columns: [{values: [0, 1000]}]},
+    ],
+    sorting: ["total", "game3"],
+  };
+  const state = {participants: ["А", "Б", "В"], games: [{cells: [[40], [30], [20]]}, {cells: [[30], [40], [20]]}, {cells: [[500], [700], [900]]}], finished: false, declined: {}};
+  const rows = multi.rankedResultRows(state, multi.rulesOf(scheme), (i) => String(i));
+  assert.deepEqual(rows.map((row) => [row.index, row.placeText, row.total, row.plus]), [[1, "1", 175, 70], [0, "2", 175, 70], [2, "3", 100, 40]]);
+  assert.equal(rows[2].placeSum, 6);
+});

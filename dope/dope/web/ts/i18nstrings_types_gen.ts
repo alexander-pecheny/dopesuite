@@ -1272,6 +1272,7 @@ export type Strings = {
       unknown: () => string;
     };
     seed: {
+      beforeRulingsOd: (game: string) => string;
       gameMissing: (code: string) => string;
       ksiMissing: () => string;
       metricUnknown: (metric: string, code: string) => string;

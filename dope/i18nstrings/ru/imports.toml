@@ -24,6 +24,9 @@ game_tours = '{{.game}}, туры {{.tours}}'
 # The scheme seeds on some tours of a game that is not an ОД (seed: game[tours
 # …], or tours.<game> beside seed: players). Only an ОД has tours.
 tours_od = 'посев по турам игры {{.game}}: туры есть только у ОД'
+# before_rulings with a seed Game that is not an OD: only an OD's answers
+# are contested.
+before_rulings_od = 'посев по игре {{.game}} до решений по спорным ответам: спорные ответы есть только у ОД'
 # Importing the seed when the fest has no КСИ game to rank.
 ksi_missing = "в фесте нет игры КСИ"
 # The game's scheme declares no [init] seed at all.

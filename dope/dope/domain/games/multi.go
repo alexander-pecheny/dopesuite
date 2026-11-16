@@ -64,6 +64,11 @@ type MultiGame struct {
 	// same in the total: a media quiz worth 1570 and a song contest worth 57
 	// both top out at 100.
 	Normalized bool `json:"normalized,omitempty"`
+	// Tiebreak: the minigame breaks ties and nothing more — its points stay
+	// out of the total, Σ+ and the sum of places, and a scheme ranks on it as
+	// gameN. Its name says so, «(вне итога)», and keeps saying it on the
+	// sheet. The Воронёнок's media games break a tie on the Медиа-Эрудит.
+	Tiebreak bool `json:"tiebreak,omitempty"`
 }
 
 // MultiPlaceSum is the metric that ranks a team on the sum of its places in
@@ -82,6 +87,7 @@ var multiSpecRe = regexp.MustCompile(`^\{([^}]*)\}(?:[xх]([0-9]+))?$`)
 // The arrow may be typed either way — «→0..100» reads best, «->0..100» is what
 // a keyboard offers.
 var multiNormalRe = regexp.MustCompile(`\s*(?:→|->)\s*0\.\.100\s*$`)
+var multiTiebreakRe = regexp.MustCompile(`\(вне итога\)\s*$`)
 var multiRangeRe = regexp.MustCompile(`^(-?[0-9]+)-(-?[0-9]+)$`)
 
 // ParseMultiGames reads the minigame spec a host writes: one line per game,
@@ -103,7 +109,7 @@ func ParseMultiGames(src string) ([]MultiGame, error) {
 		if !ok || name == "" {
 			return nil, corei18n.User(dopestrings.Default.Games.Multi.LineExpected(strconv.Itoa(n + 1)))
 		}
-		game := MultiGame{Name: name, Normalized: normalized}
+		game := MultiGame{Name: name, Normalized: normalized, Tiebreak: multiTiebreakRe.MatchString(name)}
 		block, sinceBar := 0, 0
 		for _, spec := range strings.Fields(specs) {
 			if spec == "|" {
@@ -368,7 +374,7 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 				}
 				value := rows[p][c]
 				team.Raw[g] += value
-				if value > 0 {
+				if value > 0 && !game.Tiebreak {
 					team.Plus += value
 				}
 			}
@@ -401,11 +407,16 @@ func ComputeMultiResults(schemeJSON, stateJSON string) ([]MultiResultsTeam, erro
 			default:
 				team.Games[g] = 0
 			}
-			team.Total += team.Games[g]
+			if !game.Tiebreak {
+				team.Total += team.Games[g]
+			}
 		}
 	}
 
-	for g := range scheme.Minigames {
+	for g, game := range scheme.Minigames {
+		if game.Tiebreak {
+			continue
+		}
 		places := sharedPlaces(len(ranked), func(i int) float64 { return ranked[i].Games[g] })
 		for i := range ranked {
 			if ranked[i].Places == nil {

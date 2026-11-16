@@ -1294,6 +1294,7 @@ shootout: true
       unknown: () => "не удалось сохранить",
     },
     seed: {
+      beforeRulingsOd: (game: string) => `посев по игре ${game} до решений по спорным ответам: спорные ответы есть только у ОД`,
       gameMissing: (code: string) => `в фесте нет игры с кодом ${code}`,
       ksiMissing: () => "в фесте нет игры КСИ",
       metricUnknown: (metric: string, code: string) => `sorting: ${metric} — игра ${code} такой метрики не считает`,

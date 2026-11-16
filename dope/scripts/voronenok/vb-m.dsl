@@ -2,6 +2,13 @@
 # Отборочный этап по швейцарской системе (регламент 3.1), плей-офф по
 # приложению: верхняя сетка — Квал1–4, нижняя — Квал5–8, финал из 9 вопросов.
 
+# The seed (3.1.5) names the Вопросики ОД by its code once the fest has it:
+# [init]
+# seed: <код ОД>[tours 1..2]
+# sorting: [total, rating, tour2]
+# before_rulings: true
+# division: М
+
 [defaults]
 questions: 5
 

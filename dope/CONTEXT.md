@@ -116,6 +116,8 @@ One of the several small games that make up a Мультиигры sitting. It i
 
 A мини-игра can instead be **normalised**, written `→0..100`. It then contributes what the team scored as a share of the best score in it, out of a hundred, rather than its own points. That is what lets мини-игры of very different sizes count for the same amount: «Ассорти» combined a медиа-эрудит worth 980 with a песенный конкурс worth 55. The best score is taken from the teams that played it, because a team that refused ([[Отказ]]) should not set the scale for everyone else. A team that ends a мини-игра on a negative score gets nothing for it, rather than dragging its own Итог down.
 
+A мини-игра can also be **out of the total**, written «(вне итога)» in its name, which stays on the sheet. Its points count toward neither the Итог, Σ+ nor the sum of places; a scheme can only rank on it, as `gameN`, to break a tie. The Воронёнок's media games break a tie on the Медиа-Эрудит, and the host types its results into such a мини-игра.
+
 **Кресло**:
 One of the three seats at a Троечка table, numbered in the order the ведущий asks them: two пристяжные, and then the коренной, who signals. All three answer every вопрос their team plays, and each correct answer scores on its own, so what a кресло records is a mark and never a rank. Who sits in a кресло is a fact about the тема rather than about the бой, because the регламент has the пристяжные turn round at the половина and teams often swap more than that. It is also what distinguishes a first correct answer from a repeat of one that is already on the table.
 

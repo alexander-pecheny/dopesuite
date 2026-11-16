@@ -608,20 +608,25 @@ func FromGame(code, division string) SeedSource {
 }
 
 func (f fromGame) resolve(ctx context.Context, tx *sql.Tx, scope core.FestScope) (seeding, error) {
+	// The scheme's own sorting, and its reading before the rulings, apply when
+	// the host picks the Game it declares.
 	rules := f.sort
-	if rules == nil {
-		// The scheme's own sorting applies when the host picks the Game it declares.
-		if declared, err := LoadDeclared(ctx, tx, scope.GameID); err == nil && declared.Seed == f.code {
+	beforeRulings := false
+	if declared, err := LoadDeclared(ctx, tx, scope.GameID); err == nil && declared.Seed == f.code {
+		if rules == nil {
 			rules = declared.Sort
 		}
+		beforeRulings = declared.BeforeRulings
 	}
 	label := f.code
 	var gameID int64
 	var candidates []seedCandidate
 	var err error
-	if len(f.tours) > 0 {
-		label = dopestrings.Default.Imports.SeedSource.GameTours(f.code, ToursLabel(f.tours))
-		gameID, candidates, err = odTourCandidates(ctx, tx, scope.FestID, f.code, f.tours, rules)
+	if len(f.tours) > 0 || beforeRulings {
+		if len(f.tours) > 0 {
+			label = dopestrings.Default.Imports.SeedSource.GameTours(f.code, ToursLabel(f.tours))
+		}
+		gameID, candidates, err = odTourCandidates(ctx, tx, scope.FestID, f.code, odReading{tours: f.tours, beforeRulings: beforeRulings}, rules)
 	} else {
 		gameID, candidates, err = standingsCandidates(ctx, tx, scope.FestID, f.code, rules)
 	}

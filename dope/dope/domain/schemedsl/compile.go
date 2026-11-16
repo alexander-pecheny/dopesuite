@@ -302,7 +302,7 @@ var commonKeys = []string{"kind", "title", "venues", "sorting", "reseed", "stats
 var dottedKeys = []string{"venues", "title", "bout", "standings"}
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true}
-var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true, "division": true, "tours": true}
+var initKeys = map[string]bool{"seed": true, "sorting": true, "games": true, "player": true, "division": true, "tours": true, "before_rulings": true}
 
 func keySet(lists ...[]string) map[string]bool {
 	set := map[string]bool{}
@@ -523,6 +523,7 @@ func ReadInit(doc *Doc, gameType string) (Init, error) {
 	if division, ok := doc.Init.Str("division"); ok {
 		seeding.Division = strings.TrimSpace(division)
 	}
+	seeding.BeforeRulings, _ = doc.Init.Bool("before_rulings")
 	return Init{Seeding: seeding}, nil
 }
 

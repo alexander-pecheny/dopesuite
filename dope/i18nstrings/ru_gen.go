@@ -1863,6 +1863,9 @@ var RU = Strings{
 			Unknown:    func() string { return "не удалось сохранить" },
 		},
 		Seed: ImportsSeedStrings{
+			BeforeRulingsOd: func(game string) string {
+				return fmt.Sprintf("посев по игре %s до решений по спорным ответам: спорные ответы есть только у ОД", game)
+			},
 			GameMissing: func(code string) string { return fmt.Sprintf("в фесте нет игры с кодом %s", code) },
 			KsiMissing:  func() string { return "в фесте нет игры КСИ" },
 			MetricUnknown: func(metric string, code string) string {

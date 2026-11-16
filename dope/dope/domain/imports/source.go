@@ -134,6 +134,9 @@ type Declared struct {
 	Division string
 	// Tours keeps a seed Game, an OD, to those tours.
 	Tours []int
+	// BeforeRulings reads the seed Game, an OD, without the contested answers
+	// the jury accepted.
+	BeforeRulings bool
 	// DSL says the Game is built from a scheme DSL. A pasted scheme is not,
 	// and never follows its list.
 	DSL bool
@@ -155,6 +158,7 @@ func declaredOf(init schemedsl.Init, hasDSL bool) Declared {
 	if seeding := init.Seeding; seeding != nil && strings.TrimSpace(seeding.Source) != "" {
 		d.Seed = strings.TrimSpace(seeding.Source)
 		d.Sort, d.Players, d.Division, d.Tours = seeding.Sort, seeding.Players, seeding.Division, seeding.Tours
+		d.BeforeRulings = seeding.BeforeRulings
 		return d
 	}
 	if hasDSL {

@@ -49,6 +49,10 @@ type SchemeSeeding struct {
 	// after them alone. Polyfest's KINSBF seeds on the OD's first game day,
 	// whatever has been played since (seed: od-1[tours 1..3]).
 	Tours []int `json:"tours,omitempty"`
+	// BeforeRulings reads a source OD as its hosts entered it, without the
+	// contested answers the jury accepted: the Вопросики быстрые seed on
+	// «первые два тура без учёта апелляций» (3.1.5).
+	BeforeRulings bool `json:"beforeRulings,omitempty"`
 }
 
 // SchemePlayerSeed is a seed composed over a Participant's players rather

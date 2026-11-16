@@ -206,3 +206,61 @@ func TestVoronenokFastQuestionsPlaysThrough(t *testing.T) {
 		t.Fatalf("final seats table ranks %d, %d; want 1 and 2", rank(ids[0]), rank(ids[1]))
 	}
 }
+
+// The Вопросики быстрые seed (3.1.5): the Вопросики's first two tours without
+// the appeals, a tie broken by the rating and then by the second tour. Team 2's
+// appeal on question 2 is accepted, which lifts it past team 1 in the ОД, but
+// not in the seed.
+func TestVoronenokSeedsOnTwoToursBeforeTheRulings(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	seedFestTeams(t, db, festID, 4)
+	if _, err := db.Exec(`update fests set contested = 1 where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	odID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "od", "od_tours": "3", "od_questions": "2"})
+	var odCode string
+	if err := db.QueryRow(`select code from games where id = ?`, odID).Scan(&odCode); err != nil {
+		t.Fatal(err)
+	}
+	od := fmt.Sprintf("/api/fest/%d/games/%d", festID, odID)
+	call := func(method, path string, body any) {
+		t.Helper()
+		if resp := scopedAPIRequest(t, srv, method, od+path, body, token); resp.Code != http.StatusOK {
+			t.Fatalf("%s %s: %d %s", method, path, resp.Code, resp.Body.String())
+		}
+	}
+	// Tours 1–2 leave teams 3 and 4 on two each and level on rating; tour 2
+	// puts 4 first. Team 1 sweeps tour 3, which the seed does not count.
+	call(http.MethodPatch, "/state", map[string]any{"ops": []map[string]any{
+		{"path": []any{"entries"}, "value": [][]int{{1, 2}, {3}, {3, 4}, {4}, {1}, {1}}},
+		{"path": []any{"completed"}, "value": []bool{true, true, true, true, true, true}},
+	}})
+	call(http.MethodPost, "/contested", map[string]any{"question": 1, "number": 2, "answer": "Пушкин"})
+	call(http.MethodPut, "/contested/ruling", map[string]any{"question": 1, "answer": "Пушкин", "status": "accepted"})
+
+	numberOf := teamNumbers(t, db, festID)
+	seedOrder := func(beforeRulings bool) string {
+		t.Helper()
+		dsl := fmt.Sprintf("[init]\nseed: %s[tours 1..2]\nsorting: [total, rating, tour2]\nbefore_rulings: %t\n\n[scheme]\nkind: swiss_classic\nparticipants: 4\nrounds: 3\n", odCode, beforeRulings)
+		gameID := createSchemeGame(t, db, festID, "brain", fmt.Sprintf("ВБ %t", beforeRulings), dsl)
+		resp := scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/%d/games/%d/seed-import/run", festID, gameID), nil, token)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("seed-import %d %s", resp.Code, resp.Body.String())
+		}
+		var order []int
+		for _, row := range decodeJSON[esSeedView](t, resp).Rows {
+			order = append(order, numberOf[row.TeamID])
+		}
+		return fmt.Sprint(order)
+	}
+	if got := seedOrder(true); got != "[4 3 1 2]" {
+		t.Fatalf("seed before the rulings = %s, want [4 3 1 2]", got)
+	}
+	if got := seedOrder(false); got != "[4 3 2 1]" {
+		t.Fatalf("seed with the rulings = %s, want [4 3 2 1]", got)
+	}
+}

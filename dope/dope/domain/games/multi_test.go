@@ -2,6 +2,7 @@ package games
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -268,5 +269,56 @@ func TestComputeMultiResultsRanksOnTheSumOfPlaces(t *testing.T) {
 	}
 	if b := ranked[0]; b.Places[0] != 2.5 || b.Places[1] != 1.5 {
 		t.Fatalf("Б's places = %v, want [2.5 1.5]", b.Places)
+	}
+}
+
+// The Воронёнок's media games: Морской бой and Катакана count a hundred at
+// best each, and a tie on that is broken by the Медиа-Эрудит, which counts for
+// nothing else. А and Б tie on 175; Б did better at the Медиа-Эрудит. В's
+// best Медиа-Эрудит lifts it nowhere.
+func TestATiebreakMinigameBreaksTiesAlone(t *testing.T) {
+	minigames, err := ParseMultiGames("Морской бой →0..100: {0-60}\nКатакана →0..100: {0-60}\nМедиа-Эрудит (вне итога): {0-1000}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !minigames[2].Tiebreak || minigames[2].Name != "Медиа-Эрудит (вне итога)" || minigames[0].Tiebreak {
+		t.Fatalf("minigames = %+v", minigames)
+	}
+	state := `{"participants":[{"number":1,"name":"А"},{"number":2,"name":"Б"},{"number":3,"name":"В"}],
+		"games":[{"cells":[[40],[30],[20]]},{"cells":[[30],[40],[20]]},{"cells":[[500],[700],[900]]}]}`
+	for sorting, want := range map[string]string{"": "[0:1.5 1:1.5 2:3]", "total,game3": "[1:1 0:2 2:3]"} {
+		schemeJSON, _ := MultiEmptyGameJSON("media", "Медиа-игры", minigames, strings.Split(sorting, ","))
+		ranked, err := ComputeMultiResults(string(schemeJSON), state)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, team := range ranked {
+			if team.Total > 175 || team.Plus > 70 {
+				t.Fatalf("the Медиа-Эрудит counts in %+v", team)
+			}
+			got = append(got, fmt.Sprintf("%d:%v", team.Index, team.Place))
+		}
+		if fmt.Sprint(got) != want {
+			t.Errorf("sorting %q ranks %v, want %s", sorting, got, want)
+		}
+	}
+}
+
+// The Воронёнок's media games, as scripts/voronenok writes them, parse.
+func TestVoronenokMediaGamesParse(t *testing.T) {
+	src, err := os.ReadFile("../../../scripts/voronenok/media.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	minigames, err := ParseMultiGames(string(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(minigames) != 3 || !minigames[0].Normalized || !minigames[1].Normalized || !minigames[2].Tiebreak {
+		t.Fatalf("minigames = %+v", minigames)
+	}
+	if _, err := ParseMultiSorting(minigames, "total, game3"); err != nil {
+		t.Fatal(err)
 	}
 }
