@@ -56,6 +56,10 @@ proceeding_missing = "предыдущему блоку нужен proceeding_pa
 draw_template = "draw: жеребьёвка сажает победителей групп против вторых мест, поэтому нужны группы с proceeding_participants: 2, бои на двоих и participants, равный удвоенному числу групп"
 # The label of a drawn seat while it is empty: which place of a group it takes.
 draw_seat = 'Жребий: {{.place}}-е место группы'
+# A key that does not go with rounds written out bout by bout (bouts.rN):
+# a reseed, a draw, a bronze bout, a series or a pairing would seat the
+# rounds the scheme already seats.
+bouts_with = 'bouts.rN и {{.key}} вместе не работают: раунды уже расписаны'
 # The previous block's seating template does not fit bouts of this size.
 template_size = 'нет шаблона рассадки в бои по {{.size}} из предыдущего блока — добавьте reseed: true'
 # The previous block's groups do not pair into a bracket template.

@@ -2144,6 +2144,7 @@ export type Strings = {
       bestOfParity: () => string;
       blockRoundNth: (n: string) => string;
       blockRoundSemifinals: () => string;
+      boutsWith: (key: string) => string;
       bronze: () => string;
       bronzeBout: (n: string) => string;
       drawSeat: (place: string) => string;

@@ -3191,9 +3191,12 @@ var RU = Strings{
 			},
 			BlockRoundNth:        func(n string) string { return fmt.Sprintf("1/%s финала", n) },
 			BlockRoundSemifinals: func() string { return "Полуфиналы" },
-			Bronze:               func() string { return "Матч за 3-е место" },
-			BronzeBout:           func(n string) string { return fmt.Sprintf("Матч за 3-е место. Бой %s", n) },
-			DrawSeat:             func(place string) string { return fmt.Sprintf("Жребий: %s-е место группы", place) },
+			BoutsWith: func(key string) string {
+				return fmt.Sprintf("bouts.rN и %s вместе не работают: раунды уже расписаны", key)
+			},
+			Bronze:     func() string { return "Матч за 3-е место" },
+			BronzeBout: func(n string) string { return fmt.Sprintf("Матч за 3-е место. Бой %s", n) },
+			DrawSeat:   func(place string) string { return fmt.Sprintf("Жребий: %s-е место группы", place) },
 			DrawTemplate: func() string {
 				return "draw: жеребьёвка сажает победителей групп против вторых мест, поэтому нужны группы с proceeding_participants: 2, бои на двоих и participants, равный удвоенному числу групп"
 			},

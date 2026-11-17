@@ -1,0 +1,24 @@
+# Интеллектуальный воронёнок 2026, Эрудит-квартет, группа М (регламент 3.1,
+# приложение 1). 16 команд по посеву из Вопросиков; в бою четыре команды,
+# дальше проходят двое. Бои 1/4 — змейка посева (A: 1 8 9 16), дальше бои
+# расписаны как в приложении. Бои 1/4 получают буквы A–D, их места пишутся
+# номером боя: «1-1» — первое место боя A.
+
+# The seed (1.5) names the Вопросики ОД by its code once the fest has it:
+# [init]
+# seed: <код ОД>[tours 1..2]
+# sorting: [total, rating, tour2]
+# before_rulings: true
+# division: М
+
+[scheme]
+kind: single_elimination
+title: Эрудит-квартет
+participants: 16
+match_size: 4
+winning_places: 2
+title.r1: 1/4 финала
+title.r2: 1/2 финала
+title.r3: Финал
+bouts.r2: [E: 1-1 2-2 3-1 4-2, F: 1-2 2-1 3-2 4-1]
+bouts.r3: [Финал: E-1 F-1 E-2 F-2]

@@ -21,7 +21,7 @@ type singleElim struct{}
 func (singleElim) Code() string { return "se" }
 func (singleElim) Word() string { return "single_elimination" }
 func (singleElim) Keys() []Key {
-	return []Key{{Name: "participants"}, {Name: "match_size", BlockRound: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", BlockRound: true}, {Name: "rollout", BlockRound: true}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "draw"}, {Name: "pairing", BlockRound: true}}
+	return []Key{{Name: "participants"}, {Name: "match_size", BlockRound: true}, {Name: "winning_places"}, {Name: "rounds"}, {Name: "bronze"}, {Name: "best_of", BlockRound: true}, {Name: "rollout", BlockRound: true}, {Name: "points", Cascade: true}, {Name: "metric"}, {Name: "draw"}, {Name: "pairing", BlockRound: true}, {Name: writtenBoutsKey, BlockRound: true}}
 }
 
 // The pairings a round may take its bouts' winners in.
@@ -118,6 +118,13 @@ func (singleElim) Expand(b Block) (Outputs, error) {
 			size = v
 		}
 		return size
+	}
+	written, err := writtenBlockRounds(b)
+	if err != nil {
+		return Outputs{}, err
+	}
+	if len(written) > 0 {
+		return seWritten(b, participants, winning, sizeFor, written)
 	}
 	maxBlockRounds, _ := b.Int("rounds")
 	plan, err := planElimBlockRounds(participants, winning, maxBlockRounds, sizeFor)

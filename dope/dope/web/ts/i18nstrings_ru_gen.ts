@@ -2166,6 +2166,7 @@ shootout: true
       bestOfParity: () => "best_of: серия играется до большинства побед — нечётное число боёв от 3",
       blockRoundNth: (n: string) => `1/${n} финала`,
       blockRoundSemifinals: () => "Полуфиналы",
+      boutsWith: (key: string) => `bouts.rN и ${key} вместе не работают: раунды уже расписаны`,
       bronze: () => "Матч за 3-е место",
       bronzeBout: (n: string) => `Матч за 3-е место. Бой ${n}`,
       drawSeat: (place: string) => `Жребий: ${place}-е место группы`,

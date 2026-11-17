@@ -264,3 +264,80 @@ func TestVoronenokSeedsOnTwoToursBeforeTheRulings(t *testing.T) {
 		t.Fatalf("seed with the rulings = %s, want [4 3 2 1]", got)
 	}
 }
+
+// The Воронёнок's Эрудит-квартет for Ш (приложение 2) through the server:
+// every бой won by seed, the places carried as the appendix prints them, so
+// the final seats seeds 1, 4, 2, 3 (M-1 M-2 N-1 N-2) and ranks them.
+func TestVoronenokEKPlaysThrough(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
+	db := srv.Eng().DB
+	teams := seedParticipants(t, db, festID, 32)
+	gameID := createSchemeGameFor(t, db, festID, "ek", "Эрудит-квартет", readFile(t, "../../../scripts/voronenok/ek-sh.dsl"), teams)
+	seedOf := map[int64]int{}
+	for i, id := range teams {
+		seedOf[id] = i + 1
+	}
+	seeds := func(code string) []int {
+		var out []int
+		for _, id := range matchSeatIDs(t, db, gameID, code) {
+			out = append(out, seedOf[id])
+		}
+		return out
+	}
+	// A team loses ten points per seed number: wrong answers, the dearest
+	// first, theme by theme.
+	play := func(code string) {
+		t.Helper()
+		var ops []map[string]any
+		for _, id := range matchSeatIDs(t, db, gameID, code) {
+			left := seedOf[id] * 10
+			for theme := 0; left > 0; theme++ {
+				for q := 4; q >= 0 && left > 0; q-- {
+					if value := (q + 1) * 10; value <= left {
+						ops = append(ops, map[string]any{"path": []any{"participants", fmt.Sprint(id), "themes", theme, "answers", q}, "value": "wrong"})
+						left -= value
+					}
+				}
+			}
+		}
+		patchState(t, srv, festID, gameID, code, token, ops)
+		finish(t, srv, festID, gameID, code, token)
+	}
+	for round := 1; round <= 3; round++ {
+		for _, code := range roundBouts(t, db, gameID, fmt.Sprintf("s1-r%d", round)) {
+			play(code)
+		}
+	}
+	semis := roundBouts(t, db, gameID, "s1-r3")
+	if got := fmt.Sprint(seeds(semis[0]), seeds(semis[1])); got != "[1 7 6 4] [2 8 5 3]" {
+		t.Fatalf("semifinals seat seeds %s", got)
+	}
+	final := roundBouts(t, db, gameID, "s1-r4")
+	if len(final) != 1 {
+		t.Fatalf("final бои = %v", final)
+	}
+	if got := fmt.Sprint(seeds(final[0])); got != "[1 4 2 3]" {
+		t.Fatalf("final seats seeds %s, want [1 4 2 3]", got)
+	}
+	play(final[0])
+	var places []int
+	rows, err := db.Query(`select participant_id from match_results r join matches m on m.id = r.match_id
+where m.game_id = ? and m.code = ? order by r.place`, gameID, final[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		places = append(places, seedOf[id])
+	}
+	if got := fmt.Sprint(places); got != "[1 2 3 4]" {
+		t.Fatalf("final places by seed %s, want [1 2 3 4]", got)
+	}
+}
