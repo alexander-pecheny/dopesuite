@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math/rand/v2"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -199,6 +200,51 @@ func (s *server) handleDeal(w http.ResponseWriter, r *http.Request, _ route.Scop
 
 func questionHref(id int64) string { return "/admin/question/" + idstr.Format(id) }
 
+// The question list filters, ?in= on the list and on a question opened from
+// it, so that the question's previous and next stay within the filter.
+const inPending = "pending"
+
+// listFilter is the filter the request names, if it names one.
+func listFilter(r *http.Request) string {
+	if r.FormValue("in") == inPending {
+		return inPending
+	}
+	return ""
+}
+
+// filterWhere is the questions a filter keeps. With suggestions waiting: a
+// question merged into another is left out, its suggestions moot.
+func filterWhere(f string) string {
+	if f == inPending {
+		return "merged_into is null and id in (select question_id from suggestions where status = 'pending')"
+	}
+	return "1"
+}
+
+// withFilter is a link that keeps the filter.
+func withFilter(href, f string) string {
+	if f == "" {
+		return href
+	}
+	return href + "?in=" + f
+}
+
+// questionBack is where an action on a question returns: the question, in
+// the filter it was opened from, with the notice done names.
+func questionBack(r *http.Request, id int64, done string) string {
+	v := url.Values{}
+	if f := listFilter(r); f != "" {
+		v.Set("in", f)
+	}
+	if done != "" {
+		v.Set("done", done)
+	}
+	if len(v) == 0 {
+		return questionHref(id)
+	}
+	return questionHref(id) + "?" + v.Encode()
+}
+
 func questionName(q store.Question) string {
 	if q.QY > 0 {
 		return qyLabel(q.QY)
@@ -249,7 +295,8 @@ func (s *server) handleQuestionList(w http.ResponseWriter, r *http.Request, _ ro
 		return err
 	}
 	ctx := r.Context()
-	qs, err := store.Questions(ctx, s.db, c.Year, "1")
+	f := listFilter(r)
+	qs, err := store.Questions(ctx, s.db, c.Year, filterWhere(f))
 	if err != nil {
 		return err
 	}
@@ -257,26 +304,84 @@ func (s *server) handleQuestionList(w http.ResponseWriter, r *http.Request, _ ro
 	if err != nil {
 		return err
 	}
+	var all, withPending int
+	if err := s.db.QueryRowContext(ctx, `select count(*), count(*) filter (where `+filterWhere(inPending)+`) from questions where year = ?`,
+		c.Year).Scan(&all, &withPending); err != nil {
+		return err
+	}
+	list := contestHref(c.Year) + "/questions"
+	filterButton := func(to string, label string) ui.Item {
+		look := ui.Ghost
+		if to == f {
+			look = ui.Primary
+		}
+		return ui.Button(ui.Href(withFilter(list, to)), look, ui.Small(), text(label))
+	}
+	filters := ui.Row(ui.SpaceSM, ui.Wrap(), filterButton("", str.Admin.Questions.All(strconv.Itoa(all))),
+		filterButton(inPending, str.Admin.Questions.Pending(strconv.Itoa(withPending))))
 	rows := []ui.Item{ui.Scroll(), headRow(str.Admin.Questions.Number(), str.Admin.Questions.Answer(),
 		str.Admin.Questions.Status(), str.Admin.Questions.Suggestions(), str.Admin.Questions.Dates())}
 	for _, q := range qs {
 		rows = append(rows, ui.Trow(
-			ui.Cell(ui.Button(ui.Href(questionHref(q.ID)), ui.Ghost, ui.Small(), text(questionName(q)))),
+			ui.Cell(ui.Button(ui.Href(withFilter(questionHref(q.ID), f)), ui.Ghost, ui.Small(), text(questionName(q)))),
 			ui.Cell(text(clip(q.Orig.Answer, answerPreview))),
 			ui.Cell(text(statusName(q))),
 			ui.Cell(text(strconv.Itoa(pending[q.ID]))),
 			ui.Cell(text(datesNote(c, q)))))
 	}
 	y := strconv.Itoa(c.Year)
-	body := []ui.Item{ui.Section(hint(str.Admin.Questions.Count(len(qs))))}
+	body := []ui.Item{ui.Section(filters, hint(str.Admin.Questions.Count(len(qs))))}
 	if len(qs) > 0 {
-		body = []ui.Item{ui.Section(ui.Data("questions", ""), hint(str.Admin.Questions.Count(len(qs))), ui.Table(rows...))}
+		body = []ui.Item{ui.Section(ui.Data("questions", ""), filters, hint(str.Admin.Questions.Count(len(qs))), ui.Table(rows...))}
 	}
 	return s.ok(w, r, view{
 		title: str.Admin.Contest.Questions(),
 		trail: adminTrail(crumb{contestHref(c.Year), str.Admin.Contests.Row(y)}, crumb{"", str.Admin.Contest.Questions()}),
 		body:  body,
 	})
+}
+
+// questionNav is the way to the question before and after this one in the
+// list it was opened from, and where it stands in it. A question the filter no
+// longer keeps, its last suggestion just decided, still leads on to its
+// neighbours.
+func (s *server) questionNav(ctx context.Context, year int, id int64, f string) (ui.Item, error) {
+	where := filterWhere(f)
+	rows, err := s.db.QueryContext(ctx, `
+select id, (`+where+`) from questions where year = ? and (id = ? or (`+where+`))
+order by qy is null, qy, id`, year, id)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	at, kept := -1, false
+	for rows.Next() {
+		var qid int64
+		var in bool
+		if err := rows.Scan(&qid, &in); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if qid == id {
+			at, kept = len(ids), in
+		}
+		ids = append(ids, qid)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	items := []ui.Item{ui.SpaceSM, ui.AlignCenter, ui.Wrap()}
+	if at > 0 {
+		items = append(items, ui.Button(ui.Href(withFilter(questionHref(ids[at-1]), f)), ui.Ghost, ui.Small(), text(str.Admin.Question.Prev())))
+	}
+	if at >= 0 && at < len(ids)-1 {
+		items = append(items, ui.Button(ui.Href(withFilter(questionHref(ids[at+1]), f)), ui.Ghost, ui.Small(), text(str.Admin.Question.Next())))
+	}
+	if kept {
+		items = append(items, hint(str.Admin.Question.Position(strconv.Itoa(at+1), strconv.Itoa(len(ids)))))
+	}
+	return ui.Section(ui.Row(items...)), nil
 }
 
 func (s *server) pendingSuggestions(ctx context.Context, year int) (map[int64]int, error) {
@@ -399,6 +504,12 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 	}
 	href := questionHref(q.ID)
 	y := strconv.Itoa(c.Year)
+	f := listFilter(r)
+	keep := withFilter("", f)
+	nav, err := s.questionNav(ctx, c.Year, q.ID, f)
+	if err != nil {
+		return err
+	}
 
 	about := []ui.Item{hint(str.Admin.Question.StatusLine(statusName(q), datesNote(c, q)))}
 	for _, n := range noms {
@@ -424,7 +535,7 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 		}
 		about = append(about, hint(str.Admin.Question.MergedInto(questionName(target))), ui.Row(ui.SpaceSM, ui.AlignCenter,
 			ui.Button(ui.Href(questionHref(q.MergedInto)), ui.Ghost, ui.Small(), text(str.Admin.Question.OpenMerged(questionName(target)))),
-			ui.Form(ui.Method("post"), ui.Action(href+"/unmerge"), ui.Data("confirm", str.Admin.Question.UnmergeConfirm()),
+			ui.Form(ui.Method("post"), ui.Action(href+"/unmerge"+keep), ui.Data("confirm", str.Admin.Question.UnmergeConfirm()),
 				ui.Button(ui.Submit(), ui.Small(), text(str.Admin.Question.Unmerge())))))
 	}
 	if q.AIStatus == store.AIFailed {
@@ -437,10 +548,10 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 	if err != nil {
 		return err
 	}
-	body := []ui.Item{ui.Section(about...), rules}
+	body := []ui.Item{nav, ui.Section(about...), rules}
 	if q.Orig.Empty() {
 		body = append(body, ui.Section(subhead(str.Admin.Question.PasteTitle()), hint(str.Admin.Question.PasteHint()),
-			ui.Form(ui.Method("post"), ui.Action(href+"/reparse"), ui.DirCol, ui.SpaceSM,
+			ui.Form(ui.Method("post"), ui.Action(href+"/reparse"+keep), ui.DirCol, ui.SpaceSM,
 				ui.Editor(ui.Name("source"), ui.Rows("10"), ui.Required(), ui.Text(q.SourceText)),
 				ui.Row(ui.Button(ui.Submit(), ui.Primary, text(str.Admin.Question.Parse()))))))
 	}
@@ -449,31 +560,31 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 		for _, d := range dups {
 			dupItems = append(dupItems, ui.Row(ui.SpaceSM, ui.AlignCenter,
 				ui.Button(ui.Href(questionHref(d.ID)), ui.Ghost, ui.Small(), text(questionName(d))),
-				ui.Form(ui.Method("post"), ui.Action(href+"/merge"), ui.Data("confirm", str.Admin.Question.MergeConfirm()),
+				ui.Form(ui.Method("post"), ui.Action(href+"/merge"+keep), ui.Data("confirm", str.Admin.Question.MergeConfirm()),
 					ui.Hiddenfield(ui.Name("target"), ui.Value(idstr.Format(d.ID))),
 					ui.Button(ui.Submit(), ui.Small(), text(str.Admin.Question.MergeInto(questionName(d)))))))
 		}
 		body = append(body, ui.Section(dupItems...))
 	}
-	body = append(body, ui.Section(s.suggestionItems(href, sugs)...))
+	body = append(body, ui.Section(s.suggestionItems(href, keep, sugs)...))
 	if !q.Clean.Empty() {
 		body = append(body, ui.Section(subhead(str.Admin.Question.Preview()),
 			ui.Card(ui.Richtext(ui.Raw(questionHTML(card{qy: q.QY, q: q.Clean, factcheck: q.Factcheck, extra: q.ExtraContext}))))))
 	}
 	if !q.Orig.Empty() {
 		body = append(body, ui.Section(ui.Details(ui.Summary(text(str.Admin.Question.Orig())),
-			hint(str.Admin.Question.OrigHint()), ui.Form(origForm(href, q)...))))
+			hint(str.Admin.Question.OrigHint()), ui.Form(origForm(href+"/orig"+keep, q)...))))
 	}
-	body = append(body, ui.Section(subhead(str.Admin.Question.Edit()), ui.Form(questionForm(href, q)...)))
+	body = append(body, ui.Section(subhead(str.Admin.Question.Edit()), ui.Form(questionForm(href+keep, q)...)))
 	return s.ok(w, r, view{
 		title: questionName(q),
 		trail: adminTrail(crumb{contestHref(c.Year), str.Admin.Contests.Row(y)},
-			crumb{contestHref(c.Year) + "/questions", str.Admin.Contest.Questions()}, crumb{"", questionName(q)}),
+			crumb{withFilter(contestHref(c.Year)+"/questions", f), str.Admin.Contest.Questions()}, crumb{"", questionName(q)}),
 		body: body,
 	})
 }
 
-func (s *server) suggestionItems(href string, sugs []store.Suggestion) []ui.Item {
+func (s *server) suggestionItems(href, keep string, sugs []store.Suggestion) []ui.Item {
 	out := []ui.Item{subhead(str.Admin.Suggestions.Title())}
 	if len(sugs) == 0 {
 		out = append(out, ui.Empty(text(str.Admin.Suggestions.None())))
@@ -492,7 +603,7 @@ func (s *server) suggestionItems(href string, sugs []store.Suggestion) []ui.Item
 			ui.Muted(text(str.Admin.Suggestions.Why(source, reasonName(sg))))}
 		switch sg.Status {
 		case store.SuggestionPending:
-			action := href + "/suggestions/" + idstr.Format(sg.ID)
+			action := href + "/suggestions/" + idstr.Format(sg.ID) + keep
 			item = append(item, ui.Row(ui.SpaceSM,
 				ui.Form(ui.Method("post"), ui.Action(action), ui.Hiddenfield(ui.Name("decision"), ui.Value("accept")),
 					ui.Button(ui.Submit(), ui.Primary, ui.Small(), ui.IconCheck, text(str.Admin.Suggestions.Accept()))),
@@ -505,16 +616,18 @@ func (s *server) suggestionItems(href string, sugs []store.Suggestion) []ui.Item
 		}
 		out = append(out, ui.Card(item...))
 	}
-	return append(out, ui.Form(ui.Method("post"), ui.Action(href+"/rerun"),
+	return append(out, ui.Form(ui.Method("post"), ui.Action(href+"/rerun"+keep),
 		ui.Button(ui.Submit(), ui.Ghost, ui.IconWandSparkles, text(str.Admin.Suggestions.Rerun()))))
 }
 
-func questionForm(href string, q store.Question) []ui.Item {
+// questionForm edits the question as the jury sees it; action is where it
+// posts.
+func questionForm(action string, q store.Question) []ui.Item {
 	status := ui.Selectfield(ui.Name("status"),
 		option(store.StatusNew, str.Admin.Question.New(), q.Status),
 		option(store.StatusApproved, str.Admin.Question.Approved(), q.Status),
 		option(store.StatusRejected, str.Admin.Question.Rejected(), q.Status))
-	form := []ui.Item{ui.Method("post"), ui.Action(href), ui.DirCol, ui.SpaceSM,
+	form := []ui.Item{ui.Method("post"), ui.Action(action), ui.DirCol, ui.SpaceSM,
 		ui.Field(ui.Label(str.Admin.Question.Status()), status), hint(str.Admin.Question.EditHint())}
 	for _, f := range question.Fields {
 		value := q.Clean.Get(f)
@@ -542,9 +655,9 @@ func questionForm(href string, q store.Question) []ui.Item {
 	return form
 }
 
-// origForm edits the question as it was nominated.
-func origForm(href string, q store.Question) []ui.Item {
-	form := []ui.Item{ui.Method("post"), ui.Action(href + "/orig"), ui.DirCol, ui.SpaceSM}
+// origForm edits the question as it was nominated; action is where it posts.
+func origForm(action string, q store.Question) []ui.Item {
+	form := []ui.Item{ui.Method("post"), ui.Action(action), ui.DirCol, ui.SpaceSM}
 	for _, f := range question.Fields {
 		form = append(form, ui.Field(ui.Label(fieldName(f)), ui.Editor(ui.Name(f), ui.Rows(fieldRows(f)), ui.Text(q.Orig.Get(f)))))
 	}
@@ -584,7 +697,7 @@ func (s *server) handleSaveOrig(w http.ResponseWriter, r *http.Request, _ route.
 	}); err != nil {
 		return err
 	}
-	return seeOther(w, r, questionHref(q.ID)+"?done="+doneSaved)
+	return seeOther(w, r, questionBack(r, q.ID, doneSaved))
 }
 
 func option(value, label, current string) ui.Item {
@@ -628,7 +741,7 @@ func (s *server) handleSaveQuestion(w http.ResponseWriter, r *http.Request, _ ro
 	}); err != nil {
 		return err
 	}
-	return seeOther(w, r, questionHref(q.ID)+"?done="+doneSaved)
+	return seeOther(w, r, questionBack(r, q.ID, doneSaved))
 }
 
 // readQuestionForm applies the review form to q: the jury's copy, the
@@ -696,7 +809,7 @@ func (s *server) handleSuggestion(w http.ResponseWriter, r *http.Request, _ rout
 	if err != nil {
 		return err
 	}
-	return seeOther(w, r, questionHref(q.ID))
+	return seeOther(w, r, questionBack(r, q.ID, ""))
 }
 
 // decide accepts a suggestion, making its edit, or rejects it.
@@ -732,7 +845,7 @@ func (s *server) handleMerge(w http.ResponseWriter, r *http.Request, _ route.Sco
 	if err != nil {
 		return err
 	}
-	return seeOther(w, r, questionHref(target))
+	return seeOther(w, r, questionBack(r, target, ""))
 }
 
 // mergeInto makes q a copy of target: its nominations count as target's.
@@ -762,7 +875,7 @@ func (s *server) handleUnmerge(w http.ResponseWriter, r *http.Request, _ route.S
 	if err != nil {
 		return err
 	}
-	return seeOther(w, r, questionHref(q.ID))
+	return seeOther(w, r, questionBack(r, q.ID, ""))
 }
 
 // handleReparse fills in a question that arrived without text it could read:
@@ -790,7 +903,7 @@ func (s *server) handleReparse(w http.ResponseWriter, r *http.Request, _ route.S
 		return err
 	}
 	s.nudge()
-	return seeOther(w, r, questionHref(q.ID))
+	return seeOther(w, r, questionBack(r, q.ID, ""))
 }
 
 func (s *server) handleRerun(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
@@ -806,7 +919,7 @@ func (s *server) handleRerun(w http.ResponseWriter, r *http.Request, _ route.Sco
 		return err
 	}
 	s.nudge()
-	return seeOther(w, r, questionHref(q.ID))
+	return seeOther(w, r, questionBack(r, q.ID, ""))
 }
 
 // sinceStamp formats a stored moment for a hint, in Moscow time.

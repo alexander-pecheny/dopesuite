@@ -185,6 +185,7 @@ var RU = Strings{
 			},
 			Missing: func() string { return "Такого вопроса нет." },
 			New:     func() string { return "Не проверен" },
+			Next:    func() string { return "Следующий →" },
 			NoText:  func() string { return "Нет текста" },
 			NominatedBy: func(who string, rating string, slot string) string {
 				return fmt.Sprintf("Номинировал(а) %s, ID на турнирном сайте %s, %s.", who, rating, slot)
@@ -211,6 +212,8 @@ var RU = Strings{
 			PinAdd:     func() string { return "Добавить вручную" },
 			PinNone:    func() string { return "По голосам" },
 			PinRemove:  func() string { return "Убрать вручную" },
+			Position:   func(n string, total string) string { return fmt.Sprintf("%s из %s", n, total) },
+			Prev:       func() string { return "← Предыдущий" },
 			Preview:    func() string { return "Как его увидит жюри" },
 			Published: func() string {
 				return "Вопрос опубликован (его видит народное жюри)"
@@ -236,12 +239,14 @@ var RU = Strings{
 			Unnumbered: func(id string) string { return fmt.Sprintf("Без номера (№ %s)", id) },
 		},
 		Questions: AdminQuestionsStrings{
+			All:    func(n string) string { return fmt.Sprintf("Все: %s", n) },
 			Answer: func() string { return "Ответ" },
 			Count: func(n int) string {
 				return fmt.Sprintf("Всего %d %s.", n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"))
 			},
 			Dates:       func() string { return "Даты" },
 			Number:      func() string { return "Номер" },
+			Pending:     func(n string) string { return fmt.Sprintf("С правками: %s", n) },
 			Status:      func() string { return "Статус" },
 			Suggestions: func() string { return "Правки" },
 		},

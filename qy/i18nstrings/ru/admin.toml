@@ -101,8 +101,13 @@ answer = "Ответ"
 status = "Статус"
 suggestions = "Правки"
 dates = "Даты"
+all = 'Все: {{.n}}'
+pending = 'С правками: {{.n}}'
 
 [question]
+prev = "← Предыдущий"
+next = "Следующий →"
+position = '{{.n}} из {{.total}}'
 unnumbered = 'Без номера (№ {{.id}})'
 missing = "Такого вопроса нет."
 new = "Не проверен"
