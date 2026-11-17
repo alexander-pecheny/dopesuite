@@ -138,6 +138,7 @@ export type Strings = {
       mergedInto: (name: string) => string;
       missing: () => string;
       new: () => string;
+      next: () => string;
       noText: () => string;
       nominatedBy: (who: string, rating: string, slot: string) => string;
       openLink: () => string;
@@ -154,6 +155,8 @@ export type Strings = {
       pinAdd: () => string;
       pinNone: () => string;
       pinRemove: () => string;
+      position: (n: string, total: string) => string;
+      prev: () => string;
       preview: () => string;
       published: () => string;
       rejected: () => string;
@@ -171,10 +174,12 @@ export type Strings = {
       unnumbered: (id: string) => string;
     };
     questions: {
+      all: (n: string) => string;
       answer: () => string;
       count: (n: number) => string;
       dates: () => string;
       number: () => string;
+      pending: (n: string) => string;
       status: () => string;
       suggestions: () => string;
     };
