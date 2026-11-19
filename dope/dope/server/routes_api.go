@@ -27,6 +27,7 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
+	"dope/dope/web/editbatch"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
 
@@ -403,7 +404,7 @@ func (s *server) scopedMatchPatch(w http.ResponseWriter, r *http.Request, sc rou
 	}
 	data, _, err := s.editor().SubmitMatchEdit(r.Context(), sc.Fest(), mscope.MatchID, mscope.Code, req, raw, &sample)
 	if err != nil {
-		return route.BadUser(err)
+		return editRefusal(err)
 	}
 	if err := route.JSONBytes(w, data); err != nil {
 		return err
@@ -413,6 +414,17 @@ func (s *server) scopedMatchPatch(w http.ResponseWriter, r *http.Request, sc rou
 		s.metrics.RecordEdit(sample)
 	}
 	return nil
+}
+
+// editRefusal answers a batched edit that failed: 503 when the database let
+// its window down (the editor sends it again), 400 when the edit itself was
+// refused (the editor drops it). A 400 for the first kind lost hosts' inputs
+// at Polyfest: an OD taker or a KSI blank colour reverted after its spinner.
+func editRefusal(err error) error {
+	if errors.Is(err, editbatch.ErrRetry) {
+		return route.Statusf(http.StatusServiceUnavailable, "%s", dopestrings.Default.Server.Error.BadRequest())
+	}
+	return route.BadUser(err)
 }
 
 func readPatch(r *http.Request) (string, edit.PatchRequest, error) {
@@ -445,7 +457,7 @@ func (s *server) scopedMatchFinish(w http.ResponseWriter, r *http.Request, sc ro
 	}
 	data, _, err := s.editor().SubmitMatchFinish(r.Context(), sc.Fest(), mscope.MatchID, mscope.Code, *req.Finished)
 	if err != nil {
-		return route.BadUser(err)
+		return editRefusal(err)
 	}
 	return route.JSONBytes(w, data)
 }
@@ -465,7 +477,7 @@ func (s *server) scopedMatchVenue(w http.ResponseWriter, r *http.Request, sc rou
 	}
 	data, _, err := s.editor().SubmitMatchVenue(r.Context(), sc.Fest(), mscope.MatchID, mscope.Code, number)
 	if err != nil {
-		return route.BadUser(err)
+		return editRefusal(err)
 	}
 	return route.JSONBytes(w, data)
 }
@@ -603,7 +615,7 @@ func (s *server) scopedGameStatePatch(w http.ResponseWriter, r *http.Request, sc
 		return route.NotFound
 	}
 	if err != nil {
-		return route.BadUser(err)
+		return editRefusal(err)
 	}
 	if err := route.JSONBytes(w, next); err != nil {
 		return err

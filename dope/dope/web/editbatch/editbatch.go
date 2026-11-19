@@ -318,7 +318,7 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 	defer cancelTx()
 	conn, err := b.Eng.AcquireWriteConn(txCtx, "edit-batch")
 	if err != nil {
-		b.failBatch(jobs, err)
+		b.failBusy(scope, jobs, err)
 		return
 	}
 	defer conn.Close()
@@ -335,7 +335,7 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 	tx, err := b.Eng.BeginWriteTxConn(txCtx, conn)
 	if err != nil {
 		unlock()
-		b.failBatch(jobs, err)
+		b.failBusy(scope, jobs, err)
 		return
 	}
 	// Safety net: a no-op after Commit, but guarantees the tx is finalized on any
@@ -410,7 +410,7 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 		unlock()
 		// Commit failed: the whole window failed atomically. Even the edits that
 		// applied in memory did not persist, so report the failure to all.
-		b.failBatch(jobs, err)
+		b.failBusy(scope, jobs, err)
 		return
 	}
 
@@ -627,6 +627,18 @@ func (b *Batcher) deliver(job *editJob, res editResult, metricsOn bool, acquired
 	}
 	job.finish(res)
 	job.cancel()
+}
+
+// ErrRetry marks a window that failed for want of the database (no write
+// connection in time, a busy BEGIN or COMMIT), not for anything its edits
+// said: sent again, they apply. The handlers answer it 503, which the editor
+// retries; any other refusal is a 400, which it drops.
+var ErrRetry = errors.New("the edit window could not reach the database")
+
+// failBusy fails every job of a window the database refused, as one to retry.
+func (b *Batcher) failBusy(scope core.FestScope, jobs []*editJob, err error) {
+	log.Printf("edit batch for game %d failed, %d edits to retry: %v", scope.GameID, len(jobs), err)
+	b.failBatch(jobs, fmt.Errorf("%w: %w", ErrRetry, err))
 }
 
 // failBatch fails every job with err and releases their contexts.
