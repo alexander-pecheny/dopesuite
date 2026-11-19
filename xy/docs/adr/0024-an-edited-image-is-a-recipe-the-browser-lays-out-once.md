@@ -34,11 +34,20 @@ schema compiler, no new dependency:
 ```
 "XYIMG" 0x00 | u8 format version
 chunks: [4-byte ASCII type][u32 big-endian length][bytes]
-  RCPE  the Recipe, UTF-8 JSON with its own version (always first)
-  SRCI  the source image as uploaded (absent on a text-only canvas)
-  TSVG  the text and the black boxes as SVG, the vector overlay
+  RCPE  the Recipe, UTF-8 JSON with its own version (always first): the
+        frame, the items as the editor reopens them, and the bake plan
+  IMAG  one picture as it was added, numbered in order (repeatable)
+  OVER  one vector overlay: black boxes and Frozen Lines (repeatable)
   RAST  the raster Rendition
 ```
+
+The bake plan is the frame (size in mm, background) and its layers in
+stacking order: a picture layer names an `IMAG` and its rectangle relative to
+the frame; an overlay layer names an `OVER`, which covers the whole frame. A
+run of black boxes and text between two pictures is one overlay, so a black
+box can sit over one photo and under another. The reader and writer are
+`chgksuite/xyimage` and `web/ts/xyimagefile.ts`, held to
+`chgksuite/xyimage/testdata/fixture.*`.
 
 Compatibility follows PNG's rule. A chunk type that starts with an uppercase
 letter is critical: a reader that does not know it refuses the file with
@@ -53,12 +62,14 @@ Nothing outside xy ever sees the container.
 **Nothing is destructive.** The source bytes are never rewritten, and the
 Recipe can be reopened and changed at any time.
 
-**The canvas is the frame, and the source is optional.** Every Edited Image
-has a canvas measured in millimetres, resizable at any time, with a background
-colour (white by default). A source image is an optional layer placed on it, and
-a crop is the source framed by the canvas. So one model covers a text-only
-раздатка (no source at all), text over a photo (canvas = crop) and a photo with
-text beside it (canvas larger than the photo). Font sizes are points against
+**An infinite canvas with one frame, and pictures are optional.** The editor is
+laid out like Figma: an infinite canvas in millimetres with one frame on it,
+and only what is inside the frame is baked. The frame is resizable at any time,
+with a background colour (white by default), and dragging its edge reframes:
+nothing on the canvas moves. Pictures are ordinary layers, as many as wanted,
+and a crop is a picture framed by the frame. So one model covers a text-only
+раздатка (no picture at all), text over a photo (frame = crop) and a photo with
+text beside it (frame larger than the photo). Font sizes are points against
 those millimetres, and the raster Rendition takes its pixels from a dpi.
 
 **Editing a picture creates a new attachment and changes no text.**
@@ -83,12 +94,14 @@ export ever lays the text out again; it places the Frozen Lines.
 **The Renditions are baked in the browser on save**, and stored next to the
 Recipe:
 
-- the **vector Rendition** is `TSVG` placed over `SRCI`: an SVG of the black
-  boxes and one positioned `<text>` per Frozen Line, with no raster inside it.
-  The PDF and раздатки export places the source with its crop and lays the
-  overlay on top, which is geometry only, never layout. typst keeps SVG text
-  as real text: a probe through the wasm pool produced `BT … Tj` text, the Noto
-  Sans faces embedded as subsets, and a ToUnicode map;
+- the **vector Rendition** is the `OVER` chunks laid between the `IMAG`
+  pictures by the bake plan. Each overlay is an SVG of black boxes and one
+  positioned `<text>` per frozen word, with no raster inside it. At export the
+  Go reader composes them into one SVG the size of the frame (the pictures
+  embedded, the overlays inline), in memory only, and typst takes it as an
+  image: geometry, never layout. typst keeps SVG text as real text, as the
+  test in `typstwasm/xyimage_test.go` checks: Noto Sans embedded, with a
+  ToUnicode map;
 - the **raster Rendition** (`RAST`) is the whole canvas drawn at the Recipe's
   dpi, 300 by default and set per image in the editor. Because it is baked on
   save, changing the dpi is an edit, never an export option. PNG for a

@@ -50,16 +50,15 @@ func (e *exporter) parseImage(arg string) (*slideImage, bool) {
 	if !found {
 		return nil, false
 	}
-	decoded, err := imgconv.Decode(data)
+	pw, ph, err := imgconv.Size(data)
 	if err != nil {
 		return nil, false
 	}
-	b := decoded.Bounds()
 	sized := img
 	sized.Inline = false
-	w, h := sized.SizeInches(b.Dx(), b.Dy())
+	w, h := sized.SizeInches(pw, ph)
 	return &slideImage{
-		name: img.Name, data: data, width: w, height: h,
+		name: img.Name, data: imgconv.Raster(data), width: w, height: h,
 		big: img.Big, inline: img.Inline,
 	}, true
 }

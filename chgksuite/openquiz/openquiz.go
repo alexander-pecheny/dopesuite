@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/fsource"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/imgconv"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/imghost"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/inline"
 )
@@ -256,7 +257,9 @@ func (e *exporter) link(arg string) (string, error) {
 	if !found || e.host == nil {
 		return "", nil
 	}
-	return e.host.Upload(name, data)
+	// An Edited Image is hosted as its raster rendition: a quiz site shows a
+	// picture, and has no use for the container.
+	return e.host.Upload(name, imgconv.Raster(data))
 }
 
 // makeSplit is openquiz's make_split: a list becomes numbered lines, and the

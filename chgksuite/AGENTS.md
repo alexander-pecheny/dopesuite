@@ -207,6 +207,12 @@ imgconv/               jpegopt.go: OptimizeJPEG rebuilds a baseline JPEG's Huffm
                        Re-encoding is unavoidable (neither Word nor typst reads WebP), but re-encoding a photo
                        as PNG is lossless and huge: an 800 KB JPEG attachment used to come back as a megabyte
                        of PNG — most of the exported file. Don't "simplify" this back to a plain ToPNG.
+xyimage/               xy's Edited Image (.xyimage, xy ADR-0024): the PNG-framed chunk container
+                       (RCPE Recipe, IMAG pictures, OVER vector overlays, RAST raster), Parse/Encode,
+                       NativePx (the frame at 120 px/in) and VectorSVG, the composed SVG typst sets.
+                       imgconv answers for it (Decode/Size/Raster/Vector), so docx, pptx, typstdoc,
+                       handout, openquiz and tg take it without knowing. web/ts/xyimagefile.ts in xy
+                       is the browser's copy, held to testdata/fixture.* (go test ./xyimage -update)
 xyenvelope/            xy's Envelope outside the browser: Unlock derives the KEK with scrypt,
                        unwraps the board's data key and checks the verify token; DataKey seals
                        and opens fields and attachment bytes. Parity-tested both ways against

@@ -61,12 +61,11 @@ func (e *exporter) imageInches(arg string) (im inline.Img, w, h float64, ok bool
 	if raw == nil {
 		return im, 0, 0, false
 	}
-	src, err := imgconv.Decode(raw)
+	pw, ph, err := imgconv.Size(raw)
 	if err != nil {
 		return im, 0, 0, false
 	}
-	b := src.Bounds()
-	w, h = im.SizeInches(b.Dx(), b.Dy())
+	w, h = im.SizeInches(pw, ph)
 	return im, w, h, true
 }
 

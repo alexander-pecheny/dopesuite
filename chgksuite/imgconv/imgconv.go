@@ -17,16 +17,63 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyimage"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 )
 
-// Decode decodes an image of any supported format (PNG/JPEG/GIF/WebP). Callers
-// need this before ForExport, because the size a picture is drawn at is derived
-// from its ORIGINAL pixel dimensions (inline.Img.SizeInches).
+// Decode decodes an image of any supported format (PNG/JPEG/GIF/WebP). An
+// Edited Image (xy's .xyimage) decodes as its raster rendition. Size a picture
+// with Size, not with the bounds of what Decode returns: an Edited Image's
+// raster is baked at whatever dpi its editor chose.
 func Decode(raw []byte) (image.Image, error) {
-	img, _, err := image.Decode(bytes.NewReader(raw))
+	img, _, err := image.Decode(bytes.NewReader(Raster(raw)))
 	return img, err
+}
+
+// Raster is the bytes of a picture as an ordinary image: an Edited Image's
+// raster rendition, anything else as it is. For an exporter that embeds the
+// bytes without re-encoding them.
+func Raster(raw []byte) []byte {
+	if !xyimage.Is(raw) {
+		return raw
+	}
+	f, err := xyimage.Parse(raw)
+	if err != nil || f.Raster == nil {
+		return nil
+	}
+	return f.Raster
+}
+
+// Size is a picture's native size in pixels, which is what the size it is drawn
+// at is derived from (inline.Img.SizeInches reads them at 120 dpi). An Edited
+// Image's native size is its frame (xy ADR-0024), so its dpi changes only how
+// sharp it is, never how big.
+func Size(raw []byte) (w, h int, err error) {
+	if xyimage.Is(raw) {
+		f, err := xyimage.Parse(raw)
+		if err != nil {
+			return 0, 0, err
+		}
+		w, h = f.NativePx()
+		return w, h, nil
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	return cfg.Width, cfg.Height, err
+}
+
+// Vector is an Edited Image's vector rendition, one SVG typst sets as vector
+// with its text as text; ok is false for any other picture.
+func Vector(raw []byte) (svg []byte, ok bool) {
+	if !xyimage.Is(raw) {
+		return nil, false
+	}
+	f, err := xyimage.Parse(raw)
+	if err != nil {
+		return nil, false
+	}
+	svg, err = f.VectorSVG()
+	return svg, err == nil
 }
 
 // ExportDPI is the resolution images are embedded at. A picture in an exported

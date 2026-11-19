@@ -40,13 +40,12 @@ func (e *exporter) addImage(p *para, arg string) {
 	// The size it will be drawn at comes from the ORIGINAL pixel dimensions
 	// (chgksuite's proportional_resize works off those), and the encoding is then
 	// chosen for that size — so decode first, size second, encode third.
-	src, err := imgconv.Decode(raw)
+	pw, ph, err := imgconv.Size(raw)
 	if err != nil {
 		p.addStyled(missingImage(im.Name), "bold")
 		return
 	}
-	b := src.Bounds()
-	widthIn, heightIn := im.SizeInches(b.Dx(), b.Dy())
+	widthIn, heightIn := im.SizeInches(pw, ph)
 
 	// The board preview caps a picture at 12em tall / 480px wide (.pv-img), but
 	// SizeInches only clamps the AUTO size (longest side ≤ 5in) — a portrait photo
@@ -59,7 +58,7 @@ func (e *exporter) addImage(p *para, arg string) {
 		widthIn, heightIn = widthIn*s, heightIn*s
 	}
 
-	data, ext, err := imgconv.ForExport(raw, widthIn, heightIn)
+	data, ext, err := exportBytes(raw, widthIn, heightIn)
 	if err != nil {
 		p.addStyled(missingImage(im.Name), "bold")
 		return
@@ -80,3 +79,14 @@ func (e *exporter) addImage(p *para, arg string) {
 }
 
 func missingImage(name string) string { return chgkstrings.Default.Docs.Image.Missing(name) }
+
+// exportBytes is what a picture goes into the PDF as. An Edited Image goes in
+// as its vector rendition, so its text stays text and the frame is drawn at
+// whatever size the page gives it; anything else is re-encoded for the size
+// it is drawn at.
+func exportBytes(raw []byte, widthIn, heightIn float64) ([]byte, string, error) {
+	if svg, ok := imgconv.Vector(raw); ok {
+		return svg, "svg", nil
+	}
+	return imgconv.ForExport(raw, widthIn, heightIn)
+}

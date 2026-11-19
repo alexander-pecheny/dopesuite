@@ -120,7 +120,7 @@ func prepare(ctx context.Context, hndt string, images map[string][]byte, a Args,
 		return "", err
 	}
 	hndt, images = flattenImagePaths(hndt, images)
-	if err := ts.SetImages(ctx, images); err != nil {
+	if err := ts.SetImages(ctx, vectorImages(images)); err != nil {
 		return "", err
 	}
 	return GenerateTyp(hndt, a), nil

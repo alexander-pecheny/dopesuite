@@ -308,8 +308,11 @@ func (s *slidePart) addPicture(p *pkg, name string, data []byte, left, top, widt
 func imageExt(name string) string {
 	if i := strings.LastIndex(name, "."); i >= 0 {
 		ext := strings.ToLower(name[i+1:])
-		if ext == "jpg" {
+		switch ext {
+		case "jpg":
 			return "jpeg"
+		case "xyimage":
+			return "png" // its raster rendition is what parseImage embeds
 		}
 		return ext
 	}

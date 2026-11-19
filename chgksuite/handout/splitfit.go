@@ -46,7 +46,7 @@ const (
 
 // newSFRun loads the run's images into the typesetter.
 func newSFRun(ctx context.Context, images map[string][]byte, a Args, ts Typesetter) (*sfRun, error) {
-	if err := ts.SetImages(ctx, images); err != nil {
+	if err := ts.SetImages(ctx, vectorImages(images)); err != nil {
 		return nil, err
 	}
 	return &sfRun{a: a, ts: ts}, nil

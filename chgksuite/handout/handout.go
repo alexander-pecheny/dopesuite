@@ -386,6 +386,11 @@ func (a Args) buildCellBody(b block) string {
 		imgWidth := pyFloat(qw*percent) + "%"
 		path := strings.ReplaceAll(img, "\\", "/")
 		imgExpr = strings.ReplaceAll(strings.ReplaceAll(imgTmpl, "<IMGPATH>", path), "<IMGWIDTH>", imgWidth)
+		if isEditedImageName(path) {
+			// vectorImages handed typst its vector rendition under this name,
+			// and typst picks a decoder by extension unless told.
+			imgExpr = strings.TrimSuffix(imgExpr, ")") + `, format: "svg")`
+		}
 	}
 
 	var textExpr string

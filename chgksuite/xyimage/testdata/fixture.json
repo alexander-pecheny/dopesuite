@@ -1,0 +1,10 @@
+{
+  "recipe": "{\"v\":1,\"frame\":{\"x\":0,\"y\":0,\"w\":40,\"h\":20,\"bg\":\"#ffffff\",\"dpi\":300},\"items\":[{\"kind\":\"image\",\"src\":0,\"name\":\"dot.png\",\"x\":-5,\"y\":2,\"w\":20,\"h\":10},{\"kind\":\"text\",\"text\":\"Раздатка\",\"x\":4,\"y\":4,\"w\":30,\"h\":10}],\"bake\":{\"w\":40,\"h\":20,\"bg\":\"#ffffff\",\"layers\":[{\"kind\":\"image\",\"src\":0,\"ext\":\"png\",\"x\":-5,\"y\":2,\"w\":20,\"h\":10},{\"kind\":\"svg\",\"over\":0}]}}",
+  "images": [
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+  ],
+  "overlays": [
+    "\u003csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"40mm\" height=\"20mm\" viewBox=\"0 0 40 20\"\u003e\u003ctext font-family=\"Noto Sans\" font-size=\"4.939\" fill=\"#000\"\u003e\u003ctspan x=\"4\" y=\"9\"\u003eРаздатка\u003c/tspan\u003e\u003c/text\u003e\u003c/svg\u003e"
+  ],
+  "raster": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+}
