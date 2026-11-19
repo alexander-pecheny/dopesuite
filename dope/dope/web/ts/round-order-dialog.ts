@@ -7,6 +7,7 @@
 // begun stays, nobody plays twice in one wave) and has the last word.
 
 import S from "./i18nstrings.js";
+import {nameCell} from "./name-cell.js";
 
 // SlotBout is one bout as the dialog shows it.
 export interface SlotBout {
@@ -101,7 +102,7 @@ export function openRoundOrderDialog(title: string, rounds: SlotRound[], swap: S
     }
     for (const [wave, bouts] of wavesOf(round.bouts)) {
       const row = document.createElement("div");
-      row.className = "round-order-wave";
+      row.className = "u-col u-gap-xs";
       const label = document.createElement("div");
       label.className = "round-order-wave-label";
       const times = [...new Set(bouts.map((bout) => bout.time).filter(Boolean))];
@@ -141,10 +142,8 @@ export function openRoundOrderDialog(title: string, rounds: SlotRound[], swap: S
     }
     node.appendChild(top);
     for (const seat of bout.seats) {
-      const line = document.createElement("span");
-      line.className = "round-order-card-seat";
-      line.textContent = seat;
-      node.appendChild(line);
+      // A team's name: it fades when it does not fit, and its popover has it whole.
+      node.appendChild(nameCell(seat, {tag: "span", className: "round-order-card-seat"}));
     }
     bindDrag(node, sections, (target) => {
       const other = round.bouts.find((entry) => entry.code === target.dataset.bout);

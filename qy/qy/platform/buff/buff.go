@@ -44,7 +44,8 @@ func Open(path string) (Names, error) {
 	return &DB{db: db}, nil
 }
 
-// Players is "Имя Фамилия" for each ID the mirror knows.
+// Players is the name, given name first ("Ivan Petrov"), of each ID the
+// mirror knows.
 func (d *DB) Players(ctx context.Context, ids []int64) map[int64]string {
 	out := map[int64]string{}
 	for _, id := range ids {

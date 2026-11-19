@@ -95,7 +95,8 @@ func questionImages(source string, f file) []QuestionImage {
 // numbering draws, a number on a line of its own that chgksuite's «smart» mode
 // leaves alone), the one chgksuite's 4s gives it, counting on from the written
 // numbers. A written number wins over a counted one: a note to the narrator
-// read as an unnumbered question does not take «Вопрос 1.»'s number.
+// read as an unnumbered question does not take the number of the question
+// written as number 1.
 func Question(name string, data []byte, number string, opt Options) (*QuestionText, error) {
 	opt.images = true
 	files, err := packetFiles(name, data, opt)

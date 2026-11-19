@@ -268,6 +268,7 @@ func (roundRobin) Metrics() []string {
 
 // rrCanonBlockRounds are the community's canonical KINSBF group schedules,
 // retained verbatim so existing sheets and dope groups agree bout-for-bout.
+// sloplint: ignore[magic-numbers] the numbers are seats in a published schedule
 var rrCanonBlockRounds = map[int][][][]int{
 	2: {{{1, 2}}},
 	3: {{{1, 2}}, {{1, 3}}, {{2, 3}}},
@@ -279,6 +280,7 @@ var rrCanonBlockRounds = map[int][][][]int{
 // (generate_si.py GROUP_STAGE), so a dope group and the reference sheet name
 // the same Matches; it is the affine plane AG(2,3) with its parallel classes
 // in that document's order.
+// sloplint: ignore[magic-numbers] the numbers are seats in a published schedule
 var rrCanonTables = map[[2]int][][][]int{
 	{9, 3}: {
 		{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},

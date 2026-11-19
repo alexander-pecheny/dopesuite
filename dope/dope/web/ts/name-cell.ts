@@ -127,7 +127,7 @@ export function compactFlagBadges(flags: readonly string[] | undefined): HTMLEle
   wrap.className = "team-flags team-flags-compact";
   for (let at = 0; at < flags.length; at += FLAGS_PER_LINE) {
     const line = document.createElement("span");
-    line.className = "team-flags-line";
+    line.className = "u-row u-gap-xs";
     for (const flag of flags.slice(at, at + FLAGS_PER_LINE)) {
       const badge = document.createElement("span");
       badge.className = "team-flag";
