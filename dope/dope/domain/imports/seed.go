@@ -743,7 +743,7 @@ type standingRow struct {
 // odTourCandidates is an OD's table as a reading sees it, as seed
 // candidates: ranked by place, the questions taken, with the OD's total, its
 // rating and each tour's questions (tour1, tour2…) as the Metrics the [init]
-// sorting may name. The Вопросики быстрые break a tie by the second tour.
+// sorting may name. The fast-questions tournament breaks a tie by the second tour.
 func odTourCandidates(ctx context.Context, q store.Queryer, festID int64, gameCode string, reading odReading, rules []store.SchemeSortRule) (int64, []seedCandidate, error) {
 	doc, err := store.LoadGameDocByCode(ctx, q, festID, gameCode)
 	if errors.Is(err, sql.ErrNoRows) {

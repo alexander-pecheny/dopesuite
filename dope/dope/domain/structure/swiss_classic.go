@@ -17,18 +17,18 @@ func init() {
 	Register(swissPairing{})
 }
 
-// swissClassic is the Swiss system as chess and the Вопросики быстрые play it
+// swissClassic is the Swiss system as chess and the fast-questions tournament play it
 // (regulations 3.1): a fixed number of rounds, every team in every round, each
 // round pairing teams level on points or as close as they can be, and never
 // the same two twice. Unlike the Major's `swiss`, nobody leaves early and no
 // pairing is known before the round before it ends, so a round after the first
 // is seated from a pairing stage the host calculates once that round is
-// played: it ranks everyone so that ranks 2k−1 and 2k sit down at бой k.
+// played: it ranks everyone so that ranks 2k−1 and 2k sit down at bout k.
 // Calculating publishes the round, and a later correction of a result changes
 // the table but not those pairs (3.1.10), unless the host calculates again.
 //
 // With an odd number of teams one sits out each round against the empty
-// table: it plays the questions alone, and its бой counts like any other
+// table: it plays the questions alone, and its bout counts like any other
 // (3.1.4).
 type swissClassic struct{}
 
@@ -39,12 +39,12 @@ func (swissClassic) Keys() []Key {
 }
 
 // SwissClassicConfig is what both the table and a round's pairing read: what
-// a бой pays and how the table ranks.
+// a bout pays and how the table ranks.
 type SwissClassicConfig struct {
 	Code   string   `json:"code,omitempty"`
 	Points RRPoints `json:"points"`
-	// ZeroDraw is what a draw pays when neither side took a question: «за
-	// ненулевую ничью — одно очко, за нулевую ничью — ноль».
+	// ZeroDraw is what a draw pays when neither side took a question: a draw with
+	// answers pays one point, a 0:0 nothing (3.1.6).
 	ZeroDraw float64    `json:"zeroDraw"`
 	Order    []SortRule `json:"order"`
 }
@@ -200,7 +200,7 @@ func (swissClassic) Expand(b Block) (Outputs, error) {
 	}}}, nil
 }
 
-// swissClassicConfig reads what a бой pays and the table's order.
+// swissClassicConfig reads what a bout pays and the table's order.
 func swissClassicConfig(b Block) (SwissClassicConfig, error) {
 	points, err := rrPoints(b)
 	if err != nil {
@@ -263,7 +263,7 @@ type swissBook struct {
 	order []int64
 }
 
-// swissRecords sums every finished бой of the stage. A бой against the empty
+// swissRecords sums every finished bout of the stage. A bout against the empty
 // table has no second Participant: its team wins it by taking a question and
 // draws it 0:0 otherwise, which is the zero draw. Buchholz is the points of
 // every opponent the team met, the empty table not among them (3.1.4).
@@ -362,7 +362,7 @@ func (book swissBook) table(order []SortRule) []RankedEntry {
 }
 
 // swissPairing is a round's pairing stage: a reseed whose ranks are seats,
-// 2k−1 and 2k at бой k, and the team that sits out last.
+// 2k−1 and 2k at bout k, and the team that sits out last.
 type swissPairing struct{}
 
 func (swissPairing) Code() string { return "swiss_pairing" }
@@ -556,7 +556,7 @@ func bestPairing(ids []int64, points map[int64]float64, met func(a, b int64) boo
 }
 
 // orderPairs puts the pairs in lineup order, the better-placed team first in
-// each, so бой 1 is the top of the table.
+// each, so bout 1 is the top of the table.
 func orderPairs(pairs [][2]int64, ids []int64) [][2]int64 {
 	at := map[int64]int{}
 	for i, id := range ids {

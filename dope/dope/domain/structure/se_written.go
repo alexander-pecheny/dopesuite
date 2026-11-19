@@ -10,7 +10,7 @@ import (
 
 // A single elimination whose rounds after the opening the regulations print
 // bout by bout (`bouts.rN`), as the double elimination's may (de_written.go).
-// The Воронёнок's Эрудит-квартет seats its 1/2 e = a1 b2 c1 d2, where the
+// The Voronenok's erudite quartet seats its 1/2 e = a1 b2 c1 d2, where the
 // bracket's own order would seat a1 a2 b1 b2. A single elimination is a
 // bracket with one life, so the planner and the reading are the double
 // elimination's; only what the block hands on differs: a final's every place,

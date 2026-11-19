@@ -251,8 +251,8 @@ func (w *writtenPlan) seat(token string) (deSource, int, error) {
 // finish checks that everyone still in before the last round plays on, and
 // makes the last round's places the block's survivors: fewer Losses first,
 // as the planner ranks them, then in the order the round lists them. A place
-// no later bout takes may instead wait for the next Block — the Вопросики
-// быстрые upper final's winner waits for the lower bracket's to meet it in a
+// no later bout takes may instead wait for the next Block — the fast-questions
+// tournament's upper final's winner waits for the lower bracket's to meet it in a
 // final of three — when proceeding_participants counts it among those the
 // block sends on, so a seat the scheme forgot still fails.
 func (w *writtenPlan) finish(proceeding int, declared bool) error {

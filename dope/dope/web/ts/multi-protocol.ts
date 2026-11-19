@@ -21,7 +21,7 @@ export interface MultiMinigame {
   // rather than its own points — so minigames of quite different scales weigh
   // the same in the total.
   normalized: boolean;
-  // A tiebreak minigame («(вне итога)») only breaks ties: its points stay out
+  // A tiebreak minigame (its name ends in "out of the total") only breaks ties: its points stay out
   // of the total, Σ+ and the sum of places (games.MultiGame.Tiebreak).
   tiebreak: boolean;
 }
