@@ -24,6 +24,12 @@ saving = "Синхронизация"
 reconnecting = "Переподключение"
 error = "Ошибка"
 
+[refused]
+# The banner when the server refused an edit and the page took it back: the
+# server's reason, and what the host should do; then the close button.
+text = 'Правка не сохранилась: {{.reason}}. Значение на экране вернулось к сохранённому — проверьте и введите ещё раз.'
+close = "Закрыть"
+
 [viewers]
 # The live spectator tally beside the sync-status dot: the aria-label, then
 # the hover title with the current count.

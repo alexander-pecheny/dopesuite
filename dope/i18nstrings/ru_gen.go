@@ -3404,6 +3404,12 @@ var RU = Strings{
 				return "Скачать журнал состояния этой вкладки (для диагностики)"
 			},
 		},
+		Refused: WidgetsRefusedStrings{
+			Close: func() string { return "Закрыть" },
+			Text: func(reason string) string {
+				return fmt.Sprintf("Правка не сохранилась: %s. Значение на экране вернулось к сохранённому — проверьте и введите ещё раз.", reason)
+			},
+		},
 		ScoreTable: WidgetsScoreTableStrings{
 			Place: func() string { return "М" },
 		},

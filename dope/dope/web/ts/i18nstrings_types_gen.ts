@@ -2301,6 +2301,10 @@ export type Strings = {
       label: () => string;
       title: () => string;
     };
+    refused: {
+      close: () => string;
+      text: (reason: string) => string;
+    };
     scoreTable: {
       place: () => string;
     };

@@ -36,7 +36,7 @@ import {mountGamePage} from "./game-shell.js";
 import type {CursorKind, GameShell} from "./game-shell.js";
 import {notifyEmbeddedResize, parseGameRoute} from "./game-page.js";
 import type {GameInitLike, GameRoute} from "./game-page.js";
-import {fitScrollFade, renderTabBar} from "./widgets.js";
+import {fitScrollFade, renderTabBar, showWriteRefused} from "./widgets.js";
 import {gameTabs} from "./game-tabs.js";
 import type {GameKind, GameTab} from "./game-tabs.js";
 import {RESEED_TAB_CODE} from "./game-tabs.js";
@@ -607,6 +607,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     recorder: () => shell.recorder,
     onRejected: (info) => {
       shell.recorder?.event("write-rejected", info);
+      showWriteRefused(info.error);
       resync();
     },
   });

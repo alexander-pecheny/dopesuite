@@ -12,7 +12,7 @@ import S from "./i18nstrings.js";
 import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, SyncIndicator} from "./state-sync.js";
 import {bindNameCells} from "./name-cell.js";
 import {bindPinnedScroll} from "./sheet-pins.js";
-import {createStatusReporter, createViewerCounter, floatingPopover} from "./widgets.js";
+import {createStatusReporter, createViewerCounter, floatingPopover, showWriteRefused} from "./widgets.js";
 import {createGameDataLoader, fetchGameData, gameVenue, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
 import type {GameDataSnapshot, GameRoute} from "./game-page.js";
 import {cssEscape} from "./cells.js";
@@ -289,10 +289,13 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
       before: spec.before,
       indicator: shell.indicator,
       recorder: () => shell.recorder,
+      // A refused edit is taken back: the page says so (a page with its own
+      // place for the reason, as the friendship cup's players tab, says it
+      // there) and fetches the document again.
       onRejected: (info) => {
         shell.recorder?.event("write-rejected", info);
-        if (!spec.onRejected) return;
-        spec.onRejected(info.error);
+        if (spec.onRejected) spec.onRejected(info.error);
+        else showWriteRefused(info.error);
         void live?.resync(scope);
       },
     });

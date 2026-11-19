@@ -849,3 +849,37 @@ export function fitScrollFade(frame: Element | null | undefined): void {
   observeChildren();
   apply();
 }
+
+// showWriteRefused tells the host that the server refused an edit and the page
+// took it back: without it the cell only reverted after its spinner, and at
+// Polyfest the hosts noticed late and entered the value again. One banner at a
+// time, a newer refusal replacing the older; it stays until closed.
+export function showWriteRefused(reason: string): HTMLElement {
+  document.querySelector("[data-write-refused]")?.remove();
+  const bar = document.createElement("div");
+  bar.dataset.writeRefused = "";
+  bar.setAttribute("role", "alert");
+  Object.assign(bar.style, {
+    position: "sticky",
+    top: "0",
+    zIndex: "2147483601",
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "var(--warn-bg)",
+    color: "var(--warn-text)",
+    font: "13px/1.4 system-ui, sans-serif",
+    padding: "8px 12px",
+  });
+  const text = document.createElement("span");
+  text.textContent = S.widgets.refused.text(reason.trim() || S.widgets.status.error());
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = S.widgets.refused.close();
+  Object.assign(close.style, {font: "inherit", fontWeight: "600", color: "inherit", background: "none", border: "1px solid currentColor", borderRadius: "4px", padding: "2px 8px", cursor: "pointer"});
+  close.addEventListener("click", () => bar.remove());
+  bar.append(text, close);
+  document.body.prepend(bar);
+  return bar;
+}
