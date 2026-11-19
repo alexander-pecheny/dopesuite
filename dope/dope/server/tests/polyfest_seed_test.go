@@ -5,11 +5,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+
+	"dope/dope/platform/realtime"
+	dopeserver "dope/dope/server"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"github.com/xuri/excelize/v2"
@@ -217,5 +222,103 @@ func TestPolyfestSiSeedsOnTheQualifierSheet(t *testing.T) {
 	}
 	if participants != 32 {
 		t.Fatalf("%d player Participants, want the 32 the sheet names", participants)
+	}
+}
+
+// kinsbfOnAnOd is a КИнСбФ (the youth scheme, every team in it) seeded on
+// the first two tours of an ОД of two tours of two questions, whose entries
+// are given, and the list it took: the fest's numbers in seed order.
+func kinsbfOnAnOd(t *testing.T, teams int, entries [][]int) (srv *dopeserver.Server, token string, base string, festID int64, listed []int) {
+	t.Helper()
+	srv = newAuthTestServer(t)
+	festID, _ = scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	token = createTestSession(t, srv, systemUserID(t, db))
+	seedFestTeams(t, db, festID, teams)
+	odID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "od", "od_tours": "2", "od_questions": "2"})
+	var odCode string
+	if err := db.QueryRow(`select code from games where id = ?`, odID).Scan(&odCode); err != nil {
+		t.Fatal(err)
+	}
+	if resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/games/%d/state", festID, odID),
+		map[string]any{"ops": []map[string]any{
+			{"path": []any{"entries"}, "value": entries},
+			{"path": []any{"completed"}, "value": []bool{true, true, true, true}},
+		}}, token); resp.Code != http.StatusOK {
+		t.Fatalf("od state: %d %s", resp.Code, resp.Body.String())
+	}
+	dsl := readFile(t, "../../../scripts/polyfest/kinsbf-youth.dsl")
+	dsl = strings.Replace(dsl, "seed: od-1[tours 1..3]", "seed: "+odCode+"[tours 1..2]", 1)
+	dsl = strings.Replace(dsl, "division: -Студ\n", "", 1)
+	gameID := createSchemeGame(t, db, festID, "brain", "КИнСбФ", dsl)
+	base = fmt.Sprintf("/api/fest/%d/games/%d", festID, gameID)
+	resp := scopedAPIRequest(t, srv, http.MethodPost, base+"/entrants/import",
+		map[string]any{"kind": "game", "game": odCode, "tours": []int{1, 2}}, token)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("import: %d %s", resp.Code, resp.Body.String())
+	}
+	numberOf := teamNumbers(t, db, festID)
+	for _, row := range decodeJSON[esSeedView](t, resp).Rows {
+		listed = append(listed, numberOf[row.TeamID])
+	}
+	return srv, token, base, festID, listed
+}
+
+// Teams level on the ОД's questions go by рейтинг, not by the ОД's own order
+// of teams, which is alphabetical: at Polyfest the hosts re-sorted КИнСбФ's
+// list by hand. Teams 2 and 3 take one question each; 3's is the one nobody
+// else took, so 3 comes first.
+func TestAnOdSeedBreaksTiesByRating(t *testing.T) {
+	t.Parallel()
+	_, _, _, _, listed := kinsbfOnAnOd(t, 20, [][]int{{1, 2, 4, 5}, {3}, {1}, {1}})
+	if fmt.Sprint(listed[:5]) != "[1 3 2 4 5]" {
+		t.Fatalf("seeded %v, want 1, then 3 over 2, 4 and 5 on рейтинг", listed)
+	}
+}
+
+// A decline deals the seats again, and every page drawing those bouts must
+// be told: a page draws a bout's teams from the bout's own view, so with only
+// the fest view sent, every page but the host's own kept the old seating.
+func TestADeclineSendsTheBoutsItReseated(t *testing.T) {
+	t.Parallel()
+	srv, token, base, festID, listed := kinsbfOnAnOd(t, 24, [][]int{{1, 2, 3}, {1, 2}, {1}, {}})
+	if listed[0] != 1 {
+		t.Fatalf("seeded %v, want team 1 first", listed)
+	}
+	db := srv.Eng().DB
+	var first int64
+	if err := db.QueryRow(`select id from participants where fest_id = ? and number = 1`, festID).Scan(&first); err != nil {
+		t.Fatal(err)
+	}
+	ch := make(chan realtime.Event, 256)
+	srv.Eng().RT.AddSubscriber(festID, ch, false, 0)
+	defer srv.Eng().RT.RemoveSubscriber(festID, ch)
+
+	if resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("%s/entrants/%d", base, first),
+		map[string]any{"declined": true}, token); resp.Code != http.StatusOK {
+		t.Fatalf("decline: %d %s", resp.Code, resp.Body.String())
+	}
+	// Seed 1 sits in a bout of every round of its group; team 2 takes it in each.
+	sent := map[string]string{}
+	for len(ch) > 0 {
+		var env struct {
+			Scope string          `json:"scope"`
+			Data  json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal((<-ch).Data, &env); err == nil && strings.HasPrefix(env.Scope, "match:") {
+			sent[env.Scope] = string(env.Data)
+		}
+	}
+	reseated := 0
+	for scope, data := range sent {
+		if strings.Contains(data, `"Участник 1"`) {
+			t.Fatalf("%s still seats the declined team: %s", scope, data)
+		}
+		if strings.Contains(data, `"Участник 2"`) {
+			reseated++
+		}
+	}
+	if reseated < 2 {
+		t.Fatalf("sent %d bouts with team 2 in seed 1's seats, want seed 1's group bouts; sent %v", reseated, slices.Sorted(maps.Keys(sent)))
 	}
 }

@@ -739,6 +739,16 @@ func (s *server) answerEntrants(w http.ResponseWriter, sc route.Scope, result en
 		return route.BadUser(err)
 	}
 	s.eng.BroadcastState(sc.FestID, gameStateScopeKey(sc.GameID), result.Revision, result.StateJSON)
+	// The bouts whose seats moved go out on their own scopes: a page draws a
+	// bout's teams from its view, which the fest view does not carry, so
+	// without them every page but this one kept the old seating.
+	var moved []store.MatchView
+	for _, matchID := range result.Moved {
+		if view, err := s.loadMatchViewByIDLocked(sc.FestID, sc.GameID, matchID); err == nil && view.Code != "" {
+			moved = append(moved, view)
+		}
+	}
+	s.broadcastMatchCascade(sc.FestID, sc.GameID, moved)
 	s.broadcastFestView(festScope{FestID: sc.FestID, GameID: sc.GameID}, result.Revision)
 	return route.JSON(w, struct {
 		entrants.View
