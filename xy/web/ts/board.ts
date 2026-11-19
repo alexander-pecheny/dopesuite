@@ -1438,6 +1438,7 @@ const attachments = createAttachments({
   ui: {
     message: byId("cardMessage"), list: byId("attachments"), upload: byId("attachUpload"),
     file: byId<HTMLInputElement>("attachFile"), compress: byId<HTMLInputElement>("attachCompress"),
+    createImage: byId("attachCreateImage"),
     cardOverlay: byId("cardOverlay"), pasteForm: byId("pasteForm"),
     pasteName: byId<HTMLInputElement>("pasteName"), pasteCompress: byId<HTMLInputElement>("pasteCompress"),
   },

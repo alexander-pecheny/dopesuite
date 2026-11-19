@@ -14,6 +14,7 @@ import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
 import { icon, iconed } from "./icons_gen.js";
 import S from "./i18nstrings.js";
+import { isXyimage, rasterOf } from "./xyimagefile.js";
 
 const { fetchJSON, jpatch, jdelete, el, errMsg } = xyApp;
 
@@ -93,8 +94,15 @@ export function nameStemEnd(name: string): number {
 }
 
 // The card editor's static elements the kernel writes to and listens on.
+// An Edited Image (ADR-0024) is stored under this mime, so everything that asks
+// "is it a picture?" says yes; what it is, is told by its bytes.
+export const XYIMAGE_MIME = "image/x-xyimage";
+const XYIMAGE_EXT = "xyimage";
+
 export interface AttachmentsUI {
   message: HTMLElement;
+  // The create-image button: a blank Edited Image on the open card.
+  createImage?: HTMLElement;
   list: HTMLElement;
   upload: HTMLElement;
   file: HTMLInputElement;
@@ -119,6 +127,8 @@ export interface AttachmentsDeps {
   // encrypted payload).
   onCommentImage?(attId: number): void;
 }
+
+type EditorStart = { file?: Uint8Array; picture?: { blob: Blob; name: string } };
 
 export function create(deps: AttachmentsDeps) {
 const ui = deps.ui;
@@ -178,12 +188,22 @@ async function attachmentBlob(att: Attachment): Promise<Blob> {
 
 // attachmentUrl is the same bytes as a URL, for the DOM (previews, lightbox,
 // downloads). It is revoked with the blob it points at, by the eviction above.
+// An Edited Image is drawn as its raster rendition: an <img> cannot read the
+// container, and the raster is what docx gets, so the preview cannot drift
+// from the export.
 async function attachmentUrl(att: Attachment): Promise<string> {
   const key = `${att.id}:${att.rev || 0}`;
   const blob = await attachmentBlob(att);
   let url = attUrlCache.get(key);
-  if (!url) { url = URL.createObjectURL(blob); attUrlCache.set(key, url); }
+  if (!url) { url = URL.createObjectURL(await displayBlob(blob)); attUrlCache.set(key, url); }
   return url;
+}
+
+async function displayBlob(blob: Blob): Promise<Blob> {
+  const head = new Uint8Array(await blob.slice(0, XYIMAGE_EXT.length).arrayBuffer());
+  if (!isXyimage(head)) return blob;
+  const raster = rasterOf(new Uint8Array(await blob.arrayBuffer()));
+  return raster ? new Blob([new Uint8Array(raster)], { type: "image/png" }) : blob;
 }
 
 // imageBlob hands one named image on a card to a caller that needs its bytes —
@@ -249,7 +269,11 @@ async function loadAttachments(cardId: number): Promise<void> {
 }
 
 function attachMenu(anchor: HTMLElement, att: NamedAttachment, name: string): void {
+  const edit: MenuItem[] = (att.mime || "").startsWith("image/")
+    ? [{ icon: icon("pencil"), label: S.attachments.menu.edit(), onClick: () => { void editImage(att, name); } }]
+    : [];
   deps.popupMenu(anchor, [
+    ...edit,
     { icon: icon("replace"), label: S.attachments.menu.replace(), onClick: () => pickReplacement(att, name) },
     { icon: icon("trash-2"), label: S.attachments.menu.delete(), onClick: () => { void removeAttachment(att, name); } },
     {
@@ -290,19 +314,113 @@ function pickReplacement(att: NamedAttachment, name: string): void {
       let bytes: Uint8Array<ArrayBuffer>, mime: string;
       if (lossless) { bytes = new Uint8Array(await file.arrayBuffer()); mime = file.type || "application/octet-stream"; }
       else ({ bytes, mime } = await recompressToWebp(file));
-      const key = deps.mustDK();
-      const fd = new FormData();
-      fd.append("meta", JSON.stringify({
-        filename: await xyCrypto.encField(key, name),
-        mime, lossless,
-        event_payload: await sealPayload(key, "attach_replace", { file: name }),
-      }));
-      fd.append("blob", new Blob([await xyCrypto.encBytes(key, bytes)], { type: "application/octet-stream" }), "blob");
-      const res = await fetch(`/api/attachments/${att.id}`, { method: "PUT", credentials: "same-origin", body: fd });
-      if (!res.ok) throw new Error((await res.text()) || S.attachments.error.replaceFailed());
+      await putReplacement(att, name, bytes, mime, lossless);
     });
   });
   picker.click();
+}
+
+// putReplacement writes new bytes over an attachment, keeping its id.
+async function putReplacement(att: NamedAttachment, name: string, bytes: Uint8Array<ArrayBuffer>, mime: string, lossless: boolean): Promise<void> {
+  const key = deps.mustDK();
+  const fd = new FormData();
+  fd.append("meta", JSON.stringify({
+    filename: await xyCrypto.encField(key, name),
+    mime, lossless,
+    event_payload: await sealPayload(key, "attach_replace", { file: name }),
+  }));
+  fd.append("blob", new Blob([await xyCrypto.encBytes(key, bytes)], { type: "application/octet-stream" }), "blob");
+  const res = await fetch(`/api/attachments/${att.id}`, { method: "PUT", credentials: "same-origin", body: fd });
+  if (!res.ok) throw new Error((await res.text()) || S.attachments.error.replaceFailed());
+}
+
+// ---- the image editor (ADR-0024) ----
+
+// freeName is a name for a new Edited Image that no attachment on the card
+// already has: a name is what (img …) finds a picture by, so two of the same
+// name would leave the second one unreachable.
+async function freeName(cardId: number, stem: string): Promise<string> {
+  const taken = new Set((await cardAttachments(cardId)).map((a) => a.name.normalize("NFC")));
+  for (let n = 1; ; n++) {
+    const name = `${n === 1 ? stem : `${stem} ${n}`}.${XYIMAGE_EXT}`;
+    if (!taken.has(name.normalize("NFC"))) return name;
+  }
+}
+
+// editImage opens the editor on an image attachment. An Edited Image is
+// reopened and saved back over itself; any other picture is the start of a
+// NEW Edited Image beside it, and the original stays as it was: nothing in the
+// card's text is rewritten, so the editor picks the new one by hand.
+async function editImage(att: NamedAttachment, name: string): Promise<void> {
+  if (!xySync.requireOnline(S.attachments.status.offlineEdit(), ui.message)) return;
+  const cardId = deps.openCardId();
+  if (cardId == null) return;
+  try {
+    const blob = await attachmentBlob(att);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (isXyimage(bytes)) {
+      await openImageEditor({ file: bytes }, (out) => putReplacement(att, name, out, XYIMAGE_MIME, true));
+      return;
+    }
+    let target: string | null = null;
+    await openImageEditor({ picture: { blob, name } }, async (out) => {
+      target ??= await freeName(cardId, name.slice(0, nameStemEnd(name)) || name);
+      await saveNewImage(cardId, target, out);
+    });
+  } catch (err) { ui.message.textContent = errMsg(err); }
+}
+
+// A new Edited Image is uploaded on its first save and replaced on each one
+// after, so saving twice leaves one attachment, not two.
+const savedNew = new Map<string, NamedAttachment>();
+
+async function saveNewImage(cardId: number, name: string, out: Uint8Array<ArrayBuffer>): Promise<void> {
+  const key = `${cardId}:${name}`;
+  const prev = savedNew.get(key);
+  if (prev) { await putReplacement(prev, name, out, XYIMAGE_MIME, true); return; }
+  const id = await uploadAttachment(new File([out], name, { type: XYIMAGE_MIME }), true, name);
+  const made = (await cardAttachments(cardId)).find((a) => a.id === id);
+  if (made) savedNew.set(key, made);
+}
+
+async function createImage(): Promise<void> {
+  if (!xySync.requireOnline(S.attachments.status.offlineUpload(), ui.message)) return;
+  const cardId = deps.openCardId();
+  if (cardId == null) return;
+  let target: string | null = null;
+  try {
+    await openImageEditor({}, async (out) => {
+      target ??= await freeName(cardId, S.attachments.editor.defaultName());
+      await saveNewImage(cardId, target, out);
+    });
+  } catch (err) { ui.message.textContent = errMsg(err); }
+}
+
+ui.createImage?.addEventListener("click", () => { void createImage(); });
+
+// openImageEditor puts the editor over the card, full screen, on the overlay
+// stack: back, Escape (once the editor has let go of its selection) and its ✕
+// close it, and closing with unsaved changes asks first. After every save the
+// card's attachments and timeline are reloaded.
+async function openImageEditor(start: EditorStart, save: (out: Uint8Array<ArrayBuffer>) => Promise<void>): Promise<void> {
+  const { createEditor } = await import("./xyimageeditor.js");
+  const root = el("div");
+  const overlay = el("div", { class: "xyed-overlay", role: "dialog", "aria-label": S.attachments.editor.title() }, root);
+  document.body.append(overlay);
+  const editor = await createEditor(root, {
+    ...start,
+    onSave: async (out) => {
+      await save(new Uint8Array(out));
+      const oc = deps.openCardId();
+      if (oc != null) { await loadAttachments(oc); await deps.timeline.load(oc); }
+    },
+    onClose: () => overlayStack.pop(),
+  });
+  overlayStack.open({
+    el: overlay,
+    close: () => { editor.destroy(); overlay.remove(); },
+    confirm: async () => !editor.dirty() || window.confirm(S.attachments.editor.discard()),
+  });
 }
 
 

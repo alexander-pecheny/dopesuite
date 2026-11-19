@@ -233,6 +233,10 @@ internal/server/       package server — the whole HTTP server
                        parsed in memory, nothing persisted; the client encrypts the result into a new list.
                        POST /api/import/text — the same pipeline without the file: one card's plain text
                        (a question pasted as prose) → 4s, behind the card editor's →.4s button
+  xyimagelab.go        the Edited Image's server half (ADR-0024): POST /api/xyimage/render places a
+                       frame's layers (pictures, and the overlays the browser froze) on a typst page
+                       and returns the PDF, laying nothing out; GET /xyimage/fonts/{name} serves the
+                       exact Noto Sans files typst sets text in, for the browser to lay text out in
   handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgksuite/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
   typst.go             the shared typst (wasm) pool: built once, warmed at boot, injectable so handler tests stub it. XY_WASM_CACHE must be persistent (~15s cold compile vs ~0.6s cached)
   sessions.go          test sessions (ADR-0004): a board-level entity, not a card in a list.
@@ -617,6 +621,19 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        Shared defaults/ranges/sanitize/apply live in app.ts (xySizes)
                        so this write path and board.ts's read path agree
     tokens.ts          /profile/tokens — create/revoke API tokens for the Trello API
+    xyimageeditor.ts   the Edited Image editor (ADR-0024), Figma-shaped: an infinite canvas in mm
+                       with one frame, layers left, properties right, tools on top. createEditor
+                       (root, {file|picture, onSave, onClose}) mounts it; attachments.ts opens it
+                       over a card (on the overlay stack, Escape first lets go of the selection),
+                       /lab/xyimage (xyimagelab.ts) on a page of its own. Zoom is a transform over a
+                       layout at a fixed BASE resolution, so zooming never re-wraps text. Saving
+                       writes a .xyimage: the Recipe, the pictures, the overlays, a raster baked here
+    xyimagefreeze.ts   the Frozen Lines: freezeBox reads back where the browser broke a text box's
+                       lines, word by word, in mm; overlaySVG writes them and the black boxes as
+                       the SVG typst places as it is
+    xyimagefile.ts     the .xyimage container (RCPE/IMAG/OVER/RAST), the browser's copy of
+                       chgksuite/xyimage, both held to its testdata/fixture.*. attachments.ts asks
+                       it by the bytes and draws an Edited Image's raster wherever a picture shows
     join.ts            /join/<code> — what an invite link opens: the board's name,
                        why the link does or does not work, and one button (ADR-0017)
 web/assets/            //go:embed static + ui (package assets)

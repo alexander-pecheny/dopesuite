@@ -24,7 +24,20 @@ xySync.putAttachment = async () => {};
 globalThis.fetch = async (url) => { fetched.push(url); return { ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }; };
 let urls = 0;
 globalThis.URL = { createObjectURL: () => `blob:${++urls}`, revokeObjectURL() {} };
-globalThis.Blob = class { constructor(parts, opts) { this.parts = parts; this.type = opts?.type; } };
+// A Blob with just what attachments.ts reads: its parts, and bytes by slice and
+// arrayBuffer (an Edited Image is told by its first bytes).
+globalThis.Blob = class {
+  constructor(parts, opts) { this.parts = parts; this.type = opts?.type; }
+  bytes() {
+    const chunks = this.parts.map((p) => (typeof p === "string" ? new TextEncoder().encode(p) : new Uint8Array(p.buffer ?? p)));
+    const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let at = 0;
+    for (const c of chunks) { out.set(c, at); at += c.length; }
+    return out;
+  }
+  slice(a, b) { return new Blob([this.bytes().slice(a, b)], { type: this.type }); }
+  async arrayBuffer() { return this.bytes().buffer; }
+};
 const { create, extFromMime, gatherTargets, humanSize, nameStemEnd, withExt } = await import("../web/assets/static/dist/attachments.js");
 
 test("gatherTargets picks the first attachment per wanted name, in card order", () => {

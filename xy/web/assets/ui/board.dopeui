@@ -183,6 +183,7 @@ page title=@board.page.title kind="board" scripts="dist/board.js dist/timer.js"
       filefield id="attachFile"
       checkbox id="attachCompress" @board.card.compress
       button id="attachUpload" @board.card.upload
+      button kind="ghost" id="attachCreateImage" icon="image" @board.card.create_image
 
     label @board.card.move_label
     row gap="sm" align="center" wrap

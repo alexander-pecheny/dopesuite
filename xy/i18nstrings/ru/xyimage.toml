@@ -25,6 +25,9 @@ fit = "Показать кадр целиком (Shift+1)"
 compare = "Сравнить с зафиксированными строками: всё, что совпадает с экраном, станет чёрным"
 pdf = "PDF"
 png = "PNG"
+# On the board: write the picture back to the card, and leave the editor.
+save = "Сохранить"
+close = "Закрыть"
 
 [layers]
 # The left panel.
@@ -70,5 +73,8 @@ sample = "Текст"
 [status]
 # Shown while typst renders.
 working = "typst верстает…"
+# Shown while the picture is being baked and uploaded, and once it is.
+saving = "Сохранение…"
+saved = "Сохранено"
 # Shown when an export is ready; the parameter is the number of frozen lines.
 frozen_lines = 'Строк зафиксировано: {{.n}}'

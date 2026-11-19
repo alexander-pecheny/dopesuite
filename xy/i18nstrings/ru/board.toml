@@ -157,6 +157,8 @@ attachments_label = "Вложения"
 compress = " сжать (WebP)"
 # Upload button.
 upload = "Загрузить"
+# Opens the image editor on a blank frame; the picture is saved to the card.
+create_image = "Создать картинку"
 # Move/copy section: heading.
 move_label = "Переместить / копировать"
 # Handout badge on a kanban card: tooltip.

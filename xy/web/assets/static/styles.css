@@ -2149,6 +2149,12 @@ body {
    middle, the selection's properties on the right. The page is a board-kind
    page, so .board-main already fills the viewport below the header. */
 .board-page .board-main:has(.xyimage-editor) { padding: 0; gap: 0; }
+/* Over a card, the editor takes the whole screen, header included. It sits
+   under the modals, which may still have something to ask. */
+.xyed-overlay {
+  position: fixed; inset: 0; z-index: calc(var(--z-modal) - 1);
+  display: flex; flex-direction: column; background: var(--surface);
+}
 .xyimage-editor {
   flex: 1 1 auto;
   min-height: 0;

@@ -25,8 +25,20 @@ actions_title = "Действия с вложением"
 # The ⋯ popup menu on an attachment row.
 replace = "Заменить"
 delete = "Удалить"
+# Opens the image editor (ADR-0024) on a picture.
+edit = "Редактировать"
 # The excerpt toggle item.
 excerpt = "Выписка"
+
+[editor]
+# The image editor over the card (ADR-0024).
+# Accessible name of the editor's full-screen overlay.
+title = "Редактор картинок"
+# The name a new Edited Image starts with, before its .xyimage; a number is
+# added when the card already has one.
+default_name = "картинка"
+# Asked when the editor is closed with changes that are not saved.
+discard = "Закрыть редактор? Несохранённые правки пропадут."
 
 [status]
 # Progress and guard messages, shown in the card editor's message line.

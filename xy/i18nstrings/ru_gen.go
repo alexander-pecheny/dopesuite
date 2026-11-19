@@ -197,6 +197,13 @@ var RU = Strings{
 		Confirm: AttachmentsConfirmStrings{
 			Remove: func(name string) string { return fmt.Sprintf("Удалить вложение «%s»?", name) },
 		},
+		Editor: AttachmentsEditorStrings{
+			DefaultName: func() string { return "картинка" },
+			Discard: func() string {
+				return "Закрыть редактор? Несохранённые правки пропадут."
+			},
+			Title: func() string { return "Редактор картинок" },
+		},
 		Error: AttachmentsErrorStrings{
 			BlobDownloadFailed: func() string { return "не удалось скачать вложение" },
 			DownloadFailed:     func() string { return "не удалось скачать" },
@@ -215,6 +222,7 @@ var RU = Strings{
 		},
 		Menu: AttachmentsMenuStrings{
 			Delete:  func() string { return "Удалить" },
+			Edit:    func() string { return "Редактировать" },
 			Excerpt: func() string { return "Выписка" },
 			Replace: func() string { return "Заменить" },
 		},
@@ -320,6 +328,7 @@ var RU = Strings{
 			Copy4sLabel:         func() string { return "Скопировать" },
 			Copy4sTitle:         func() string { return "Скопировать текст в формате 4s" },
 			CopyTitle:           func() string { return "Скопировать вопрос или раздатку" },
+			CreateImage:         func() string { return "Создать картинку" },
 			Delete:              func() string { return "Удалить карточку" },
 			DescLabel:           func() string { return "Описание" },
 			ExcerptsView:        func() string { return "Смотреть" },
@@ -2829,9 +2838,12 @@ var RU = Strings{
 		},
 		Status: XyimageStatusStrings{
 			FrozenLines: func(n string) string { return fmt.Sprintf("Строк зафиксировано: %s", n) },
+			Saved:       func() string { return "Сохранено" },
+			Saving:      func() string { return "Сохранение…" },
 			Working:     func() string { return "typst верстает…" },
 		},
 		Tools: XyimageToolsStrings{
+			Close: func() string { return "Закрыть" },
 			Compare: func() string {
 				return "Сравнить с зафиксированными строками: всё, что совпадает с экраном, станет чёрным"
 			},
@@ -2843,6 +2855,7 @@ var RU = Strings{
 			},
 			Png:  func() string { return "PNG" },
 			Rect: func() string { return "Чёрный прямоугольник (R)" },
+			Save: func() string { return "Сохранить" },
 			Text: func() string { return "Текст (T)" },
 			Typo: func() string { return "Типографить" },
 		},

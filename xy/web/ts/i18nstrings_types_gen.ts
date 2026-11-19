@@ -152,6 +152,11 @@ export type Strings = {
     confirm: {
       remove: (name: string) => string;
     };
+    editor: {
+      defaultName: () => string;
+      discard: () => string;
+      title: () => string;
+    };
     error: {
       blobDownloadFailed: () => string;
       downloadFailed: () => string;
@@ -170,6 +175,7 @@ export type Strings = {
     };
     menu: {
       delete: () => string;
+      edit: () => string;
       excerpt: () => string;
       replace: () => string;
     };
@@ -263,6 +269,7 @@ export type Strings = {
       copy4sLabel: () => string;
       copy4sTitle: () => string;
       copyTitle: () => string;
+      createImage: () => string;
       delete: () => string;
       descLabel: () => string;
       excerptsView: () => string;
@@ -2168,9 +2175,12 @@ export type Strings = {
     };
     status: {
       frozenLines: (n: string) => string;
+      saved: () => string;
+      saving: () => string;
       working: () => string;
     };
     tools: {
+      close: () => string;
       compare: () => string;
       fit: () => string;
       move: () => string;
@@ -2178,6 +2188,7 @@ export type Strings = {
       picture: () => string;
       png: () => string;
       rect: () => string;
+      save: () => string;
       text: () => string;
       typo: () => string;
     };
