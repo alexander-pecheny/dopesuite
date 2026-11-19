@@ -68,6 +68,8 @@
   --name-fade-tight: 28px;
   --grid-stage-head-min: 42px;
   --group-standings-col: 520px;
+  /* A seed number before a seated team's name: two digits and their gap. */
+  --seed-number-col: calc(2ch + var(--space-1));
   --od-detailed-number-digits: 3ch;
   --od-detailed-number-pad-left: var(--space-0-5);
   --od-detailed-number-pad-right: var(--space-1);
@@ -1588,6 +1590,26 @@ body:not(.embedded-match) .grid-match {
 .grid-slot-team .name-cell-wrap {
   position: static;
   flex: 1 1 auto;
+}
+
+/* A seat a seed filled: its seed number in a narrow muted column before the
+   name (seededName in standings.ts), so a box's or a group's names stay
+   aligned whatever the numbers' widths. */
+.grid-slot-team .od-detailed-team-layout,
+.results-team .od-detailed-team-layout {
+  display: grid;
+  grid-template-columns: var(--seed-number-col) minmax(0, 1fr);
+  align-items: center;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.seed-number {
+  justify-self: end;
+  padding-right: var(--space-1);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .slot-total,

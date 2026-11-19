@@ -5,7 +5,7 @@
 
 import {formatDisplayText, roundTo, td} from "./cells.js";
 import type {CellContent} from "./cells.js";
-import {groupBoutsTable, standingsTable} from "./standings.js";
+import {groupBoutsTable, resultsTeamCell, standingsTable} from "./standings.js";
 import S from "./i18nstrings.js";
 
 // A seat ref as a scheme writes it, before anyone sits in it.
@@ -25,9 +25,11 @@ export function slotKey(slot: SchemeSlotRef | null | undefined): string {
   return slot.label || "";
 }
 
-// crossSlot is a planned seat as a row: its key and the label the grid prints.
+// crossSlot is a planned seat as a row: its key, the label the grid prints,
+// and its seed number when a seed fills it.
 export function crossSlot(slot: SchemeSlotRef | null | undefined): CrossSlot {
-  return {key: slotKey(slot), label: slot?.label || ""};
+  const seed = slot?.seed?.number || slot?.seed?.position;
+  return {key: slotKey(slot), label: slot?.label || "", ...(seed ? {seed: String(seed)} : {})};
 }
 
 // standingsByParticipant is a stage's own table keyed by Participant id — the
@@ -47,6 +49,8 @@ export function standingsByParticipant(
 export interface CrossSlot {
   key: string;
   label: string;
+  // seed is the seat's seed number; the row shows it once a team sits there.
+  seed?: string;
 }
 
 // CrossBout is one match of the group as the page knows it now: who is sitting
@@ -144,7 +148,7 @@ export function buildCrosstables(spec: CrosstableSpec): HTMLElement {
 }
 
 function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement {
-  const rows = group.entrants.map((slot) => ({key: slot.key, name: slot.label || "", id: 0}));
+  const rows = group.entrants.map((slot) => ({key: slot.key, name: slot.label || "", id: 0, seed: slot.seed, seated: false}));
   const indexByKey = new Map<string, number>();
   rows.forEach((row, i) => indexByKey.set(row.key, i));
   const cellText: string[][] = rows.map(() => rows.map(() => ""));
@@ -157,7 +161,7 @@ function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement
     if (a === undefined || b === undefined) continue;
     [a, b].forEach((index, side) => {
       const seat = bout.sides[side];
-      if (seat?.name) rows[index].name = seat.name;
+      if (seat?.name) rows[index] = {...rows[index], name: seat.name, seated: true};
       if (seat?.id) rows[index].id = seat.id;
     });
     if (bout.href) hrefs[a][b] = hrefs[b][a] = bout.href;
@@ -200,7 +204,8 @@ function buildCrosstable(group: CrossGroup, columns: CrossColumn[]): HTMLElement
     ],
     rows: rows.map((row, i) => [
       i + 1,
-      row.name,
+      // Before a team sits there the row reads its seed label already.
+      row.seated && row.seed ? resultsTeamCell(formatDisplayText(row.name), {seed: row.seed}) : row.name,
       ...rows.map((_, j) => cross(i, j)),
       ...columns.map((column) => stat(row, column.metric)),
     ]),

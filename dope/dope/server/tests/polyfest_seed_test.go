@@ -321,4 +321,32 @@ func TestADeclineSendsTheBoutsItReseated(t *testing.T) {
 	if reseated < 2 {
 		t.Fatalf("sent %d bouts with team 2 in seed 1's seats, want seed 1's group bouts; sent %v", reseated, slices.Sorted(maps.Keys(sent)))
 	}
+	// The grid draws each seat's seed number from the fest view: team 2 now
+	// holds seed 1.
+	view := decodeJSON[seededFestView](t, scopedAPIRequest(t, srv, http.MethodGet, base, nil, token))
+	seeds := map[string]int{}
+	for _, stage := range view.Stages {
+		for _, match := range stage.Matches {
+			for _, seat := range match.Participants {
+				if seat.Seed > 0 {
+					seeds[seat.Name] = seat.Seed
+				}
+			}
+		}
+	}
+	if seeds["Участник 2"] != 1 || seeds["Участник 1"] != 0 {
+		t.Fatalf("the fest view's seeds = %v, want Участник 2 on seed 1 and Участник 1 on none", seeds)
+	}
+}
+
+// seededFestView is the fest view as far as the grid's seed numbers go.
+type seededFestView struct {
+	Stages []struct {
+		Matches []struct {
+			Participants []struct {
+				Name string `json:"name"`
+				Seed int    `json:"seed"`
+			} `json:"participants"`
+		} `json:"matches"`
+	} `json:"stages"`
 }

@@ -84,6 +84,8 @@ export interface TeamCellOptions {
   flag?: string;
   badges?: readonly string[];
   href?: string;
+  // seed is the seat's seed number, drawn muted before the name (seededName).
+  seed?: string;
 }
 
 // resultsTeamCell is the name cell of a results table (name-cell.ts): the
@@ -99,7 +101,16 @@ export function resultsTeamCell(name: string, options: TeamCellOptions = {}): HT
     href: options.href,
     badges: options.badges,
     city: options.city,
+    ...seededName(options.seed),
   });
+}
+
+// seededName is what a name cell takes to draw a seat's seed number before
+// the name: a column of its own, muted, so the names stay aligned. A seat
+// with no seed (one fed by a bout or a reseed) passes nothing and the cell is
+// the plain name.
+export function seededName(seed: string | undefined): {layout?: boolean; number?: {text: string; className: string}} {
+  return seed ? {layout: true, number: {text: seed, className: "seed-number"}} : {};
 }
 
 // A column's kind is its role in the results-table skin: the place, the fading

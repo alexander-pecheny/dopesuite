@@ -217,13 +217,17 @@ type FestMatchView struct {
 }
 
 type MatchParticipantSummary struct {
-	Name       string  `json:"name"`
-	Source     string  `json:"source,omitempty"`
-	SourceType string  `json:"sourceType,omitempty"`
-	Place      float64 `json:"place"`
-	Total      int     `json:"total"`
-	Plus       int     `json:"plus"`
-	Tiebreak   int     `json:"tiebreak"`
+	Name       string `json:"name"`
+	Source     string `json:"source,omitempty"`
+	SourceType string `json:"sourceType,omitempty"`
+	// Seed is the seed number of the team a seed's slot seats, 0 for any other
+	// slot and for a seed's slot nobody sits in yet: the grid draws it before
+	// the name.
+	Seed     int     `json:"seed,omitempty"`
+	Place    float64 `json:"place"`
+	Total    int     `json:"total"`
+	Plus     int     `json:"plus"`
+	Tiebreak int     `json:"tiebreak"`
 	// Draw is set on a seat the host fills by lot: who may be seated there,
 	// and who already is. The candidates are resolved here rather than on the
 	// page, because the page has no Participant ids to send back (ADR-0011).

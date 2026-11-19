@@ -1,4 +1,4 @@
-import {festLetters, letteredTitle, standingsTable} from "./standings.js";
+import {festLetters, letteredTitle, seededName, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
 import {normalizeVenue, venueLabel, venueShort, venuesByRoom, venuesShort, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
@@ -33,6 +33,9 @@ export type FestGridSlot = string | FestGridSlotObject;
 export interface FestGridLiveParticipant {
   name?: string;
   source?: string;
+  // seed is the seed number of the team a seed's slot seats, set by the
+  // server only once a team sits there.
+  seed?: number;
   total?: unknown;
   place?: number;
   // draw is set on a seat a lot fills: the slot's own code, who is sitting in
@@ -230,6 +233,8 @@ export interface GridTable {
   live: FestGridStage;
   entries: ReseedEntry[];
   order: string[];
+  // seeds is the seed number of each team seated from a seed, by name.
+  seeds?: Map<string, string>;
   sort?: SortRule[] | null;
   item: GridItem;
 }
@@ -284,7 +289,9 @@ export function planGrid(stages: FestGridStage[], liveStages: Map<string | undef
   // never graded (kind unknown).
   const table = (stage: FestGridStage): GridTable | null => {
     const live = liveOf(stage);
-    const order = blockOf(stage) !== "" ? stageSlotOrder(stage, live) : [];
+    const seats = blockOf(stage) !== "" ? stageSeats(stage, live) : [];
+    const order = seats.map((seat) => seat.name);
+    const seeds = new Map(seats.flatMap((seat) => seat.seed ? [[seat.name, seat.seed] as [string, string]] : []));
     const standings = live.standings || stage.standings || [];
     let ranked: Pick<GridTable, "entries" | "sort">;
     // A table over other stages holds whoever sits in the first of them, so
@@ -293,14 +300,14 @@ export function planGrid(stages: FestGridStage[], liveStages: Map<string | undef
     const source = stage.sources?.length && !(stage.matches || []).length
       ? stages.find((other) => other.code === stage.sources?.[0])
       : undefined;
-    const sourceOrder = source ? stageSlotOrder(source, liveOf(source)) : [];
+    const sourceOrder = source ? stageSeats(source, liveOf(source)).map((seat) => seat.name) : [];
     if (standings.length) ranked = {entries: standings, sort: live.sort || stage.sort};
     else if (stage.grain?.group && order.length && stage.kind) ranked = {entries: order.map((name) => ({name, metrics: {}}))};
     else if (sourceOrder.length) ranked = {entries: sourceOrder.map((name) => ({name, metrics: {}})), sort: live.sort || stage.sort};
     else return null;
     const item = {rows: 1 + ranked.entries.length, units: 1};
     items.push(item);
-    return {stage, live, order, item, ...ranked};
+    return {stage, live, order, seeds, item, ...ranked};
   };
   const boxes = (stage: FestGridStage): GridBoxes => ({
     stage,
@@ -603,14 +610,14 @@ function stageWhere(stage: FestGridStage, liveStage: FestGridStage): string {
   return venuesShort(venues);
 }
 
-// stageSlotOrder is the seating order of a stage's participants — first
-// appearance across its Matches, which is how the schedule dealt them. The
-// grid's rows sit in this order, not place order, so a live group never
-// reshuffles under the reader. An unseated slot contributes its label
-// ("Reseed-3"), so the map of who proceeds where survives until the reseed
-// fills the names.
-function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[] {
-  const order: string[] = [];
+// stageSeats is the seating order of a stage's participants — first
+// appearance across its Matches, which is how the schedule dealt them — each
+// with its seed number when a seed seated it. The grid's rows sit in this
+// order, not place order, so a live group never reshuffles under the reader.
+// An unseated slot contributes its label ("Reseed-3"), so the map of who
+// proceeds where survives until the reseed fills the names.
+function stageSeats(stage: FestGridStage, liveStage: FestGridStage): Array<{name: string; seed: string}> {
+  const seats: Array<{name: string; seed: string}> = [];
   const seen = new Set<string>();
   const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
   (stage.matches || []).forEach((match) => {
@@ -619,14 +626,15 @@ function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[
     const slots = match.slots || [];
     const count = Math.max(liveTeams.length, slots.length);
     for (let index = 0; index < count; index += 1) {
-      const name = String(liveTeams[index]?.name || "") ||
-        (slots[index] !== undefined ? slotLabel(slots[index], liveTeams[index] || {}) : "");
+      const team = liveTeams[index] || {};
+      const name = String(team.name || "") ||
+        (slots[index] !== undefined ? slotLabel(slots[index], team) : "");
       if (!name || seen.has(name)) continue;
       seen.add(name);
-      order.push(name);
+      seats.push({name, seed: slotSeed(slots[index], team)});
     }
   });
-  return order;
+  return seats;
 }
 
 // A Group's table is a Match box: the same article and cells the Match boxes
@@ -634,7 +642,7 @@ function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[
 // seating order; the columns are the name, the place, and the one number the
 // Block ranks by first — a second number costs forty pixels the names need,
 // and everything else belongs on the stage's own page.
-function buildStandingsTable({stage, live, entries, order, sort, item}: GridTable, options: FestGridOptions = {}): HTMLElement {
+function buildStandingsTable({stage, live, entries, order, seeds, sort, item}: GridTable, options: FestGridOptions = {}): HTMLElement {
   const metric = sort?.[0]?.metric;
   const head = tableHead(stage, live);
   const box = el("article", `grid-box grid-standings${metric ? "" : " grid-standings-bare"}`, "");
@@ -649,7 +657,8 @@ function buildStandingsTable({stage, live, entries, order, sort, item}: GridTabl
     : entries;
   spanRows(box, item);
   const realRows = rows.map((entry) => {
-    const cells = [slotTeamCell(String(entry.name || ""))];
+    const name = String(entry.name || "");
+    const cells = [slotTeamCell(name, seeds?.get(name))];
     if (metric) cells.push(gridCell("slot-total", reseedMetricValue(metric, entry.metrics?.[metric])));
     cells.push(gridCell("slot-place", placeText(Number(entry.metrics?.place ?? entry.rank) || null)));
     cells.forEach((cell) => grid.appendChild(cell));
@@ -838,7 +847,7 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
     }
     const live = liveTeams[index] || {};
     const cells = [
-      slotTeamCell(slotLabel(slot, live, ctx.letters)),
+      slotTeamCell(slotLabel(slot, live, ctx.letters), slotSeed(slot, live)),
       gridCell("slot-total", scoreText(live.total)),
       gridCell("slot-place", placeText(live.place)),
     ];
@@ -1081,9 +1090,20 @@ function hasDefaultTitle(match: FestGridMatch): boolean {
   return !match.title || match.title === S.fest.grid.matchDefault(String(match.code));
 }
 
-// slotTeamCell is a seat's team, the grid's clipped name (name-cell.ts).
-function slotTeamCell(label: string): HTMLElement {
-  return nameCell(label, {tag: "div", className: "grid-slot-cell slot-source grid-slot-team"});
+// slotTeamCell is a seat's team, the grid's clipped name (name-cell.ts),
+// with its seed number before it when a seed seated it.
+function slotTeamCell(label: string, seed?: string): HTMLElement {
+  return nameCell(label, {tag: "div", className: "grid-slot-cell slot-source grid-slot-team", ...seededName(seed)});
+}
+
+// slotSeed is the seed number of the team sitting in a seed's slot, "" for any
+// other slot and for one nobody sits in yet, whose label says the seed.
+// The live seat says it once seated; a scheme's slot, where the page has one,
+// says it for a team the stage seated by name.
+function slotSeed(slot: FestGridSlot | undefined, live: FestGridLiveParticipant): string {
+  if (live.seed) return String(live.seed);
+  if (!slot || typeof slot === "string" || !slot.seed || !live.name || live.name === live.source) return "";
+  return String(slot.seed.number || slot.seed.position || "");
 }
 
 function scheduleFestGridUpdate(grid: Grid): void {

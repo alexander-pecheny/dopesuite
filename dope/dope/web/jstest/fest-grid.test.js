@@ -546,3 +546,48 @@ test("a grid draws no link the caller did not give", () => {
   const heads = walk(linked).filter((n) => n.tag === "a").map((n) => [n.className, n.href]);
   assert.deepEqual(heads, [["grid-stage-head grid-stage-link", "#stage:s1-g1"], ["grid-stage-head grid-stage-link", "#stage:s2-r1"]]);
 });
+
+// A team a seed seated carries its seed number before its name, in the бой
+// boxes and in a группа's table alike, so a host can check the seeding against
+// the list at a glance. A seat still waiting reads «Посев 2» and adds nothing,
+// nor does a seat fed by another бой.
+test("a seeded team shows its seed number before its name", () => {
+  const round = buildFestGrid({
+    stages: [{
+      code: "s2-r1", title: "Финал", stage_type: "matches",
+      matches: [{code: "s2-r1-m1", participantCount: 3,
+        slots: [{label: "Посев 1", seed: {number: 1}}, {label: "Посев 2", seed: {number: 2}}, {label: "Победитель A", fromMatch: {match: "A", place: 1}}],
+        participants: [{name: "Ктулху", source: "Посев 1"}, {}, {name: "ВШЭстером"}]}],
+    }],
+  });
+  assert.deepEqual(texts(round, "seed-number"), ["1"]);
+  assert.deepEqual(texts(round, "name-cell-text"), ["Ктулху", "Посев 2", "ВШЭстером"]);
+
+  const group = buildFestGrid({
+    stages: [{
+      code: "s1-g1", title: "Группа 1", stage_type: "matches",
+      grain: {block: "s1", group: "1"},
+      standings: [{rank: 1, name: "Ктулху", metrics: {place: 1}}, {rank: 2, name: "ВШЭстером", metrics: {place: 2}}],
+      matches: [{code: "s1-g1-1",
+        slots: [{label: "Посев 8", seed: {number: 8}}, {label: "Посев 1", seed: {number: 1}}],
+        participants: [{name: "ВШЭстером"}, {name: "Ктулху"}]}],
+    }],
+  });
+  assert.deepEqual(texts(group, "name-cell-text"), ["ВШЭстером", "Ктулху"]);
+  assert.deepEqual(texts(group, "seed-number"), ["8", "1"]);
+});
+
+// The fest view marks a seated seed on the seat itself (seed), and a scheme
+// may label a seed's slot with the team it names, so the seat's source is
+// its name: the grid takes the number from the seat.
+test("a seat the server marks as a seed's shows its number", () => {
+  const grid = buildFestGrid({
+    stages: [{
+      code: "s2-r1", title: "Финал", stage_type: "matches",
+      matches: [{code: "s2-r1-m1", participantCount: 2,
+        slots: [{label: "Ктулху", seed: {number: 3}}, {label: "Посев 6", seed: {number: 6}}],
+        participants: [{name: "Ктулху", source: "Ктулху", sourceType: "seed", seed: 3}, {name: "Посев 6", source: "Посев 6", sourceType: "seed"}]}],
+    }],
+  });
+  assert.deepEqual(texts(grid, "seed-number"), ["3"]);
+});
