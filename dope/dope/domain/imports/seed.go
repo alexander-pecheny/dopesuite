@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -66,6 +67,16 @@ type seedImportStateRow struct {
 	Name       string `json:"name"`
 	City       string `json:"city,omitempty"`
 	Declined   bool   `json:"declined,omitempty"`
+	// Terms are what the import sorted the source by, as this entrant had
+	// them; a row the host added by hand has none.
+	Terms []SeedTerm `json:"terms,omitempty"`
+}
+
+// SeedTerm is one value a seed sorted its source by, shown under the name on
+// the entrants tab ("rating: 457"), so the order needs no explaining.
+type SeedTerm struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 type SeedImportView struct {
@@ -91,15 +102,16 @@ type SeedImportView struct {
 // removed nor renamed and its seat no longer moves; OneOff says the host typed
 // it in for this Game alone.
 type SeedImportViewRow struct {
-	SourceRank int    `json:"sourceRank"`
-	SeedNumber int    `json:"seedNumber,omitempty"`
-	TeamID     int64  `json:"teamID"`
-	Name       string `json:"name"`
-	City       string `json:"city,omitempty"`
-	Declined   bool   `json:"declined"`
-	Waitlist   bool   `json:"waitlist"`
-	Played     bool   `json:"played,omitempty"`
-	OneOff     bool   `json:"oneOff,omitempty"`
+	SourceRank int        `json:"sourceRank"`
+	SeedNumber int        `json:"seedNumber,omitempty"`
+	TeamID     int64      `json:"teamID"`
+	Name       string     `json:"name"`
+	City       string     `json:"city,omitempty"`
+	Declined   bool       `json:"declined"`
+	Waitlist   bool       `json:"waitlist"`
+	Played     bool       `json:"played,omitempty"`
+	OneOff     bool       `json:"oneOff,omitempty"`
+	Terms      []SeedTerm `json:"terms,omitempty"`
 }
 
 type SeedDeclineRequest struct {
@@ -152,6 +164,7 @@ type seedCandidate struct {
 	Name       string
 	Number     int
 	Declined   bool
+	Terms      []SeedTerm
 	// ParticipantID names the Participant itself when the source knows it
 	// and a fest number would not find it: a troika, a player, a one-off.
 	ParticipantID int64
@@ -491,6 +504,7 @@ func listFromSeedingTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, pr
 			Name:       candidate.Name,
 			City:       city,
 			Declined:   declined,
+			Terms:      candidate.Terms,
 		})
 	}
 
@@ -744,7 +758,7 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (s
 	if err != nil {
 		return 0, nil, err
 	}
-	candidates, err := rankedCandidates(gameCode, gameType, document, rows, rules)
+	candidates, err := rankedCandidates(gameCode, gameType, document, rows, rules, termNames{})
 	return gameID, candidates, err
 }
 
@@ -785,7 +799,7 @@ func odTourCandidates(ctx context.Context, q store.Queryer, festID int64, gameCo
 		}
 		rows[i] = standingRow{name: team.Name, number: int(team.Number), entry: structure.RankedEntry{Rank: rank, Metrics: metrics}}
 	}
-	candidates, err := rankedCandidates(gameCode, doc.GameType, doc.State, rows, rules)
+	candidates, err := rankedCandidates(gameCode, doc.GameType, doc.State, rows, rules, termNames{od: true, tours: reading.tours})
 	return doc.GameID, candidates, err
 }
 
@@ -796,8 +810,9 @@ func odTourCandidates(ctx context.Context, q store.Queryer, festID int64, gameCo
 // the order of its teams, which is alphabetical. The [init] sorting rules,
 // when a scheme names some, take the place of both. Rows keep their table
 // order as the final tie-break. A team the source document marks as declined
-// comes pre-declined.
-func rankedCandidates(gameCode, gameType, document string, rows []standingRow, rules []store.SchemeSortRule) ([]seedCandidate, error) {
+// comes pre-declined. Each candidate keeps the values it was sorted by, for
+// the entrants tab to show.
+func rankedCandidates(gameCode, gameType, document string, rows []standingRow, rules []store.SchemeSortRule, names termNames) ([]seedCandidate, error) {
 	if len(rows) == 0 {
 		return nil, corei18n.User(dopestrings.Default.Imports.Seed.SourceNoTeams())
 	}
@@ -824,7 +839,8 @@ func rankedCandidates(gameCode, gameType, document string, rows []standingRow, r
 	}
 	candidates := make([]seedCandidate, len(rows))
 	for i, r := range rows {
-		candidates[i] = seedCandidate{SourceRank: i + 1, Name: r.name, Number: r.number, Declined: declined[int64(r.number)]}
+		candidates[i] = seedCandidate{SourceRank: i + 1, Name: r.name, Number: r.number, Declined: declined[int64(r.number)],
+			Terms: names.terms(order, r.entry.Metrics)}
 		// A fest team is found again by its number, which also refreshes its
 		// people from the roster; a player comes as itself.
 		if r.player {
@@ -857,6 +873,75 @@ func seedOrder(gameCode string, rows []standingRow, rules []store.SchemeSortRule
 		order = append(order, store.SchemeSortRule{Metric: "rating", Dir: "desc"})
 	}
 	return order, nil
+}
+
+// termNames names the Metrics a seed sorted by for the entrants tab. An OD
+// ranks by the questions taken, so its place shows as that total, over the
+// tours the import read (none: all of them).
+type termNames struct {
+	od    bool
+	tours []int
+}
+
+func (n termNames) terms(order []store.SchemeSortRule, metrics map[string]float64) []SeedTerm {
+	var out []SeedTerm
+	for _, rule := range order {
+		metric := rule.Metric
+		if metric == "rank" && n.od {
+			metric = "total"
+		}
+		value, ok := metrics[metric]
+		if !ok {
+			continue
+		}
+		out = append(out, SeedTerm{Label: n.label(metric), Value: strconv.FormatFloat(math.Round(value*100)/100, 'f', -1, 64)})
+	}
+	return out
+}
+
+func (n termNames) label(metric string) string {
+	switch {
+	case metric == "rank":
+		return dopestrings.Default.Imports.Term.Rank()
+	case metric == "rating":
+		return dopestrings.Default.Imports.Term.Rating()
+	case metric == "total" && n.od && len(n.tours) == 0:
+		return dopestrings.Default.Imports.Term.Taken()
+	case metric == "total" && n.od:
+		return dopestrings.Default.Imports.Term.TakenTours(tourSpan(n.tours), n.tours[len(n.tours)-1])
+	}
+	if tour, err := strconv.Atoi(strings.TrimPrefix(metric, "tour")); err == nil && n.od {
+		return dopestrings.Default.Imports.Term.Tour(strconv.Itoa(tour))
+	}
+	if label, ok := festMetricLabels()[metric]; ok {
+		return strings.ToLower(label())
+	}
+	return metric
+}
+
+// festMetricLabels are the grid's names of a table's Metrics, which a
+// standings source sorts by.
+func festMetricLabels() map[string]func() string {
+	m := dopestrings.Default.Fest.Metric
+	return map[string]func() string{
+		"place_sum": m.PlaceSum, "points_share": m.PointsShare, "taken_share": m.TakenShare,
+		"taken_base": m.TakenBase, "points": m.Points, "taken": m.Taken, "bouts": m.Bouts,
+		"stage": m.Stage, "wins": m.Wins, "losses": m.Losses, "first": m.First, "draw": m.Draw,
+	}
+}
+
+// tourSpan is the tours an import read as a person writes them: «1–2», or
+// «1, 3» when they skip one.
+func tourSpan(tours []int) string {
+	sorted := slices.Sorted(slices.Values(tours))
+	if sorted[len(sorted)-1]-sorted[0] == len(sorted)-1 && len(sorted) > 1 {
+		return fmt.Sprintf("%d–%d", sorted[0], sorted[len(sorted)-1])
+	}
+	parts := make([]string, len(sorted))
+	for i, t := range sorted {
+		parts[i] = strconv.Itoa(t)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // randomSeedCandidates orders the fest's numbered teams by a deterministic

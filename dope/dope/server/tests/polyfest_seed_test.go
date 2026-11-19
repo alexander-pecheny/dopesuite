@@ -228,7 +228,7 @@ func TestPolyfestSiSeedsOnTheQualifierSheet(t *testing.T) {
 // kinsbfOnAnOd is a КИнСбФ (the youth scheme, every team in it) seeded on
 // the first two tours of an ОД of two tours of two questions, whose entries
 // are given, and the list it took: the fest's numbers in seed order.
-func kinsbfOnAnOd(t *testing.T, teams int, entries [][]int) (srv *dopeserver.Server, token string, base string, festID int64, listed []int) {
+func kinsbfOnAnOd(t *testing.T, teams int, entries [][]int) (srv *dopeserver.Server, token string, base string, festID int64, listed []int, terms []string) {
 	t.Helper()
 	srv = newAuthTestServer(t)
 	festID, _ = scopedAPITestIDs(t, srv)
@@ -258,10 +258,27 @@ func kinsbfOnAnOd(t *testing.T, teams int, entries [][]int) (srv *dopeserver.Ser
 		t.Fatalf("import: %d %s", resp.Code, resp.Body.String())
 	}
 	numberOf := teamNumbers(t, db, festID)
-	for _, row := range decodeJSON[esSeedView](t, resp).Rows {
-		listed = append(listed, numberOf[row.TeamID])
+	var view struct {
+		Rows []struct {
+			TeamID int64 `json:"teamID"`
+			Terms  []struct {
+				Label string `json:"label"`
+				Value string `json:"value"`
+			} `json:"terms"`
+		} `json:"rows"`
 	}
-	return srv, token, base, festID, listed
+	if err := json.Unmarshal(resp.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range view.Rows {
+		listed = append(listed, numberOf[row.TeamID])
+		var line []string
+		for _, term := range row.Terms {
+			line = append(line, term.Label+": "+term.Value)
+		}
+		terms = append(terms, strings.Join(line, " · "))
+	}
+	return srv, token, base, festID, listed, terms
 }
 
 // Teams level on the ОД's questions go by рейтинг, not by the ОД's own order
@@ -270,9 +287,13 @@ func kinsbfOnAnOd(t *testing.T, teams int, entries [][]int) (srv *dopeserver.Ser
 // else took, so 3 comes first.
 func TestAnOdSeedBreaksTiesByRating(t *testing.T) {
 	t.Parallel()
-	_, _, _, _, listed := kinsbfOnAnOd(t, 20, [][]int{{1, 2, 4, 5}, {3}, {1}, {1}})
+	_, _, _, _, listed, terms := kinsbfOnAnOd(t, 20, [][]int{{1, 2, 4, 5}, {3}, {1}, {1}})
 	if fmt.Sprint(listed[:5]) != "[1 3 2 4 5]" {
 		t.Fatalf("seeded %v, want 1, then 3 over 2, 4 and 5 on рейтинг", listed)
+	}
+	// Each entrant says what it was sorted by, so the order needs no asking.
+	if terms[0] != "взятых за 1–2 тура: 3 · рейтинг: 57" || terms[1] != "взятых за 1–2 тура: 1 · рейтинг: 20" {
+		t.Fatalf("terms %q, want the questions taken over tours 1–2, then рейтинг", terms[:2])
 	}
 }
 
@@ -281,7 +302,7 @@ func TestAnOdSeedBreaksTiesByRating(t *testing.T) {
 // the fest view sent, every page but the host's own kept the old seating.
 func TestADeclineSendsTheBoutsItReseated(t *testing.T) {
 	t.Parallel()
-	srv, token, base, festID, listed := kinsbfOnAnOd(t, 24, [][]int{{1, 2, 3}, {1, 2}, {1}, {}})
+	srv, token, base, festID, listed, _ := kinsbfOnAnOd(t, 24, [][]int{{1, 2, 3}, {1, 2}, {1}, {}})
 	if listed[0] != 1 {
 		t.Fatalf("seeded %v, want team 1 first", listed)
 	}

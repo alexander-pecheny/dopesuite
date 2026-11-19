@@ -1314,6 +1314,13 @@ export type Strings = {
       random: () => string;
       troikas: () => string;
     };
+    term: {
+      rank: () => string;
+      rating: () => string;
+      taken: () => string;
+      takenTours: (tours: string, n: number) => string;
+      tour: (n: string) => string;
+    };
   };
   journal: {
     ek: {

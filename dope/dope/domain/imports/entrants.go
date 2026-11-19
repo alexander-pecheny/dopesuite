@@ -587,6 +587,7 @@ select id, name, city, game_id is not null from participants where fest_id = ?`,
 			Declined:   row.Declined,
 			Played:     hasResults,
 			OneOff:     current.oneOff,
+			Terms:      row.Terms,
 		}
 		if number, ok := numberOf[row.TeamID]; ok {
 			out.SeedNumber = number
