@@ -11,6 +11,12 @@ import S from "./i18nstrings.js";
 
 // EventSource.OPEN, spelled numerically so fake streams need no global.
 const SSE_OPEN = 1;
+// A stream that has said nothing for this long is taken as dead. The server
+// sends a "ping" every 15s (sseKeepaliveInterval), so this is two lost pings
+// and some slack.
+const STREAM_SILENCE_MS = 40000;
+// How often a visible page checks that its stream still talks.
+const STREAM_WATCH_MS = 10000;
 
 function defaultEventSource(url: string): EventSource {
   return new EventSource(url);
@@ -59,25 +65,36 @@ interface WakeRecoveryOptions {
 
 interface WakeRecovery {
   bind(): void;
+  // kick starts recovery now, from the start of the backoff: a tab or network
+  // event is fresh news, not part of a chain that has been failing a while.
+  kick(): void;
+  // later starts recovery after the first backoff step: the stream reported
+  // an error, and native EventSource gets that long to reconnect on its own.
+  later(): void;
+  // settle ends the chain: something else re-seeded the page on a live stream.
+  settle(): void;
 }
 
-// createWakeRecovery pulls a dead SSE stream back up when the tab or the network
-// returns. iOS freezes backgrounded tabs and silently kills the socket, while
-// native EventSource auto-reconnect sits in CONNECTING forever — so a resumed
-// page spins on "reconnecting" until something re-opens the stream.
+// createWakeRecovery pulls a dead SSE stream back up. iOS freezes backgrounded
+// tabs and kills the socket without telling the page, and native EventSource
+// auto-reconnect can sit in CONNECTING forever, so a page left alone spins on
+// "reconnecting" or, worse, shows "saved" on a state it never re-seeded.
 //
-// One attempt is not enough, which is what left the spinner running for good:
-// iOS wakes the tab with the radio still down, that attempt fails, and no
-// further visibility event is coming to trigger another. So once recovery is
-// needed the helper retries on a backoff until an attempt actually succeeds —
-// it deliberately does not stop at a stream that looks OPEN again, because a
-// natively re-connected socket still leaves the page on state it never re-seeded
-// (and on the spinner that says so).
+// The wake events alone are not enough. The tab often wakes while the dead
+// socket still reads OPEN, and the error comes a few seconds later, when no
+// further wake event is coming. So the stream's own error starts the chain too
+// (later), and once started the helper retries on a backoff until an attempt
+// actually succeeds. It does not stop at a stream that looks OPEN again: a
+// natively re-connected socket still leaves the page on state it never
+// re-seeded.
 function createWakeRecovery(options: WakeRecoveryOptions): WakeRecovery {
   let timer: number | null = null;
   let attempt = 0;
   let running = false;
   let recovering = false;
+  // failedMeanwhile records an error reported while an attempt ran: that
+  // attempt's success is already out of date, and the chain goes on.
+  let failedMeanwhile = false;
 
   function cancelRetry(): void {
     if (timer !== null) {
@@ -110,6 +127,7 @@ function createWakeRecovery(options: WakeRecoveryOptions): WakeRecovery {
     }
     recovering = true;
     running = true;
+    failedMeanwhile = false;
     let recovered = false;
     try {
       recovered = await options.recover();
@@ -118,21 +136,32 @@ function createWakeRecovery(options: WakeRecoveryOptions): WakeRecovery {
     } finally {
       running = false;
     }
-    if (recovered) {
-      recovering = false;
-      attempt = 0;
-      cancelRetry();
+    if (recovered && !failedMeanwhile) {
+      settle();
       return;
     }
     scheduleRetry();
   }
 
-  // kick restarts the backoff from zero: a tab or network event is fresh news,
-  // not the continuation of a chain that has been failing for a while.
+  function settle(): void {
+    recovering = false;
+    attempt = 0;
+    cancelRetry();
+  }
+
   function kick(): void {
     attempt = 0;
     cancelRetry();
     void attemptRecover();
+  }
+
+  function later(): void {
+    recovering = true;
+    if (running) {
+      failedMeanwhile = true;
+      return;
+    }
+    if (timer === null) scheduleRetry();
   }
 
   return {
@@ -141,6 +170,9 @@ function createWakeRecovery(options: WakeRecoveryOptions): WakeRecovery {
       window.addEventListener("pageshow", kick);
       window.addEventListener("online", kick);
     },
+    kick,
+    later,
+    settle,
   };
 }
 
@@ -1029,6 +1061,8 @@ export interface LiveEventsOptions {
   staticMode?: () => boolean;
   recorder?: () => ClientRecorder | null | undefined;
   newEventSource?: (url: string) => EventSource;
+  // A monotonic clock in ms, for the stream's silence check; tests pass one.
+  now?: () => number;
 }
 
 // siblingGameScope says whether an event on the fest stream belongs to another
@@ -1072,9 +1106,20 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
   const indicator = options.indicator || createSyncIndicator();
   const recorder = () => options.recorder?.();
   const resyncable = options.scopes.length > 0 && options.scopes.every((s) => s.stateURL);
+  const now = options.now || (() => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()));
   let stream: EventSource | null = null;
   let epochReloadScheduled = false;
-  const resyncing = new Set<string>();
+  // A scope being refetched holds the events that arrive meanwhile, and they
+  // are replayed onto the fetched state, so none committed after it is lost.
+  const resyncing = new Map<string, ScopedEventMessage[]>();
+  // When the stream last said anything, ping included.
+  let lastHeard = now();
+  // A re-seed is under way: the dot stays on "reconnecting" until it lands.
+  let seeding = false;
+  let watching = false;
+  // The page deliberately has no stream: server lockdown, a static snapshot,
+  // a latched epoch reload.
+  const paused = () => epochReloadScheduled || Boolean(options.staticMode?.());
 
   function specFor(scope: string): ScopeSpec | null {
     let best: ScopeSpec | null = null;
@@ -1094,7 +1139,11 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
       options.onUnhandled?.(message);
       return;
     }
-    if (resyncing.has(scope)) return;
+    const held = resyncing.get(scope);
+    if (held) {
+      held.push(message);
+      return;
+    }
     const seq = Number(message.seq) || 0;
     const base = spec.base ? spec.base(scope) : null;
     if (Array.isArray(message.ops)) {
@@ -1147,7 +1196,7 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
     const spec = specFor(scope);
     if (!spec?.stateURL) return false;
     if (resyncing.has(scope)) return true;
-    resyncing.add(scope);
+    resyncing.set(scope, []);
     const abort = new AbortController();
     const deadline = window.setTimeout(() => abort.abort(), RESYNC_TIMEOUT_MS);
     try {
@@ -1160,6 +1209,9 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
       if (epoch) epochTracker.adopt(epoch);
       recorder()?.event("resync", {scope, seq, epoch: epochTracker.epoch});
       spec.adopt(scope, {data, seq}, null);
+      const held = resyncing.get(scope) || [];
+      resyncing.delete(scope);
+      for (const message of held) dispatch(message);
       indicator.touch();
       return true;
     } catch (error) { // sloplint: ignore[error-only-printed] false tells the caller, and reload() throws on it
@@ -1169,6 +1221,49 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
       window.clearTimeout(deadline);
       resyncing.delete(scope);
     }
+  }
+
+  function silent(): boolean {
+    return now() - lastHeard > STREAM_SILENCE_MS;
+  }
+
+  // showLink turns the dot to "saved" once the stream is open and no re-seed
+  // is still under way. Going offline is the error handler's to say.
+  function showLink(): void {
+    if (stream && stream.readyState === SSE_OPEN && !seeding) indicator.online();
+  }
+
+  // reseed re-fetches the page's state after native EventSource re-opened a
+  // dropped stream by itself. The server does not replay what it sent while
+  // the socket was down, so without this the page would show "saved" on a
+  // state that misses those changes until the next one happens to gap.
+  async function reseed(): Promise<void> {
+    wake.settle();
+    seeding = true;
+    try {
+      await reload();
+    } catch (error: unknown) {
+      options.onRecoverError?.(error);
+      wake.later();
+      return;
+    } finally {
+      seeding = false;
+    }
+    showLink();
+  }
+
+  // watch checks, while the page is visible, that the stream still talks. A
+  // socket the phone has not yet noticed is dead reads OPEN and never errors,
+  // and only its silence gives it away.
+  function watch(): void {
+    if (watching) return;
+    watching = true;
+    window.setInterval(() => {
+      if (document.visibilityState !== "visible" || paused() || !stream || !silent()) return;
+      recorder()?.event("sse-silent", {silent_ms: Math.round(now() - lastHeard), readyState: stream.readyState});
+      indicator.offline();
+      wake.kick();
+    }, STREAM_WATCH_MS);
   }
 
   function connect(): void {
@@ -1181,6 +1276,13 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
     }
     const events = (options.newEventSource || defaultEventSource)(options.eventsURL());
     stream = events;
+    lastHeard = now();
+    // dropped: this stream errored since it last opened, so its next open is
+    // a native reconnect that missed whatever was sent meanwhile.
+    let dropped = false;
+    const heard = () => {
+      if (events === stream) lastHeard = now();
+    };
     events.addEventListener("lockdown", () => {
       // Server entered static mode: drop the stream and reload into the static
       // page (otherwise native EventSource would just auto-reconnect).
@@ -1188,7 +1290,9 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
       epochReloadScheduled = true;
       options.onLockdown?.();
     });
+    events.addEventListener("ping", heard);
     events.addEventListener("state", (event) => {
+      heard();
       let message: ScopedEventMessage;
       try {
         message = parseScopedEvent((event as MessageEvent<string>).data);
@@ -1215,6 +1319,7 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
       dispatch(message);
     });
     events.addEventListener("viewers", (event) => {
+      heard();
       const onViewers = options.onViewers;
       if (!onViewers) return;
       try {
@@ -1224,34 +1329,54 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
       }
     });
     events.addEventListener("open", () => {
-      indicator.online();
-      recorder()?.event("sse-open", {epoch: epochTracker.epoch});
+      if (events !== stream) return;
+      heard();
+      recorder()?.event("sse-open", {epoch: epochTracker.epoch, reopened: dropped});
+      if (dropped) {
+        dropped = false;
+        void reseed();
+        return;
+      }
+      showLink();
     });
     events.onerror = () => {
+      if (events !== stream) return;
       indicator.offline();
-      recorder()?.event("sse-error", {});
+      recorder()?.event("sse-error", {readyState: events.readyState});
+      dropped = true;
+      // Native EventSource may come back on its own (and reseed on open), or
+      // sit in CONNECTING for good; the chain covers the second case.
+      wake.later();
     };
+    watch();
   }
 
+  // recover opens a fresh stream and only then re-fetches the state, so a
+  // change committed between the two still arrives on the stream; the fetched
+  // seq drops the ones it already holds.
   async function recover(): Promise<boolean> {
-    recorder()?.event("sse-recover", {readyState: stream?.readyState ?? null});
+    recorder()?.event("sse-recover", {readyState: stream?.readyState ?? null, silent_ms: Math.round(now() - lastHeard)});
     indicator.offline();
+    seeding = true;
+    connect();
     try {
       await reload();
     } catch (error: unknown) {
       options.onRecoverError?.(error);
       return false;
+    } finally {
+      seeding = false;
     }
-    indicator.online();
-    connect();
+    showLink();
     return true;
   }
 
-  createWakeRecovery({
-    live: () => stream !== null && stream.readyState === SSE_OPEN,
-    paused: () => epochReloadScheduled || Boolean(options.staticMode?.()),
+  const wake = createWakeRecovery({
+    live: () => stream !== null && stream.readyState === SSE_OPEN && !silent(),
+    paused,
     recover,
-  }).bind();
+  });
+  wake.bind();
 
   return {connect, resync};
 }

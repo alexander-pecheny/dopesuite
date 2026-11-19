@@ -149,16 +149,18 @@
   content: var(--name-fade-on-wrap, none);
 }
 
-/* A name on a head's structure fill (a brain side, a bout's venue) fades by
-   a mask: an overlay painted in paper showed as a bar on that fill, and as
-   nothing in the dark theme. */
+/* A name on a head's structure fill (a brain side, a bout's venue, a seat on
+   a round-order card) fades by a mask: an overlay painted in paper showed as a
+   bar on that fill, and as nothing in the dark theme. */
 .brain-name-head,
-.venue-label {
+.venue-label,
+.round-order-card-seat {
   --name-fade-on-text: none;
 }
 
 .brain-name-head.name-cell-truncated .name-cell-text,
-.venue-label.name-cell-truncated .name-cell-text {
+.venue-label.name-cell-truncated .name-cell-text,
+.round-order-card-seat.name-cell-truncated .name-cell-text {
   -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
   mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
 }
@@ -2939,11 +2941,6 @@ body:not(.embedded-match) .grid-match {
   padding-left: var(--space-1);
 }
 
-.team-flags-line {
-  display: flex;
-  gap: var(--space-1);
-}
-
 .team-flags-compact .team-flag {
   padding: 0;
   background: none;
@@ -5197,12 +5194,6 @@ body.is-fullscreen.od-page .match-main {
   font-size: var(--text-md);
 }
 
-.round-order-wave {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
 .round-order-wave-label {
   color: var(--muted);
   font-size: var(--text-xs);
@@ -5245,10 +5236,7 @@ body.is-fullscreen.od-page .match-main {
 
 .round-order-card-seat {
   max-width: 100%;
-  overflow: hidden;
   font-size: var(--text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .round-order-card.is-dragging {

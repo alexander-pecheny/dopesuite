@@ -63,6 +63,8 @@ const (
 	viewerEventBuffer    = 8
 	hostEventBuffer      = 16
 	sseKeepaliveInterval = 15 * time.Second
+	// sseKeepalive is what pumpSSE writes every sseKeepaliveInterval.
+	sseKeepalive = "event: ping\ndata:\n\n"
 	// defaultArchiveTimeout caps an offline archive-journal pass.
 	defaultArchiveTimeout = 10 * time.Minute
 )
@@ -477,7 +479,10 @@ func openSSE(w http.ResponseWriter) bool {
 
 // pumpSSE streams events from ch to w until a write fails, the client goes
 // away or format says to stop. It opens with a "connected" comment and sends a
-// keepalive comment every sseKeepaliveInterval.
+// keepalive every sseKeepaliveInterval. The keepalive is a named "ping" event,
+// not a comment, because a page cannot see comments: hearing the pings is how
+// it tells a quiet game from a dead socket the phone has not noticed yet. Its
+// data line is empty, since EventSource drops an event that has none.
 func pumpSSE[E any](ctx context.Context, w http.ResponseWriter, ch <-chan E, format func(E) (payload string, ok bool)) {
 	writeWithDeadline := sseWriter(w)
 	if !writeWithDeadline(": connected\n\n") {
@@ -493,7 +498,7 @@ func pumpSSE[E any](ctx context.Context, w http.ResponseWriter, ch <-chan E, for
 				return
 			}
 		case <-ticker.C:
-			if !writeWithDeadline(": keepalive\n\n") {
+			if !writeWithDeadline(sseKeepalive) {
 				return
 			}
 		case <-ctx.Done():

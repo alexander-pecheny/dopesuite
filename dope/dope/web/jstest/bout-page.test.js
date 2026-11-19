@@ -13,6 +13,7 @@ globalThis.window = {
     return 0;
   },
   clearTimeout() {},
+  setInterval() { return 0; },
   addEventListener() {},
   location: {pathname: "/host/fest/f/game/g/", hash: "", search: "", reload() {}},
   history: {replaceState(_state, _title, url) { window.location.hash = url.includes("#") ? url.slice(url.indexOf("#")) : ""; }},

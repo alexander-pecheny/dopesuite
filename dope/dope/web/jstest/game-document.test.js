@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 // mountGameDocument composes the loader, the live events and the writer over
 // a page's two callbacks; the page is a fake here, and so are the stream, the
 // fetch and the storage — the same fakes state-sync.test.js uses.
-globalThis.window = {setTimeout: (fn) => { fn(); return 0; }, clearTimeout() {}, addEventListener() {}, location: {search: ""}};
+globalThis.window = {setTimeout: (fn) => { fn(); return 0; }, clearTimeout() {}, setInterval() { return 0; }, addEventListener() {}, location: {search: ""}};
 globalThis.document = {addEventListener() {}, visibilityState: "visible", body: {classList: {toggle() {}}}};
 const store = new Map();
 window.localStorage = {getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k)};

@@ -131,6 +131,7 @@ func decodeUTF16(raw []byte) (string, bool) {
 
 // russianFrequencies is how often each letter occurs in Russian prose. The
 // numbers are the usual published ones; only their shape matters here.
+// sloplint: ignore[magic-numbers] a published frequency table, not quantities to name
 var russianFrequencies = map[rune]float64{
 	'о': 10.98, 'е': 8.45, 'а': 8.01, 'и': 7.35, 'н': 6.70, 'т': 6.26,
 	'с': 5.47, 'р': 4.73, 'в': 4.54, 'л': 4.40, 'к': 3.49, 'м': 3.21,
