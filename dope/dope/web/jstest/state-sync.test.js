@@ -11,6 +11,7 @@ const timers = new Map();
 let nextTimer = 0;
 let holdShortTimers = false;
 const lifecycle = new Map();
+let intervals = [];
 
 function bindLifecycle(type, fn) {
   if (!lifecycle.has(type)) lifecycle.set(type, []);
@@ -28,6 +29,12 @@ globalThis.window = {
     return nextTimer;
   },
   clearTimeout: (id) => timers.delete(id),
+  // Intervals (the stream's silence check) only run when a test calls
+  // runIntervals().
+  setInterval: (fn) => {
+    intervals.push(fn);
+    return intervals.length;
+  },
   addEventListener: bindLifecycle,
 };
 globalThis.document = {addEventListener: bindLifecycle, visibilityState: "visible"};
@@ -40,6 +47,11 @@ async function runTimers() {
   await new Promise((r) => setTimeout(r, 0));
 }
 
+async function runIntervals() {
+  for (const fn of intervals) fn();
+  await new Promise((r) => setTimeout(r, 0));
+}
+
 async function fire(type) {
   for (const fn of lifecycle.get(type) || []) fn();
   await new Promise((r) => setTimeout(r, 0));
@@ -48,6 +60,7 @@ async function fire(type) {
 function resetEnv() {
   timers.clear();
   lifecycle.clear();
+  intervals = [];
   holdShortTimers = false;
   globalThis.document.visibilityState = "visible";
 }
@@ -235,6 +248,103 @@ test("a stream that reconnects on its own is still re-seeded", async () => {
   assert.deepEqual(states, [{v: 42}]);
 });
 
+// The tab often wakes while the dead socket still reads OPEN, so the wake
+// check passes, and the error comes a few seconds later with no further wake
+// event behind it. Native EventSource may then sit in CONNECTING for good.
+test("a stream that errors after the tab woke is still recovered", async () => {
+  const calls = fakeFetch([{headers: {"X-State-Seq": "9"}, body: {v: 42}}]);
+  const {stream, streams, states, statuses} = connectGame();
+  await fire("visibilitychange");
+  assert.equal(calls.length, 0, "the stream still read OPEN on wake");
+  stream.readyState = 0;
+  stream.onerror();
+  assert.equal(statuses.at(-1), "reconnecting");
+  await runTimers();
+  assert.equal(streams.length, 2);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(states, [{v: 42}]);
+  assert.equal(statuses.at(-1), "saved");
+  await runTimers();
+  assert.equal(calls.length, 1, "a re-seeded page ends the retry chain");
+});
+
+// The server does not replay what it sent while the socket was down, so a
+// stream that native EventSource re-opened on its own must not show "saved"
+// on the state from before the drop.
+test("a stream that re-opens on its own is re-seeded before it shows saved", async () => {
+  const calls = fakeFetch([{headers: {"X-State-Seq": "9"}, body: {v: 42}}]);
+  const {stream, streams, states, statuses} = connectGame();
+  stream.readyState = 0;
+  stream.onerror();
+  stream.readyState = 1;
+  stream.emit("open");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(streams.length, 1, "the re-opened stream is kept");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(states, [{v: 42}]);
+  assert.equal(statuses.at(-1), "saved");
+  assert.ok(!statuses.slice(statuses.indexOf("reconnecting")).slice(0, -1).includes("saved"), `no "saved" before the re-seed: ${statuses}`);
+  await runTimers();
+  assert.equal(calls.length, 1, "the error's retry chain ends with the re-seed");
+});
+
+test("the first open of a stream re-seeds nothing", async () => {
+  const calls = fakeFetch([]);
+  const {stream} = connectGame();
+  stream.emit("open");
+  await runTimers();
+  assert.equal(calls.length, 0);
+});
+
+// A socket the phone has not noticed is dead reads OPEN and never errors; only
+// its silence gives it away. The server's pings keep a quiet game's stream alive.
+test("a stream that has said nothing for too long is taken as dead", async () => {
+  let clock = 0;
+  const calls = fakeFetch([{headers: {"X-State-Seq": "9"}, body: {v: 42}}]);
+  const {stream, streams, states, statuses} = connectGame({now: () => clock});
+  clock = 30000;
+  stream.emit("ping");
+  clock = 60000;
+  await runIntervals();
+  await fire("visibilitychange");
+  assert.equal(streams.length, 1, "a ping 30s ago keeps the stream");
+  clock = 75000;
+  await runIntervals();
+  assert.equal(streams.length, 2);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(states, [{v: 42}]);
+  assert.equal(statuses.at(-1), "saved");
+});
+
+test("a silent stream is left alone while the tab is hidden", async () => {
+  let clock = 0;
+  const calls = fakeFetch([]);
+  const {streams} = connectGame({now: () => clock});
+  globalThis.document.visibilityState = "hidden";
+  clock = 120000;
+  await runIntervals();
+  assert.equal(streams.length, 1);
+  assert.equal(calls.length, 0);
+});
+
+test("a delta that arrives during a resync is applied onto the fetched state", async () => {
+  fakeFetch([]);
+  let answer;
+  globalThis.fetch = () => new Promise((resolve) => { answer = resolve; });
+  const {stream, states, seqOf} = connectGame();
+  stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["v"], value: 8}], seq: 8, prevSeq: 7, epoch: "e1"});
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(answer, "the gap started a resync");
+  // Committed after the server read the state it is about to answer with.
+  stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["w"], value: 10}], seq: 10, prevSeq: 9, epoch: "e1"});
+  // Already in the fetched state, so it is dropped.
+  stream.emit("state", {scope: "game-state:1", ops: [{op: "set", path: ["v"], value: 9}], seq: 9, prevSeq: 8, epoch: "e1"});
+  answer({ok: true, status: 200, headers: {get: (name) => (name === "X-State-Seq" ? "9" : null)}, json: () => Promise.resolve({v: 9})});
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(states.at(-1), {v: 9, w: 10});
+  assert.equal(seqOf(), 10);
+});
+
 test("recovery stays off while the tab is hidden", async () => {
   const calls = fakeFetch([]);
   const {stream, streams} = connectGame();
@@ -326,14 +436,14 @@ test("createLiveEvents retries a reload that failed on wake", async () => {
   live.connect();
   await fire("visibilitychange");
   assert.equal(errors, 1);
-  assert.equal(streams.length, 1, "a failed reload opens no stream");
+  assert.equal(streams.length, 2, "the stream is re-opened before the reload, so nothing sent meanwhile is lost");
   assert.equal(statuses.at(-1), "reconnecting");
   fail = false;
   await runTimers();
-  assert.equal(streams.length, 2);
+  assert.equal(streams.length, 3);
   assert.equal(statuses.at(-1), "saved");
   await runTimers();
-  assert.equal(streams.length, 2, "a re-seeded page ends the retry chain");
+  assert.equal(streams.length, 3, "a re-seeded page ends the retry chain");
 });
 
 // ---- the writer -----------------------------------------------------------
