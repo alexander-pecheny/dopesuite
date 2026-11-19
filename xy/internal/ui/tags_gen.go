@@ -337,6 +337,7 @@ var MountAccentPicks = Attr{Name: "kind", Value: "accent-picks"}
 var MountColorField = Attr{Name: "kind", Value: "color-field"}
 var MountReplaceHits = Attr{Name: "kind", Value: "replace-hits"}
 var MountPanelBody = Attr{Name: "kind", Value: "panel-body"}
+var MountXyimageEditor = Attr{Name: "kind", Value: "xyimage-editor"}
 var PageWide = Attr{Name: "kind", Value: "wide"}
 var PageBoard = Attr{Name: "kind", Value: "board"}
 var PaneSrc = Attr{Name: "kind", Value: "src"}

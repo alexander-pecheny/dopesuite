@@ -2125,4 +2125,61 @@ export type Strings = {
       replies: (n: number) => string;
     };
   };
+  xyimage: {
+    layers: {
+      down: () => string;
+      frame: () => string;
+      help: () => string;
+      picture: () => string;
+      rect: () => string;
+      remove: () => string;
+      text: () => string;
+      title: () => string;
+      up: () => string;
+    };
+    page: {
+      name: () => string;
+      title: () => string;
+    };
+    props: {
+      align: () => string;
+      alignCenter: () => string;
+      alignJustify: () => string;
+      alignLeft: () => string;
+      alignRight: () => string;
+      background: () => string;
+      bold: () => string;
+      dpi: () => string;
+      frame: () => string;
+      h: () => string;
+      hyphens: () => string;
+      italic: () => string;
+      leading: () => string;
+      sample: () => string;
+      size: () => string;
+      tracking: () => string;
+      valign: () => string;
+      valignBottom: () => string;
+      valignMiddle: () => string;
+      valignTop: () => string;
+      w: () => string;
+      x: () => string;
+      y: () => string;
+    };
+    status: {
+      frozenLines: (n: string) => string;
+      working: () => string;
+    };
+    tools: {
+      compare: () => string;
+      fit: () => string;
+      move: () => string;
+      pdf: () => string;
+      picture: () => string;
+      png: () => string;
+      rect: () => string;
+      text: () => string;
+      typo: () => string;
+    };
+  };
 };

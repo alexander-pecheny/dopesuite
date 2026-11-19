@@ -120,6 +120,27 @@ chgksuite's plain-text question format, and xy's interchange format for import, 
 **Handout**:
 Раздатка, in the two senses that the Russian word does not distinguish. First, a Card's own: a field of its 4s, holding either text or the name of one of its image Attachments, and the thing an editor means by «раздаточный материал». Second, a tour's: the `.hndt` source built out of those, rendered to PDF entirely in-process with typst as wasm, which is what «Вёрстка раздаток» produces. The first is content and travels with the question. The second is an artefact, and nothing decrypted ever touches disk on its way there. An image name is not a foreign key: a Card may name a picture that is attached to a different Card, or to no Card at all, and an import does that routinely.
 
+**Edited Image (.xyimage)**:
+A picture made in xy's image editor, stored as one Attachment named `something.xyimage` and named from 4s like any other picture, `(img plakat.xyimage)`. It has a canvas in millimetres, resizable, and holds an optional untouched source image, the Recipe, and two Renditions. Nothing is destructive: the source is never rewritten and the Recipe can always be reopened (ADR-0024).
+_Avoid_: edited version, since a Version is a candidate wording of a Card; layout, which a Handout's settings already mean.
+
+**Recipe**:
+What an Edited Image says to do to its source: the crop, the black boxes, and the text boxes with their styling (alignment, vertical alignment, size, line height, letter spacing, opt-in hyphenation) and their Frozen Lines. It is the source of truth; the Renditions are derived from it.
+
+**Frozen Lines**:
+Where the browser actually broke a text box's lines, each with its exact position, read back when editing ends. No export lays the text out again; every output places these lines, so the screen and every export break in the same places.
+
+**Rendition**:
+One baked form of an Edited Image, rewritten in the browser on every save: the **vector** Rendition (the source with its crop, under an SVG overlay of the black boxes and the Frozen Lines, the text kept as text), which the PDF and the раздатки take, and the **raster** one (the whole canvas as one image), which docx takes. A bare .4s ships the .xyimage itself.
+_Avoid_: version.
+
+**Font Family**:
+A named font a Board's Edited Images can be set in, stored as one zip of its Faces and identified by the zip's hash («Inter»). Noto Sans is always there and needs no upload. Only the newest zip of a name is live: uploading a Family again under the same name rewrites every image that used the old one, and they may be laid out differently (ADR-0025).
+_Avoid_: font, when the Family is meant.
+
+**Face**:
+One TTF or OTF file inside a Font Family's zip, at one weight and style. A Recipe names it by the zip's hash and its path in the zip.
+
 **Board Passphrase**:
 The words that wrap a Board's key. They are chosen once when the Board is created, and only the owner can replace them. xy stores them nowhere and cannot recover them. The one copy outside people's heads is the Passphrase Copy. A device that has unlocked the Board once keeps the key rather than the words, so a Board can stay readable on one phone for years after everybody has forgotten the passphrase.
 _Avoid_: password, which is the account's, and master password.

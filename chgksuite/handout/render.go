@@ -154,3 +154,21 @@ func RegularFont() []byte {
 	}
 	return b
 }
+
+// BundledFontNames lists the embedded Noto Sans faces by file name, in the
+// order BundledFonts returns them.
+func BundledFontNames() []string { return append([]string(nil), fontNames...) }
+
+// BundledFontFile is one embedded face by file name. An editor in the browser
+// that lays text out for typst to place has to load these exact bytes, not the
+// Kit's variable woff2 of the same family, or its line breaks would be computed
+// against different glyph widths.
+func BundledFontFile(name string) ([]byte, bool) {
+	for _, n := range fontNames {
+		if n == name {
+			b, err := fontFS.ReadFile("assets/" + n)
+			return b, err == nil
+		}
+	}
+	return nil, false
+}

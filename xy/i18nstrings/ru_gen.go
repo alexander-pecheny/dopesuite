@@ -2784,4 +2784,67 @@ var RU = Strings{
 			},
 		},
 	},
+	Xyimage: XyimageStrings{
+		Layers: XyimageLayersStrings{
+			Down:  func() string { return "Ниже" },
+			Frame: func() string { return "Кадр" },
+			Help: func() string {
+				return "Колесо: прокрутка. Ctrl или щипок: масштаб. Пробел и перетаскивание: сдвиг. Двойной щелчок по тексту: правка. Запекается только то, что внутри кадра."
+			},
+			Picture: func() string { return "Картинка" },
+			Rect:    func() string { return "Прямоугольник" },
+			Remove:  func() string { return "Удалить" },
+			Text:    func() string { return "Текст" },
+			Title:   func() string { return "Слои" },
+			Up:      func() string { return "Выше" },
+		},
+		Page: XyimagePageStrings{
+			Name:  func() string { return "Редактор картинок" },
+			Title: func() string { return "Редактор картинок · xy" },
+		},
+		Props: XyimagePropsStrings{
+			Align:        func() string { return "Выравнивание" },
+			AlignCenter:  func() string { return "По центру" },
+			AlignJustify: func() string { return "По ширине" },
+			AlignLeft:    func() string { return "Слева" },
+			AlignRight:   func() string { return "Справа" },
+			Background:   func() string { return "Фон" },
+			Bold:         func() string { return "Жирный" },
+			Dpi:          func() string { return "dpi для PNG" },
+			Frame:        func() string { return "Кадр" },
+			H:            func() string { return "Высота, мм" },
+			Hyphens:      func() string { return "Переносы" },
+			Italic:       func() string { return "Курсив" },
+			Leading:      func() string { return "Интерлиньяж" },
+			Sample:       func() string { return "Текст" },
+			Size:         func() string { return "Кегль, пт" },
+			Tracking:     func() string { return "Трекинг, пт" },
+			Valign:       func() string { return "По вертикали" },
+			ValignBottom: func() string { return "Снизу" },
+			ValignMiddle: func() string { return "По центру" },
+			ValignTop:    func() string { return "Сверху" },
+			W:            func() string { return "Ширина, мм" },
+			X:            func() string { return "X, мм" },
+			Y:            func() string { return "Y, мм" },
+		},
+		Status: XyimageStatusStrings{
+			FrozenLines: func(n string) string { return fmt.Sprintf("Строк зафиксировано: %s", n) },
+			Working:     func() string { return "typst верстает…" },
+		},
+		Tools: XyimageToolsStrings{
+			Compare: func() string {
+				return "Сравнить с зафиксированными строками: всё, что совпадает с экраном, станет чёрным"
+			},
+			Fit:  func() string { return "Показать кадр целиком (Shift+1)" },
+			Move: func() string { return "Выделение и перемещение (V)" },
+			Pdf:  func() string { return "PDF" },
+			Picture: func() string {
+				return "Картинка. Её можно и вставить из буфера, и перетащить на холст"
+			},
+			Png:  func() string { return "PNG" },
+			Rect: func() string { return "Чёрный прямоугольник (R)" },
+			Text: func() string { return "Текст (T)" },
+			Typo: func() string { return "Типографить" },
+		},
+	},
 }

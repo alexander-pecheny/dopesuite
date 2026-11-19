@@ -165,6 +165,10 @@ func routes(srv *server) *http.ServeMux {
 		mux.HandleFunc("GET /gallery", srv.servePage("ui/gallery.dopeui"))
 	}
 	mux.HandleFunc("GET /import", srv.servePage("ui/import.dopeui"))
+	// The Edited Image prototype (ADR-0024): a lab page, nothing stored.
+	mux.HandleFunc("GET /lab/xyimage", srv.servePage("ui/xyimagelab.dopeui"))
+	mux.HandleFunc("GET /lab/xyimage/fonts/{name}", srv.handleXyimageFont)
+	mux.HandleFunc("POST /api/lab/xyimage/render", srv.handleXyimageRender)
 
 	// ---- admin tooling (gated on the configured admin username) ----
 	mux.HandleFunc("GET /admin", srv.serverOnly(srv.HandleAdminLanding))

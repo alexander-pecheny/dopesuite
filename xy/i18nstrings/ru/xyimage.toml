@@ -1,0 +1,74 @@
+# xy — the Edited Image prototype at /lab/xyimage (xyimagelab.dopeui +
+# xyimagelab.ts, ADR-0024): an infinite canvas in the manner of Figma with one
+# Кадр on it. Whatever lies inside the Кадр is baked: a vector PDF through
+# typst, a PNG in the browser. Nothing is saved; the page exists to try the
+# editor and the browser's own text layout against typst.
+
+[page]
+# Browser tab title.
+title = "Редактор картинок · xy"
+# Topbar heading and the current-page crumb.
+name = "Редактор картинок"
+
+[tools]
+# The toolbar. Each tooltip names the key that picks the tool.
+move = "Выделение и перемещение (V)"
+text = "Текст (T)"
+rect = "Чёрный прямоугольник (R)"
+picture = "Картинка. Её можно и вставить из буфера, и перетащить на холст"
+# Runs the card editor's typography pass over every text box: quotes,
+# dashes, stress marks, non-breaking spaces and hyphens.
+typo = "Типографить"
+# Zooms so the Кадр fills the view (Shift+1).
+fit = "Показать кадр целиком (Shift+1)"
+# Lays the browser's bake over the editor with a difference blend.
+compare = "Сравнить с зафиксированными строками: всё, что совпадает с экраном, станет чёрным"
+pdf = "PDF"
+png = "PNG"
+
+[layers]
+# The left panel.
+title = "Слои"
+frame = "Кадр"
+text = "Текст"
+rect = "Прямоугольник"
+picture = "Картинка"
+# Moving the selected layer up or down the stack.
+up = "Выше"
+down = "Ниже"
+remove = "Удалить"
+# The navigation help at the foot of the left panel.
+help = "Колесо: прокрутка. Ctrl или щипок: масштаб. Пробел и перетаскивание: сдвиг. Двойной щелчок по тексту: правка. Запекается только то, что внутри кадра."
+
+[props]
+# The right panel's heading when nothing but the Кадр is selected.
+frame = "Кадр"
+x = "X, мм"
+y = "Y, мм"
+w = "Ширина, мм"
+h = "Высота, мм"
+background = "Фон"
+dpi = "dpi для PNG"
+size = "Кегль, пт"
+leading = "Интерлиньяж"
+tracking = "Трекинг, пт"
+align = "Выравнивание"
+align_left = "Слева"
+align_center = "По центру"
+align_right = "Справа"
+align_justify = "По ширине"
+valign = "По вертикали"
+valign_top = "Сверху"
+valign_middle = "По центру"
+valign_bottom = "Снизу"
+bold = "Жирный"
+italic = "Курсив"
+hyphens = "Переносы"
+# The text a new box starts with, selected so that typing replaces it.
+sample = "Текст"
+
+[status]
+# Shown while typst renders.
+working = "typst верстает…"
+# Shown when an export is ready; the parameter is the number of frozen lines.
+frozen_lines = 'Строк зафиксировано: {{.n}}'

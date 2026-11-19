@@ -37,6 +37,7 @@ var pagePaths = []string{
 	"ui/board.dopeui",
 	"ui/join.dopeui",
 	"ui/index.dopeui",
+	"ui/xyimagelab.dopeui",
 }
 
 // servePage compiles and serves a ui/*.dopeui page with asset-ref versioning and

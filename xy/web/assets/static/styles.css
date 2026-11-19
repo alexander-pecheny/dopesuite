@@ -2143,3 +2143,127 @@ body {
 .pv-theme .pv-q:first-of-type { margin-top: var(--space-4); }
 .card-preview-body .pv-theme .pv-q { margin-bottom: var(--space-5); }
 .card-preview-body .pv-theme .pv-q:last-child { margin-bottom: 0; }
+
+/* ---- /lab/xyimage, the Edited Image prototype (ADR-0024) ----
+   Laid out like Figma: tools on top, layers on the left, the canvas in the
+   middle, the selection's properties on the right. The page is a board-kind
+   page, so .board-main already fills the viewport below the header. */
+.board-page .board-main:has(.xyimage-editor) { padding: 0; gap: 0; }
+.xyimage-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) 228px;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-top: 1px solid var(--border);
+}
+.xyed-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 var(--space-1-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.xyed-spacer { flex: 1 1 auto; }
+.xyed-status { font-size: var(--text-sm); color: var(--muted); margin-right: var(--space-2); }
+.xyed-tool {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: 0; border-radius: var(--radius-md);
+  background: transparent; color: var(--text); cursor: pointer;
+}
+.xyed-tool:hover { background: var(--structure); }
+.xyed-tool.xyed-on, .xyed-barbtn.xyed-on { background: var(--blue); color: #fff; }
+.xyed-zoom { min-width: 3.5rem; font-variant-numeric: tabular-nums; }
+.xyed-layers, .xyed-props {
+  overflow-y: auto;
+  background: var(--surface);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.xyed-layers { border-right: 1px solid var(--border); }
+.xyed-props { border-left: 1px solid var(--border); }
+.xyed-panelhead { font-size: var(--text-sm); font-weight: var(--fw-semibold); }
+.xyed-layer {
+  display: flex; align-items: center; gap: var(--space-1-5);
+  padding: 4px 6px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text); font: inherit; font-size: var(--text-sm);
+  text-align: left; cursor: pointer; min-width: 0;
+}
+.xyed-layer-child { padding-left: 22px; }
+.xyed-layer:hover { background: var(--structure); }
+.xyed-layer.xyed-on { background: var(--blue); color: #fff; }
+.xyed-help { margin: auto 0 0; font-size: var(--text-sm); color: var(--muted); }
+.xyed-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.xyed-grid2 > .field { min-width: 0; }
+.xyed-grid2 .input { width: 100%; min-width: 0; box-sizing: border-box; }
+.xyed-check { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-sm); }
+
+/* The canvas. The world is laid out at a fixed resolution and zoomed by its
+   transform; the mask, the Кадр's label and the selection are drawn in screen
+   space over it, so their handles keep their size at any zoom. */
+.xyed-view { position: relative; overflow: hidden; background: var(--structure); outline: none; touch-action: none; cursor: default; }
+.xyed-view[data-tool="text"] { cursor: text; }
+.xyed-view[data-tool="rect"] { cursor: crosshair; }
+.xyed-view[data-tool="pan"] { cursor: grab; }
+.xyed-world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.xyed-framebg, .xyed-item, .xyed-compare { position: absolute; box-sizing: border-box; }
+.xyed-image img { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; }
+.xyed-rect { background: #000; }
+.xyed-body { width: 100%; color: #000; white-space: pre-wrap; overflow-wrap: break-word; outline: none; user-select: none; }
+.xyed-editing .xyed-body { user-select: text; cursor: text; }
+.xyed-compare { pointer-events: none; mix-blend-mode: difference; }
+.xyed-mask {
+  position: absolute; pointer-events: none;
+  box-shadow: 0 0 0 100000px rgb(0 0 0 / .28);
+  outline: 1px solid rgb(0 0 0 / .35);
+}
+.xyed-framelabel {
+  position: absolute; transform: translateY(-100%); padding-bottom: 3px;
+  font-size: var(--text-sm); color: var(--muted); white-space: pre; cursor: default; user-select: none;
+}
+.xyed-framelabel.xyed-on { color: var(--blue); }
+.xyed-selbox { position: absolute; outline: 1.5px solid var(--blue); pointer-events: none; }
+.xyed-handle {
+  position: absolute; width: 9px; height: 9px; margin: -5px 0 0 -5px;
+  background: #fff; border: 1.5px solid var(--blue); box-sizing: border-box; pointer-events: auto;
+}
+.xyed-h-nw { left: 0; top: 0; cursor: nwse-resize; }
+.xyed-h-n { left: 50%; top: 0; cursor: ns-resize; }
+.xyed-h-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.xyed-h-e { left: 100%; top: 50%; cursor: ew-resize; }
+.xyed-h-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.xyed-h-s { left: 50%; top: 100%; cursor: ns-resize; }
+.xyed-h-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.xyed-h-w { left: 0; top: 50%; cursor: ew-resize; }
+.xyed-comparing .xyed-mask { box-shadow: none; }
+
+/* Editor density. An image editor wants the canvas, so its chrome is set at
+   Figma's size: 11px text, 24px controls, tight panels. Scoped to the editor;
+   the rest of xy keeps the kit's sizes. */
+.xyimage-editor { font-size: 11px; line-height: 1.35; }
+.xyimage-editor .xyed-tool .ico, .xyimage-editor .btn .ico { --ico-size: 15px; }
+.xyimage-editor .btn {
+  min-height: 24px; height: 24px; padding: 0 8px; gap: 4px;
+  font-size: 11px; border-radius: var(--radius-sm);
+}
+.xyimage-editor .input, .xyimage-editor .field > input, .xyimage-editor .field > select {
+  min-height: 24px; height: 24px; padding: 0 6px;
+  font-size: 11px; border-radius: var(--radius-sm);
+}
+.xyimage-editor .field { gap: 2px; font-size: 11px; color: var(--muted); }
+.xyimage-editor .field > span { line-height: 1.2; }
+.xyimage-editor .field > input, .xyimage-editor .field > select { color: var(--text); }
+.xyed-layers, .xyed-props { padding: 8px; gap: 10px; }
+.xyed-panelhead, .xyed-layer, .xyed-check, .xyed-status, .xyed-help, .xyed-framelabel { font-size: 11px; }
+.xyed-layer { padding: 3px 6px; gap: 6px; }
+.xyed-layer .ico { --ico-size: 13px; }
+.xyed-layer-child { padding-left: 20px; }
+.xyed-check input { width: 13px; height: 13px; margin: 0; }
+

@@ -1,0 +1,7 @@
+page title=@xyimage.page.title kind="board" scripts="dist/xyimagelab.js"
+  topbar title=@xyimage.page.name
+    crumbs
+      crumb home href="/" icon="house" label=@board.page.home
+      crumb @xyimage.page.name
+
+  mount id="editor" kind="xyimage-editor"
