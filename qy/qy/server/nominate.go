@@ -409,7 +409,17 @@ func (s *server) storeQuestion(ctx context.Context, tx *sql.Tx, q store.Question
 	if err != nil {
 		return 0, err
 	}
-	return id, store.AddSuggestions(ctx, tx, id, store.FromRule, anon.Rules(q.Orig, str.Anon.Placeholder()), s.stamp())
+	return id, s.addRuleSuggestions(ctx, tx, id, q.Orig)
+}
+
+// addRuleSuggestions shows the rule pass's finds to the admins as they are,
+// but only when there is no model: a model gets them as candidates in the
+// background pass, and passes on only the ones it confirms.
+func (s *server) addRuleSuggestions(ctx context.Context, tx *sql.Tx, id int64, orig question.Question) error {
+	if s.llm != nil {
+		return nil
+	}
+	return store.AddSuggestions(ctx, tx, id, store.FromRule, anon.Rules(orig, str.Anon.Placeholder()), s.stamp())
 }
 
 // handleParseQuestion is the form's parse button when the page's script runs:

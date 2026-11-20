@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 
 	"qy/qy/platform/buff"
 	"qy/qy/platform/gq"
+	"qy/qy/platform/langdetect"
 	"qy/qy/platform/openrouter"
 	"qy/qy/platform/rating"
 	"qy/qy/platform/telegram"
@@ -29,6 +31,12 @@ import (
 )
 
 const dbFile = "qy.db"
+
+// langDetector names the language of each of a batch of question texts,
+// by their keys (platform/langdetect).
+type langDetector interface {
+	Detect(ctx context.Context, texts map[int64]string) (map[int64]string, error)
+}
 
 // completer is the language model the anonymisation pass asks.
 type completer interface {
@@ -51,8 +59,12 @@ type server struct {
 	// buff names the rating site's players, from the mirror dope reads too.
 	buff buff.Names
 	tg   telegram.Source
-	// llm is nil when no OpenRouter key is set: the rule pass still runs.
+	// llm is nil when no OpenRouter key is set: the rule pass's finds then go
+	// to the admins unvetted.
 	llm completer
+	// langs names the language of new questions; nil when the qy-langdetect
+	// binary is not there, and the admins set it by hand.
+	langs langDetector
 	// wake nudges the background pass when a question arrives.
 	wake chan struct{}
 	now  func() time.Time
@@ -82,6 +94,11 @@ func newServer() (*server, error) {
 	}
 	if key := strings.TrimSpace(os.Getenv("QY_OPENROUTER_KEY")); key != "" {
 		s.llm = openrouter.New(key, llmModel())
+	}
+	if r := langdetect.Find(strings.TrimSpace(os.Getenv("QY_LANGDETECT"))); r != nil {
+		s.langs = r
+	} else {
+		log.Printf("no %s next to the server and no QY_LANGDETECT: question languages are set by hand", langdetect.Binary)
 	}
 	return s, nil
 }

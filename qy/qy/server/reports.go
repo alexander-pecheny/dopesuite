@@ -257,7 +257,7 @@ func (s *server) serveShortlist(w http.ResponseWriter, r *http.Request, sc route
 		seed += "/" + idstr.Format(sc.User.UserID)
 	}
 	for _, q := range inReaderOrder(qs, seed) {
-		body = append(body, ui.Card(ui.Richtext(ui.Raw(questionHTML(card{qy: q.QY, q: q.Clean, extra: q.ExtraContext, factcheck: q.Factcheck})))))
+		body = append(body, ui.Card(ui.Richtext(ui.Raw(questionHTML(juryCard(q))))))
 	}
 	return s.ok(w, r, view{title: str.Results.Shortlist(), trail: yearTrail(c.Year, str.Results.Shortlist()),
 		body: []ui.Item{ui.Section(body...)}})
@@ -279,10 +279,9 @@ func (s *server) serveResults(w http.ResponseWriter, r *http.Request, c contest.
 	}
 	for _, res := range t.results {
 		q := t.byID[res.ID]
-		body = append(body, ui.Card(ui.Richtext(ui.Raw(questionHTML(card{
-			qy: q.QY, q: q.Clean, tournament: q.TournamentTitle, places: placesLine(res),
-			extra: q.ExtraContext, factcheck: q.Factcheck,
-		}.withAuthor(q.Orig.Author))))))
+		c := juryCard(q)
+		c.tournament, c.places = q.TournamentTitle, placesLine(res)
+		body = append(body, ui.Card(ui.Richtext(ui.Raw(questionHTML(c.withAuthor(q.Orig.Author))))))
 	}
 	return s.ok(w, r, view{title: str.Results.Title(), trail: yearTrail(c.Year, str.Results.Title()),
 		body: []ui.Item{ui.Section(body...)}})
@@ -290,5 +289,10 @@ func (s *server) serveResults(w http.ResponseWriter, r *http.Request, c contest.
 
 func (c card) withAuthor(author string) card {
 	c.q.Author = author
+	if c.tr != nil {
+		tr := *c.tr
+		tr.Author = author
+		c.tr = &tr
+	}
 	return c
 }

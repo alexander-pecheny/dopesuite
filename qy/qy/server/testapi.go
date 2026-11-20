@@ -86,22 +86,50 @@ func (ts *TestServer) BotMessage(m tgbot.Message) (string, bool) {
 	return ts.s.keepForward(context.Background(), &m)
 }
 
-// Model is a stand-in language model that answers every prompt with Reply.
-type Model struct{ Reply string }
+// Model is a stand-in language model that answers every prompt with Reply,
+// or with what Answer says when it is set, and keeps the material it was
+// given in Seen.
+type Model struct {
+	Reply  string
+	Answer func(system, user string) (string, error)
+	Seen   []string
+}
 
-func (m *Model) Complete(context.Context, string, string) (string, error) { return m.Reply, nil }
+func (m *Model) Complete(_ context.Context, system, user string) (string, error) {
+	m.Seen = append(m.Seen, user)
+	if m.Answer != nil {
+		return m.Answer(system, user)
+	}
+	return m.Reply, nil
+}
 
 func (ts *TestServer) SetModel(m *Model) { ts.s.llm = m }
 
+// Langs is a stand-in language detector that names each text's language by
+// the function.
+type Langs func(text string) string
+
+func (f Langs) Detect(_ context.Context, texts map[int64]string) (map[int64]string, error) {
+	out := map[int64]string{}
+	for id, t := range texts {
+		out[id] = f(t)
+	}
+	return out, nil
+}
+
+func (ts *TestServer) SetLangs(f Langs) { ts.s.langs = f }
+
 // ReviewPending runs the background pass until no question waits for it.
 func (ts *TestServer) ReviewPending() {
-	for {
-		more, err := ts.s.reviewOne(ts.t.Context())
-		if err != nil {
-			ts.t.Fatalf("review pass: %v", err)
-		}
-		if !more {
-			return
+	for _, step := range ts.s.passSteps() {
+		for {
+			more, err := step(ts.t.Context())
+			if err != nil {
+				ts.t.Fatalf("review pass: %v", err)
+			}
+			if !more {
+				break
+			}
 		}
 	}
 }

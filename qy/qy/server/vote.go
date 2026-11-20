@@ -164,7 +164,7 @@ func (s *server) portionBody(ctx context.Context, r *http.Request, c contest.Con
 	form := []ui.Item{ui.Method("post"), ui.Action("/vote"), ui.DirCol, ui.SpaceMD, ui.Data("autosave", ""),
 		ui.Hiddenfield(ui.Name("portion"), ui.Value(strconv.Itoa(k)))}
 	for _, q := range inReaderOrder(qs, fmt.Sprintf("%d/%d/%d", c.Year, k, j.userID)) {
-		form = append(form, likeCard(q, card{qy: q.QY, q: q.Clean, extra: q.ExtraContext}, liked[q.ID]))
+		form = append(form, likeCard(q, juryCard(q).withoutFactcheck(), liked[q.ID]))
 	}
 	form = append(form, ui.Row(ui.SpaceSM, ui.AlignCenter,
 		ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save())), ui.Message(ui.ID("autosaveStatus"))))
@@ -194,7 +194,7 @@ func (s *server) factcheckBody(ctx context.Context, c contest.Contest, j juror) 
 			continue
 		}
 		shown++
-		form = append(form, likeCard(q, card{qy: q.QY, q: q.Clean, extra: q.ExtraContext, factcheck: q.Factcheck}, true))
+		form = append(form, likeCard(q, juryCard(q), true))
 	}
 	if shown == 0 {
 		return []ui.Item{head, ui.Section(ui.Empty(text(str.Vote.Factcheck.Nothing())))}, nil

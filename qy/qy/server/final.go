@@ -98,7 +98,7 @@ func (s *server) handleJuryPage(w http.ResponseWriter, r *http.Request, sc route
 			radios = append(radios, ui.Radio(items...))
 		}
 		form = append(form, ui.Card(ui.DirCol, ui.SpaceSM,
-			ui.Richtext(ui.Raw(questionHTML(card{qy: q.QY, q: q.Clean, extra: q.ExtraContext, factcheck: q.Factcheck}))),
+			ui.Richtext(ui.Raw(questionHTML(juryCard(q)))),
 			ui.Row(append([]ui.Item{ui.SpaceSM, ui.Wrap(), ui.Aria("label", str.Final.Jury.Scale())}, radios...)...)))
 	}
 	form = append(form, ui.Row(ui.SpaceSM, ui.AlignCenter,
@@ -201,7 +201,7 @@ func (s *server) handlePopularPage(w http.ResponseWriter, r *http.Request, sc ro
 	form = append(form, ui.Row(ui.Button(ui.Submit(), ui.Primary, text(str.Final.Popular.Submit()))))
 	var cards []ui.Item
 	for _, q := range inReaderOrder(qs, fmt.Sprintf("%d/popular/%d", c.Year, sc.User.UserID)) {
-		cards = append(cards, ui.Card(ui.Richtext(ui.Raw(questionHTML(card{qy: q.QY, q: q.Clean, extra: q.ExtraContext, factcheck: q.Factcheck})))))
+		cards = append(cards, ui.Card(ui.Richtext(ui.Raw(questionHTML(juryCard(q))))))
 	}
 	lead := []ui.Item{hint(str.Final.Popular.Lead(dayText(c.FinalEnd)))}
 	if vote[0] != 0 {

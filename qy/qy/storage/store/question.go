@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"qy/qy/domain/anon"
+	"qy/qy/domain/lang"
 	"qy/qy/domain/question"
 )
 
@@ -44,19 +45,41 @@ type Question struct {
 	Pin             string
 	AIStatus        string
 	AIError         string
+	// Lang is "" until the background pass has detected it.
+	Lang string
+	// Translation is the clean copy in Russian, for a question in another
+	// language; TranslationOf is the clean copy (JSON) it was made from.
+	Translation       question.Question
+	TranslationOf     string
+	TranslationEdited bool
+	TranslationError  string
+	// TranslationStale says the clean copy changed after the translation.
+	TranslationStale bool
+}
+
+// Foreign says whether the question is in another language than Russian.
+func (q Question) Foreign() bool { return q.Lang != "" && q.Lang != lang.Russian }
+
+// JuryTranslation is the translation the jury may switch to, if the question
+// has one.
+func (q Question) JuryTranslation() (question.Question, bool) {
+	return q.Translation, q.Foreign() && !q.Translation.Empty()
 }
 
 const questionColumns = `id, year, coalesce(qy, 0), status, coalesce(merged_into, 0), coalesce(gq_id, 0), link,
   published, source_text, orig, clean, coalesce(tournament_id, 0), tournament_title, tournament_start,
-  tournament_end, factcheck, extra_context, author_declined, coalesce(shortlist_pin, ''), ai_status, ai_error, tournament_link`
+  tournament_end, factcheck, extra_context, author_declined, coalesce(shortlist_pin, ''), ai_status, ai_error, tournament_link,
+  coalesce(lang, ''), translation, translation_of, translation_edited, translation_error, translation_of != clean`
 
 func scanQuestion(row interface{ Scan(...any) error }) (Question, error) {
 	var q Question
-	var orig, clean string
+	var orig, clean, translation string
 	err := row.Scan(&q.ID, &q.Year, &q.QY, &q.Status, &q.MergedInto, &q.GQID, &q.Link,
 		&q.Published, &q.SourceText, &orig, &clean, &q.TournamentID, &q.TournamentTitle, &q.TournamentStart,
-		&q.TournamentEnd, &q.Factcheck, &q.ExtraContext, &q.AuthorDeclined, &q.Pin, &q.AIStatus, &q.AIError, &q.TournamentLink)
+		&q.TournamentEnd, &q.Factcheck, &q.ExtraContext, &q.AuthorDeclined, &q.Pin, &q.AIStatus, &q.AIError, &q.TournamentLink,
+		&q.Lang, &translation, &q.TranslationOf, &q.TranslationEdited, &q.TranslationError, &q.TranslationStale)
 	q.Orig, q.Clean = question.FromJSON(orig), question.FromJSON(clean)
+	q.Translation = question.FromJSON(translation)
 	return q, err
 }
 
@@ -115,6 +138,29 @@ where id = ?`,
 		qq.Status, nullInt(qq.MergedInto), qq.Link, qq.Published, qq.Orig.JSON(), qq.Clean.JSON(),
 		nullInt(qq.TournamentID), qq.TournamentTitle, qq.TournamentStart, qq.TournamentEnd, qq.Factcheck,
 		qq.ExtraContext, qq.AuthorDeclined, nullStr(qq.Pin), qq.AIStatus, qq.AIError, now, qq.ID)
+	return err
+}
+
+// SetLang records the language an admin chose for a question.
+func SetLang(ctx context.Context, q Querier, id int64, l, now string) error {
+	_, err := q.ExecContext(ctx, `update questions set lang = ?, updated_at = ? where id = ?`, l, now, id)
+	return err
+}
+
+// SaveTranslation records an admin's edit of a question's translation, which
+// the background pass then leaves alone.
+func SaveTranslation(ctx context.Context, q Querier, id int64, tr question.Question, now string) error {
+	_, err := q.ExecContext(ctx, `
+update questions set translation = ?, translation_of = clean, translation_edited = 1, translation_error = '', updated_at = ?
+where id = ?`, tr.JSON(), now, id)
+	return err
+}
+
+// Retranslate hands a question's translation back to the background pass,
+// dropping an admin's edits.
+func Retranslate(ctx context.Context, q Querier, id int64, now string) error {
+	_, err := q.ExecContext(ctx, `
+update questions set translation_of = '', translation_edited = 0, translation_error = '', updated_at = ? where id = ?`, now, id)
 	return err
 }
 

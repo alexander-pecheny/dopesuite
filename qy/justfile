@@ -7,11 +7,14 @@ default: dev
 build-web:
     cd .. && just build-web qy uikit
 
+# qy-langdetect sits next to qy-server, where the server looks for it.
 build: build-web
     CGO_ENABLED=0 go build -o qy-server ./qy/cmd/qy-server
+    CGO_ENABLED=0 go build -o qy-langdetect ./qy/cmd/qy-langdetect
 
 dev: build-web
-    go run ./qy/cmd/qy-server
+    go build -o qy-langdetect ./qy/cmd/qy-langdetect
+    QY_LANGDETECT=$PWD/qy-langdetect go run ./qy/cmd/qy-server
 
 fmt:
     #!/usr/bin/env bash

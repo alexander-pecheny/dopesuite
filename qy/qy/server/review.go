@@ -569,10 +569,10 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 	body = append(body, ui.Section(s.suggestionItems(href, keep, sugs)...))
 	if !q.Clean.Empty() {
 		body = append(body, ui.Section(subhead(str.Admin.Question.Preview()),
-			ui.Card(ui.Richtext(ui.Raw(questionHTML(card{qy: q.QY, q: q.Clean, factcheck: q.Factcheck, extra: q.ExtraContext}))))))
+			ui.Card(ui.Richtext(ui.Raw(questionHTML(juryCard(q)))))))
 	}
 	if !q.Orig.Empty() {
-		body = append(body, ui.Section(ui.Details(ui.Summary(text(str.Admin.Question.Orig())),
+		body = append(body, translationSection(href, keep, q), ui.Section(ui.Details(ui.Summary(text(str.Admin.Question.Orig())),
 			hint(str.Admin.Question.OrigHint()), ui.Form(origForm(href+"/orig"+keep, q)...))))
 	}
 	body = append(body, ui.Section(subhead(str.Admin.Question.Edit()), ui.Form(questionForm(href+keep, q)...)))
@@ -897,7 +897,11 @@ func (s *server) handleReparse(w http.ResponseWriter, r *http.Request, _ route.S
 		if err := store.SaveQuestion(ctx, tx, q, s.stamp()); err != nil {
 			return err
 		}
-		return store.AddSuggestions(ctx, tx, q.ID, store.FromRule, anon.Rules(q.Orig, str.Anon.Placeholder()), s.stamp())
+		// A new text may be in another language: the pass detects it again.
+		if _, err := tx.ExecContext(ctx, `update questions set lang = null where id = ?`, q.ID); err != nil {
+			return err
+		}
+		return s.addRuleSuggestions(ctx, tx, q.ID, q.Orig)
 	})
 	if err != nil {
 		return err

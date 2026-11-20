@@ -1,7 +1,9 @@
 // Package anon finds what in a question still gives its author or tournament
-// away, and proposes a redaction for each find. A rule pass catches the
-// mechanical leaks; a language model, asked through Prompt, catches the rest.
-// Nothing here edits a question: an admin accepts or rejects each Suggestion.
+// away, and proposes a redaction for each find. A rule pass finds candidates
+// by stem matching, which also hits ordinary words (the common noun "novel"
+// for an author whose first name is Roman); a language model, asked through Prompt, confirms or
+// drops each candidate and finds the rest. Nothing here edits a question: an
+// admin accepts or rejects each Suggestion.
 package anon
 
 import (
@@ -40,7 +42,9 @@ const (
 var sourceLinkRe = regexp.MustCompile(`https?://(?:www\.)?(?:gotquestions\.online/(?:question|pack)/\d+|rating\.chgk\.info/tournaments?/\d+)\S*`)
 
 // Rules runs the mechanical checks against q, whose Author names the people
-// to look for. placeholder is what an author's name is replaced with.
+// to look for. placeholder is what an author's name is replaced with. Its
+// finds are candidates for the model (Prompt), shown to an admin as they are
+// only when no model is configured.
 func Rules(q question.Question, placeholder string) []Suggestion {
 	stems := nameStems(question.AuthorNames(q.Author))
 	var out []Suggestion
@@ -180,8 +184,9 @@ func tidy(s string) string { return strings.TrimSpace(doubleSpaceRe.ReplaceAllSt
 var promptTemplate string
 
 // Prompt is the instruction and the material for a model, which answers with
-// the JSON ParseReply reads.
-func Prompt(q question.Question, tournament, placeholder string) (system, user string) {
+// the JSON ParseReply reads. candidates are the rule pass's finds, which the
+// model keeps in its answer only where they really give the author away.
+func Prompt(q question.Question, tournament, placeholder string, candidates []Suggestion) (system, user string) {
 	system = strings.ReplaceAll(promptTemplate, "{{placeholder}}", placeholder)
 	fields := map[string]string{}
 	for _, f := range juryFields {
@@ -189,10 +194,14 @@ func Prompt(q question.Question, tournament, placeholder string) (system, user s
 			fields[f] = v
 		}
 	}
+	if candidates == nil {
+		candidates = []Suggestion{}
+	}
 	material, _ := json.MarshalIndent(map[string]any{
 		"authors":    question.AuthorNames(q.Author),
 		"tournament": tournament,
 		"fields":     fields,
+		"candidates": candidates,
 	}, "", "  ")
 	return system, string(material)
 }

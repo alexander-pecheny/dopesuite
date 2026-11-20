@@ -92,6 +92,9 @@ BRANCH_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$")
 #   module        subdir holding the go.mod         (build + `go test` run here)
 #   package       Go package, relative to module
 #   binary        installed name — systemd's ExecStart points at it, do not rename
+#   helpers       optional {binary: package}: more binaries of the module, built
+#                 and installed next to the main one before it restarts (qy's
+#                 language detector, kept out of the server for its size)
 # The sibling modules whose tests a deploy of this module also runs, because the
 # binary is built from them.
 TESTED_WITH: dict[str, tuple[Path, ...]] = {"xy": (ROOT / "chgksuite",)}
@@ -180,6 +183,7 @@ TARGETS: dict[str, dict] = {
         "package": "./qy/cmd/qy-server",
         "binary": "qy-server",
         "env_prefix": "QY",
+        "helpers": {"qy-langdetect": "./qy/cmd/qy-langdetect"},
     },
     # Staging: the same qy binary on the same box, its own database and no
     # telegram bot. Bootstrap accounts with `qy-server adduser`.
@@ -192,6 +196,7 @@ TARGETS: dict[str, dict] = {
         "package": "./qy/cmd/qy-server",
         "binary": "qy-server",
         "env_prefix": "QYTEST",
+        "helpers": {"qy-langdetect": "./qy/cmd/qy-langdetect"},
     },
     # Per-branch staging. --instance names the branch and fills in the rest:
     # the unit is dope-test@<name>, the dir /opt/dope-test/<name>, and the URL
@@ -227,6 +232,7 @@ class Target:
         self.module = ROOT / spec["module"]
         self.package = args.package or spec["package"]
         self.binary = args.binary or spec["binary"]
+        self.helpers: dict[str, str] = spec.get("helpers", {})
         # A branch instance fills in the two fields the table left as a family:
         # its own directory under the root, and its own unit of the template.
         if self.instance:
@@ -602,14 +608,15 @@ def describe_build() -> str:
     return completed.stdout.strip() or "dev"
 
 
-def build_binary(target: Target, goarch: str) -> Path:
+def build_binary(target: Target, goarch: str, binary: str = "", package: str = "") -> Path:
+    """Build the target's binary, or the helper named binary from package."""
     DIST_DIR.mkdir(parents=True, exist_ok=True)
-    output = DIST_DIR / target.binary
+    output = DIST_DIR / (binary or target.binary)
     env = os.environ.copy()
     env.update({"CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": goarch})
     ldflags = f"-s -w -X code.pecheny.me/pecheny/dopesuite/dopecore/buildinfo.stamped={describe_build()}"
     run(
-        ["go", "build", "-trimpath", "-ldflags", ldflags, "-o", output, target.package],
+        ["go", "build", "-trimpath", "-ldflags", ldflags, "-o", output, package or target.package],
         cwd=target.module,
         env=env,
     )
@@ -638,6 +645,13 @@ def install_and_restart(target: Target, *, remote_tmp: str, stamp: str, health_w
     remote_bin = f"{target.remote_dir.rstrip('/')}/{target.binary}"
     tmp_bin = f"{remote_tmp.rstrip('/')}/{target.binary}"
     backup = f"{remote_bin}.{stamp}.bak"
+    # Helpers go in first, without a backup: the server finds them at start, and
+    # an older server ignores a newer helper.
+    helpers = "".join(
+        f"sudo install -m 0755 {remote_quote(remote_tmp.rstrip('/') + '/' + h)} "
+        f"{remote_quote(target.remote_dir.rstrip('/') + '/' + h)}\n"
+        for h in target.helpers
+    )
     script = f"""
 set -euo pipefail
 
@@ -669,7 +683,7 @@ sudo install -d -m 0755 "$REMOTE_DIR"
 if [ -e "$REMOTE_BIN" ]; then
   sudo cp -a "$REMOTE_BIN" "$BACKUP"
 fi
-sudo install -m 0755 "$TMP_BIN" "$REMOTE_BIN"
+{helpers}sudo install -m 0755 "$TMP_BIN" "$REMOTE_BIN"
 
 if ! sudo systemctl restart "$SERVICE"; then
   rollback
@@ -843,13 +857,15 @@ def main() -> int:
             flush=True,
         )
         binary = build_binary(target, goarch)
+        helpers = [build_binary(target, goarch, h, pkg) for h, pkg in target.helpers.items()]
 
         if args.dry_run:
             print(f"Built {binary}; dry run requested, skipping upload.")
             continue
 
         remote_tmp = f"/tmp/{target.name}-deploy-{stamp}"
-        upload_binary(target.host, binary, remote_tmp)
+        for b in [binary, *helpers]:
+            upload_binary(target.host, b, remote_tmp)
         install_and_restart(target, remote_tmp=remote_tmp, stamp=stamp, health_wait=args.health_wait)
     return 0
 

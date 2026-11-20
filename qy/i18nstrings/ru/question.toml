@@ -4,3 +4,8 @@ unnumbered = "Вопрос."
 show_answer = "Показать ответ"
 tournament = "Турнир:"
 factcheck = "Фактчек"
+# A question not written in Russian: the switch between the original and its
+# translation, and the disclosure that stands in for it without the script.
+original = "Оригинал"
+translation = "Перевод"
+translation_disclosure = "Перевод на русский"

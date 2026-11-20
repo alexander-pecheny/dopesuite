@@ -1,0 +1,5 @@
+# The model's translation of a question not written in Russian.
+[in_language]
+# The question's language as the prompt names it: «Вопрос написан на … языке».
+uk = "украинском"
+be = "белорусском"

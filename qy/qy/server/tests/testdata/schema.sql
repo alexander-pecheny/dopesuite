@@ -144,7 +144,7 @@ CREATE TABLE questions(
   ai_status text not null default 'pending' check (ai_status in ('pending','done','failed')),
   ai_error text not null default '',
   created_at text not null,
-  updated_at text not null, tournament_link text not null default '',
+  updated_at text not null, tournament_link text not null default '', lang text check (lang in ('ru','uk','be')), translation text not null default '{}', translation_of text not null default '', translation_edited integer not null default 0, translation_error text not null default '',
   unique(year, qy)
 );
 

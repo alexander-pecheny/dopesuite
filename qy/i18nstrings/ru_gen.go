@@ -303,6 +303,33 @@ var RU = Strings{
 			Title: func() string { return "Предложенные правки" },
 			Why:   func(source string, reason string) string { return fmt.Sprintf("%s: %s", source, reason) },
 		},
+		Translation: AdminTranslationStrings{
+			Be:      func() string { return "Белорусский" },
+			Changes: func() string { return "Что изменилось в тексте для жюри" },
+			Edited:  func() string { return "Перевод правили вручную." },
+			Failed:  func(error string) string { return fmt.Sprintf("Перевод не удался: %s", error) },
+			Hint: func() string {
+				return "Язык определяется автоматически. Для вопроса не на русском модель делает перевод обезличенного текста, а жюри может переключаться между оригиналом и переводом. По умолчанию жюри видит оригинал."
+			},
+			Lang:        func() string { return "Язык вопроса" },
+			LangUnknown: func() string { return "Определяется…" },
+			Machine:     func() string { return "Перевод сделан моделью. Проверьте его." },
+			Pending:     func() string { return "Перевод готовится." },
+			Refreshing: func() string {
+				return "Текст для жюри изменился, перевод обновляется."
+			},
+			Retranslate: func() string { return "Перевести заново" },
+			RetranslateConfirm: func() string {
+				return "Перевести заново? Ручные правки перевода пропадут."
+			},
+			Ru:   func() string { return "Русский" },
+			Save: func() string { return "Сохранить перевод" },
+			Stale: func() string {
+				return "Текст для жюри изменился после ручной правки перевода. Сверьте перевод с изменениями и сохраните его или переведите заново."
+			},
+			Title: func() string { return "Язык и перевод" },
+			Uk:    func() string { return "Украинский" },
+		},
 	},
 	Anon: AnonStrings{
 		Placeholder: func() string { return "[автор вопроса]" },
@@ -627,11 +654,14 @@ var RU = Strings{
 		Title:      func() string { return "Профиль" },
 	},
 	Question: QuestionStrings{
-		Factcheck:  func() string { return "Фактчек" },
-		Label:      func(number string) string { return fmt.Sprintf("Вопрос %s.", number) },
-		ShowAnswer: func() string { return "Показать ответ" },
-		Tournament: func() string { return "Турнир:" },
-		Unnumbered: func() string { return "Вопрос." },
+		Factcheck:             func() string { return "Фактчек" },
+		Label:                 func(number string) string { return fmt.Sprintf("Вопрос %s.", number) },
+		Original:              func() string { return "Оригинал" },
+		ShowAnswer:            func() string { return "Показать ответ" },
+		Tournament:            func() string { return "Турнир:" },
+		Translation:           func() string { return "Перевод" },
+		TranslationDisclosure: func() string { return "Перевод на русский" },
+		Unnumbered:            func() string { return "Вопрос." },
 	},
 	Results: ResultsStrings{
 		Places: func(jury string, popular string, rank_sum string, points string) string {
@@ -646,6 +676,12 @@ var RU = Strings{
 			Internal: func() string {
 				return "Что-то сломалось на нашей стороне. Попробуйте ещё раз."
 			},
+		},
+	},
+	Translate: TranslateStrings{
+		InLanguage: TranslateInLanguageStrings{
+			Be: func() string { return "белорусском" },
+			Uk: func() string { return "украинском" },
 		},
 	},
 	Vote: VoteStrings{

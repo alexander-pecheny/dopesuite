@@ -222,6 +222,25 @@ export type Strings = {
       title: () => string;
       why: (source: string, reason: string) => string;
     };
+    translation: {
+      be: () => string;
+      changes: () => string;
+      edited: () => string;
+      failed: (error: string) => string;
+      hint: () => string;
+      lang: () => string;
+      langUnknown: () => string;
+      machine: () => string;
+      pending: () => string;
+      refreshing: () => string;
+      retranslate: () => string;
+      retranslateConfirm: () => string;
+      ru: () => string;
+      save: () => string;
+      stale: () => string;
+      title: () => string;
+      uk: () => string;
+    };
   };
   anon: {
     placeholder: () => string;
@@ -454,8 +473,11 @@ export type Strings = {
   question: {
     factcheck: () => string;
     label: (number: string) => string;
+    original: () => string;
     showAnswer: () => string;
     tournament: () => string;
+    translation: () => string;
+    translationDisclosure: () => string;
     unnumbered: () => string;
   };
   results: {
@@ -467,6 +489,12 @@ export type Strings = {
     error: {
       badRequest: () => string;
       internal: () => string;
+    };
+  };
+  translate: {
+    inLanguage: {
+      be: () => string;
+      uk: () => string;
     };
   };
   vote: {

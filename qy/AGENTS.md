@@ -16,8 +16,9 @@ qy/                     module root (go.mod: module "qy")
     tally/              the shortlist cut and the final count
     question/           parsing a pasted question (chgksuite's textparse)
     anon/               the rule pass, the model prompt, applying a redaction
+    lang/, translate/   a question's language; the prompt that puts it into Russian
   qy/platform/          gotquestions (a SQLite copy of its dump: the API is down), rating.chgk.info,
-                        OpenRouter, Markdown
+                        OpenRouter, Markdown, langdetect (runs qy-langdetect)
   qy/storage/store/     the schema and the queries several handlers share
   qy/web/               route (the dispatcher), ui (the overlay), ts, assets
 ```
@@ -68,7 +69,9 @@ reconnect every few minutes to see it.
 
 ## Commands
 
-`just dev`, `just test`, `just check` as in the other apps. `just
+`just dev`, `just test`, `just check` as in the other apps. `qy-langdetect`
+(lingua-go, 130 MB of language models) is a binary of its own next to
+`qy-server`, which runs it on batches of new questions; deploy ships both. `just
 import-archive <vopros_goda checkout>` loads the old static site into the CMS
 and turns the last year's rules into the next year's, with the dates as
 variables. Deploy targets are `qy-server` and `qytest` on vps-he.

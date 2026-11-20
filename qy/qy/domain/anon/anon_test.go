@@ -59,11 +59,11 @@ func TestApply(t *testing.T) {
 }
 
 func TestPromptCarriesTheMaterial(t *testing.T) {
-	system, user := Prompt(q, "Кубок Чего-то", placeholder)
+	system, user := Prompt(q, "Кубок Чего-то", placeholder, Rules(q, placeholder))
 	if !strings.Contains(system, "Вчера [автор вопроса] ел яблоко") || strings.Contains(system, "{{") {
 		t.Error("the placeholder was not filled in")
 	}
-	for _, want := range []string{"Эдуард Голуб", "Кубок Чего-то", "думал об искусстве"} {
+	for _, want := range []string{"Эдуард Голуб", "Кубок Чего-то", "думал об искусстве", `"reason": "author-name"`} {
 		if !strings.Contains(user, want) {
 			t.Errorf("material lacks %q", want)
 		}

@@ -63,14 +63,7 @@ func routes(s *server) *http.ServeMux {
 	pages.Handle("GET /admin/contest/{year}/final", route.Admin, s.handleFinalReport)
 	pages.Handle("POST /admin/contest/{year}/publish", route.Admin, s.handlePublish)
 	pages.Handle("POST /admin/contest/{year}/unpublish", route.Admin, s.handleUnpublish)
-	pages.Handle("GET /admin/question/{id}", route.Admin, s.handleQuestionPage)
-	pages.Handle("POST /admin/question/{id}", route.Admin, s.handleSaveQuestion)
-	pages.Handle("POST /admin/question/{id}/suggestions/{sid}", route.Admin, s.handleSuggestion)
-	pages.Handle("POST /admin/question/{id}/merge", route.Admin, s.handleMerge)
-	pages.Handle("POST /admin/question/{id}/unmerge", route.Admin, s.handleUnmerge)
-	pages.Handle("POST /admin/question/{id}/orig", route.Admin, s.handleSaveOrig)
-	pages.Handle("POST /admin/question/{id}/reparse", route.Admin, s.handleReparse)
-	pages.Handle("POST /admin/question/{id}/rerun", route.Admin, s.handleRerun)
+	s.questionRoutes(pages)
 	pages.Handle("GET /admin/pages", route.Admin, s.handlePageList)
 	pages.Handle("GET /admin/pages/edit", route.Admin, s.handlePageEdit)
 	pages.Handle("POST /admin/pages/save", route.Admin, s.handlePageSave)
@@ -103,4 +96,20 @@ func routes(s *server) *http.ServeMux {
 		public(w, r)
 	})
 	return mux
+}
+
+// questionRoutes are an admin's review of one question: the jury's copy, the
+// redactions, merging, and the translation.
+func (s *server) questionRoutes(pages *route.Table) {
+	pages.Handle("GET /admin/question/{id}", route.Admin, s.handleQuestionPage)
+	pages.Handle("POST /admin/question/{id}", route.Admin, s.handleSaveQuestion)
+	pages.Handle("POST /admin/question/{id}/suggestions/{sid}", route.Admin, s.handleSuggestion)
+	pages.Handle("POST /admin/question/{id}/merge", route.Admin, s.handleMerge)
+	pages.Handle("POST /admin/question/{id}/unmerge", route.Admin, s.handleUnmerge)
+	pages.Handle("POST /admin/question/{id}/orig", route.Admin, s.handleSaveOrig)
+	pages.Handle("POST /admin/question/{id}/reparse", route.Admin, s.handleReparse)
+	pages.Handle("POST /admin/question/{id}/rerun", route.Admin, s.handleRerun)
+	pages.Handle("POST /admin/question/{id}/lang", route.Admin, s.handleSetLang)
+	pages.Handle("POST /admin/question/{id}/translation", route.Admin, s.handleSaveTranslation)
+	pages.Handle("POST /admin/question/{id}/retranslate", route.Admin, s.handleRetranslate)
 }

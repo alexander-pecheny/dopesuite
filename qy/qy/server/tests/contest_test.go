@@ -131,7 +131,11 @@ func TestAContestEndToEnd(t *testing.T) {
 	w.ts.SetGotQuestions(gq.Fixed{777: {Question: question.Question{
 		Text: "Опубликованный вопрос про ИКС.", Answer: "икс", Author: "Пётр Петров",
 	}, Tournament: "Кубок", TournamentID: 12345}})
-	w.ts.SetModel(&qyserver.Model{Reply: `{"suggestions": [{"field": "comment", "quote": "так вышло", "replacement": "", "reason": "подпись"}]}`})
+	// The model confirms the rule pass's find of the author's name.
+	model := &qyserver.Model{Reply: `{"suggestions": [
+		{"field": "comment", "quote": "так вышло", "replacement": "", "reason": "подпись"},
+		{"field": "text", "quote": "Эдуард Голуб", "replacement": "[автор вопроса]", "reason": "имя автора"}]}`}
+	w.ts.SetModel(model)
 
 	// ---- nomination ----
 	w.ts.SetNow(day(t, "2026-11-10", 12))
@@ -157,14 +161,22 @@ func TestAContestEndToEnd(t *testing.T) {
 	// ---- review ----
 	w.ts.ReviewPending()
 	art := w.questionID("искусство")
-	if n := w.count(`select count(*) from suggestions where question_id = ? and source = 'rule' and quote = 'Эдуард Голуб'`, art); n != 1 {
-		t.Fatalf("rule suggestions: %d", n)
+	// The rule pass's finds reach the admins only through the model.
+	if n := w.count(`select count(*) from suggestions where source = 'rule'`); n != 0 {
+		t.Fatalf("rule suggestions went to the admins unvetted: %d", n)
 	}
-	if n := w.count(`select count(*) from suggestions where question_id = ? and source = 'ai'`, art); n != 1 {
+	shown := false
+	for _, m := range model.Seen {
+		shown = shown || strings.Contains(m, `"candidates": [`) && strings.Contains(m, `"quote": "Эдуард Голуб"`)
+	}
+	if !shown {
+		t.Error("the model was not shown the rule pass's candidate")
+	}
+	if n := w.count(`select count(*) from suggestions where question_id = ? and source = 'ai'`, art); n != 2 {
 		t.Fatalf("model suggestions: %d", n)
 	}
 	var sid int64
-	w.ts.DB().QueryRow(`select id from suggestions where question_id = ? and source = 'rule'`, art).Scan(&sid)
+	w.ts.DB().QueryRow(`select id from suggestions where question_id = ? and source = 'ai' and quote = 'Эдуард Голуб'`, art).Scan(&sid)
 	href := "/admin/question/" + strconv.FormatInt(art, 10)
 	w.post(w.admin, href+"/suggestions/"+strconv.FormatInt(sid, 10), url.Values{"decision": {"accept"}}, http.StatusSeeOther)
 	page := w.get(w.admin, href, http.StatusOK)

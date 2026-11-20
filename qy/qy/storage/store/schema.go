@@ -10,6 +10,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/schema"
 )
 
+// sloplint: ignore[magic-numbers] a step's version is its id in schema_versions, not a quantity
 var Migrations = []schema.Migration{
 	{Version: 1, Name: "the v1 schema", Up: schema.Exec(`
 -- ===== accounts =====
@@ -275,6 +276,21 @@ update admins set telegram_user_id = (select u.telegram_user_id from users u
 -- way to log in. It counts only while nobody with that rating ID has
 -- nominated through the form.
 alter table nominations add column sheet integer not null default 0;
+`)},
+	{Version: 7, Name: "questions in Ukrainian and Belarusian, translated", Up: schema.Exec(`
+-- lang is the language the question is written in, null until the background
+-- pass has detected it (domain/lang); an admin may correct it. A question not
+-- in Russian gets translation, the clean copy in Russian: the model's at first,
+-- then the admin's once translation_edited is set. translation_of is the clean
+-- copy it was made from, so a translation whose clean copy has changed since is
+-- stale: the pass translates it again unless an admin has edited it.
+-- translation_error is the model's failure, which holds the pass off the
+-- question until an admin asks for a translation again.
+alter table questions add column lang text check (lang in ('ru','uk','be'));
+alter table questions add column translation text not null default '{}';
+alter table questions add column translation_of text not null default '';
+alter table questions add column translation_edited integer not null default 0;
+alter table questions add column translation_error text not null default '';
 `)},
 }
 

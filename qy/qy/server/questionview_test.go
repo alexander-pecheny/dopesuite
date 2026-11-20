@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"html"
 	"regexp"
+	"strings"
 	"testing"
 
 	"qy/qy/domain/question"
@@ -27,5 +28,21 @@ func TestTheCardSendsItsFieldsToTheRenderer(t *testing.T) {
 	}
 	if !regexp.MustCompile(`id="QY12"`).MatchString(out) || !regexp.MustCompile(`pv-label">Турнир: </strong>Кубок`).MatchString(out) {
 		t.Errorf("no anchor or tournament in %s", out)
+	}
+}
+
+// A translated card carries both versions for the switch, which waits hidden
+// for the script, and the translation as plain text for a page without it.
+func TestATranslatedCardCarriesBothVersions(t *testing.T) {
+	tr := question.Question{Text: "Назовите ЕГО.", Answer: "дворец памяти"}
+	out := questionHTML(card{qy: 3, q: question.Question{Text: "Назвіть ЙОГО.", Answer: "палац пам’яті"}, tr: &tr})
+	for _, want := range []string{`data-translation="`, `data-part="langs" hidden`, `data-view="orig"`, `data-view="tr"`,
+		`<details data-part="translation">`, "Назовите ЕГО."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("no %q in %s", want, out)
+		}
+	}
+	if strings.Contains(questionHTML(card{qy: 3, q: tr}), "data-translation") {
+		t.Error("a card without a translation has no switch")
 	}
 }
