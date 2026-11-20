@@ -212,6 +212,9 @@ var RU = Strings{
 			UploadFailed:       func() string { return "ошибка загрузки" },
 		},
 		Fonts: AttachmentsFontsStrings{
+			Missing: func(names string) string {
+				return fmt.Sprintf("Картинка набрана шрифтами, которых нет на доске: %s. Загрузите те же файлы шрифтов в «Шрифты» в меню доски, иначе PDF и раздатка не соберутся.", names)
+			},
 			NotMoved: func(names string) string {
 				return fmt.Sprintf("Не удалось перевёрстать картинки: %s. Они остались набраны прежним шрифтом.", names)
 			},

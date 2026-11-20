@@ -14,7 +14,7 @@ import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
 import { icon, iconed } from "./icons_gen.js";
 import S from "./i18nstrings.js";
-import { fileType, fontZipsOf, isXyimage, rasterOf, XYIMAGE_EXT, XYIMAGE_MIME, XYIMAGE_SNIFF_LEN } from "./xyimagefile.js";
+import { fileType, fontsOf, fontZipsOf, isXyimage, rasterOf, XYIMAGE_EXT, XYIMAGE_MIME, XYIMAGE_SNIFF_LEN } from "./xyimagefile.js";
 import type { BoardFonts } from "./boardfonts.js";
 import type { BoardFont } from "./unlock.js";
 
@@ -288,12 +288,13 @@ function attachMenu(anchor: HTMLElement, att: NamedAttachment, name: string): vo
   ]);
 }
 
-async function attachAction(fn: () => Promise<unknown>): Promise<void> {
+// attachAction runs one change to the open card's attachments, then shows
+// what it has to say, if anything, in the message line.
+async function attachAction(fn: () => Promise<string | void>): Promise<void> {
   const msg = ui.message;
   if (!xySync.requireOnline(S.attachments.status.offlineEdit(), msg)) return;
   try {
-    await fn();
-    msg.textContent = "";
+    msg.textContent = (await fn()) || "";
     const oc = deps.openCardId();
     if (oc != null) {
       await loadAttachments(oc);
@@ -315,6 +316,7 @@ function pickReplacement(att: NamedAttachment, name: string): void {
       msg.textContent = S.attachments.status.encrypting();
       const { bytes, mime, lossless } = await storedBytes(file, !!att.lossless);
       await putReplacement(att, name, bytes, mime, lossless);
+      return missingFontsNote(bytes);
     });
   });
   picker.click();
@@ -529,10 +531,24 @@ async function uploadAttachment(file: File, keepAsIs: boolean, name: string): Pr
   const res = await fetch(`/api/cards/${oc}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
   if (!res.ok) throw new Error((await res.text()) || S.attachments.error.uploadFailed());
   const made = (await res.json().catch(() => null)) as { id?: number } | null;
-  msg.textContent = "";
   await loadAttachments(oc);
   await deps.timeline.load(oc);
+  msg.textContent = missingFontsNote(bytes);
   return made?.id ?? null;
+}
+
+// missingFontsNote warns that an Edited Image just attached is set in fonts
+// this board does not have (ADR-0025). A lone .xyimage names its Families by
+// hash and carries none of them, so one brought from another board shows and
+// exports to docx from its raster, but a PDF of it stops until the same font
+// files are uploaded here.
+function missingFontsNote(bytes: Uint8Array): string {
+  const fonts = deps.fonts;
+  if (!fonts || !isXyimage(bytes)) return "";
+  let used: { zip: string; name: string }[];
+  try { used = fontsOf(bytes); } catch (_) { return ""; }
+  const names = [...new Set(used.filter((f) => !fonts.byHash(f.zip)).map((f) => f.name))];
+  return names.length ? S.attachments.fonts.missing(names.join(", ")) : "";
 }
 
 ui.upload.addEventListener("click", async () => {

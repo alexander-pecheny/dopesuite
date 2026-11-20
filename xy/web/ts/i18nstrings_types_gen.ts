@@ -165,6 +165,7 @@ export type Strings = {
       uploadFailed: () => string;
     };
     fonts: {
+      missing: (names: string) => string;
       notMoved: (names: string) => string;
     };
     lightbox: {
