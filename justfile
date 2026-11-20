@@ -30,6 +30,12 @@ vet: vet-core vet-uikit
 # `just pre-commit` inside an app comes back here, because class-check and the
 # kit's own gate are things no single module can run for itself.
 #
+# core.hooksPath lives in the shared .git/config, so once covers every worktree.
+#
+# Make every commit, in every checkout, pass the gate first (.githooks/pre-commit).
+install-hooks:
+    git config core.hooksPath .githooks
+
 # The gate, wherever you are. A module's own faster one is `just check`.
 pre-commit: pre-commit-core pre-commit-uikit class-check cyrillic-check strings-check slop-check
     cd chgksuite && just check

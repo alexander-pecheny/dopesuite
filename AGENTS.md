@@ -48,6 +48,14 @@ chgksuite-app/
   which also runs `test`, `fmt` and `vet` across all six modules at once. `just pre-commit` is the gate for the whole repo and you can run it from
   anywhere. The per-module `pre-commit` recipes just call the root one, because
   class-check needs every app's TypeScript and the shared core.css together.
+- **A commit has to pass the gate.** `.githooks/pre-commit` runs `just
+  pre-commit` and refuses the commit when it fails, and merge commits go
+  through it too. `just install-hooks` turns it on for every checkout and
+  worktree. It checks the working tree, so don't commit from a tree with
+  unstaged edits you wouldn't commit. A fresh worktree also needs
+  `chgksuite/typstwasm/typst.wasm`: copy it from another checkout or run `just
+  build-wasm` in chgksuite/. Don't reach for `--no-verify` to get past a red
+  gate. Fix the gate.
 - **Deploying** is done by one script for the whole repo, `deploy.py`. It has a
   table of targets (`dope-server`, `dopetest`, `xy-server`, `xytest`,
   `spliff-server`, `splifftest`, `qy-server`, `qytest`), and each row says which module, package,

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# A merge commit passes the same gate as any other (pre-commit).
+exec "$(git rev-parse --show-toplevel)/.githooks/pre-commit"

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Refuses the commit unless the whole repo's gate passes: `just pre-commit`,
+# the same one AGENTS.md asks for by hand. Installed for every checkout and
+# worktree of this repo by `just install-hooks` (core.hooksPath is shared).
+#
+# The gate checks the working tree, not just what is staged: commit from a
+# tree whose unstaged edits you would also stand behind. `git commit
+# --no-verify` skips it, which is for emergencies, not for a red gate.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+log=$(mktemp -t dopesuite-gate.XXXXXX)
+echo "pre-commit: running the gate (just pre-commit); log in $log" >&2
+if ! just pre-commit >"$log" 2>&1; then
+  tail -n 40 "$log" >&2
+  echo >&2
+  echo "pre-commit: the gate failed — commit refused. Full log: $log" >&2
+  exit 1
+fi
+rm -f "$log"
