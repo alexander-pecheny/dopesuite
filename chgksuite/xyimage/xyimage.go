@@ -41,6 +41,15 @@ const (
 	Version = 1
 )
 
+// MIME is the type xy stores an Edited Image under, and Ext the extension its
+// files carry. Readers still tell one by its bytes (Is); these are for the
+// places that only have a name to go on, like an import picking pictures out
+// of an archive.
+const (
+	MIME = "image/x-xyimage"
+	Ext  = ".xyimage"
+)
+
 // The chunk types this version knows.
 const (
 	TypeRecipe  = "RCPE"

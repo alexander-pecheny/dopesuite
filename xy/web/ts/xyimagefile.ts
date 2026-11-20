@@ -12,6 +12,12 @@
 
 const MAGIC = [0x58, 0x59, 0x49, 0x4d, 0x47, 0x00]; // "XYIMG\0"
 export const XYIMAGE_VERSION = 1;
+// An Edited Image is stored under this mime, so everything that asks "is it a
+// picture?" says yes; what it is, is told by its bytes.
+export const XYIMAGE_MIME = "image/x-xyimage";
+export const XYIMAGE_EXT = "xyimage";
+// How many leading bytes isXyimage needs to see.
+export const XYIMAGE_SNIFF_LEN = MAGIC.length;
 const TYPE_LEN = 4;
 const LENGTH_LEN = 4;
 const HEADER_LEN = MAGIC.length + 1;
@@ -34,6 +40,13 @@ export class XyimageError extends Error {
 // .xyimage is not.
 export function isXyimage(b: Uint8Array): boolean {
   return b.length >= MAGIC.length && MAGIC.every((m, i) => b[i] === m);
+}
+
+// fileType is a picked file's mime. A browser knows nothing of .xyimage and
+// reports it as "" (or as octet-stream), which would leave an Edited Image
+// picked from disk out of everything that takes pictures.
+export function fileType(f: { name: string; type: string }): string {
+  return f.name.toLowerCase().endsWith("." + XYIMAGE_EXT) ? XYIMAGE_MIME : f.type;
 }
 
 const enc = new TextEncoder();

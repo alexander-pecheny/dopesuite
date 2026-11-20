@@ -31,6 +31,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/textenc"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/textparse"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/typo"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyimage"
 )
 
 // Image is one image referenced by the package, named as the 4s source's
@@ -62,6 +63,7 @@ var imageExts = map[string]string{
 	".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
 	".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
 	".tif": "image/tiff", ".tiff": "image/tiff", ".svg": "image/svg+xml",
+	xyimage.Ext: xyimage.MIME,
 }
 
 // Parse imports one uploaded file. filename decides the format and gives the

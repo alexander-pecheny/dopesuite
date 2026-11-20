@@ -29,6 +29,7 @@ import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board } from "./panels.js";
 import S from "./i18nstrings.js";
 import { KIND, numbered } from "./chgk/cardkind.js";
+import { fileType } from "./xyimagefile.js";
 
 // Quiet time after the last option change before the preview is redrawn.
 const PREVIEW_DEBOUNCE_MS = 200;
@@ -101,7 +102,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // with it, since a browser hands over a .4s without the pictures beside it.
   function picked(): { file: File | null; images: File[] } {
     const files = native ?? [...(fileField.files ?? [])];
-    const images = files.filter((f) => f.type.startsWith("image/"));
+    const images = files.filter((f) => fileType(f).startsWith("image/"));
     const rest = files.filter((f) => !images.includes(f));
     return { file: rest.length === 1 ? rest[0] : null, images };
   }

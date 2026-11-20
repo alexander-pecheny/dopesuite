@@ -14,7 +14,7 @@ import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
 import { icon, iconed } from "./icons_gen.js";
 import S from "./i18nstrings.js";
-import { isXyimage, rasterOf } from "./xyimagefile.js";
+import { fileType, isXyimage, rasterOf, XYIMAGE_EXT, XYIMAGE_MIME, XYIMAGE_SNIFF_LEN } from "./xyimagefile.js";
 
 const { fetchJSON, jpatch, jdelete, el, errMsg } = xyApp;
 
@@ -94,10 +94,7 @@ export function nameStemEnd(name: string): number {
 }
 
 // The card editor's static elements the kernel writes to and listens on.
-// An Edited Image (ADR-0024) is stored under this mime, so everything that asks
-// "is it a picture?" says yes; what it is, is told by its bytes.
-export const XYIMAGE_MIME = "image/x-xyimage";
-const XYIMAGE_EXT = "xyimage";
+export { XYIMAGE_MIME };
 
 export interface AttachmentsUI {
   message: HTMLElement;
@@ -200,7 +197,7 @@ async function attachmentUrl(att: Attachment): Promise<string> {
 }
 
 async function displayBlob(blob: Blob): Promise<Blob> {
-  const head = new Uint8Array(await blob.slice(0, XYIMAGE_EXT.length).arrayBuffer());
+  const head = new Uint8Array(await blob.slice(0, XYIMAGE_SNIFF_LEN).arrayBuffer());
   if (!isXyimage(head)) return blob;
   const raster = rasterOf(new Uint8Array(await blob.arrayBuffer()));
   return raster ? new Blob([new Uint8Array(raster)], { type: "image/png" }) : blob;
@@ -310,10 +307,7 @@ function pickReplacement(att: NamedAttachment, name: string): void {
     void attachAction(async () => {
       const msg = ui.message;
       msg.textContent = S.attachments.status.encrypting();
-      const lossless = !!att.lossless;
-      let bytes: Uint8Array<ArrayBuffer>, mime: string;
-      if (lossless) { bytes = new Uint8Array(await file.arrayBuffer()); mime = file.type || "application/octet-stream"; }
-      else ({ bytes, mime } = await recompressToWebp(file));
+      const { bytes, mime, lossless } = await storedBytes(file, !!att.lossless);
       await putReplacement(att, name, bytes, mime, lossless);
     });
   });
@@ -424,6 +418,15 @@ async function openImageEditor(start: EditorStart, save: (out: Uint8Array<ArrayB
 }
 
 
+// storedBytes is what an upload stores: the file as it is, or, when the user
+// asked for compression, a WebP of it. An Edited Image is never re-encoded:
+// its raster is only one of its parts.
+async function storedBytes(file: File, lossless: boolean): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string; lossless: boolean }> {
+  const type = fileType(file);
+  if (!lossless && type !== XYIMAGE_MIME) return { ...await recompressToWebp(file), lossless };
+  return { bytes: new Uint8Array(await file.arrayBuffer()), mime: type || "application/octet-stream", lossless: true };
+}
+
 // recompressToWebp re-encodes an image File to WebP q70. Opt-in (see
 // uploadAttachment): the default is to store what the user uploaded.
 async function recompressToWebp(file: File): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string }> {
@@ -444,14 +447,12 @@ async function recompressToWebp(file: File): Promise<{ bytes: Uint8Array<ArrayBu
 // both re-encode each picture for the size it is drawn at (imgconv.ForExport), so
 // throwing away the original on the way in bought nothing but a worse original.
 // Online-only — callers must gate on xySync.isOnline(). Refreshes list+timeline.
-async function uploadAttachment(file: File, lossless: boolean, name: string): Promise<number | null> {
+async function uploadAttachment(file: File, keepAsIs: boolean, name: string): Promise<number | null> {
   const oc = deps.openCardId();
   if (!file || oc == null) return null;
   const msg = ui.message;
   msg.textContent = S.attachments.status.encrypting();
-  let bytes: Uint8Array<ArrayBuffer>, mime: string;
-  if (lossless) { bytes = new Uint8Array(await file.arrayBuffer()); mime = file.type || "application/octet-stream"; }
-  else ({ bytes, mime } = await recompressToWebp(file));
+  const { bytes, mime, lossless } = await storedBytes(file, keepAsIs);
   const key = deps.mustDK();
   const cipher = await xyCrypto.encBytes(key, bytes);
   const fd = new FormData();

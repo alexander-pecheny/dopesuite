@@ -8,6 +8,7 @@ import (
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/corpus"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/listexport"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyimage"
 )
 
 // docxFixtures are every chgk-game .docx in chgksuite's corpus. The SI and
@@ -273,6 +274,28 @@ func TestZipRelativeImageRefs(t *testing.T) {
 	}
 	if !hasImage(res.Images, "q3.png") {
 		t.Fatal("image not extracted under its base name")
+	}
+}
+
+// TestZipKeepsEditedImages: a .4s exported from xy ships its Edited Images as
+// .xyimage files, and importing it back must keep them as pictures, under the
+// mime the board stores them by, both from the archive and when picked beside it.
+func TestZipKeepsEditedImages(t *testing.T) {
+	edited := []byte(xyimage.Magic + "\x01")
+	res, err := Parse("p.zip", zipOf(t, map[string][]byte{
+		"q.4s":           []byte("? Вопрос (img poster.xyimage)\n! Ответ\n"),
+		"poster.xyimage": edited,
+	}), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Images) != 1 || res.Images[0].MIME != xyimage.MIME {
+		t.Fatalf("want poster.xyimage as %s, got %+v", xyimage.MIME, res.Images)
+	}
+	res = &Result{Source: "? Вопрос (img poster.xyimage)\n"}
+	res.AddImages([]Image{{Name: "poster.xyimage", Data: edited}})
+	if len(res.Images) != 1 || res.Images[0].MIME != xyimage.MIME {
+		t.Fatalf("a picked .xyimage should be kept, got %+v", res.Images)
 	}
 }
 
