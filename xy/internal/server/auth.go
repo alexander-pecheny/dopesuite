@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
@@ -385,7 +386,7 @@ func scanAccount(row *sql.Row) (tglogin.Account, bool, error) {
 }
 
 func (xyUsers) Create(ctx context.Context, tx tglogin.Tx, id tglogin.Identity, username string, now time.Time) (int64, error) {
-	if isAdminUsername(username) {
+	if !adminusers.MayTake(adminUserEnv, username, id.Username.String) {
 		return 0, errForbidden(xystrings.Default.Auth.Tg.UsernameReserved())
 	}
 	res, err := tx.ExecContext(ctx, `

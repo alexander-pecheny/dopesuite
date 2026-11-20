@@ -204,3 +204,17 @@ func (c Creator) Create(ctx context.Context, usernames []string) (CreateUsersDat
 	}
 	return data, nil
 }
+
+// MayTake says whether a new telegram sign-up may take username. The admin
+// username is the one name that grants rights by itself, so a stranger must
+// not be able to claim it on a fresh instance — but the owner, whose telegram
+// handle is that very name, must: otherwise a fresh instance has no way for
+// the admin to sign up at all. Telegram handles are unique and the bot
+// verified this one, so a matching handle is proof enough.
+func MayTake(envVar, username, telegramHandle string) bool {
+	admin := AdminUsername(envVar)
+	if !strings.EqualFold(username, admin) {
+		return true
+	}
+	return strings.EqualFold(strings.TrimPrefix(strings.TrimSpace(telegramHandle), "@"), admin)
+}

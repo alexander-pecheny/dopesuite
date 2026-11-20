@@ -48,6 +48,7 @@ const usernameMessage = byId("usernameMessage");
 const linkForm = byId<HTMLFormElement>("linkForm");
 const linkPassword = byId<HTMLInputElement>("linkPassword");
 const linkMessage = byId("linkMessage");
+const linkHint = byId("linkHint");
 const linkCancelBtn = byId<HTMLButtonElement>("linkCancelBtn");
 
 const passwordForm = byId<HTMLFormElement>("passwordForm");
@@ -255,13 +256,14 @@ async function claim(password: string, messageNode: HTMLElement): Promise<void> 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code, username, password }),
-    })) as { status?: string };
+    })) as { status?: string; telegram?: string };
     const outcome = claimOutcome(res.status);
     if (outcome.kind === "redirect") {
       redirectToHost();
       return;
     }
     if (outcome.kind === "step") {
+      setText(linkHint, S.login.link.hint(res.telegram ?? "", username));
       linkPassword.value = "";
       showStep(outcome.step);
       setStatus("saved");

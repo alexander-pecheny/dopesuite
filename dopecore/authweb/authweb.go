@@ -133,6 +133,8 @@ type StatusResponse struct {
 	Username    *string `json:"username,omitempty"`
 	Code        string  `json:"code,omitempty"`
 	BotUsername string  `json:"bot_username,omitempty"`
+	// Telegram names the telegram a password_required claim would link.
+	Telegram *string `json:"telegram,omitempty"`
 }
 
 // Start mints a code for the visitor to forward to the bot. An instance with
@@ -236,7 +238,7 @@ func (web Web) Claim(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	settle(w, out)
-	return writeJSON(w, StatusResponse{Status: out.Status, Username: out.Username})
+	return writeJSON(w, StatusResponse{Status: out.Status, Username: out.Username, Telegram: out.Telegram})
 }
 
 // settle writes the cookies an outcome implies: the session when one was

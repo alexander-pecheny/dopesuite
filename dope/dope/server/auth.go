@@ -14,11 +14,13 @@ import (
 	"strings"
 	"time"
 
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authweb"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/tglogin"
 
+	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
@@ -213,6 +215,9 @@ func scanAccount(row *sql.Row) (tglogin.Account, bool, error) {
 }
 
 func (dopeUsers) Create(ctx context.Context, tx tglogin.Tx, id tglogin.Identity, username string, now time.Time) (int64, error) {
+	if !adminusers.MayTake(festaccess.SiteAdminEnv, username, id.Username.String) {
+		return 0, route.Conflict(dopestrings.Default.Auth.Username.Taken())
+	}
 	res, err := tx.ExecContext(ctx, `
 insert into users(telegram_user_id, telegram_username, telegram_name, username, is_system, created_at, updated_at)
 values(?, ?, ?, ?, 0, ?, ?)`, id.TelegramUserID, id.Username, id.Name, username, rfc3339(now), rfc3339(now))

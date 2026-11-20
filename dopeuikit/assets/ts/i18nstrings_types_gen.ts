@@ -44,7 +44,7 @@ export type Strings = {
     };
     link: {
       cancel: () => string;
-      hint: () => string;
+      hint: (telegram: string, username: string) => string;
       submit: () => string;
     };
     message: {

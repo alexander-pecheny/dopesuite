@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authweb"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
@@ -151,7 +152,7 @@ func scanAccount(row *sql.Row) (tglogin.Account, bool, error) {
 }
 
 func (qyUsers) Create(ctx context.Context, tx tglogin.Tx, id tglogin.Identity, username string, now time.Time) (int64, error) {
-	if isAdminUsername(username) {
+	if !adminusers.MayTake(adminUserEnv, username, id.Username.String) {
 		return 0, route.Forbidden(str.Auth.Username.Reserved())
 	}
 	res, err := tx.ExecContext(ctx, `

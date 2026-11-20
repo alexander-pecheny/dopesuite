@@ -239,7 +239,7 @@ where code = ? and kind = 'register' and consumed_at is not null and expires_at 
 		return h.login(ctx, tx, uid, code, &username, now)
 	case acct.PasswordHash.Valid && acct.PasswordHash.String != "":
 		if password == "" {
-			return Outcome{Status: PasswordRequired, Username: &username}, nil
+			return Outcome{Status: PasswordRequired, Username: &username, Telegram: telegramLabel(id)}, nil
 		}
 		ok, _, err := authcred.VerifyPasswordUpgrading(acct.PasswordHash.String, acct.PasswordSalt.String, password)
 		if err != nil {
@@ -340,4 +340,17 @@ func nameOf(acct Account, fallback string) *string {
 		return nil
 	}
 	return &name
+}
+
+// telegramLabel is how the login page names a telegram to the person holding
+// it: the @handle, or the display name for an account without one.
+func telegramLabel(id Identity) *string {
+	label := id.Name.String
+	if h := strings.TrimPrefix(id.Username.String, "@"); h != "" {
+		label = "@" + h
+	}
+	if label == "" {
+		return nil
+	}
+	return &label
 }

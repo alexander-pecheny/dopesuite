@@ -24,7 +24,7 @@ page title="{{title}}" kind="sheet" classicscripts="login.js"
     message id="usernameMessage"
 
   section id="step-link" hidden
-    hint @login.link.hint
+    hint id="linkHint"
     form id="linkForm"
       password id="linkPassword" placeholder=@login.field.password autocomplete="current-password" required grow
       button submit @login.link.submit

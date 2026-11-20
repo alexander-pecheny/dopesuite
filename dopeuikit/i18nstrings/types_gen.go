@@ -79,7 +79,7 @@ type LoginFieldStrings struct {
 
 type LoginLinkStrings struct {
 	Cancel func() string
-	Hint   func() string
+	Hint   func(telegram string, username string) string
 	Submit func() string
 }
 
@@ -180,8 +180,6 @@ func (s Strings) Lookup(id string) (string, bool) {
 		return s.Login.Field.Username(), true
 	case "login.link.cancel":
 		return s.Login.Link.Cancel(), true
-	case "login.link.hint":
-		return s.Login.Link.Hint(), true
 	case "login.link.submit":
 		return s.Login.Link.Submit(), true
 	case "login.message.code_expired":

@@ -2,6 +2,10 @@
 
 package i18nstrings
 
+import (
+	"fmt"
+)
+
 // EN is the en Catalog.
 var EN = Strings{
 	Admin: AdminStrings{
@@ -49,8 +53,8 @@ var EN = Strings{
 		},
 		Link: LoginLinkStrings{
 			Cancel: func() string { return "That is not me, I will choose another username" },
-			Hint: func() string {
-				return "That user already exists. If it is you, enter the password to link the account."
+			Hint: func(telegram string, username string) string {
+				return fmt.Sprintf("That username is taken. If it is you, enter the password to link telegram %s to username %s:", telegram, username)
 			},
 			Submit: func() string { return "Link" },
 		},
