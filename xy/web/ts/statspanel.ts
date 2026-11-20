@@ -107,6 +107,7 @@ export function createStatsPanel(board: Board, transfer: Transfer): ListPanel {
         append: {
           labels: ctx.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
           sessions: ctx.sessions.map((x) => ({ id: x.id, meta: x.meta })),
+          fontHashes: ctx.fontHashes,
           lastRank: after,
           nextRank: ranks.find((r) => after !== null && r > after) ?? null,
           sourceName: board.state.name,

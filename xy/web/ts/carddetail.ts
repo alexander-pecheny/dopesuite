@@ -28,7 +28,7 @@ import { parseAppeal } from "./appeals.js";
 import { appealHeading, verdictLines, type AppealCard } from "./appealcard.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { CardFields, CopyTarget, Handout } from "./chgk/chgk.js";
-import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags } from "./unlock.js";
+import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags, BoardFont } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 import type { Transfer } from "./transfer.js";
@@ -68,6 +68,7 @@ export interface CardDetailState {
   lists: BoardList[];
   cards: BoardCard[];
   labels: BoardLabel[];
+  fonts: BoardFont[];
   cardLabels: CardLabel[];
   cardSessions: Playing[];
   sessions: BoardSession[];
@@ -243,6 +244,9 @@ export interface MoveCtx {
   cardsByList: Map<number, Array<{ id: number; rank: string }>>;
   labels: MoveLabel[];
   sessions: MoveSession[];
+  // The hashes of the Font Families the board holds (ADR-0025): a copied
+  // picture set in one it lacks brings it along.
+  fontHashes: Set<string>;
   name: string;
 }
 

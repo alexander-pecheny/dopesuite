@@ -2085,6 +2085,7 @@ var RU = Strings{
 			EventType: func(got string) string {
 				return fmt.Sprintf("timeline: неизвестный тип события «%s»", got)
 			},
+			FontFields:        func() string { return "fonts: нет hash, path или faces" },
 			ListFields:        func() string { return "lists: нет title/rank" },
 			MissingAttachment: func(path string) string { return fmt.Sprintf("в архиве нет файла %s", path) },
 			NoBoardJson: func(file string) string {
@@ -2145,6 +2146,9 @@ var RU = Strings{
 			},
 			DoneSingle: func(cards string, images string) string {
 				return fmt.Sprintf("Импортировано: %s карточек, %s изображений.", cards, images)
+			},
+			FontsMissing: func(n string) string {
+				return fmt.Sprintf("\n\nНе нашлось шрифтов (%s), которыми набраны картинки: ", n)
 			},
 			ImagesFailed: func(n string) string {
 				return fmt.Sprintf("\n\nНе удалось загрузить изображения (%s): ", n)

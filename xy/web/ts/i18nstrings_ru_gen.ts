@@ -1596,6 +1596,7 @@ ${usage}
       eventOrphan: () => "timeline: событие ни на карточке, ни на тесте",
       eventPayload: () => "timeline: нет payload",
       eventType: (got: string) => `timeline: неизвестный тип события «${got}»`,
+      fontFields: () => "fonts: нет hash, path или faces",
       listFields: () => "lists: нет title/rank",
       missingAttachment: (path: string) => `в архиве нет файла ${path}`,
       noBoardJson: (file: string) => `в архиве нет ${file} — это не экспорт доски xy`,
@@ -1636,6 +1637,9 @@ ${usage}
       defaultTitle: () => "Импорт",
       doneGrouped: (lists: string, cards: string, images: string) => `Импортировано: ${lists} списков (по турам), ${cards} карточек, ${images} изображений.`,
       doneSingle: (cards: string, images: string) => `Импортировано: ${cards} карточек, ${images} изображений.`,
+      fontsMissing: (n: string) => `
+
+Не нашлось шрифтов (${n}), которыми набраны картинки: `,
       imagesFailed: (n: string) => `
 
 Не удалось загрузить изображения (${n}): `,

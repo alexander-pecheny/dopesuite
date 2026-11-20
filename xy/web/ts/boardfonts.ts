@@ -13,6 +13,7 @@ import S from "./i18nstrings.js";
 import { buildFamily } from "./xyimagefonts.js";
 import type { FontFamily, FontSource } from "./xyimagefonts.js";
 import type { BoardFont } from "./unlock.js";
+import { postFamily } from "./fonttransfer.js";
 
 export interface BoardFontsDeps {
   boardId: number;
@@ -24,14 +25,13 @@ export interface BoardFontsDeps {
 }
 
 export interface BoardFonts extends FontSource {
+  family(hash: string): FontFamily | undefined;
   // byHash is the Family with this hash, live or replaced.
   byHash(hash: string): BoardFont | undefined;
   // forget drops a Family that was deleted.
   forget(row: BoardFont): void;
 }
 
-// META_VERSION is the meta's own version: bumped on a change of meaning only.
-const META_VERSION = 1;
 
 export function boardFonts(deps: BoardFontsDeps): BoardFonts {
   const zips = new Map<string, Promise<Uint8Array<ArrayBuffer>>>();
@@ -63,14 +63,7 @@ export function boardFonts(deps: BoardFontsDeps): BoardFonts {
   }
 
   async function store(family: FontFamily, bytes: Uint8Array<ArrayBuffer>): Promise<BoardFont> {
-    const key = deps.dk();
-    const fd = new FormData();
-    fd.set("meta", await xyCrypto.encField(key, JSON.stringify({ v: META_VERSION, hash: family.hash, name: family.name, faces: family.faces })));
-    fd.set("blob", new Blob([await xyCrypto.encBytes(key, bytes)]), "blob");
-    const res = await fetch(`/api/boards/${deps.boardId}/fonts`, { method: "POST", body: fd, credentials: "same-origin" });
-    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-    const { id, size } = (await res.json()) as { id: number; size: number };
-    const row: BoardFont = { ...family, id, size };
+    const row = await postFamily(deps.boardId, deps.dk(), family, bytes);
     deps.state().fonts.push(row);
     zips.set(family.hash, Promise.resolve(bytes));
     return row;
@@ -99,5 +92,5 @@ export function boardFonts(deps: BoardFontsDeps): BoardFonts {
     zips.delete(row.hash);
   }
 
-  return { families, zip, upload, byHash, forget };
+  return { families, zip, upload, byHash, forget, family: byHash };
 }

@@ -85,6 +85,7 @@ export function createBundleImport(board: Board, shell: PanelShell): BundleImpor
   function appendState(bundle: Bundle): AppendState {
     return {
       labels: board.state.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+      fontHashes: new Set(board.state.fonts.map((f) => f.hash)),
       sessions: board.state.sessions.map((s) => ({ id: s.id, meta: s.meta })),
       lastRank: [...board.state.lists].map((l) => l.rank).sort().pop() ?? null,
       sourceName: bundle.board.name,

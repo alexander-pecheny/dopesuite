@@ -19,11 +19,14 @@ import { xyRank } from "./rank.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import { parseDeclaration, serializeDeclaration } from "./seen.js";
 import { bundleUnits } from "./bundle.js";
-import type { Bundle, BundleAttachment, BundleEvent, BundleUnit } from "./bundle.js";
+import type { Bundle, BundleAttachment, BundleEvent, BundleFile, BundleUnit } from "./bundle.js";
 import { remapCommentImages } from "./eventpayload.js";
 import { relinkPacket } from "./appeals.js";
 import type { DataKey } from "./crypto.js";
 import S from "./i18nstrings.js";
+import { copyFamilies } from "./fonttransfer.js";
+import type { FamilySource } from "./fonttransfer.js";
+import { fontZipsOf, isXyimage } from "./xyimagefile.js";
 
 // Log a progress line every this many cards.
 const PROGRESS_EVERY_CARDS = 20;
@@ -93,6 +96,9 @@ export interface AppendState {
   lastRank: string | null;
   nextRank?: string | null; // the list the arrivals go before; absent = the end
   sourceName: string; // the Bundle's board name — the origin stamp's other half
+  // The hashes of the Font Families the target holds; a picture set in one
+  // it lacks brings it from the Bundle (ADR-0025).
+  fontHashes?: Set<string>;
 }
 
 export interface ApplyTarget {
@@ -104,7 +110,7 @@ export interface ApplyTarget {
 // A producer that returns null for an attachment is saying "this one cannot be
 // had" — a Trello download that 404s — and the apply carries on without it. A
 // producer that must have it (a zip missing its own file) throws instead.
-export type AttachmentBytes = (a: BundleAttachment) => Promise<Uint8Array<ArrayBuffer> | null>;
+export type AttachmentBytes = (a: BundleFile) => Promise<Uint8Array<ArrayBuffer> | null>;
 
 export interface UnitResult {
   title: string;
@@ -141,6 +147,15 @@ export async function applyBundle(
   const attachmentMap = new Map<number, number>();
 
   const result: ApplyResult = { units: [], cards: 0, attachments: 0, events: 0, skipped: [], failed: false };
+  // The Font Families the target holds, added to as this apply brings more.
+  const fontsTo = { boardId, dk, has: append?.fontHashes ?? new Set<string>() };
+  const bundleFonts: FamilySource = {
+    family: (h) => bundle.fonts?.find((f) => f.hash === h),
+    zip: async (h) => {
+      const f = bundle.fonts?.find((x) => x.hash === h);
+      return f ? bytesOf(f) : null;
+    },
+  };
   const units = bundleUnits(bundle);
 
   // reconcileLabel maps a Bundle Label onto the target. Appending, an existing
@@ -354,6 +369,7 @@ export async function applyBundle(
       // Each attachment is a download, a re-encrypt and an upload — two round
       // trips of its own, and nothing between them touches another attachment.
       const atts = bundle.attachments.filter((a) => ours.has(a.card_id));
+      const zips = new Set<string>(); // the Font Families these pictures name
       let attDone = 0;
       await pooled(atts, ATTACH_POOL, async (a) => {
         const fd = new FormData();
@@ -369,6 +385,7 @@ export async function applyBundle(
           result.skipped.push(a.filename);
           return;
         }
+        if (isXyimage(plain)) { try { for (const z of fontZipsOf(plain)) zips.add(z); } catch { /* a damaged picture names none */ } }
         const cipher = await xyCrypto.encBytes(dk, plain);
         fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
         const res = await fetch(`/api/cards/${cardMap.get(a.card_id)}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
@@ -377,6 +394,7 @@ export async function applyBundle(
         result.attachments++;
         log(S.import.apply.attachments(unit.title, String(++attDone), String(atts.length)));
       });
+      result.skipped.push(...await copyFamilies(zips, bundleFonts, fontsTo));
 
       const keptSessions = new Set(newSessions);
       await importEvents(

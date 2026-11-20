@@ -30,6 +30,7 @@ function board() {
     name: "Своя", lists: [{ id: 1, title: "Тур 1", rank: "a0" }, { id: 2, title: "Тур 2", rank: "a1" }],
     cards: [{ id: 10, listId: 1, kind: "question", rank: "a0", desc: "Вопрос?", alias: "В1" }, { id: 11, listId: 1, kind: "question", rank: "a1", desc: "Второй" }],
     labels: [{ id: 3, name: "взяли", color: "#0f0" }],
+    fonts: [],
     cardLabels: [{ cardId: 10, labelId: 3, sessionId: 7 }],
     cardSessions: [{ cardId: 10, sessionId: 7 }],
     sessions: [{ id: 7, meta: JSON.stringify({ key: "s-7", date: "2026-08-01", title: "Тест" }) }],
@@ -76,7 +77,7 @@ test("a copy on the same board repeats the labels and playings verbatim and carr
 test("a copy to another board re-encrypts under its key and reconciles labels by name and playings by session key", async () => {
   const { state, transfer } = board();
   calls.length = 0;
-  const ctx = { boardId: 2, dk: dstDk, lists: [{ id: 20, title: "Чужой", rank: "a0" }], cardsByList: new Map(), labels: [{ id: 33, name: "взяли", color: "#0f0" }], sessions: [], name: "Другая" };
+  const ctx = { boardId: 2, dk: dstDk, lists: [{ id: 20, title: "Чужой", rank: "a0" }], cardsByList: new Map(), labels: [{ id: 33, name: "взяли", color: "#0f0" }], sessions: [], fontHashes: new Set(), name: "Другая" };
   const id = await transfer.transferCard(state.cards[0], 20, ctx, true);
   const post = calls.find((c) => c[0] === "POST" && c[1] === "/api/lists/20/cards");
   assert.equal(await xyCrypto.decField(dstDk, post[2].description), "Вопрос?");
@@ -117,7 +118,7 @@ test("a copy to another board points a comment's images at the copied attachment
     return { ok: false };
   };
   try {
-    const ctx = { boardId: 2, dk: dstDk, lists: [{ id: 20, title: "Чужой", rank: "a0" }], cardsByList: new Map(), labels: [], sessions: [], name: "Другая" };
+    const ctx = { boardId: 2, dk: dstDk, lists: [{ id: 20, title: "Чужой", rank: "a0" }], cardsByList: new Map(), labels: [], sessions: [], fontHashes: new Set(), name: "Другая" };
     const id = await transfer.transferCard(state.cards[0], 20, ctx, false);
     const imported = calls.find((c) => c[1] === `/api/cards/${id}/timeline/import`)[2].events;
     assert.equal(await xyCrypto.decField(dstDk, imported[0].payload), JSON.stringify({ xy: 1, t: "картинка", img: [900] }));

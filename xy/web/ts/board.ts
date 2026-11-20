@@ -1435,6 +1435,9 @@ function questionNumberFor(card: PreviewCardLike): string | null {
 // listeners (the Escape handler) register before the timeline's; the timeline
 // seam it needs binds lazily through arrow closures.
 let timeline: Timeline;
+// The board's Font Families (ADR-0025): what the image editor sets text in,
+// what exports send along, what a copied card brings to another board.
+const fonts = boardFonts({ boardId, state: () => state, dk: mustDK, onReplaced: (old, now) => attachments.replaceFamily(old, now) });
 const attachments = createAttachments({
   ui: {
     message: byId("cardMessage"), list: byId("attachments"), upload: byId("attachUpload"),
@@ -1451,13 +1454,13 @@ const attachments = createAttachments({
     setAttachments: (list) => timeline.setAttachments(list),
   },
   onCommentImage: (attId) => timeline.addDraftImage(attId),
-  fonts: boardFonts({ boardId, state: () => state, dk: mustDK, onReplaced: (old, now) => attachments.replaceFamily(old, now) }),
+  fonts,
   boardId,
 });
 
 // transfer moves and copies cards within and across boards; the card editor,
 // mass action and "move list" share it.
-const transfer = createTransfer({ boardId, getState: () => state, getDK: () => dk, verbs: { patch }, cardsOf, labelById, askPassphrase: askTargetPass });
+const transfer = createTransfer({ boardId, getState: () => state, getDK: () => dk, verbs: { patch }, cardsOf, labelById, askPassphrase: askTargetPass, fonts });
 
 // askTargetPass keeps the dialog open through a wrong passphrase, so a typo
 // costs a retype rather than the whole transfer.

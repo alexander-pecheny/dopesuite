@@ -154,6 +154,10 @@ no_tours_note = "\nТуры («## …») в файле не найдены — �
 images_failed = "\n\nНе удалось загрузить изображения ({{.n}}): "
 # Appended when cards name images that were neither in the package nor given with it.
 images_missing = "\n\nНе нашлось картинок ({{.n}}): "
+# Pictures made in xy's editor name a font the package did not ship in its
+# fonts/ folder (ADR-0025); they export only as their raster until the font is
+# uploaded again. The names follow.
+fonts_missing = "\n\nНе нашлось шрифтов ({{.n}}), которыми набраны картинки: "
 # Picker lines in the desktop app, whose own dialog picked the file: its name,
 # and for a .4s how many of the pictures it names were found beside it.
 picked_file = 'Файл «{{.name}}».'
@@ -199,6 +203,8 @@ event_type = 'timeline: неизвестный тип события «{{.got}}�
 event_orphan = "timeline: событие ни на карточке, ни на тесте"
 event_payload = "timeline: нет payload"
 attachment_fields = "attachments: нет path/filename"
+# A Font Family's row (ADR-0025) lacks its hash, its file or its faces.
+font_fields = "fonts: нет hash, path или faces"
 
 [append]
 # Appending an archive's lists to the OPEN board (bundleimportpanel.ts) — the

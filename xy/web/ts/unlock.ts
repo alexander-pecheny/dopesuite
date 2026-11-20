@@ -311,7 +311,7 @@ export interface Unlock {
 // board page.
 // decryptFonts reads each Family's meta. One that does not read (damaged, or
 // written by a newer xy) is left out rather than failing the board.
-async function decryptFonts(crypto: UnlockCrypto, key: DataKey, rows: NonNullable<Snapshot["fonts"]>): Promise<BoardFont[]> {
+export async function decryptFonts(crypto: Pick<UnlockCrypto, "decField">, key: DataKey, rows: NonNullable<Snapshot["fonts"]>): Promise<BoardFont[]> {
   const out: BoardFont[] = [];
   for (const r of rows) {
     try {

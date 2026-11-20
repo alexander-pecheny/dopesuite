@@ -216,6 +216,22 @@ export async function buildFamily(files: File[]): Promise<{ family: FontFamily; 
   return { family: { hash: await sha256Hex(zip), name, faces: sortFaces(faces) }, zip };
 }
 
+// readFamily describes a Family zip as it stands, for one that arrives already
+// zipped (in a .4s export's fonts/ folder): its hash is of these very bytes,
+// which the pictures set in it name.
+export async function readFamily(zip: Uint8Array<ArrayBuffer>): Promise<FontFamily> {
+  const faces: FamilyFace[] = [];
+  let name = "";
+  for (const e of await zipRead(zip)) {
+    if (!FONT_FILE.test(e.name)) continue;
+    const info = readFace(e.data, e.name);
+    name ||= info.family;
+    faces.push({ path: e.name, style: info.style, weight: info.weight, italic: info.italic });
+  }
+  if (!faces.length) throw new FontRefused("empty", "");
+  return { hash: await sha256Hex(zip), name, faces: sortFaces(faces) };
+}
+
 export function sortFaces(faces: FamilyFace[]): FamilyFace[] {
   return [...faces].sort((a, b) => Number(a.italic) - Number(b.italic) || a.weight - b.weight || a.style.localeCompare(b.style));
 }

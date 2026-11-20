@@ -280,6 +280,8 @@ func TestZipRelativeImageRefs(t *testing.T) {
 // TestZipKeepsEditedImages: a .4s exported from xy ships its Edited Images as
 // .xyimage files, and importing it back must keep them as pictures, under the
 // mime the board stores them by, both from the archive and when picked beside it.
+const fontHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
 func TestZipKeepsEditedImages(t *testing.T) {
 	edited := []byte(xyimage.Magic + "\x01")
 	res, err := Parse("p.zip", zipOf(t, map[string][]byte{
@@ -291,6 +293,17 @@ func TestZipKeepsEditedImages(t *testing.T) {
 	}
 	if len(res.Images) != 1 || res.Images[0].MIME != xyimage.MIME {
 		t.Fatalf("want poster.xyimage as %s, got %+v", xyimage.MIME, res.Images)
+	}
+	res, err = Parse("p.zip", zipOf(t, map[string][]byte{
+		"Тур 1/q.4s":                       []byte("? Вопрос (img poster.xyimage)\n! Ответ\n"),
+		"Тур 1/fonts/" + fontHash + ".zip": []byte("a family"),
+		"fonts/not-a-hash.zip":             []byte("junk"),
+	}), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Fonts) != 1 || res.Fonts[0].Name != fontHash+".zip" {
+		t.Fatalf("want the one Family zip in fonts/, got %+v", res.Fonts)
 	}
 	res = &Result{Source: "? Вопрос (img poster.xyimage)\n"}
 	res.AddImages([]Image{{Name: "poster.xyimage", Data: edited}})

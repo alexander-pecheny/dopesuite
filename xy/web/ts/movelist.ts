@@ -136,6 +136,7 @@ export function createMoveListPanel(board: Board, transfer: Pick<Transfer, "load
         append: {
           labels: ctx.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
           sessions: ctx.sessions.map((x) => ({ id: x.id, meta: x.meta })),
+          fontHashes: ctx.fontHashes,
           lastRank: bounds.prev,
           nextRank: bounds.next,
           sourceName: board.state.name,

@@ -15,6 +15,13 @@ import { byRank } from "./dragrank.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { BoardCard, BoardLabel, Snapshot } from "./unlock.js";
+import { decryptFonts } from "./unlock.js";
+import { copyFamilies } from "./fonttransfer.js";
+import type { FamilySource } from "./fonttransfer.js";
+import { fontZipsOf, isXyimage } from "./xyimagefile.js";
+
+// FontsTarget is the board a copied card's fonts go to, and what it holds.
+export interface FontsTarget { boardId: number; has: Set<string> }
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 import type { CardDetailState, MoveCtx, MutationVerbs } from "./carddetail.js";
@@ -41,6 +48,8 @@ export interface TransferDeps {
   labelById(id: number): BoardLabel | undefined;
   // Asks for another board's passphrase until unlock accepts one; null cancels.
   askPassphrase(unlock: (pass: string) => Promise<DataKey>): Promise<DataKey | null>;
+  // The open board's Font Families, which a copied picture may be set in.
+  fonts?: FamilySource;
 }
 
 export interface Transfer {
@@ -48,7 +57,7 @@ export interface Transfer {
   moveBoardOptions(): Promise<Array<{ id: number; label: string }>>;
   loadMoveBoard(bid: number): Promise<MoveCtx>;
   cardCopyBody(src: BoardCard, rank: string, key: DataKey): Promise<OpBody>;
-  copyCardExtras(srcCardId: number, targetDk: DataKey, newCardId: number): Promise<void>;
+  copyCardExtras(srcCardId: number, targetDk: DataKey, newCardId: number, fontsTo?: FontsTarget): Promise<void>;
   reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<Array<{ label_id: number; session_id: number | null }>>;
   reconcilePlayings(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number[]>;
   transferCard(card: BoardCard, targetListId: number, ctx: MoveCtx, remove: boolean, rank?: string): Promise<number>;
@@ -117,8 +126,9 @@ export function createTransfer(deps: TransferDeps): Transfer {
     const sessions = await Promise.all((snap.sessions || []).map(async (s) => ({
       id: s.id, meta: await xyCrypto.decField(tdk, s.meta),
     })));
+    const fontHashes = new Set((await decryptFonts(xyCrypto, tdk, snap.fonts || [])).map((f) => f.hash));
     return {
-      boardId: bid, dk: tdk, lists, cardsByList, labels, sessions,
+      boardId: bid, dk: tdk, lists, cardsByList, labels, sessions, fontHashes,
       name: snap.name || "",
     };
   }
@@ -131,6 +141,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
     return {
       boardId, dk: mustDK(), lists, cardsByList, labels: st().labels,
       sessions: st().sessions.map((s) => ({ id: s.id, meta: s.meta })), name: st().name,
+      fontHashes: new Set(st().fonts.map((f) => f.hash)),
     };
   }
 
@@ -157,12 +168,15 @@ export function createTransfer(deps: TransferDeps): Transfer {
   // endpoint); attachments are downloaded, decrypted, re-encrypted and re-uploaded
   // (preserving mime + lossless flag). Copy/move is an online-only operation, so
   // this runs straight against the API (no sync outbox / temp ids).
-  async function copyCardExtras(srcCardId: number, targetDk: DataKey, newCardId: number): Promise<void> {
+  async function copyCardExtras(srcCardId: number, targetDk: DataKey, newCardId: number, fontsTo?: FontsTarget): Promise<void> {
     if (!xySync.isOnline() || !newCardId) return;
     const dk = mustDK();
     // Attachments go first: a comment's images name attachments by id, so the
     // comments can only point at the copies once those exist.
-    const attIds = await copyAttachments(srcCardId, dk, targetDk, newCardId);
+    const { ids: attIds, zips } = await copyAttachments(srcCardId, dk, targetDk, newCardId);
+    if (fontsTo && deps.fonts && zips.size) {
+      try { await copyFamilies(zips, deps.fonts, { boardId: fontsTo.boardId, dk: targetDk, has: fontsTo.has }); } catch (_) {}
+    }
     // Comments, oldest→newest so the copy keeps the original order, re-encrypted
     // under the destination key but carrying the source author + created_at.
     let events: CardEvent[] = [];
@@ -192,8 +206,9 @@ export function createTransfer(deps: TransferDeps): Transfer {
   // copyAttachments re-encrypts a card's attachments under the destination key
   // and uploads them to the new card, and returns which copy each source id
   // became. One that fails to copy is left out of the map.
-  async function copyAttachments(srcCardId: number, dk: DataKey, targetDk: DataKey, newCardId: number): Promise<Map<number, number>> {
+  async function copyAttachments(srcCardId: number, dk: DataKey, targetDk: DataKey, newCardId: number): Promise<{ ids: Map<number, number>; zips: Set<string> }> {
     const ids = new Map<number, number>();
+    const zips = new Set<string>(); // the Font Families the copied pictures name
     let atts: AttachmentDTO[] = [];
     try { atts = (await fetchJSON(`/api/cards/${srcCardId}/attachments`)) as AttachmentDTO[]; } catch (_) { atts = []; }
     for (const att of atts) {
@@ -205,6 +220,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
         if (!res.ok) continue;
         plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
       } catch (_) { continue; }
+      if (isXyimage(plain)) { try { for (const z of fontZipsOf(plain)) zips.add(z); } catch (_) {} }
       let recipher: Uint8Array<ArrayBuffer>;
       try { recipher = await xyCrypto.encBytes(targetDk, plain); } catch (_) { continue; }
       const fd = new FormData();
@@ -219,7 +235,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
         if (res.ok) ids.set(att.id, ((await res.json()) as { id: number }).id);
       } catch (_) {}
     }
-    return ids;
+    return { ids, zips };
   }
 
   // reconcileLabels maps a source card's label assignments onto the target board,
@@ -328,7 +344,7 @@ export function createTransfer(deps: TransferDeps): Transfer {
       if (plays.length) await jput(`/api/cards/${res.id}/sessions`, { session_ids: plays });
       const assignments = await reconcileLabels(card.id, ctx.boardId, tdk, ctx);
       if (assignments.length) await jput(`/api/cards/${res.id}/labels`, { labels: assignments });
-      await copyCardExtras(card.id, tdk, res.id);
+      await copyCardExtras(card.id, tdk, res.id, { boardId: ctx.boardId, has: ctx.fontHashes });
       if (remove) {
         await jdelete(`/api/cards/${card.id}`);
         const s = st();

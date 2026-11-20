@@ -4,6 +4,7 @@
 // decrypt and the network live in bundleexport.ts / bundleimport.ts.
 
 import S from "./i18nstrings.js";
+import type { FamilyFace } from "./xyimagefonts.js";
 
 export const BUNDLE_FORMAT = "xy.board.v1";
 export const BOARD_JSON = "board.json";
@@ -92,6 +93,25 @@ export interface BundleAttachment {
   is_excerpt: boolean;
   path: string; // the entry inside the zip
 }
+// BundleFont is a Font Family (ADR-0025) some of the Bundle's Edited Images
+// are set in: its meta in the clear, its zip a file beside the attachments.
+// id is the source's, for fetching it during a live Transfer.
+export interface BundleFont {
+  id: number;
+  hash: string;
+  name: string;
+  faces: FamilyFace[];
+  size: number;
+  path: string; // fontPath(hash)
+  filename: string; // what a message calls it
+}
+
+// BundleFile is either kind of file a Bundle carries beside board.json.
+export type BundleFile = Pick<BundleAttachment, "id" | "path" | "filename">;
+
+export const FONTS_DIR = "fonts/";
+export function fontPath(hash: string): string { return `${FONTS_DIR}${hash}.zip`; }
+
 export interface BundleMember {
   username: string;
   role: string;
@@ -113,6 +133,9 @@ export interface Bundle {
   tour_declarations?: BundleTourDeclaration[];
   timeline: BundleEvent[];
   attachments: BundleAttachment[];
+  // Absent from Bundles made before Font Families; a live Transfer carries
+  // every Family and the apply takes the ones its pictures name.
+  fonts?: BundleFont[];
 }
 
 // attachmentPath names an attachment's file inside the zip: the source id keeps
@@ -209,6 +232,10 @@ export function parseBundle(text: string): Bundle {
     ref(a.card_id, cardIds, "attachments.card_id");
     if (typeof a.path !== "string" || typeof a.filename !== "string") throw new Error(S.import.bundle.attachmentFields());
   }
+  if (b.fonts != null && !Array.isArray(b.fonts)) throw new Error(S.import.bundle.notArray("fonts"));
+  for (const f of b.fonts || []) {
+    if (typeof f.hash !== "string" || !/^[0-9a-f]{64}$/.test(f.hash) || f.path !== fontPath(f.hash) || !Array.isArray(f.faces)) throw new Error(S.import.bundle.fontFields());
+  }
   return b;
 }
 
@@ -230,6 +257,7 @@ export function contentBytes(b: Bundle): number {
   for (const l of b.labels) n += utf8(l.name) + utf8(l.color);
   for (const s of b.sessions) n += utf8(s.meta);
   for (const e of b.timeline) n += utf8(e.payload);
+  for (const f of b.fonts || []) n += f.size;
   return n;
 }
 
@@ -325,4 +353,4 @@ export function sliceBundle(b: Bundle, listIds: number[]): Bundle {
   };
 }
 
-export const xyBundle = { BUNDLE_FORMAT, BOARD_JSON, EVENT_TYPES, attachmentPath, parseBundle, attachmentsTotal, contentBytes, unitsOf, bundleUnits, sliceBundle };
+export const xyBundle = { BUNDLE_FORMAT, BOARD_JSON, EVENT_TYPES, attachmentPath, fontPath, parseBundle, attachmentsTotal, contentBytes, unitsOf, bundleUnits, sliceBundle };

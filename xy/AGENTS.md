@@ -648,6 +648,9 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        zips fetched and decrypted by hash, uploads encrypted; a re-upload under a
                        used name asks, then attachments.replaceFamily re-bakes every Edited Image
                        set in the old one through an off-screen editor and deletes the old Family
+    fonttransfer.ts    postFamily (store a Family on any board) and copyFamilies (bring the ones some
+                       pictures name that a board lacks): shared by uploads, a card copied across
+                       boards (transfer.ts), every Bundle apply and a .4s import's fonts/ folder
     join.ts            /join/<code> — what an invite link opens: the board's name,
                        why the link does or does not work, and one button (ADR-0017)
 web/assets/            //go:embed static + ui (package assets)

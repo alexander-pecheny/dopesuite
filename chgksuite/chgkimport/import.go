@@ -50,6 +50,9 @@ type Result struct {
 	Source string
 	// Images are the images the source references, if any.
 	Images []Image
+	// Fonts are the Font Family zips a .4s export ships for its Edited
+	// Images (xy ADR-0025): fonts/<sha256>.zip, named by the bare file name.
+	Fonts []Image
 	// Doc is a .docx's structure as the text parser read it, before Source
 	// writes it out: its questions carry the numbers the packet writes, which
 	// Source keeps only where they break the count (NumbersDefault).
@@ -293,6 +296,12 @@ func parseZip(base string, data []byte) (*Result, error) {
 		ext := strings.ToLower(path.Ext(name))
 		mimeType, isImage := imageExts[ext]
 		switch {
+		case path.Base(path.Dir(f.Name))+"/" == xyimage.FontsDir && xyimage.IsFontZipKey(xyimage.FontsDir+name):
+			body, err := readZipEntry(f, &budget)
+			if err != nil {
+				return nil, err
+			}
+			res.Fonts = append(res.Fonts, Image{Name: name, MIME: "application/zip", Data: body})
 		case ext == ".4s":
 			body, err := readZipEntry(f, &budget)
 			if err != nil {

@@ -27,6 +27,8 @@ type importResponse struct {
 	Name   string          `json:"name"`
 	Source string          `json:"source"`
 	Images []importedImage `json:"images"`
+	// Fonts are the Font Family zips a .4s export ships (ADR-0025).
+	Fonts []importedImage `json:"fonts,omitempty"`
 }
 
 type textParseRequest struct {
@@ -121,6 +123,9 @@ func (s *server) handleImportParse(w http.ResponseWriter, r *http.Request) {
 			MIME: img.MIME,
 			Data: base64.StdEncoding.EncodeToString(img.Data),
 		})
+	}
+	for _, f := range res.Fonts {
+		out.Fonts = append(out.Fonts, importedImage{Name: f.Name, MIME: f.MIME, Data: base64.StdEncoding.EncodeToString(f.Data)})
 	}
 	writeJSON(w, out)
 }

@@ -29,7 +29,11 @@ import type { BundleImport } from "./bundleimportpanel.js";
 import type { Board } from "./panels.js";
 import S from "./i18nstrings.js";
 import { KIND, numbered } from "./chgk/cardkind.js";
-import { fileType } from "./xyimagefile.js";
+import { fileType, fontZipsOf, isXyimage } from "./xyimagefile.js";
+import { readFamily } from "./xyimagefonts.js";
+import type { FontFamily } from "./xyimagefonts.js";
+import { copyFamilies } from "./fonttransfer.js";
+import type { FamilySource } from "./fonttransfer.js";
 
 // Quiet time after the last option change before the preview is redrawn.
 const PREVIEW_DEBOUNCE_MS = 200;
@@ -46,7 +50,7 @@ export type PreviewRenderer = (card: { id: number; kind: string; desc: string },
 export function createImportPanel(board: Board, renderPreviewCard: PreviewRenderer, bundles: BundleImport): { open(): void } {
   interface ImportImage { name: string; data: string; mime: string }
   interface ImportCard { id: number; kind: string; desc: string }
-  interface ImportPkg { name: string; source: string; images?: ImportImage[] }
+  interface ImportPkg { name: string; source: string; images?: ImportImage[]; fonts?: ImportImage[] }
 
   // importCtx holds the package awaiting confirmation on the verification screen.
   let importCtx: { name: string; images: ImportImage[]; imgMap: Map<string, string>; splitTours: boolean; game: string } | null = null;
@@ -166,7 +170,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       board.setStatus("saved");
       // A .docx or .txt parse is a guess; let the user check it before it becomes a list.
       if (/\.(docx|txt)$/i.test(file.name)) openImportVerify(pkg, splitTours, game);
-      else await commitImport(pkg.name, pkg.source, pkg.images, splitTours, game);
+      else await commitImport(pkg.name, pkg.source, pkg.images, splitTours, game, pkg.fonts);
     } catch (err) {
       board.setStatus("error");
       alert(S.import.pack.parseFailed(errMsg(err)));
@@ -318,7 +322,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
   // outbox: an import is online-only anyway, and mutate() hands back a negative
   // temp id whenever the queue is non-empty — which the attachment upload, a plain
   // POST to /api/cards/{id}/attachments, cannot use. Going direct keeps every id real.
-  async function commitImport(name: string, source: string, images: ImportImage[] | undefined, splitTours: boolean, game: string): Promise<void> {
+  async function commitImport(name: string, source: string, images: ImportImage[] | undefined, splitTours: boolean, game: string, fonts: ImportImage[] = []): Promise<void> {
     const cards = importCards(source, game);
     if (!cards.length) { alert(S.import.pack.noQuestions()); return; }
     if (!xySync.requireOnline(S.import.pack.offline())) return;
@@ -337,6 +341,8 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
     let done = 0, attached = 0;
     const failed: string[] = []; // images the server refused — the card would keep a dead (img …)
     const missing = new Set<string>(); // images the cards name but the import never had
+    const zips = new Set<string>(); // the Font Families the imported Edited Images name
+    let fontsMissing: string[] = [];
     try {
       const key = board.dk();
       const ranks = [...board.state.lists].sort(byRank);
@@ -365,9 +371,11 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
             if (!img) { missing.add(ref); continue; }
             if (await attachImported(res.id, img)) attached++;
             else failed.push(ref);
+            for (const z of zipsOf(img)) zips.add(z);
           }
         }
       }
+      fontsMissing = await bringFonts(zips, fonts);
       if (grouped) {
         await jpost(`/api/boards/${board.id}/list-groups`, { name: await xyCrypto.encField(key, title), list_ids: listIds });
         // Reload rather than mirror group_id/groups[] locally — import is online-only.
@@ -382,6 +390,7 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       // but the picture is gone, and the parse response is not kept to retry from.
       if (failed.length) msg += S.import.pack.imagesFailed(String(failed.length)) + failed.join(", ");
       if (missing.size) msg += S.import.pack.imagesMissing(String(missing.size)) + [...missing].join(", ");
+      if (fontsMissing.length) msg += S.import.pack.fontsMissing(String(fontsMissing.length)) + fontsMissing.join(", ");
       alert(msg);
     } catch (err) {
       // The lists and the cards created so far are already on the server — show them
@@ -390,6 +399,35 @@ export function createImportPanel(board: Board, renderPreviewCard: PreviewRender
       board.setStatus("error");
       alert(S.import.pack.aborted(String(done), errMsg(err)));
     }
+  }
+
+  // zipsOf is the Font Families an imported Edited Image is set in.
+  function zipsOf(img: ImportImage): string[] {
+    try {
+      const bytes = Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0));
+      return isXyimage(bytes) ? fontZipsOf(bytes) : [];
+    } catch (_) { return []; }
+  }
+
+  // bringFonts puts on the board the Families the imported pictures name that
+  // it lacks, from the package's fonts/ folder (ADR-0025). A zip is described
+  // by reading it, and kept only if its bytes are the hash it is named by.
+  async function bringFonts(zips: Set<string>, fonts: ImportImage[]): Promise<string[]> {
+    if (!zips.size) return [];
+    const shipped = new Map<string, { fam: FontFamily; zip: Uint8Array<ArrayBuffer> }>();
+    for (const f of fonts) {
+      try {
+        const zip = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0));
+        const fam = await readFamily(zip);
+        if (`${fam.hash}.zip` === f.name) shipped.set(fam.hash, { fam, zip });
+      } catch (_) { /* not a Family: as if it were not there */ }
+    }
+    const from: FamilySource = {
+      family: (h) => shipped.get(h)?.fam,
+      zip: async (h) => shipped.get(h)?.zip ?? null,
+    };
+    const has = new Set(board.state.fonts.map((f) => f.hash));
+    return copyFamilies(zips, from, { boardId: board.id, dk: board.dk(), has, stored: (row) => board.state.fonts.push(row) });
   }
 
   // attachImported encrypts one imported image and posts it as an attachment of

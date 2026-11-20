@@ -12,7 +12,8 @@ import { xyInstance } from "./instance.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import type { DataKey } from "./crypto.js";
-import { attachmentPath, BOARD_JSON, BUNDLE_FORMAT, sliceBundle, unitsOf } from "./bundle.js";
+import { attachmentPath, BOARD_JSON, BUNDLE_FORMAT, FONTS_DIR, fontPath, sliceBundle, unitsOf } from "./bundle.js";
+import { fontZipsOf, isXyimage } from "./xyimagefile.js";
 import type { Bundle, BundleAttachment, BundleEvent, BundleUnit } from "./bundle.js";
 import type { AttachmentBytes } from "./bundleapply.js";
 import { zipWrite } from "./zip.js";
@@ -134,10 +135,15 @@ export async function buildBundle(
     tour_declarations: state.tourDeclarations.map((t) => ({ list_id: t.listId, group_id: t.groupId, names: t.names })),
     timeline,
     attachments,
+    fonts: state.fonts.map((f) => ({
+      id: f.id, hash: f.hash, name: f.name, faces: f.faces, size: f.size, path: fontPath(f.hash), filename: `${f.name}.zip`,
+    })),
   };
 
+  // A Family's zip and an attachment are fetched alike, from their own routes.
   const bytesOf: AttachmentBytes = async (a) => {
-    const res = await fetch(`/api/attachments/${a.id}`, { credentials: "same-origin" });
+    const route = a.path.startsWith(FONTS_DIR) ? "fonts" : "attachments";
+    const res = await fetch(`/api/${route}/${a.id}`, { credentials: "same-origin" });
     if (!res.ok) throw new Error(S.import.export.attachFailed(a.filename, String(res.status)));
     return await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
   };
@@ -156,13 +162,22 @@ async function zipBundle(
   log: (line: string) => void,
 ): Promise<{ name: string; blob: Blob }> {
   const entries: ZipEntry[] = [];
+  const zips = new Set<string>(); // the Font Families the pictures name
   let done = 0;
   for (const a of bundle.attachments) {
     log(S.import.export.downloading(String(++done), String(bundle.attachments.length)));
     const data = await bytesOf(a);
-    if (data) entries.push({ name: a.path, data });
+    if (!data) continue;
+    entries.push({ name: a.path, data });
+    if (isXyimage(data)) { try { for (const z of fontZipsOf(data)) zips.add(z); } catch { /* names none */ } }
   }
-  entries.unshift({ name: BOARD_JSON, data: new TextEncoder().encode(JSON.stringify(bundle, null, 1)) });
+  // The file carries only the Families its pictures are set in.
+  const fonts = (bundle.fonts || []).filter((f) => zips.has(f.hash));
+  for (const f of fonts) {
+    const data = await bytesOf(f);
+    if (data) entries.push({ name: f.path, data });
+  }
+  entries.unshift({ name: BOARD_JSON, data: new TextEncoder().encode(JSON.stringify({ ...bundle, fonts }, null, 1)) });
   log(S.import.export.zipping());
   const zipped = await zipWrite(entries, (name) => name === BOARD_JSON);
   const safe = stem.replace(/[/\\:*?"<>|]/g, "_").trim() || "board";
