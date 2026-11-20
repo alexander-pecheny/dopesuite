@@ -147,13 +147,7 @@ func (s *server) handleHandoutsStage(w http.ResponseWriter, r *http.Request) {
 		handleUser(w, err)
 		return
 	}
-	images := map[string][]byte{}
-	for _, f := range form.Files("img") {
-		if base := safeImageName(f.Filename); base != "" {
-			images[base] = f.Data
-		}
-	}
-	id, err := s.staging.create(u.UserID, images)
+	id, err := s.staging.create(u.UserID, form.Images())
 	if err != nil {
 		switch {
 		case errors.Is(err, errStagingFull):

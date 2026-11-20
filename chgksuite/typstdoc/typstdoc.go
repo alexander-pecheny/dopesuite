@@ -86,6 +86,9 @@ const (
 func Export(ctx context.Context, doc fsource.Doc, images map[string][]byte, ts Typesetter, o Options) ([]byte, error) {
 	e := newExporter(images, o)
 	src := e.generate(doc)
+	if e.err != nil {
+		return nil, e.err
+	}
 	if err := ts.SetImages(ctx, e.used); err != nil {
 		return nil, err
 	}
@@ -106,6 +109,9 @@ func GenerateTyp(doc fsource.Doc, images map[string][]byte, o Options) string {
 type exporter struct {
 	images map[string][]byte
 	used   map[string][]byte // images actually referenced, keyed by the name the source uses
+	// err is the first picture that cannot go in at all: an Edited Image whose
+	// font the export was not given. Anything else degrades to a placeholder.
+	err    error
 	opts   Options
 	cfg    Config
 	device Device

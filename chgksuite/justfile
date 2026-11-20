@@ -35,13 +35,22 @@ build-wasm:
     cp typst-wasm/target/wasm32-wasip1/release/typst_wasm.wasm {{wasm_path}}
     ls -lh {{wasm_path}}
 
-# Guard: the embedded artifact must exist before anything compiles typstwasm.
+# Guard: the embedded artifact must exist before anything compiles typstwasm,
+# and be no older than the guest's source. typstwasm refuses to start on a
+# guest missing an export it calls, so a checkout that pulled a guest change
+# but kept its old wasm would build fine and then fail at startup.
 [private]
 wasm:
     #!/usr/bin/env bash
-    [ -f {{wasm_path}} ] && exit 0
-    echo "missing chgksuite/{{wasm_path}} — run 'just build-wasm' in chgksuite/ once (needs Rust + the wasm32-wasip1 target)" >&2
-    exit 1
+    if [ ! -f {{wasm_path}} ]; then
+      echo "missing chgksuite/{{wasm_path}} — run 'just build-wasm' in chgksuite/ once (needs Rust + the wasm32-wasip1 target)" >&2
+      exit 1
+    fi
+    newer=$(find typst-wasm/src typst-wasm/Cargo.toml typst-wasm/Cargo.lock -newer {{wasm_path}} -print -quit 2>/dev/null)
+    if [ -n "$newer" ]; then
+      echo "chgksuite/{{wasm_path}} is older than $newer — run 'just build-wasm' in chgksuite/" >&2
+      exit 1
+    fi
 
 fmt:
     #!/usr/bin/env bash

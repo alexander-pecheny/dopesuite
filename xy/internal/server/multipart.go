@@ -1,9 +1,13 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyimage"
 )
 
 // The export / handout / staging / import endpoints all receive the same thing:
@@ -31,6 +35,24 @@ func (f *memForm) Value(key string) string { return f.values[key] }
 
 // Files returns the uploaded parts sent under key.
 func (f *memForm) Files(key string) []memFile { return f.files[key] }
+
+// Images is what an export renders from: every "img" part by its base name,
+// and every "font" part, a Font Family's zip, where chgksuite looks for it
+// (xyimage.FontZipKey, ADR-0025). A zip is keyed by the hash of the bytes
+// that came, so a part cannot pass itself off as another Family.
+func (f *memForm) Images() map[string][]byte {
+	images := map[string][]byte{}
+	for _, img := range f.Files("img") {
+		if base := safeImageName(img.Filename); base != "" {
+			images[base] = img.Data
+		}
+	}
+	for _, font := range f.Files("font") {
+		sum := sha256.Sum256(font.Data)
+		images[xyimage.FontZipKey(hex.EncodeToString(sum[:]))] = font.Data
+	}
+	return images
+}
 
 // readMultipart parses a multipart body without ever touching the filesystem.
 // maxTotal bounds the summed size of every part, so a large upload fails cleanly

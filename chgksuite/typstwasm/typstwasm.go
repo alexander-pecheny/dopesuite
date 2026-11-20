@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyimage"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -52,14 +53,15 @@ type Pool struct {
 }
 
 type instance struct {
-	mod     api.Module
-	alloc   api.Function
-	dealloc api.Function
-	addFont api.Function
-	addFile api.Function
-	reset   api.Function
-	compile api.Function
-	measure api.Function
+	mod      api.Module
+	alloc    api.Function
+	dealloc  api.Function
+	addFont  api.Function
+	addNamed api.Function
+	addFile  api.Function
+	reset    api.Function
+	compile  api.Function
+	measure  api.Function
 }
 
 // NewPool compiles the module once, instantiates `size` copies and loads the fonts
@@ -107,18 +109,19 @@ func NewPool(ctx context.Context, fonts [][]byte, cacheDir string, size int) (*P
 			return fail(fmt.Errorf("instantiate: %w", err))
 		}
 		in := &instance{
-			mod:     mod,
-			alloc:   mod.ExportedFunction("alloc"),
-			dealloc: mod.ExportedFunction("dealloc"),
-			addFont: mod.ExportedFunction("add_font"),
-			addFile: mod.ExportedFunction("add_file"),
-			reset:   mod.ExportedFunction("reset_files"),
-			compile: mod.ExportedFunction("compile"),
-			measure: mod.ExportedFunction("measure"),
+			mod:      mod,
+			alloc:    mod.ExportedFunction("alloc"),
+			dealloc:  mod.ExportedFunction("dealloc"),
+			addFont:  mod.ExportedFunction("add_font"),
+			addNamed: mod.ExportedFunction("add_named_font"),
+			addFile:  mod.ExportedFunction("add_file"),
+			reset:    mod.ExportedFunction("reset_files"),
+			compile:  mod.ExportedFunction("compile"),
+			measure:  mod.ExportedFunction("measure"),
 		}
 		for name, f := range map[string]api.Function{
 			"alloc": in.alloc, "dealloc": in.dealloc, "add_font": in.addFont,
-			"add_file": in.addFile, "reset_files": in.reset, "compile": in.compile,
+			"add_named_font": in.addNamed, "add_file": in.addFile, "reset_files": in.reset, "compile": in.compile,
 			"measure": in.measure,
 		} {
 			if f == nil {
@@ -147,6 +150,10 @@ func (p *Pool) Close() error { return p.rt.Close(p.closeCtx) }
 // SetImages replaces the images the source may reference, keyed by the bare name
 // the (img …) directive uses. Every instance gets them, since any one of them may
 // serve the next Compile.
+//
+// A key that starts with xyimage.FontKeyPrefix is a font instead: an uploaded
+// Face an Edited Image's text is set in, added under the family name after the
+// prefix for this generation only. The next SetImages drops it with the images.
 func (p *Pool) SetImages(ctx context.Context, images map[string][]byte) error {
 	// Drain the pool so no compile is running against half-replaced images.
 	held := make([]*instance, 0, len(p.instances))
@@ -168,7 +175,11 @@ func (p *Pool) SetImages(ctx context.Context, images map[string][]byte) error {
 			return fmt.Errorf("reset_files: %w", err)
 		}
 		for name, data := range images {
-			if err := in.addImage(ctx, name, data); err != nil {
+			add := in.addImage
+			if family, ok := strings.CutPrefix(name, xyimage.FontKeyPrefix); ok {
+				name, add = family, in.addNamedFont
+			}
+			if err := add(ctx, name, data); err != nil {
 				return err
 			}
 		}
@@ -243,6 +254,16 @@ func (in *instance) free(ctx context.Context, ptr, size uint32) {
 }
 
 func (in *instance) addImage(ctx context.Context, name string, data []byte) error {
+	return in.callNamed(ctx, in.addFile, "add_file", name, data)
+}
+
+func (in *instance) addNamedFont(ctx context.Context, family string, data []byte) error {
+	return in.callNamed(ctx, in.addNamed, "add_named_font", family, data)
+}
+
+// callNamed hands the guest a name and a buffer, the shape of both add_file
+// and add_named_font.
+func (in *instance) callNamed(ctx context.Context, fn api.Function, what, name string, data []byte) error {
 	np, err := in.write(ctx, []byte(name))
 	if err != nil {
 		return err
@@ -252,11 +273,11 @@ func (in *instance) addImage(ctx context.Context, name string, data []byte) erro
 		in.free(ctx, np, uint32(len(name)))
 		return err
 	}
-	_, err = in.addFile.Call(ctx, uint64(np), uint64(len(name)), uint64(dp), uint64(len(data)))
+	_, err = fn.Call(ctx, uint64(np), uint64(len(name)), uint64(dp), uint64(len(data)))
 	in.free(ctx, np, uint32(len(name)))
 	in.free(ctx, dp, uint32(len(data)))
 	if err != nil {
-		return fmt.Errorf("add_file: %w", err)
+		return fmt.Errorf("%s: %w", what, err)
 	}
 	return nil
 }

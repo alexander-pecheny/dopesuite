@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"log"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -67,11 +68,7 @@ func (s *server) readHandoutRequest(w http.ResponseWriter, r *http.Request, ext 
 	for name, data := range s.stagedImages(form.Value("session"), u.UserID) {
 		req.images[name] = data
 	}
-	for _, f := range form.Files("img") {
-		if base := safeImageName(f.Filename); base != "" {
-			req.images[base] = f.Data
-		}
-	}
+	maps.Copy(req.images, form.Images())
 	return req, form, true
 }
 

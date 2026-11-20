@@ -1,12 +1,15 @@
 package typstdoc
 
 import (
+	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	chgkstrings "code.pecheny.me/pecheny/dopesuite/chgksuite/i18nstrings"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/imgconv"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/inline"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyimage"
 )
 
 // addImage resolves an (img …) directive and appends the picture to the paragraph,
@@ -58,11 +61,16 @@ func (e *exporter) addImage(p *para, arg string) {
 		widthIn, heightIn = widthIn*s, heightIn*s
 	}
 
-	data, ext, err := exportBytes(raw, widthIn, heightIn)
+	data, ext, faces, err := e.exportBytes(raw, widthIn, heightIn)
+	var mf *xyimage.MissingFontError
+	if errors.As(err, &mf) && e.err == nil {
+		e.err = xyimage.UserError(im.Name, err)
+	}
 	if err != nil {
 		p.addStyled(missingImage(im.Name), "bold")
 		return
 	}
+	maps.Copy(e.used, faces)
 	name := fmt.Sprintf("img%d.%s", len(e.used)+1, ext)
 	e.used[name] = data
 
@@ -82,11 +90,16 @@ func missingImage(name string) string { return chgkstrings.Default.Docs.Image.Mi
 
 // exportBytes is what a picture goes into the PDF as. An Edited Image goes in
 // as its vector rendition, so its text stays text and the frame is drawn at
-// whatever size the page gives it; anything else is re-encoded for the size
-// it is drawn at.
-func exportBytes(raw []byte, widthIn, heightIn float64) ([]byte, string, error) {
-	if svg, ok := imgconv.Vector(raw); ok {
-		return svg, "svg", nil
+// whatever size the page gives it, together with the uploaded Faces its text
+// is set in; anything else is re-encoded for the size it is drawn at.
+func (e *exporter) exportBytes(raw []byte, widthIn, heightIn float64) ([]byte, string, map[string][]byte, error) {
+	svg, faces, err := xyimage.Vector(raw, e.images)
+	if err != nil {
+		return nil, "", nil, err
 	}
-	return imgconv.ForExport(raw, widthIn, heightIn)
+	if svg != nil {
+		return svg, "svg", faces, nil
+	}
+	data, ext, err := imgconv.ForExport(raw, widthIn, heightIn)
+	return data, ext, nil, err
 }

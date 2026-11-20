@@ -23,7 +23,7 @@ use typst::foundations::{Bytes, Datetime, Duration, Label, Selector};
 use typst::introspection::Introspector;
 use typst::utils::PicoStr;
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
-use typst::text::{Font, FontBook};
+use typst::text::{Font, FontBook, FontInfo};
 use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World};
 use typst_layout::PagedDocument;
@@ -32,6 +32,12 @@ use typst_layout::PagedDocument;
 /// expensive part) and the images of the generation in flight.
 struct State {
     fonts: Vec<Font>,
+    /// What the book knows each font by. A bundled font keeps its own info; a
+    /// font added for one generation goes under a family name the host gives.
+    infos: Vec<FontInfo>,
+    /// How many of `fonts` are the bundled ones, loaded once at start. The rest
+    /// were added for the generation in flight and go with its images.
+    bundled: usize,
     book: LazyHash<FontBook>,
     library: LazyHash<Library>,
     files: HashMap<String, Bytes>,
@@ -43,6 +49,8 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
     let mut guard = STATE.lock().unwrap();
     let state = guard.get_or_insert_with(|| State {
         fonts: Vec::new(),
+        infos: Vec::new(),
+        bundled: 0,
         book: LazyHash::new(FontBook::new()),
         library: LazyHash::new(Library::builder().build()),
         files: HashMap::new(),
@@ -156,12 +164,51 @@ fn result_buf(ok: bool, pages: u32, payload: &[u8]) -> Vec<u8> {
 pub unsafe extern "C" fn add_font(ptr: u32, len: u32) {
     let data = Bytes::new(slice(ptr, len).to_vec());
     with_state(|s| {
+        s.drop_generation_fonts();
         // One file can carry several faces (a collection).
         for face in Font::iter(data) {
+            s.infos.push(face.info().clone());
             s.fonts.push(face);
         }
-        s.book = LazyHash::new(FontBook::from_fonts(&s.fonts));
+        s.bundled = s.fonts.len();
+        s.rebuild_book();
     });
+}
+
+/// add_named_font adds a font for the generation in flight only, under a
+/// family name of the host's choosing: xy names an uploaded Face by its zip's
+/// hash, so two uploads that call themselves the same, or one that calls
+/// itself Noto Sans, never stand in for each other. reset_files drops it.
+///
+/// # Safety
+/// Both pointer/length pairs must describe buffers in guest memory.
+#[no_mangle]
+pub unsafe extern "C" fn add_named_font(name_ptr: u32, name_len: u32, ptr: u32, len: u32) {
+    let family = String::from_utf8_lossy(slice(name_ptr, name_len)).to_lowercase();
+    let data = Bytes::new(slice(ptr, len).to_vec());
+    with_state(|s| {
+        for face in Font::iter(data) {
+            let mut info = face.info().clone();
+            info.family = family.clone();
+            s.infos.push(info);
+            s.fonts.push(face);
+        }
+        s.rebuild_book();
+    });
+}
+
+impl State {
+    fn rebuild_book(&mut self) {
+        self.book = LazyHash::new(FontBook::from_infos(self.infos.iter().cloned()));
+    }
+
+    fn drop_generation_fonts(&mut self) {
+        if self.fonts.len() > self.bundled {
+            self.fonts.truncate(self.bundled);
+            self.infos.truncate(self.bundled);
+            self.rebuild_book();
+        }
+    }
 }
 
 /// # Safety
@@ -175,10 +222,14 @@ pub unsafe extern "C" fn add_file(name_ptr: u32, name_len: u32, ptr: u32, len: u
     });
 }
 
-/// Drops the images but keeps the parsed fonts, which are the costly part.
+/// Drops the images and the generation's own fonts, but keeps the bundled
+/// fonts, which are the costly part.
 #[no_mangle]
 pub extern "C" fn reset_files() {
-    with_state(|s| s.files.clear());
+    with_state(|s| {
+        s.files.clear();
+        s.drop_generation_fonts();
+    });
 }
 
 /// The label the measured source ends with — chgksuite's MEASURE_LABEL, so both

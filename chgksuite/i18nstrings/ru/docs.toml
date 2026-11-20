@@ -46,6 +46,10 @@ screen_version = "Версия для экрана"
 # shared verbatim by the docx (docx/images.go) and typst (typstdoc/images.go)
 # exporters.
 missing = '[нет изображения: {{.name}}]'
+# A vector export (PDF, handouts) of an Edited Image whose text is set in an
+# uploaded font the export was not given. The text cannot be set in another
+# font without breaking its lines, so the export stops (xy ADR-0025).
+font_missing = 'картинка «{{.image}}» набрана шрифтом «{{.font}}», а его нет на доске. Загрузите шрифт заново или поправьте картинку в редакторе'
 
 [pptx]
 # The slide's question number when the number format is caps

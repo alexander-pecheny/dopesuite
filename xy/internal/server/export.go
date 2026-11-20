@@ -72,8 +72,8 @@ func headerSafeName(name string) string {
 }
 
 // exportRequest is what both export endpoints take: the 4s source, the name to
-// hand back, and the images the source references (multipart "img" parts, keyed by
-// base name).
+// hand back, and the images the source references (memForm.Images: the "img"
+// parts by base name, and the Font Families its Edited Images are set in).
 type exportRequest struct {
 	source string
 	name   string
@@ -118,14 +118,9 @@ func (s *server) readExportForm(w http.ResponseWriter, r *http.Request, ext stri
 		name:   strings.TrimSuffix(name, ext),
 		device: form.Value("device"),
 		game:   exportGame(form.Value("game")),
-		images: map[string][]byte{},
+		images: form.Images(),
 
 		commentFirst: form.Value("comment_first") == formOn,
-	}
-	for _, f := range form.Files("img") {
-		if base := safeImageName(f.Filename); base != "" {
-			req.images[base] = f.Data
-		}
 	}
 	return req, form, true
 }
@@ -229,12 +224,7 @@ func (s *server) handleExportPDF(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	b, err := typstdoc.Export(ctx, fsource.Parse(req.source, req.game), req.images, ts, typstdoc.Options{Device: device, Game: req.game, CommentFirst: req.commentFirst})
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			httpError(w, http.StatusGatewayTimeout, "typst timed out")
-			return
-		}
-		log.Printf("pdf export failed: %v", err)
-		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
+		renderFailed(w, ctx, "pdf export", err)
 		return
 	}
 	serveDownload(w, b, req.name+".pdf", "application/pdf")

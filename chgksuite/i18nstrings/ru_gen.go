@@ -87,6 +87,9 @@ var RU = Strings{
 			TourNumbers:  func(n string, numbers string) string { return fmt.Sprintf("Тур %s: %s\n", n, numbers) },
 		},
 		Image: DocsImageStrings{
+			FontMissing: func(image string, font string) string {
+				return fmt.Sprintf("картинка «%s» набрана шрифтом «%s», а его нет на доске. Загрузите шрифт заново или поправьте картинку в редакторе", image, font)
+			},
 			Missing: func(name string) string { return fmt.Sprintf("[нет изображения: %s]", name) },
 		},
 		Markdown: DocsMarkdownStrings{

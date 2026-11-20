@@ -110,17 +110,30 @@ func RenderSVG(ctx context.Context, hndt string, images map[string][]byte, a Arg
 	return pages, nil
 }
 
-func prepare(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) (string, error) {
+// typstInput is a handout source and the files typst reads for it: the
+// preamble applied, the pictures turned and narrowed to the ones it names,
+// and an Edited Image as its vector rendition with the Faces it is set in.
+func typstInput(hndt string, images map[string][]byte, a Args) (string, map[string][]byte, error) {
 	hndt, err := ApplyPreamble(hndt, a)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
+	zips := fontZips(images) // before the narrowing below drops them
 	hndt, images, err = ApplyRotation(hndt, images)
+	if err != nil {
+		return "", nil, err
+	}
+	hndt, images = flattenImagePaths(hndt, images)
+	files, err := vectorImages(images, zips)
+	return hndt, files, err
+}
+
+func prepare(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) (string, error) {
+	hndt, files, err := typstInput(hndt, images, a)
 	if err != nil {
 		return "", err
 	}
-	hndt, images = flattenImagePaths(hndt, images)
-	if err := ts.SetImages(ctx, vectorImages(images)); err != nil {
+	if err := ts.SetImages(ctx, files); err != nil {
 		return "", err
 	}
 	return GenerateTyp(hndt, a), nil

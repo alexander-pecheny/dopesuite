@@ -74,6 +74,7 @@ export const RU: Strings = {
 `,
     },
     image: {
+      fontMissing: (image: string, font: string) => `картинка «${image}» набрана шрифтом «${font}», а его нет на доске. Загрузите шрифт заново или поправьте картинку в редакторе`,
       missing: (name: string) => `[нет изображения: ${name}]`,
     },
     markdown: {

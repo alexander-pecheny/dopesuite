@@ -72,6 +72,7 @@ export type Strings = {
       tourNumbers: (n: string, numbers: string) => string;
     };
     image: {
+      fontMissing: (image: string, font: string) => string;
       missing: (name: string) => string;
     };
     markdown: {

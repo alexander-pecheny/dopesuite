@@ -96,12 +96,27 @@ type Layer struct {
 	H    float64 `json:"h,omitempty"`
 }
 
-// Bake is the part of the Recipe an exporter reads: the frame and its layers.
+// Face is one uploaded font file an image's text is set in (xy ADR-0025): a
+// file inside a Font Family's zip, which is named by its SHA-256. The overlays
+// name it by Family, a name of the editor's own making, so neither typst nor
+// the browser ever confuses it with another font that calls itself the same.
+// Name is the Family as the user knows it, for messages.
+type Face struct {
+	Zip    string `json:"zip"`
+	Path   string `json:"face"`
+	Family string `json:"family"`
+	Name   string `json:"name,omitempty"`
+}
+
+// Bake is the part of the Recipe an exporter reads: the frame, its layers and
+// the uploaded Faces its overlays use. Text in the bundled Noto Sans needs no
+// Face.
 type Bake struct {
 	W      float64 `json:"w"`
 	H      float64 `json:"h"`
 	BG     string  `json:"bg"`
 	Layers []Layer `json:"layers"`
+	Fonts  []Face  `json:"fonts,omitempty"`
 }
 
 // recipeHead is what this package reads out of the Recipe; the editor's own

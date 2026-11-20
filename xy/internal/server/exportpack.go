@@ -117,12 +117,7 @@ func (s *server) handleExportPack(w http.ResponseWriter, r *http.Request) {
 	}
 	files, err := s.renderPack(ctx, req, formats, settings, normalizeNewlines(form.Value("hndt")), ts)
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			httpError(w, http.StatusGatewayTimeout, "export timed out")
-			return
-		}
-		log.Printf("export failed: %v", err)
-		httpError(w, http.StatusInternalServerError, xystrings.Default.Server.Internal())
+		renderFailed(w, ctx, "export", err)
 		return
 	}
 	if len(files) == 0 {

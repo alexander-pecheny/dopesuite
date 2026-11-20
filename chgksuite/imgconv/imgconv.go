@@ -62,20 +62,6 @@ func Size(raw []byte) (w, h int, err error) {
 	return cfg.Width, cfg.Height, err
 }
 
-// Vector is an Edited Image's vector rendition, one SVG typst sets as vector
-// with its text as text; ok is false for any other picture.
-func Vector(raw []byte) (svg []byte, ok bool) {
-	if !xyimage.Is(raw) {
-		return nil, false
-	}
-	f, err := xyimage.Parse(raw)
-	if err != nil {
-		return nil, false
-	}
-	svg, err = f.VectorSVG()
-	return svg, err == nil
-}
-
 // ExportDPI is the resolution images are embedded at. A picture in an exported
 // package is laid out at a known physical size (a few inches — see
 // inline.Img.SizeInches), so anything beyond a print-quality sampling of that size

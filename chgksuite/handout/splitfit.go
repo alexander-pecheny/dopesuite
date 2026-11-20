@@ -44,9 +44,9 @@ const (
 	hundredths = 100
 )
 
-// newSFRun loads the run's images into the typesetter.
-func newSFRun(ctx context.Context, images map[string][]byte, a Args, ts Typesetter) (*sfRun, error) {
-	if err := ts.SetImages(ctx, vectorImages(images)); err != nil {
+// newSFRun loads the run's files (typstInput's) into the typesetter.
+func newSFRun(ctx context.Context, files map[string][]byte, a Args, ts Typesetter) (*sfRun, error) {
+	if err := ts.SetImages(ctx, files); err != nil {
 		return nil, err
 	}
 	return &sfRun{a: a, ts: ts}, nil
@@ -55,16 +55,11 @@ func newSFRun(ctx context.Context, images map[string][]byte, a Args, ts Typesett
 // FitRows returns the fitted row count per block (in order) — exported for parity
 // tests against chgksuite's "final rows=N".
 func FitRows(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) ([]int, error) {
-	hndt, err := ApplyPreamble(hndt, a)
+	hndt, files, err := typstInput(hndt, images, a)
 	if err != nil {
 		return nil, err
 	}
-	hndt, images, err = ApplyRotation(hndt, images)
-	if err != nil {
-		return nil, err
-	}
-	hndt, images = flattenImagePaths(hndt, images)
-	r, err := newSFRun(ctx, images, a, ts)
+	r, err := newSFRun(ctx, files, a, ts)
 	if err != nil {
 		return nil, err
 	}
@@ -163,16 +158,11 @@ type fittedBlock struct {
 // fitAll fits and renders every block, concurrently (bounded by CPU count),
 // keeping them in block order.
 func fitAll(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) (*sfRun, []fittedBlock, error) {
-	hndt, err := ApplyPreamble(hndt, a)
+	hndt, files, err := typstInput(hndt, images, a)
 	if err != nil {
 		return nil, nil, err
 	}
-	hndt, images, err = ApplyRotation(hndt, images)
-	if err != nil {
-		return nil, nil, err
-	}
-	hndt, images = flattenImagePaths(hndt, images)
-	r, err := newSFRun(ctx, images, a, ts)
+	r, err := newSFRun(ctx, files, a, ts)
 	if err != nil {
 		return nil, nil, err
 	}
