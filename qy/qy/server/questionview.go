@@ -9,6 +9,9 @@ import (
 
 	"qy/qy/domain/question"
 	"qy/qy/platform/markdown"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
+
 	"qy/qy/storage/store"
 )
 
@@ -19,7 +22,10 @@ type card struct {
 	q  question.Question
 	// tr is the question's Russian translation, for one written in another
 	// language; the card then offers a switch between the two.
-	tr         *question.Question
+	tr *question.Question
+	// images are the links of the pictures attached to the question, which
+	// the card draws with its handout.
+	images     []string
 	tournament string
 	places     string
 	factcheck  string
@@ -28,12 +34,24 @@ type card struct {
 
 // juryCard is a card of the jury's copy, with its translation if it has one.
 func juryCard(q store.Question) card {
-	c := card{qy: q.QY, q: q.Clean, extra: q.ExtraContext, factcheck: q.Factcheck}
+	c := card{qy: q.QY, q: q.Clean, images: imageLinks(q), extra: q.ExtraContext, factcheck: q.Factcheck}
 	if tr, ok := q.JuryTranslation(); ok {
 		c.tr = &tr
 	}
 	return c
 }
+
+// imageLinks are the links a card draws q's attached pictures from. The
+// extension is only for the card's script, which knows a picture by it.
+func imageLinks(q store.Question) []string {
+	var out []string
+	for _, f := range q.Images {
+		out = append(out, fileHref(f.ID)+"."+store.ImageTypes[f.ContentType])
+	}
+	return out
+}
+
+func fileHref(id int64) string { return "/nominate/file/" + idstr.Format(id) }
 
 // withoutFactcheck is the card before the factcheck has opened.
 func (c card) withoutFactcheck() card {
@@ -58,6 +76,10 @@ func questionHTML(c card) string {
 	b.WriteString(`<div id="` + anchor + `" data-question="` + html.EscapeString(rendererFields(c.q)) + `"`)
 	if c.tr != nil {
 		b.WriteString(` data-translation="` + html.EscapeString(rendererFields(*c.tr)) + `"`)
+	}
+	if len(c.images) > 0 {
+		images, _ := json.Marshal(c.images)
+		b.WriteString(` data-images="` + html.EscapeString(string(images)) + `"`)
 	}
 	b.WriteString(` data-number="` + number + `">`)
 	if c.tr != nil {

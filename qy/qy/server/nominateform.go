@@ -3,6 +3,7 @@ package qyserver
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"io"
 	"mime"
@@ -138,7 +139,6 @@ type nominationForm struct {
 	slots     map[int]slotView
 	parseOnly bool // a parse, a load or a clear was asked for, not a save
 	loads     []int
-	uploaded  bool
 }
 
 // check lists the mistakes of every slot, once the loads are done.
@@ -253,9 +253,6 @@ func readNominationForm(r *http.Request, c contest.Contest, before map[int]slotV
 		old := before[from]
 		v := slotView{in: readSlot(r, slot), view: r.FormValue(slotKey(slot, "view")), from: from}
 		v.questionID, v.files, v.answer = old.questionID, old.files, old.answer
-		if v.in.file != nil {
-			form.uploaded = true
-		}
 		unfilled := v.in.raw != "" && v.in.fields == (question.Question{})
 		switch {
 		case slot == loadSlot || unfilled && isSingleLink(v.in.raw) && slot != parseSlot:
@@ -320,6 +317,9 @@ func readSlot(r *http.Request, slot int) slotInput {
 		*in.fields.Ptr(f) = formText(r, slotKey(slot, f))
 	}
 	in.file, in.fileTooBig = readUpload(r, slotKey(slot, "file"))
+	if in.file == nil && !in.fileTooBig {
+		in.file = readKept(r, slot)
+	}
 	if in.link == "" && isSingleLink(in.raw) {
 		in.link = in.raw
 	}
@@ -341,11 +341,35 @@ func readUpload(r *http.Request, key string) (_ *upload, tooBig bool) {
 	if err != nil || len(data) == 0 {
 		return nil, false
 	}
+	// A browser that does not know the kind sends it as bytes; the card draws
+	// a picture by its kind, so it is read off the file then.
 	ct := hdr.Header.Get("Content-Type")
-	if ct == "" {
+	if ct == "" || ct == "application/octet-stream" {
 		ct = http.DetectContentType(data)
 	}
 	return &upload{name: hdr.Filename, contentType: ct, data: data}, false
+}
+
+// A file chosen on a post the server sends back, for a mistake or a parse,
+// would be gone from the redrawn form: a browser never fills a file input
+// itself. The form carries it instead, as the kept fields, and attaches it
+// on the next save unless the nominator unticks it.
+const (
+	keptName = "kept_name"
+	keptType = "kept_type"
+	keptData = "kept_data"
+)
+
+// readKept reads the file the form carried over, if it is still ticked.
+func readKept(r *http.Request, slot int) *upload {
+	if r.FormValue(slotKey(slot, "keep_file")) == "" {
+		return nil
+	}
+	data, err := base64.StdEncoding.DecodeString(r.FormValue(slotKey(slot, keptData)))
+	if err != nil || len(data) == 0 || len(data) > maxHandoutFile {
+		return nil
+	}
+	return &upload{name: r.FormValue(slotKey(slot, keptName)), contentType: r.FormValue(slotKey(slot, keptType)), data: data}
 }
 
 // requiredFields are the fields a typed-in question cannot do without.

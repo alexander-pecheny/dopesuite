@@ -1,11 +1,10 @@
 package qyserver
 
 import (
+	"encoding/base64"
 	"net/http"
 	"strconv"
 	"strings"
-
-	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"qy/qy/domain/contest"
 	"qy/qy/domain/question"
@@ -42,9 +41,6 @@ func (s *server) nominationView(r *http.Request, c contest.Contest, sc route.Sco
 	lead = append(lead, noticeOf(r)...)
 	if f.hasErrors() || f.ratingErr != nil {
 		lead = append(lead, dangerHint(str.Nominate.Page.NotSaved()))
-		if f.uploaded {
-			lead = append(lead, dangerHint(str.Nominate.Page.FilesLost()))
-		}
 	}
 	return view{title: str.Nominate.Page.Title(), trail: []crumb{{"", str.Nominate.Page.Title()}},
 		body: []ui.Item{ui.Section(lead...), ui.Section(ui.Form(nominationFormItems(c, f)...))}}
@@ -180,7 +176,7 @@ func previewPanel(v slotView) ui.Item {
 }
 
 func fileLink(f store.File) ui.Item {
-	return ui.Row(ui.Button(ui.Href("/nominate/file/"+idstr.Format(f.ID)), ui.Ghost, ui.Small(), ui.IconPaperclip, text(f.Name)))
+	return ui.Row(ui.Button(ui.Href(fileHref(f.ID)), ui.Ghost, ui.Small(), ui.IconPaperclip, text(f.Name)))
 }
 
 // fieldEditors are the question's fields, each one line until it holds
@@ -228,6 +224,13 @@ func fileField(slot int, v slotView) ui.Item {
 	}
 	if len(v.files) > 0 {
 		items = append(items, checkbox(slotKey(slot, "drop_file"), str.Nominate.Slot.DropFile(), v.in.dropFile))
+	}
+	if f := v.in.file; f != nil {
+		items = append(items, ui.Hiddenfield(ui.Name(slotKey(slot, keptName)), ui.Value(f.name)),
+			ui.Hiddenfield(ui.Name(slotKey(slot, keptType)), ui.Value(f.contentType)),
+			ui.Hiddenfield(ui.Name(slotKey(slot, keptData)), ui.Value(base64.StdEncoding.EncodeToString(f.data))),
+			ui.Checkbox(ui.Name(slotKey(slot, "keep_file")), ui.Value("1"), ui.Checked(), ui.Data("kept-file", ""),
+				text(str.Nominate.Slot.KeepFile(f.name))))
 	}
 	items = append(items, ui.Filefield(ui.Name(slotKey(slot, "file"))))
 	return ui.Field(items...)

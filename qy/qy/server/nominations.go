@@ -187,7 +187,7 @@ func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]sto
 			text(str.Admin.Nominations.Slot(questionName(q), statusName(q)))))}
 		body := "<p>" + plain(q.SourceText) + "</p>"
 		if !q.Orig.Empty() {
-			body = questionHTML(card{qy: q.QY, q: q.Orig, tournament: q.TournamentTitle})
+			body = questionHTML(card{qy: q.QY, q: q.Orig, images: imageLinks(q), tournament: q.TournamentTitle})
 		}
 		// A long question is cut short until clicked (web/ts/fold.ts), so a
 		// screen holds a few nominators.

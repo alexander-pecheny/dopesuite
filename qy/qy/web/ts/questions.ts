@@ -11,8 +11,25 @@
 // starting on the original, and draws whichever side is picked; the
 // disclosure with the translation as plain text, which stands in for the
 // switch without the script, goes.
+//
+// The pictures a nominator attached come in data-images as links of this
+// site; they join the handout on either side, ahead of what it says.
 import { renderPreviewCard } from "../../../../chgksuite/web/ts/preview.js";
 import { fourS, imageLinks, PARSED_FIELDS, type ParsedField } from "./nominate-model.js";
+
+function readImages(json: string | undefined): string[] {
+  try {
+    const links: unknown = JSON.parse(json ?? "[]");
+    return Array.isArray(links) ? links.map((l) => new URL(String(l), location.href).href) : [];
+  } catch {
+    return [];
+  }
+}
+
+function withImages(f: Record<ParsedField, string> | null, images: string[]): Record<ParsedField, string> | null {
+  if (!f || images.length === 0) return f;
+  return { ...f, handout: [...images, f.handout].filter((l) => l.trim()).join("\n") };
+}
 
 function readFields(json: string | undefined): Record<ParsedField, string> | null {
   let sent: Partial<Record<ParsedField, string>>;
@@ -40,10 +57,11 @@ export function drawQuestions(root: ParentNode): void {
   for (const box of root.querySelectorAll<HTMLElement>("[data-question]")) {
     const question = box.querySelector("[data-part=question]");
     const fields = box.querySelector("[data-part=fields]");
-    const orig = readFields(box.dataset.question);
+    const images = readImages(box.dataset.images);
+    const orig = withImages(readFields(box.dataset.question), images);
     if (!question || !fields || !orig) continue;
     let current = draw(box, question, fields, orig);
-    const tr = readFields(box.dataset.translation);
+    const tr = withImages(readFields(box.dataset.translation), images);
     const langs = box.querySelector<HTMLElement>("[data-part=langs]");
     if (!tr || !langs) continue;
     box.querySelector("[data-part=translation]")?.remove();

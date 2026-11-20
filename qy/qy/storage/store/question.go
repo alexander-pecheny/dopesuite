@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"qy/qy/domain/anon"
 	"qy/qy/domain/lang"
@@ -55,7 +58,14 @@ type Question struct {
 	TranslationError  string
 	// TranslationStale says the clean copy changed after the translation.
 	TranslationStale bool
+	// Images are the attached files a card draws as its handout, without
+	// their names: the pictures in a kind every browser shows.
+	Images []File
 }
+
+// ImageTypes are the kinds of attached file a card draws as a picture, by
+// the extension its link carries.
+var ImageTypes = map[string]string{"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp"}
 
 // Foreign says whether the question is in another language than Russian.
 func (q Question) Foreign() bool { return q.Lang != "" && q.Lang != lang.Russian }
@@ -69,16 +79,24 @@ func (q Question) JuryTranslation() (question.Question, bool) {
 const questionColumns = `id, year, coalesce(qy, 0), status, coalesce(merged_into, 0), coalesce(gq_id, 0), link,
   published, source_text, orig, clean, coalesce(tournament_id, 0), tournament_title, tournament_start,
   tournament_end, factcheck, extra_context, author_declined, coalesce(shortlist_pin, ''), ai_status, ai_error, tournament_link,
-  coalesce(lang, ''), translation, translation_of, translation_edited, translation_error, translation_of != clean`
+  coalesce(lang, ''), translation, translation_of, translation_edited, translation_error, translation_of != clean,
+  (select coalesce(group_concat(f.id || ' ' || f.content_type, char(10)), '') from (select id, content_type from question_files
+    where question_id = questions.id order by id) f)`
 
 func scanQuestion(row interface{ Scan(...any) error }) (Question, error) {
 	var q Question
-	var orig, clean, translation string
+	var orig, clean, translation, images string
 	err := row.Scan(&q.ID, &q.Year, &q.QY, &q.Status, &q.MergedInto, &q.GQID, &q.Link,
 		&q.Published, &q.SourceText, &orig, &clean, &q.TournamentID, &q.TournamentTitle, &q.TournamentStart,
 		&q.TournamentEnd, &q.Factcheck, &q.ExtraContext, &q.AuthorDeclined, &q.Pin, &q.AIStatus, &q.AIError, &q.TournamentLink,
-		&q.Lang, &translation, &q.TranslationOf, &q.TranslationEdited, &q.TranslationError, &q.TranslationStale)
+		&q.Lang, &translation, &q.TranslationOf, &q.TranslationEdited, &q.TranslationError, &q.TranslationStale, &images)
 	q.Orig, q.Clean = question.FromJSON(orig), question.FromJSON(clean)
+	for _, line := range strings.Split(images, "\n") {
+		id, ct, ok := strings.Cut(line, " ")
+		if n, err := idstr.Parse(id); ok && err == nil && ImageTypes[ct] != "" {
+			q.Images = append(q.Images, File{ID: n, QuestionID: q.ID, ContentType: ct})
+		}
+	}
 	q.Translation = question.FromJSON(translation)
 	return q, err
 }

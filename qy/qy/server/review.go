@@ -526,7 +526,7 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 		return err
 	}
 	for _, f := range files {
-		about = append(about, ui.Row(ui.Button(ui.Href("/nominate/file/"+idstr.Format(f.ID)), ui.Ghost, ui.Small(), ui.IconPaperclip, text(f.Name))))
+		about = append(about, ui.Row(ui.Button(ui.Href(fileHref(f.ID)), ui.Ghost, ui.Small(), ui.IconPaperclip, text(f.Name))))
 	}
 	if q.MergedInto != 0 {
 		target := store.Question{ID: q.MergedInto}

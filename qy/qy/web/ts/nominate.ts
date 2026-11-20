@@ -142,7 +142,7 @@ function syncButtons(card: HTMLElement): void {
 
 function filled(el: Element): boolean {
   return [...el.querySelectorAll<Control>("textarea, input[type=text], input:not([type])")].some((c) => c.value.trim() !== "")
-    || el.querySelector('a[href^="/nominate/file/"]') !== null;
+    || el.querySelector('a[href^="/nominate/file/"], [data-kept-file]') !== null;
 }
 
 // syncOptional hides each empty optional field behind its «+» button.

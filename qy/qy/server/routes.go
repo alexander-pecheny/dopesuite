@@ -33,7 +33,7 @@ func routes(s *server) *http.ServeMux {
 	// ---- the contest ----
 	pages.Handle("POST /{year}/nominate", route.LoggedIn, s.handleNominate)
 	pages.Handle("GET /nominate", route.Public, s.handleOldNominate)
-	pages.Handle("GET /nominate/file/{id}", route.LoggedIn, s.handleNominationFile)
+	pages.Handle("GET /nominate/file/{id}", route.Public, s.handleNominationFile)
 	api.Handle("POST /api/nominate/parse", route.LoggedIn, s.handleParseQuestion)
 	api.Handle("POST /api/nominate/load", route.LoggedIn, s.handleLoadQuestion)
 	api.Handle("POST /api/nominate/preview", route.LoggedIn, s.handlePreviewQuestion)

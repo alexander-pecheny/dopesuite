@@ -594,9 +594,6 @@ var RU = Strings{
 			Eligible: func(from string, to string) string {
 				return fmt.Sprintf("Подходят вопросы турниров, отыгрыш которых начался с %s по %s.", from, to)
 			},
-			FilesLost: func() string {
-				return "Прикреплённые файлы не сохранились, их нужно выбрать заново."
-			},
 			HowTo: func() string {
 				return "Для каждого вопроса вставьте ссылку на него и нажмите «Загрузить». Загрузить можно вопрос из базы gotquestions или пост из телеграм-канала. Если ссылки нет, вставьте текст вопроса целиком и нажмите «Распарсить». Потом проверьте вопрос во вкладке «Просмотр» и поправьте поля, если что-то распозналось не так. Текст вопроса, ответ, источник, автор и ссылка на турнир обязательны. Если ссылка на турнир есть в пакете на gotquestions, она подставится сама."
 			},
@@ -617,6 +614,9 @@ var RU = Strings{
 			File:     func() string { return "Файл для раздатки" },
 			ForwardToBot: func(bot string) string {
 				return fmt.Sprintf("Телеграм не показывает этот пост на сайте. Перешлите пост боту %s и нажмите «Загрузить» ещё раз.", bot)
+			},
+			KeepFile: func(name string) string {
+				return fmt.Sprintf("Приложить %s — файл ещё не сохранён", name)
 			},
 			Link: func() string { return "Ссылка на вопрос" },
 			LinkOnly: func() string {

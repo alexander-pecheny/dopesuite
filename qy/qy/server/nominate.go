@@ -202,11 +202,13 @@ func (s *server) slotChanges(ctx context.Context, c contest.Contest, before, aft
 		case unchanged && !moved:
 		case unchanged && old.questionID != 0:
 			out[slot] = slotChange{reuse: old.questionID}
-		case !now.in.needsFields() && !now.in.fieldsGiven():
-			q := s.questionFrom(ctx, c.Year, now.in.link)
-			out[slot] = slotChange{q: &q}
 		default:
-			q := s.fieldsQuestion(ctx, c.Year, now.in)
+			var q store.Question
+			if !now.in.needsFields() && !now.in.fieldsGiven() {
+				q = s.questionFrom(ctx, c.Year, now.in.link)
+			} else {
+				q = s.fieldsQuestion(ctx, c.Year, now.in)
+			}
 			ch := slotChange{q: &q, add: now.in.file}
 			if now.in.file == nil && !now.in.dropFile {
 				ch.keepFrom = old.questionID
@@ -473,34 +475,6 @@ func (s *server) handlePreviewQuestion(w http.ResponseWriter, r *http.Request, _
 	}
 	q.Text = question.WithHandout(q.Text, strings.TrimSpace(req["handout"]))
 	return writeJSON(w, map[string]any{"text": question.Format(q)})
-}
-
-// handleNominationFile serves a handout file to an admin or to a nominator of
-// its question.
-func (s *server) handleNominationFile(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	id, err := idstr.Parse(r.PathValue("id"))
-	if err != nil {
-		return route.NotFound(str.Cms.NotFound())
-	}
-	f, data, err := store.FileData(r.Context(), s.db, id)
-	if errors.Is(err, store.ErrNoFile) {
-		return route.NotFound(str.Cms.NotFound())
-	}
-	if err != nil {
-		return err
-	}
-	if !sc.IsAdmin {
-		var n int
-		err := s.db.QueryRowContext(r.Context(), `select count(*) from nominations where question_id = ? and user_id = ?`, f.QuestionID, sc.User.UserID).Scan(&n)
-		if err != nil {
-			return err
-		}
-		if n == 0 {
-			return route.NotFound(str.Cms.NotFound())
-		}
-	}
-	serveFile(w, f, data)
-	return nil
 }
 
 // nudge wakes the background pass without waiting for it.
