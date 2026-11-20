@@ -7,9 +7,7 @@ import (
 	"dope/dope/platform/util"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -424,52 +422,6 @@ func meResponseFor(user session.User) meResponse {
 		resp.Telegram = &v
 	}
 	return resp
-}
-
-const (
-	telegramAPIBase     = "https://api.telegram.org"
-	telegramSendTimeout = 10 * time.Second
-)
-
-// newTelegramSendRequest builds the Bot API sendMessage call for one HTML
-// message.
-func newTelegramSendRequest(ctx context.Context, token string, chatID int64, text string) (*http.Request, error) {
-	values := url.Values{}
-	values.Set("chat_id", fmt.Sprintf("%d", chatID))
-	values.Set("text", text)
-	values.Set("parse_mode", "HTML")
-	endpoint := fmt.Sprintf("%s/bot%s/sendMessage", telegramAPIBase, token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return req, nil
-}
-
-func sendTelegramMessageFromEnv(ctx context.Context, chatID int64, text string) error {
-	token := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
-	if token == "" {
-		return errors.New("telegram bot token is not configured")
-	}
-	req, err := newTelegramSendRequest(ctx, token, chatID, text)
-	if err != nil {
-		return err
-	}
-	client := &http.Client{Timeout: telegramSendTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("telegram sendMessage status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return nil
 }
 
 // RequireSameOriginUnsafe is route.SameOriginUnsafe, kept under the name the
