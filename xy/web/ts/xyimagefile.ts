@@ -111,6 +111,13 @@ export function encodeXyimage(p: XyimageParts): Uint8Array {
   return out;
 }
 
+// fontZipsOf is the hashes of the Font Family zips an Edited Image's text is
+// set in (its Recipe's bake.fonts, ADR-0025), which an export must send along.
+export function fontZipsOf(b: Uint8Array): string[] {
+  const bake = (JSON.parse(parseXyimage(b).recipe) as { bake?: { fonts?: { zip?: unknown }[] } }).bake;
+  return [...new Set((bake?.fonts ?? []).map((f) => f.zip).filter((z): z is string => typeof z === "string"))];
+}
+
 // rasterOf is the raster rendition of an Edited Image, which is what every
 // place that merely shows a picture (the board, the card preview, the lightbox) draws.
 export function rasterOf(b: Uint8Array): Uint8Array | null {

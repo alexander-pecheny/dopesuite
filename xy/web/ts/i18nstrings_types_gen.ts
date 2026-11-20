@@ -164,6 +164,9 @@ export type Strings = {
       replaceFailed: () => string;
       uploadFailed: () => string;
     };
+    fonts: {
+      notMoved: (names: string) => string;
+    };
     lightbox: {
       close: () => string;
       dialogLabel: () => string;
@@ -476,6 +479,12 @@ export type Strings = {
       reset: () => string;
       scopedNote: () => string;
       title: () => string;
+    };
+    fonts: {
+      missing: () => string;
+      notReplaced: (name: string) => string;
+      offline: () => string;
+      replace: (name: string) => string;
     };
     forget: {
       label: () => string;
@@ -1902,6 +1911,8 @@ export type Strings = {
     child: {
       cardForeign: () => string;
       cardNotFound: () => string;
+      fontForeign: () => string;
+      fontNotFound: () => string;
       groupForeign: () => string;
       groupNotFound: () => string;
       labelForeign: () => string;

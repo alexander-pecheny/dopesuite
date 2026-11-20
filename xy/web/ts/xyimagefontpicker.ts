@@ -26,6 +26,8 @@ export interface PickerHost {
   render(): void; // lay the canvas out again
   renderProps(): void; // rebuild the properties panel
   say(text: string): void; // the status line
+  // A Family was uploaded: boxes set in an older one of its name move onto it.
+  uploaded(fam: FontFamily): Promise<void>;
   button(title: string, onClick: () => void): HTMLElement;
 }
 
@@ -38,7 +40,7 @@ export interface FontPicker {
 
 // closestFace is the Face of a Family nearest the box's current look, so
 // switching from bold Noto Sans to an upload stays bold where it can.
-function closestFace(fam: FontFamily, s: TextStyle): FamilyFace {
+export function closestFace(fam: FontFamily, s: TextStyle): FamilyFace {
   const italic = s.font ? /italic|oblique/i.test(s.font.style) : s.italic;
   const weight = s.bold && !s.font ? WEIGHT.bold : WEIGHT.regular;
   const score = (f: FamilyFace): number => (f.italic === italic ? 0 : FACE_ITALIC_COST) + Math.abs(f.weight - weight);
@@ -70,6 +72,14 @@ function styleOptions(s: TextStyle, fam: FontFamily | undefined): [string, strin
   if (!s.font) return NOTO_STYLES.map(([k]): [string, string] => [k, notoStyleLabel(k)]);
   if (fam) return fam.faces.map((f): [string, string] => [f.path, f.style]);
   return [[s.font.face, s.font.style]];
+}
+
+// matchFace is the Face of a new Family that stands in for a box's Face of a
+// replaced one: the same file where it has one, else the same style, else
+// the nearest.
+export function matchFace(fam: FontFamily, s: TextStyle): FamilyFace {
+  const ref = s.font;
+  return fam.faces.find((f) => f.path === ref?.face) ?? fam.faces.find((f) => f.style === ref?.style) ?? closestFace(fam, s);
 }
 
 export function fontPicker(host: PickerHost): FontPicker {
@@ -134,6 +144,7 @@ export function fontPicker(host: PickerHost): FontPicker {
     try {
       const fam = await send(files);
       setFace(s, fam, closestFace(fam, s));
+      await host.uploaded(fam);
       host.say("");
       host.renderProps();
     } catch (err) { host.say(fontError(err)); }

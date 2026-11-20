@@ -28,25 +28,19 @@ func (s *server) reapOnce(ctx context.Context, cutoff time.Time) (rowsReaped int
 	cut := rfc3339(cutoff)
 	var refs []string
 	err = s.withWriteTx(ctx, "reap", func(ctx context.Context, tx *sql.Tx) error {
-		refs, rowsReaped = nil, 0
-		rows, err := tx.QueryContext(ctx, `
+		rowsReaped = 0
+		var err error
+		refs, err = blobRefs(ctx, tx, `
 select a.blob_ref from attachments a
 join boards b on b.id = a.board_id
 join cards c on c.id = a.card_id
 join lists l on l.id = c.list_id
-where b.deleted_at < ?1 or c.deleted_at < ?1 or l.deleted_at < ?1 or a.deleted_at < ?1`, cut)
+where b.deleted_at < ?1 or c.deleted_at < ?1 or l.deleted_at < ?1 or a.deleted_at < ?1
+union all
+select f.blob_ref from font_families f
+join boards b on b.id = f.board_id
+where b.deleted_at < ?1 or f.deleted_at < ?1`, cut)
 		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			var ref string
-			if err := rows.Scan(&ref); err != nil {
-				rows.Close()
-				return err
-			}
-			refs = append(refs, ref)
-		}
-		if err := rows.Close(); err != nil {
 			return err
 		}
 		// Before a deleted card or comment goes for good, the board
@@ -80,6 +74,7 @@ where b.deleted_at < ?1 or c.deleted_at < ?1 or l.deleted_at < ?1 or a.deleted_a
 			                where reply_to_id is not null
 			                  and (deleted_at is null or deleted_at >= ?1))`,
 			`delete from attachments where deleted_at < ?1`,
+			`delete from font_families where deleted_at < ?1`,
 		}
 		for _, q := range stmts {
 			res, err := tx.ExecContext(ctx, q, cut)
@@ -101,7 +96,25 @@ where b.deleted_at < ?1 or c.deleted_at < ?1 or l.deleted_at < ?1 or a.deleted_a
 	return rowsReaped, nil
 }
 
-// sweepOrphanBlobs removes blob files no attachment row references — leaked by
+// blobRefs runs a query of blob refs.
+func blobRefs(ctx context.Context, q querier, query string, args ...any) ([]string, error) {
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var refs []string
+	for rows.Next() {
+		var ref string
+		if err := rows.Scan(&ref); err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
+}
+
+// sweepOrphanBlobs removes blob files no attachment or Font Family references — leaked by
 // a crash between a transaction and its blob Remove. minAge keeps it clear of
 // uploads whose row hasn't committed yet.
 func (s *server) sweepOrphanBlobs(ctx context.Context, minAge time.Duration) (int, error) {
@@ -109,21 +122,13 @@ func (s *server) sweepOrphanBlobs(ctx context.Context, minAge time.Duration) (in
 	if err != nil {
 		return 0, err
 	}
-	rows, err := s.db.QueryContext(ctx, `select blob_ref from attachments`)
+	refs, err := blobRefs(ctx, s.db, `select blob_ref from attachments union all select blob_ref from font_families`)
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
-	referenced := make(map[string]bool)
-	for rows.Next() {
-		var ref string
-		if err := rows.Scan(&ref); err != nil {
-			return 0, err
-		}
+	referenced := make(map[string]bool, len(refs))
+	for _, ref := range refs {
 		referenced[ref] = true
-	}
-	if err := rows.Err(); err != nil {
-		return 0, err
 	}
 	n := 0
 	for _, ref := range onDisk {

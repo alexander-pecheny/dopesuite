@@ -2155,6 +2155,11 @@ body {
   position: fixed; inset: 0; z-index: calc(var(--z-modal) - 1);
   display: flex; flex-direction: column; background: var(--surface);
 }
+/* An editor nobody sees: replacing a Font Family runs each picture set in it
+   through one to lay its text out again (attachments.ts rebake). It must be
+   laid out, so it sits off the screen rather than being hidden. */
+.xyed-offscreen { position: fixed; left: -20000px; top: 0; width: 1200px; height: 800px; overflow: hidden; pointer-events: none; }
+.xyed-offscreen > div { width: 100%; height: 100%; }
 .xyimage-editor {
   flex: 1 1 auto;
   min-height: 0;

@@ -214,16 +214,19 @@ type boardSnapshot struct {
 	// the cards changed after it, GoneCards the ones deleted, and CardLabels,
 	// CardSessions and Votes only the rows of the changed cards. Everything
 	// else is complete, as in a full snapshot.
-	Since      *int64         `json:"since,omitempty"`
-	GoneCards  []int64        `json:"gone_cards,omitempty"`
-	Name       string         `json:"name"`
-	Role       string         `json:"role"`
-	Lists      []listDTO      `json:"lists"`
-	Groups     []groupDTO     `json:"groups"`
-	Cards      []cardDTO      `json:"cards"`
-	Labels     []labelDTO     `json:"labels"`
-	Sessions   []sessionDTO   `json:"sessions"`
-	CardLabels []cardLabelDTO `json:"card_labels"`
+	Since     *int64     `json:"since,omitempty"`
+	GoneCards []int64    `json:"gone_cards,omitempty"`
+	Name      string     `json:"name"`
+	Role      string     `json:"role"`
+	Lists     []listDTO  `json:"lists"`
+	Groups    []groupDTO `json:"groups"`
+	Cards     []cardDTO  `json:"cards"`
+	Labels    []labelDTO `json:"labels"`
+	// Fonts is the board's live Font Families (ADR-0025), metadata only; a
+	// Family's zip is fetched when a picture needs it.
+	Fonts      []fontFamilyDTO `json:"fonts"`
+	Sessions   []sessionDTO    `json:"sessions"`
+	CardLabels []cardLabelDTO  `json:"card_labels"`
 	// CardSessions is the Playings — one row per (card, session), the same shape
 	// as CardLabels because both mirror their table. What the Seen column reads.
 	CardSessions []cardSessionDTO `json:"card_sessions"`
@@ -296,7 +299,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	since := rev.deltaBase(r.URL.Query())
-	snap := boardSnapshot{Rev: rev.rev, ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, TourTesters: []tourTesterDTO{}, TourDeclarations: []tourDeclarationDTO{}, Unread: map[string]unreadDTO{}}
+	snap := boardSnapshot{Rev: rev.rev, ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Fonts: []fontFamilyDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, TourTesters: []tourTesterDTO{}, TourDeclarations: []tourDeclarationDTO{}, Unread: map[string]unreadDTO{}}
 
 	var name sql.NullString
 	var token []byte
@@ -360,6 +363,12 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	snap.Labels = labels
+
+	fonts, err := scanFontFamilies(ctx, q, bid)
+	if handleErr(w, err) {
+		return
+	}
+	snap.Fonts = fonts
 
 	sessions, err := scanSessions(ctx, q, bid)
 	if handleErr(w, err) {

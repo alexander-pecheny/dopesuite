@@ -22,9 +22,9 @@ import { chgk4s } from "./chgk/chgk.js";
 import { PT_MM, freezeBox, overlaySVG } from "./xyimagefreeze.js";
 import type { Align, FrozenBox, Layer, Rect, TextStyle, VAlign } from "./xyimagefreeze.js";
 import { encodeXyimage, parseXyimage } from "./xyimagefile.js";
-import { loadFace } from "./xyimagefonts.js";
-import type { FaceRef, FontSource } from "./xyimagefonts.js";
-import { NOTO_FAMILY, fontPicker } from "./xyimagefontpicker.js";
+import { faceRef, loadFace } from "./xyimagefonts.js";
+import type { FaceRef, FontFamily, FontSource } from "./xyimagefonts.js";
+import { NOTO_FAMILY, fontPicker, matchFace } from "./xyimagefontpicker.js";
 
 const { el, errMsg, downloadBlob } = xyApp;
 
@@ -97,6 +97,12 @@ export interface EditorOptions {
 export interface XyEditor {
   // dirty reports whether anything changed since it opened or was last saved.
   dirty(): boolean;
+  // retarget moves every box set in a Family of this name, other than fam
+  // itself, onto fam (ADR-0025: only the newest Family of a name is live),
+  // and reports how many it moved.
+  retarget(fam: FontFamily): Promise<number>;
+  // bytes is the .xyimage as it stands, baked afresh.
+  bytes(): Promise<Uint8Array>;
   destroy(): void;
 }
 
@@ -146,6 +152,7 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     render: () => render(), renderProps: () => renderProps(),
     say: (text) => { status.textContent = text; },
     button: (title, onClick) => barBtn("file-up", null, title, onClick),
+    uploaded: async (fam) => { if (await retarget(fam)) renderProps(); },
   });
   const fonts = picker.fonts;
 
@@ -927,6 +934,13 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     return rules.join("");
   }
 
+  async function retarget(fam: FontFamily): Promise<number> {
+    const moved = textStyles().filter((st) => st.font && st.font.name === fam.name && st.font.zip !== fam.hash);
+    for (const st of moved) st.font = faceRef(fam, matchFace(fam, st));
+    await Promise.all(usedFaces(moved).map(picker.useFace));
+    return moved.length;
+  }
+
   function textStyles(): TextStyle[] {
     return state.items.filter((i): i is TextItem => i.kind === "text").map((t) => t.style);
   }
@@ -1112,8 +1126,10 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
 
   if (opts.file) load(opts.file);
   bar.append(picker.input);
-  await Promise.all(usedFaces(textStyles()).map(picker.useFace));
   syncItems();
+  // Its boxes' Faces load before anything is measured: a box laid out in Noto
+  // Sans while its Face is on the way would freeze the wrong lines.
+  await Promise.all(usedFaces(textStyles()).map(picker.useFace));
   renderLayers();
   renderProps();
   fitFrame();
@@ -1129,6 +1145,8 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
 
   return {
     dirty: () => contentKey() !== savedKey,
+    retarget,
+    bytes: serialize,
     destroy() {
       ac.abort();
       for (const it of state.items) if (it.kind === "image") URL.revokeObjectURL(it.url);

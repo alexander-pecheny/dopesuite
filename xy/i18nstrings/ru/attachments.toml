@@ -30,6 +30,11 @@ edit = "Редактировать"
 # The excerpt toggle item.
 excerpt = "Выписка"
 
+[fonts]
+# A Font Family was replaced (ADR-0025) but these pictures could not be moved
+# onto it; they stay set in the old one. The parameter lists their names.
+not_moved = 'Не удалось перевёрстать картинки: {{.names}}. Они остались набраны прежним шрифтом.'
+
 [editor]
 # The image editor over the card (ADR-0024).
 # Accessible name of the editor's full-screen overlay.

@@ -33,7 +33,7 @@ func humanMB(b int64) string { return xystrings.Default.Server.Quota.HumanMb(mbN
 // storageUsageSQL sums the bytes a user's own boards hold: attachment blobs plus
 // every encrypted content column. Tombstones don't count, including everything
 // under a tombstoned board or card (ADR-0002: quota-free until reaped). Shown on
-// /profile and enforced on upload; the uid is bound five times, once per subquery.
+// /profile and enforced on upload; the uid is bound once per subquery.
 const storageUsageSQL = `
 select
   coalesce((select sum(a.size) from attachments a
@@ -49,6 +49,9 @@ select
 + coalesce((select sum(length(lb.name) + length(lb.color)) from labels lb
             join boards b on b.id = lb.board_id and b.deleted_at is null
             where b.owner_user_id = ? and lb.deleted_at is null), 0)
++ coalesce((select sum(f.size + length(f.meta)) from font_families f
+            join boards b on b.id = f.board_id and b.deleted_at is null
+            where b.owner_user_id = ? and f.deleted_at is null), 0)
 + coalesce((select sum(length(s.meta)) from test_sessions s
             join boards b on b.id = s.board_id and b.deleted_at is null
             where b.owner_user_id = ? and s.deleted_at is null), 0)
@@ -66,7 +69,7 @@ type rowQuerier interface {
 
 func storageBytes(ctx context.Context, q rowQuerier, uid int64) (int64, error) {
 	var n int64
-	err := q.QueryRowContext(ctx, storageUsageSQL, uid, uid, uid, uid, uid, uid).Scan(&n)
+	err := q.QueryRowContext(ctx, storageUsageSQL, uid, uid, uid, uid, uid, uid, uid).Scan(&n)
 	return n, err
 }
 

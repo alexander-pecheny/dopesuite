@@ -29,6 +29,9 @@ label_not_found = "метка не найдена"
 label_foreign = "метка с другой доски"
 session_not_found = "тест не найден"
 session_foreign = "тест с другой доски"
+# An uploaded Font Family (ADR-0025).
+font_not_found = "шрифт не найден"
+font_foreign = "шрифт с другой доски"
 
 [board]
 # Board lookup in boardRole: missing board, tombstoned board, non-member.

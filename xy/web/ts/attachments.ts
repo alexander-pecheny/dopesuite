@@ -14,7 +14,9 @@ import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
 import { icon, iconed } from "./icons_gen.js";
 import S from "./i18nstrings.js";
-import { fileType, isXyimage, rasterOf, XYIMAGE_EXT, XYIMAGE_MIME, XYIMAGE_SNIFF_LEN } from "./xyimagefile.js";
+import { fileType, fontZipsOf, isXyimage, rasterOf, XYIMAGE_EXT, XYIMAGE_MIME, XYIMAGE_SNIFF_LEN } from "./xyimagefile.js";
+import type { BoardFonts } from "./boardfonts.js";
+import type { BoardFont } from "./unlock.js";
 
 const { fetchJSON, jpatch, jdelete, el, errMsg } = xyApp;
 
@@ -123,6 +125,10 @@ export interface AttachmentsDeps {
   // card attachment, but ALSO joins the pending comment (its ref rides the
   // encrypted payload).
   onCommentImage?(attId: number): void;
+  // The board's Font Families (ADR-0025), for the editor and for the exports
+  // of pictures set in them.
+  fonts?: BoardFonts;
+  boardId?: number;
 }
 
 type EditorStart = { file?: Uint8Array; picture?: { blob: Blob; name: string } };
@@ -403,6 +409,7 @@ async function openImageEditor(start: EditorStart, save: (out: Uint8Array<ArrayB
   document.body.append(overlay);
   const editor = await createEditor(root, {
     ...start,
+    fonts: deps.fonts,
     onSave: async (out) => {
       await save(new Uint8Array(out));
       const oc = deps.openCardId();
@@ -417,6 +424,57 @@ async function openImageEditor(start: EditorStart, save: (out: Uint8Array<ArrayB
   });
 }
 
+
+// ---- moving pictures onto a replaced Font Family (ADR-0025) ----
+
+// boardEditedImages is every Edited Image on the board, named and decrypted.
+async function boardEditedImages(): Promise<{ att: NamedAttachment; bytes: Uint8Array<ArrayBuffer> }[]> {
+  const res = await fetch(`/api/boards/${deps.boardId}/attachments`, { credentials: "same-origin" });
+  if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+  const key = deps.mustDK();
+  const all = ((await res.json()) as Attachment[]).filter((a) => a.mime === XYIMAGE_MIME);
+  return Promise.all(all.map(async (a) => {
+    const blob = await fetch(`/api/attachments/${a.id}`, { credentials: "same-origin" });
+    if (!blob.ok) throw new Error(`HTTP ${blob.status}`);
+    const bytes = await xyCrypto.decBytes(key, new Uint8Array(await blob.arrayBuffer()));
+    return { att: { ...a, name: await xyCrypto.decField(key, a.filename) }, bytes };
+  }));
+}
+
+// rebake runs a picture through an editor nobody sees: its boxes move onto
+// the new Family, are laid out again in the browser, and both renditions are
+// baked afresh, so the raster and the vector never disagree on the font.
+async function rebake(bytes: Uint8Array, now: BoardFont): Promise<Uint8Array> {
+  const { createEditor } = await import("./xyimageeditor.js");
+  const host = el("div", { class: "xyed-offscreen", "aria-hidden": "true" });
+  const root = el("div");
+  host.append(root);
+  document.body.append(host);
+  try {
+    const editor = await createEditor(root, { file: bytes, fonts: deps.fonts });
+    try {
+      await editor.retarget(now);
+      return await editor.bytes();
+    } finally { editor.destroy(); }
+  } finally { host.remove(); }
+}
+
+// replaceFamily moves every picture set in the old Family onto the new one,
+// each put back in place (same id, a new rev), and then lets the old Family
+// go. If a picture fails, the old Family stays for the ones still set in it.
+async function replaceFamily(old: BoardFont, now: BoardFont): Promise<void> {
+  const failed: string[] = [];
+  for (const { att, bytes } of await boardEditedImages()) {
+    if (!fontZipsOf(bytes).includes(old.hash)) continue;
+    try {
+      await putReplacement(att, att.name, new Uint8Array(await rebake(bytes, now)), XYIMAGE_MIME, true);
+    } catch (_) { failed.push(att.name); }
+  }
+  if (failed.length) throw new Error(S.attachments.fonts.notMoved(failed.join(", ")));
+  await jdelete(`/api/fonts/${old.id}`);
+  deps.fonts?.forget(old);
+  attListCache.clear();
+}
 
 // storedBytes is what an upload stores: the file as it is, or, when the user
 // asked for compression, a WebP of it. An Edited Image is never re-encoded:
@@ -693,6 +751,7 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
     if (!wanted.size) return found;
     const lists = await Promise.all(cards.map((c) => cardAttachments(c.id)));
     const targets = gatherTargets(lists, wanted);
+    const zips = new Set<string>();
     await Promise.all([...targets].map(async ([name, att]) => {
       try {
         const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
@@ -700,12 +759,26 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
         const plain = await xyCrypto.decBytes(deps.mustDK(), new Uint8Array(await res.arrayBuffer()));
         fd.append("img", new Blob([plain], { type: att.mime }), name);
         found.add(name);
+        if (isXyimage(plain)) for (const z of fontZipsOf(plain)) zips.add(z);
       } catch (_) {}
     }));
+    await appendFonts(fd, zips);
     return found;
   }
 
+  // appendFonts sends the Font Families the Edited Images are set in, as
+  // "font" parts. One the board no longer has is left out, and the export
+  // then says which picture lacks which font.
+  async function appendFonts(fd: FormData, zips: Set<string>): Promise<void> {
+    const fonts = deps.fonts;
+    if (!fonts) return;
+    await Promise.all([...zips].map(async (z) => {
+      try { fd.append("font", new Blob([await fonts.zip(z)]), `${z}.zip`); } catch (_) {}
+    }));
+  }
+
   return {
+    replaceFamily,
     cardAttachments,
     attachmentUrl,
     resolveImages,

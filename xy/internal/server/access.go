@@ -22,11 +22,12 @@ type child struct {
 }
 
 var (
-	childCard    = child{"cards", xystrings.Default.Server.Child.CardNotFound, xystrings.Default.Server.Child.CardForeign}
-	childList    = child{"lists", xystrings.Default.Server.Child.ListNotFound, xystrings.Default.Server.Child.ListForeign}
-	childGroup   = child{"list_groups", xystrings.Default.Server.Child.GroupNotFound, xystrings.Default.Server.Child.GroupForeign}
-	childLabel   = child{"labels", xystrings.Default.Server.Child.LabelNotFound, xystrings.Default.Server.Child.LabelForeign}
-	childSession = child{"test_sessions", xystrings.Default.Server.Child.SessionNotFound, xystrings.Default.Server.Child.SessionForeign}
+	childCard       = child{"cards", xystrings.Default.Server.Child.CardNotFound, xystrings.Default.Server.Child.CardForeign}
+	childList       = child{"lists", xystrings.Default.Server.Child.ListNotFound, xystrings.Default.Server.Child.ListForeign}
+	childGroup      = child{"list_groups", xystrings.Default.Server.Child.GroupNotFound, xystrings.Default.Server.Child.GroupForeign}
+	childLabel      = child{"labels", xystrings.Default.Server.Child.LabelNotFound, xystrings.Default.Server.Child.LabelForeign}
+	childSession    = child{"test_sessions", xystrings.Default.Server.Child.SessionNotFound, xystrings.Default.Server.Child.SessionForeign}
+	childFontFamily = child{"font_families", xystrings.Default.Server.Child.FontNotFound, xystrings.Default.Server.Child.FontForeign}
 )
 
 func (c child) board(ctx context.Context, q querier, id int64) (int64, error) {

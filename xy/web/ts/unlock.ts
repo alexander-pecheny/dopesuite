@@ -11,6 +11,7 @@ import type { SyncStatus } from "./sync.js";
 import S from "./i18nstrings.js";
 import { parseDeclaration } from "./seen.js";
 import type { Tester } from "./sessions.js";
+import type { FontFamily } from "./xyimagefonts.js";
 
 // Structural mirrors of crypto.ts's DataKey/BoardKeymeta. Deliberately not
 // imported: crypto.ts pulls the vendored scrypt, and this module's whole point
@@ -95,6 +96,13 @@ export interface BoardLabel {
   color: string;
 }
 
+// BoardFont is an uploaded Font Family (ADR-0025): its encrypted meta read,
+// with the row's id and the size of its zip.
+export interface BoardFont extends FontFamily {
+  id: number;
+  size: number;
+}
+
 // One label ASSIGNMENT. sessionId null = the author's own view of the question;
 // set = what the testers thought at that sitting (ADR-0004). The same label may
 // appear on one card twice, once each way.
@@ -151,6 +159,7 @@ export interface BoardState {
   groups: BoardGroup[];
   cards: BoardCard[];
   labels: BoardLabel[];
+  fonts: BoardFont[];
   sessions: BoardSession[];
   cardLabels: CardLabel[];
   cardSessions: Playing[];
@@ -198,6 +207,7 @@ export interface Snapshot {
     created_at?: string | null;
   }>;
   labels?: Array<{ id: number; name: string; color: string }>;
+  fonts?: Array<{ id: number; meta: string; size: number }>;
   card_sessions?: Array<{ card_id: number; session_id: number }>;
   tour_testers?: Array<{ list_id?: number | null; group_id?: number | null; session_id: number | null }>;
   tour_declarations?: Array<{ list_id?: number | null; group_id?: number | null; names: string }>;
@@ -299,6 +309,21 @@ export interface Unlock {
 // page's copy flow (copyfromlist.ts) reuses it to read a board this device never
 // opened — the same GET /api/boards/{id}, a held DK, and buildBundle needs no
 // board page.
+// decryptFonts reads each Family's meta. One that does not read (damaged, or
+// written by a newer xy) is left out rather than failing the board.
+async function decryptFonts(crypto: UnlockCrypto, key: DataKey, rows: NonNullable<Snapshot["fonts"]>): Promise<BoardFont[]> {
+  const out: BoardFont[] = [];
+  for (const r of rows) {
+    try {
+      const m = JSON.parse(await crypto.decField(key, r.meta)) as Partial<FontFamily>;
+      if (typeof m.hash === "string" && typeof m.name === "string" && Array.isArray(m.faces)) {
+        out.push({ id: r.id, size: r.size, hash: m.hash, name: m.name, faces: m.faces });
+      }
+    } catch { /* skipped: see above */ }
+  }
+  return out;
+}
+
 export async function decryptSnapshot(
   key: DataKey,
   snap: Snapshot,
@@ -348,6 +373,7 @@ export async function decryptSnapshot(
       name: await crypto.decField(key, l.name),
       color: await crypto.decField(key, l.color),
     }))),
+    fonts: await decryptFonts(crypto, key, snap.fonts || []),
     sessions: await Promise.all((snap.sessions || []).map(async (s) => ({
       id: s.id, meta: await crypto.decField(key, s.meta), createdAt: s.created_at || null,
     }))),

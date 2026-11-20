@@ -897,6 +897,21 @@ alter table boards add column passphrase_sent_at text;
 alter table users add column telegram_snoozes integer not null default 0;
 alter table users add column telegram_snoozed_until text;
 `)},
+	// A board's uploaded fonts (ADR-0025): meta is the Family's encrypted
+	// description, blob_ref its encrypted zip.
+	{Version: 36, Name: "font families", Up: schema.Exec(`
+create table if not exists font_families(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  meta blob not null,
+  size integer not null,
+  blob_ref text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text
+);
+create index if not exists idx_font_families_board on font_families(board_id);
+`)},
 }
 
 // revTriggers number the changes to a board. Each one increments boards.rev

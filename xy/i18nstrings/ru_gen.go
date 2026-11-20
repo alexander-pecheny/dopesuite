@@ -211,6 +211,11 @@ var RU = Strings{
 			ReplaceFailed:      func() string { return "ошибка замены" },
 			UploadFailed:       func() string { return "ошибка загрузки" },
 		},
+		Fonts: AttachmentsFontsStrings{
+			NotMoved: func(names string) string {
+				return fmt.Sprintf("Не удалось перевёрстать картинки: %s. Они остались набраны прежним шрифтом.", names)
+			},
+		},
 		Lightbox: AttachmentsLightboxStrings{
 			Close:       func() string { return "Закрыть" },
 			DialogLabel: func() string { return "Просмотр изображения" },
@@ -587,6 +592,14 @@ var RU = Strings{
 				return "Метка засчитывается и тогда, когда она проставлена на тесте — такие метки на карточке не видны."
 			},
 			Title: func() string { return "Фильтр по меткам" },
+		},
+		Fonts: BoardFontsStrings{
+			Missing:     func() string { return "этого шрифта на доске больше нет" },
+			NotReplaced: func(name string) string { return fmt.Sprintf("Шрифт «%s» оставлен как был", name) },
+			Offline:     func() string { return "Шрифт можно загрузить только в сети" },
+			Replace: func(name string) string {
+				return fmt.Sprintf("На доске уже есть шрифт «%s». Заменить его новыми файлами? Картинки, набранные им, перевёрстаются, и строки в них могут перенестись иначе.", name)
+			},
 		},
 		Forget: BoardForgetStrings{
 			Label: func() string { return "Забыть пароль доски" },
@@ -2513,6 +2526,8 @@ var RU = Strings{
 		Child: ServerChildStrings{
 			CardForeign:     func() string { return "карточка с другой доски" },
 			CardNotFound:    func() string { return "карточка не найдена" },
+			FontForeign:     func() string { return "шрифт с другой доски" },
+			FontNotFound:    func() string { return "шрифт не найден" },
 			GroupForeign:    func() string { return "группа с другой доски" },
 			GroupNotFound:   func() string { return "группа списков не найдена" },
 			LabelForeign:    func() string { return "метка с другой доски" },

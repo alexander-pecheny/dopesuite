@@ -237,6 +237,10 @@ internal/server/       package server — the whole HTTP server
                        frame's layers (pictures, and the overlays the browser froze) on a typst page
                        and returns the PDF, laying nothing out; GET /xyimage/fonts/{name} serves the
                        exact Noto Sans files typst sets text in, for the browser to lay text out in
+  fontfamilies.go      a board's Font Families (ADR-0025): encrypted meta plus an encrypted zip blob
+                       per Family, listed in the snapshot (fonts), GET /api/fonts/{id} the zip, no
+                       patch or replace (a change is a new upload). Counted by quota.go, reaped and
+                       kept from the orphan sweep by reap.go
   handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgksuite/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
   typst.go             the shared typst (wasm) pool: built once, warmed at boot, injectable so handler tests stub it. XY_WASM_CACHE must be persistent (~15s cold compile vs ~0.6s cached)
   sessions.go          test sessions (ADR-0004): a board-level entity, not a card in a list.
@@ -640,6 +644,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        Face goes by in the browser, the overlay and typst; FontSource is what a
                        board offers the editor (memoryFonts on the lab page)
     xyimagefontpicker.ts  the editor's Family and Face fields, the upload button, Face loading
+    boardfonts.ts      a board's Font Families as a FontSource: the newest of each name is live,
+                       zips fetched and decrypted by hash, uploads encrypted; a re-upload under a
+                       used name asks, then attachments.replaceFamily re-bakes every Edited Image
+                       set in the old one through an off-screen editor and deletes the old Family
     join.ts            /join/<code> — what an invite link opens: the board's name,
                        why the link does or does not work, and one button (ADR-0017)
 web/assets/            //go:embed static + ui (package assets)

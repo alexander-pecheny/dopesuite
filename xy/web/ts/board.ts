@@ -39,6 +39,7 @@ import { label as kindLabel } from "./kindlabel.js";
 import { xySync } from "./sync.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
+import { boardFonts } from "./boardfonts.js";
 import { createUnlock, listType, tourCommentFirst } from "./unlock.js";
 import { boardOrder, byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from "./dragrank.js";
 import { createTimeline, eventAuthor } from "./timeline.js";
@@ -117,7 +118,7 @@ titleNode.after(importButton);
 // members roster boardmembers.js merges onto it.
 type LiveState = BoardState & MembersState;
 
-const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], tourDeclarations: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "", votes: [], ratingToken: "" };
+const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], fonts: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], tourDeclarations: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "", votes: [], ratingToken: "" };
 let dk: DataKey | null = null;
 // Whether that key came out of the cache rather than off the unlock overlay —
 // the Passphrase Check's one question (passcheck.ts).
@@ -1450,6 +1451,8 @@ const attachments = createAttachments({
     setAttachments: (list) => timeline.setAttachments(list),
   },
   onCommentImage: (attId) => timeline.addDraftImage(attId),
+  fonts: boardFonts({ boardId, state: () => state, dk: mustDK, onReplaced: (old, now) => attachments.replaceFamily(old, now) }),
+  boardId,
 });
 
 // transfer moves and copies cards within and across boards; the card editor,
