@@ -2794,6 +2794,24 @@ var RU = Strings{
 		},
 	},
 	Xyimage: XyimageStrings{
+		Fonts: XyimageFontsStrings{
+			Collection: func(file string) string {
+				return fmt.Sprintf("%s: коллекции шрифтов (TTC) не поддерживаются, загрузите отдельные файлы TTF или OTF", file)
+			},
+			Empty: func(file string) string {
+				return fmt.Sprintf("%s: в нём нет ни одного файла TTF или OTF", file)
+			},
+			Notfont: func(file string) string {
+				return fmt.Sprintf("%s: это не файл шрифта TTF или OTF", file)
+			},
+			Toobig: func(file string) string { return fmt.Sprintf("%s: начертание больше 20 МБ", file) },
+			Variable: func(file string) string {
+				return fmt.Sprintf("%s: вариативные шрифты пока не поддерживаются, загрузите отдельные начертания в TTF или OTF", file)
+			},
+			Woff: func(file string) string {
+				return fmt.Sprintf("%s: это веб-шрифт WOFF, а нужен TTF или OTF", file)
+			},
+		},
 		Layers: XyimageLayersStrings{
 			Down:  func() string { return "Ниже" },
 			Frame: func() string { return "Кадр" },
@@ -2819,12 +2837,20 @@ var RU = Strings{
 			AlignRight:   func() string { return "Справа" },
 			Background:   func() string { return "Фон" },
 			Bold:         func() string { return "Жирный" },
+			BoldItalic:   func() string { return "Жирный курсив" },
 			Dpi:          func() string { return "dpi для PNG" },
+			Face:         func() string { return "Начертание" },
+			Font:         func() string { return "Шрифт" },
+			FontMissing:  func(name string) string { return fmt.Sprintf("%s (нет на доске)", name) },
+			FontUpload: func() string {
+				return "Загрузить шрифт: файлы TTF или OTF, или zip с ними"
+			},
 			Frame:        func() string { return "Кадр" },
 			H:            func() string { return "Высота, мм" },
 			Hyphens:      func() string { return "Переносы" },
 			Italic:       func() string { return "Курсив" },
 			Leading:      func() string { return "Интерлиньяж" },
+			Regular:      func() string { return "Обычный" },
 			Sample:       func() string { return "Текст" },
 			Size:         func() string { return "Кегль, пт" },
 			Tracking:     func() string { return "Трекинг, пт" },
@@ -2837,10 +2863,14 @@ var RU = Strings{
 			Y:            func() string { return "Y, мм" },
 		},
 		Status: XyimageStatusStrings{
-			FrozenLines: func(n string) string { return fmt.Sprintf("Строк зафиксировано: %s", n) },
-			Saved:       func() string { return "Сохранено" },
-			Saving:      func() string { return "Сохранение…" },
-			Working:     func() string { return "typst верстает…" },
+			FontMissing: func(name string) string {
+				return fmt.Sprintf("Шрифта «%s» нет на доске: выберите для этого текста другой шрифт или загрузите этот заново", name)
+			},
+			FontUploading: func() string { return "Загружаю шрифт…" },
+			FrozenLines:   func(n string) string { return fmt.Sprintf("Строк зафиксировано: %s", n) },
+			Saved:         func() string { return "Сохранено" },
+			Saving:        func() string { return "Сохранение…" },
+			Working:       func() string { return "typst верстает…" },
 		},
 		Tools: XyimageToolsStrings{
 			Close: func() string { return "Закрыть" },

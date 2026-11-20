@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"regexp"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/handout"
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyimage"
 )
 
 // The Edited Image prototype (ADR-0024): /lab/xyimage lays text out in the
@@ -58,6 +60,8 @@ type xyimageLayout struct {
 	H      float64        `json:"h"`
 	BG     string         `json:"bg"`
 	Layers []xyimageLayer `json:"layers"`
+	// Fonts are the uploaded Faces the overlays use, found in the "font" parts.
+	Fonts []xyimage.Face `json:"fonts"`
 }
 
 func finiteIn(v, lo, hi float64) bool {
@@ -142,6 +146,12 @@ func readXyimage(w http.ResponseWriter, r *http.Request) (xyimageLayout, map[str
 		}
 		images[ly.fileName()] = f[0].Data
 	}
+	faces, err := (&xyimage.File{Bake: xyimage.Bake{Fonts: l.Fonts}}).Faces(form.Images())
+	if err != nil {
+		handleUser(w, xyimage.UserError("xyimage", err))
+		return l, nil, false
+	}
+	maps.Copy(images, faces)
 	return l, images, true
 }
 

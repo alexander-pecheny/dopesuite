@@ -634,6 +634,12 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     xyimagefile.ts     the .xyimage container (RCPE/IMAG/OVER/RAST), the browser's copy of
                        chgksuite/xyimage, both held to its testdata/fixture.*. attachments.ts asks
                        it by the bytes and draws an Edited Image's raster wherever a picture shows
+    xyimagefonts.ts    uploaded Font Families (ADR-0025): readFace reads a TTF/OTF's names and
+                       refuses WOFF, collections and variable fonts; buildFamily makes the stored
+                       zip (deterministic, so one hash per set of Faces); faceFamily is the name a
+                       Face goes by in the browser, the overlay and typst; FontSource is what a
+                       board offers the editor (memoryFonts on the lab page)
+    xyimagefontpicker.ts  the editor's Family and Face fields, the upload button, Face loading
     join.ts            /join/<code> — what an invite link opens: the board's name,
                        why the link does or does not work, and one button (ADR-0017)
 web/assets/            //go:embed static + ui (package assets)

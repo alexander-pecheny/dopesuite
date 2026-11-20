@@ -5,6 +5,8 @@
 // as an SVG that typst places as it is, so no export ever lays the text out
 // again.
 
+import type { FaceRef } from "./xyimagefonts.js";
+
 const MM_PER_IN = 25.4;
 const PT_PER_IN = 72;
 export const PT_MM = MM_PER_IN / PT_PER_IN;
@@ -24,6 +26,9 @@ export interface TextStyle {
   bold: boolean;
   italic: boolean;
   hyphens: boolean;
+  // An uploaded Face (ADR-0025). It is a weight and a style of its own, so
+  // bold and italic apply only to the bundled Noto Sans, which has no Face.
+  font?: FaceRef | null;
 }
 
 export interface Rect { x: number; y: number; w: number; h: number } // mm
@@ -101,9 +106,10 @@ export function freezeBox(body: HTMLElement, style: TextStyle, origin: DOMRect, 
 }
 
 function textOpen(family: string, s: TextStyle): string {
-  const weight = s.bold ? WEIGHT.bold : WEIGHT.regular;
-  const style = s.italic ? "italic" : "normal";
-  return `<text font-family="${esc(family)}" font-size="${n(s.size * PT_MM)}" font-weight="${weight}" font-style="${style}" letter-spacing="${n(s.tracking * PT_MM)}" fill="#000">`;
+  const noto = !s.font; // an uploaded Face is its own weight and style
+  const weight = noto && s.bold ? WEIGHT.bold : WEIGHT.regular;
+  const style = noto && s.italic ? "italic" : "normal";
+  return `<text font-family="${esc(s.font?.family ?? family)}" font-size="${n(s.size * PT_MM)}" font-weight="${weight}" font-style="${style}" letter-spacing="${n(s.tracking * PT_MM)}" fill="#000">`;
 }
 
 function esc(s: string): string {
@@ -113,7 +119,7 @@ function esc(s: string): string {
 function n(v: number): string { return String(Math.round(v * PRECISION) / PRECISION); }
 
 export interface OverlayOpts {
-  family: string; // the family name both the browser's embedded faces and typst know
+  family: string; // the bundled family's name, which both the browser's embedded faces and typst know
   fontFaces?: string; // @font-face rules to embed, for the browser's own raster
 }
 

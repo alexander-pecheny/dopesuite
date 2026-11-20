@@ -22,6 +22,9 @@ import { chgk4s } from "./chgk/chgk.js";
 import { PT_MM, freezeBox, overlaySVG } from "./xyimagefreeze.js";
 import type { Align, FrozenBox, Layer, Rect, TextStyle, VAlign } from "./xyimagefreeze.js";
 import { encodeXyimage, parseXyimage } from "./xyimagefile.js";
+import { loadFace } from "./xyimagefonts.js";
+import type { FaceRef, FontSource } from "./xyimagefonts.js";
+import { NOTO_FAMILY, fontPicker } from "./xyimagefontpicker.js";
 
 const { el, errMsg, downloadBlob } = xyApp;
 
@@ -31,7 +34,7 @@ const BASE = 10; // layout px per mm, before the zoom transform
 const REAL = 96 / 25.4; // screen px per mm at 100%
 const MM_PER_IN = 25.4;
 const FONT_ALIAS = "XyimgNoto";
-const TYPST_FAMILY = "Noto Sans";
+const TYPST_FAMILY = NOTO_FAMILY;
 const FACES = [
   { file: "NotoSans-Regular.ttf", weight: "400", style: "normal" },
   { file: "NotoSans-Bold.ttf", weight: "700", style: "normal" },
@@ -83,6 +86,9 @@ export interface EditorOptions {
   // from, or nothing for a blank frame.
   file?: Uint8Array;
   picture?: { blob: Blob; name: string };
+  // The uploaded Font Families on offer (ADR-0025): the board's, or, on the
+  // lab page, whatever is uploaded while it is open.
+  fonts?: FontSource;
   // Present when the editor can save (the board): the Save and Close buttons.
   onSave?(bytes: Uint8Array): Promise<void>;
   onClose?(): void;
@@ -131,6 +137,17 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     comparing: false,
     nextId: 1,
   };
+
+  // The Faces a text box names that could not be loaded: its Family was
+  // deleted or replaced. Such a box shows in Noto Sans, and cannot be saved.
+  const missingFaces = new Set<string>();
+  const picker = fontPicker({
+    fonts: opts.fonts, missing: missingFaces,
+    render: () => render(), renderProps: () => renderProps(),
+    say: (text) => { status.textContent = text; },
+    button: (title, onClick) => barBtn("file-up", null, title, onClick),
+  });
+  const fonts = picker.fonts;
 
   const defaultStyle: TextStyle = {
     size: DEFAULT_SIZE, leading: DEFAULT_LEADING, tracking: 0, align: "center", valign: "middle", bold: false, italic: false, hyphens: false,
@@ -244,14 +261,18 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
 
   const VALIGN_FLEX: Record<VAlign, string> = { top: "flex-start", middle: "center", bottom: "flex-end" };
 
+  function cssFamily(s: TextStyle): string {
+    return s.font && !missingFaces.has(s.font.family) ? `"${s.font.family}"` : `"${FONT_ALIAS}"`;
+  }
+
   function styleBody(body: HTMLElement, s: TextStyle): void {
-    body.style.fontFamily = `"${FONT_ALIAS}"`;
+    body.style.fontFamily = cssFamily(s);
     body.style.fontSize = `${s.size * PT_MM * BASE}px`;
     body.style.lineHeight = String(s.leading);
     body.style.letterSpacing = `${s.tracking * PT_MM * BASE}px`;
     body.style.textAlign = s.align;
-    body.style.fontWeight = s.bold ? "700" : "400";
-    body.style.fontStyle = s.italic ? "italic" : "normal";
+    body.style.fontWeight = !s.font && s.bold ? "700" : "400";
+    body.style.fontStyle = !s.font && s.italic ? "italic" : "normal";
     body.style.hyphens = s.hyphens ? "auto" : "manual";
   }
 
@@ -409,9 +430,8 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
       el("label", { class: "field" }, el("span", { text: S.xyimage.props.valign() }),
         choice<VAlign>([["top", S.xyimage.props.valignTop()], ["middle", S.xyimage.props.valignMiddle()], ["bottom", S.xyimage.props.valignBottom()]],
           () => s.valign, (v) => { s.valign = v; })),
+      ...picker.fields(s),
       el("div", { class: "u-row u-wrap u-gap-sm" },
-        check(S.xyimage.props.bold(), () => s.bold, (v) => { s.bold = v; }),
-        check(S.xyimage.props.italic(), () => s.italic, (v) => { s.italic = v; }),
         check(S.xyimage.props.hyphens(), () => s.hyphens, (v) => { s.hyphens = v; })),
     ];
   }
@@ -856,7 +876,8 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
 
   function ascentPx(s: TextStyle): number {
     const ctx = document.createElement("canvas").getContext("2d")!;
-    ctx.font = `${s.italic ? "italic " : ""}${s.bold ? WEIGHT.bold : WEIGHT.regular} ${s.size * PT_MM * BASE}px "${FONT_ALIAS}"`;
+    const italic = !s.font && s.italic ? "italic " : "";
+    ctx.font = `${italic}${!s.font && s.bold ? WEIGHT.bold : WEIGHT.regular} ${s.size * PT_MM * BASE}px ${cssFamily(s)}`;
     return ctx.measureText("Hg").fontBoundingBoxAscent * state.zoom / BASE;
   }
 
@@ -894,10 +915,27 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
 
   // The browser's own render of an overlay needs the faces inside the SVG: an
   // SVG drawn as an image cannot see the page's fonts.
-  function embeddedFaces(texts: FrozenBox[]): string {
-    const used = new Set(texts.map((t) => `${t.style.bold ? "700" : "400"}/${t.style.italic ? "italic" : "normal"}`));
-    return FACES.filter((f) => used.has(`${f.weight}/${f.style}`)).map((f) =>
-      `@font-face{font-family:"${TYPST_FAMILY}";font-weight:${f.weight};font-style:${f.style};src:url(data:font/ttf;base64,${base64(faceBytes.get(f.file)!)})}`).join("");
+  async function embeddedFaces(texts: FrozenBox[]): Promise<string> {
+    const noto = texts.filter((t) => !t.style.font);
+    const used = new Set(noto.map((t) => `${t.style.bold ? "700" : "400"}/${t.style.italic ? "italic" : "normal"}`));
+    const rules = FACES.filter((f) => used.has(`${f.weight}/${f.style}`)).map((f) =>
+      `@font-face{font-family:"${TYPST_FAMILY}";font-weight:${f.weight};font-style:${f.style};src:url(data:font/ttf;base64,${base64(faceBytes.get(f.file)!)})}`);
+    for (const ref of usedFaces(texts.map((t) => t.style))) {
+      const bytes = await loadFace(fonts, ref);
+      rules.push(`@font-face{font-family:"${ref.family}";src:url(data:font/ttf;base64,${base64(bytes.buffer)})}`);
+    }
+    return rules.join("");
+  }
+
+  function textStyles(): TextStyle[] {
+    return state.items.filter((i): i is TextItem => i.kind === "text").map((t) => t.style);
+  }
+
+  // usedFaces is the uploaded Faces some of these styles name, once each.
+  function usedFaces(styles: TextStyle[]): FaceRef[] {
+    const out = new Map<string, FaceRef>();
+    for (const st of styles) if (st.font) out.set(st.font.family, st.font);
+    return [...out.values()];
   }
 
   async function bakePNG(dpi: number): Promise<{ blob: Blob; lines: number }> {
@@ -911,7 +949,7 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     try {
       for (const o of out) {
         if ("image" in o) { drawn.push({ img: await loadImage(o.image.url), r: { x: o.image.x - f.x, y: o.image.y - f.y, w: o.image.w, h: o.image.h } }); continue; }
-        const svg = overlaySVG(f.w, f.h, o.overlay, { family: TYPST_FAMILY, fontFaces: embeddedFaces(o.texts) });
+        const svg = overlaySVG(f.w, f.h, o.overlay, { family: TYPST_FAMILY, fontFaces: await embeddedFaces(o.texts) });
         const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
         urls.push(url);
         drawn.push({ img: await loadImage(url), r: { x: 0, y: 0, w: f.w, h: f.h } });
@@ -941,7 +979,9 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
         fd.set(file, new Blob([overlaySVG(f.w, f.h, o.overlay, { family: TYPST_FAMILY })], { type: "image/svg+xml" }), `${file}.svg`);
       }
     });
-    fd.set("layout", JSON.stringify({ w: f.w, h: f.h, bg: f.bg, layers: layout }));
+    const faces = bakeFonts();
+    for (const zip of new Set(faces.map((x) => x.zip))) fd.append("font", new Blob([await fonts.zip(zip)]), `${zip}.zip`);
+    fd.set("layout", JSON.stringify({ w: f.w, h: f.h, bg: f.bg, layers: layout, fonts: faces }));
     status.textContent = S.xyimage.status.working();
     const res = await fetch("/api/xyimage/render", { method: "POST", body: fd, credentials: "same-origin" });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
@@ -1005,7 +1045,15 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     return JSON.stringify({ frame: state.frame, items: recipeItems(state.items.filter((i): i is ImageItem => i.kind === "image")) });
   }
 
+  // bakeFonts is the Recipe's list of the uploaded Faces its overlays use,
+  // which an exporter looks up in the Families it is handed.
+  function bakeFonts(): { zip: string; face: string; family: string; name: string }[] {
+    return usedFaces(textStyles()).map((r) => ({ zip: r.zip, face: r.face, family: r.family, name: r.name }));
+  }
+
   async function serialize(): Promise<Uint8Array> {
+    const missing = state.items.find((i): i is TextItem => i.kind === "text" && !!i.style.font && missingFaces.has(i.style.font.family));
+    if (missing?.kind === "text") throw new Error(S.xyimage.status.fontMissing(missing.style.font!.name));
     const images = state.items.filter((i): i is ImageItem => i.kind === "image");
     const out = exportLayers();
     const f = state.frame;
@@ -1018,7 +1066,7 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
       overlays.push(overlaySVG(f.w, f.h, o.overlay, { family: TYPST_FAMILY }));
       return { kind: "svg", over: overlays.length - 1 };
     });
-    const recipe: Recipe = { v: RECIPE_VERSION, frame: { ...f }, items: recipeItems(images), bake: { w: f.w, h: f.h, bg: f.bg, layers } };
+    const recipe: Recipe = { v: RECIPE_VERSION, frame: { ...f }, items: recipeItems(images), bake: { w: f.w, h: f.h, bg: f.bg, layers, fonts: bakeFonts() } };
     const raster = (await bakePNG(f.dpi)).blob;
     return encodeXyimage({
       recipe: JSON.stringify(recipe),
@@ -1063,6 +1111,8 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
   }
 
   if (opts.file) load(opts.file);
+  bar.append(picker.input);
+  await Promise.all(usedFaces(textStyles()).map(picker.useFace));
   syncItems();
   renderLayers();
   renderProps();

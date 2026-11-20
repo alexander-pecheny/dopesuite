@@ -64,8 +64,19 @@ valign = "По вертикали"
 valign_top = "Сверху"
 valign_middle = "По центру"
 valign_bottom = "Снизу"
+# The font of a text box: its Family (Noto Sans, or one uploaded to the
+# board, ADR-0025) and its Face within it.
+font = "Шрифт"
+face = "Начертание"
+# The button beside the font picker: upload a Family (font files or a zip).
+font_upload = "Загрузить шрифт: файлы TTF или OTF, или zip с ними"
+# A box set in a Family the board no longer has; the parameter is its name.
+font_missing = '{{.name}} (нет на доске)'
+# The bundled Noto Sans's four Faces.
+regular = "Обычный"
 bold = "Жирный"
 italic = "Курсив"
+bold_italic = "Жирный курсив"
 hyphens = "Переносы"
 # The text a new box starts with, selected so that typing replaces it.
 sample = "Текст"
@@ -76,5 +87,20 @@ working = "typst верстает…"
 # Shown while the picture is being baked and uploaded, and once it is.
 saving = "Сохранение…"
 saved = "Сохранено"
+# While an uploaded font is read and stored.
+font_uploading = "Загружаю шрифт…"
+# Saving refused: a box is set in a font that could not be loaded.
+font_missing = 'Шрифта «{{.name}}» нет на доске: выберите для этого текста другой шрифт или загрузите этот заново'
 # Shown when an export is ready; the parameter is the number of frozen lines.
 frozen_lines = 'Строк зафиксировано: {{.n}}'
+
+[fonts]
+# Why an uploaded font file was refused; the parameter is the file's name.
+# typst, which sets the PDF, reads neither WOFF nor WOFF2.
+woff = '{{.file}}: это веб-шрифт WOFF, а нужен TTF или OTF'
+# typst sets only a variable font's default instance.
+variable = '{{.file}}: вариативные шрифты пока не поддерживаются, загрузите отдельные начертания в TTF или OTF'
+collection = '{{.file}}: коллекции шрифтов (TTC) не поддерживаются, загрузите отдельные файлы TTF или OTF'
+notfont = '{{.file}}: это не файл шрифта TTF или OTF'
+empty = '{{.file}}: в нём нет ни одного файла TTF или OTF'
+toobig = '{{.file}}: начертание больше 20 МБ'

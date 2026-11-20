@@ -2133,6 +2133,14 @@ export type Strings = {
     };
   };
   xyimage: {
+    fonts: {
+      collection: (file: string) => string;
+      empty: (file: string) => string;
+      notfont: (file: string) => string;
+      toobig: (file: string) => string;
+      variable: (file: string) => string;
+      woff: (file: string) => string;
+    };
     layers: {
       down: () => string;
       frame: () => string;
@@ -2156,12 +2164,18 @@ export type Strings = {
       alignRight: () => string;
       background: () => string;
       bold: () => string;
+      boldItalic: () => string;
       dpi: () => string;
+      face: () => string;
+      font: () => string;
+      fontMissing: (name: string) => string;
+      fontUpload: () => string;
       frame: () => string;
       h: () => string;
       hyphens: () => string;
       italic: () => string;
       leading: () => string;
+      regular: () => string;
       sample: () => string;
       size: () => string;
       tracking: () => string;
@@ -2174,6 +2188,8 @@ export type Strings = {
       y: () => string;
     };
     status: {
+      fontMissing: (name: string) => string;
+      fontUploading: () => string;
       frozenLines: (n: string) => string;
       saved: () => string;
       saving: () => string;
