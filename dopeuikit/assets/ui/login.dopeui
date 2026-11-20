@@ -19,7 +19,7 @@ page title="{{title}}" kind="sheet" classicscripts="login.js"
   section id="step-username" hidden
     hint @login.username.hint
     form id="usernameForm"
-      textfield id="tgUsername" placeholder=@login.field.username autocapitalize="none" autocomplete="username" spellcheck="false" required autofocus grow
+      textfield id="tgUsername" placeholder=@login.field.username autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false" required autofocus grow
       button submit @login.username.submit
     message id="usernameMessage"
 
