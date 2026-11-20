@@ -137,6 +137,15 @@ card_joker = 'Джокер: весь турнир за столом {{.n}}. Со
 # How many tables play, above the players table.
 tables_note = 'Столов: {{.n}}. Листы 1–{{.n}} — джокеры.'
 
+[refused]
+# Where a refused edit was, in the banner that says it was taken back
+# (widgets.refused.text_at): a team entered on a question, a question's cell
+# cleared or its tick, the shootout.
+entry = 'вопрос {{.q}}, команда {{.team}}'
+question = 'вопрос {{.q}}'
+# A team in that place: its number and name.
+team = '{{.number}} «{{.name}}»'
+
 [venues]
 # The chips that switch a synch fest's OD between the venues' views, and the
 # chip of the whole fest's view.

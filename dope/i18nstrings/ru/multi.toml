@@ -37,6 +37,11 @@ place_sum = "Сумма мест"
 # brackets, the place it earned in that мини-игра.
 score_and_place = '{{.score}} ({{.place}})'
 
+[refused]
+# Where a refused edit was, in the banner that says it was taken back
+# (widgets.refused.text_at): the мини-игра and the team.
+cell = '{{.game}}, {{.team}}'
+
 [refusals]
 # The «Команды» tab: the team and refused-to-play column headers.
 team = "Команда"

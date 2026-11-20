@@ -385,36 +385,21 @@ select exists(select 1 from match_slots ms join matches m on m.id = ms.match_id 
 // keeps its number, unless it has declined; the other active entrants take
 // the numbers left, in list order, and those beyond the Structure's seats are
 // numbered on past them — the waiting list. The Game's entrant record (game_participants) follows
-// when the Game keeps one.
-func seatListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, gameType string, rows []ListRow) error {
+// when the Game keeps one. It returns the bouts whose seats it dealt again.
+func seatListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, gameType string, rows []ListRow) ([]int64, error) {
 	numbers, err := seatNumbersTx(ctx, tx, scope.GameID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	played, err := PlayedParticipants(ctx, tx, scope.GameID, gameType)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	seats := make(map[int]bool, len(numbers))
 	for _, n := range numbers {
 		seats[n] = true
 	}
-	// A declined entrant keeps its place in the bouts it has played, which the
-	// seating never touches, and gives its seat up in the rest.
-	declined := map[int64]bool{}
-	for _, row := range rows {
-		if row.Declined {
-			declined[row.TeamID] = true
-		}
-	}
-	byNumber := map[int]int64{}
-	pinned := map[int64]bool{}
-	for participant, number := range played {
-		if seats[number] && !declined[participant] {
-			byNumber[number] = participant
-			pinned[participant] = true
-		}
-	}
+	byNumber, pinned := pinnedSeats(rows, played, seats)
 	next := 0
 	overflow := 0
 	if len(numbers) > 0 {
@@ -437,7 +422,7 @@ func seatListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, gameType 
 	}
 
 	if _, err := tx.ExecContext(ctx, `delete from game_assignments where game_id = ?`, scope.GameID); err != nil {
-		return err
+		return nil, err
 	}
 	assignments := make(map[[2]int]int64, len(byNumber))
 	ordered := make([]int, 0, len(byNumber))
@@ -449,14 +434,37 @@ func seatListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, gameType 
 		if _, err := tx.ExecContext(ctx, `
 insert into game_assignments(game_id, basket, number, participant_id) values(?, 1, ?, ?)`,
 			scope.GameID, number, byNumber[number]); err != nil {
-			return err
+			return nil, err
 		}
 		assignments[[2]int{1, number}] = byNumber[number]
 	}
-	if err := resolveSeedSlots(ctx, tx, scope.GameID, gameType, assignments); err != nil {
-		return err
+	moved, err := resolveSeedSlots(ctx, tx, scope.GameID, gameType, assignments)
+	if err != nil {
+		return nil, err
 	}
-	return recordSeatedTx(ctx, tx, scope, seats, ordered, byNumber)
+	return moved, recordSeatedTx(ctx, tx, scope, seats, ordered, byNumber)
+}
+
+// pinnedSeats is the seats a bout that has begun holds: each entrant seated
+// in one keeps its number, by number, unless it has declined. A declined
+// entrant keeps its place in the bouts it has played, which the seating never
+// touches, and gives its seat up in the rest.
+func pinnedSeats(rows []ListRow, played map[int64]int, seats map[int]bool) (map[int]int64, map[int64]bool) {
+	declined := map[int64]bool{}
+	for _, row := range rows {
+		if row.Declined {
+			declined[row.TeamID] = true
+		}
+	}
+	byNumber := map[int]int64{}
+	pinned := map[int64]bool{}
+	for participant, number := range played {
+		if seats[number] && !declined[participant] {
+			byNumber[number] = participant
+			pinned[participant] = true
+		}
+	}
+	return byNumber, pinned
 }
 
 // recordSeatedTx rewrites the Game's entrant record — who holds a seat, by
@@ -579,6 +587,7 @@ select id, name, city, game_id is not null from participants where fest_id = ?`,
 			Declined:   row.Declined,
 			Played:     hasResults,
 			OneOff:     current.oneOff,
+			Terms:      row.Terms,
 		}
 		if number, ok := numberOf[row.TeamID]; ok {
 			out.SeedNumber = number

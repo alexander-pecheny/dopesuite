@@ -91,13 +91,15 @@ type View struct {
 }
 
 // Result is what a write answers: the tab afresh, the revision and document it
-// recorded, and whether the Structure was rebuilt, which an open page must
-// reload to draw.
+// recorded, whether the Structure was rebuilt, which an open page must reload
+// to draw, and the bouts whose seats moved (by id), which every page drawing
+// them must be sent again.
 type Result struct {
 	View      View
 	Revision  int64
 	StateJSON []byte
 	Rebuilt   bool
+	Moved     []int64
 }
 
 // Load reads the tab.
@@ -364,7 +366,7 @@ func edit(h Host, reqCtx context.Context, scope core.FestScope, event string,
 			return err
 		}
 		view.Kept = saved.kept
-		result = Result{View: view, Revision: saved.revision, StateJSON: saved.stateJSON, Rebuilt: saved.rebuilt}
+		result = Result{View: view, Revision: saved.revision, StateJSON: saved.stateJSON, Rebuilt: saved.rebuilt, Moved: saved.moved}
 		return nil
 	})
 	return result, err

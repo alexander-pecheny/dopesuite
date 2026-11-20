@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,6 +67,19 @@ type seedImportStateRow struct {
 	Name       string `json:"name"`
 	City       string `json:"city,omitempty"`
 	Declined   bool   `json:"declined,omitempty"`
+	// Terms are what the import sorted the source by, as this entrant had
+	// them; a row the host added by hand has none.
+	Terms []SeedTerm `json:"terms,omitempty"`
+}
+
+// SeedTerm is one value a seed sorted its source by, shown under the name on
+// the entrants tab ("rating: 457"), so the order needs no explaining.
+// termScale rounds a term's value to two decimals.
+const termScale = 100
+
+type SeedTerm struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 type SeedImportView struct {
@@ -90,15 +105,16 @@ type SeedImportView struct {
 // removed nor renamed and its seat no longer moves; OneOff says the host typed
 // it in for this Game alone.
 type SeedImportViewRow struct {
-	SourceRank int    `json:"sourceRank"`
-	SeedNumber int    `json:"seedNumber,omitempty"`
-	TeamID     int64  `json:"teamID"`
-	Name       string `json:"name"`
-	City       string `json:"city,omitempty"`
-	Declined   bool   `json:"declined"`
-	Waitlist   bool   `json:"waitlist"`
-	Played     bool   `json:"played,omitempty"`
-	OneOff     bool   `json:"oneOff,omitempty"`
+	SourceRank int        `json:"sourceRank"`
+	SeedNumber int        `json:"seedNumber,omitempty"`
+	TeamID     int64      `json:"teamID"`
+	Name       string     `json:"name"`
+	City       string     `json:"city,omitempty"`
+	Declined   bool       `json:"declined"`
+	Waitlist   bool       `json:"waitlist"`
+	Played     bool       `json:"played,omitempty"`
+	OneOff     bool       `json:"oneOff,omitempty"`
+	Terms      []SeedTerm `json:"terms,omitempty"`
 }
 
 type SeedDeclineRequest struct {
@@ -151,6 +167,7 @@ type seedCandidate struct {
 	Name       string
 	Number     int
 	Declined   bool
+	Terms      []SeedTerm
 	// ParticipantID names the Participant itself when the source knows it
 	// and a fest number would not find it: a troika, a player, a one-off.
 	ParticipantID int64
@@ -490,6 +507,7 @@ func listFromSeedingTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, pr
 			Name:       candidate.Name,
 			City:       city,
 			Declined:   declined,
+			Terms:      candidate.Terms,
 		})
 	}
 
@@ -513,22 +531,32 @@ where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&gameType, &rawS
 	return gameType, rawState, err
 }
 
+// SavedList is what SaveListTx did: the list as the entrants tab shows it,
+// the revision and game document it recorded, and the bouts whose seats it
+// dealt again (Moved, by id), which the pages drawing them must be told of.
+type SavedList struct {
+	View      SeedImportView
+	Revision  int64
+	StateJSON []byte
+	Moved     []int64
+}
+
 // SaveListTx writes the Game's Entrant list and seats it (seatListTx), records
-// the event and returns the list as the entrants tab shows it, with the
-// document the game-state scope broadcasts. current is the list as it was
-// loaded, whose state blob the new list is written into.
-func SaveListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, current, next List, eventType string) (SeedImportView, int64, []byte, error) {
+// the event and returns what it saved. current is the list as it was loaded,
+// whose state blob the new list is written into.
+func SaveListTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, current, next List, eventType string) (SavedList, error) {
 	stateJSON, err := putSeedImportState(current.Raw, next.State)
 	if err != nil {
-		return SeedImportView{}, 0, nil, err
+		return SavedList{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `
 update games set state_json = ?, updated_at = ?
 where fest_id = ? and id = ?`, string(stateJSON), util.UtcNow(), scope.FestID, scope.GameID); err != nil {
-		return SeedImportView{}, 0, nil, err
+		return SavedList{}, err
 	}
-	if err := seatListTx(ctx, tx, scope, current.GameType, next.State.Rows); err != nil {
-		return SeedImportView{}, 0, nil, err
+	moved, err := seatListTx(ctx, tx, scope, current.GameType, next.State.Rows)
+	if err != nil {
+		return SavedList{}, err
 	}
 	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, eventType, util.MustJSON(map[string]any{
 		"gameID":       scope.GameID,
@@ -537,10 +565,10 @@ where fest_id = ? and id = ?`, string(stateJSON), util.UtcNow(), scope.FestID, s
 		"rows":         len(next.State.Rows),
 	}))
 	if err != nil {
-		return SeedImportView{}, 0, nil, err
+		return SavedList{}, err
 	}
 	view, err := LoadListView(ctx, tx, scope)
-	return view, revision, stateJSON, err
+	return SavedList{View: view, Revision: revision, StateJSON: stateJSON, Moved: moved}, err
 }
 
 func seedImportStateFromRaw(raw string) (seedImportState, error) {
@@ -589,7 +617,10 @@ func previousSeedDeclines(state seedImportState) (map[int64]bool, map[string]boo
 	return byTeam, byName
 }
 
-func resolveSeedSlots(ctx context.Context, tx *sql.Tx, gameID int64, gameType string, assignments map[[2]int]int64) error {
+// resolveSeedSlots deals the seed numbers' Participants into every seed slot
+// of a bout nobody has started, and returns the bouts it dealt into, by id, for
+// the caller to tell the pages that draw them.
+func resolveSeedSlots(ctx context.Context, tx *sql.Tx, gameID int64, gameType string, assignments map[[2]int]int64) ([]int64, error) {
 	type slotRecord struct {
 		ID        int64
 		MatchID   int64
@@ -610,7 +641,7 @@ order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 		return slot, nil
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	touchedMatches := make(map[int64]struct{})
 
@@ -625,15 +656,18 @@ order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 		teamID := assignments[[2]int{basket, number}]
 		touchedMatches[slot.MatchID] = struct{}{}
 		if _, err := tx.ExecContext(ctx, `update match_slots set participant_id = ? where id = ?`, util.NullableInt64(teamID), slot.ID); err != nil {
-			return err
+			return nil, err
 		}
 	}
+	touched := make([]int64, 0, len(touchedMatches))
 	for matchID := range touchedMatches {
 		if err := pruneMatchStateToSlots(ctx, tx, matchID, gameType); err != nil {
-			return err
+			return nil, err
 		}
+		touched = append(touched, matchID)
 	}
-	return nil
+	slices.Sort(touched)
+	return touched, nil
 }
 
 func pruneMatchStateToSlots(ctx context.Context, tx *sql.Tx, matchID int64, gameType string) error {
@@ -727,7 +761,7 @@ where st.stage_id = ? order by st.rank`, []any{stages[0]}, func(rs *sql.Rows) (s
 	if err != nil {
 		return 0, nil, err
 	}
-	candidates, err := rankedCandidates(gameCode, gameType, document, rows, rules)
+	candidates, err := rankedCandidates(gameCode, gameType, document, rows, rules, termNames{})
 	return gameID, candidates, err
 }
 
@@ -768,16 +802,20 @@ func odTourCandidates(ctx context.Context, q store.Queryer, festID int64, gameCo
 		}
 		rows[i] = standingRow{name: team.Name, number: int(team.Number), entry: structure.RankedEntry{Rank: rank, Metrics: metrics}}
 	}
-	candidates, err := rankedCandidates(gameCode, doc.GameType, doc.State, rows, rules)
+	candidates, err := rankedCandidates(gameCode, doc.GameType, doc.State, rows, rules, termNames{od: true, tours: reading.tours})
 	return doc.GameID, candidates, err
 }
 
 // rankedCandidates orders a source's table as seed candidates. The table's
-// own rank comes first (the Structure ranked it, ADR-0011); the [init]
-// sorting rules, when a scheme names some, re-sort within it by the Metrics
-// the Protocol measured. Rows keep their table order as the final tie-break.
-// A team the source document marks as declined comes pre-declined.
-func rankedCandidates(gameCode, gameType, document string, rows []standingRow, rules []store.SchemeSortRule) ([]seedCandidate, error) {
+// own rank comes first (the Structure ranked it, ADR-0011), and teams that
+// share a place go by rating when the table has one: an OD's ties are broken
+// by its rating, as the regulations have it, and its own table leaves them in
+// the order of its teams, which is alphabetical. The [init] sorting rules,
+// when a scheme names some, take the place of both. Rows keep their table
+// order as the final tie-break. A team the source document marks as declined
+// comes pre-declined. Each candidate keeps the values it was sorted by, for
+// the entrants tab to show.
+func rankedCandidates(gameCode, gameType, document string, rows []standingRow, rules []store.SchemeSortRule, names termNames) ([]seedCandidate, error) {
 	if len(rows) == 0 {
 		return nil, corei18n.User(dopestrings.Default.Imports.Seed.SourceNoTeams())
 	}
@@ -788,21 +826,9 @@ func rankedCandidates(gameCode, gameType, document string, rows []standingRow, r
 		}
 		rows[i].entry.Metrics["rank"] = float64(rows[i].entry.Rank)
 	}
-	order := []store.SchemeSortRule{{Metric: "rank", Dir: "asc"}}
-	if len(rules) > 0 {
-		order = rules
-	}
-	for _, rule := range rules {
-		known := false
-		for _, r := range rows {
-			_, known = r.entry.Metrics[rule.Metric]
-			if known {
-				break
-			}
-		}
-		if !known {
-			return nil, corei18n.User(dopestrings.Default.Imports.Seed.MetricUnknown(rule.Metric, gameCode))
-		}
+	order, err := seedOrder(gameCode, rows, rules)
+	if err != nil {
+		return nil, err
 	}
 	less := structure.LessBy(order)
 	sort.SliceStable(rows, func(i, j int) bool { return less(rows[i].entry, rows[j].entry) })
@@ -816,7 +842,8 @@ func rankedCandidates(gameCode, gameType, document string, rows []standingRow, r
 	}
 	candidates := make([]seedCandidate, len(rows))
 	for i, r := range rows {
-		candidates[i] = seedCandidate{SourceRank: i + 1, Name: r.name, Number: r.number, Declined: declined[int64(r.number)]}
+		candidates[i] = seedCandidate{SourceRank: i + 1, Name: r.name, Number: r.number, Declined: declined[int64(r.number)],
+			Terms: names.terms(order, r.entry.Metrics)}
 		// A fest team is found again by its number, which also refreshes its
 		// people from the roster; a player comes as itself.
 		if r.player {
@@ -824,6 +851,100 @@ func rankedCandidates(gameCode, gameType, document string, rows []standingRow, r
 		}
 	}
 	return candidates, nil
+}
+
+// seedOrder is the sort rankedCandidates seeds by: the rules a scheme names,
+// each refused when the table measures no such Metric, else the table's rank
+// with its rating, if it has one, breaking a shared place.
+func seedOrder(gameCode string, rows []standingRow, rules []store.SchemeSortRule) ([]store.SchemeSortRule, error) {
+	measured := func(metric string) bool {
+		return slices.ContainsFunc(rows, func(r standingRow) bool {
+			_, ok := r.entry.Metrics[metric]
+			return ok
+		})
+	}
+	for _, rule := range rules {
+		if !measured(rule.Metric) {
+			return nil, corei18n.User(dopestrings.Default.Imports.Seed.MetricUnknown(rule.Metric, gameCode))
+		}
+	}
+	if len(rules) > 0 {
+		return rules, nil
+	}
+	order := []store.SchemeSortRule{{Metric: "rank", Dir: "asc"}}
+	if measured("rating") {
+		order = append(order, store.SchemeSortRule{Metric: "rating", Dir: "desc"})
+	}
+	return order, nil
+}
+
+// termNames names the Metrics a seed sorted by for the entrants tab. An OD
+// ranks by the questions taken, so its place shows as that total, over the
+// tours the import read (none: all of them).
+type termNames struct {
+	od    bool
+	tours []int
+}
+
+func (n termNames) terms(order []store.SchemeSortRule, metrics map[string]float64) []SeedTerm {
+	var out []SeedTerm
+	for _, rule := range order {
+		metric := rule.Metric
+		if metric == "rank" && n.od {
+			metric = "total"
+		}
+		value, ok := metrics[metric]
+		if !ok {
+			continue
+		}
+		out = append(out, SeedTerm{Label: n.label(metric), Value: fmt.Sprint(math.Round(value*termScale) / termScale)})
+	}
+	return out
+}
+
+func (n termNames) label(metric string) string {
+	switch {
+	case metric == "rank":
+		return dopestrings.Default.Imports.Term.Rank()
+	case metric == "rating":
+		return dopestrings.Default.Imports.Term.Rating()
+	case metric == "total" && n.od && len(n.tours) == 0:
+		return dopestrings.Default.Imports.Term.Taken()
+	case metric == "total" && n.od:
+		return dopestrings.Default.Imports.Term.TakenTours(tourSpan(n.tours), n.tours[len(n.tours)-1])
+	}
+	if tour, err := strconv.Atoi(strings.TrimPrefix(metric, "tour")); err == nil && n.od {
+		return dopestrings.Default.Imports.Term.Tour(strconv.Itoa(tour))
+	}
+	if label, ok := festMetricLabels()[metric]; ok {
+		return strings.ToLower(label())
+	}
+	return metric
+}
+
+// festMetricLabels are the grid's names of a table's Metrics, which a
+// standings source sorts by.
+func festMetricLabels() map[string]func() string {
+	m := dopestrings.Default.Fest.Metric
+	return map[string]func() string{
+		"place_sum": m.PlaceSum, "points_share": m.PointsShare, "taken_share": m.TakenShare,
+		"taken_base": m.TakenBase, "points": m.Points, "taken": m.Taken, "bouts": m.Bouts,
+		"stage": m.Stage, "wins": m.Wins, "losses": m.Losses, "first": m.First, "draw": m.Draw,
+	}
+}
+
+// tourSpan is the tours an import read as a person writes them: «1–2», or
+// «1, 3» when they skip one.
+func tourSpan(tours []int) string {
+	sorted := slices.Sorted(slices.Values(tours))
+	if sorted[len(sorted)-1]-sorted[0] == len(sorted)-1 && len(sorted) > 1 {
+		return fmt.Sprintf("%d–%d", sorted[0], sorted[len(sorted)-1])
+	}
+	parts := make([]string, len(sorted))
+	for i, t := range sorted {
+		parts[i] = strconv.Itoa(t)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // randomSeedCandidates orders the fest's numbered teams by a deterministic

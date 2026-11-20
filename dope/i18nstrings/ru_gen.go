@@ -317,7 +317,7 @@ var RU = Strings{
 				return "Переименовать здесь можно только разового участника. Команду феста переименуйте в списке команд феста, тройку на странице «Тройки»."
 			},
 			ReplaceSelf:   func() string { return "Участника нельзя заменить им самим." },
-			SourceMissing: func() string { return "Выберите, откуда взять список." },
+			SourceMissing: func() string { return "Выберите, откуда загрузить список." },
 		},
 		Filter: EntrantsFilterStrings{
 			All:         func() string { return "Все зачёты" },
@@ -331,15 +331,15 @@ var RU = Strings{
 		},
 		Import: EntrantsImportStrings{
 			ConfirmFresh: func() string {
-				return "Взять список заново из источника без ваших правок? Правки пропадут."
+				return "Загрузить список заново из источника без ваших правок? Правки пропадут."
 			},
 			Done: func(n int) string {
 				return fmt.Sprintf("В списке %d %s.", n, core.Plural("ru", n, "участник", "участника", "участников"))
 			},
 			File:      func() string { return "Файл" },
 			KeepEdits: func(n string) string { return fmt.Sprintf("Сохранить мои правки (%s)", n) },
-			Label:     func() string { return "Откуда взять список" },
-			Run:       func() string { return "Взять список" },
+			Label:     func() string { return "Откуда загрузить список" },
+			Run:       func() string { return "Загрузить список" },
 		},
 		Row: EntrantsRowStrings{
 			DeclinedLabel: func(name string) string { return fmt.Sprintf("Отказ: %s", name) },
@@ -996,7 +996,7 @@ var RU = Strings{
 			CancelBtn: func() string { return "Отмена" },
 			ClearBtn:  func() string { return "Очистить" },
 			ClearConfirm: func() string {
-				return "Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся."
+				return "Очистить игру? Будут удалены все результаты, список участников вместе с отказами и посев: игра вернётся в исходное состояние, и отказы придётся отметить заново. Настройки и ссылка сохранятся."
 			},
 			ColGames:    func() string { return "Игры" },
 			ColNickname: func() string { return "Никнейм" },
@@ -1943,6 +1943,15 @@ var RU = Strings{
 			Random:    func() string { return "жребий" },
 			Troikas:   func() string { return "тройки феста" },
 		},
+		Term: ImportsTermStrings{
+			Rank:   func() string { return "место" },
+			Rating: func() string { return "рейтинг" },
+			Taken:  func() string { return "взятых" },
+			TakenTours: func(tours string, n int) string {
+				return fmt.Sprintf("взятых за %s %s", tours, core.Plural("ru", n, "тур", "тура", "туров"))
+			},
+			Tour: func(n string) string { return fmt.Sprintf("в %s-м туре", n) },
+		},
 	},
 	Journal: JournalStrings{
 		Ek: JournalEkStrings{
@@ -2083,6 +2092,9 @@ var RU = Strings{
 		Refusals: MultiRefusalsStrings{
 			Declined: func() string { return "Отказ" },
 			Team:     func() string { return "Команда" },
+		},
+		Refused: MultiRefusedStrings{
+			Cell: func(game string, team string) string { return fmt.Sprintf("%s, %s", game, team) },
 		},
 		Results: MultiResultsStrings{
 			Place:         func() string { return "М" },
@@ -2348,6 +2360,11 @@ var RU = Strings{
 		Progress: OdProgressStrings{
 			Entered:    func(n string) string { return fmt.Sprintf("Введён вопрос %s", n) },
 			NotStarted: func() string { return "Игра не началась" },
+		},
+		Refused: OdRefusedStrings{
+			Entry:    func(q string, team string) string { return fmt.Sprintf("вопрос %s, команда %s", q, team) },
+			Question: func(q string) string { return fmt.Sprintf("вопрос %s", q) },
+			Team:     func(number string, name string) string { return fmt.Sprintf("%s «%s»", number, name) },
 		},
 		Results: OdResultsStrings{
 			ShootoutCollapse: func() string { return "Свернуть перестрелку" },
@@ -3393,6 +3410,17 @@ var RU = Strings{
 			Label: func() string { return "Скачать лог" },
 			Title: func() string {
 				return "Скачать журнал состояния этой вкладки (для диагностики)"
+			},
+		},
+		Refused: WidgetsRefusedStrings{
+			Bout:  func(letter string) string { return fmt.Sprintf("бой %s", letter) },
+			Close: func() string { return "Закрыть" },
+			More:  func(n string) string { return fmt.Sprintf("и ещё %s", n) },
+			Text: func(reason string) string {
+				return fmt.Sprintf("Правка не сохранилась: %s. Значение на экране вернулось к сохранённому — проверьте и введите ещё раз.", reason)
+			},
+			TextAt: func(places string, reason string) string {
+				return fmt.Sprintf("Правка не сохранилась (%s): %s. Значение на экране вернулось к сохранённому и обведено — проверьте и введите ещё раз.", places, reason)
 			},
 		},
 		ScoreTable: WidgetsScoreTableStrings{

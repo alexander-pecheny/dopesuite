@@ -208,6 +208,9 @@ order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantS
 		team.Source = ref.DisplayLabel()
 		if name.Valid && name.String != "" {
 			team.Name = name.String
+			if team.SourceType == SlotSeed && seated > 0 {
+				team.Seed = ref.Number
+			}
 		} else {
 			team.Name = team.Source
 		}

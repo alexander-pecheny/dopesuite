@@ -43,6 +43,16 @@ export interface EntrantRow {
   waitlist?: boolean;
   played?: boolean;
   oneOff?: boolean;
+  // terms are what the import sorted the source by, as this entrant had
+  // them ("rating: 457").
+  terms?: Array<{label: string; value: string}>;
+}
+
+// entrantSubline is the line under an entrant's name: the city, then the
+// values the list was sorted by, so the order explains itself.
+export function entrantSubline(row: EntrantRow): string | undefined {
+  const terms = (row.terms || []).map((term) => `${term.label}: ${term.value}`).join(" · ");
+  return [row.city, terms].filter(Boolean).join(" · ") || undefined;
 }
 
 export interface EntrantsView {
@@ -383,7 +393,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     } else if (replacing === row.teamID) {
       tr.appendChild(td(replaceField(rows, row)));
     } else {
-      tr.appendChild(ENTRANT_PINS.mark(resultsTeamCell(name, {city: row.city, badges: row.oneOff ? [S.entrants.row.oneOff()] : undefined}), "name"));
+      tr.appendChild(ENTRANT_PINS.mark(resultsTeamCell(name, {city: entrantSubline(row), badges: row.oneOff ? [S.entrants.row.oneOff()] : undefined}), "name"));
     }
 
     const declinedCell = td("", "results-num seed-declined-cell");
