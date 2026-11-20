@@ -459,6 +459,12 @@ async function rebake(bytes: Uint8Array, now: BoardFont): Promise<Uint8Array> {
   } finally { host.remove(); }
 }
 
+// picturesUsing names the board's pictures set in a Family: deleting one
+// is refused while any is (ADR-0025), and only the client can read them.
+async function picturesUsing(hash: string): Promise<string[]> {
+  return (await boardEditedImages()).filter((p) => fontZipsOf(p.bytes).includes(hash)).map((p) => p.att.name);
+}
+
 // replaceFamily moves every picture set in the old Family onto the new one,
 // each put back in place (same id, a new rev), and then lets the old Family
 // go. If a picture fails, the old Family stays for the ones still set in it.
@@ -779,6 +785,7 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
 
   return {
     replaceFamily,
+    picturesUsing,
     cardAttachments,
     attachmentUrl,
     resolveImages,

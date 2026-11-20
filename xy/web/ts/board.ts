@@ -20,6 +20,7 @@ import { createTesterList } from "./testerlist.js";
 import { createBundleExportPanel } from "./bundleexport.js";
 import { createBundleImport } from "./bundleimportpanel.js";
 import { createCopyBoardPanel } from "./copyboard.js";
+import { createFontsPanel } from "./fontspanel.js";
 import { createAuthorCountPanel } from "./authorcount.js";
 import { createAppealsPanels, isAppeals, isManual } from "./appealspanel.js";
 import { appealHeading, createAppealCard } from "./appealcard.js";
@@ -1785,6 +1786,7 @@ registerPanel(
   listsManage.panel,
   labelsEditor.panel,
   labelFilter.panel,
+  createFontsPanel(board, shell, { fonts, picturesUsing: (hash) => attachments.picturesUsing(hash) }),
   { id: "sessions", menu: "board", icon: "flask-conical", label: S.board.sessions.name(), title: S.board.sessions.menuTitle(), open: () => sessionsPanel.open() },
 
   // Board-wide edits

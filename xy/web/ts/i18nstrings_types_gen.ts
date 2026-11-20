@@ -481,10 +481,20 @@ export type Strings = {
       title: () => string;
     };
     fonts: {
+      checking: () => string;
+      confirmDelete: (name: string) => string;
+      delete: () => string;
+      empty: () => string;
+      inUse: (name: string, pictures: string) => string;
+      intro: () => string;
+      label: () => string;
       missing: () => string;
       notReplaced: (name: string) => string;
       offline: () => string;
       replace: (name: string) => string;
+      replaced: () => string;
+      title: () => string;
+      upload: () => string;
     };
     forget: {
       label: () => string;

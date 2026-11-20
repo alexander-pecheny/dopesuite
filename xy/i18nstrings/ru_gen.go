@@ -594,12 +594,30 @@ var RU = Strings{
 			Title: func() string { return "Фильтр по меткам" },
 		},
 		Fonts: BoardFontsStrings{
+			Checking: func() string {
+				return "Проверяю, какие картинки набраны этим шрифтом…"
+			},
+			ConfirmDelete: func(name string) string { return fmt.Sprintf("Удалить шрифт «%s»?", name) },
+			Delete:        func() string { return "Удалить" },
+			Empty:         func() string { return "Пока только встроенный Noto Sans." },
+			InUse: func(name string, pictures string) string {
+				return fmt.Sprintf("Шрифтом «%s» набраны картинки: %s. Сначала поменяйте в них шрифт.", name, pictures)
+			},
+			Intro: func() string {
+				return "Шрифты, которыми можно набирать текст в редакторе картинок. Загрузите файлы TTF или OTF одного семейства, или zip с ними; загрузка под тем же названием заменяет шрифт."
+			},
+			Label:       func() string { return "Шрифты" },
 			Missing:     func() string { return "этого шрифта на доске больше нет" },
 			NotReplaced: func(name string) string { return fmt.Sprintf("Шрифт «%s» оставлен как был", name) },
-			Offline:     func() string { return "Шрифт можно загрузить только в сети" },
+			Offline: func() string {
+				return "Шрифты загружаются и удаляются только в сети"
+			},
 			Replace: func(name string) string {
 				return fmt.Sprintf("На доске уже есть шрифт «%s». Заменить его новыми файлами? Картинки, набранные им, перевёрстаются, и строки в них могут перенестись иначе.", name)
 			},
+			Replaced: func() string { return "заменён более новым" },
+			Title:    func() string { return "Шрифты доски для картинок" },
+			Upload:   func() string { return "Загрузить шрифт" },
 		},
 		Forget: BoardForgetStrings{
 			Label: func() string { return "Забыть пароль доски" },

@@ -98,3 +98,22 @@ Font bytes count towards the Board's quota, with a cap of about 20 MB per Face.
   Transfer, names collide, and a Family changed later would reflow old images.
 - **Deleting freely**, failing exports later; **never deleting a Face**, letting
   storage only grow.
+
+## As built
+
+- A Face goes by `xyf-<first 16 hex of the zip's hash>-<fnv1a of its path>`
+  everywhere: the browser's FontFace, the overlay SVG and typst. The typst
+  guest's `add_named_font` registers it under that family for one generation;
+  `reset_files` drops it. So an upload calling itself Noto Sans can never
+  stand in for the bundled one.
+- The Recipe's `bake.fonts` lists `{zip, face, family, name}` per Face used.
+  Exports receive Family zips as `font` parts keyed by the hash the server
+  computes; a `.4s` in a pack writes them to `fonts/<hash>.zip`.
+- A text box's font is a Family and a Face picker; Noto Sans keeps its
+  bold/italic as four Faces.
+- The replacement re-bakes each image through an editor laid out off-screen
+  (`attachments.replaceFamily`); the old Family is deleted once nothing names it.
+- The ☰ menu's «Шрифты» panel lists, uploads and deletes Families; deleting
+  is refused while a picture is set in one.
+- Not done: a Family's zip is not kept in the offline Mirror, so editing a
+  picture in an uploaded font needs the network.

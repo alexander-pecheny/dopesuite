@@ -985,11 +985,25 @@ move = "Переместить"
 copy_text = "Скопировать"
 
 [fonts]
-# The board's uploaded Font Families (ADR-0025, boardfonts.ts).
+# The board's uploaded Font Families (ADR-0025, boardfonts.ts, fontspanel.ts).
+# The ☰ menu entry and the panel's title.
+label = "Шрифты"
+title = "Шрифты доски для картинок"
+intro = "Шрифты, которыми можно набирать текст в редакторе картинок. Загрузите файлы TTF или OTF одного семейства, или zip с ними; загрузка под тем же названием заменяет шрифт."
+empty = "Пока только встроенный Noto Sans."
+upload = "Загрузить шрифт"
+delete = "Удалить"
+# Marks a Family a newer upload of its name replaced; pictures not yet moved
+# onto the new one still use it.
+replaced = "заменён более новым"
+checking = "Проверяю, какие картинки набраны этим шрифтом…"
+# Deleting is refused while a picture is set in the Family; the names follow.
+in_use = 'Шрифтом «{{.name}}» набраны картинки: {{.pictures}}. Сначала поменяйте в них шрифт.'
+confirm_delete = 'Удалить шрифт «{{.name}}»?'
 # A picture names a Family the board no longer has.
 missing = "этого шрифта на доске больше нет"
-# Uploading needs the server.
-offline = "Шрифт можно загрузить только в сети"
+# Uploading or deleting a font needs the server.
+offline = "Шрифты загружаются и удаляются только в сети"
 # Asked before an upload replaces a Family of the same name. The pictures set
 # in it are moved onto the new files and laid out again, so their lines may
 # fall differently. The parameter is the Family's name.
