@@ -28,6 +28,13 @@ error = "Ошибка"
 # The banner when the server refused an edit and the page took it back: the
 # server's reason, and what the host should do; then the close button.
 text = 'Правка не сохранилась: {{.reason}}. Значение на экране вернулось к сохранённому — проверьте и введите ещё раз.'
+# The same when the page can say where the edit was: one or more places,
+# such as «вопрос 12, команда 7 «Сова»», joined by semicolons.
+text_at = 'Правка не сохранилась ({{.places}}): {{.reason}}. Значение на экране вернулось к сохранённому и обведено — проверьте и введите ещё раз.'
+# After the first few places: how many more edits were refused with them.
+more = 'и ещё {{.n}}'
+# The place of a refused edit on a page of бои: the бой's letter.
+bout = 'бой {{.letter}}'
 close = "Закрыть"
 
 [viewers]

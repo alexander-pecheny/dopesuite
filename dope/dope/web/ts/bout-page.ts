@@ -36,7 +36,8 @@ import {mountGamePage} from "./game-shell.js";
 import type {CursorKind, GameShell} from "./game-shell.js";
 import {notifyEmbeddedResize, parseGameRoute} from "./game-page.js";
 import type {GameInitLike, GameRoute} from "./game-page.js";
-import {fitScrollFade, renderTabBar, showWriteRefused} from "./widgets.js";
+import {fitScrollFade, outlineRefused, renderTabBar, showWriteRefused} from "./widgets.js";
+import type {EditPlace} from "./widgets.js";
 import {gameTabs} from "./game-tabs.js";
 import type {GameKind, GameTab} from "./game-tabs.js";
 import {RESEED_TAB_CODE} from "./game-tabs.js";
@@ -192,7 +193,7 @@ export interface BoutPage<V extends BoutView, S> {
   // The bout's box as drawn now, or null.
   boxOf(code: string): HTMLElement | null;
   // Fetch every bout again, soon; a burst of reasons fetches once.
-  resync(): void;
+  resync(): Promise<void>;
   // Drop the roster tab, so the next drawing builds it afresh.
   invalidateRoster(): void;
   // The fest's venues, one array kept in place, so a dialog opened from an
@@ -468,14 +469,18 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     render();
   }
 
-  let resyncScheduled = false;
-  function resync(): void {
-    if (resyncScheduled) return;
-    resyncScheduled = true;
-    window.setTimeout(() => {
-      resyncScheduled = false;
-      fetchMatches().catch(() => indicator.fail());
-    }, REFETCH_DEBOUNCE_MS);
+  // resync reads every bout again, once for a burst of calls; what it returns
+  // settles when that read is drawn (or failed).
+  let resyncing: Promise<void> | null = null;
+  function resync(): Promise<void> {
+    if (resyncing) return resyncing;
+    resyncing = new Promise<void>((done) => {
+      window.setTimeout(() => {
+        resyncing = null;
+        fetchMatches().catch(() => indicator.fail()).finally(done);
+      }, REFETCH_DEBOUNCE_MS);
+    });
+    return resyncing;
   }
 
   // refreshFest reads the fest view again: the grid's heads carry each bout's
@@ -607,8 +612,11 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     recorder: () => shell.recorder,
     onRejected: (info) => {
       shell.recorder?.event("write-rejected", info);
-      showWriteRefused(info.error);
-      resync();
+      // A bout's edit is named by its bout, whose box is outlined.
+      const code = info.scope.startsWith(matchPrefix) ? info.scope.slice(matchPrefix.length) : "";
+      const places: EditPlace[] = code ? [{label: S.widgets.refused.bout(letters.get(code) || code), cell: () => boxOf(code)}] : [];
+      showWriteRefused(info.error, places.map((place) => place.label));
+      void resync().then(() => outlineRefused(places));
     },
   });
 

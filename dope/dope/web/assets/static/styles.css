@@ -3843,6 +3843,27 @@ body:not(.embedded-match) .grid-match {
   }
 }
 
+/* A cell (or a бой's box) whose edit the server refused and the page took
+   back: outlined in the warning colour beside the banner that names it, then
+   faded (widgets.ts outlineRefused takes the class off at the same time, or
+   at the host's next click). */
+.edit-refused {
+  outline: 2px solid var(--warn-text);
+  outline-offset: -2px;
+  animation: edit-refused-fade 4s ease-in forwards;
+}
+
+@keyframes edit-refused-fade {
+  0%,
+  75% {
+    outline-color: var(--warn-text);
+  }
+
+  100% {
+    outline-color: transparent;
+  }
+}
+
 .match-table.brain-detailed .brain-finish-head,
 .match-table.brain-detailed .brain-finish-gap,
 .troika-sheet .troika-finish-head,

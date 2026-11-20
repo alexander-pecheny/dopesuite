@@ -12,7 +12,8 @@ import S from "./i18nstrings.js";
 import type {ClientRecorder, HostPresence, LiveEvents, PatchPath, ScopedWriter, SyncIndicator} from "./state-sync.js";
 import {bindNameCells} from "./name-cell.js";
 import {bindPinnedScroll} from "./sheet-pins.js";
-import {createStatusReporter, createViewerCounter, floatingPopover, showWriteRefused} from "./widgets.js";
+import {createStatusReporter, createViewerCounter, floatingPopover, outlineRefused, refusedPlaces, showWriteRefused} from "./widgets.js";
+import type {EditPlace} from "./widgets.js";
 import {createGameDataLoader, fetchGameData, gameVenue, mountEditorLink, mountGameDownloads, mountUnnumberedBanner, mountViewerLink, renderGameBreadcrumbs} from "./game-page.js";
 import type {GameDataSnapshot, GameRoute} from "./game-page.js";
 import {cssEscape} from "./cells.js";
@@ -220,6 +221,9 @@ export interface GameDocumentSpec {
   // page is told and the document is fetched again, so the edit the page
   // already shows is taken back.
   onRejected?: (message: string) => void;
+  // Where an edit at path was, for the banner of a refused one and the cell
+  // it outlines; null when the page has no words for it.
+  describeEdit?: (path: PatchPath, value: unknown) => EditPlace | null;
   // Test seam: the stream constructor the engine opens (an EventSource).
   newEventSource?: (url: string) => EventSource;
   // What the page lays over every document the server sends, once, as it
@@ -294,9 +298,10 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
       // there) and fetches the document again.
       onRejected: (info) => {
         shell.recorder?.event("write-rejected", info);
+        const places = refusedPlaces(info.ops, spec.describeEdit);
         if (spec.onRejected) spec.onRejected(info.error);
-        else showWriteRefused(info.error);
-        void live?.resync(scope);
+        else showWriteRefused(info.error, places.map((place) => place.label));
+        void live?.resync(scope).then(() => outlineRefused(places));
       },
     });
     live = createLiveEvents({

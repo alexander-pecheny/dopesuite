@@ -1456,6 +1456,9 @@ shootout: true
       declined: () => "Отказ",
       team: () => "Команда",
     },
+    refused: {
+      cell: (game: string, team: string) => `${game}, ${team}`,
+    },
     results: {
       place: () => "М",
       placeSum: () => "Сумма мест",
@@ -1652,6 +1655,11 @@ shootout: true
     progress: {
       entered: (n: string) => `Введён вопрос ${n}`,
       notStarted: () => "Игра не началась",
+    },
+    refused: {
+      entry: (q: string, team: string) => `вопрос ${q}, команда ${team}`,
+      question: (q: string) => `вопрос ${q}`,
+      team: (number: string, name: string) => `${number} «${name}»`,
     },
     results: {
       shootoutCollapse: () => "Свернуть перестрелку",
@@ -2324,8 +2332,11 @@ shootout: true
       title: () => "Скачать журнал состояния этой вкладки (для диагностики)",
     },
     refused: {
+      bout: (letter: string) => `бой ${letter}`,
       close: () => "Закрыть",
+      more: (n: string) => `и ещё ${n}`,
       text: (reason: string) => `Правка не сохранилась: ${reason}. Значение на экране вернулось к сохранённому — проверьте и введите ещё раз.`,
+      textAt: (places: string, reason: string) => `Правка не сохранилась (${places}): ${reason}. Значение на экране вернулось к сохранённому и обведено — проверьте и введите ещё раз.`,
     },
     scoreTable: {
       place: () => "М",

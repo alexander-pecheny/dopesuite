@@ -20,7 +20,7 @@ import {gameVenue, parseGameRoute, venuePageURL} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {fitScrollFade, installVirtualKeypad, renderTabBar, tabPicker} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
-import type {VirtualKeypad} from "./widgets.js";
+import type {EditPlace, VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
 import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
@@ -297,6 +297,7 @@ const doc = mountGameDocument({
   // A friendship cup's registration can be refused (another host took the
   // card a moment ago): the players tab says why, and the document is fetched
   // again, which takes back the player the page already showed.
+  describeEdit: describeEntryEdit,
   onRejected: kdGame ? (message) => {
     showRefusal(message);
     invalidateTabCache("players");
@@ -497,6 +498,31 @@ function entryIndexByNumber(number: number): number {
 function entryNumbered(): boolean { return od.allTeamsNumbered(entrySheet); }
 function entryTeamNumber(teamIndex: number): number { return od.teamNumber(entrySheet, teamIndex); }
 function entryValidEntries(qIndex: number): number { return od.countValidEntries(entryStats(), qIndex); }
+
+// describeEntryEdit names where a refused edit of the input tab was: the
+// question and the team the host entered there (or the question alone, for a
+// cleared cell or its tick), and the cell to outline when the sheet on screen
+// is the one the edit was on. Other edits go unnamed.
+function describeEntryEdit(path: PatchPath, value: unknown): EditPlace | null {
+  let at = path;
+  if (at[0] === "venues") {
+    if (Number(at[1]) !== sheetVenue) return null;
+    at = at.slice(2);
+  }
+  if (at[0] === "shootoutRounds") return {label: S.od.shootout.title().toLocaleLowerCase("ru")};
+  if (at[0] !== "entries" && at[0] !== "completed") return null;
+  const q = Number(at[1]);
+  if (!Number.isInteger(q)) return null;
+  const question = String(q + 1);
+  if (at[0] === "completed") return {label: S.od.refused.question(question), cell: () => lockCheckboxNode(q)};
+  const row = Number(at[2]);
+  const cell = Number.isInteger(row) ? () => entryCellNode(q, row) : undefined;
+  const number = Number(value) || 0;
+  if (!number) return {label: S.od.refused.question(question), cell};
+  const index = entryIndexByNumber(number);
+  const team = index >= 0 ? S.od.refused.team(String(number), teamLabel(index)) : String(number);
+  return {label: S.od.refused.entry(question, team), cell};
+}
 
 // entryPath is where an edit of the input tab lands: in a synch fest, inside
 // the venue's sheet.
@@ -1960,9 +1986,13 @@ function handleEntryLockKeydown(event: KeyboardEvent, checkbox: HTMLInputElement
 }
 
 // focusLockCheckbox moves keyboard focus to a (non-shootout) column's tickbox.
-function focusLockCheckbox(qIndex: number): boolean {
-  const cb = entryRoot().querySelector<HTMLInputElement>(
+function lockCheckboxNode(qIndex: number): HTMLInputElement | null {
+  return entryRoot().querySelector<HTMLInputElement>(
     `.entry-lock-checkbox[data-q="${cssEscape(String(qIndex))}"]:not([data-entry-kind="shootout"])`);
+}
+
+function focusLockCheckbox(qIndex: number): boolean {
+  const cb = lockCheckboxNode(qIndex);
   if (!cb) return false;
   // Moving onto the tickbox is a move, not a copy: drop the cell cursor so it
   // doesn't stay highlighted on the row below.

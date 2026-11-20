@@ -1434,6 +1434,9 @@ export type Strings = {
       declined: () => string;
       team: () => string;
     };
+    refused: {
+      cell: (game: string, team: string) => string;
+    };
     results: {
       place: () => string;
       placeSum: () => string;
@@ -1630,6 +1633,11 @@ export type Strings = {
     progress: {
       entered: (n: string) => string;
       notStarted: () => string;
+    };
+    refused: {
+      entry: (q: string, team: string) => string;
+      question: (q: string) => string;
+      team: (number: string, name: string) => string;
     };
     results: {
       shootoutCollapse: () => string;
@@ -2302,8 +2310,11 @@ export type Strings = {
       title: () => string;
     };
     refused: {
+      bout: (letter: string) => string;
       close: () => string;
+      more: (n: string) => string;
       text: (reason: string) => string;
+      textAt: (places: string, reason: string) => string;
     };
     scoreTable: {
       place: () => string;

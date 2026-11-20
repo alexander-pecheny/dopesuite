@@ -2093,6 +2093,9 @@ var RU = Strings{
 			Declined: func() string { return "Отказ" },
 			Team:     func() string { return "Команда" },
 		},
+		Refused: MultiRefusedStrings{
+			Cell: func(game string, team string) string { return fmt.Sprintf("%s, %s", game, team) },
+		},
 		Results: MultiResultsStrings{
 			Place:         func() string { return "М" },
 			PlaceSum:      func() string { return "Сумма мест" },
@@ -2357,6 +2360,11 @@ var RU = Strings{
 		Progress: OdProgressStrings{
 			Entered:    func(n string) string { return fmt.Sprintf("Введён вопрос %s", n) },
 			NotStarted: func() string { return "Игра не началась" },
+		},
+		Refused: OdRefusedStrings{
+			Entry:    func(q string, team string) string { return fmt.Sprintf("вопрос %s, команда %s", q, team) },
+			Question: func(q string) string { return fmt.Sprintf("вопрос %s", q) },
+			Team:     func(number string, name string) string { return fmt.Sprintf("%s «%s»", number, name) },
 		},
 		Results: OdResultsStrings{
 			ShootoutCollapse: func() string { return "Свернуть перестрелку" },
@@ -3405,9 +3413,14 @@ var RU = Strings{
 			},
 		},
 		Refused: WidgetsRefusedStrings{
+			Bout:  func(letter string) string { return fmt.Sprintf("бой %s", letter) },
 			Close: func() string { return "Закрыть" },
+			More:  func(n string) string { return fmt.Sprintf("и ещё %s", n) },
 			Text: func(reason string) string {
 				return fmt.Sprintf("Правка не сохранилась: %s. Значение на экране вернулось к сохранённому — проверьте и введите ещё раз.", reason)
+			},
+			TextAt: func(places string, reason string) string {
+				return fmt.Sprintf("Правка не сохранилась (%s): %s. Значение на экране вернулось к сохранённому и обведено — проверьте и введите ещё раз.", places, reason)
 			},
 		},
 		ScoreTable: WidgetsScoreTableStrings{
