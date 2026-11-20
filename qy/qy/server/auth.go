@@ -6,12 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
-	corei18n "code.pecheny.me/pecheny/dopesuite/dopecore/i18nstrings"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authweb"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/tglogin"
 
@@ -30,45 +29,13 @@ var qySessions = authcred.Sessions{
 	UserDest:    func(u *session.User) ([]any, func()) { return []any{&u.Username, &u.Telegram}, nil },
 }
 
-// lookupSession resolves the session cookie to a user. An expired session is
-// deleted; a live one slides, with the browser cookie.
+// lookupSession resolves the session cookie to a user (authweb.CookieSession).
 func (s *server) lookupSession(w http.ResponseWriter, r *http.Request) (session.User, bool) {
-	c, err := r.Cookie(session.CookieName)
-	if err != nil || c.Value == "" {
-		return session.User{}, false
-	}
-	now := time.Now()
-	u, state, slide := qySessions.Lookup(r.Context(), s.db, c.Value, now)
-	switch state {
-	case authcred.NoSession:
-		return session.User{}, false
-	case authcred.Expired:
-		logDropped("session-expire", s.withWriteTx(r.Context(), "session-expire", func(ctx context.Context, tx *sql.Tx) error {
-			return authcred.DeleteSession(ctx, tx, u.SessionID)
-		}))
-		return session.User{}, false
-	}
-	if slide {
-		logDropped("session-refresh", s.withWriteTx(r.Context(), "session-refresh", func(ctx context.Context, tx *sql.Tx) error {
-			return authcred.SlideSession(ctx, tx, u.SessionID, now)
-		}))
-		session.SetCookie(w, c.Value)
-	}
-	return u, true
+	return authweb.CookieSession(w, r, qySessions, s.db, s.withWriteTx)
 }
 
-// usernameRe is the shape of a username: letters, digits and ._- . The length
-// is checked separately so the two refusals can say different things.
-var usernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-
-const (
-	minUsernameLen = 3
-	maxUsernameLen = 64
-)
-
-func validNewUsername(name string) bool {
-	return len(name) >= minUsernameLen && len(name) <= maxUsernameLen && usernameRe.MatchString(name)
-}
+// validNewUsername is the shared rule (authweb.ValidUsername).
+func validNewUsername(name string) bool { return authweb.ValidUsername(name) }
 
 // ---- what the login page asks ----
 
@@ -94,134 +61,60 @@ func (s *server) handleMe(w http.ResponseWriter, _ *http.Request, sc route.Scope
 }
 
 func (s *server) handleLogout(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	if sc.HasUser {
-		logDropped("logout", s.withWriteTx(r.Context(), "logout", func(ctx context.Context, tx *sql.Tx) error {
-			return authcred.DeleteSession(ctx, tx, sc.User.SessionID)
-		}))
-	}
-	session.ClearCookie(w)
-	w.WriteHeader(http.StatusNoContent)
-	return nil
+	return s.web().Logout(w, r, sc.User, sc.HasUser)
 }
-
-// The three answers the login page can get about telegram. Being configured and
-// being usable are different things, and a visitor deserves to know which one
-// failed rather than watching a code no bot will ever collect.
-const (
-	tgStatusOK            = "ok"
-	tgStatusMisconfigured = "misconfigured"
-	tgStatusUnreachable   = "unreachable"
-)
 
 // botUsername is the login bot's @handle, which the t.me deep link is built
 // from. Required for telegram login: a token without a handle advertises a way
 // in and then shows a dead link.
 func botUsername() string { return strings.TrimSpace(os.Getenv("QY_BOT_USERNAME")) }
 
-func (s *server) telegramStatus() string {
-	if s.bot == nil || botUsername() == "" {
-		return tgStatusMisconfigured
+// web is the shared login endpoints (dopecore/authweb) over qy's users table,
+// its write transaction and its words. The handshake carries Accounts as well
+// as Users: /profile links a telegram onto the account a person is already in.
+func (s *server) web() authweb.Web {
+	return authweb.Web{
+		Handshake: tglogin.Handshake{Users: qyUsers{}, Accounts: qyUsers{}},
+		Passwords: qyUsers{},
+		WriteTx:   s.withWriteTx,
+		ReadJSON:  readJSON,
+		Refuse:    func(code int, msg string) error { return &route.Status{Code: code, Msg: msg} },
+		Me: func(ctx context.Context, tx *sql.Tx, id int64) (any, error) {
+			u := session.User{UserID: id}
+			err := tx.QueryRowContext(ctx, `select username, telegram_username from users where id = ?`, id).Scan(&u.Username, &u.Telegram)
+			return meOf(u), err
+		},
+		HasBot:         func() bool { return s.bot != nil },
+		TelegramStatus: func() string { return authweb.TelegramState(s.bot != nil && botUsername() != "", s.botPolling()) },
+		BotUsername:    botUsername,
+		ValidUsername:  validNewUsername,
+		Words: authweb.Words{
+			NotConfigured:   str.Auth.Tg.NotConfigured(),
+			CodeMissing:     str.Auth.Tg.CodeMissing(),
+			CodeNotFound:    str.Auth.Tg.CodeMissing(),
+			UsernameInvalid: str.Auth.Username.Format(),
+			PasswordWrong:   str.Auth.Login.Invalid(),
+			TelegramTaken:   str.Auth.Tg.TelegramTaken(),
+			FieldsRequired:  str.Auth.Login.FieldsRequired(),
+			LoginInvalid:    str.Auth.Login.Invalid(),
+		},
 	}
-	if !s.botPolling() {
-		return tgStatusUnreachable
-	}
-	return tgStatusOK
 }
 
-func (s *server) handleLoginMethods(w http.ResponseWriter, _ *http.Request, _ route.Scope) error {
-	st := s.telegramStatus()
-	return writeJSON(w, map[string]any{"telegram": st == tgStatusOK, "telegram_status": st})
+func (s *server) handleLoginMethods(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	return s.web().Methods(w, r)
 }
-
-// ---- the telegram handshake ----
-
-// The handshake carries Accounts as well as Users: /profile links a telegram
-// onto the account a person is already in, and that is the one step that has to
-// read the account it is about.
-func (s *server) handshake() tglogin.Handshake {
-	return tglogin.Handshake{Users: qyUsers{}, Accounts: qyUsers{}}
-}
-
-type tgStartResponse struct {
-	Code        string `json:"code"`
-	ExpiresAt   string `json:"expires_at"`
-	BotUsername string `json:"bot_username,omitempty"`
-}
-
 func (s *server) handleTgStart(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
-	if s.bot == nil {
-		return &route.Status{
-			Code: http.StatusServiceUnavailable,
-			Msg:  str.Auth.Tg.NotConfigured(),
-		}
-	}
-	var out tgStartResponse
-	err := s.withWriteTx(r.Context(), "tg-start", func(ctx context.Context, tx *sql.Tx) error {
-		res, err := s.handshake().Start(ctx, tx, time.Now())
-		out = tgStartResponse{Code: res.Code, ExpiresAt: rfc3339(res.ExpiresAt), BotUsername: botUsername()}
-		return err
-	})
-	if err != nil {
-		return err
-	}
-	return writeJSON(w, out)
+	return s.web().Start(w, r)
 }
-
-type tgStatusResponse struct {
-	Status   string  `json:"status"`
-	Username *string `json:"username,omitempty"`
-}
-
 func (s *server) handleTgStatus(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
-	code := strings.TrimSpace(r.URL.Query().Get("code"))
-	if code == "" {
-		return corei18n.User(str.Auth.Tg.CodeMissing())
-	}
-	var out tglogin.Outcome
-	err := s.withWriteTx(r.Context(), "tg-status", func(ctx context.Context, tx *sql.Tx) (err error) {
-		out, err = s.handshake().Resolve(ctx, tx, code, time.Now())
-		return err
-	})
-	return writeOutcome(w, out, err)
+	return s.web().Status(w, r)
 }
-
 func (s *server) handleTgClaim(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
-	var req struct {
-		Code     string `json:"code"`
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if err := readJSON(r, &req); err != nil {
-		return err
-	}
-	name := strings.TrimSpace(req.Username)
-	if !validNewUsername(name) {
-		return corei18n.User(str.Auth.Username.Format())
-	}
-	var out tglogin.Outcome
-	err := s.withWriteTx(r.Context(), "tg-claim", func(ctx context.Context, tx *sql.Tx) (err error) {
-		out, err = s.handshake().Claim(ctx, tx, req.Code, name, req.Password, time.Now())
-		switch {
-		case errors.Is(err, tglogin.ErrCodeNotFound):
-			return corei18n.User(str.Auth.Tg.CodeMissing())
-		case errors.Is(err, tglogin.ErrWrongPassword):
-			return corei18n.User(str.Auth.Login.Invalid())
-		case errors.Is(err, tglogin.ErrTelegramLinked):
-			return corei18n.User(str.Auth.Tg.TelegramTaken())
-		}
-		return err
-	})
-	return writeOutcome(w, out, err)
+	return s.web().Claim(w, r)
 }
-
-func writeOutcome(w http.ResponseWriter, out tglogin.Outcome, err error) error {
-	if err != nil {
-		return err
-	}
-	if out.Token != "" {
-		session.SetCookie(w, out.Token)
-	}
-	return writeJSON(w, tgStatusResponse{Status: out.Status, Username: out.Username})
+func (s *server) handleLoginPassword(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	return s.web().LoginPassword(w, r)
 }
 
 // qyUsers is qy's users table as the handshake needs it.
@@ -283,60 +176,8 @@ update users set telegram_user_id = ?, telegram_username = ?, telegram_name = ?,
 	return store.BindTelegram(ctx, tx, id.TelegramUserID, id.Username.String)
 }
 
-// ---- password login ----
-
-func (s *server) handleLoginPassword(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
-	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if err := readJSON(r, &req); err != nil {
-		return err
-	}
-	name := strings.TrimSpace(req.Username)
-	if name == "" || req.Password == "" {
-		return corei18n.User(str.Auth.Login.FieldsRequired())
-	}
-	now := time.Now()
-	var (
-		token string
-		me    meResponse
-	)
-	err := s.withWriteTx(r.Context(), "login-password", func(ctx context.Context, tx *sql.Tx) error {
-		var uid int64
-		var hash, salt, username, telegram sql.NullString
-		row := tx.QueryRowContext(ctx,
-			`select id, password_hash, password_salt, username, telegram_username from users where username = ?`, name)
-		if err := row.Scan(&uid, &hash, &salt, &username, &telegram); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return corei18n.User(str.Auth.Login.Invalid())
-			}
-			return err
-		}
-		ok, upgraded, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, req.Password)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return corei18n.User(str.Auth.Login.Invalid())
-		}
-		if upgraded != "" {
-			if _, err := tx.ExecContext(ctx,
-				`update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
-				upgraded, rfc3339(now), uid); err != nil {
-				return err
-			}
-		}
-		token, err = authcred.CreateSession(ctx, tx, uid, now)
-		if err != nil {
-			return err
-		}
-		me = meOf(session.User{UserID: uid, Username: username, Telegram: telegram})
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	session.SetCookie(w, token)
-	return writeJSON(w, me)
+func (qyUsers) SetPasswordHash(ctx context.Context, tx *sql.Tx, userID int64, hash string, now time.Time) error {
+	_, err := tx.ExecContext(ctx,
+		`update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`, hash, rfc3339(now), userID)
+	return err
 }

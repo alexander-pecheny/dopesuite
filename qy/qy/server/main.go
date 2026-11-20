@@ -42,7 +42,7 @@ func Main() {
 
 	log.Printf("qy %s serving on %s (assets from %s)", buildinfo.Version(), addr, srv.assets.Mode)
 	httpSrv := &http.Server{
-		Handler:           webassets.Gzip(mux),
+		Handler:           webassets.Gzip(srv.web().FinishPending(mux)),
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}

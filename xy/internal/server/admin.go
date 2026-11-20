@@ -7,11 +7,11 @@ import (
 	"errors"
 	"net/http"
 	"os"
-	"regexp"
 	"slices"
 	"time"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authweb"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sameorigin"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
@@ -30,19 +30,14 @@ func (s *server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.U
 	})
 }
 
-// The length limits on a username, in bytes.
+// The length limits on a username, in bytes, and its shape: the shared rule
+// (authweb.ValidUsername).
 const (
-	usernameMinLen = 3
-	usernameMaxLen = 64
+	usernameMinLen = authweb.UsernameMinLen
+	usernameMaxLen = authweb.UsernameMaxLen
 )
 
-// adminUsernameRe allows the same shape the rest of the app uses for logins:
-// letters, digits, and ._- (length is checked separately).
-var adminUsernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-
-func validNewUsername(name string) bool {
-	return len(name) >= usernameMinLen && len(name) <= usernameMaxLen && adminUsernameRe.MatchString(name)
-}
+func validNewUsername(name string) bool { return authweb.ValidUsername(name) }
 
 // adminIndexDoc builds the /admin landing page: a link list of admin tools.
 func adminIndexDoc() *ui.Doc {

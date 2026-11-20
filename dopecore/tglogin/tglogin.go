@@ -176,7 +176,7 @@ from telegram_login_codes where code = ? and kind = 'register'`, code).
 // Resolve polls a code for the login page: a known telegram logs straight in, a
 // new one answers ChooseUsername for Claim.
 func (h Handshake) Resolve(ctx context.Context, tx Tx, code string, now time.Time) (Outcome, error) {
-	code = normalise(code)
+	code = Normalise(code)
 	id, status, err := h.poll(ctx, tx, code, now)
 	if err != nil || status != "" {
 		return Outcome{Status: status}, err
@@ -198,7 +198,7 @@ func (h Handshake) Resolve(ctx context.Context, tx Tx, code string, now time.Tim
 // create and log in; a password account → link once the password is proven;
 // a passwordless account → UsernameTaken.
 func (h Handshake) Claim(ctx context.Context, tx Tx, code, username, password string, now time.Time) (Outcome, error) {
-	code = normalise(code)
+	code = Normalise(code)
 	var (
 		id       Identity
 		tgUserID sql.NullInt64
@@ -271,7 +271,7 @@ func (h Handshake) Link(ctx context.Context, tx Tx, code string, userID int64, n
 	if h.Accounts == nil {
 		return Outcome{}, errNoReader
 	}
-	code = normalise(code)
+	code = Normalise(code)
 	id, status, err := h.poll(ctx, tx, code, now)
 	if err != nil || status != "" {
 		return Outcome{Status: status}, err
@@ -327,7 +327,8 @@ func (h Handshake) burn(ctx context.Context, tx Tx, code string) error {
 	return err
 }
 
-func normalise(code string) string { return strings.ToUpper(strings.TrimSpace(code)) }
+// Normalise is a code as the table keeps it: what a person types may be lower-case or padded.
+func Normalise(code string) string { return strings.ToUpper(strings.TrimSpace(code)) }
 
 // nameOf is the account's username, else fallback, else nil.
 func nameOf(acct Account, fallback string) *string {
