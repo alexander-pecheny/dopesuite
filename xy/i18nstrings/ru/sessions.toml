@@ -73,6 +73,8 @@ team = "команда"
 name_placeholder = "имя…"
 # Tooltip of the × that removes a tester row.
 remove_row = "Удалить строку"
+# The grip a tester's row is dragged by to change their order.
+move_row = "Перетащите, чтобы поменять порядок. Или Alt и стрелка вверх или вниз"
 # Button appending one more empty tester row.
 add = "+ тестер"
 # Button in the test editor copying the «Вопросы тестировали: …» line.

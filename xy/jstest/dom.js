@@ -33,6 +33,8 @@ export class FakeNode {
       contains: (c) => s.has(c),
     };
   }
+  // children is the element children, as in the DOM: kids without the text.
+  get children() { return this.kids.filter((k) => typeof k !== "string"); }
   // textContent replaces the subtree, as in the DOM; reading it flattens it.
   get textContent() { return this._text || this.kids.map((k) => (typeof k === "string" ? k : k.textContent)).join(""); }
   set textContent(v) { this._text = String(v); this.kids = []; }

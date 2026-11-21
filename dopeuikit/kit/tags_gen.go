@@ -556,6 +556,7 @@ var IconFlaskRound = Attr{Name: "icon", Value: "flask-round"}
 var IconFunnel = Attr{Name: "icon", Value: "funnel"}
 var IconGavel = Attr{Name: "icon", Value: "gavel"}
 var IconGrid3x3 = Attr{Name: "icon", Value: "grid-3x3"}
+var IconGripVertical = Attr{Name: "icon", Value: "grip-vertical"}
 var IconHouse = Attr{Name: "icon", Value: "house"}
 var IconImage = Attr{Name: "icon", Value: "image"}
 var IconInfo = Attr{Name: "icon", Value: "info"}

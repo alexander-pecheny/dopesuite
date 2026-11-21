@@ -919,6 +919,7 @@ export type Strings = {
     };
     authors: {
       captionTitle: () => string;
+      moveTitle: () => string;
       placeholder: () => string;
     };
     chip: {
@@ -961,6 +962,7 @@ export type Strings = {
       copyTitle: () => string;
       handout: () => string;
       hndt: () => string;
+      moveRowTitle: () => string;
       nezachet: () => string;
       question: () => string;
       removeRowTitle: () => string;
@@ -2077,6 +2079,7 @@ export type Strings = {
       add: () => string;
       copy: () => string;
       label: () => string;
+      moveRow: () => string;
       namePlaceholder: () => string;
       player: () => string;
       removeRow: () => string;

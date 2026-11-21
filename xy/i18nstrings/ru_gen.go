@@ -1182,7 +1182,10 @@ var RU = Strings{
 		},
 		Authors: CardAuthorsStrings{
 			CaptionTitle: func() string { return "Подпись поля в экспорте" },
-			Placeholder:  func() string { return "имя автора…" },
+			MoveTitle: func() string {
+				return "Перетащите, чтобы поменять порядок авторов"
+			},
+			Placeholder: func() string { return "имя автора…" },
 		},
 		Chip: CardChipStrings{
 			RemoveAria: func(title string, name string) string { return fmt.Sprintf("%s: %s", title, name) },
@@ -1230,17 +1233,20 @@ var RU = Strings{
 			CopyTitle:        func() string { return "Скопировать текст поля" },
 			Handout:          func() string { return "Раздаточный материал" },
 			Hndt:             func() string { return "Доп. разметка для генерации раздаток" },
-			Nezachet:         func() string { return "Незачёт" },
-			Question:         func() string { return "Текст вопроса" },
-			RemoveRowTitle:   func() string { return "Удалить строку" },
-			RemoveTitle:      func() string { return "Убрать поле" },
-			Source:           func() string { return "Источник" },
-			SourceToImage:    func() string { return "Сделать картинкой" },
-			SourceToText:     func() string { return "Сделать текстом" },
-			ThemeAuthor:      func() string { return "Автор темы" },
-			ThemeComment:     func() string { return "Комментарий к теме" },
-			ThemeName:        func() string { return "Тема" },
-			Zachet:           func() string { return "Зачёт" },
+			MoveRowTitle: func() string {
+				return "Перетащите, чтобы поменять порядок. Или Alt и стрелка вверх или вниз"
+			},
+			Nezachet:       func() string { return "Незачёт" },
+			Question:       func() string { return "Текст вопроса" },
+			RemoveRowTitle: func() string { return "Удалить строку" },
+			RemoveTitle:    func() string { return "Убрать поле" },
+			Source:         func() string { return "Источник" },
+			SourceToImage:  func() string { return "Сделать картинкой" },
+			SourceToText:   func() string { return "Сделать текстом" },
+			ThemeAuthor:    func() string { return "Автор темы" },
+			ThemeComment:   func() string { return "Комментарий к теме" },
+			ThemeName:      func() string { return "Тема" },
+			Zachet:         func() string { return "Зачёт" },
 		},
 		Handout: CardHandoutStrings{
 			Attach:      func() string { return "Прикрепить…" },
@@ -2743,9 +2749,12 @@ var RU = Strings{
 			},
 		},
 		Testers: SessionsTestersStrings{
-			Add:             func() string { return "+ тестер" },
-			Copy:            func() string { return "Скопировать список тестеров" },
-			Label:           func() string { return "Тестировали" },
+			Add:   func() string { return "+ тестер" },
+			Copy:  func() string { return "Скопировать список тестеров" },
+			Label: func() string { return "Тестировали" },
+			MoveRow: func() string {
+				return "Перетащите, чтобы поменять порядок. Или Alt и стрелка вверх или вниз"
+			},
 			NamePlaceholder: func() string { return "имя…" },
 			Player:          func() string { return "игрок" },
 			RemoveRow:       func() string { return "Удалить строку" },

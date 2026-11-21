@@ -11,6 +11,7 @@ import {
   sessionLabel, zoneOffset,
 } from "./sessions.js";
 import S from "./i18nstrings.js";
+import { grip, reorderable } from "./reorderable.js";
 import { xyApp } from "./app.js";
 import { TOWNS } from "./towns.js";
 import { autocomplete, type Choice } from "./kit/suggest.js";
@@ -256,7 +257,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       const inp = el("input", { class: "input fld-row-input", type: "text", value: (t && t.text) || "", placeholder: S.sessions.testers.namePlaceholder(), autocomplete: "off" }) as HTMLInputElement;
       autocomplete(inp, testerChoices);
       const rm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: S.sessions.testers.removeRow() });
-      const row = el("div", { class: "fld-row tester-row" }, seg, inp, rm);
+      const row = el("div", { class: "fld-row tester-row" }, grip(S.sessions.testers.moveRow()), seg, inp, rm);
       rm.addEventListener("click", () => row.remove());
       (row as TesterRow)._read = () => ({ text: inp.value, type });
       // Enter opens the next row, so a list of testers can be typed without the
@@ -295,6 +296,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       else rows.append(row);
       return inp;
     };
+    reorderable(rows, { item: ".tester-row", handle: ".reorder-grip", axis: "y" });
     (m.testers.length ? m.testers : [{ text: "", type: "player" as const }]).forEach((t) => addRow(t));
     const add = el("button", { class: "input fld-add-row", type: "button", text: S.sessions.testers.add() });
     add.addEventListener("click", () => addRow({ text: "", type: "player" }).focus());

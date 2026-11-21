@@ -52,6 +52,8 @@ copy_title = "Скопировать текст поля"
 add_row = "+ строка"
 # Tooltip of a source row's "×".
 remove_row_title = "Удалить строку"
+# The grip a source line is dragged by to change the order of the sources.
+move_row_title = "Перетащите, чтобы поменять порядок. Или Alt и стрелка вверх или вниз"
 # The button adding a source row that is a picture, and its tooltip.
 add_image_row = "+ картинка"
 add_image_row_title = "Добавить источник-картинку"
@@ -80,6 +82,8 @@ attach_title = "Загрузить картинку и подставить её
 [authors]
 # Placeholder of the author tag input.
 placeholder = "имя автора…"
+# An author's tag is dragged to change the order the authors print in.
+move_title = "Перетащите, чтобы поменять порядок авторов"
 # Tooltip of the caption <select> (Автор / Авторка / … — chgk.toml [author]).
 caption_title = "Подпись поля в экспорте"
 

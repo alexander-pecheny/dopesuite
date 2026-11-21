@@ -34,6 +34,7 @@ import type { CardEvent } from "./timeline.js";
 import type { Transfer } from "./transfer.js";
 import { icon, iconed } from "./icons_gen.js";
 import S from "./i18nstrings.js";
+import { grip, moveIndex, reorderable } from "./reorderable.js";
 import chgkStrings from "./chgk/i18nstrings.js";
 
 const { fetchJSON, jpost, jput, jdelete, el, onCmdEnter } = xyApp;
@@ -786,13 +787,16 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const addBtn = el("button", { class: "fld-add", type: "button", text: S.card.field.add(S.card.field.source()), title: S.card.field.addTitle() });
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: S.card.field.removeTitle() });
     const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: S.card.field.source() }), rmBtn);
+    // The rows read back in the order they stand, which their grips change.
     const rows = el("div", { class: "fld-rows" });
-    const readers: Array<{ row: HTMLElement; read(): string }> = [];
+    const readers = new WeakMap<Element, () => string>();
+    const lines = (): string[] => [...rows.children].map((row) => readers.get(row)?.() ?? "");
+    reorderable(rows, { item: ".fld-row", handle: ".reorder-grip", axis: "y" });
     const addRow = (val: string, asImage = false): HTMLElement => {
       const r = sourceRow(val, asImage, suggestions, () => addRow("").focus());
-      const reader = { row: r.row, read: r.read };
-      readers.push(reader);
-      r.remove.addEventListener("click", () => { r.row.remove(); readers.splice(readers.indexOf(reader), 1); });
+      r.row.prepend(grip(S.card.field.moveRowTitle()));
+      readers.set(r.row, r.read);
+      r.remove.addEventListener("click", () => { r.row.remove(); });
       rows.append(r.row);
       return r.focusable();
     };
@@ -804,11 +808,11 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     let present = initial !== null && initial !== undefined;
     (present ? ((initial as string[]).length ? (initial as string[]) : [""]) : []).forEach((s) => addRow(s));
     const sync = (): void => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; wrap.classList.toggle("fld-present", present); };
-    addBtn.addEventListener("click", () => { present = true; if (!readers.length) addRow(""); sync(); });
+    addBtn.addEventListener("click", () => { present = true; if (!rows.children.length) addRow(""); sync(); });
     rmBtn.addEventListener("click", () => { present = false; sync(); });
     wrap.append(addBtn, head, body);
     sync();
-    return { node: wrap, read: () => (present ? readers.map((r) => r.read()) : null) };
+    return { node: wrap, read: () => (present ? lines() : null) };
   }
 
   // sourceRow is one line of the sources: text, or a picture when the whole line is
@@ -876,9 +880,14 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       tags.replaceChildren(...tagSet.map((t, i) => {
         const rm = el("button", { class: "fld-tag-rm", type: "button", text: "×" });
         rm.addEventListener("click", () => { tagSet.splice(i, 1); renderTags(); });
-        return el("span", { class: "fld-tag" }, document.createTextNode(t), rm);
+        return el("span", { class: "fld-tag", title: S.card.authors.moveTitle() }, document.createTextNode(t), rm);
       }));
     };
+    // An author's tag is dragged by itself, to put the authors in print order.
+    reorderable(tags, {
+      item: ".fld-tag", handle: ".fld-tag", axis: "x",
+      moved: (from, to) => { tagSet.splice(0, tagSet.length, ...moveIndex(tagSet, from, to)); renderTags(); },
+    });
     const commit = (): void => { const v = inp.value.trim(); if (v) { tagSet.push(v); inp.value = ""; renderTags(); } };
     // suggestWrap first, so its keydown handler outranks the Enter-commit below.
     const inpWrap = suggestWrap(inp, suggestions, commit);

@@ -204,6 +204,7 @@ var IconFlaskRound = base.IconFlaskRound
 var IconFunnel = base.IconFunnel
 var IconGavel = base.IconGavel
 var IconGrid3x3 = base.IconGrid3x3
+var IconGripVertical = base.IconGripVertical
 var IconHouse = base.IconHouse
 var IconImage = base.IconImage
 var IconInfo = base.IconInfo
