@@ -27,6 +27,9 @@ replace = "Заменить"
 delete = "Удалить"
 # Opens the image editor (ADR-0024) on a picture.
 edit = "Редактировать"
+# Saves the attachment's file as it is stored: for an Edited Image, the
+# .xyimage itself, which clicking its name (the lightbox) does not give.
+download = "Скачать"
 # The excerpt toggle item.
 excerpt = "Выписка"
 

@@ -181,6 +181,7 @@ export const RU: Strings = {
     },
     menu: {
       delete: () => "Удалить",
+      download: () => "Скачать",
       edit: () => "Редактировать",
       excerpt: () => "Выписка",
       replace: () => "Заменить",

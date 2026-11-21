@@ -232,10 +232,11 @@ var RU = Strings{
 			FallbackName: func() string { return "файл" },
 		},
 		Menu: AttachmentsMenuStrings{
-			Delete:  func() string { return "Удалить" },
-			Edit:    func() string { return "Редактировать" },
-			Excerpt: func() string { return "Выписка" },
-			Replace: func() string { return "Заменить" },
+			Delete:   func() string { return "Удалить" },
+			Download: func() string { return "Скачать" },
+			Edit:     func() string { return "Редактировать" },
+			Excerpt:  func() string { return "Выписка" },
+			Replace:  func() string { return "Заменить" },
 		},
 		Name: AttachmentsNameStrings{
 			DefaultStem:  func() string { return "вставка" },

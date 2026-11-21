@@ -180,6 +180,7 @@ export type Strings = {
     };
     menu: {
       delete: () => string;
+      download: () => string;
       edit: () => string;
       excerpt: () => string;
       replace: () => string;

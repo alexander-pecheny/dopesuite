@@ -277,6 +277,9 @@ function attachMenu(anchor: HTMLElement, att: NamedAttachment, name: string): vo
     : [];
   deps.popupMenu(anchor, [
     ...edit,
+    // A picture's name opens the lightbox, so its file is fetched from here:
+    // an Edited Image's .xyimage, which the lightbox only shows the raster of.
+    { icon: icon("file-down"), label: S.attachments.menu.download(), onClick: () => { void download(att, name); } },
     { icon: icon("replace"), label: S.attachments.menu.replace(), onClick: () => pickReplacement(att, name) },
     { icon: icon("trash-2"), label: S.attachments.menu.delete(), onClick: () => { void removeAttachment(att, name); } },
     {
