@@ -266,6 +266,15 @@ func statusName(q store.Question) string {
 	return str.Admin.Question.New()
 }
 
+// publishedBadge says whether the question was public before the contest,
+// which decides whether the people's jury reads it.
+func publishedBadge(q store.Question) ui.Item {
+	if q.Published {
+		return ui.Badge(ui.BadgePositive, text(str.Admin.Questions.PublishedYes()))
+	}
+	return ui.Badge(ui.BadgeNeutral, text(str.Admin.Questions.PublishedNo()))
+}
+
 // datesNote says whether the tournament started inside the window of
 // eligible tournaments.
 func datesNote(c contest.Contest, q store.Question) string {
@@ -320,12 +329,13 @@ func (s *server) handleQuestionList(w http.ResponseWriter, r *http.Request, _ ro
 	filters := ui.Row(ui.SpaceSM, ui.Wrap(), filterButton("", str.Admin.Questions.All(strconv.Itoa(all))),
 		filterButton(inPending, str.Admin.Questions.Pending(strconv.Itoa(withPending))))
 	rows := []ui.Item{ui.Scroll(), headRow(str.Admin.Questions.Number(), str.Admin.Questions.Answer(),
-		str.Admin.Questions.Status(), str.Admin.Questions.Suggestions(), str.Admin.Questions.Dates())}
+		str.Admin.Questions.Status(), str.Admin.Questions.Published(), str.Admin.Questions.Suggestions(), str.Admin.Questions.Dates())}
 	for _, q := range qs {
 		rows = append(rows, ui.Trow(
 			ui.Cell(ui.Button(ui.Href(withFilter(questionHref(q.ID), f)), ui.Ghost, ui.Small(), text(questionName(q)))),
 			ui.Cell(text(clip(q.Orig.Answer, answerPreview))),
 			ui.Cell(text(statusName(q))),
+			ui.Cell(publishedBadge(q)),
 			ui.Cell(text(strconv.Itoa(pending[q.ID]))),
 			ui.Cell(text(datesNote(c, q)))))
 	}

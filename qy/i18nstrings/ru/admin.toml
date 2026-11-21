@@ -101,6 +101,11 @@ answer = "Ответ"
 status = "Статус"
 suggestions = "Правки"
 dates = "Даты"
+published = "Публикация"
+# Whether the question was public before the contest: the people's jury
+# reads only the published ones.
+published_yes = "Опубликован"
+published_no = "Не опубликован"
 all = 'Все: {{.n}}'
 pending = 'С правками: {{.n}}'
 

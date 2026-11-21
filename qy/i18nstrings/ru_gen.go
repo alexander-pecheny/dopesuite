@@ -249,11 +249,14 @@ var RU = Strings{
 			Count: func(n int) string {
 				return fmt.Sprintf("Всего %d %s.", n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"))
 			},
-			Dates:       func() string { return "Даты" },
-			Number:      func() string { return "Номер" },
-			Pending:     func(n string) string { return fmt.Sprintf("С правками: %s", n) },
-			Status:      func() string { return "Статус" },
-			Suggestions: func() string { return "Правки" },
+			Dates:        func() string { return "Даты" },
+			Number:       func() string { return "Номер" },
+			Pending:      func(n string) string { return fmt.Sprintf("С правками: %s", n) },
+			Published:    func() string { return "Публикация" },
+			PublishedNo:  func() string { return "Не опубликован" },
+			PublishedYes: func() string { return "Опубликован" },
+			Status:       func() string { return "Статус" },
+			Suggestions:  func() string { return "Правки" },
 		},
 		Site: AdminSiteStrings{
 			Files: func() string { return "Файлы" },

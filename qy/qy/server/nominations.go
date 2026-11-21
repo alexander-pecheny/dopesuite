@@ -183,8 +183,8 @@ func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]sto
 			continue
 		}
 		q := byID[sl.questionID]
-		items := []ui.Item{ui.Row(ui.Button(ui.Href(questionHref(q.ID)), ui.Ghost, ui.Small(),
-			text(str.Admin.Nominations.Slot(questionName(q), statusName(q)))))}
+		items := []ui.Item{ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(), ui.Button(ui.Href(questionHref(q.ID)), ui.Ghost, ui.Small(),
+			text(str.Admin.Nominations.Slot(questionName(q), statusName(q)))), publishedBadge(q))}
 		body := "<p>" + plain(q.SourceText) + "</p>"
 		if !q.Orig.Empty() {
 			body = questionHTML(card{qy: q.QY, q: q.Orig, images: imageLinks(q), tournament: q.TournamentTitle})

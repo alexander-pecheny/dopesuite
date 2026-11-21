@@ -185,6 +185,9 @@ export type Strings = {
       dates: () => string;
       number: () => string;
       pending: (n: string) => string;
+      published: () => string;
+      publishedNo: () => string;
+      publishedYes: () => string;
       status: () => string;
       suggestions: () => string;
     };
