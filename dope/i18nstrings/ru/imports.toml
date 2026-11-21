@@ -68,6 +68,20 @@ metric_unknown = 'sorting: {{.metric}} — игра {{.code}} такой мет�
 # The random lot over a fest with no numbered teams.
 no_numbered_teams = "в фесте нет пронумерованных команд"
 
+[term]
+# The values a seed sorted its source by, under each name on the entrants
+# tab: «взятых за 1–2 тура: 15 · рейтинг: 457». The place in the source's
+# table.
+rank = "место"
+# An OD's rating.
+rating = "рейтинг"
+# An OD's questions taken, over all its tours, or over the tours the import
+# read ({{.tours}} is «1–2» or «1, 3»; {{.n}} is the last of them).
+taken = "взятых"
+taken_tours = 'взятых за {{.tours}} {{plural .n "тур" "тура" "туров"}}'
+# The questions taken in one tour of an OD.
+tour = 'в {{.n}}-м туре'
+
 [seed_players]
 # The fromPlayers source ([init] seed: players): checks on the scheme's
 # declarations, before anything is read.

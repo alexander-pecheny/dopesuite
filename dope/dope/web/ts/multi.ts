@@ -15,6 +15,7 @@ import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {fitScrollFade, renderTabBar} from "./widgets.js";
+import type {EditPlace} from "./widgets.js";
 import {declarePins, sheetHead} from "./sheet-pins.js";
 import type {Pins} from "./sheet-pins.js";
 import {icon, iconed} from "./icons_gen.js";
@@ -110,7 +111,21 @@ const doc = mountGameDocument({
   adopt: adoptGameSnapshot,
   apply: applyRemoteState,
   current: () => ({scheme, state, fest}),
+  describeEdit: describeCellEdit,
 });
+
+// describeCellEdit names where a refused cell was, by its mini-game and its
+// team, and finds that cell.
+function describeCellEdit(path: ReadonlyArray<string | number>): EditPlace | null {
+  const [head, gameAt, part, participantAt, columnAt] = path;
+  if (head !== "games" || part !== "cells") return null;
+  const [game, participant, column] = [gameAt, participantAt, columnAt].map(Number);
+  if (![game, participant, column].every(Number.isInteger) || !state || !rules.minigames[game]) return null;
+  return {
+    label: S.multi.refused.cell(rules.minigames[game].name, multi.participantName(state, participant)),
+    cell: () => root.querySelector(`.multi-cell[data-participant="${participant}"][data-game="${game}"][data-column="${column}"]`),
+  };
+}
 
 function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest}: GameDataSnapshot): void {
   scheme = nextScheme as MultiScheme;

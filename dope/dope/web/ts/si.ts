@@ -15,6 +15,7 @@ import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {clamp, fitScrollFade, renderTabBar} from "./widgets.js";
+import type {EditPlace} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
@@ -152,6 +153,7 @@ const doc = mountGameDocument({
   adopt: adoptGameSnapshot,
   apply: applyRemoteState,
   current: () => ({scheme, state, fest}),
+  describeEdit: describeAnswerEdit,
   onRoster: () => {
     siRosterView = null;
     if (activeTab === "roster") render();
@@ -903,9 +905,18 @@ function isActivePlayerRow(playerIndex: number): boolean {
   return !state!.finished && !viewer && isDetailedTabActive() && activeCell.player === playerIndex;
 }
 
+// describeAnswerEdit names where a refused mark was, as its cell's tooltip
+// does (the team, the theme, the question's value), and finds that cell.
+function describeAnswerEdit(path: ReadonlyArray<string | number>): EditPlace | null {
+  const [head, themeAt, part, playerAt, answerAt] = path;
+  if (head !== "themes" || part !== "answers") return null;
+  const [theme, player, answer] = [themeAt, playerAt, answerAt].map(Number);
+  if (![theme, player, answer].every(Number.isInteger)) return null;
+  return {label: answerTitle(player, theme, answer), cell: () => answerCellNode(player, theme, answer) ?? null};
+}
+
 function updateAnswerCell(player: number, theme: number, answer: number, mark: string): void {
-  const cell = tableIndex?.get("answer", {player, theme, answer}) ||
-    siRoot.querySelector<HTMLElement>(`.answer-cell[data-player="${cssEscape(String(player))}"][data-theme="${cssEscape(String(theme))}"][data-answer="${cssEscape(String(answer))}"]`);
+  const cell = answerCellNode(player, theme, answer);
   if (!cell) return;
   setMarkClass(cell, mark);
   cell.title = answerTitle(player, theme, answer);

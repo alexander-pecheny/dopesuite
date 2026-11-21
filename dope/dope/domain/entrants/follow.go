@@ -30,6 +30,8 @@ type applied struct {
 	stateJSON []byte
 	rebuilt   bool
 	kept      string
+	// moved is the bouts whose seats the list dealt again, by id.
+	moved []int64
 }
 
 // applyListTx saves a Game's Entrant list (CONTEXT.md) and seats it. An
@@ -53,7 +55,8 @@ select coalesce(scheme_dsl, ''), coalesce(scheme_json, '{}') from games where id
 			return out, err
 		}
 	}
-	out.view, out.revision, out.stateJSON, err = imports.SaveListTx(ctx, tx, scope, current, next, event)
+	saved, err := imports.SaveListTx(ctx, tx, scope, current, next, event)
+	out.view, out.revision, out.stateJSON, out.moved = saved.View, saved.Revision, saved.StateJSON, saved.Moved
 	return out, err
 }
 

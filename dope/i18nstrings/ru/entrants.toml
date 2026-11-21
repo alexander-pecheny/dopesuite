@@ -31,13 +31,13 @@ not_carrying = 'Не из зачёта «{{.flag}}»'
 
 [import]
 # The picker's label, and the button that runs it.
-label = "Откуда взять список"
-run = "Взять список"
+label = "Откуда загрузить список"
+run = "Загрузить список"
 # Beside the import button when the list was edited by hand: a re-import
 # applies those edits again unless the box is cleared (ADR-0025).
 keep_edits = 'Сохранить мои правки ({{.n}})'
 # Confirm before an import that drops the hand edits.
-confirm_fresh = "Взять список заново из источника без ваших правок? Правки пропадут."
+confirm_fresh = "Загрузить список заново из источника без ваших правок? Правки пропадут."
 # The file field of the xlsx source.
 file = "Файл"
 # The notice after an import.
@@ -111,7 +111,7 @@ summary = 'Мест в сетке: {{.size}}, занято {{.seated}}. Всег
 failed = 'Не получилось: {{.err}}'
 
 [error]
-source_missing = "Выберите, откуда взять список."
+source_missing = "Выберите, откуда загрузить список."
 pick_somebody = "Выберите участника из списка или впишите название."
 already_in = '«{{.name}}» уже в списке.'
 name_taken = 'В списке уже есть «{{.name}}».'

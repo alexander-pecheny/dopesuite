@@ -849,3 +849,87 @@ export function fitScrollFade(frame: Element | null | undefined): void {
   observeChildren();
   apply();
 }
+
+// EditPlace is where a refused edit was: the words the banner names it by
+// ("question 12, team 7") and the cell the page outlines, looked up
+// after the page has drawn the saved document again.
+export interface EditPlace {
+  label: string;
+  cell?: () => Element | null;
+}
+
+// The banner names at most this many places, then counts the rest.
+const REFUSED_PLACES_SHOWN = 3;
+// How long a refused cell keeps its outline (the CSS fade is this long).
+const REFUSED_OUTLINE_MS = 4000;
+
+// refusedPlaces turns a refused batch's ops into the places a page describes,
+// one per distinct label, in the order the host made them.
+export function refusedPlaces(ops: ReadonlyArray<{path: ReadonlyArray<string | number>; value: unknown}>, describe?: (path: ReadonlyArray<string | number>, value: unknown) => EditPlace | null): EditPlace[] {
+  if (!describe) return [];
+  const places: EditPlace[] = [];
+  const seen = new Set<string>();
+  for (const op of ops) {
+    const place = describe(op.path, op.value);
+    if (!place || seen.has(place.label)) continue;
+    seen.add(place.label);
+    places.push(place);
+  }
+  return places;
+}
+
+// outlineRefused outlines the cells of the refused places, so the host sees
+// which values went back; the outline fades, or goes at the host's next click.
+export function outlineRefused(places: readonly EditPlace[]): void {
+  const cells = places.map((place) => place.cell?.()).filter((cell): cell is Element => Boolean(cell));
+  if (cells.length === 0) return;
+  const clear = () => {
+    for (const cell of cells) cell.classList.remove("edit-refused");
+    document.removeEventListener("pointerdown", clear, true);
+  };
+  for (const cell of cells) cell.classList.add("edit-refused");
+  window.setTimeout(clear, REFUSED_OUTLINE_MS);
+  document.addEventListener("pointerdown", clear, true);
+}
+
+function refusedPlacesText(places: readonly string[]): string {
+  const shown = places.slice(0, REFUSED_PLACES_SHOWN);
+  const rest = places.length - shown.length;
+  return rest > 0 ? [...shown, S.widgets.refused.more(String(rest))].join("; ") : shown.join("; ");
+}
+
+// showWriteRefused tells the host that the server refused an edit and the page
+// took it back: without it the cell only reverted after its spinner, and at
+// Polyfest the hosts noticed late and entered the value again. It names where
+// the edit was when the page could say. One banner at a time, a newer refusal
+// replacing the older; it stays until closed.
+export function showWriteRefused(reason: string, places: readonly string[] = []): HTMLElement {
+  document.querySelector("[data-write-refused]")?.remove();
+  const bar = document.createElement("div");
+  bar.dataset.writeRefused = "";
+  bar.setAttribute("role", "alert");
+  Object.assign(bar.style, {
+    position: "sticky",
+    top: "0",
+    zIndex: "2147483601",
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "var(--warn-bg)",
+    color: "var(--warn-text)",
+    font: "13px/1.4 system-ui, sans-serif",
+    padding: "8px 12px",
+  });
+  const text = document.createElement("span");
+  const why = reason.trim() || S.widgets.status.error();
+  text.textContent = places.length > 0 ? S.widgets.refused.textAt(refusedPlacesText(places), why) : S.widgets.refused.text(why);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = S.widgets.refused.close();
+  Object.assign(close.style, {font: "inherit", fontWeight: "600", color: "inherit", background: "none", border: "1px solid currentColor", borderRadius: "4px", padding: "2px 8px", cursor: "pointer"});
+  close.addEventListener("click", () => bar.remove());
+  bar.append(text, close);
+  document.body.prepend(bar);
+  return bar;
+}

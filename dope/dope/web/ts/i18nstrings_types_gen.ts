@@ -1314,6 +1314,13 @@ export type Strings = {
       random: () => string;
       troikas: () => string;
     };
+    term: {
+      rank: () => string;
+      rating: () => string;
+      taken: () => string;
+      takenTours: (tours: string, n: number) => string;
+      tour: (n: string) => string;
+    };
   };
   journal: {
     ek: {
@@ -1426,6 +1433,9 @@ export type Strings = {
     refusals: {
       declined: () => string;
       team: () => string;
+    };
+    refused: {
+      cell: (game: string, team: string) => string;
     };
     results: {
       place: () => string;
@@ -1623,6 +1633,11 @@ export type Strings = {
     progress: {
       entered: (n: string) => string;
       notStarted: () => string;
+    };
+    refused: {
+      entry: (q: string, team: string) => string;
+      question: (q: string) => string;
+      team: (number: string, name: string) => string;
     };
     results: {
       shootoutCollapse: () => string;
@@ -2293,6 +2308,13 @@ export type Strings = {
     recorder: {
       label: () => string;
       title: () => string;
+    };
+    refused: {
+      bout: (letter: string) => string;
+      close: () => string;
+      more: (n: string) => string;
+      text: (reason: string) => string;
+      textAt: (places: string, reason: string) => string;
     };
     scoreTable: {
       place: () => string;

@@ -295,6 +295,44 @@ type touched struct {
 	view    store.MatchView
 }
 
+// editWindow is a batch's hold on the database: the dedicated connection, the
+// global write lock (unlock releases it) and the transaction on it.
+type editWindow struct {
+	conn     *sql.Conn
+	tx       *sql.Tx
+	unlock   func()
+	acquired time.Time
+}
+
+// openWindow acquires the dedicated connection OFF the global lock (pool wait
+// bounded by festwrite.WriteTxTimeout), exactly as the hardened match-write
+// path does, so a starved pool can never pin b.Eng.Mu (see the 2026-06-13
+// freeze note in audit.go); then takes the lock and begins the transaction.
+// When the database refuses either, every job is failed to be sent again.
+func (b *Batcher) openWindow(ctx context.Context, scope core.FestScope, jobs []*editJob) (editWindow, bool) {
+	conn, err := b.Eng.AcquireWriteConn(ctx, "edit-batch")
+	if err != nil {
+		b.failBusy(scope, jobs, err)
+		return editWindow{}, false
+	}
+	if b.Rec.On {
+		b.Rec.WriteWaiters.Add(int64(len(jobs)))
+	}
+	unlock := b.Eng.LockWrite("edit-batch")
+	acquired := time.Now()
+	if b.Rec.On {
+		b.Rec.WriteWaiters.Add(-int64(len(jobs)))
+	}
+	tx, err := b.Eng.BeginWriteTxConn(ctx, conn)
+	if err != nil {
+		unlock()
+		conn.Close()
+		b.failBusy(scope, jobs, err)
+		return editWindow{}, false
+	}
+	return editWindow{conn: conn, tx: tx, unlock: unlock, acquired: acquired}, true
+}
+
 // applyEditBatch applies a window's edits under a single lock acquisition in one
 // transaction, then resolves every job and broadcasts once per touched scope. It
 // must resolve every job's done channel even on panic, so no editor request can
@@ -310,37 +348,17 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 	}()
 
 	metricsOn := b.Rec.On
-
-	// Acquire the dedicated connection OFF the global lock (pool wait bounded by
-	// festwrite.WriteTxTimeout), exactly as the hardened match-write path does, so a starved
-	// pool can never pin b.Eng.Mu. See the 2026-06-13 freeze note in audit.go.
 	txCtx, cancelTx := context.WithTimeout(context.Background(), festwrite.WriteTxTimeout)
 	defer cancelTx()
-	conn, err := b.Eng.AcquireWriteConn(txCtx, "edit-batch")
-	if err != nil {
-		b.failBatch(jobs, err)
+	win, ok := b.openWindow(txCtx, scope, jobs)
+	if !ok {
 		return
 	}
-	defer conn.Close()
-
-	if metricsOn {
-		b.Rec.WriteWaiters.Add(int64(len(jobs)))
-	}
-	unlock := b.Eng.LockWrite("edit-batch")
-	acquired := time.Now()
-	if metricsOn {
-		b.Rec.WriteWaiters.Add(-int64(len(jobs)))
-	}
-
-	tx, err := b.Eng.BeginWriteTxConn(txCtx, conn)
-	if err != nil {
-		unlock()
-		b.failBatch(jobs, err)
-		return
-	}
+	defer win.conn.Close()
 	// Safety net: a no-op after Commit, but guarantees the tx is finalized on any
 	// early return below before the conn is returned to the pool.
-	defer tx.Rollback()
+	defer win.tx.Rollback()
+	tx, unlock, acquired := win.tx, win.unlock, win.acquired
 
 	// Pre-images of every match this window will touch, read through our own tx
 	// before it writes anything — that is exactly the committed state, and it
@@ -410,13 +428,13 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 		unlock()
 		// Commit failed: the whole window failed atomically. Even the edits that
 		// applied in memory did not persist, so report the failure to all.
-		b.failBatch(jobs, err)
+		b.failBusy(scope, jobs, err)
 		return
 	}
 
 	// Post-images, still under the lock (as the per-edit path did), so the views
 	// we broadcast are exactly the ones this window committed.
-	cascaded := postImages(txCtx, conn, scope, order, byMatch, cascadedIDs)
+	cascaded := postImages(txCtx, win.conn, scope, order, byMatch, cascadedIDs)
 	hold := time.Since(acquired)
 	unlock()
 
@@ -627,6 +645,18 @@ func (b *Batcher) deliver(job *editJob, res editResult, metricsOn bool, acquired
 	}
 	job.finish(res)
 	job.cancel()
+}
+
+// ErrRetry marks a window that failed for want of the database (no write
+// connection in time, a busy BEGIN or COMMIT), not for anything its edits
+// said: sent again, they apply. The handlers answer it 503, which the editor
+// retries; any other refusal is a 400, which it drops.
+var ErrRetry = errors.New("the edit window could not reach the database")
+
+// failBusy fails every job of a window the database refused, as one to retry.
+func (b *Batcher) failBusy(scope core.FestScope, jobs []*editJob, err error) {
+	log.Printf("edit batch for game %d failed, %d edits to retry: %v", scope.GameID, len(jobs), err)
+	b.failBatch(jobs, fmt.Errorf("%w: %w", ErrRetry, err))
 }
 
 // failBatch fails every job with err and releases their contexts.
