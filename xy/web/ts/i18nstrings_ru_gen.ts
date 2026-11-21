@@ -161,6 +161,7 @@ export const RU: Strings = {
     error: {
       blobDownloadFailed: () => "не удалось скачать вложение",
       downloadFailed: () => "не удалось скачать",
+      imageNotFound: () => "Картинки по этой ссылке на карточке нет: возможно, её удалили.",
       offlineUnavailable: () => "вложение недоступно офлайн",
       replaceFailed: () => "ошибка замены",
       uploadFailed: () => "ошибка загрузки",

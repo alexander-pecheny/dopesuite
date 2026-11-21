@@ -160,6 +160,7 @@ export type Strings = {
     error: {
       blobDownloadFailed: () => string;
       downloadFailed: () => string;
+      imageNotFound: () => string;
       offlineUnavailable: () => string;
       replaceFailed: () => string;
       uploadFailed: () => string;

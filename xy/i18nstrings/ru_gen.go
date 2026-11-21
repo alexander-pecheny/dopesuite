@@ -207,6 +207,9 @@ var RU = Strings{
 		Error: AttachmentsErrorStrings{
 			BlobDownloadFailed: func() string { return "не удалось скачать вложение" },
 			DownloadFailed:     func() string { return "не удалось скачать" },
+			ImageNotFound: func() string {
+				return "Картинки по этой ссылке на карточке нет: возможно, её удалили."
+			},
 			OfflineUnavailable: func() string { return "вложение недоступно офлайн" },
 			ReplaceFailed:      func() string { return "ошибка замены" },
 			UploadFailed:       func() string { return "ошибка загрузки" },

@@ -116,6 +116,8 @@ export interface AttachmentsSeam {
   upload(file: File, lossless: boolean, name: string): Promise<number | null>;
   resolveImages(cards: ReadonlyArray<{ id: number }>, wanted: Set<string>): Promise<Map<string, string>>;
   imageBlob(cardId: number, name: string): Promise<Blob | null>;
+  // openImage opens the image editor on one of the open card's pictures.
+  openImage(attId: number): Promise<void>;
 }
 
 // The board-owned halves of read tracking: the kanban card dot and the 🔔 badge.
@@ -1308,8 +1310,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // ---- direct links (shareable URLs for a card and a comment) ----
   // A card link is /board/{id}?card={cardId}; a comment link adds &comment={eventId}
-  // (the timeline event id). Opening such a URL deep-links straight to the card and,
-  // for a comment link, scrolls to and flashes that comment.
+  // (the timeline event id), and the image editor's address &image={attachmentId}.
+  // Opening such a URL deep-links straight to the card and, for a comment link,
+  // scrolls to and flashes that comment, or for a picture opens the editor on it.
   function cardUrl(cardId: number): string { return `${location.origin}${location.pathname}?card=${cardId}`; }
   function commentUrl(cardId: number, eventId: number): string { return `${cardUrl(cardId)}&comment=${eventId}`; }
 
@@ -1327,8 +1330,12 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const card = state().cards.find((c) => c.id === cardId);
     if (!card) return;
     const commentId = Number(params.get("comment")) || null;
+    const imageId = Number(params.get("image")) || null;
     history.replaceState(null, "", location.pathname);
-    openCard(card).then(() => { if (commentId) void highlightComment(commentId); }).catch(() => {});
+    openCard(card).then(() => {
+      if (commentId) void highlightComment(commentId);
+      else if (imageId) void deps.attachments.openImage(imageId);
+    }).catch(() => { /* the card did not open: the board stays as it is */ });
   }
 
   // highlightComment scrolls a comment into view and flashes it. The event node

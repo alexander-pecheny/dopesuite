@@ -59,7 +59,7 @@ function setup(images = []) {
     popupMenu() {},
     forgetCardLabels() {},
     preview: { renderPreviewCard: () => fakeNode("div", { className: "pv" }), resolveImages: async () => new Map(), imageRefs: () => new Set(), fillPreviewImages() {}, previewList: async () => {} },
-    attachments: { load: async () => {}, imageNames: () => images, clearImageNames() {}, cardAttachments: async () => [], resolveImages: async () => new Map(), attachmentUrl: async () => "", download: async () => {}, imageBlob: async () => null },
+    attachments: { load: async () => {}, imageNames: () => images, clearImageNames() {}, cardAttachments: async () => [], resolveImages: async () => new Map(), attachmentUrl: async () => "", download: async () => {}, imageBlob: async () => null, openImage: async () => {} },
     readMarkers: { refreshCardUnreadDot() {}, renderNotifBadge() {} },
     timeline: { load: async () => {}, events: () => [], resetFilter() {}, readBuckets: () => ({}), ensureVisible() {}, commentDraft: () => "", postComment: async () => {}, clearCommentDraft() {} },
     transfer: { moveBoardOptions: async () => [], loadMoveBoard: async () => ({ boardId: 1, dk: {}, lists: [], cardsByList: new Map(), labels: [], sessions: [], name: "" }), transferCard: async () => 0 },

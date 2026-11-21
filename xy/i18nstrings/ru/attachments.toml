@@ -72,6 +72,8 @@ download_failed = "не удалось скачать"
 offline_unavailable = "вложение недоступно офлайн"
 replace_failed = "ошибка замены"
 upload_failed = "ошибка загрузки"
+# A link to the image editor names a picture this card no longer has.
+image_not_found = "Картинки по этой ссылке на карточке нет: возможно, её удалили."
 
 [lightbox]
 # The image lightbox.

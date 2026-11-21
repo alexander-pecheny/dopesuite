@@ -136,9 +136,9 @@ type EditorStart = { file?: Uint8Array; picture?: { blob: Blob; name: string } }
 export function create(deps: AttachmentsDeps) {
 const ui = deps.ui;
 
-const attListCache = new Map<number, NamedAttachment[]>(); // cardId → [{ ...att, name }]
-const attBlobCache = new Map<string, Blob>();   // id:rev → decrypted bytes
-const attUrlCache = new Map<string, string>();  // id:rev → object URL over those bytes
+const attListCache = new Map<number, NamedAttachment[]>(); // by card id: [{ ...att, name }]
+const attBlobCache = new Map<string, Blob>();   // by id:rev: the decrypted bytes
+const attUrlCache = new Map<string, string>();  // by id:rev: an object URL over those bytes
 const ATT_CACHE_MAX = 64;
 
 // cardAttachments lists one card's attachments with their filenames decrypted.
@@ -150,7 +150,7 @@ async function cardAttachments(cardId: number, refresh = false): Promise<NamedAt
   try { atts = (await fetchJSON(`/api/cards/${cardId}/attachments`)) as Attachment[]; } catch (_) { return []; }
   const out = await Promise.all(atts.map(async (att) => {
     let name = "";
-    try { name = await xyCrypto.decField(deps.mustDK(), att.filename); } catch (_) {}
+    try { name = await xyCrypto.decField(deps.mustDK(), att.filename); } catch (_) { /* unreadable: listed without a name */ }
     return { ...att, name };
   }));
   attListCache.set(cardId, out);
@@ -176,7 +176,7 @@ async function attachmentBlob(att: Attachment): Promise<Blob> {
     const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
     if (!res.ok) throw new Error(S.attachments.error.blobDownloadFailed());
     cipher = new Uint8Array(await res.arrayBuffer());
-    try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher, rev }); } catch (_) {}
+    try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher, rev }); } catch (_) { /* not mirrored offline: still shown */ }
   }
   const plain = await xyCrypto.decBytes(deps.mustDK(), cipher);
   const blob = new Blob([plain], { type: att.mime });
@@ -216,7 +216,7 @@ async function imageBlob(cardId: number, name: string): Promise<Blob | null> {
   return att ? await attachmentBlob(att) : null;
 }
 
-// resolveImages maps each wanted image name → a decrypted object URL, scanning
+// resolveImages maps each wanted image name to a decrypted object URL, scanning
 // the cards' attachments (online only — mirrors the docx export's image
 // gathering). Attachment lists and image bodies are fetched in parallel, and
 // `onImage` fires per image as it lands so callers can fill placeholders in
@@ -232,7 +232,7 @@ async function resolveImages(cards: ReadonlyArray<{ id: number }>, wanted: Set<s
       const url = await attachmentUrl(att);
       map.set(name, url);
       if (onImage) onImage(name, url);
-    } catch (_) {}
+    } catch (_) { /* a picture that will not load is left out */ }
   }));
   return map;
 }
@@ -272,7 +272,7 @@ async function loadAttachments(cardId: number): Promise<void> {
 }
 
 function attachMenu(anchor: HTMLElement, att: NamedAttachment, name: string): void {
-  const edit: MenuItem[] = (att.mime || "").startsWith("image/")
+  const edit: MenuItem[] = isImage(att)
     ? [{ icon: icon("pencil"), label: S.attachments.menu.edit(), onClick: () => { void editImage(att, name); } }]
     : [];
   deps.popupMenu(anchor, [
@@ -361,13 +361,16 @@ async function editImage(att: NamedAttachment, name: string): Promise<void> {
     const blob = await attachmentBlob(att);
     const bytes = new Uint8Array(await blob.arrayBuffer());
     if (isXyimage(bytes)) {
-      await openImageEditor({ file: bytes }, (out) => putReplacement(att, name, out, XYIMAGE_MIME, true));
+      await openImageEditor(cardId, att.id, { file: bytes }, async (out) => {
+        await putReplacement(att, name, out, XYIMAGE_MIME, true);
+        return att.id;
+      });
       return;
     }
     let target: string | null = null;
-    await openImageEditor({ picture: { blob, name } }, async (out) => {
+    await openImageEditor(cardId, null, { picture: { blob, name } }, async (out) => {
       target ??= await freeName(cardId, name.slice(0, nameStemEnd(name)) || name);
-      await saveNewImage(cardId, target, out);
+      return saveNewImage(cardId, target, out);
     });
   } catch (err) { ui.message.textContent = errMsg(err); }
 }
@@ -376,13 +379,15 @@ async function editImage(att: NamedAttachment, name: string): Promise<void> {
 // after, so saving twice leaves one attachment, not two.
 const savedNew = new Map<string, NamedAttachment>();
 
-async function saveNewImage(cardId: number, name: string, out: Uint8Array<ArrayBuffer>): Promise<void> {
+// saveNewImage returns the attachment the picture was saved as.
+async function saveNewImage(cardId: number, name: string, out: Uint8Array<ArrayBuffer>): Promise<number | null> {
   const key = `${cardId}:${name}`;
   const prev = savedNew.get(key);
-  if (prev) { await putReplacement(prev, name, out, XYIMAGE_MIME, true); return; }
+  if (prev) { await putReplacement(prev, name, out, XYIMAGE_MIME, true); return prev.id; }
   const id = await uploadAttachment(new File([out], name, { type: XYIMAGE_MIME }), true, name);
   const made = (await cardAttachments(cardId)).find((a) => a.id === id);
   if (made) savedNew.set(key, made);
+  return id;
 }
 
 async function createImage(): Promise<void> {
@@ -391,20 +396,33 @@ async function createImage(): Promise<void> {
   if (cardId == null) return;
   let target: string | null = null;
   try {
-    await openImageEditor({}, async (out) => {
+    await openImageEditor(cardId, null, {}, async (out) => {
       target ??= await freeName(cardId, S.attachments.editor.defaultName());
-      await saveNewImage(cardId, target, out);
+      return saveNewImage(cardId, target, out);
     });
   } catch (err) { ui.message.textContent = errMsg(err); }
 }
 
 ui.createImage?.addEventListener("click", () => { void createImage(); });
 
+// isImage is whether an attachment is a picture the editor can open.
+function isImage(att: Attachment): boolean {
+  return (att.mime || "").startsWith("image/");
+}
+
+// imageUrl is the address of the editor open on a saved picture: the card's
+// link with &image=, which reopens it (carddetail's deep link). A picture not
+// saved yet has none, and the editor keeps the card's address until it is.
+function imageUrl(cardId: number, attId: number | null): string | undefined {
+  return attId == null ? undefined : `${location.pathname}?card=${cardId}&image=${attId}`;
+}
+
 // openImageEditor puts the editor over the card, full screen, on the overlay
-// stack: back, Escape (once the editor has let go of its selection) and its ✕
+// stack: back, Escape (once the editor has let go of its selection) and its close button
 // close it, and closing with unsaved changes asks first. After every save the
-// card's attachments and timeline are reloaded.
-async function openImageEditor(start: EditorStart, save: (out: Uint8Array<ArrayBuffer>) => Promise<void>): Promise<void> {
+// card's attachments and timeline are reloaded, and the address moves to the
+// picture once it is one (a new picture's first save).
+async function openImageEditor(cardId: number, attId: number | null, start: EditorStart, save: (out: Uint8Array<ArrayBuffer>) => Promise<number | null>): Promise<void> {
   const { createEditor } = await import("./xyimageeditor.js");
   const root = el("div");
   const overlay = el("div", { class: "xyed-overlay", role: "dialog", "aria-label": S.attachments.editor.title() }, root);
@@ -413,17 +431,32 @@ async function openImageEditor(start: EditorStart, save: (out: Uint8Array<ArrayB
     ...start,
     fonts: deps.fonts,
     onSave: async (out) => {
-      await save(new Uint8Array(out));
+      const id = await save(new Uint8Array(out));
+      if (id != null && id !== attId) {
+        attId = id;
+        overlayStack.replace(overlay, entry, imageUrl(cardId, id));
+      }
       const oc = deps.openCardId();
       if (oc != null) { await loadAttachments(oc); await deps.timeline.load(oc); }
     },
     onClose: () => overlayStack.pop(),
   });
-  overlayStack.open({
+  const entry = {
     el: overlay,
     close: () => { editor.destroy(); overlay.remove(); },
     confirm: async () => !editor.dirty() || window.confirm(S.attachments.editor.discard()),
-  });
+  };
+  overlayStack.open(entry, imageUrl(cardId, attId));
+}
+
+// openImage opens the editor on one of the open card's pictures by its id,
+// for a link to it; a picture that is gone says so in the card's message line.
+async function openImage(attId: number): Promise<void> {
+  const cardId = deps.openCardId();
+  if (cardId == null) return;
+  const att = (await cardAttachments(cardId)).find((a) => a.id === attId && isImage(a));
+  if (att) await editImage(att, att.name);
+  else ui.message.textContent = S.attachments.error.imageNotFound();
 }
 
 
@@ -613,7 +646,7 @@ ui.pasteForm.addEventListener("submit", async (e) => {
 });
 
 // viewAttachment shows an image attachment in an in-page lightbox (zoom/pan,
-// right-click → save still works since it's a real <img> on the blob URL).
+// right-click and save still works since it's a real <img> on the blob URL).
 // attachmentUrl already handles the offline mirror + memoizes the object URL,
 // so the URL stays alive for the page's lifetime.
 async function viewAttachment(att: NamedAttachment, name: string): Promise<void> {
@@ -648,14 +681,14 @@ function lbZoomTo(next: number, cx: number, cy: number): void {
   const cont = lbEls.overlay.getBoundingClientRect();
   const centerX = cont.left + cont.width / 2, centerY = cont.top + cont.height / 2;
   lbScale = next;
-  // rect.left = centerX - nw/2 + tx  ⇒  solve tx so the fractional point stays put.
+  // rect.left = centerX - nw/2 + tx , so solve tx so the fractional point stays put.
   lbTx = (cx - fx * nw) - (centerX - nw / 2);
   lbTy = (cy - fy * nh) - (centerY - nh / 2);
   if (next === 1) { lbTx = 0; lbTy = 0; }
   lbApply();
 }
 
-// Backdrop click closes; a click on the image toggles fit ↔ 2.5× toward the point.
+// Backdrop click closes; a click on the image toggles between fit and 2.5× toward the point.
 function wireLightboxZoom(overlay: HTMLElement, img: HTMLImageElement): void {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeLightbox(); });
   img.addEventListener("click", (e) => {
@@ -732,7 +765,7 @@ async function download(att: NamedAttachment, name: string): Promise<void> {
       const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
       if (!res.ok) throw new Error(S.attachments.error.downloadFailed());
       cipher = new Uint8Array(await res.arrayBuffer());
-      try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher }); } catch (_) {}
+      try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher }); } catch (_) { /* not mirrored offline */ }
     } catch (netErr) {
       const cached = await xySync.getAttachment(att.id);
       if (!cached) throw new Error(S.attachments.error.offlineUnavailable());
@@ -782,7 +815,7 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
         fd.append("img", new Blob([plain], { type: att.mime }), name);
         found.add(name);
         if (isXyimage(plain)) for (const z of fontZipsOf(plain)) zips.add(z);
-      } catch (_) {}
+      } catch (_) { /* left out: the export names what it could not find */ }
     }));
     await appendFonts(fd, zips);
     return found;
@@ -795,7 +828,7 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
     const fonts = deps.fonts;
     if (!fonts) return;
     await Promise.all([...zips].map(async (z) => {
-      try { fd.append("font", new Blob([await fonts.zip(z)]), `${z}.zip`); } catch (_) {}
+      try { fd.append("font", new Blob([await fonts.zip(z)]), `${z}.zip`); } catch (_) { /* a missing font: the export says which */ }
     }));
   }
 
@@ -811,6 +844,7 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
     imageNames: (): string[] => cardImageNames,
     clearImageNames: (): void => { cardImageNames = []; },
     upload: uploadAttachment,
+    openImage,
     download,
     openLightbox,
   };
