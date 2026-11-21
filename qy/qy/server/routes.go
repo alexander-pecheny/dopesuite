@@ -99,7 +99,7 @@ func routes(s *server) *http.ServeMux {
 }
 
 // questionRoutes are an admin's review of one question: the jury's copy, the
-// redactions, merging, and the translation.
+// redactions, merging, the translation and the attached files.
 func (s *server) questionRoutes(pages *route.Table) {
 	pages.Handle("GET /admin/question/{id}", route.Admin, s.handleQuestionPage)
 	pages.Handle("POST /admin/question/{id}", route.Admin, s.handleSaveQuestion)
@@ -112,4 +112,6 @@ func (s *server) questionRoutes(pages *route.Table) {
 	pages.Handle("POST /admin/question/{id}/lang", route.Admin, s.handleSetLang)
 	pages.Handle("POST /admin/question/{id}/translation", route.Admin, s.handleSaveTranslation)
 	pages.Handle("POST /admin/question/{id}/retranslate", route.Admin, s.handleRetranslate)
+	pages.Handle("POST /admin/question/{id}/files", route.Admin, s.handleAddFile)
+	pages.Handle("POST /admin/question/{id}/files/{fid}/remove", route.Admin, s.handleRemoveFile)
 }

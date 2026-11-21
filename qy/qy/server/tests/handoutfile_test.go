@@ -116,3 +116,27 @@ func TestAnAttachedPictureIsOnTheCardForWhoeverSeesIt(t *testing.T) {
 		t.Errorf("a visitor before the shortlist is public: %d", res.Code)
 	}
 }
+
+func TestAnAdminAttachesAndRemovesAHandout(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	alice := w.user("alice")
+	w.post(alice, "/2026/nominate", slots("101", map[int]string{1: pasted("Вопрос без картинки.", "картинка", "Алиса")}), http.StatusSeeOther)
+	href := "/admin/question/" + strconv.FormatInt(w.questionID("картинка"), 10)
+	if res := alice.PostMultipart(href+"/files", nil, qyserver.File{Field: "file", Name: "pic.png", Data: png}); res.Code == http.StatusSeeOther {
+		t.Fatal("a nominator should not attach through the admin page")
+	}
+	if res := w.admin.PostMultipart(href+"/files", nil, qyserver.File{Field: "file", Name: "pic.png", Data: png}); res.Code != http.StatusSeeOther {
+		t.Fatalf("attach = %d: %s", res.Code, res.Body.String())
+	}
+	var fid int64
+	w.ts.DB().QueryRow(`select id from question_files`).Scan(&fid)
+	page := w.get(w.admin, href, http.StatusOK)
+	if !strings.Contains(page, "pic.png") || !strings.Contains(page, `/nominate/file/`+strconv.FormatInt(fid, 10)+`.png`) {
+		t.Error("the page should list the file and the card draw it")
+	}
+	w.post(w.admin, href+"/files/"+strconv.FormatInt(fid, 10)+"/remove", nil, http.StatusSeeOther)
+	if w.count(`select count(*) from question_files`) != 0 {
+		t.Error("the file should be gone")
+	}
+}

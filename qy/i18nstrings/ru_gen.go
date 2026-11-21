@@ -171,9 +171,14 @@ var RU = Strings{
 			EditHint: func() string {
 				return "Здесь правится обезличенный текст, который видит жюри. Авторов жюри не видит, они появятся только в итогах."
 			},
-			Extra:     func() string { return "Дополнительный контекст (Markdown)" },
-			Factcheck: func() string { return "Фактчек (Markdown)" },
-			Link:      func() string { return "Ссылка на вопрос" },
+			Extra:             func() string { return "Дополнительный контекст (Markdown)" },
+			Factcheck:         func() string { return "Фактчек (Markdown)" },
+			FileAdd:           func() string { return "Файл для раздатки" },
+			FileAttach:        func() string { return "Прикрепить" },
+			FileMissing:       func() string { return "Выберите файл." },
+			FileRemove:        func() string { return "Убрать" },
+			FileRemoveConfirm: func(name string) string { return fmt.Sprintf("Убрать файл %s?", name) },
+			Link:              func() string { return "Ссылка на вопрос" },
 			MergeConfirm: func() string {
 				return "Объединить? Этот вопрос будет отклонён, а его номинации перейдут к выбранному."
 			},

@@ -124,6 +124,13 @@ open_link = "Открыть ссылку"
 open_tournament = "Открыть турнир"
 ai_failed = 'Модель не ответила: {{.error}}'
 source_text = "Что прислал номинатор"
+# A handout sent some other way than the nomination form.
+file_add = "Файл для раздатки"
+file_attach = "Прикрепить"
+file_missing = "Выберите файл."
+file_remove = "Убрать"
+file_remove_confirm = 'Убрать файл {{.name}}?'
+
 paste_title = "Текст вопроса"
 paste_hint = "Мы не смогли разобрать вопрос. Вставьте его полный текст с ответом, комментарием и авторами."
 parse = "Распознать"

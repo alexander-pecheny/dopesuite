@@ -521,13 +521,11 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 	if q.TournamentLink != "" {
 		about = append(about, ui.Row(ui.Button(ui.Href(q.TournamentLink), ui.Ghost, ui.Small(), ui.IconLink, text(str.Admin.Question.OpenTournament()))))
 	}
-	files, err := store.Files(ctx, s.db, q.ID)
+	files, err := s.fileItems(ctx, href, keep, q.ID)
 	if err != nil {
 		return err
 	}
-	for _, f := range files {
-		about = append(about, ui.Row(ui.Button(ui.Href(fileHref(f.ID)), ui.Ghost, ui.Small(), ui.IconPaperclip, text(f.Name))))
-	}
+	about = append(about, files...)
 	if q.MergedInto != 0 {
 		target := store.Question{ID: q.MergedInto}
 		if t, err := store.GetQuestion(ctx, s.db, q.MergedInto); err == nil {
