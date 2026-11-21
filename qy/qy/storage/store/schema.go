@@ -292,6 +292,10 @@ alter table questions add column translation_of text not null default '';
 alter table questions add column translation_edited integer not null default 0;
 alter table questions add column translation_error text not null default '';
 `)},
+	// A juror may mark one of the questions they liked as their favourite,
+	// which counts for more than a like (tally.FavouritePoints). The server
+	// keeps it to one per juror and year.
+	{Version: 8, Name: "the favourite question of a juror", Up: schema.Exec(`alter table likes add column favourite integer not null default 0;`)},
 }
 
 func Migrate(db *sql.DB) error { return schema.Apply(db, Migrations) }

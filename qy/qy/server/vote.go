@@ -10,6 +10,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"qy/qy/domain/contest"
+	"qy/qy/domain/tally"
 	"qy/qy/storage/store"
 	"qy/qy/web/route"
 	"qy/qy/web/ui"
@@ -107,7 +108,11 @@ func (s *server) handleVotePage(w http.ResponseWriter, r *http.Request, sc route
 	}
 	switch c.StageAt(s.now()) {
 	case contest.Prelim:
-		v.body, err = s.portionBody(ctx, r, c, j)
+		if r.URL.Query().Get("portion") == likedTab {
+			v.body, err = s.likedBody(ctx, c, j)
+		} else {
+			v.body, err = s.portionBody(ctx, r, c, j)
+		}
 	case contest.Factcheck:
 		v.body, err = s.factcheckBody(ctx, c, j)
 	default:
@@ -140,19 +145,13 @@ func (s *server) portionBody(ctx context.Context, r *http.Request, c contest.Con
 	if err != nil {
 		return nil, err
 	}
-	var tabs []ui.Item
-	for i := 1; i <= open; i++ {
-		b := []ui.Item{ui.Href("/vote?portion=" + strconv.Itoa(i)), ui.Small(), text(strconv.Itoa(i))}
-		if i == k {
-			b = append(b, ui.Primary)
-		} else {
-			b = append(b, ui.Ghost)
-		}
-		tabs = append(tabs, ui.Button(b...))
+	tabs, err := s.portionTabs(ctx, c, strconv.Itoa(k))
+	if err != nil {
+		return nil, err
 	}
 	head := []ui.Item{
 		hint(str.Vote.Portion.Lead(c.PortionDays)),
-		ui.Row(append([]ui.Item{ui.SpaceXS, ui.Wrap(), ui.Aria("label", str.Vote.Portion.Tabs())}, tabs...)...),
+		tabs,
 		hint(str.Vote.Portion.Title(strconv.Itoa(k), dayText(c.PortionOpens(k).Format(contest.DateLayout)))),
 	}
 	if k < total && k == open {
@@ -161,20 +160,131 @@ func (s *server) portionBody(ctx context.Context, r *http.Request, c contest.Con
 	if len(qs) == 0 {
 		return []ui.Item{ui.Section(head...), ui.Section(ui.Empty(text(str.Vote.Portion.Empty())))}, nil
 	}
-	form := []ui.Item{ui.Method("post"), ui.Action("/vote"), ui.DirCol, ui.SpaceMD, ui.Data("autosave", ""),
+	form := []ui.Item{
 		ui.Hiddenfield(ui.Name("portion"), ui.Value(strconv.Itoa(k)))}
 	for _, q := range inReaderOrder(qs, fmt.Sprintf("%d/%d/%d", c.Year, k, j.userID)) {
 		form = append(form, likeCard(q, juryCard(q).withoutFactcheck(), liked[q.ID]))
 	}
-	form = append(form, ui.Row(ui.SpaceSM, ui.AlignCenter,
-		ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save())), ui.Message(ui.ID("autosaveStatus"))))
-	return []ui.Item{ui.Section(head...), ui.Section(ui.Form(form...))}, nil
+	return []ui.Item{ui.Section(head...), ui.Section(likesForm(form))}, nil
+}
+
+// likesForm is a page of likes: it saves itself on every change, and its
+// button saves it without the script.
+func likesForm(items []ui.Item) ui.Item {
+	form := append([]ui.Item{ui.Method("post"), ui.Action("/vote"), ui.DirCol, ui.SpaceMD, ui.Data("autosave", "")}, items...)
+	return ui.Form(append(form, ui.Row(ui.SpaceSM, ui.AlignCenter,
+		ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save())), ui.Message(ui.ID("autosaveStatus"))))...)
+}
+
+// likedTab is the portion tab, after the last portion, with every question
+// the juror liked, where they pick their favourite.
+const likedTab = "liked"
+
+// portionTabs are the first stage's tabs: every portion, those not open yet
+// disabled with the day they open, then the questions the juror liked.
+func (s *server) portionTabs(ctx context.Context, c contest.Contest, current string) (ui.Item, error) {
+	total, err := portionCount(ctx, s.db, c)
+	if err != nil {
+		return nil, err
+	}
+	open := c.PortionsOpen(s.now(), total)
+	tab := func(to, label string, icon ...ui.Item) ui.Item {
+		look := ui.Ghost
+		if to == current {
+			look = ui.Primary
+		}
+		return ui.Button(append([]ui.Item{ui.Href("/vote?portion=" + to), ui.Small(), look, text(label)}, icon...)...)
+	}
+	items := []ui.Item{ui.SpaceXS, ui.Wrap(), ui.Aria("label", str.Vote.Portion.Tabs())}
+	for i := 1; i <= total; i++ {
+		n := strconv.Itoa(i)
+		if i > open {
+			items = append(items, ui.Button(ui.Small(), ui.Ghost, ui.Disabled(),
+				ui.Title(str.Vote.Portion.Opens(dayText(c.PortionOpens(i).Format(contest.DateLayout)))), text(n)))
+			continue
+		}
+		items = append(items, tab(n, n))
+	}
+	items = append(items, tab(likedTab, str.Vote.Liked.Tab(), ui.IconHeart))
+	return ui.Row(items...), nil
+}
+
+func likeToggle(q store.Question, liked bool) ui.Item {
+	items := []ui.Item{ui.Name("like"), ui.Value(idstr.Format(q.ID)), ui.IconHeart, text(str.Vote.Like())}
+	if liked {
+		items = append(items, ui.Checked())
+	}
+	return ui.Toggle(items...)
 }
 
 func likeCard(q store.Question, c card, liked bool) ui.Item {
 	return ui.Card(ui.DirCol, ui.SpaceSM,
 		ui.Richtext(ui.Raw(questionHTML(c))),
-		checkboxOf("like", idstr.Format(q.ID), str.Vote.Like(), liked))
+		ui.Row(likeToggle(q, liked)))
+}
+
+// likedQuestions are the questions the juror liked that they can still read,
+// in QY order.
+func likedQuestions(ctx context.Context, q store.Querier, c contest.Contest, j juror) ([]store.Question, error) {
+	where := "status = 'approved' and qy is not null and id in (select question_id from likes where user_id = ?)"
+	if j.kind == store.People {
+		where += " and published = 1"
+	}
+	return store.Questions(ctx, q, c.Year, where, j.userID)
+}
+
+// favouriteOf is the question the juror picked as their favourite this year,
+// 0 if none.
+func favouriteOf(ctx context.Context, q store.Querier, year int, userID int64) (int64, error) {
+	ids, err := store.Collect(ctx, q, store.Scalar[int64], `select l.question_id from likes l
+join questions qq on qq.id = l.question_id and qq.year = ?
+where l.user_id = ? and l.favourite = 1`, year, userID)
+	if err != nil || len(ids) == 0 {
+		return 0, err
+	}
+	return ids[0], nil
+}
+
+// likedBody is the liked tab: every question the juror liked, each with its
+// like, and the choice of one favourite among them.
+func (s *server) likedBody(ctx context.Context, c contest.Contest, j juror) ([]ui.Item, error) {
+	tabs, err := s.portionTabs(ctx, c, likedTab)
+	if err != nil {
+		return nil, err
+	}
+	qs, err := likedQuestions(ctx, s.db, c, j)
+	if err != nil {
+		return nil, err
+	}
+	fav, err := favouriteOf(ctx, s.db, c.Year, j.userID)
+	if err != nil {
+		return nil, err
+	}
+	head := ui.Section(hint(str.Vote.Portion.Lead(c.PortionDays)), tabs, hint(str.Vote.Liked.Lead(tally.FavouritePoints)))
+	if len(qs) == 0 {
+		return []ui.Item{head, ui.Section(ui.Empty(text(str.Vote.Liked.Empty())))}, nil
+	}
+	form := []ui.Item{
+		ui.Hiddenfield(ui.Name("portion"), ui.Value(likedTab)),
+		ui.Row(favouriteToggle("", str.Vote.Liked.NoFavourite(), fav == 0, nil))}
+	for _, q := range qs {
+		form = append(form, ui.Card(ui.DirCol, ui.SpaceSM,
+			ui.Richtext(ui.Raw(questionHTML(juryCard(q).withoutFactcheck()))),
+			ui.Row(ui.SpaceSM, ui.Wrap(), likeToggle(q, true),
+				favouriteToggle(idstr.Format(q.ID), str.Vote.Liked.Favourite(), fav == q.ID, ui.IconStar))))
+	}
+	return []ui.Item{head, ui.Section(likesForm(form))}, nil
+}
+
+func favouriteToggle(value, label string, on bool, icon ui.Item) ui.Item {
+	items := []ui.Item{ui.Name("favourite"), ui.Value(value), ui.Exclusive(), text(label)}
+	if icon != nil {
+		items = append(items, icon)
+	}
+	if on {
+		items = append(items, ui.Checked())
+	}
+	return ui.Toggle(items...)
 }
 
 func (s *server) factcheckBody(ctx context.Context, c contest.Contest, j juror) ([]ui.Item, error) {
@@ -187,7 +297,7 @@ func (s *server) factcheckBody(ctx context.Context, c contest.Contest, j juror) 
 		return nil, err
 	}
 	head := ui.Section(hint(str.Vote.Factcheck.Lead(dayText(c.FactcheckEnd))))
-	form := []ui.Item{ui.Method("post"), ui.Action("/vote"), ui.DirCol, ui.SpaceMD, ui.Data("autosave", "")}
+	var form []ui.Item
 	shown := 0
 	for _, q := range inReaderOrder(qs, fmt.Sprintf("%d/factcheck/%d", c.Year, j.userID)) {
 		if !liked[q.ID] {
@@ -199,9 +309,7 @@ func (s *server) factcheckBody(ctx context.Context, c contest.Contest, j juror) 
 	if shown == 0 {
 		return []ui.Item{head, ui.Section(ui.Empty(text(str.Vote.Factcheck.Nothing())))}, nil
 	}
-	form = append(form, ui.Row(ui.SpaceSM, ui.AlignCenter,
-		ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save())), ui.Message(ui.ID("autosaveStatus"))))
-	return []ui.Item{head, ui.Section(ui.Form(form...))}, nil
+	return []ui.Item{head, ui.Section(likesForm(form))}, nil
 }
 
 // handleVote saves the likes on one page. What the page showed is the scope:
@@ -221,18 +329,11 @@ func (s *server) handleVote(w http.ResponseWriter, r *http.Request, sc route.Sco
 	}
 	posted := postedIDs(r, "like")
 	stage := c.StageAt(s.now())
+	liked := stage == contest.Prelim && r.FormValue("portion") == likedTab
 	k, _ := strconv.Atoi(r.FormValue("portion"))
+	fav, _ := idstr.Parse(r.FormValue("favourite"))
 	err = s.withWriteTx(ctx, "vote", func(ctx context.Context, tx *sql.Tx) error {
-		scope, err := s.voteScope(ctx, tx, c, j, stage, k)
-		if err != nil {
-			return err
-		}
-		for _, q := range scope {
-			if err := s.setLike(ctx, tx, j.userID, q.ID, posted[q.ID], stage == contest.Prelim); err != nil {
-				return err
-			}
-		}
-		return nil
+		return s.saveVote(ctx, tx, c, j, voteForm{stage, k, liked, posted, fav})
 	})
 	if err != nil {
 		return err
@@ -241,10 +342,45 @@ func (s *server) handleVote(w http.ResponseWriter, r *http.Request, sc route.Sco
 		return writeJSON(w, map[string]string{"status": str.Common.Saved()})
 	}
 	target := "/vote?done=" + doneSaved
-	if k > 0 {
+	switch {
+	case liked:
+		target += "&portion=" + likedTab
+	case k > 0:
 		target += "&portion=" + strconv.Itoa(k)
 	}
 	return seeOther(w, r, target)
+}
+
+// voteForm is one posted page of likes: its stage, its portion (or the liked
+// tab), the likes it left on, and the favourite on the liked tab.
+type voteForm struct {
+	stage  contest.Stage
+	k      int
+	liked  bool
+	posted map[int64]bool
+	fav    int64
+}
+
+func (s *server) saveVote(ctx context.Context, tx *sql.Tx, c contest.Contest, j juror, f voteForm) error {
+	var scope []store.Question
+	var err error
+	if f.liked {
+		scope, err = likedQuestions(ctx, tx, c, j)
+	} else {
+		scope, err = s.voteScope(ctx, tx, c, j, f.stage, f.k)
+	}
+	if err != nil {
+		return err
+	}
+	for _, q := range scope {
+		if err := s.setLike(ctx, tx, j.userID, q.ID, f.posted[q.ID], f.stage == contest.Prelim); err != nil {
+			return err
+		}
+	}
+	if !f.liked {
+		return nil
+	}
+	return setFavourite(ctx, tx, c.Year, j.userID, f.fav)
 }
 
 // voteScope is what the page being saved showed the juror.
@@ -263,6 +399,14 @@ func (s *server) voteScope(ctx context.Context, tx *sql.Tx, c contest.Contest, j
 		return shortlistQuestions(ctx, tx, c)
 	}
 	return nil, userError(str.Vote.Page.Closed(dayText(c.PrelimStart), dayText(c.FactcheckEnd)))
+}
+
+// setFavourite makes fav the juror's one favourite of the year, or clears it
+// when fav is 0. Only a question they still like can be it.
+func setFavourite(ctx context.Context, tx *sql.Tx, year int, userID, fav int64) error {
+	_, err := tx.ExecContext(ctx, `update likes set favourite = (question_id = ?)
+where user_id = ? and question_id in (select id from questions where year = ?)`, fav, userID, year)
+	return err
 }
 
 // setLike writes one question's like as the form left it. canAdd is false

@@ -62,7 +62,7 @@ CREATE TABLE jurors(
 CREATE TABLE likes(
   user_id integer not null references users(id) on delete cascade,
   question_id integer not null references questions(id) on delete cascade,
-  created_at text not null,
+  created_at text not null, favourite integer not null default 0,
   primary key(user_id, question_id)
 );
 

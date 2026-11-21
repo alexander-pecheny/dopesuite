@@ -2,7 +2,9 @@
   "enums": {
     "page-kind": {
       "prefix": "Page",
-      "values": ["wide"]
+      "values": [
+        "wide"
+      ]
     }
   },
   "primitives": [
@@ -10,6 +12,32 @@
       "name": "richtext",
       "props": [],
       "children": "any"
+    },
+    {
+      "name": "toggle",
+      "props": [
+        {
+          "name": "name",
+          "required": true
+        },
+        {
+          "name": "value",
+          "required": true
+        },
+        {
+          "name": "checked",
+          "kind": "bare"
+        },
+        {
+          "name": "exclusive",
+          "kind": "bare"
+        },
+        {
+          "name": "icon",
+          "enum": "icon-name"
+        }
+      ],
+      "children": "text"
     }
   ]
 }

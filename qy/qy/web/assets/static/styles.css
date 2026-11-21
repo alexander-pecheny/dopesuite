@@ -171,3 +171,33 @@ textarea[data-autogrow] {
 [data-questions] .data-table td:not(:nth-child(2)) {
   white-space: nowrap;
 }
+
+/* A toggle (web/ui expandToggle): a checkbox or radio drawn as a button, the
+   jury's like and favourite. The box is hidden but stays in the form and in
+   the tab order; the button looks pressed while it is checked. */
+.toggle {
+  position: relative;
+  gap: 0;
+}
+
+.toggle > input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.toggle:has(> input:checked) {
+  background: var(--blue);
+  color: var(--uchu-yang);
+}
+
+.toggle:has(> input:checked) .ico {
+  fill: currentColor;
+}
+
+.toggle:has(> input:focus-visible) {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}

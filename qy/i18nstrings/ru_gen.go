@@ -277,8 +277,8 @@ var RU = Strings{
 			},
 			FreezeTitle: func() string { return "Утвердить шорт-лист" },
 			Frozen:      func(date string) string { return fmt.Sprintf("Шорт-лист утверждён %s.", date) },
-			Lead: func(expert int, people int) string {
-				return fmt.Sprintf("В шорт-лист попадают не меньше %d %s по отметкам экспертного жюри и не меньше %d %s по отметкам народного, вместе с вопросами, у которых столько же отметок, сколько у последнего прошедшего.", expert, core.Plural("ru", expert, "вопроса", "вопросов", "вопросов"), people, core.Plural("ru", people, "вопроса", "вопросов", "вопросов"))
+			Lead: func(favourite int, expert int, people int) string {
+				return fmt.Sprintf("Каждая отметка жюри даёт вопросу очко, а любимый вопрос члена жюри получает от него %d %s. В шорт-лист попадают не меньше %d %s по очкам экспертного жюри и не меньше %d %s по очкам народного, вместе с вопросами, у которых столько же очков, сколько у последнего прошедшего.", favourite, core.Plural("ru", favourite, "очко", "очка", "очков"), expert, core.Plural("ru", expert, "вопроса", "вопросов", "вопросов"), people, core.Plural("ru", people, "вопроса", "вопросов", "вопросов"))
 			},
 			People:    func() string { return "Народное" },
 			Shortlist: func() string { return "Шорт-лист" },
@@ -702,6 +702,15 @@ var RU = Strings{
 			},
 		},
 		Like: func() string { return "Нравится" },
+		Liked: VoteLikedStrings{
+			Empty:     func() string { return "Вы пока не отметили ни одного вопроса." },
+			Favourite: func() string { return "Любимый" },
+			Lead: func(n int) string {
+				return fmt.Sprintf("Здесь все вопросы, которые вам понравились. Один из них можно выбрать любимым: он получит от вас %d %s, остальные по одному.", n, core.Plural("ru", n, "очко", "очка", "очков"))
+			},
+			NoFavourite: func() string { return "Без любимого" },
+			Tab:         func() string { return "Понравившиеся" },
+		},
 		Page: VotePageStrings{
 			Closed: func(from string, to string) string {
 				return fmt.Sprintf("Первый этап и фактчек идут с %s по %s.", from, to)
@@ -721,6 +730,7 @@ var RU = Strings{
 				return fmt.Sprintf("Следующая порция откроется %s.", date)
 			},
 			NotOpen: func() string { return "Эта порция ещё не открыта." },
+			Opens:   func(date string) string { return fmt.Sprintf("Откроется %s", date) },
 			Tabs:    func() string { return "Порции" },
 			Title:   func(n string, date string) string { return fmt.Sprintf("Порция %s, открыта %s.", n, date) },
 		},

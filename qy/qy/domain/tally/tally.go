@@ -8,7 +8,11 @@ import (
 	"slices"
 )
 
-// Count is one question's first-stage likes from one jury.
+// FavouritePoints is what a juror's favourite question gets from them in the
+// first stage; any other question they liked gets one point.
+const FavouritePoints = 3
+
+// Count is one question's first-stage points from one jury.
 type Count struct {
 	ID int64
 	QY int

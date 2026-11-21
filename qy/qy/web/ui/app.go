@@ -9,6 +9,7 @@ package ui
 import (
 	_ "embed"
 
+	"code.pecheny.me/pecheny/dopesuite/dopeuikit/icons"
 	base "code.pecheny.me/pecheny/dopesuite/dopeuikit/kit"
 
 	qystrings "qy/i18nstrings"
@@ -29,6 +30,7 @@ func mustApp() *base.App {
 		Expand: map[string]base.ExpandFunc{
 			"richtext": expandRichtext,
 			"checkbox": expandCheckbox,
+			"toggle":   expandToggle,
 		},
 		Chrome: base.CoreChrome().With(base.Chrome{
 			// The kit's sheet caps a section at a form's 420px. Questions and
@@ -54,12 +56,37 @@ func expandRichtext(c *base.ExpandCtx, p *base.Element) []base.Node {
 func expandCheckbox(c *base.ExpandCtx, p *base.Element) []base.Node {
 	labelAttrs := []base.Attr{base.ClassAttr(base.GrowClasses([]string{"checkbox"}, p)...)}
 	labelAttrs = append(labelAttrs, base.MetaAttrs(p)...)
-	boxAttrs := []base.Attr{base.At("type", "checkbox")}
-	boxAttrs = append(boxAttrs, base.IDAttr(p)...)
-	boxAttrs = append(boxAttrs, base.CopyProps(p, "name", "value")...)
-	boxAttrs = append(boxAttrs, base.CopyFlags(p, "checked")...)
 	span := &base.Element{Tag: "span", Inline: c.Items(p.Inline)}
-	return []base.Node{&base.Element{Tag: "label", Attrs: labelAttrs, Block: []base.Node{base.El("input", boxAttrs), span}}}
+	return []base.Node{&base.Element{Tag: "label", Attrs: labelAttrs, Block: []base.Node{boxInput(p, "checkbox"), span}}}
+}
+
+// boxInput is the checkbox or radio a label wraps, posted under its name.
+func boxInput(p *base.Element, typ string) base.Node {
+	attrs := []base.Attr{base.At("type", typ)}
+	attrs = append(attrs, base.IDAttr(p)...)
+	attrs = append(attrs, base.CopyProps(p, "name", "value")...)
+	return base.El("input", append(attrs, base.CopyFlags(p, "checked")...))
+}
+
+// expandToggle is a checkbox drawn as a button, pressed while it is checked:
+// the jury's like. An exclusive one is a radio, one of a group: the favourite.
+// The box itself is hidden by the stylesheet and still takes the focus and the
+// clicks through its label, so a form posts it like any other.
+func expandToggle(c *base.ExpandCtx, p *base.Element) []base.Node {
+	labelAttrs := append([]base.Attr{base.ClassAttr("btn", "btn-ghost", "toggle")}, base.MetaAttrs(p)...)
+	typ := "checkbox"
+	if base.Flag(p, "exclusive") {
+		typ = "radio"
+	}
+	kids := []base.Node{boxInput(p, typ)}
+	if name, ok := base.Get(p, "icon"); ok {
+		if body, found := icons.Body(name); found {
+			kids = append(kids, base.Raw(`<svg class="ico ico-lead" viewBox="0 0 24 24" fill="none" stroke="currentColor" `+
+				`stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`+body+`</svg>`))
+		}
+	}
+	kids = append(kids, &base.Element{Tag: "span", Inline: c.Items(p.Inline)})
+	return []base.Node{&base.Element{Tag: "label", Attrs: labelAttrs, Block: kids}}
 }
 
 // Compile parses, validates and expands a .dopeui page (the kit's login page).

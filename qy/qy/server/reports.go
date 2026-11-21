@@ -80,7 +80,7 @@ func (s *server) handleStage1Report(w http.ResponseWriter, r *http.Request, _ ro
 		title: str.Admin.Contest.Stage1(),
 		trail: adminTrail(crumb{base, str.Admin.Contests.Row(y)}, crumb{"", str.Admin.Contest.Stage1()}),
 		body: []ui.Item{
-			ui.Section(hint(str.Admin.Stage1.Lead(c.ExpertCutoff, c.PeopleCutoff))),
+			ui.Section(hint(str.Admin.Stage1.Lead(tally.FavouritePoints, c.ExpertCutoff, c.PeopleCutoff))),
 			ui.Section(step...),
 			ui.Section(ui.Table(rows...)),
 		},

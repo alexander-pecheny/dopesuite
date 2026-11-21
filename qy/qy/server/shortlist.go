@@ -11,14 +11,15 @@ import (
 // The shortlist is computed from the likes whenever it is asked for, until an
 // admin freezes it; from then on the shortlist table is what it is.
 
-// likeCounts is each question's likes from the expert and the people's jury.
+// likeCounts is each question's points from the expert and the people's jury:
+// one for a like, more for a juror's favourite.
 func likeCounts(ctx context.Context, q store.Querier, year int) (map[int64][2]int, error) {
 	rows, err := q.QueryContext(ctx, `
-select l.question_id, j.kind, count(*) from likes l
+select l.question_id, j.kind, sum(case when l.favourite = 1 then ? else 1 end) from likes l
 join users u on u.id = l.user_id
 join jurors j on j.year = ? and `+store.JurorIsUser+`
 join questions qq on qq.id = l.question_id and qq.year = ?
-group by l.question_id, j.kind`, year, year)
+group by l.question_id, j.kind`, tally.FavouritePoints, year, year)
 	if err != nil {
 		return nil, err
 	}

@@ -206,7 +206,7 @@ export type Strings = {
       freezeHint: (n: number) => string;
       freezeTitle: () => string;
       frozen: (date: string) => string;
-      lead: (expert: number, people: number) => string;
+      lead: (favourite: number, expert: number, people: number) => string;
       people: () => string;
       shortlist: () => string;
       unfreeze: () => string;
@@ -511,6 +511,13 @@ export type Strings = {
       nothing: () => string;
     };
     like: () => string;
+    liked: {
+      empty: () => string;
+      favourite: () => string;
+      lead: (n: number) => string;
+      noFavourite: () => string;
+      tab: () => string;
+    };
     page: {
       closed: (from: string, to: string) => string;
       notJuror: () => string;
@@ -522,6 +529,7 @@ export type Strings = {
       lead: (days: number) => string;
       next: (date: string) => string;
       notOpen: () => string;
+      opens: (date: string) => string;
       tabs: () => string;
       title: (n: string, date: string) => string;
     };
