@@ -19,6 +19,9 @@ picture = "Картинка. Её можно и вставить из буфер
 # Runs the card editor's typography pass over every text box: quotes,
 # dashes, stress marks, non-breaking spaces and hyphens.
 typo = "Типографить"
+# Toggles the grid drawn over the Кадр, and snapping to it while dragging.
+grid = "Сетка"
+snap = "Привязка к сетке"
 # Zooms so the Кадр fills the view (Shift+1).
 fit = "Показать кадр целиком (Shift+1)"
 # Lays the browser's bake over the editor with a difference blend.
@@ -41,7 +44,7 @@ up = "Выше"
 down = "Ниже"
 remove = "Удалить"
 # The navigation help at the foot of the left panel.
-help = "Колесо: прокрутка. Ctrl или щипок: масштаб. Пробел и перетаскивание: сдвиг. Двойной щелчок по тексту: правка. Запекается только то, что внутри кадра."
+help = "Колесо: прокрутка. Ctrl или щипок: масштаб. Пробел и перетаскивание: сдвиг. Двойной щелчок по тексту: правка. Shift или Cmd со щелчком: выделить несколько. Alt и перетаскивание: копия. Запекается только то, что внутри кадра."
 
 [props]
 # The right panel's heading when nothing but the Кадр is selected.
@@ -52,6 +55,9 @@ w = "Ширина, мм"
 h = "Высота, мм"
 background = "Фон"
 dpi = "dpi для PNG"
+# The spacing of the editor's grid. It is the editor's setting, not the
+# picture's, and is remembered on this device.
+grid_step = "Шаг сетки, мм"
 size = "Кегль, пт"
 leading = "Интерлиньяж"
 tracking = "Трекинг, пт"
@@ -80,6 +86,21 @@ bold_italic = "Жирный курсив"
 hyphens = "Переносы"
 # The text a new box starts with, selected so that typing replaces it.
 sample = "Текст"
+
+[arrange]
+# Lining boxes up, as in Figma: several selected boxes by their common bounds,
+# one box by the Кадр.
+left = "Выровнять по левому краю"
+hcenter = "Выровнять по центру по горизонтали"
+right = "Выровнять по правому краю"
+top = "Выровнять по верхнему краю"
+vmiddle = "Выровнять по центру по вертикали"
+bottom = "Выровнять по нижнему краю"
+# Equal gaps between three or more boxes; the outermost two stay.
+distribute_x = "Распределить по горизонтали"
+distribute_y = "Распределить по вертикали"
+# The right panel's heading when several boxes are selected.
+picked = 'Выделено: {{.n}}'
 
 [status]
 # Shown while typst renders.

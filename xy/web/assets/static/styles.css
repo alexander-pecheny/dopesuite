@@ -2254,6 +2254,16 @@ body {
 .xyed-h-sw { left: 0; top: 100%; cursor: nesw-resize; }
 .xyed-h-w { left: 0; top: 50%; cursor: ew-resize; }
 .xyed-comparing .xyed-mask { box-shadow: none; }
+/* The editor's grid over the frame: its lines run from the frame's corner, and
+   renderGrid sets the cell size from the step and the zoom. Never baked. */
+.xyed-grid {
+  position: absolute; pointer-events: none;
+  --xyed-grid-line: color-mix(in srgb, var(--blue) 30%, transparent);
+  background-image: linear-gradient(to right, var(--xyed-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--xyed-grid-line) 1px, transparent 1px);
+}
+/* Each box of a selection of several; the selbox goes round all of them. */
+.xyed-pickbox { position: absolute; outline: 1px solid var(--blue); pointer-events: none; }
 
 /* Editor density. An image editor wants the canvas, so its chrome is set at
    Figma's size: 11px text, 24px controls, tight panels. Scoped to the editor;

@@ -2157,6 +2157,17 @@ export type Strings = {
     };
   };
   xyimage: {
+    arrange: {
+      bottom: () => string;
+      distributeX: () => string;
+      distributeY: () => string;
+      hcenter: () => string;
+      left: () => string;
+      picked: (n: string) => string;
+      right: () => string;
+      top: () => string;
+      vmiddle: () => string;
+    };
     fonts: {
       collection: (file: string) => string;
       empty: (file: string) => string;
@@ -2195,6 +2206,7 @@ export type Strings = {
       fontMissing: (name: string) => string;
       fontUpload: () => string;
       frame: () => string;
+      gridStep: () => string;
       h: () => string;
       hyphens: () => string;
       italic: () => string;
@@ -2223,12 +2235,14 @@ export type Strings = {
       close: () => string;
       compare: () => string;
       fit: () => string;
+      grid: () => string;
       move: () => string;
       pdf: () => string;
       picture: () => string;
       png: () => string;
       rect: () => string;
       save: () => string;
+      snap: () => string;
       text: () => string;
       typo: () => string;
     };

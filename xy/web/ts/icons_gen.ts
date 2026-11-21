@@ -6,7 +6,15 @@
 // SVG node has one parent, so a shared instance would teleport between buttons.
 
 export type IconName =
-    "arrow-down"
+    "align-center-horizontal"
+  | "align-center-vertical"
+  | "align-end-horizontal"
+  | "align-end-vertical"
+  | "align-horizontal-distribute-center"
+  | "align-start-horizontal"
+  | "align-start-vertical"
+  | "align-vertical-distribute-center"
+  | "arrow-down"
   | "arrow-left"
   | "arrow-left-right"
   | "arrow-up"
@@ -31,6 +39,7 @@ export type IconName =
   | "flask-round"
   | "funnel"
   | "gavel"
+  | "grid-3x3"
   | "house"
   | "image"
   | "info"
@@ -40,6 +49,7 @@ export type IconName =
   | "list-plus"
   | "lock"
   | "log-in"
+  | "magnet"
   | "maximize-2"
   | "menu"
   | "message-circle"
@@ -71,6 +81,14 @@ export type IconName =
 ;
 
 const BODIES: Record<IconName, string> = {
+  "align-center-horizontal": "<path d=\"M2 12h20\" /> <path d=\"M10 16v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4\" /> <path d=\"M10 8V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v4\" /> <path d=\"M20 16v1a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-1\" /> <path d=\"M14 8V7c0-1.1.9-2 2-2h2a2 2 0 0 1 2 2v1\" />",
+  "align-center-vertical": "<path d=\"M12 2v20\" /> <path d=\"M8 10H4a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h4\" /> <path d=\"M16 10h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4\" /> <path d=\"M8 20H7a2 2 0 0 1-2-2v-2c0-1.1.9-2 2-2h1\" /> <path d=\"M16 14h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1\" />",
+  "align-end-horizontal": "<rect width=\"6\" height=\"16\" x=\"4\" y=\"2\" rx=\"2\" /> <rect width=\"6\" height=\"9\" x=\"14\" y=\"9\" rx=\"2\" /> <path d=\"M22 22H2\" />",
+  "align-end-vertical": "<rect width=\"16\" height=\"6\" x=\"2\" y=\"4\" rx=\"2\" /> <rect width=\"9\" height=\"6\" x=\"9\" y=\"14\" rx=\"2\" /> <path d=\"M22 22V2\" />",
+  "align-horizontal-distribute-center": "<rect width=\"6\" height=\"14\" x=\"4\" y=\"5\" rx=\"2\" /> <rect width=\"6\" height=\"10\" x=\"14\" y=\"7\" rx=\"2\" /> <path d=\"M17 22v-5\" /> <path d=\"M17 7V2\" /> <path d=\"M7 22v-3\" /> <path d=\"M7 5V2\" />",
+  "align-start-horizontal": "<rect width=\"6\" height=\"16\" x=\"4\" y=\"6\" rx=\"2\" /> <rect width=\"6\" height=\"9\" x=\"14\" y=\"6\" rx=\"2\" /> <path d=\"M22 2H2\" />",
+  "align-start-vertical": "<rect width=\"9\" height=\"6\" x=\"6\" y=\"14\" rx=\"2\" /> <rect width=\"16\" height=\"6\" x=\"6\" y=\"4\" rx=\"2\" /> <path d=\"M2 2v20\" />",
+  "align-vertical-distribute-center": "<path d=\"M22 17h-3\" /> <path d=\"M22 7h-5\" /> <path d=\"M5 17H2\" /> <path d=\"M7 7H2\" /> <rect x=\"5\" y=\"14\" width=\"14\" height=\"6\" rx=\"2\" /> <rect x=\"7\" y=\"4\" width=\"10\" height=\"6\" rx=\"2\" />",
   "arrow-down": "<path d=\"M12 5v14\" /> <path d=\"m19 12-7 7-7-7\" />",
   "arrow-left": "<path d=\"m12 19-7-7 7-7\" /> <path d=\"M19 12H5\" />",
   "arrow-left-right": "<path d=\"M8 3 4 7l4 4\" /> <path d=\"M4 7h16\" /> <path d=\"m16 21 4-4-4-4\" /> <path d=\"M20 17H4\" />",
@@ -96,6 +114,7 @@ const BODIES: Record<IconName, string> = {
   "flask-round": "<path d=\"M10 2v6.292a7 7 0 1 0 4 0V2\" /> <path d=\"M5 15h14\" /> <path d=\"M8.5 2h7\" />",
   "funnel": "<path d=\"M10 20a1 1 0 0 0 1.447.894l2-1A1 1 0 0 0 14 19v-4.586a1 1 0 0 1 .293-.707l6.414-6.414A1 1 0 0 0 21 6.586V5a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v1.586a1 1 0 0 0 .293.707l6.414 6.414a1 1 0 0 1 .293.707z\" />",
   "gavel": "<path d=\"m14 13-8.381 8.38a1 1 0 0 1-3.001-3l8.384-8.381\" /> <path d=\"m16 16 6-6\" /> <path d=\"m21.5 10.5-8-8\" /> <path d=\"m8 8 6-6\" /> <path d=\"m8.5 7.5 8 8\" />",
+  "grid-3x3": "<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\" /> <path d=\"M3 9h18\" /> <path d=\"M3 15h18\" /> <path d=\"M9 3v18\" /> <path d=\"M15 3v18\" />",
   "house": "<path d=\"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8\" /> <path d=\"M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\" />",
   "image": "<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\" ry=\"2\" /> <circle cx=\"9\" cy=\"9\" r=\"2\" /> <path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\" />",
   "info": "<circle cx=\"12\" cy=\"12\" r=\"10\" /> <path d=\"M12 16v-4\" /> <path d=\"M12 8h.01\" />",
@@ -105,6 +124,7 @@ const BODIES: Record<IconName, string> = {
   "list-plus": "<path d=\"M16 5H3\" /> <path d=\"M11 12H3\" /> <path d=\"M16 19H3\" /> <path d=\"M18 9v6\" /> <path d=\"M21 12h-6\" />",
   "lock": "<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\" /> <path d=\"M7 11V7a5 5 0 0 1 10 0v4\" />",
   "log-in": "<path d=\"m10 17 5-5-5-5\" /> <path d=\"M15 12H3\" /> <path d=\"M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4\" />",
+  "magnet": "<path d=\"m12 15 4 4\" /> <path d=\"M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z\" /> <path d=\"m5 8 4 4\" />",
   "maximize-2": "<path d=\"M15 3h6v6\" /> <path d=\"m21 3-7 7\" /> <path d=\"m3 21 7-7\" /> <path d=\"M9 21H3v-6\" />",
   "menu": "<path d=\"M4 5h16\" /> <path d=\"M4 12h16\" /> <path d=\"M4 19h16\" />",
   "message-circle": "<path d=\"M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719\" />",

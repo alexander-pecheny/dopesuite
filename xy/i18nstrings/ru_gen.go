@@ -2834,6 +2834,17 @@ var RU = Strings{
 		},
 	},
 	Xyimage: XyimageStrings{
+		Arrange: XyimageArrangeStrings{
+			Bottom:      func() string { return "Выровнять по нижнему краю" },
+			DistributeX: func() string { return "Распределить по горизонтали" },
+			DistributeY: func() string { return "Распределить по вертикали" },
+			Hcenter:     func() string { return "Выровнять по центру по горизонтали" },
+			Left:        func() string { return "Выровнять по левому краю" },
+			Picked:      func(n string) string { return fmt.Sprintf("Выделено: %s", n) },
+			Right:       func() string { return "Выровнять по правому краю" },
+			Top:         func() string { return "Выровнять по верхнему краю" },
+			Vmiddle:     func() string { return "Выровнять по центру по вертикали" },
+		},
 		Fonts: XyimageFontsStrings{
 			Collection: func(file string) string {
 				return fmt.Sprintf("%s: коллекции шрифтов (TTC) не поддерживаются, загрузите отдельные файлы TTF или OTF", file)
@@ -2856,7 +2867,7 @@ var RU = Strings{
 			Down:  func() string { return "Ниже" },
 			Frame: func() string { return "Кадр" },
 			Help: func() string {
-				return "Колесо: прокрутка. Ctrl или щипок: масштаб. Пробел и перетаскивание: сдвиг. Двойной щелчок по тексту: правка. Запекается только то, что внутри кадра."
+				return "Колесо: прокрутка. Ctrl или щипок: масштаб. Пробел и перетаскивание: сдвиг. Двойной щелчок по тексту: правка. Shift или Cmd со щелчком: выделить несколько. Alt и перетаскивание: копия. Запекается только то, что внутри кадра."
 			},
 			Picture: func() string { return "Картинка" },
 			Rect:    func() string { return "Прямоугольник" },
@@ -2886,6 +2897,7 @@ var RU = Strings{
 				return "Загрузить шрифт: файлы TTF или OTF, или zip с ними"
 			},
 			Frame:        func() string { return "Кадр" },
+			GridStep:     func() string { return "Шаг сетки, мм" },
 			H:            func() string { return "Высота, мм" },
 			Hyphens:      func() string { return "Переносы" },
 			Italic:       func() string { return "Курсив" },
@@ -2918,6 +2930,7 @@ var RU = Strings{
 				return "Сравнить с зафиксированными строками: всё, что совпадает с экраном, станет чёрным"
 			},
 			Fit:  func() string { return "Показать кадр целиком (Shift+1)" },
+			Grid: func() string { return "Сетка" },
 			Move: func() string { return "Выделение и перемещение (V)" },
 			Pdf:  func() string { return "PDF" },
 			Picture: func() string {
@@ -2926,6 +2939,7 @@ var RU = Strings{
 			Png:  func() string { return "PNG" },
 			Rect: func() string { return "Чёрный прямоугольник (R)" },
 			Save: func() string { return "Сохранить" },
+			Snap: func() string { return "Привязка к сетке" },
 			Text: func() string { return "Текст (T)" },
 			Typo: func() string { return "Типографить" },
 		},

@@ -25,6 +25,8 @@ import { encodeXyimage, parseXyimage } from "./xyimagefile.js";
 import { faceRef, loadFace } from "./xyimagefonts.js";
 import type { FaceRef, FontFamily, FontSource } from "./xyimagefonts.js";
 import { NOTO_FAMILY, fontPicker, matchFace } from "./xyimagefontpicker.js";
+import { GRID_STEP_RANGE, MIN_DISTRIBUTE, align, bounds, distribute, loadGrid, saveGrid, snapPoint, snapShift } from "./xyimagearrange.js";
+import type { AlignMode, Axis, Box } from "./xyimagearrange.js";
 
 const { el, errMsg, downloadBlob } = xyApp;
 
@@ -70,6 +72,8 @@ const WEIGHT = { regular: 400, bold: 700 };
 const WHITE = "#ffffff";
 // The Recipe's own version (ADR-0024): bumped on a change of meaning only.
 const RECIPE_VERSION = 1;
+// Grid lines closer together on screen than this are not drawn.
+const MIN_GRID_PX = 4;
 
 // ---- model ----
 
@@ -134,6 +138,9 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     frame: { x: 0, y: 0, ...NEW_FRAME, bg: WHITE, dpi: DEFAULT_DPI } as Frame,
     items: [] as Item[],
     sel: null as Sel,
+    // Every item selected, the primary (sel) among them: several are picked
+    // with Shift or Cmd/Ctrl and then aligned, moved or removed together.
+    picked: new Set<number>(),
     tool: "move" as Tool,
     editing: null as number | null,
     zoom: REAL, // screen px per mm; fitFrame sets it at boot
@@ -142,6 +149,7 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     space: false,
     comparing: false,
     nextId: 1,
+    grid: loadGrid(),
   };
 
   // The Faces a text box names that could not be loaded: its Family was
@@ -180,12 +188,16 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
   const zoomLabel = el("button", { class: "btn btn-ghost xyed-zoom", type: "button", title: S.xyimage.tools.fit() });
   const compareBtn = barBtn("eye", null, S.xyimage.tools.compare(), () => { void toggleCompare(); });
   const status = el("span", { class: "xyed-status" });
+  const gridBtn = barBtn("grid-3x3", null, S.xyimage.tools.grid(), () => setGrid({ show: !state.grid.show }));
+  const snapBtn = barBtn("magnet", null, S.xyimage.tools.snap(), () => setGrid({ snap: !state.grid.snap }));
   const bar = el("div", { class: "xyed-bar" },
     toolBtn("move", "maximize-2", S.xyimage.tools.move()),
     toolBtn("text", "text-cursor-input", S.xyimage.tools.text()),
     toolBtn("rect", "square", S.xyimage.tools.rect()),
     barBtn("image", null, S.xyimage.tools.picture(), () => fileInput.click()),
     barBtn("wand-sparkles", null, S.xyimage.tools.typo(), typographAll),
+    gridBtn,
+    snapBtn,
     el("span", { class: "xyed-spacer" }),
     status,
     zoomLabel,
@@ -218,7 +230,9 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     handleEls.set(h, node);
     selBox.append(node);
   }
-  const view = el("div", { class: "xyed-view", tabindex: "0" }, world, mask, frameLabel, selBox);
+  const gridEl = el("div", { class: "xyed-grid", hidden: true });
+  const pickBoxes = el("div");
+  const view = el("div", { class: "xyed-view", tabindex: "0" }, world, mask, gridEl, frameLabel, pickBoxes, selBox);
 
   root.classList.add("xyimage-editor");
   root.append(bar, layers, view, props);
@@ -260,10 +274,18 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
 
   function itemById(id: number): Item | undefined { return state.items.find((i) => i.id === id); }
 
+  // pickedItems is every selected item, in stacking order.
+  function pickedItems(): Item[] {
+    if (typeof state.sel !== "number") return [];
+    const ids = state.picked.has(state.sel) ? state.picked : new Set([state.sel]);
+    return state.items.filter((i) => ids.has(i.id));
+  }
+
   function selRect(): (Rect & { kind: string }) | null {
     if (state.sel === "frame") return { ...state.frame, kind: "frame" };
-    if (state.sel === null) return null;
-    return itemById(state.sel) ?? null;
+    const items = pickedItems();
+    if (items.length > 1) return { ...bounds(items), kind: "many" };
+    return items[0] ?? null;
   }
 
   const VALIGN_FLEX: Record<VAlign, string> = { top: "flex-start", middle: "center", bottom: "flex-end" };
@@ -337,9 +359,12 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
       }
     }
     renderSelection();
+    renderGrid();
     zoomLabel.textContent = `${Math.round(state.zoom / REAL * PERCENT)}%`;
     for (const b of bar.querySelectorAll<HTMLElement>("[data-tool]")) b.classList.toggle("xyed-on", b.dataset.tool === state.tool);
     compareBtn.classList.toggle("xyed-on", state.comparing);
+    gridBtn.classList.toggle("xyed-on", state.grid.show);
+    snapBtn.classList.toggle("xyed-on", state.grid.snap);
     view.dataset.tool = state.space ? "pan" : state.tool;
     syncPropValues();
   }
@@ -350,7 +375,29 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     if (!r) return;
     placeScreen(selBox, r);
     const cornersOnly = r.kind === "image";
-    for (const [h, node] of handleEls) node.hidden = state.editing !== null || (cornersOnly && h.length === 1);
+    for (const [h, node] of handleEls) node.hidden = state.editing !== null || r.kind === "many" || (cornersOnly && h.length === 1);
+    const many = pickedItems();
+    pickBoxes.replaceChildren(...(many.length > 1 && !state.comparing ? many.map((it) => {
+      const node = el("div", { class: "xyed-pickbox" });
+      placeScreen(node, it);
+      return node;
+    }) : []));
+  }
+
+  // renderGrid draws the grid over the frame, its lines from the frame's
+  // corner; it is the editor's, and never baked.
+  function renderGrid(): void {
+    const px = state.grid.step * state.zoom;
+    gridEl.hidden = !state.grid.show || state.comparing || px < MIN_GRID_PX;
+    if (gridEl.hidden) return;
+    placeScreen(gridEl, state.frame);
+    gridEl.style.backgroundSize = `${px}px ${px}px`;
+  }
+
+  function setGrid(change: Partial<typeof state.grid>): void {
+    Object.assign(state.grid, change);
+    saveGrid(state.grid);
+    render();
   }
 
   function round1(v: number): string { return String(Math.round(v * TENTHS) / TENTHS); }
@@ -373,8 +420,8 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     rows.push(frameRow);
     for (const it of [...state.items].reverse()) {
       const row = el("button", { class: "xyed-layer xyed-layer-child", type: "button" }, icon(KIND_ICON[it.kind]), el("span", { class: "u-clip-fade", text: itemLabel(it) }));
-      row.classList.toggle("xyed-on", state.sel === it.id);
-      row.addEventListener("click", () => select(it.id));
+      row.classList.toggle("xyed-on", pickedItems().includes(it));
+      row.addEventListener("click", (e) => { if (addsToSelection(e)) togglePicked(it.id); else select(it.id); });
       rows.push(row);
     }
     layersList.replaceChildren(...rows);
@@ -443,6 +490,27 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     ];
   }
 
+  // arrangeButtons lines boxes up: several by their common bounds, one by the
+  // frame. Spacing out evenly needs three.
+  function arrangeButtons(items: Item[]): HTMLElement {
+    const modes: [AlignMode, IconName, string][] = [
+      ["left", "align-start-vertical", S.xyimage.arrange.left()],
+      ["hcenter", "align-center-vertical", S.xyimage.arrange.hcenter()],
+      ["right", "align-end-vertical", S.xyimage.arrange.right()],
+      ["top", "align-start-horizontal", S.xyimage.arrange.top()],
+      ["vmiddle", "align-center-horizontal", S.xyimage.arrange.vmiddle()],
+      ["bottom", "align-end-horizontal", S.xyimage.arrange.bottom()],
+    ];
+    const to: Box = items.length > 1 ? bounds(items) : state.frame;
+    const rows = [el("div", { class: "u-row u-wrap" }, modes.map(([mode, ico, title]) => barBtn(ico, null, title, () => { align(items, mode, to); render(); })))];
+    const spread: [Axis, IconName, string][] = [
+      ["x", "align-horizontal-distribute-center", S.xyimage.arrange.distributeX()],
+      ["y", "align-vertical-distribute-center", S.xyimage.arrange.distributeY()],
+    ];
+    if (items.length >= MIN_DISTRIBUTE) rows.push(el("div", { class: "u-row" }, spread.map(([axis, ico, title]) => barBtn(ico, null, title, () => { distribute(items, axis); render(); }))));
+    return el("div", { class: "u-col" }, rows);
+  }
+
   function orderButtons(id: number): HTMLElement {
     return el("div", { class: "u-row u-wrap u-gap-sm" },
       barBtn("arrow-up", S.xyimage.layers.up(), S.xyimage.layers.up(), () => restack(id, 1)),
@@ -453,18 +521,27 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
   function renderProps(): void {
     numProps = [];
     const f = state.frame;
-    const sel = state.sel === null || state.sel === "frame" ? null : itemById(state.sel) ?? null;
+    const many = pickedItems();
+    const sel = many.length === 1 ? many[0] : null;
     const parts: HTMLElement[] = [];
-    if (!sel) {
+    if (many.length > 1) {
+      parts.push(el("div", { class: "xyed-panelhead u-clip-fade", text: S.xyimage.arrange.picked(String(many.length)) }),
+        arrangeButtons(many),
+        el("div", { class: "u-row u-wrap u-gap-sm" }, barBtn("trash-2", S.xyimage.layers.remove(), S.xyimage.layers.remove(), removeSelected)));
+    } else if (!sel) {
       const bg = el("input", { class: "input", type: "text", maxlength: "7", spellcheck: "false", value: f.bg }) as HTMLInputElement;
       bg.addEventListener("input", () => { if (HEX_COLOUR.test(bg.value)) { f.bg = bg.value; render(); } });
       parts.push(el("div", { class: "xyed-panelhead u-clip-fade", text: S.xyimage.props.frame() }), geometry(f),
         el("div", { class: "xyed-grid2" },
           el("label", { class: "field" }, el("span", { text: S.xyimage.props.background() }), bg),
-          numField(S.xyimage.props.dpi(), () => f.dpi, (v) => { f.dpi = Math.min(DPI_RANGE.max, Math.max(DPI_RANGE.min, Math.round(v))); }, "1")));
+          numField(S.xyimage.props.dpi(), () => f.dpi, (v) => { f.dpi = Math.min(DPI_RANGE.max, Math.max(DPI_RANGE.min, Math.round(v))); }, "1"),
+          numField(S.xyimage.props.gridStep(), () => state.grid.step, (v) => {
+            state.grid.step = Math.min(GRID_STEP_RANGE.max, Math.max(GRID_STEP_RANGE.min, v));
+            saveGrid(state.grid);
+          }, "0.5")));
     } else {
       parts.push(el("div", { class: "xyed-panelhead u-clip-fade", text: itemLabel(sel) }),
-        geometry(sel, sel.kind === "image" ? sel.ratio : undefined));
+        geometry(sel, sel.kind === "image" ? sel.ratio : undefined), arrangeButtons([sel]));
       if (sel.kind === "text") parts.push(...textProps(sel));
       parts.push(orderButtons(sel.id));
     }
@@ -477,6 +554,30 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
   function select(sel: Sel): void {
     if (state.editing !== null && sel !== state.editing) stopEditing();
     state.sel = sel;
+    state.picked = new Set(typeof sel === "number" ? [sel] : []);
+    renderLayers();
+    renderProps();
+    render();
+  }
+
+  // addsToSelection is whether a click adds to the selection, or takes away
+  // from it, instead of replacing it.
+  function addsToSelection(e: MouseEvent): boolean {
+    return e.shiftKey || e.metaKey || e.ctrlKey;
+  }
+
+  function togglePicked(id: number): void {
+    const ids = new Set(pickedItems().map((i) => i.id));
+    if (ids.has(id)) ids.delete(id); else ids.add(id);
+    const rest = [...ids];
+    if (!rest.length) select(null);
+    else setPicked(rest, ids.has(id) ? id : rest[rest.length - 1]);
+  }
+
+  // setPicked selects several items, `primary` among them.
+  function setPicked(ids: number[], primary: number): void {
+    select(primary);
+    state.picked = new Set(ids);
     renderLayers();
     renderProps();
     render();
@@ -492,6 +593,7 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     if (!body) return;
     state.editing = id;
     state.sel = id;
+    state.picked = new Set([id]);
     body.contentEditable = "plaintext-only";
     if (body.contentEditable !== "plaintext-only") body.contentEditable = "true";
     body.focus();
@@ -522,13 +624,28 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
   }
 
   function removeSelected(): void {
-    if (typeof state.sel !== "number") return;
-    const it = itemById(state.sel);
-    if (it?.kind === "image") URL.revokeObjectURL(it.url);
+    const gone = new Set(pickedItems());
+    if (!gone.size) return;
+    for (const it of gone) if (it.kind === "image") URL.revokeObjectURL(it.url);
     stopEditing();
-    state.items = state.items.filter((i) => i.id !== state.sel);
+    state.items = state.items.filter((i) => !gone.has(i));
     syncItems();
     select(null);
+  }
+
+  // cloneItems puts a copy of each item just above it, as Alt-drag does, and
+  // returns the copies.
+  function cloneItems(items: Item[]): Item[] {
+    const copies: Item[] = [];
+    for (const it of items) {
+      const copy: Item = { ...it, id: state.nextId++ };
+      if (copy.kind === "text") copy.style = { ...copy.style };
+      if (copy.kind === "image") copy.url = URL.createObjectURL(copy.bytes);
+      state.items.splice(state.items.indexOf(it) + 1, 0, copy);
+      copies.push(copy);
+    }
+    syncItems();
+    return copies;
   }
 
   function restack(id: number, by: number): void {
@@ -632,7 +749,8 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
 
   type Drag =
     | { kind: "pan"; x0: number; y0: number; px: number; py: number }
-    | { kind: "move"; target: Rect; x0: number; y0: number; r0: Rect }
+    | { kind: "move"; targets: Rect[]; x0: number; y0: number; r0: Rect[]; copy?: boolean }
+    | { kind: "none" }
     | { kind: "resize"; target: Rect; handle: Handle; r0: Rect; ratio?: number }
     | { kind: "create"; tool: Tool; x0: number; y0: number; item: Item | null };
 
@@ -656,6 +774,36 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     return undefined;
   }
 
+  function moveFrom(p: { x: number; y: number }, targets: Rect[], copy = false): Drag {
+    return { kind: "move", targets, x0: p.x, y0: p.y, r0: targets.map((r) => ({ ...r })), copy };
+  }
+
+  // grabbed is what a press on an item drags: the whole selection when the
+  // item is in it, else the item alone.
+  function grabbed(it: Item): Item[] {
+    const picked = pickedItems();
+    const items = picked.includes(it) ? picked : [it];
+    pick(items, it);
+    return items;
+  }
+
+  function pick(items: Item[], primary: Item): void {
+    if (items.length === 1) select(items[0].id);
+    else setPicked(items.map((i) => i.id), primary.id);
+  }
+
+  // copyDragged swaps what an Alt-drag holds for copies of it, on its first
+  // move, so an Alt-click alone copies nothing. The originals stay put.
+  function copyDragged(d: Extract<Drag, { kind: "move" }>): void {
+    d.copy = false;
+    const items = d.targets.filter((t): t is Item => t !== state.frame);
+    if (items.length !== d.targets.length) return;
+    const primary = items.findIndex((i) => i.id === state.sel);
+    const copies = cloneItems(items);
+    d.targets = copies;
+    pick(copies, copies[Math.max(0, primary)]);
+  }
+
   function panFrom(e: PointerEvent): Drag {
     return { kind: "pan", x0: e.clientX, y0: e.clientY, px: state.panX, py: state.panY };
   }
@@ -667,15 +815,16 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     const handle = t.closest<HTMLElement>("[data-handle]")?.dataset.handle as Handle | undefined;
     const sr = selTarget();
     if (handle && sr) return { kind: "resize", target: sr, handle, r0: { ...sr }, ratio: sr.ratio };
-    if (state.tool !== "move") return { kind: "create", tool: state.tool, x0: p.x, y0: p.y, item: null };
-    const it = hitItem(t);
-    if (it) {
-      if (state.sel !== it.id) select(it.id);
-      return { kind: "move", target: it, x0: p.x, y0: p.y, r0: { ...it } };
+    if (state.tool !== "move") {
+      const at = snapped(p, true);
+      return { kind: "create", tool: state.tool, x0: at.x, y0: at.y, item: null };
     }
+    const it = hitItem(t);
+    if (it && addsToSelection(e)) { togglePicked(it.id); return { kind: "none" }; }
+    if (it) return moveFrom(p, grabbed(it), e.altKey);
     if (t.closest("[data-frame]") || inFrame(p)) {
       if (state.sel !== "frame") select("frame");
-      return { kind: "move", target: state.frame, x0: p.x, y0: p.y, r0: { ...state.frame } };
+      return moveFrom(p, [state.frame]);
     }
     select(null);
     return panFrom(e);
@@ -726,10 +875,11 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
       render();
       return;
     }
-    const p = toWorld(e.clientX, e.clientY);
+    if (drag.kind === "none") return;
+    const p = snapped(toWorld(e.clientX, e.clientY), drag.kind !== "move");
     if (drag.kind === "move") {
-      drag.target.x = drag.r0.x + p.x - drag.x0;
-      drag.target.y = drag.r0.y + p.y - drag.y0;
+      if (drag.copy) copyDragged(drag);
+      moveBy(drag, p.x - drag.x0, p.y - drag.y0);
     } else if (drag.kind === "resize") {
       resizeRect(drag, p, e.shiftKey);
     } else {
@@ -742,6 +892,29 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     }
     render();
   });
+
+  // snapped is a pointer position on the grid, when snapping is on; a move
+  // snaps the box instead (moveBy), so the point is left as it is.
+  function snapped(p: { x: number; y: number }, onGrid: boolean): { x: number; y: number } {
+    if (!onGrid || !state.grid.snap) return p;
+    const f = state.frame;
+    return { x: snapPoint(p.x, f.x, state.grid.step), y: snapPoint(p.y, f.y, state.grid.step) };
+  }
+
+  // moveBy shifts what is dragged; with snapping on, the dragged boxes' common
+  // bounds land with their nearer edges on the grid. The frame never snaps to
+  // its own grid.
+  function moveBy(d: Extract<Drag, { kind: "move" }>, dx: number, dy: number): void {
+    const moved = d.r0.map((r) => ({ ...r, x: r.x + dx, y: r.y + dy }));
+    if (state.grid.snap && !d.targets.includes(state.frame)) {
+      const b = bounds(moved);
+      const f = state.frame;
+      const sx = snapShift(b.x, b.w, f.x, state.grid.step);
+      const sy = snapShift(b.y, b.h, f.y, state.grid.step);
+      for (const r of moved) { r.x += sx; r.y += sy; }
+    }
+    d.targets.forEach((t, i) => { t.x = moved[i].x; t.y = moved[i].y; });
+  }
 
   function endDrag(): void {
     const d = drag;
@@ -809,13 +982,19 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
       return;
     }
     const dir = ARROWS[e.key];
-    const r = selTarget();
-    if (!dir || !r) return;
+    const rs: Rect[] = state.sel === "frame" ? [state.frame] : pickedItems();
+    if (!dir || !rs.length) return;
     e.preventDefault();
     const step = e.shiftKey ? NUDGE_BIG : NUDGE;
-    r.x += dir[0] * step;
-    r.y += dir[1] * step;
+    for (const r of rs) {
+      r.x += dir[0] * step;
+      r.y += dir[1] * step;
+    }
     render();
+  }
+
+  function selectAll(): void {
+    setPicked(state.items.map((i) => i.id), state.items[state.items.length - 1].id);
   }
 
   // escapeKey takes Escape for the editor while there is something to let go of:
@@ -836,6 +1015,7 @@ export async function createEditor(root: HTMLElement, opts: EditorOptions = {}):
     if (e.key === "Escape" && escapeKey(e)) return;
     if (state.editing !== null || isField(e.target)) return;
     const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.code === "KeyA" && state.items.length) { e.preventDefault(); selectAll(); return; }
     if (zoomKey(e, mod) || mod) return;
     if (e.key === " ") { e.preventDefault(); state.space = true; render(); return; }
     const tool = TOOL_KEYS[e.key.toLowerCase()];
