@@ -25,14 +25,18 @@ import (
 // The JSON is a list of rows in the order they were sent, each
 // {"rating": 25177, "at": "2026-02-02T16:36:20Z", "link": "…", "tournament": "…"}:
 // the link a gotquestions question or a telegram post, a question known only by
-// its number having been looked up in the gotquestions dump beforehand. The
-// import replaces the year's earlier one, so it can be run again.
+// its number having been looked up in the gotquestions dump beforehand. A
+// question that is in neither comes with its text as a nominator would paste
+// it, in "text", and a link of its own making to tell it apart (the
+// tournament's page with the question's number, say). The import replaces the
+// year's earlier one, so it can be run again.
 
 type sheetRow struct {
 	Rating     int64  `json:"rating"`
 	At         string `json:"at"`
 	Link       string `json:"link"`
 	Tournament string `json:"tournament"`
+	Text       string `json:"text,omitempty"`
 }
 
 // maxSheet caps what import-sheet reads from stdin.
@@ -148,8 +152,9 @@ delete from questions where id = ? and qy is null and status = 'new'
 	return people, nominations, err
 }
 
-// sheetQuestion is a row's question as nominated: read by its link, or, if
-// the link does not load, waiting for an admin to paste its text.
+// sheetQuestion is a row's question as nominated: parsed from the text the
+// row brings, read by its link, or, if the link does not load, waiting for an
+// admin to paste its text.
 func (s *server) sheetQuestion(ctx context.Context, year int, r sheetRow) store.Question {
 	links := question.FindLinks(r.Link)
 	tournament := question.FindLinks(r.Tournament).TournamentID
@@ -159,6 +164,15 @@ func (s *server) sheetQuestion(ctx context.Context, year int, r sheetRow) store.
 	}
 	if q.GQID != 0 {
 		q.Link = links.GotQuestions
+	}
+	if r.Text != "" {
+		q.SourceText = r.Text
+		if parsed, ok := question.Parse(r.Text); ok {
+			q.Orig, q.Clean = parsed, parsed.Anonymous()
+			return q
+		}
+		log.Printf("import-sheet: the text for %s did not parse; an admin pastes it", r.Link)
+		return q
 	}
 	l, err := s.loadQuestion(ctx, r.Link)
 	if err != nil {

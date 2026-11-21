@@ -111,3 +111,21 @@ func TestAQuestionNominatedTwiceIsMergedAndCanBeParted(t *testing.T) {
 		t.Error("unmerge should make the question stand alone again")
 	}
 }
+
+func TestASheetRowMayBringItsQuestionsText(t *testing.T) {
+	w := newWorld(t)
+	sheetQuestions(w)
+	text := pasted("Вопрос, которого нет в базе.", "небаза", "Автор Вопроса")
+	rows := []qyserver.SheetRow{row(303, 900),
+		{Rating: 303, At: "2026-02-03T10:00:00Z", Link: "https://rating.chgk.info/tournament/13594#40", Tournament: "https://rating.chgk.info/tournament/13594", Text: text}}
+	if _, n := w.ts.ImportSheet(2026, rows); n != 2 {
+		t.Fatalf("imported %d nominations, want 2", n)
+	}
+	if w.count(`select count(*) from questions where json_extract(orig, '$.answer') = 'небаза' and json_extract(orig, '$.author') = 'Автор Вопроса'
+  and tournament_id = 13594 and published = 1 and source_text = ?`, text) != 1 {
+		t.Error("the row's text should be the question, parsed")
+	}
+	if _, n := w.ts.ImportSheet(2026, rows); n != 2 || w.count(`select count(*) from questions`) != 2 {
+		t.Error("a second import should find the question by its link")
+	}
+}
