@@ -7,8 +7,9 @@
 # line to match, so the gain is kept. It is 0.502 since the migration lists
 # vouched for their version numbers (sloplint 3ab0283 leaves those out), and
 # 0.4935 since the round-robin schedules and the letter frequencies did too,
-# 0.4933 since the entrants-grid merge named its numbers, and 0.4913 since
-# qy's migration list did.
+# 0.4933 since the entrants-grid merge named its numbers, 0.4913 since
+# qy's migration list did, and 0.4896 once xy's image editor, its fonts and
+# reorderable list fields came in.
 # Score with sloplint 3ab0283 or newer: an older binary still counts the
 # numbers an ignore comment vouches for, and reads about 0.03 higher.
-max-slop-score = 0.4913
+max-slop-score = 0.4896
