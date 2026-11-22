@@ -8,11 +8,15 @@
 # Empty state of the sessions list on a board with no test sessions yet.
 empty = "Тестов пока нет."
 # Per-row count of tester players, appended to the row's meta line.
-players = '{{.n}} игр.'
+# «чел.», not «игр.»: next to a count of questions «игр.» reads as games.
+players = '{{.n}} чел.'
 # Per-row count of tester teams, appended to the row's meta line.
 teams = '{{.n}} ком.'
 # Per-row count of questions already played at this session.
 played = '{{.n}} вопр.'
+# Per-row count of SI themes played at this session, said instead of (or
+# after) the questions: a theme is one card, not one question.
+played_themes = '{{.n}} {{plural .n "тема" "темы" "тем"}}'
 # Fallback row title when the session carries no date at all.
 no_date = "(без даты)"
 # Tooltip of the copy marker on a session that arrived from another board.

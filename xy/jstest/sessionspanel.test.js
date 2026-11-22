@@ -31,7 +31,7 @@ const panel = createSessionsPanel({
   boardName: () => "Доска",
   defaultTimezone: () => "Europe/Moscow",
   defaultCities: () => [],
-  playedCount: (id) => (id === 2 ? 12 : 0),
+  playedCount: (id) => (id === 2 ? { questions: 12, themes: 0 } : id === 1 ? { questions: 3, themes: 5 } : { questions: 0, themes: 0 }),
   createSession: async (m) => { log.push(["create", m]); sessions.push({ id: 3, meta: m }); return 3; },
   patchSession: async (id, m) => { log.push(["patch", id, m]); sessions.find((s) => s.id === id).meta = m; },
   deleteSession: async (id) => { log.push(["delete", id]); },
@@ -49,7 +49,7 @@ test("the list shows the newest test first with its counts, and copies the invit
   const rows = p.node("sessionsList").querySelectorAll(".sess-row");
   assert.equal(rows.length, 2);
   assert.deepEqual(p.node("sessionsList").querySelectorAll(".sess-title").map((n) => n.textContent), ["10 августа · Поздний", "1 августа · Ранний"]);
-  assert.deepEqual(p.node("sessionsList").querySelectorAll(".sess-meta").map((n) => n.textContent), ["1 игр., 1 ком. · 12 вопр.", "1 игр."]);
+  assert.deepEqual(p.node("sessionsList").querySelectorAll(".sess-meta").map((n) => n.textContent), ["1 чел., 1 ком. · 12 вопр.", "1 чел. · 3 вопр., 5 тем"]);
   rows[0].querySelectorAll(".input")[1].fire("click");
   assert.equal(log.at(-1)[0], "copy");
   assert.ok(log.at(-1)[1].includes("10 августа"), log.at(-1)[1]);

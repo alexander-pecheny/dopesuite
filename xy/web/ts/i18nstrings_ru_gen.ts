@@ -2097,7 +2097,8 @@ ${usage}
       originAt: (board: string, date: string) => `копия с «${board}» от ${date}`,
       originTitle: () => "Скопирована с другой доски: список тестеров с тех пор мог измениться",
       played: (n: string) => `${n} вопр.`,
-      players: (n: string) => `${n} игр.`,
+      playedThemes: (n: number) => `${n} ${plural("ru", n, "тема", "темы", "тем")}`,
+      players: (n: string) => `${n} чел.`,
       teams: (n: string) => `${n} ком.`,
     },
     message: {

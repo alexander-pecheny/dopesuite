@@ -2728,8 +2728,11 @@ var RU = Strings{
 			OriginTitle: func() string {
 				return "Скопирована с другой доски: список тестеров с тех пор мог измениться"
 			},
-			Played:  func(n string) string { return fmt.Sprintf("%s вопр.", n) },
-			Players: func(n string) string { return fmt.Sprintf("%s игр.", n) },
+			Played: func(n string) string { return fmt.Sprintf("%s вопр.", n) },
+			PlayedThemes: func(n int) string {
+				return fmt.Sprintf("%d %s", n, core.Plural("ru", n, "тема", "темы", "тем"))
+			},
+			Players: func(n string) string { return fmt.Sprintf("%s чел.", n) },
 			Teams:   func(n string) string { return fmt.Sprintf("%s ком.", n) },
 		},
 		Message: SessionsMessageStrings{

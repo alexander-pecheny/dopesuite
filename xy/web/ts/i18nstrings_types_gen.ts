@@ -2058,6 +2058,7 @@ export type Strings = {
       originAt: (board: string, date: string) => string;
       originTitle: () => string;
       played: (n: string) => string;
+      playedThemes: (n: number) => string;
       players: (n: string) => string;
       teams: (n: string) => string;
     };

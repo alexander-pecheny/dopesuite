@@ -1645,10 +1645,13 @@ const sessionsPanel = createSessionsPanel({
     const c = state.announceCities;
     return Array.isArray(c) ? (c as AnnounceCity[]) : [];
   },
-  // How many questions this test was played at — the number the tests panel
-  // shows and the tester-list modal counts coverage from.
-  playedCount: (sessionId) =>
-    new Set(state.cardSessions.filter((p) => p.sessionId === sessionId).map((p) => p.cardId)).size,
+  // How many questions and SI themes were played at this test, which the
+  // tests panel shows on the session's row.
+  playedCount: (sessionId) => {
+    const ids = new Set(state.cardSessions.filter((p) => p.sessionId === sessionId).map((p) => p.cardId));
+    const kinds = state.cards.filter((c) => ids.has(c.id)).map((c) => counter(c.kind));
+    return { questions: kinds.filter((k) => k !== "theme").length, themes: kinds.filter((k) => k === "theme").length };
+  },
   createSession: async (meta) => {
     const res = await create("createSession", `/api/boards/${boardId}/sessions`, {
       meta: await xyCrypto.encField(mustDK(), meta),

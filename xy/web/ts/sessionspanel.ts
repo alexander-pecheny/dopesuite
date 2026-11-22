@@ -31,7 +31,8 @@ export interface SessionsPanelDeps {
   boardName(): string;
   defaultTimezone(): string;
   defaultCities(): AnnounceCity[];
-  playedCount(sessionId: number): number;
+  // How many of the test's played cards are questions and how many SI themes.
+  playedCount(sessionId: number): { questions: number; themes: number };
   createSession(meta: string): Promise<number>;
   patchSession(id: number, meta: string): Promise<void>;
   deleteSession(id: number): Promise<void>;
@@ -94,10 +95,13 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       if (players) counts.push(S.sessions.list.players(String(players)));
       if (teams) counts.push(S.sessions.list.teams(String(teams)));
       const marked = deps.playedCount(s.id);
+      const played: string[] = [];
+      if (marked.questions) played.push(S.sessions.list.played(String(marked.questions)));
+      if (marked.themes) played.push(S.sessions.list.playedThemes(marked.themes));
 
       const head = el("div", { class: "sess-head" },
         el("span", { class: "sess-title", text: sessionLabel(m) || S.sessions.list.noDate() }),
-        el("span", { class: "sess-meta", text: [m.time, counts.join(", "), marked ? S.sessions.list.played(String(marked)) : ""].filter(Boolean).join(" · ") }),
+        el("span", { class: "sess-meta", text: [m.time, counts.join(", "), played.join(", ")].filter(Boolean).join(" · ") }),
       );
       // A copied session says how stale it might be (ADR-0003) — its testers are
       // frozen at transfer time, and that list is what the card's "Seen" line reads.
