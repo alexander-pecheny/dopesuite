@@ -219,7 +219,6 @@ var RU = Strings{
 			PinRemove:  func() string { return "Убрать вручную" },
 			Position:   func(n string, total string) string { return fmt.Sprintf("%s из %s", n, total) },
 			Prev:       func() string { return "← Предыдущий" },
-			Preview:    func() string { return "Как его увидит жюри" },
 			Published: func() string {
 				return "Вопрос опубликован (его видит народное жюри)"
 			},

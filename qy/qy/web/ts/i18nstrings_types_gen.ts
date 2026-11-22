@@ -162,7 +162,6 @@ export type Strings = {
       pinRemove: () => string;
       position: (n: string, total: string) => string;
       prev: () => string;
-      preview: () => string;
       published: () => string;
       rejected: () => string;
       rules: () => string;

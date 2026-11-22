@@ -575,15 +575,11 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 		body = append(body, ui.Section(dupItems...))
 	}
 	body = append(body, ui.Section(s.suggestionItems(href, keep, sugs)...))
-	if !q.Clean.Empty() {
-		body = append(body, ui.Section(subhead(str.Admin.Question.Preview()),
-			ui.Card(ui.Richtext(ui.Raw(questionHTML(juryCard(q)))))))
-	}
+	body = append(body, ui.Section(subhead(str.Admin.Question.Edit()), ui.Form(questionForm(href+keep, q)...)))
 	if !q.Orig.Empty() {
 		body = append(body, translationSection(href, keep, q), ui.Section(ui.Details(ui.Summary(text(str.Admin.Question.Orig())),
 			hint(str.Admin.Question.OrigHint()), ui.Form(origForm(href+"/orig"+keep, q)...))))
 	}
-	body = append(body, ui.Section(subhead(str.Admin.Question.Edit()), ui.Form(questionForm(href+keep, q)...)))
 	return s.ok(w, r, view{
 		title: questionName(q),
 		trail: adminTrail(crumb{contestHref(c.Year), str.Admin.Contests.Row(y)},
@@ -637,13 +633,7 @@ func questionForm(action string, q store.Question) []ui.Item {
 		option(store.StatusRejected, str.Admin.Question.Rejected(), q.Status))
 	form := []ui.Item{ui.Method("post"), ui.Action(action), ui.DirCol, ui.SpaceSM,
 		ui.Field(ui.Label(str.Admin.Question.Status()), status), hint(str.Admin.Question.EditHint())}
-	for _, f := range question.Fields {
-		value := q.Clean.Get(f)
-		if f == question.FieldAuthor {
-			value = q.Orig.Author
-		}
-		form = append(form, ui.Field(ui.Label(fieldName(f)), ui.Editor(ui.Name(f), ui.Rows(fieldRows(f)), ui.Text(value))))
-	}
+	form = append(form, questionEditor(q))
 	pin := ui.Selectfield(ui.Name("pin"),
 		option("", str.Admin.Question.PinNone(), q.Pin),
 		option("add", str.Admin.Question.PinAdd(), q.Pin),
@@ -755,14 +745,9 @@ func (s *server) handleSaveQuestion(w http.ResponseWriter, r *http.Request, _ ro
 // readQuestionForm applies the review form to q: the jury's copy, the
 // credits, and the admin's decisions.
 func readQuestionForm(r *http.Request, q *store.Question) error {
-	for _, f := range question.Fields {
-		v := strings.TrimSpace(strings.ReplaceAll(r.FormValue(f), "\r\n", "\n"))
-		if f == question.FieldAuthor {
-			q.Orig.Author = v
-			continue
-		}
-		*q.Clean.Ptr(f) = v
-	}
+	edited := editedQuestion(r)
+	q.Orig.Author, edited.Author = edited.Author, q.Clean.Author
+	q.Clean = edited
 	status, pin := r.FormValue("status"), r.FormValue("pin")
 	if !validStatus(status) || !validPin(pin) {
 		return userError(str.Server.Error.BadRequest())

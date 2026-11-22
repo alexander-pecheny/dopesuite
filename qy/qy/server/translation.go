@@ -64,6 +64,8 @@ func translationSection(href, keep string, q store.Question) ui.Item {
 		items = append(items, hint(str.Admin.Translation.Machine()))
 	}
 	if !q.Translation.Empty() {
+		// The jury's card, which switches between the original and this.
+		items = append(items, ui.Card(ui.Richtext(ui.Raw(questionHTML(juryCard(q))))))
 		form := []ui.Item{ui.Method("post"), ui.Action(href + "/translation" + keep), ui.DirCol, ui.SpaceSM}
 		for _, f := range translate.Fields {
 			form = append(form, ui.Field(ui.Label(fieldName(f)), ui.Editor(ui.Name(f), ui.Rows(fieldRows(f)), ui.Text(q.Translation.Get(f)))))

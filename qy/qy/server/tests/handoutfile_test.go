@@ -102,7 +102,7 @@ func TestAnAttachedPictureIsOnTheCardForWhoeverSeesIt(t *testing.T) {
 	link := "/nominate/file/" + strconv.FormatInt(fid, 10) + ".png"
 
 	page := w.get(w.admin, "/admin/question/"+strconv.FormatInt(id, 10), http.StatusOK)
-	if !strings.Contains(page, `data-images="[&#34;`+link+`&#34;]"`) {
+	if !regexp.MustCompile(`data-images="[^"]*` + regexp.QuoteMeta(link)).MatchString(page) {
 		t.Errorf("the card should carry the picture's link %s", link)
 	}
 	w.get(alice, link, http.StatusOK)

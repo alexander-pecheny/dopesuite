@@ -1,4 +1,5 @@
-// The nomination form (server/nominateview.go). Each [data-slot] card starts
+// The nomination form (server/nominateview.go), and the question on its
+// admin page (server/questioneditor.go), which has a slot's three tabs. Each [data-slot] card starts
 // in the "source" state: one box for a link or a whole question, which grows
 // as a pasted question does. A link loads (/api/nominate/load), a text
 // parses (/api/nominate/parse), and the card turns to the "editor" state:
@@ -24,8 +25,22 @@ import { fourS, imageLinks, isLoadable, isSingleLink, PARSED_FIELDS, type Parsed
 
 type Control = HTMLInputElement | HTMLTextAreaElement;
 
+// field is one of the card's controls: a slot's are named slotN_field, and
+// a card with data-prefix (the admin's question page) names them prefix+field.
 function field(card: HTMLElement, name: string): Control | null {
-  return card.querySelector(`[name="slot${card.dataset.slot}_${name}"]`);
+  const prefix = card.dataset.prefix ?? `slot${card.dataset.slot}_`;
+  return card.querySelector(`[name="${prefix}${name}"]`);
+}
+
+// attached are the pictures attached to the question (data-images), which
+// the preview puts in front of the handout.
+function attached(card: HTMLElement): string[] {
+  try {
+    const links: unknown = JSON.parse(card.dataset.images ?? "[]");
+    return Array.isArray(links) ? links.map((l) => new URL(String(l), location.href).href) : [];
+  } catch {
+    return [];
+  }
 }
 
 function part(card: HTMLElement, name: string): HTMLElement | null {
@@ -66,6 +81,7 @@ function refreshPreview(card: HTMLElement): void {
     el.replaceChildren(Object.assign(document.createElement("p"), { textContent: S.nominate.slot.previewEmpty() }));
     return;
   }
+  f.handout = [...attached(card), f.handout].filter((l) => l.trim()).join("\n");
   const images = new Map(imageLinks(f.handout).map((u) => [u, u]));
   el.replaceChildren(renderPreviewCard({ id: 0, kind: "question", desc: fourS(f) }, null, images, false));
 }
@@ -213,6 +229,7 @@ async function ask<T>(url: string, body: object): Promise<T | string> {
 
 // check asks whether the question passes the rules and shows what it fails.
 async function check(card: HTMLElement): Promise<void> {
+  if (!card.querySelector("[data-lint]")) return;
   const body = {
     tournament: field(card, "tournament")?.value ?? "",
     link: field(card, "link")?.value ?? "",
@@ -366,7 +383,7 @@ function wire(card: HTMLElement): void {
   });
 }
 
-for (const card of document.querySelectorAll<HTMLElement>("form[data-nominate] [data-slot]")) wire(card);
+for (const card of document.querySelectorAll<HTMLElement>("form[data-nominate] [data-slot], [data-question-editor]")) wire(card);
 
 // Enter in a one-line field would submit the form through its first submit
 // button, which is the first slot's clear. The source box loads its own slot

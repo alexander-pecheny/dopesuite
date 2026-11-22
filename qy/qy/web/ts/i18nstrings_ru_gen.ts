@@ -163,7 +163,6 @@ export const RU: Strings = {
       pinRemove: () => "Убрать вручную",
       position: (n: string, total: string) => `${n} из ${total}`,
       prev: () => "← Предыдущий",
-      preview: () => "Как его увидит жюри",
       published: () => "Вопрос опубликован (его видит народное жюри)",
       rejected: () => "Отклонён",
       rules: () => "Проверка правил",
