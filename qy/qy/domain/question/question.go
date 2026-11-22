@@ -5,6 +5,7 @@ package question
 import (
 	"encoding/json"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -194,7 +195,7 @@ func Same(a, b Question) bool {
 
 func wordBag(q Question) map[string]int {
 	bag := map[string]int{}
-	words := strings.FieldsFunc(yo.Replace(strings.ToLower(q.Text+" "+q.Answer)), func(r rune) bool {
+	words := strings.FieldsFunc(yo.Replace(strings.ToLower(withoutNotes(q.Text)+" "+withoutNotes(q.Answer))), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !unicode.Is(unicode.Mn, r)
 	})
 	for _, w := range words {
@@ -208,6 +209,17 @@ func wordBag(q Question) map[string]int {
 		}
 	}
 	return bag
+}
+
+// notesRe are what a question carries besides itself: a note in brackets,
+// to the host or on how a word is said, and a link.
+var notesRe = regexp.MustCompile(`\[[^\[\]]*\]|\{[^{}]*\}|https?://\S+`)
+
+// withoutNotes is a question's text as the players hear it: its handout and
+// its words, without the notes one copy may have and another not.
+func withoutNotes(text string) string {
+	handout, rest := SplitHandout(text)
+	return handout + " " + notesRe.ReplaceAllString(rest, " ")
 }
 
 func total(bag map[string]int) int {

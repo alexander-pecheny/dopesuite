@@ -119,3 +119,12 @@ func TestSameIsOneQuestionNominatedTwice(t *testing.T) {
 		t.Error("different questions, or too little text, should not be one")
 	}
 }
+
+func TestANoteToTheHostDoesNotPartTwoCopies(t *testing.T) {
+	a := Question{Text: "Джон Кейдж использовал в своих сочинениях очень необычные инструменты, например подключённый к усилителю ИКС. Какое слово мы заменили ИКСом?", Answer: "кактус"}
+	noted := a
+	noted.Text += "\n[Если есть возможность, сначала покажите видеокомментарий к ответу: https://www.youtube.com/watch?v=NVCz-QBY15o ]\n{Ведущему: читать медленно, по просьбам игроков повторить}"
+	if !Same(a, noted) {
+		t.Error("a note to the host is not part of the question")
+	}
+}
