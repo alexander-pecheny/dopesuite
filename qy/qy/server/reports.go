@@ -249,8 +249,8 @@ func (s *server) serveShortlist(w http.ResponseWriter, r *http.Request, sc route
 	}
 	if c.StageAt(s.now()) == contest.Final {
 		body = append(body, ui.Row(ui.SpaceSM, ui.Wrap(),
-			ui.Button(ui.Href("/popular"), ui.Primary, text(str.Final.Popular.Title())),
-			ui.Button(ui.Href("/final"), ui.Ghost, text(str.Final.Jury.Title()))))
+			ui.Button(ui.Href(yearPath(c.Year, popularPage)), ui.Primary, text(str.Final.Popular.Title())),
+			ui.Button(ui.Href(yearPath(c.Year, finalPage)), ui.Ghost, text(str.Final.Jury.Title()))))
 	}
 	seed := strconv.Itoa(c.Year) + "/shortlist"
 	if sc.HasUser {

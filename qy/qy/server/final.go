@@ -35,14 +35,14 @@ func (s *server) finalOpen(ctx context.Context, c contest.Contest) ([]store.Ques
 	return qs, "", err
 }
 
-// openFinal is the current contest and its shortlist, for a form posted to
-// the final stage; a closed stage is the poster's error.
-func (s *server) openFinal(ctx context.Context) (contest.Contest, []store.Question, error) {
-	c, err := s.currentContest(ctx)
+// openFinal is the contest of the page's year and its shortlist, for a form
+// posted to the final stage; a closed stage is the poster's error.
+func (s *server) openFinal(r *http.Request) (contest.Contest, []store.Question, error) {
+	c, err := s.yearContest(r)
 	if err != nil {
 		return c, nil, err
 	}
-	qs, closed, err := s.finalOpen(ctx, c)
+	qs, closed, err := s.finalOpen(r.Context(), c)
 	if err == nil && closed != "" {
 		err = userError(closed)
 	}
@@ -65,7 +65,7 @@ func (s *server) scoresOf(ctx context.Context, q store.Querier, userID int64) (m
 
 func (s *server) handleJuryPage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	ctx := r.Context()
-	c, j, err := s.currentJuror(ctx, sc)
+	c, j, err := s.yearJuror(r, sc)
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func (s *server) handleJuryPage(w http.ResponseWriter, r *http.Request, sc route
 		return err
 	}
 	marked := 0
-	form := []ui.Item{ui.Method("post"), ui.Action("/final"), ui.DirCol, ui.SpaceMD, ui.Data("autosave", "")}
+	form := []ui.Item{ui.Method("post"), ui.Action(yearPath(c.Year, finalPage)), ui.DirCol, ui.SpaceMD, ui.Data("autosave", "")}
 	for _, q := range inReaderOrder(qs, fmt.Sprintf("%d/final/%d", c.Year, j.userID)) {
 		if scores[q.ID] > 0 {
 			marked++
@@ -115,14 +115,14 @@ func (s *server) handleJuryScores(w http.ResponseWriter, r *http.Request, sc rou
 		return err
 	}
 	ctx := r.Context()
-	_, j, err := s.currentJuror(ctx, sc)
+	c, j, err := s.yearJuror(r, sc)
 	if err != nil {
 		return err
 	}
 	if j.kind != store.Expert {
 		return route.Forbidden(str.Final.Jury.NotExpert())
 	}
-	_, qs, err := s.openFinal(ctx)
+	_, qs, err := s.openFinal(r)
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func (s *server) handleJuryScores(w http.ResponseWriter, r *http.Request, sc rou
 	if wantsJSON(r) {
 		return writeJSON(w, map[string]string{"status": str.Common.Saved()})
 	}
-	return seeOther(w, r, "/final?done="+doneSaved)
+	return seeOther(w, r, yearPath(c.Year, finalPage)+"?done="+doneSaved)
 }
 
 // setScore writes one mark; anything off the scale clears it.
@@ -171,7 +171,7 @@ func (s *server) popularVoteOf(ctx context.Context, year int, userID int64) (tal
 
 func (s *server) handlePopularPage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	ctx := r.Context()
-	c, err := s.currentContest(ctx)
+	c, err := s.yearContest(r)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func (s *server) handlePopularPage(w http.ResponseWriter, r *http.Request, sc ro
 		return err
 	}
 	labels := []string{str.Final.Popular.First(), str.Final.Popular.Second(), str.Final.Popular.Third()}
-	form := []ui.Item{ui.Method("post"), ui.Action("/popular"), ui.DirCol, ui.SpaceSM,
+	form := []ui.Item{ui.Method("post"), ui.Action(yearPath(c.Year, popularPage)), ui.DirCol, ui.SpaceSM,
 		ui.Field(ui.Label(str.Common.RatingId()), ui.Textfield(ui.Name("rating_id"), ui.Value(rating), ui.Inputmode("numeric"), ui.Required()))}
 	for i, label := range labels {
 		opts := []ui.Item{ui.Name("pick" + strconv.Itoa(i)), option("", str.Final.Popular.Choose(), idText(vote[i]))}
@@ -220,7 +220,7 @@ func (s *server) handlePopularVote(w http.ResponseWriter, r *http.Request, sc ro
 		return err
 	}
 	ctx := r.Context()
-	c, qs, err := s.openFinal(ctx)
+	c, qs, err := s.openFinal(r)
 	if err != nil {
 		return err
 	}
@@ -255,7 +255,7 @@ on conflict(year, user_id) do update set first_id = excluded.first_id, second_id
 	if err != nil {
 		return err
 	}
-	return seeOther(w, r, "/popular?done="+doneSaved)
+	return seeOther(w, r, yearPath(c.Year, popularPage)+"?done="+doneSaved)
 }
 
 // ---- the count ----

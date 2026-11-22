@@ -50,9 +50,9 @@ func (s *server) nominationOpen(c contest.Contest, sc route.Scope) bool {
 	return c.StageAt(s.now()) == contest.Nomination || sc.IsAdmin
 }
 
-// nominationContest is the contest of the form's year, which must be the
-// current one: an earlier year's form is gone with its stage.
-func (s *server) nominationContest(r *http.Request) (contest.Contest, error) {
+// yearContest is the contest of the page's year, /{year}/…, which must be
+// the current one: an earlier year's form or vote is gone with its stage.
+func (s *server) yearContest(r *http.Request) (contest.Contest, error) {
 	c, err := s.currentContest(r.Context())
 	if err != nil {
 		return c, err
@@ -63,12 +63,31 @@ func (s *server) nominationContest(r *http.Request) (contest.Contest, error) {
 	return c, nil
 }
 
-func nominatePath(year int) string { return "/" + strconv.Itoa(year) + "/nominate" }
+// The pages of a year's contest that are not CMS pages: /{year}/{page}.
+const (
+	nominatePage = "nominate"
+	votePage     = "vote"
+	finalPage    = "final"
+	popularPage  = "popular"
+)
 
-// isNominatePath says whether p is some year's form, /{year}/nominate.
-func isNominatePath(p string) bool {
+// yearPath is the address of a year's page.
+func yearPath(year int, page string) string { return "/" + strconv.Itoa(year) + "/" + page }
+
+func nominatePath(year int) string { return yearPath(year, nominatePage) }
+
+// yearPageOf is the page p is, /{year}/{page}, or "" for any other path.
+func yearPageOf(p string) string {
 	y := yearOf(strings.TrimPrefix(p, "/"))
-	return y != 0 && p == nominatePath(y)
+	if y == 0 {
+		return ""
+	}
+	for _, page := range []string{nominatePage, votePage, finalPage, popularPage} {
+		if p == yearPath(y, page) {
+			return page
+		}
+	}
+	return ""
 }
 
 // handleOldNominate sends the form's first address, /nominate, on to the
@@ -83,7 +102,7 @@ func (s *server) handleOldNominate(w http.ResponseWriter, r *http.Request, _ rou
 }
 
 func (s *server) handleNominatePage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	c, err := s.nominationContest(r)
+	c, err := s.yearContest(r)
 	if err != nil {
 		return err
 	}
@@ -117,7 +136,7 @@ func (s *server) handleNominate(w http.ResponseWriter, r *http.Request, sc route
 	if err := parseNominationForm(w, r); err != nil {
 		return err
 	}
-	c, err := s.nominationContest(r)
+	c, err := s.yearContest(r)
 	if err != nil {
 		return err
 	}

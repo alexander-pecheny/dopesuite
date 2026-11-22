@@ -38,12 +38,9 @@ func routes(s *server) *http.ServeMux {
 	api.Handle("POST /api/nominate/load", route.LoggedIn, s.handleLoadQuestion)
 	api.Handle("POST /api/nominate/preview", route.LoggedIn, s.handlePreviewQuestion)
 	api.Handle("POST /api/nominate/check", route.LoggedIn, s.handleCheckQuestion)
-	pages.Handle("GET /vote", route.LoggedIn, s.handleVotePage)
-	pages.Handle("POST /vote", route.LoggedIn, s.handleVote)
-	pages.Handle("GET /final", route.LoggedIn, s.handleJuryPage)
-	pages.Handle("POST /final", route.LoggedIn, s.handleJuryScores)
-	pages.Handle("GET /popular", route.LoggedIn, s.handlePopularPage)
-	pages.Handle("POST /popular", route.LoggedIn, s.handlePopularVote)
+	pages.Handle("POST /{year}/vote", route.LoggedIn, s.handleVote)
+	pages.Handle("POST /{year}/final", route.LoggedIn, s.handleJuryScores)
+	pages.Handle("POST /{year}/popular", route.LoggedIn, s.handlePopularVote)
 
 	// ---- admin ----
 	pages.Handle("GET /admin", route.Admin, s.handleAdmin)
@@ -84,13 +81,18 @@ func routes(s *server) *http.ServeMux {
 	mux.Handle("GET /static/", s.assets.FileServer())
 
 	// ---- everything else is a CMS page, a file, or a year's generated page ----
-	// GET /{year}/nominate would clash with GET /static/ in the mux, so the
-	// form's page is picked out of the catch-all here.
-	nominatePage := pages.Serve(route.LoggedIn, s.handleNominatePage)
+	// GET /{year}/nominate and the like would clash with GET /static/ in the
+	// mux, so a year's pages are picked out of the catch-all here.
+	yearPages := map[string]http.HandlerFunc{
+		nominatePage: pages.Serve(route.LoggedIn, s.handleNominatePage),
+		votePage:     pages.Serve(route.LoggedIn, s.handleVotePage),
+		finalPage:    pages.Serve(route.LoggedIn, s.handleJuryPage),
+		popularPage:  pages.Serve(route.LoggedIn, s.handlePopularPage),
+	}
 	public := pages.Serve(route.Public, s.handlePublic)
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		if isNominatePath(r.URL.Path) {
-			nominatePage(w, r)
+		if page := yearPageOf(r.URL.Path); page != "" {
+			yearPages[page](w, r)
 			return
 		}
 		public(w, r)

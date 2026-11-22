@@ -212,7 +212,7 @@ func TestAContestEndToEnd(t *testing.T) {
 	noHandle := w.ts.AddUser("nohandle")
 	w.ts.Exec(`update users set telegram_username = null, telegram_user_id = 448180345 where id = ?`, noHandle)
 	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Эксперт Без Ника"}, "telegram": {"448180345"}, "kind": {"expert"}}, http.StatusSeeOther)
-	if body := w.get(w.ts.As(noHandle), "/vote", http.StatusOK); strings.Count(body, `name="like"`) != 3 {
+	if body := w.get(w.ts.As(noHandle), "/2026/vote", http.StatusOK); strings.Count(body, `name="like"`) != 3 {
 		t.Error("a juror named by telegram id should see the likes")
 	}
 	if admin := w.get(w.admin, "/admin/contest/2026", http.StatusOK); !strings.Contains(admin, "ID 448180345") {
@@ -224,39 +224,39 @@ func TestAContestEndToEnd(t *testing.T) {
 	bound := w.ts.AddUser("bound")
 	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Эксперт Два"}, "telegram": {"@bound"}, "kind": {"expert"}}, http.StatusSeeOther)
 	w.ts.Exec(`update users set telegram_username = 'renamed', username = 'renamed' where id = ?`, bound)
-	if body := w.get(w.user("bound"), "/vote", http.StatusOK); strings.Contains(body, `name="like"`) {
+	if body := w.get(w.user("bound"), "/2026/vote", http.StatusOK); strings.Contains(body, `name="like"`) {
 		t.Error("whoever takes a juror's old handle sees the likes")
 	}
-	if body := w.get(w.ts.As(bound), "/vote", http.StatusOK); !strings.Contains(body, `name="like"`) {
+	if body := w.get(w.ts.As(bound), "/2026/vote", http.StatusOK); !strings.Contains(body, `name="like"`) {
 		t.Error("a juror who renamed themselves lost the likes")
 	}
 	w.post(w.admin, "/admin/contest/2026/jurors/remove", url.Values{"telegram": {"bound"}}, http.StatusSeeOther)
-	if body := w.get(alice, "/vote", http.StatusOK); strings.Contains(body, `name="like"`) {
+	if body := w.get(alice, "/2026/vote", http.StatusOK); strings.Contains(body, `name="like"`) {
 		t.Error("a non-juror sees the likes")
 	}
-	expertPage := w.get(ex, "/vote", http.StatusOK)
+	expertPage := w.get(ex, "/2026/vote", http.StatusOK)
 	if strings.Count(expertPage, `name="like"`) != 3 {
 		t.Errorf("the expert should see all three questions")
 	}
 	if strings.Contains(expertPage, "Голуб") {
 		t.Error("the jury can see the author")
 	}
-	if peoplePage := w.get(pe, "/vote", http.StatusOK); strings.Count(peoplePage, `name="like"`) != 1 {
+	if peoplePage := w.get(pe, "/2026/vote", http.StatusOK); strings.Count(peoplePage, `name="like"`) != 1 {
 		t.Errorf("the people's jury should see only the published question")
 	}
 	likes := url.Values{"portion": {"1"}}
 	for _, a := range []string{"искусство", "икс"} {
 		likes.Add("like", strconv.FormatInt(w.questionID(a), 10))
 	}
-	w.post(ex, "/vote", likes, http.StatusSeeOther)
-	w.post(pe, "/vote", url.Values{"portion": {"1"}, "like": {strconv.FormatInt(w.questionID("запас боба"), 10)}}, http.StatusSeeOther)
+	w.post(ex, "/2026/vote", likes, http.StatusSeeOther)
+	w.post(pe, "/2026/vote", url.Values{"portion": {"1"}, "like": {strconv.FormatInt(w.questionID("запас боба"), 10)}}, http.StatusSeeOther)
 	if n := w.count(`select count(*) from likes`); n != 2 {
 		t.Errorf("likes: %d; the people's juror's like of an unpublished question should be ignored", n)
 	}
 
 	// ---- the factcheck: a like can be taken back, not given ----
 	w.ts.SetNow(day(t, "2027-01-02", 12))
-	w.post(ex, "/vote", url.Values{"like": {strconv.FormatInt(w.questionID("икс"), 10), strconv.FormatInt(w.questionID("запас боба"), 10)}}, http.StatusSeeOther)
+	w.post(ex, "/2026/vote", url.Values{"like": {strconv.FormatInt(w.questionID("икс"), 10), strconv.FormatInt(w.questionID("запас боба"), 10)}}, http.StatusSeeOther)
 	if n := w.count(`select count(*) from likes`); n != 1 {
 		t.Errorf("likes after the factcheck: %d", n)
 	}
@@ -272,8 +272,8 @@ func TestAContestEndToEnd(t *testing.T) {
 	// ---- the final ----
 	w.ts.SetNow(day(t, "2027-01-20", 12))
 	x := strconv.FormatInt(w.questionID("икс"), 10)
-	w.post(ex, "/final", url.Values{"score" + x: {"9"}}, http.StatusSeeOther)
-	w.post(alice, "/popular", url.Values{"rating_id": {"101"}, "pick0": {x}, "pick1": {x}, "pick2": {x}}, http.StatusBadRequest)
+	w.post(ex, "/2026/final", url.Values{"score" + x: {"9"}}, http.StatusSeeOther)
+	w.post(alice, "/2026/popular", url.Values{"rating_id": {"101"}, "pick0": {x}, "pick1": {x}, "pick2": {x}}, http.StatusBadRequest)
 	if body := w.get(w.admin, "/2026/shortlist/", http.StatusOK); !strings.Contains(body, "Текст икс") {
 		t.Error("the public shortlist does not show its question")
 	}
@@ -314,9 +314,9 @@ func TestPopularVoteNeedsThreeDifferentQuestions(t *testing.T) {
 	w.ts.SetNow(day(t, "2027-01-02", 12))
 	w.post(w.admin, "/admin/contest/2026/freeze", nil, http.StatusSeeOther)
 	w.ts.SetNow(day(t, "2027-01-20", 12))
-	w.post(alice, "/popular", url.Values{"rating_id": {"1"}, "pick0": {ids[0]}, "pick1": {ids[1]}}, http.StatusBadRequest)
-	w.post(alice, "/popular", url.Values{"rating_id": {"1"}, "pick0": {ids[0]}, "pick1": {ids[1]}, "pick2": {ids[2]}}, http.StatusSeeOther)
-	w.post(alice, "/popular", url.Values{"rating_id": {"1"}, "pick0": {ids[3]}, "pick1": {ids[1]}, "pick2": {ids[2]}}, http.StatusSeeOther)
+	w.post(alice, "/2026/popular", url.Values{"rating_id": {"1"}, "pick0": {ids[0]}, "pick1": {ids[1]}}, http.StatusBadRequest)
+	w.post(alice, "/2026/popular", url.Values{"rating_id": {"1"}, "pick0": {ids[0]}, "pick1": {ids[1]}, "pick2": {ids[2]}}, http.StatusSeeOther)
+	w.post(alice, "/2026/popular", url.Values{"rating_id": {"1"}, "pick0": {ids[3]}, "pick1": {ids[1]}, "pick2": {ids[2]}}, http.StatusSeeOther)
 	if n := w.count(`select count(*) from popular_votes`); n != 1 {
 		t.Errorf("a voter's second vote should replace the first, got %d votes", n)
 	}

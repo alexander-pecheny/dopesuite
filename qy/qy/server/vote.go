@@ -27,13 +27,14 @@ type juror struct {
 	kind   string
 }
 
-// currentJuror is the current contest and the caller's place on its juries.
-func (s *server) currentJuror(ctx context.Context, sc route.Scope) (contest.Contest, juror, error) {
-	c, err := s.currentContest(ctx)
+// yearJuror is the contest of the page's year and the caller's place on its
+// juries.
+func (s *server) yearJuror(r *http.Request, sc route.Scope) (contest.Contest, juror, error) {
+	c, err := s.yearContest(r)
 	if err != nil {
 		return c, juror{}, err
 	}
-	kind, err := store.JurorKind(ctx, s.db, c.Year, sc.User.UserID)
+	kind, err := store.JurorKind(r.Context(), s.db, c.Year, sc.User.UserID)
 	return c, juror{sc.User.UserID, kind}, err
 }
 
@@ -97,7 +98,7 @@ func voteTrail() []crumb { return []crumb{{"", str.Vote.Page.Title()}} }
 
 func (s *server) handleVotePage(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	ctx := r.Context()
-	c, j, err := s.currentJuror(ctx, sc)
+	c, j, err := s.yearJuror(r, sc)
 	if err != nil {
 		return err
 	}
@@ -165,13 +166,13 @@ func (s *server) portionBody(ctx context.Context, r *http.Request, c contest.Con
 	for _, q := range inReaderOrder(qs, fmt.Sprintf("%d/%d/%d", c.Year, k, j.userID)) {
 		form = append(form, likeCard(q, juryCard(q).withoutFactcheck(), liked[q.ID]))
 	}
-	return []ui.Item{ui.Section(head...), ui.Section(likesForm(form))}, nil
+	return []ui.Item{ui.Section(head...), ui.Section(likesForm(c, form))}, nil
 }
 
 // likesForm is a page of likes: it saves itself on every change, and its
 // button saves it without the script.
-func likesForm(items []ui.Item) ui.Item {
-	form := append([]ui.Item{ui.Method("post"), ui.Action("/vote"), ui.DirCol, ui.SpaceMD, ui.Data("autosave", "")}, items...)
+func likesForm(c contest.Contest, items []ui.Item) ui.Item {
+	form := append([]ui.Item{ui.Method("post"), ui.Action(yearPath(c.Year, votePage)), ui.DirCol, ui.SpaceMD, ui.Data("autosave", "")}, items...)
 	return ui.Form(append(form, ui.Row(ui.SpaceSM, ui.AlignCenter,
 		ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save())), ui.Message(ui.ID("autosaveStatus"))))...)
 }
@@ -193,7 +194,7 @@ func (s *server) portionTabs(ctx context.Context, c contest.Contest, current str
 		if to == current {
 			look = ui.Primary
 		}
-		return ui.Button(append([]ui.Item{ui.Href("/vote?portion=" + to), ui.Small(), look, text(label)}, icon...)...)
+		return ui.Button(append([]ui.Item{ui.Href(yearPath(c.Year, votePage) + "?portion=" + to), ui.Small(), look, text(label)}, icon...)...)
 	}
 	items := []ui.Item{ui.SpaceXS, ui.Wrap(), ui.Aria("label", str.Vote.Portion.Tabs())}
 	for i := 1; i <= total; i++ {
@@ -273,7 +274,7 @@ func (s *server) likedBody(ctx context.Context, c contest.Contest, j juror) ([]u
 			ui.Row(ui.SpaceSM, ui.Wrap(), likeToggle(q, true),
 				favouriteToggle(idstr.Format(q.ID), str.Vote.Liked.Favourite(), fav == q.ID, ui.IconStar))))
 	}
-	return []ui.Item{head, ui.Section(likesForm(form))}, nil
+	return []ui.Item{head, ui.Section(likesForm(c, form))}, nil
 }
 
 func favouriteToggle(value, label string, on bool, icon ui.Item) ui.Item {
@@ -309,7 +310,7 @@ func (s *server) factcheckBody(ctx context.Context, c contest.Contest, j juror) 
 	if shown == 0 {
 		return []ui.Item{head, ui.Section(ui.Empty(text(str.Vote.Factcheck.Nothing())))}, nil
 	}
-	return []ui.Item{head, ui.Section(likesForm(form))}, nil
+	return []ui.Item{head, ui.Section(likesForm(c, form))}, nil
 }
 
 // handleVote saves the likes on one page. What the page showed is the scope:
@@ -320,7 +321,7 @@ func (s *server) handleVote(w http.ResponseWriter, r *http.Request, sc route.Sco
 		return err
 	}
 	ctx := r.Context()
-	c, j, err := s.currentJuror(ctx, sc)
+	c, j, err := s.yearJuror(r, sc)
 	if err != nil {
 		return err
 	}
@@ -341,7 +342,7 @@ func (s *server) handleVote(w http.ResponseWriter, r *http.Request, sc route.Sco
 	if wantsJSON(r) {
 		return writeJSON(w, map[string]string{"status": str.Common.Saved()})
 	}
-	target := "/vote?done=" + doneSaved
+	target := yearPath(c.Year, votePage) + "?done=" + doneSaved
 	switch {
 	case liked:
 		target += "&portion=" + likedTab
