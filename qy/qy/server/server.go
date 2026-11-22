@@ -25,6 +25,7 @@ import (
 	"qy/qy/platform/gq"
 	"qy/qy/platform/langdetect"
 	"qy/qy/platform/openrouter"
+	"qy/qy/platform/picture"
 	"qy/qy/platform/rating"
 	"qy/qy/platform/telegram"
 	"qy/qy/storage/store"
@@ -65,6 +66,10 @@ type server struct {
 	// langs names the language of new questions; nil when the qy-langdetect
 	// binary is not there, and the admins set it by hand.
 	langs langDetector
+	// pics fetches the pictures handouts link to; picsTried are the links
+	// fetched since the server started, whether they gave a picture or not.
+	pics      picture.Source
+	picsTried sync.Map
 	// wake nudges the background pass when a question arrives.
 	wake chan struct{}
 	now  func() time.Time
@@ -81,7 +86,7 @@ func newServer() (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &server{db: db, gq: gq.Unavailable{}, buff: buff.None{}, rating: &rating.Cached{Src: rating.NewClient(), TTL: time.Hour}, tg: telegram.NewClient(), wake: make(chan struct{}, 1), now: time.Now}
+	s := &server{db: db, gq: gq.Unavailable{}, buff: buff.None{}, rating: &rating.Cached{Src: rating.NewClient(), TTL: time.Hour}, tg: telegram.NewClient(), pics: picture.NewWeb(store.ImageTypes, maxHandoutFile), wake: make(chan struct{}, 1), now: time.Now}
 	if gqPath := os.Getenv("QY_GQ_DB"); gqPath != "" {
 		if s.gq, err = gq.Open(gqPath); err != nil {
 			return nil, fmt.Errorf("QY_GQ_DB %s: %w", gqPath, err)

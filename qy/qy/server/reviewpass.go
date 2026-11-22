@@ -50,10 +50,10 @@ func (s *server) runReviewPass(ctx context.Context) {
 }
 
 // passSteps are the pass's parts in order, each called until it reports no
-// more work: the redactions first, since the translation is made from the
-// copy they produce.
+// more work: the redactions and the handout's pictures first, since the
+// translation is made from the copy they produce.
 func (s *server) passSteps() []func(context.Context) (bool, error) {
-	return []func(context.Context) (bool, error){s.reviewOne, s.detectLangs, s.translateOne}
+	return []func(context.Context) (bool, error){s.reviewOne, s.keepPictureOne, s.detectLangs, s.translateOne}
 }
 
 // reviewOne handles the oldest pending question and reports whether there
