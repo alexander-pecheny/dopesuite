@@ -36,7 +36,7 @@ func TestTheAdminSeesWhetherAQuestionIsInTheLongList(t *testing.T) {
 	if strings.Count(list, "Не входит") != 1 {
 		t.Error("the list should mark the reserve alone as out")
 	}
-	if !strings.Contains(list, "Всего 6 вопросов.") || !strings.Contains(list, "В лонг-листе сейчас 5 вопросов") {
+	if !strings.Contains(list, "Всего 6 вопросов, из них 5 в лонг-листе.") {
 		t.Error("the list should count all the questions and the long list's apart")
 	}
 	main := "/admin/question/" + strconv.FormatInt(w.questionID("основной"), 10)

@@ -401,7 +401,12 @@ func (s *server) handleQuestionList(w http.ResponseWriter, r *http.Request, _ ro
 			ui.Cell(text(datesNote(c, q)))))
 	}
 	y := strconv.Itoa(c.Year)
-	counts := []ui.Item{hint(str.Admin.Questions.Count(len(qs))), hint(str.Admin.Questions.InLongList(len(in)))}
+	// A filtered list is not the whole: "of them in the long list" would
+	// count what it does not show.
+	counts := []ui.Item{hint(str.Admin.Questions.Count(len(qs)))}
+	if f == "" {
+		counts = []ui.Item{hint(str.Admin.Questions.CountLongList(len(qs), strconv.Itoa(len(in))))}
+	}
 	body := []ui.Item{ui.Section(append([]ui.Item{filters}, counts...)...)}
 	if len(qs) > 0 {
 		body = []ui.Item{ui.Section(append(append([]ui.Item{ui.Data("questions", ""), filters}, counts...), ui.Table(rows...))...)}
