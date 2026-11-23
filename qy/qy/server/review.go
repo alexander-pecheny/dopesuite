@@ -318,10 +318,14 @@ func publishedBadge(q store.Question) ui.Item {
 // longListBadge says whether the question is in the long list now; a
 // merged one counts as the question it went into and shows nothing.
 func longListBadge(q store.Question, in map[int64]bool) ui.Item {
-	switch {
-	case q.MergedInto != 0:
+	if q.MergedInto != 0 {
 		return ui.Text("")
-	case in[q.ID]:
+	}
+	return longListMark(in[q.ID])
+}
+
+func longListMark(in bool) ui.Item {
+	if in {
 		return ui.Badge(ui.BadgePositive, text(str.Admin.Questions.LongListYes()))
 	}
 	return ui.Badge(ui.BadgeNegative, text(str.Admin.Questions.LongListNo()))

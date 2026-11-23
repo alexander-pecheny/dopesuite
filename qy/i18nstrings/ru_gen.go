@@ -116,7 +116,7 @@ var RU = Strings{
 			},
 			Sheet: func() string { return "Из предварительной таблицы" },
 			SheetUnused: func() string {
-				return "Не учитываются: этот игрок номинировал через форму."
+				return "Таблица этого игрока не считается, потому что игрок номинировал через форму. Входит ли вопрос в лонг-лист, сказано у каждого вопроса."
 			},
 			Slot: func(question string, status string) string { return fmt.Sprintf("%s, %s", question, status) },
 			Who:  func() string { return "Номинатор" },

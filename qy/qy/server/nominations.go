@@ -88,6 +88,10 @@ func (s *server) handleNominations(w http.ResponseWriter, r *http.Request, _ rou
 	if err != nil {
 		return err
 	}
+	in, err := longList(ctx, s.db, c)
+	if err != nil {
+		return err
+	}
 	var ids []int64
 	for _, p := range people {
 		if p.rating > 0 {
@@ -112,7 +116,7 @@ func (s *server) handleNominations(w http.ResponseWriter, r *http.Request, _ rou
 	rows := []ui.Item{ui.Scroll(), ui.Trow(head...)}
 	for _, p := range people {
 		n += len(p.slots)
-		rows = append(rows, ui.Trow(append([]ui.Item{ui.Cell(nominatorHead(p))}, s.slotCells(c, p, byID, free)...)...))
+		rows = append(rows, ui.Trow(append([]ui.Item{ui.Cell(nominatorHead(p))}, s.slotCells(c, p, byID, free, in)...)...))
 	}
 	y := strconv.Itoa(c.Year)
 	body := []ui.Item{ui.Section(hint(str.Admin.Nominations.Empty()))}
@@ -172,8 +176,10 @@ func sameName(a, b string) bool {
 
 // slotCells are the person's slots, one cell each, empty where they left the
 // slot empty. A question is shown as nominated: the text they gave, before
-// the anonymiser and the admins touched it.
-func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]store.Question, free map[int64]bool) []ui.Item {
+// the anonymiser and the admins touched it, with whether it is in the long
+// list now: by this nomination or by somebody else's, a merged one as the
+// question it went into.
+func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]store.Question, free, in map[int64]bool) []ui.Item {
 	cells := make([]ui.Item, c.MainSlots+c.ReserveSlots)
 	for i := range cells {
 		cells[i] = ui.Cell()
@@ -184,7 +190,7 @@ func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]sto
 		}
 		q := byID[sl.questionID]
 		items := []ui.Item{ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(), ui.Button(ui.Href(questionHref(q.ID)), ui.Ghost, ui.Small(),
-			text(str.Admin.Nominations.Slot(questionName(q), statusName(q)))), publishedBadge(q))}
+			text(str.Admin.Nominations.Slot(questionName(q), statusName(q)))), longListMark(in[cmp.Or(q.MergedInto, q.ID)]), publishedBadge(q))}
 		body := "<p>" + plain(q.SourceText) + "</p>"
 		if !q.Orig.Empty() {
 			body = questionHTML(card{qy: q.QY, q: q.Orig, images: imageLinks(q), tournament: q.TournamentTitle})

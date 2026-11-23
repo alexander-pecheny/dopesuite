@@ -87,9 +87,10 @@ no_rating = "ID на турнирном сайте не указан"
 first = 'Первая номинация {{.date}}'
 appeal = 'Апелляция: {{.text}}'
 # A nominator from the preliminary sheet (import-sheet), whose nominations
-# count only while they have not nominated through the form.
+# count only while they have not nominated through the form. Whether each
+# question gets in is on the question: somebody else may nominate it.
 sheet = "Из предварительной таблицы"
-sheet_unused = "Не учитываются: этот игрок номинировал через форму."
+sheet_unused = "Таблица этого игрока не считается, потому что игрок номинировал через форму. Входит ли вопрос в лонг-лист, сказано у каждого вопроса."
 # A sheet question two people nominated: it counts without taking a slot.
 free = "Вне квоты: этот вопрос номинировали двое."
 slot = '{{.question}}, {{.status}}'

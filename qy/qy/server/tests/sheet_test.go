@@ -47,7 +47,7 @@ func TestThePreliminarySheetCountsUntilTheFormIsUsed(t *testing.T) {
 		t.Fatalf("a second import should replace the first: %d, %d", people, n)
 	}
 	body := w.get(w.admin, "/admin/contest/2026/nominations", http.StatusOK)
-	for _, want := range []string{"Карина Сидорова", "Первый вопрос из предварительной таблицы.", "Из предварительной таблицы", "Не учитываются: этот игрок номинировал через форму."} {
+	for _, want := range []string{"Карина Сидорова", "Первый вопрос из предварительной таблицы.", "Из предварительной таблицы", "Таблица этого игрока не считается, потому что игрок номинировал через форму."} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the nominations page lacks %q", want)
 		}
@@ -140,5 +140,25 @@ func TestASheetRowMayBringItsQuestionsText(t *testing.T) {
 	}
 	if _, n := w.ts.ImportSheet(2026, rows); n != 2 || w.count(`select count(*) from questions`) != 2 {
 		t.Error("a second import should find the question by its link")
+	}
+}
+
+// Someone who used the form after the sheet: the sheet does not count, but a
+// question of it that the form nominates again is in, and the nominations
+// page says so on the question, not only on the person.
+func TestASheetQuestionTheFormNominatesAgainIsIn(t *testing.T) {
+	w := newWorld(t)
+	sheetQuestions(w)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	if people, n := w.ts.ImportSheet(2026, []qyserver.SheetRow{row(101, 900), row(101, 901)}); people != 1 || n != 2 {
+		t.Fatalf("imported %d nominators and %d nominations", people, n)
+	}
+	alice := w.user("alice")
+	w.post(alice, "/2026/nominate", slots("101", map[int]string{1: "https://gotquestions.online/question/900"}), http.StatusSeeOther)
+	body := w.get(w.admin, "/admin/contest/2026/nominations", http.StatusOK)
+	// 900 in the form's slot and in the sheet's; 901 only in the sheet.
+	in, out := strings.Count(body, `badge-positive">Входит<`), strings.Count(body, `badge-negative">Не входит<`)
+	if in != 2 || out != 1 {
+		t.Errorf("the page should mark 900 in twice and 901 out once: %d in, %d out", in, out)
 	}
 }

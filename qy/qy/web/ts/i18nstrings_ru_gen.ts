@@ -91,7 +91,7 @@ export const RU: Strings = {
       rating: (id: string) => `Турнирный сайт: ${id}`,
       ratingNamed: (name: string, id: string) => `Турнирный сайт: ${name}, ${id}`,
       sheet: () => "Из предварительной таблицы",
-      sheetUnused: () => "Не учитываются: этот игрок номинировал через форму.",
+      sheetUnused: () => "Таблица этого игрока не считается, потому что игрок номинировал через форму. Входит ли вопрос в лонг-лист, сказано у каждого вопроса.",
       slot: (question: string, status: string) => `${question}, ${status}`,
       who: () => "Номинатор",
     },
