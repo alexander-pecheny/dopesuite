@@ -37,7 +37,7 @@ func isMetaLine(line string) bool {
 
 var (
 	gqLinkRe         = regexp.MustCompile(`https?://(?:www\.)?gotquestions\.online/question/(\d+)`)
-	tournamentLinkRe = regexp.MustCompile(`rating\.chgk\.info/tournaments?/(\d+)`)
+	tournamentLinkRe = regexp.MustCompile(`rating\.chgk\.info/tournaments?/(\d+)(?:#(\d+))?`)
 	parenRe          = regexp.MustCompile(`\([^)]*\)`)
 	authorSplitRe    = regexp.MustCompile(`\s*,\s*|\s+и\s+`)
 	yo               = strings.NewReplacer("ё", "е")

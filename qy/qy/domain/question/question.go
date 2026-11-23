@@ -235,6 +235,9 @@ type Links struct {
 	GotQuestionsID int64
 	GotQuestions   string
 	TournamentID   int64
+	// Number is the question's number in the tournament, when the link
+	// names it after "#", as a link made for the preliminary sheet does.
+	Number int
 }
 
 func FindLinks(text string) Links {
@@ -245,6 +248,7 @@ func FindLinks(text string) Links {
 	}
 	if m := tournamentLinkRe.FindStringSubmatch(text); m != nil {
 		l.TournamentID, _ = idstr.Parse(m[1])
+		l.Number, _ = strconv.Atoi(m[2])
 	}
 	return l
 }

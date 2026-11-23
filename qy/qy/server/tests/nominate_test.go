@@ -383,7 +383,8 @@ func TestThePluralTournamentLinkIsRead(t *testing.T) {
 }
 
 // An editor on the jury bars only the tour they edited: the rating site's
-// credits by the pasted question's number, gotquestions' by the question.
+// credits by the question's number, from the pasted text or from a sheet
+// link's "#3", gotquestions' by the question.
 func TestAnEditorBarsOnlyTheirOwnTour(t *testing.T) {
 	w := newWorld(t)
 	w.ts.SetNow(day(t, "2026-11-10", 12))
@@ -404,6 +405,9 @@ func TestAnEditorBarsOnlyTheirOwnTour(t *testing.T) {
 	}
 	if res := check("Текст без номера.", ""); !strings.Contains(res, "Редактор турнира Пётр Петров") {
 		t.Errorf("with no number every editor counts: %s", res)
+	}
+	if res := check("Текст без номера.", "https://rating.chgk.info/tournament/12345#3"); strings.Contains(res, "Редактор") {
+		t.Errorf("the sheet's link numbers it a question of Ivan's tour: %s", res)
 	}
 	w.ts.SetGotQuestions(gq.Fixed{
 		901: {Question: question.Question{Text: "Т.", Answer: "а"}, Editors: []gq.Editor{{Name: "Иван Иванов", RatingID: 8}}},
