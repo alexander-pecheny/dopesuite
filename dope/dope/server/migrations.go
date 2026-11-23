@@ -1241,6 +1241,12 @@ alter table game_venues add column hidden integer not null default 0;
 		_, err := db.Exec(`alter table matches add column slot_of text not null default '';`)
 		return err
 	}},
+	// The Divisions whose teams a game ranks out of competition: the short names of the
+	// Flags (coaches' teams at a school championship), as a JSON list. Those
+	// teams stand below everyone else in the whole field, with no place there.
+	{Version: 62, Name: "a game's divisions outside the standings", Up: func(db *sql.DB) error {
+		return store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{{Name: "outside_divisions", Type: "TEXT"}})
+	}},
 }
 
 // overridesToHandRosters keeps every Game's teams playing with whom they play

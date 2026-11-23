@@ -60,6 +60,9 @@ protocol = '{{.block}} (протоколы)'
 all = "Все"
 # The row's aria-label, naming what the chips choose between.
 label = "Зачёт"
+# The place cell of a team вне зачёта, which stands below the ranked teams
+# and takes no place.
+outside = "в/з"
 
 # The header breadcrumb trail (game-page.ts).
 [trail]

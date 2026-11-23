@@ -187,3 +187,36 @@ test("a tab change keeps the Division; a moved URL is drawn once", () => {
   navigate();
   assert.equal(calls.render, 2);
 });
+
+test("a team вне зачёта stands apart in «Все» and in other Divisions, not in its own", () => {
+  const teams = [
+    {name: "Альфа", number: 1, flags: ["Ш"]},
+    {name: "Тренеры", number: 2, flags: ["Тр"]},
+    {name: "Бета", number: 3, flags: ["Ш", "Тр"]},
+    {name: "Гамма", number: 4, flags: []},
+  ];
+  href = "http://x/g";
+  const lens = createTeamLens({teams: () => teams, hidden: () => [], outside: () => ["Тр"], render() {}});
+  lens.adopt();
+  assert.equal(lens.members(), undefined);
+  assert.deepEqual(lens.ranked(), [0, 3]);
+  assert.deepEqual(lens.outsiders(), [1, 2]);
+
+  href = "http://x/g?division=%D0%A8";
+  lens.adopt();
+  assert.deepEqual(lens.ranked(), [0]);
+  assert.deepEqual(lens.outsiders(), [2]);
+
+  href = "http://x/g?division=%D0%A2%D1%80";
+  lens.adopt();
+  assert.deepEqual(lens.ranked(), [1, 2]);
+  assert.deepEqual(lens.outsiders(), []);
+});
+
+test("a game with nothing вне зачёта ranks as before", () => {
+  href = "http://x/g";
+  const {lens} = lensOver();
+  lens.adopt();
+  assert.equal(lens.ranked(), undefined);
+  assert.deepEqual(lens.outsiders(), []);
+});

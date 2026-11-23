@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,6 +61,10 @@ type hostGameSettingsData struct {
 	// does not show; nil Divisions draws no divisions field.
 	Divisions []string
 	Hidden    []string
+	// Ranks says the Game ranks its teams on a flat table where a Division can
+	// stand out of competition (OD), Outside the Divisions that do.
+	Ranks   bool
+	Outside []string
 	// Grid says the Game draws a grid, GridWidth its column width (0 for
 	// the default).
 	Grid      bool
@@ -422,6 +427,24 @@ func entrantPicker(data hostGameCreateData) dopeui.Item {
 	return dopeui.Details(items...)
 }
 
+// outsideDivisionsField is the settings page's out-of-competition boxes: one per
+// Division the game offers, ticked when its teams stand below everyone else.
+func outsideDivisionsField(divisions, outside []string) []dopeui.Item {
+	s := dopestrings.Default
+	boxes := []dopeui.Item{dopeui.Hiddenfield(dopeui.Name("outside_present"), dopeui.Value("1"))}
+	for _, d := range divisions {
+		items := []dopeui.Item{dopeui.Name("division_outside"), dopeui.Value(d), dopeui.Text(d)}
+		if slices.Contains(outside, d) {
+			items = append(items, dopeui.Checked())
+		}
+		boxes = append(boxes, dopeui.Checkbox(items...))
+	}
+	return []dopeui.Item{
+		dopeui.Field(dopeui.Label(s.Host.Games.OutsideLabel()), dopeui.Row(append([]dopeui.Item{dopeui.SpaceMD}, boxes...)...)),
+		dopeui.Hint(dopeui.Text(s.Host.Games.OutsideHint())),
+	}
+}
+
 // hostGameSettingsDoc builds a game's settings page: a small form to rename the
 // game and set its slug (its type is shown read-only).
 func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
@@ -457,6 +480,9 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 			dopeui.Field(dopeui.Label(s.Host.Games.DivisionsLabel()), dopeui.Row(append([]dopeui.Item{dopeui.SpaceMD}, boxes...)...)),
 			dopeui.Hint(dopeui.Text(s.Host.Games.DivisionsHint())),
 		)
+		if data.Ranks {
+			form = append(form, outsideDivisionsField(data.Divisions, data.Outside)...)
+		}
 	}
 	if data.Grid {
 		width := ""
@@ -490,10 +516,11 @@ func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, 
 			slug      sql.NullString
 			schemeDSL string
 			hidden    string
+			outside   string
 			gridWidth int
 		)
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, ''), grid_width from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden, &gridWidth); err != nil {
+select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, ''), coalesce(outside_divisions, ''), grid_width from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden, &outside, &gridWidth); err != nil {
 			return nil, err
 		}
 		divisions, err := festops.OfferedDivisions(r.Context(), s.h.Engine().DB, festID, gameType)
@@ -521,6 +548,8 @@ select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_d
 			Pasted:    editable && !hasDSL,
 			Divisions: divisions,
 			Hidden:    store.ParseHiddenDivisions(hidden),
+			Ranks:     games.Get(gameType).OutsideDivisions,
+			Outside:   store.ParseHiddenDivisions(outside),
 			Grid:      editable,
 			GridWidth: gridWidth,
 		}), nil
@@ -557,6 +586,10 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		// The boxes say which offered Divisions are shown (festops.Settings).
 		shown := r.Form["division_shown"]
 		g.ShownDivisions = &shown
+	}
+	if r.Form.Get("outside_present") != "" {
+		outside := r.Form["division_outside"]
+		g.OutsideDivisions = &outside
 	}
 	if err := s.UpdateGameSettings(r.Context(), festID, gameID, g); errors.Is(err, sql.ErrNoRows) {
 		// The Game left the fest after the router found it.

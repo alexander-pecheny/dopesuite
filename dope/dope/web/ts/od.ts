@@ -72,6 +72,8 @@ interface FestInfo {
   gameName?: string;
   // The divisions this game does not offer (games.hidden_divisions).
   hiddenDivisions?: string[];
+  // The divisions whose teams this game ranks out of competition (games.outside_divisions).
+  outsideDivisions?: string[];
 }
 
 interface EntrySuggestOption {
@@ -225,6 +227,7 @@ let activeTab = tabFromHash(TABS) || (viewer ? (kdGame ? "personal" : "results")
 const lens = createTeamLens({
   teams: () => state ? state.teams.map((team, index) => ({flags: team.flags, number: teamNumber(index)})) : null,
   hidden: () => fest?.hiddenDivisions,
+  outside: () => fest?.outsideDivisions,
   moved: () => invalidateTabCache("results", "detailed", "screen"),
   render: () => render(),
 });
@@ -568,11 +571,21 @@ function shootoutTiebreakForTeam(teamIndex: number): number[] {
   const shootout = od.shootoutTiebreakForTeam(state, teamIndex);
   return minus ? [...od.minusTiebreak(minusScore(teamIndex, questionStats(), minus)), ...shootout] : shootout;
 }
-function rankedTeamOrder(totals: number[], tiebreaks: number[][], members?: readonly number[]): RankKey[] { return od.rankedTeamOrder(state, totals, tiebreaks, members); }
+// standingOrder is the rows of the chosen Division in standings order: the
+// ranked teams, then those out of competition ranked among themselves below them.
+function standingOrder(totals: number[], tiebreaks: number[][]): RankKey[] {
+  const ranked = od.rankedTeamOrder(state, totals, tiebreaks, lens.ranked());
+  const outsiders = lens.outsiders();
+  return outsiders.length ? ranked.concat(od.rankedTeamOrder(state, totals, tiebreaks, outsiders)) : ranked;
+}
 function shootoutRoundTotalForTeam(teamIndex: number, roundIndex: number): number | null { return od.shootoutRoundTotalForTeam(state, teamIndex, roundIndex); }
-function placesFor(totals: number[], members?: readonly number[]): string[] {
+// standingPlaces is each team's place in the chosen Division: dealt among
+// the ranked teams, the out-of-competition mark for a team out of competition.
+function standingPlaces(totals: number[]): string[] {
   const tiebreaks = minus ? state.teams.map((_, i) => shootoutTiebreakForTeam(i)) : undefined;
-  return od.placesFor(state, questionStats(), totals, members, tiebreaks);
+  const places = od.placesFor(state, questionStats(), totals, lens.ranked(), tiebreaks);
+  for (const index of lens.outsiders()) places[index] = S.screen.division.outside();
+  return places;
 }
 function shootoutQuestionCompleted(roundIndex: number, questionIndex: number): boolean { return od.shootoutQuestionCompleted(state, roundIndex, questionIndex); }
 
@@ -2523,7 +2536,7 @@ function buildDetailedScoreTable(): HTMLTableElement {
 
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const members = lens.members();
-  const placeMap = placesFor(totals, members);
+  const placeMap = standingPlaces(totals);
   // The whole fest's teams have no number its people know: by name.
   const order = spansVenues()
     ? [...lens.order("name", members)].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b), "ru"))
@@ -3075,9 +3088,9 @@ function populateScreenRows(wrapper: ScreenWrapper): void {
   const tourIndex = currentTourIndex();
   const tourStarted = tourIndex >= 0 && tourHasStarted(tourIndex);
 
-  const sortKeys = rankedTeamOrder(totals, tiebreaks, members);
+  const sortKeys = standingOrder(totals, tiebreaks);
 
-  const placeMap = placesFor(totals, members);
+  const placeMap = standingPlaces(totals);
 
   // Group consecutive teams that share a place, like buildResultsTableInner.
   const placeGroups: Array<{placeText: string; keys: RankKey[]}> = [];
@@ -3211,10 +3224,9 @@ function buildResultsTableInner(): HTMLTableElement {
   const tourStarted = tourLengths.map((_, tourIndex) => tourHasStarted(tourIndex));
   const shootoutRoundCount = state.shootoutRounds.length;
 
-  const members = lens.members();
-  const sortKeys = rankedTeamOrder(totals, tiebreaks, members);
+  const sortKeys = standingOrder(totals, tiebreaks);
 
-  const placeMap = placesFor(totals, members);
+  const placeMap = standingPlaces(totals);
 
   const table = document.createElement("table");
   table.className = "results-table od-results-table";

@@ -54,3 +54,16 @@ that ignores the зачёт is noise. A Тройка's
 `[init] division:` still picks who plays, and another game can still seed from
 this one's table kept to a зачёт. When ОД and КСИ get a scheme DSL, it becomes
 the place to write this, and it fills the same column.
+
+## Amendment (23 Nov 2026): a зачёт can stand вне зачёта
+
+A school championship lets coaches play the ОД as a team of their own: they
+want a table of their own and no place among the children. An ОД now keeps the
+Flags whose teams play вне зачёта (`games.outside_divisions`, ticked on its
+«Свойства» page, `outside_divisions` in the settings API). In «Все», and in
+any other Division such a team also carries, the page deals places among the
+rest and lists the teams вне зачёта below them, ranked among themselves, with
+«в/з» for a place. Their own Division ranks them as usual. It is still a view:
+the рейтинг is reckoned over everyone, and the server's standings (the
+results API, a seed from this game) do not know of it. A seed that should leave
+the coaches out names its зачёт with `division:`.

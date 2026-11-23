@@ -1153,6 +1153,10 @@ var RU = Strings{
 			OdMinusWrongLabel: func() string { return "Штраф за неправильный ответ" },
 			OdQuestionsLabel:  func() string { return "Количество вопросов в туре" },
 			OdToursLabel:      func() string { return "Количество туров" },
+			OutsideHint: func() string {
+				return "Команды отмеченного зачёта (например, тренеры) играют наравне со всеми, но в общей таблице стоят ниже всех и места не получают. В таблице своего зачёта места у них есть."
+			},
+			OutsideLabel: func() string { return "Вне зачёта" },
 			RebuildHint: func() string {
 				return "Пересборка меняет только бои, в которых ещё ничего не внесено. Бой с внесёнными данными должен остаться таким же, иначе новая схема не применится."
 			},
@@ -2918,8 +2922,9 @@ var RU = Strings{
 			Venue: func() string { return "Открыть страницу площадки" },
 		},
 		Division: ScreenDivisionStrings{
-			All:   func() string { return "Все" },
-			Label: func() string { return "Зачёт" },
+			All:     func() string { return "Все" },
+			Label:   func() string { return "Зачёт" },
+			Outside: func() string { return "в/з" },
 		},
 		Downloads: ScreenDownloadsStrings{
 			Archive: func() string { return "Скачать .json.gz" },

@@ -157,6 +157,9 @@ type FestView struct {
 	GridWidth int `json:"gridWidth,omitempty"`
 	// HiddenDivisions are the Flags whose divisions this game does not show.
 	HiddenDivisions []string `json:"hiddenDivisions,omitempty"`
+	// OutsideDivisions are the Flags whose teams this game ranks out of competition:
+	// below everyone else in the whole field, with no place there.
+	OutsideDivisions []string `json:"outsideDivisions,omitempty"`
 }
 
 type StageView struct {
@@ -288,8 +291,8 @@ type MatchView struct {
 	Seq uint64 `json:"seq,omitempty"`
 }
 
-// ParseHiddenDivisions reads games.hidden_divisions: a JSON list of Flag short
-// names, empty or unreadable as none.
+// ParseHiddenDivisions reads games.hidden_divisions (or outside_divisions): a
+// JSON list of Flag short names, empty or unreadable as none.
 func ParseHiddenDivisions(raw string) []string {
 	var out []string
 	if raw == "" || json.Unmarshal([]byte(raw), &out) != nil {
@@ -298,8 +301,8 @@ func ParseHiddenDivisions(raw string) []string {
 	return out
 }
 
-// HiddenDivisionsValue is what games.hidden_divisions holds for a list of Flag
-// short names: its JSON, or null for none.
+// HiddenDivisionsValue is what games.hidden_divisions (or outside_divisions)
+// holds for a list of Flag short names: its JSON, or null for none.
 func HiddenDivisionsValue(hidden []string) any {
 	if len(hidden) == 0 {
 		return nil

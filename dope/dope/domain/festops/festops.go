@@ -63,7 +63,7 @@ func compileErrorForHost(err error) error {
 }
 
 // Settings is what a Game's settings page edits: its title, its slug, its
-// scheme, and the Divisions it hides. An empty SchemeDSL leaves the scheme as
+// scheme, the Divisions it hides and the ones it ranks out of competition. An empty SchemeDSL leaves the scheme as
 // it is.
 type Settings struct {
 	Title     string `json:"title"`
@@ -77,6 +77,10 @@ type Settings struct {
 	// hidden before that it no longer offers stays hidden. When it is set,
 	// HiddenDivisions is not read.
 	ShownDivisions *[]string `json:"shown_divisions"`
+	// OutsideDivisions are the Flags whose teams the Game ranks out of competition:
+	// below everyone else in the whole field, with no place there. nil leaves them as
+	// they are.
+	OutsideDivisions *[]string `json:"outside_divisions"`
 	// GridWidth is the width of a column of the Game's grid in pixels, 0
 	// for the default; nil leaves it as it is.
 	GridWidth *int `json:"grid_width"`
@@ -131,6 +135,12 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 	}
 	if err := writeHiddenDivisionsTx(ctx, tx, festID, gameID, g, stored); err != nil {
 		return core.FestWrite{}, err
+	}
+	if g.OutsideDivisions != nil {
+		if _, err := tx.ExecContext(ctx, `update games set outside_divisions = ? where id = ? and fest_id = ?`,
+			store.HiddenDivisionsValue(roster.CleanDivisions(*g.OutsideDivisions)), gameID, festID); err != nil {
+			return core.FestWrite{}, err
+		}
 	}
 	if g.GridWidth != nil {
 		width := max(*g.GridWidth, 0)

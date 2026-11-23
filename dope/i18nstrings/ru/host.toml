@@ -12,6 +12,10 @@ divisions_label = "Зачёты"
 grid_width_label = "Ширина боя на Сетке, px (пусто — по умолчанию, 240)"
 error_grid_width = 'Ширина боя на Сетке должна быть от {{.min}} до {{.max}}.'
 divisions_hint = "Отмеченные зачёты можно выбрать на страницах этой игры. Снимите отметку с зачёта, который в этой игре не нужен."
+# The ОД settings page's вне-зачёта boxes, one per зачёт: a ticked one's
+# teams stand below everyone else in «Все», with no place there.
+outside_label = "Вне зачёта"
+outside_hint = "Команды отмеченного зачёта (например, тренеры) играют наравне со всеми, но в общей таблице стоят ниже всех и места не получают. В таблице своего зачёта места у них есть."
 # A troika in the new game's entrant picker, set apart from the teams.
 entrant_troika = '{{.name}} · тройка'
 # The create-game form (hostGameCreateDoc) and the game settings page

@@ -79,6 +79,10 @@ type Definition struct {
 	// Divisions reports whether the Game's settings offer the fest's divisions
 	// to show or hide: the formats whose results tabs carry the chips.
 	Divisions bool
+	// OutsideDivisions reports whether a Division can play out of competition in the
+	// format: its teams stand below the rest in the whole field, with no place there
+	// (ADR-0020). Only OD's page knows how to draw it.
+	OutsideDivisions bool
 	// DSL is how the format takes a scheme written in the DSL.
 	DSL DSLUse
 	// DefaultDSL is the scheme the creation form prefills for a fest of so many

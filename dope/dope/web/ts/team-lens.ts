@@ -31,6 +31,9 @@ export interface TeamLensOptions {
   teams: () => readonly LensTeam[] | null;
   // hidden is the Divisions this game does not offer (games.hidden_divisions).
   hidden: () => readonly string[] | undefined;
+  // outside is the Divisions whose teams this game ranks out of competition
+  // (games.outside_divisions): below everyone else, with no place.
+  outside?: () => readonly string[] | undefined;
   // moved is told whenever the chosen Division changes, before any render,
   // so the page can drop what it cached for the old one.
   moved?: () => void;
@@ -45,6 +48,13 @@ export interface TeamLens {
   // members is the rows the chosen Division takes, undefined for the whole
   // field, so that the whole field is ranked as it was before Divisions.
   members(): number[] | undefined;
+  // ranked is the rows that take places: members() without the teams out of
+  // competition, or undefined for the whole field when there are none.
+  ranked(): number[] | undefined;
+  // outsiders is the rows out of competition: shown below the ranked ones, with no
+  // place. Inside the outside Division itself there are none, so the
+  // coaches' own table ranks them as usual.
+  outsiders(): number[];
   // badges is the Divisions shown after a team's name. There are none inside
   // one Division, because every row would carry the same badge, and a hidden
   // Division is never a badge.
@@ -83,6 +93,17 @@ export function createTeamLens(options: TeamLensOptions): TeamLens {
     return true;
   };
 
+  const outsiders = (): number[] => {
+    const outside = options.outside?.() || [];
+    if (!outside.length || outside.includes(active)) return [];
+    const rows: number[] = [];
+    (options.teams() || []).forEach((team, index) => {
+      if (!inDivision(team.flags, active)) return;
+      if ((team.flags || []).some((flag) => outside.includes(flag))) rows.push(index);
+    });
+    return rows;
+  };
+
   return {
     get active() { return active; },
     divisions,
@@ -94,6 +115,13 @@ export function createTeamLens(options: TeamLensOptions): TeamLens {
       });
       return members;
     },
+    ranked() {
+      const out = outsiders();
+      if (!out.length) return this.members();
+      const shown = this.members() ?? (options.teams() || []).map((_, index) => index);
+      return shown.filter((index) => !out.includes(index));
+    },
+    outsiders,
     badges(index) {
       if (active !== ALL_DIVISIONS) return undefined;
       const hidden = options.hidden() || [];

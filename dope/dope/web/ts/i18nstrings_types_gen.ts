@@ -838,6 +838,8 @@ export type Strings = {
       odMinusWrongLabel: () => string;
       odQuestionsLabel: () => string;
       odToursLabel: () => string;
+      outsideHint: () => string;
+      outsideLabel: () => string;
       rebuildHint: () => string;
       saveSubmit: () => string;
       schemeLabel: () => string;
@@ -1945,6 +1947,7 @@ export type Strings = {
     division: {
       all: () => string;
       label: () => string;
+      outside: () => string;
     };
     downloads: {
       archive: () => string;

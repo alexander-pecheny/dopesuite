@@ -11,7 +11,7 @@ import (
 // odFormat is ChGK: one flat sheet of tours, the teams taking questions by
 // number.
 var odFormat = Definition{Code: OD, Label: dopestrings.Default.Games.Od.Label(), Title: dopestrings.Default.Host.Games.TypeOd(),
-	Page: "static/od.html", Flat: true, Divisions: true, DSL: DSLAccepted, ToursSeed: true,
+	Page: "static/od.html", Flat: true, Divisions: true, OutsideDivisions: true, DSL: DSLAccepted, ToursSeed: true,
 	Results: odResults, Sheets: SheetsODRating, Journal: JournalODPatches, Protocol: od{}}
 
 func odResults(schemeJSON, stateJSON string) (any, error) {

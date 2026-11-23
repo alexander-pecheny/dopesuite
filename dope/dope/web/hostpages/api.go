@@ -425,6 +425,8 @@ type apiGameSettings struct {
 	// HiddenDivisions the ones the game does not show.
 	Divisions       []string `json:"divisions"`
 	HiddenDivisions []string `json:"hidden_divisions"`
+	// OutsideDivisions the ones whose teams it ranks out of competition.
+	OutsideDivisions []string `json:"outside_divisions"`
 	// GridWidth is the width of a column of the Game's grid in pixels, 0
 	// for the default.
 	GridWidth int `json:"grid_width"`
@@ -432,17 +434,18 @@ type apiGameSettings struct {
 
 func (g apiGameSettings) settings() GameSettings {
 	hidden := append([]string{}, g.HiddenDivisions...)
+	outside := append([]string{}, g.OutsideDivisions...)
 	width := g.GridWidth
-	return GameSettings{Title: g.Title, Slug: g.Slug, SchemeDSL: g.SchemeDSL, HiddenDivisions: &hidden, GridWidth: &width}
+	return GameSettings{Title: g.Title, Slug: g.Slug, SchemeDSL: g.SchemeDSL, HiddenDivisions: &hidden, OutsideDivisions: &outside, GridWidth: &width}
 }
 
 func (s *Server) loadGameSettings(ctx context.Context, festID, gameID int64) (apiGameSettings, error) {
 	var g apiGameSettings
 	var slug sql.NullString
-	var hidden string
+	var hidden, outside string
 	err := s.h.Engine().DB.QueryRowContext(ctx, `
-select id, code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, ''), grid_width from games where id = ? and fest_id = ?`, gameID, festID).
-		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden, &g.GridWidth)
+select id, code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, ''), coalesce(outside_divisions, ''), grid_width from games where id = ? and fest_id = ?`, gameID, festID).
+		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden, &outside, &g.GridWidth)
 	if err != nil {
 		return g, err
 	}
@@ -450,6 +453,10 @@ select id, code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidd
 	g.HiddenDivisions = store.ParseHiddenDivisions(hidden)
 	if g.HiddenDivisions == nil {
 		g.HiddenDivisions = []string{}
+	}
+	g.OutsideDivisions = store.ParseHiddenDivisions(outside)
+	if g.OutsideDivisions == nil {
+		g.OutsideDivisions = []string{}
 	}
 	if g.Divisions, err = festops.OfferedDivisions(ctx, s.h.Engine().DB, festID, g.Type); err != nil {
 		return g, err

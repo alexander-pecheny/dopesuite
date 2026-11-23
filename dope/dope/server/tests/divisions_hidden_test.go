@@ -112,3 +112,85 @@ func TestAGameHidesTheDivisionsItDoesNotRank(t *testing.T) {
 		t.Fatalf("the settings page has no зачёты field: %d", resp.Code)
 	}
 }
+
+// An ОД ranks a зачёт вне зачёта: coaches play the whole game, and the page
+// sets them below everyone else in «Все». The game keeps the Flags through
+// the API twin and the settings form, and its view carries them.
+func TestAnODRanksADivisionOutside(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	srv.SetEditBatchWindow(time.Millisecond)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	festID := newFest(t, db, "outside", "Фест", systemUserID(t, db))
+	api := func(method, path string, body any) (int, string) {
+		t.Helper()
+		resp := scopedAPIRequest(t, srv, method, fmt.Sprintf("/api/fest/%d%s", festID, path), body, token)
+		return resp.Code, resp.Body.String()
+	}
+	school := festTeamWithPlayers(t, db, festID, "Альфа", [][2]string{{"А", "Один"}})
+	coaches := festTeamWithPlayers(t, db, festID, "Тренеры", [][2]string{{"Б", "Один"}})
+	festTeamFlag(t, db, school, "Ш")
+	festTeamFlag(t, db, coaches, "Тр")
+
+	code, body := api(http.MethodPost, "/games", map[string]any{"game_type": "od", "od_tours": 1, "od_questions": 3})
+	if code != http.StatusOK {
+		t.Fatalf("create: %d %s", code, body)
+	}
+	var game struct {
+		ID      int64    `json:"id"`
+		Outside []string `json:"outside_divisions"`
+	}
+	if err := json.Unmarshal([]byte(body), &game); err != nil || game.Outside == nil || len(game.Outside) != 0 {
+		t.Fatalf("a new game: %s, want an empty outside_divisions", body)
+	}
+	read := func() []string {
+		t.Helper()
+		code, body := api(http.MethodGet, fmt.Sprintf("/games/%d/settings", game.ID), nil)
+		var s struct {
+			Outside []string `json:"outside_divisions"`
+		}
+		if code != http.StatusOK || json.Unmarshal([]byte(body), &s) != nil {
+			t.Fatalf("settings: %d %s", code, body)
+		}
+		return s.Outside
+	}
+	if code, body := api(http.MethodPatch, fmt.Sprintf("/games/%d/settings", game.ID), map[string]any{"outside_divisions": []string{"Тр"}}); code != http.StatusOK {
+		t.Fatalf("outside Тр: %d %s", code, body)
+	}
+	// A rename keeps them.
+	if code, body := api(http.MethodPatch, fmt.Sprintf("/games/%d/settings", game.ID), map[string]any{"title": "Вопросики"}); code != http.StatusOK {
+		t.Fatalf("rename: %d %s", code, body)
+	}
+	if got := read(); !reflect.DeepEqual(got, []string{"Тр"}) {
+		t.Fatalf("after a rename: %v, want [Тр]", got)
+	}
+	code, body = api(http.MethodGet, fmt.Sprintf("/games/%d", game.ID), nil)
+	var view struct {
+		Outside []string `json:"outsideDivisions"`
+	}
+	if code != http.StatusOK || json.Unmarshal([]byte(body), &view) != nil || !reflect.DeepEqual(view.Outside, []string{"Тр"}) {
+		t.Fatalf("the game's view: %d %s", code, body)
+	}
+
+	host := func(req *http.Request) *httptest.ResponseRecorder {
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+		resp := httptest.NewRecorder()
+		srv.HostPageServer().HandleHostRouter(resp, req)
+		return resp
+	}
+	page := host(httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d/game/%d/settings", festID, game.ID), nil))
+	if body := page.Body.String(); !strings.Contains(body, `name="division_outside"`) || !strings.Contains(body, "Вне зачёта") {
+		t.Fatalf("the settings page has no вне-зачёта field: %d", page.Code)
+	}
+	// Unticking every box clears them; the зачёты shown stay as they were.
+	form := url.Values{"title": {"Вопросики"}, "divisions_present": {"1"}, "division_shown": {"Ш", "Тр"}, "outside_present": {"1"}}
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/%d/settings", festID, game.ID), strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if resp := host(req); resp.Code != http.StatusSeeOther {
+		t.Fatalf("settings form: %d %s", resp.Code, resp.Body.String())
+	}
+	if got := read(); len(got) != 0 {
+		t.Fatalf("after the form: %v, want none", got)
+	}
+}
