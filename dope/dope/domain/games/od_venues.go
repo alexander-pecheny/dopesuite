@@ -38,8 +38,14 @@ func (s *ODState) FlattenVenues() {
 			continue
 		}
 		for q := range min(len(sheet.Entries), len(sheet.Completed)) {
-			if sheet.Completed[q] && slices.Contains(sheet.Entries[q], team.VenueNumber) {
+			if !sheet.Completed[q] {
+				continue
+			}
+			if slices.Contains(sheet.Entries[q], team.VenueNumber) {
 				entries[q] = append(entries[q], team.Number)
+			} else if slices.Contains(sheet.Entries[q], -team.VenueNumber) {
+				// A minus game's wrong answer (ODMinus).
+				entries[q] = append(entries[q], -team.Number)
 			}
 		}
 	}
@@ -114,9 +120,7 @@ func (od) RemapVenueSheet(stateJSON []byte, venueID int64, remap map[int]int) ([
 	}
 	for q := range sheet.Entries {
 		for slot, number := range sheet.Entries[q] {
-			if mapped, ok := remap[int(number)]; ok {
-				sheet.Entries[q][slot] = int64(mapped)
-			}
+			sheet.Entries[q][slot] = int64(remapEntry(int(number), remap))
 		}
 	}
 	sheets[key] = sheet
@@ -137,7 +141,7 @@ func enteredOnVenues(stateJSON json.RawMessage) ([]bool, bool) {
 	for i, team := range state.Teams {
 		sheet := state.Venues[idstr.Format(team.Venue)]
 		for _, column := range sheet.Entries {
-			if team.VenueNumber > 0 && slices.Contains(column, team.VenueNumber) {
+			if team.VenueNumber > 0 && (slices.Contains(column, team.VenueNumber) || slices.Contains(column, -team.VenueNumber)) {
 				out[i] = true
 			}
 		}

@@ -1146,8 +1146,13 @@ var RU = Strings{
 			MultiSortingLabel: func() string {
 				return "Что решает при равном итоге (необязательно)"
 			},
-			OdQuestionsLabel: func() string { return "Количество вопросов в туре" },
-			OdToursLabel:     func() string { return "Количество туров" },
+			OdMinusBonusLabel: func() string { return "Бонус за взятый тур целиком" },
+			OdMinusEmptyLabel: func() string {
+				return "Тур без единого ответа — минус треть вопросов тура как неправильные"
+			},
+			OdMinusWrongLabel: func() string { return "Штраф за неправильный ответ" },
+			OdQuestionsLabel:  func() string { return "Количество вопросов в туре" },
+			OdToursLabel:      func() string { return "Количество туров" },
 			RebuildHint: func() string {
 				return "Пересборка меняет только бои, в которых ещё ничего не внесено. Бой с внесёнными данными должен остаться таким же, иначе новая схема не применится."
 			},
@@ -1164,10 +1169,16 @@ var RU = Strings{
 			StickerEmptywrongRow: func() string { return "Пустой = минус (пустые = −номинал)" },
 			StickerMaxField:      func() string { return "Максимум стикеров" },
 			StickerMaxLabel:      func() string { return "Макс." },
-			StickerNeutral:       func() string { return "Обычный" },
-			StickerNowrong:       func() string { return "Без минуса" },
-			StickerNowrongRow:    func() string { return "Без минуса (неправильные = 0)" },
-			StickerX2Row:         func() string { return "×2 (правильные и неправильные удваиваются)" },
+			StickerMissingEmptywrongLabel: func() string {
+				return "Бланк без стикера считается стикером «Пустой = минус»"
+			},
+			StickerNeutral:    func() string { return "Обычный" },
+			StickerNowrong:    func() string { return "Без минуса" },
+			StickerNowrongRow: func() string { return "Без минуса (неправильные = 0)" },
+			StickerPlusNominalLabel: func() string {
+				return "Первый доппоказатель — сумма номиналов правильных ответов (без минусов и удвоений)"
+			},
+			StickerX2Row: func() string { return "×2 (правильные и неправильные удваиваются)" },
 			StickersHint: func() string {
 				return "Для каждого стикера задайте, сколько штук есть у команды (0 — стикер не используется) и цвет для подсветки. «Обычный» стикер работает как стандартная тема КСИ."
 			},
@@ -3393,6 +3404,7 @@ var RU = Strings{
 		},
 		Keypad: WidgetsKeypadStrings{
 			Backspace:  func() string { return "Удалить" },
+			Minus:      func() string { return "Минус" },
 			NextColumn: func() string { return "Следующая колонка" },
 			NextRow:    func() string { return "Следующая строка" },
 			PrevColumn: func() string { return "Предыдущая колонка" },

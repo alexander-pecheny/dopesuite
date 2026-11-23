@@ -2792,6 +2792,16 @@ body:not(.embedded-match) .grid-match {
   --cell-fill: var(--green);
 }
 
+/* A minus ЧГК's wrong answer: red in the standings, and the −number in red
+   on the input sheet. */
+.results-answer.wrong .results-answer-mark {
+  --cell-fill: var(--red);
+}
+
+.entry-cell.entry-wrong {
+  color: var(--danger-text);
+}
+
 /* A спорный waiting for the jury is yellow wherever its cell shows. Once ruled
    on, the standings show it as an ordinary taken or missed question; the input
    sheet keeps the number, green or struck out, so the host sees what became of

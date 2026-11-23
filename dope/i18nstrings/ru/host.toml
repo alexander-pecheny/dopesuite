@@ -42,6 +42,13 @@ type_kd = "Кубок Дружбы"
 # The OD settings fields; also the field names their out-of-range errors name.
 od_tours_label = "Количество туров"
 od_questions_label = "Количество вопросов в туре"
+# The OD minus fields (Тминное поле): what a wrong answer costs and what
+# taking a whole tour adds; 0 points for a wrong answer is a plain ЧГК. Also
+# the field names their errors name.
+od_minus_wrong_label = "Штраф за неправильный ответ"
+od_minus_bonus_label = "Бонус за взятый тур целиком"
+# The checkbox charging an empty tour as a third of its questions wrong.
+od_minus_empty_label = "Тур без единого ответа — минус треть вопросов тура как неправильные"
 # The friendship cup's tables field; also the field its errors name.
 kd_tables_label = "Количество столов"
 # Under the friendship cup's fields: what the tables are and how many to take.
@@ -59,6 +66,11 @@ sticker_neutral = "Обычный"
 sticker_x2_row = "×2 (правильные и неправильные удваиваются)"
 sticker_nowrong_row = "Без минуса (неправильные = 0)"
 sticker_emptywrong_row = "Пустой = минус (пустые = −номинал)"
+# The stickers-KSI checkbox: the first tiebreaker sums the right answers'
+# nominals, without minuses or doubling.
+sticker_plus_nominal_label = "Первый доппоказатель — сумма номиналов правильных ответов (без минусов и удвоений)"
+# The stickers-KSI checkbox: a sheet with no sticker scores as «Пустой = минус».
+sticker_missing_emptywrong_label = "Бланк без стикера считается стикером «Пустой = минус»"
 # Sticker labels the scheme config stores for the special stickers.
 sticker_nowrong = "Без минуса"
 sticker_emptywrong = "Пустой = минус"

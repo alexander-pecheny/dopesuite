@@ -5,6 +5,7 @@ import {cssEscape, questionNumberNode, td, th} from "./cells.js";
 import type {CellAttrs} from "./cells.js";
 import {buildFlatScoreTable, computePlaces, scoreSheetPins} from "./score-table.js";
 import type {ScoreTableRow, ScoreTableTheme, ScoreTableThemeRow} from "./score-table.js";
+import type {CellSpec} from "./cells.js";
 import {nameCell} from "./name-cell.js";
 import {resultsPins, resultsTeamCell} from "./standings.js";
 import {sheetHead} from "./sheet-pins.js";
@@ -25,7 +26,7 @@ import { gameTabs } from "./game-tabs.js";
 import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
 import * as od from "./od-protocol.js";
-import type {ContestedText, ODContested, ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
+import type {ContestedText, MinusRules, ODContested, ODScheme, ODState, ODTeam, QuestionStat, RankKey, ShootoutMark, ShootoutRound} from "./od-protocol.js";
 import {buildContestedView, fetchContested, openContestedDialog, sendContested} from "./od-contested.js";
 import {SCREEN_DEFAULTS, normalizeScreenSettings, planScreen, readCityCountry, teamFlag} from "./screen-board.js";
 import type {ScreenMetrics, ScreenSettings} from "./screen-board.js";
@@ -150,6 +151,9 @@ const shell = mountGamePage({
 const {viewer, indicator} = shell;
 let scheme!: ODScheme;
 let state!: ODState;
+// minus is the scheme's minus block: a wrong answer is entered as −number and
+// costs points (Tminnoe pole). null is a plain ChGK.
+let minus: MinusRules | null = null;
 // The input tab enters entrySheet: the document itself, or in a synch fest
 // one venue's sheet under its numbers (ADR-0033), whose arrays it shares with
 // docState. Every other tab reads state. On a venue's view (?venue=) that is
@@ -321,6 +325,7 @@ function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest
 function initFromScheme(): void {
   tourLengths = od.tourLengthsOf(scheme);
   totalQuestions = tourLengths.reduce((acc, n) => acc + n, 0);
+  minus = od.minusRulesOf(scheme);
 }
 
 // The Protocol's arithmetic lives in od-protocol.ts; these read the page's
@@ -492,6 +497,7 @@ function entryStats(): QuestionStat[] {
   return entryStatsCache;
 }
 function entryIndexByNumber(number: number): number {
+  if (minus && number < 0) number = -number; // a wrong answer
   if (!Number.isInteger(number) || number < 1) return -1;
   return entryIndex().get(number) ?? -1;
 }
@@ -546,13 +552,28 @@ function questionStats(): QuestionStat[] {
 }
 function teamTookQuestion(teamIndex: number, qIndex: number, stats: QuestionStat[] = questionStats()): boolean { return od.teamTookQuestion(stats, teamIndex, qIndex); }
 function countValidEntries(qIndex: number, stats: QuestionStat[] = questionStats()): number { return od.countValidEntries(stats, qIndex); }
-function sumRow(teamIndex: number, stats: QuestionStat[] = questionStats()): number { return od.sumRow(stats, teamIndex); }
-function tourSumsForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number[] { return od.tourSumsForTeam(stats, teamIndex, tourLengths); }
+// In a minus game a team's sum is its points, and a tour's sum the tour's points.
+function minusScore(teamIndex: number, stats: QuestionStat[], rules: MinusRules): od.MinusScore { return od.minusScore(stats, teamIndex, tourLengths, rules); }
+function sumRow(teamIndex: number, stats: QuestionStat[] = questionStats()): number {
+  return minus ? minusScore(teamIndex, stats, minus).points : od.sumRow(stats, teamIndex);
+}
+function tourSumsForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number[] {
+  return minus ? minusScore(teamIndex, stats, minus).tourPoints : od.tourSumsForTeam(stats, teamIndex, tourLengths);
+}
+function teamWrongOnQuestion(teamIndex: number, qIndex: number, stats: QuestionStat[] = questionStats()): boolean { return od.teamWrongOnQuestion(stats, teamIndex, qIndex); }
 function ratingForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number { return od.ratingForTeam(state, stats, teamIndex); }
-function shootoutTiebreakForTeam(teamIndex: number): number[] { return od.shootoutTiebreakForTeam(state, teamIndex); }
+// What breaks a tie on the total: in a minus game its own tiebreakers first
+// (od.minusTiebreak), then the shootout.
+function shootoutTiebreakForTeam(teamIndex: number): number[] {
+  const shootout = od.shootoutTiebreakForTeam(state, teamIndex);
+  return minus ? [...od.minusTiebreak(minusScore(teamIndex, questionStats(), minus)), ...shootout] : shootout;
+}
 function rankedTeamOrder(totals: number[], tiebreaks: number[][], members?: readonly number[]): RankKey[] { return od.rankedTeamOrder(state, totals, tiebreaks, members); }
 function shootoutRoundTotalForTeam(teamIndex: number, roundIndex: number): number | null { return od.shootoutRoundTotalForTeam(state, teamIndex, roundIndex); }
-function placesFor(totals: number[], members?: readonly number[]): string[] { return od.placesFor(state, questionStats(), totals, members); }
+function placesFor(totals: number[], members?: readonly number[]): string[] {
+  const tiebreaks = minus ? state.teams.map((_, i) => shootoutTiebreakForTeam(i)) : undefined;
+  return od.placesFor(state, questionStats(), totals, members, tiebreaks);
+}
 function shootoutQuestionCompleted(roundIndex: number, questionIndex: number): boolean { return od.shootoutQuestionCompleted(state, roundIndex, questionIndex); }
 
 
@@ -943,6 +964,7 @@ function positionInvertOverlay(): void {
 function ensureEntryKeypad(): VirtualKeypad {
   if (entryKeypad) return entryKeypad;
   entryKeypad = installVirtualKeypad({
+    minus: Boolean(minus),
     onDigit: typeIntoActiveEditor,
     onBackspace: backspaceActiveEditor,
     onNav: navigateActiveEntryEditor,
@@ -1650,7 +1672,8 @@ function entryCell(qIndex: number, rowIndex: number, tourEnd: boolean, validatio
 }
 
 function entryCellShowsCoffin(qIndex: number, rowIndex: number): boolean {
-  return rowIndex === 0 && Boolean(entrySheet.completed[qIndex]) && entryValidEntries(qIndex) === 0;
+  // A minus game's wrong answer in the first row stays in sight.
+  return rowIndex === 0 && Boolean(entrySheet.completed[qIndex]) && entryValidEntries(qIndex) === 0 && (entrySheet.entries[qIndex]?.[0] || 0) >= 0;
 }
 
 function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number): void {
@@ -1669,6 +1692,7 @@ function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number
   }
   const value = entrySheet.entries[qIndex]?.[rowIndex] || 0;
   td.textContent = value ? String(value) : "";
+  td.classList.toggle("entry-wrong", value < 0);
 }
 
 // A contested answer is not an entry and has no row of its own: a column's contested answers
@@ -1716,7 +1740,9 @@ function buildInputValidationCounts(): Array<Map<number, number>> {
 function inputValidationCounts(qIndex: number): Map<number, number> {
   const counts = new Map<number, number>();
   const list = entrySheet.entries[qIndex] || [];
-  for (const value of list) {
+  for (const raw of list) {
+    // A team entered both right and wrong on one question is a duplicate.
+    const value = minus ? Math.abs(raw) : raw;
     if (!value) continue;
     counts.set(value, (counts.get(value) || 0) + 1);
   }
@@ -1738,7 +1764,7 @@ function markEntryCellValidity(cell: HTMLElement, qIndex: number, counts: Map<nu
   }
   const n = Number(raw);
   const known = entryIndexByNumber(n) >= 0;
-  const dup = (counts.get(n) || 0) > 1;
+  const dup = (counts.get(minus ? Math.abs(n) : n) || 0) > 1;
   cell.classList.toggle("entry-input-bad", !known);
   cell.classList.toggle("entry-input-dup", known && dup);
   syncActiveEditorValidity(cell);
@@ -2138,6 +2164,11 @@ function parseEntryInput(input: HTMLInputElement): {display: string; value: numb
   if (/^\d*$/.test(raw)) {
     return {display: raw, value: raw === "" ? 0 : Number(raw), pending: false};
   }
+  // A minus game's wrong answer: «-5» is team 5 answering wrong. The shootout
+  // has no wrong answers.
+  if (minus && input.dataset.entryKind !== "shootout" && /^-\d*$/.test(raw)) {
+    return {display: raw, value: raw === "-" ? 0 : Number(raw), pending: false};
+  }
   return {display: raw, value: 0, pending: true};
 }
 
@@ -2459,6 +2490,23 @@ function detailedQuestionHeadLabel(displayNumber: number, stat: QuestionStat | u
   return wrap;
 }
 
+// detailedAnswerCell is one question of a team on the detailed tab: taken,
+// wrong (a minus game), or a contested answer waiting for the jury.
+function detailedAnswerCell(teamIndex: number, qIndex: number, stats: QuestionStat[], first: boolean): CellSpec {
+  const answered = teamTookQuestion(teamIndex, qIndex, stats);
+  const contested = contestedMark(teamIndex, qIndex, answered);
+  const classes = ["answer-cell", "theme-block", "readonly"];
+  if (answered) classes.push("right");
+  else if (teamWrongOnQuestion(teamIndex, qIndex, stats)) classes.push("wrong");
+  if (contested.pending) classes.push("od-contested");
+  if (first) classes.push("theme-block-top-left", "theme-block-bottom-left");
+  return {
+    content: answered ? String(qIndex + 1) : contested.pending ? "?" : "",
+    className: classes.join(" "),
+    attrs: contested.title ? {title: contested.title} : null,
+  };
+}
+
 function buildDetailedScoreTable(): HTMLTableElement {
   const stats = questionStats();
   const themes: ScoreTableTheme[] = [];
@@ -2482,33 +2530,24 @@ function buildDetailedScoreTable(): HTMLTableElement {
     : lens.order("number", members);
   const rows = order.map((teamIndex): ScoreTableRow => {
     const team = state.teams[teamIndex];
+    const minusTours = minus ? tourSumsForTeam(teamIndex, stats) : null;
     let qIndex = 0;
     return {
       nameCell: teamNameCell(teamIndex),
       totalCell: totals[teamIndex],
       placeCell: placeMap[teamIndex] || "",
-      themes: tourLengths.map((tourSize): ScoreTableThemeRow => {
+      themes: tourLengths.map((tourSize, tourIndex): ScoreTableThemeRow => {
         let tourSum = 0;
         const answers = [];
         for (let i = 0; i < tourSize; i++) {
-          const answered = teamTookQuestion(teamIndex, qIndex, stats);
-          if (answered) tourSum += 1;
-          const contested = contestedMark(teamIndex, qIndex, answered);
-          const classes = ["answer-cell", "theme-block", "readonly"];
-          if (answered) classes.push("right");
-          if (contested.pending) classes.push("od-contested");
-          if (i === 0) classes.push("theme-block-top-left", "theme-block-bottom-left");
-          answers.push({
-            content: answered ? String(qIndex + 1) : contested.pending ? "?" : "",
-            className: classes.join(" "),
-            attrs: contested.title ? {title: contested.title} : null,
-          });
+          if (teamTookQuestion(teamIndex, qIndex, stats)) tourSum += 1;
+          answers.push(detailedAnswerCell(teamIndex, qIndex, stats, i === 0));
           qIndex++;
         }
         return {
           answers,
           scoreCell: {
-            content: tourSum,
+            content: minusTours ? minusTours[tourIndex] : tourSum,
             className: "number theme-score theme-block theme-block-score",
           },
         };
@@ -3298,6 +3337,7 @@ function resultsAnswerCell(teamIndex: number, qIndex: number, stats: QuestionSta
   mark.textContent = answered ? String(qIndex + 1) : contested.pending ? "?" : "";
   cell.appendChild(mark);
   if (answered) cell.classList.add("right");
+  else if (teamWrongOnQuestion(teamIndex, qIndex, stats)) cell.classList.add("wrong");
   return cell;
 }
 

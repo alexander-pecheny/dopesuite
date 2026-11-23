@@ -10,6 +10,8 @@ import (
 type Shape struct {
 	// Tours is how many questions each tour holds (OD, friendship cup).
 	Tours []int
+	// Minus is an OD's minus block (Samarium's Tminnoe pole); nil is a plain ChGK.
+	Minus *ODMinus
 	// Tables is how many tables a friendship cup seats (a prime).
 	Tables int
 	// Themes and Stickers are a KSI's themes and its optional stickers block.

@@ -86,6 +86,8 @@ type Spec struct {
 	// The flat formats. OD: tours of so many questions; KSI: themes and an
 	// optional stickers block.
 	ODTours, ODQuestions int
+	// ODMinus makes the OD a minus game (Tminnoe pole); nil is a plain ChGK.
+	ODMinus *games.ODMinus
 	// KDTables is how many tables a friendship cup seats (a prime); its
 	// tours and questions ride ODTours and ODQuestions.
 	KDTables    int

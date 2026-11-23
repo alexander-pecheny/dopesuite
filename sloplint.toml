@@ -12,7 +12,9 @@
 # reorderable list fields came in. It went up to 0.4897 when qy's eighth
 # migration made sloplint take qy/storage/store/schema.go for a data table
 # and leave it out, which takes its code out of the denominator: the new
-# vote code itself scores below the tree (0.40).
+# vote code itself scores below the tree (0.40). 0.4895 once the minus ChGK
+# and the KSI sticker options split ComputeODResults and shared the KSI
+# sticker lookup with the export.
 # Score with sloplint 3ab0283 or newer: an older binary still counts the
 # numbers an ignore comment vouches for, and reads about 0.03 higher.
-max-slop-score = 0.4897
+max-slop-score = 0.4895

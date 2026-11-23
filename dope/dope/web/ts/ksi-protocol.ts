@@ -31,7 +31,11 @@ export interface KSIScheme {
   themes?: unknown;
   participants?: string[];
   teams?: Array<{name?: string}>;
-  stickers?: {types?: Array<{id?: unknown; label?: unknown; color?: unknown; max?: unknown} | null | undefined>} | null;
+  stickers?: {
+    types?: Array<{id?: unknown; label?: unknown; color?: unknown; max?: unknown} | null | undefined>;
+    plus?: unknown;
+    missing?: unknown;
+  } | null;
   [key: string]: unknown;
 }
 
@@ -56,6 +60,12 @@ export interface KSIRules {
   themesCount: number;
   stickers: StickerType[];
   stickerById: Map<string, StickerType>;
+  // plusNominal: the first tiebreaker sums the right answers' nominals, with
+  // no sticker's doubling, instead of every positive contribution.
+  plusNominal: boolean;
+  // missingSticker scores a sheet without a sticker; "" leaves it unscored.
+  // The server's games.KSIStickerConfig carries both.
+  missingSticker: string;
 }
 
 export function isTeamMode(scheme: KSIScheme): boolean {
@@ -87,7 +97,18 @@ export function rulesOf(scheme: KSIScheme): KSIRules {
       max: typeof raw.max === "number" && Number.isFinite(raw.max) ? raw.max : null,
     });
   }
-  return {teamMode, themesCount, stickers, stickerById: new Map(stickers.map((t) => [t.id, t]))};
+  const stickerById = new Map(stickers.map((t) => [t.id, t]));
+  return {teamMode, themesCount, stickers, stickerById, ...stickerOptions(scheme, stickerById)};
+}
+
+// stickerOptions reads the stickers block's plus and missing options (the
+// server's games.KSIStickerConfig).
+function stickerOptions(scheme: KSIScheme, stickerById: Map<string, StickerType>): {plusNominal: boolean; missingSticker: string} {
+  const missing = scheme.stickers?.missing;
+  return {
+    plusNominal: scheme.stickers?.plus === "nominal",
+    missingSticker: typeof missing === "string" && stickerById.has(missing) ? missing : "",
+  };
 }
 
 // stickersEnabled gates the sticker UI and scoring: only a KSI team game that
@@ -201,6 +222,14 @@ export function stickerValue(state: KSIState, player: number, theme: number): st
   return typeof id === "string" ? id : "";
 }
 
+// scoredSticker is the sticker a team's theme is scored under: neutral in a
+// plain game, the chosen one in a stickers game, else the configured
+// missingSticker; "" is a theme left unscored.
+export function scoredSticker(state: KSIState, rules: KSIRules, player: number, theme: number): string {
+  if (!stickersEnabled(rules)) return STICKER_NEUTRAL;
+  return stickerValue(state, player, theme) || rules.missingSticker;
+}
+
 // markContribution is the signed value of one answer mark under a sticker. It
 // mirrors games.KSIStickerMarkValue on the server so the two cannot drift.
 export function markContribution(stickerId: string, mark: string, answerIndex: number): number {
@@ -222,11 +251,8 @@ export function markContribution(stickerId: string, mark: string, answerIndex: n
 // game leaves a theme unscored until its sticker is chosen.
 export function computeThemeValue(state: KSIState, rules: KSIRules, player: number, theme: number): {value: number; scored: boolean} {
   const row = state.themes[theme]?.answers?.[player] || [];
-  let stickerId = STICKER_NEUTRAL;
-  if (stickersEnabled(rules)) {
-    stickerId = stickerValue(state, player, theme);
-    if (!stickerId) return {value: 0, scored: false};
-  }
+  const stickerId = scoredSticker(state, rules, player, theme);
+  if (!stickerId) return {value: 0, scored: false};
   let value = 0;
   for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
     value += markContribution(stickerId, row[answerIndex], answerIndex);
@@ -279,18 +305,16 @@ export function resultMetrics(state: KSIState, rules: KSIRules, playerIndex: num
   let total = 0;
   let plus = 0;
   for (let themeIndex = 0; themeIndex < rules.themesCount; themeIndex++) {
-    let stickerId = STICKER_NEUTRAL;
-    if (stickersEnabled(rules)) {
-      stickerId = stickerValue(state, playerIndex, themeIndex);
-      if (!stickerId) continue; // unscored theme excluded from the ranking
-    }
+    const stickerId = scoredSticker(state, rules, playerIndex, themeIndex);
+    if (!stickerId) continue; // unscored theme excluded from the ranking
     const row = state.themes[themeIndex]?.answers?.[playerIndex] || [];
     for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
       const value = QUESTION_VALUES[answerIndex];
       const mark = row[answerIndex];
       const contribution = markContribution(stickerId, mark, answerIndex);
       total += contribution;
-      if (contribution > 0) plus += contribution;
+      if (rules.plusNominal) plus += mark === "right" ? value : 0;
+      else if (contribution > 0) plus += contribution;
       if (mark === "right") correct[value] += 1;
     }
   }

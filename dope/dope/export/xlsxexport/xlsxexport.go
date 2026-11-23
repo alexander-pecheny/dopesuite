@@ -144,10 +144,9 @@ type ksiExportState struct {
 	Themes       []struct {
 		Answers [][]string `json:"answers"`
 	} `json:"themes"`
-	// stickersMode is derived from the scheme: when true, a theme's value is
-	// scored under the per-(team,theme) sticker and is excluded entirely until a
-	// sticker is chosen.
-	stickersMode bool
+	// stickers is the scheme's stickers block, which says what sticker each
+	// theme is scored under (games.KSIStickerConfig.ThemeSticker).
+	stickers games.KSIStickerConfig
 }
 
 // BuildKSISheets writes the KSI detailed and results sheets. schemeJSON is
@@ -160,24 +159,11 @@ func BuildKSISheets(f *excelize.File, schemeJSON, stateJSON string) error {
 			return fmt.Errorf("parse KSI state: %w", err)
 		}
 	}
-	state.stickersMode = ksiSchemeHasStickers(schemeJSON)
+	state.stickers = games.ParseKSIStickerConfig(schemeJSON)
 	if err := buildKSIDetailedSheet(f, &state); err != nil {
 		return err
 	}
 	return buildKSIResultsSheet(f, &state, schemeJSON, stateJSON)
-}
-
-func ksiSchemeHasStickers(schemeJSON string) bool {
-	if strings.TrimSpace(schemeJSON) == "" {
-		return false
-	}
-	var scheme struct {
-		Stickers games.KSIStickerConfig `json:"stickers"`
-	}
-	if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
-		return false
-	}
-	return len(scheme.Stickers.Types) > 0
 }
 
 func ksiMark(state *ksiExportState, theme, player, answer int) string {
@@ -189,21 +175,6 @@ func ksiMark(state *ksiExportState, theme, player, answer int) string {
 		return ""
 	}
 	return answers[player][answer]
-}
-
-// ksiThemeSticker returns the sticker scoring a (theme, player) and whether the
-// theme is scored at all. Plain KSI games always score every theme under the
-// neutral rules; stickers games leave a theme unscored until its sticker is set.
-func ksiThemeSticker(state *ksiExportState, theme, player int) (string, bool) {
-	if !state.stickersMode {
-		return games.KSIStickerNeutral, true
-	}
-	if theme < len(state.Stickers) && player < len(state.Stickers[theme]) {
-		if id := state.Stickers[theme][player]; id != "" {
-			return id, true
-		}
-	}
-	return "", false
 }
 
 func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
@@ -245,7 +216,7 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 		total := 0
 		rowCells := []interface{}{participantExportName(state.Participants, p), nil}
 		for t := 0; t < themesCount; t++ {
-			sticker, scored := ksiThemeSticker(state, t, p)
+			sticker, scored := state.stickers.ThemeSticker(state.Stickers, t, p)
 			themeScore := 0
 			for a := 0; a < nv; a++ {
 				var cell interface{}

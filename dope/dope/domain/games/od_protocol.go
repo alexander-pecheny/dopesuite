@@ -77,7 +77,7 @@ func (od) EnteredSeats(stateJSON json.RawMessage) []bool {
 	written := make(map[int64]bool)
 	for _, question := range state.Entries {
 		for _, number := range question {
-			written[number] = true
+			written[max(number, -number)] = true // a wrong answer is -number
 		}
 	}
 	for _, round := range state.Shootout {
@@ -105,7 +105,7 @@ func (odSheet) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, e
 	outcomes := make([]structure.SlotOutcome, resultTeamCount(results))
 	place, placed := 0.0, 0
 	for rank, team := range results.Teams {
-		if rank == 0 || team.Total != results.Teams[rank-1].Total {
+		if rank == 0 || !team.SharesPlace(results.Teams[rank-1]) {
 			place = float64(placed + 1)
 		}
 		placed++
@@ -137,7 +137,7 @@ func resultTeamCount(results ODResults) int {
 // fifteen, which is what a clear always rebuilt it with.
 func (od) PristineGame(slug, title string, shape Shape) ([]byte, []byte, error) {
 	scheme, state := ODEmptyGameJSON(slug, title, shape.Tours)
-	return scheme, state, nil
+	return withODMinus(scheme, state, shape.Minus)
 }
 
 // odDefaultTourQuestions is the one tour an OD game has when its scheme
@@ -149,7 +149,25 @@ func (od) ShapeOf(schemeJSON string) Shape {
 	if len(tours) == 0 {
 		tours = []int{odDefaultTourQuestions}
 	}
-	return Shape{Tours: tours}
+	return Shape{Tours: tours, Minus: ParseODMinus(schemeJSON)}
+}
+
+// withODMinus puts a minus game's block into its pristine scheme.
+func withODMinus(scheme, state []byte, minus *ODMinus) ([]byte, []byte, error) {
+	if minus == nil {
+		return scheme, state, nil
+	}
+	obj, err := RawJSONObject(string(scheme))
+	if err != nil {
+		return nil, nil, err
+	}
+	block, err := json.Marshal(minus)
+	if err != nil {
+		return nil, nil, err
+	}
+	obj["minus"] = block
+	scheme, err = json.Marshal(obj)
+	return scheme, state, err
 }
 
 func (od) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, entryRemap map[int]int) ([]byte, []byte, error) {
@@ -217,9 +235,7 @@ func odRosterState(raw string, teams []RosterTeam, entryRemap map[int]int) ([]by
 				entries[i] = resizeIntSlice(entries[i], len(teams))
 				if len(entryRemap) > 0 {
 					for j, value := range entries[i] {
-						if mapped, ok := entryRemap[value]; ok {
-							entries[i][j] = mapped
-						}
+						entries[i][j] = remapEntry(value, entryRemap)
 					}
 				}
 			}
@@ -284,4 +300,16 @@ func chgkTeamsFromRoster(teams []RosterTeam) []ChgkTeamJSON {
 		out = append(out, ChgkTeamJSON{Name: team.Name, City: team.City, Number: team.Number, Flags: team.Flags, Venue: team.Venue, VenueNumber: team.VenueNumber})
 	}
 	return out
+}
+
+// remapEntry is an entered number after a renumbering: a minus game's wrong
+// answer (−number) follows its team too.
+func remapEntry(value int, remap map[int]int) int {
+	if mapped, ok := remap[value]; ok {
+		return mapped
+	}
+	if mapped, ok := remap[-value]; ok && value < 0 {
+		return -mapped
+	}
+	return value
 }

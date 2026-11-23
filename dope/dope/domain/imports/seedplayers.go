@@ -404,7 +404,7 @@ func odPlacesAfterTours(ctx context.Context, q store.Queryer, festID int64, code
 	ranked := results.Teams
 	for i := 0; i < len(ranked); {
 		j := i
-		for j+1 < len(ranked) && ranked[j+1].Total == ranked[i].Total {
+		for j+1 < len(ranked) && ranked[j+1].SharesPlace(ranked[i]) {
 			j++
 		}
 		mean := float64(i+1+j+1) / 2

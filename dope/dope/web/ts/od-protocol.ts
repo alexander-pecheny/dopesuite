@@ -74,8 +74,9 @@ export interface ODState {
 export interface ODScheme {
   title?: string;
   tourComp?: unknown;
+  minus?: unknown;
   // A DSL-compiled game carries the Protocol's params on its one stage.
-  stages?: Array<{config?: {tourComp?: unknown}}>;
+  stages?: Array<{config?: {tourComp?: unknown; minus?: unknown}}>;
   teams?: Array<{name?: string; city?: string}>;
   nTeams?: number;
 }
@@ -84,6 +85,33 @@ export interface QuestionStat {
   completed: boolean;
   counts: Map<number, number>;
   validCount: number;
+  // The rows that answered wrong: in a minus game, entered as −number, and
+  // not also taking the question.
+  wrong: Set<number>;
+}
+
+// MinusRules is the scheme's minus block: a ChGK where a wrong answer costs
+// points (Tminnoe pole). The server's games.ODMinus reckons the same: a tour
+// scores right − wrong·W, plus allBonus when every question of it was taken;
+// with emptyTour a team that answered nothing in a finished tour (but did
+// somewhere in the game) is charged size/3 wrong answers for it.
+export interface MinusRules {
+  wrong: number;
+  allBonus: number;
+  emptyTour: boolean;
+}
+
+// An empty tour is charged a third of its questions.
+const EMPTY_TOUR_DIVISOR = 3;
+
+export function minusRulesOf(scheme: ODScheme): MinusRules | null {
+  const raw = scheme.minus ?? scheme.stages?.[0]?.config?.minus;
+  if (!raw || typeof raw !== "object") return null;
+  const block = raw as {wrong?: unknown; allBonus?: unknown; emptyTour?: unknown};
+  const wrong = Number(block.wrong) || 0;
+  const allBonus = Number(block.allBonus) || 0;
+  if (wrong < 0 || allBonus < 0) return null;
+  return {wrong, allBonus, emptyTour: Boolean(block.emptyTour)};
 }
 
 export interface RankKey {
@@ -121,6 +149,12 @@ export function tourLengthsOf(scheme: ODScheme): number[] {
   return parseTourComp(scheme.tourComp ?? scheme.stages?.[0]?.config?.tourComp);
 }
 
+// entryFloor is the least number an entry may hold: a minus game enters a
+// wrong answer as −number; elsewhere it is junk.
+function entryFloor(scheme: ODScheme): number {
+  return minusRulesOf(scheme) ? -Infinity : 0;
+}
+
 // parseState is the adapter from whatever the server stored to an ODState the
 // renderers can trust: the team list (from the scheme when the document has
 // none), an entries grid of exactly totalQuestions rows × teams, a completed
@@ -137,12 +171,13 @@ export function parseState(raw: unknown, scheme: ODScheme, totalQuestions: numbe
   const n = state.teams.length;
   if (!Array.isArray(state.entries)) state.entries = [];
   while (state.entries.length < totalQuestions) state.entries.push([]);
+  const floor = entryFloor(scheme);
   state.entries = state.entries.slice(0, totalQuestions).map((row) => {
     const arr: unknown[] = Array.isArray(row) ? row.slice(0, n) : [];
     while (arr.length < n) arr.push(0);
     return arr.map((v) => {
       const num = Number(v);
-      return Number.isInteger(num) && num >= 0 ? num : 0;
+      return Number.isInteger(num) && num >= floor ? num : 0;
     });
   });
   if (!Array.isArray(state.completed)) state.completed = [];
@@ -152,7 +187,7 @@ export function parseState(raw: unknown, scheme: ODScheme, totalQuestions: numbe
   state.shootoutRounds = state.shootoutRounds
     .map(normalizeShootoutRound)
     .filter((round) => round.teams.length > 0);
-  if (state.venues && typeof state.venues === "object") parseVenueSheets(state, totalQuestions);
+  if (state.venues && typeof state.venues === "object") parseVenueSheets(state, totalQuestions, floor);
   state.contested = parseContested(state.contested);
   delete state.answers;
   delete state.finished;
@@ -161,7 +196,7 @@ export function parseState(raw: unknown, scheme: ODScheme, totalQuestions: numbe
 
 // parseVenueSheets gives each venue's sheet a column per question with a slot
 // per team of the venue, and a completion per question.
-function parseVenueSheets(state: ODState, totalQuestions: number): void {
+function parseVenueSheets(state: ODState, totalQuestions: number, floor: number): void {
   const counts = new Map<string, number>();
   for (const team of state.teams) {
     if (team.venue) counts.set(String(team.venue), (counts.get(String(team.venue)) || 0) + 1);
@@ -173,7 +208,7 @@ function parseVenueSheets(state: ODState, totalQuestions: number): void {
     const completed = Array.isArray(sheet.completed) ? sheet.completed : [];
     venues[id] = {
       entries: Array.from({length: totalQuestions}, (_, q) => {
-        const column = (Array.isArray(entries[q]) ? entries[q] : []).slice(0, n).map((v) => Math.max(0, Math.trunc(Number(v)) || 0));
+        const column = (Array.isArray(entries[q]) ? entries[q] : []).slice(0, n).map((v) => Math.max(floor, Math.trunc(Number(v)) || 0));
         while (column.length < n) column.push(0);
         return column;
       }),
@@ -217,7 +252,9 @@ export function flattenVenues(state: ODState): ODState {
     const sheet = venues[String(team.venue || 0)];
     if (!sheet || !team.venueNumber) continue;
     for (let q = 0; q < total; q++) {
-      if (sheet.completed[q] && sheet.entries[q]?.includes(team.venueNumber)) entries[q].push(team.number || 0);
+      if (!sheet.completed[q]) continue;
+      if (sheet.entries[q]?.includes(team.venueNumber)) entries[q].push(team.number || 0);
+      else if (sheet.entries[q]?.includes(-team.venueNumber)) entries[q].push(-(team.number || 0)); // a minus game's wrong answer
     }
   }
   for (const column of entries) {
@@ -378,7 +415,7 @@ export function questionStats(state: ODState, totalQuestions: number, index: Map
         counts.set(teamIndex, (counts.get(teamIndex) || 0) + 1);
       }
     }
-    stats.push({completed: Boolean(state.completed[q]), counts, validCount: counts.size});
+    stats.push({completed: Boolean(state.completed[q]), counts, validCount: counts.size, wrong: new Set()});
   }
   for (const item of state.contested || []) {
     const stat = stats[item.question];
@@ -387,7 +424,18 @@ export function questionStats(state: ODState, totalQuestions: number, index: Map
     stat.counts.set(teamIndex, 1);
     stat.validCount = stat.counts.size;
   }
+  stats.forEach((stat, q) => markWrong(stat, state.entries[q] || [], index));
   return stats;
+}
+
+// markWrong collects a completed question's wrong answers: a minus game's
+// −number of a team that did not also take it.
+function markWrong(stat: QuestionStat, column: number[], index: Map<number, number>): void {
+  if (!stat.completed) return;
+  for (const value of column) {
+    const teamIndex = index.get(-value);
+    if (value < 0 && teamIndex !== undefined && !stat.counts.has(teamIndex)) stat.wrong.add(teamIndex);
+  }
 }
 
 // === contested answers ===
@@ -439,6 +487,61 @@ export function groupContested(list: readonly ContestedText[]): ContestedGroup[]
 
 export function teamTookQuestion(stats: QuestionStat[], teamIndex: number, qIndex: number): boolean {
   return Boolean(stats[qIndex]?.counts.has(teamIndex));
+}
+
+export function teamWrongOnQuestion(stats: QuestionStat[], teamIndex: number, qIndex: number): boolean {
+  return Boolean(stats[qIndex]?.wrong.has(teamIndex));
+}
+
+// MinusScore is one team's score in a minus game: points overall and per
+// tour, and the right and wrong answers behind them (a charged empty tour
+// counts its charge as wrong).
+export interface MinusScore {
+  points: number;
+  tourPoints: number[];
+  tourRight: number[];
+  tourWrong: number[];
+  right: number;
+}
+
+// tourAnswers counts one team's right and wrong answers over a tour's
+// questions, and says whether every one of them is completed.
+function tourAnswers(stats: QuestionStat[], teamIndex: number, from: number, size: number): {right: number; wrong: number; done: boolean} {
+  const out = {right: 0, wrong: 0, done: size > 0};
+  for (let q = from; q < from + size; q++) {
+    if (!stats[q]?.completed) out.done = false;
+    else if (teamTookQuestion(stats, teamIndex, q)) out.right++;
+    else if (teamWrongOnQuestion(stats, teamIndex, q)) out.wrong++;
+  }
+  return out;
+}
+
+export function minusScore(stats: QuestionStat[], teamIndex: number, tourLengths: number[], rules: MinusRules): MinusScore {
+  let from = 0;
+  const tours = tourLengths.map((size) => {
+    const tour = tourAnswers(stats, teamIndex, from, size);
+    from += size;
+    return tour;
+  });
+  const answered = tours.some((tour) => tour.right + tour.wrong > 0);
+  const charged = (tour: {right: number; wrong: number; done: boolean}) => rules.emptyTour && answered && tour.done && tour.right + tour.wrong === 0;
+  const tourRight = tours.map((tour) => tour.right);
+  const tourWrong = tours.map((tour, t) => (charged(tour) ? Math.floor(tourLengths[t] / EMPTY_TOUR_DIVISOR) : tour.wrong));
+  const tourPoints = tourLengths.map((size, t) =>
+    tourRight[t] - rules.wrong * tourWrong[t] + (size > 0 && tourRight[t] === size ? rules.allBonus : 0));
+  return {
+    points: tourPoints.reduce((a, b) => a + b, 0),
+    tourPoints,
+    tourRight,
+    tourWrong,
+    right: tourRight.reduce((a, b) => a + b, 0),
+  };
+}
+
+// minusTiebreak is what breaks a tie on points, ahead of the shootout: right
+// answers, the best tour's right answers, the worst tour's.
+export function minusTiebreak(score: MinusScore): number[] {
+  return [score.right, Math.max(0, ...score.tourRight), score.tourRight.length ? Math.min(...score.tourRight) : 0];
 }
 
 export function countValidEntries(stats: QuestionStat[], qIndex: number): number {
@@ -558,12 +661,12 @@ export function anyQuestionCompleted(stats: QuestionStat[]): boolean {
 // blank. Given a Division's members it deals places afresh among those rows
 // alone and leaves every other row blank — a Division is ranked within itself
 // (ADR-0020).
-export function placesFor(state: ODState, stats: QuestionStat[], totals: number[], members?: readonly number[]): string[] {
+export function placesFor(state: ODState, stats: QuestionStat[], totals: number[], members?: readonly number[], tiebreaks?: number[][]): string[] {
   const places = new Array<string>(totals.length).fill("");
   if (!anyQuestionCompleted(stats) && !anyShootoutMarked(state)) return places;
   const rows = members ? members.slice() : state.teams.map((_, index) => index);
   const dealt = computePlaces(rows.map((index) => totals[index]), {
-    tiebreaks: rows.map((index) => shootoutTiebreakForTeam(state, index)),
+    tiebreaks: rows.map((index) => tiebreaks?.[index] ?? shootoutTiebreakForTeam(state, index)),
     compareTiebreak: (a, b) => compareShootoutTiebreaks(a as number[], b as number[]),
   });
   rows.forEach((index, rank) => {
@@ -584,16 +687,17 @@ export interface ODRow {
   place: string;
 }
 
-export function rows(state: ODState, tourLengths: number[], members?: readonly number[]): ODRow[] {
+export function rows(state: ODState, tourLengths: number[], members?: readonly number[], minus: MinusRules | null = null): ODRow[] {
   const total = tourLengths.reduce((acc, n) => acc + n, 0);
   const stats = questionStats(state, total);
-  const totals = state.teams.map((_, i) => sumRow(stats, i));
-  const tiebreaks = state.teams.map((_, i) => shootoutTiebreakForTeam(state, i));
-  const places = placesFor(state, stats, totals, members);
+  const scores = minus ? state.teams.map((_, i) => minusScore(stats, i, tourLengths, minus)) : null;
+  const totals = state.teams.map((_, i) => scores ? scores[i].points : sumRow(stats, i));
+  const tiebreaks = state.teams.map((_, i) => [...(scores ? minusTiebreak(scores[i]) : []), ...shootoutTiebreakForTeam(state, i)]);
+  const places = placesFor(state, stats, totals, members, tiebreaks);
   return rankedTeamOrder(state, totals, tiebreaks, members).map(({index}) => ({
     index,
     total: totals[index],
-    tourSums: tourSumsForTeam(stats, index, tourLengths),
+    tourSums: scores ? scores[index].tourPoints : tourSumsForTeam(stats, index, tourLengths),
     rating: ratingForTeam(state, stats, index),
     place: places[index],
   }));

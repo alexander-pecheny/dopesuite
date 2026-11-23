@@ -16,6 +16,8 @@ prev_row = "Предыдущая строка"
 next_row = "Следующая строка"
 next_column = "Следующая колонка"
 backspace = "Удалить"
+# The minus key, shown in a minus ЧГК (a wrong answer is entered as −number).
+minus = "Минус"
 
 [status]
 # The sync-status dot's tooltip/aria-label, one per connection state.

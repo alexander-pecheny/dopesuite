@@ -1,6 +1,7 @@
 package games
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -98,5 +99,83 @@ func TestComputeODResultsTiesAndEmpty(t *testing.T) {
 	}
 	if tied.Teams[2].Place != "3" || tied.Teams[2].Total != 0 {
 		t.Errorf("third team = place %q total %d, want place 3 total 0", tied.Teams[2].Place, tied.Teams[2].Total)
+	}
+}
+
+func TestComputeODResultsMinus(t *testing.T) {
+	// Тминное поле in small: two tours of three, a wrong answer −3, a whole
+	// tour +3, an empty tour charged 3/3 = 1 wrong.
+	scheme := `{"tourComp":[3,3],"minus":{"wrong":3,"allBonus":3,"emptyTour":true}}`
+	state := `{
+		"teams":[{"name":"A","number":1},{"name":"B","number":2},{"name":"C","number":3},{"name":"D","number":4}],
+		"entries":[[1,2,-3],[1,2],[1],[1,2],[-1,2],[]],
+		"completed":[true,true,true,true,true,true]
+	}`
+	res, err := ComputeODResults(scheme, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct {
+		number     int64
+		place      string
+		total      int
+		right      int
+		wrong      int
+		tourTotals []int
+	}{
+		// A: 3 right +3 bonus, then 1 right 1 wrong = 6 − 2 = 4, best tour 3.
+		{1, "1", 4, 4, 1, []int{6, -2}},
+		// B: 2 + 2 = 4, the same right answers, but the best tour is 2.
+		{2, "2", 4, 4, 0, []int{2, 2}},
+		// D answered nothing anywhere: no charge for its empty tours.
+		{4, "3", 0, 0, 0, []int{0, 0}},
+		// C: one wrong, then an empty tour charged one wrong.
+		{3, "4", -6, 0, 2, []int{-3, -3}},
+	}
+	for i, w := range want {
+		got := res.Teams[i]
+		if got.Number != w.number || got.Place != w.place || got.Total != w.total || got.Right != w.right || got.Wrong != w.wrong || !slices.Equal(got.TourTotals, w.tourTotals) {
+			t.Errorf("row %d = %+v, want %+v", i, got, w)
+		}
+	}
+	// The rating site's mask still marks right answers alone.
+	if res.Teams[0].Mask != "111100" {
+		t.Errorf("A's mask = %q", res.Teams[0].Mask)
+	}
+}
+
+func TestComputeODResultsMinusContestedAndUnfinishedTour(t *testing.T) {
+	// C's wrong answer on q0 is accepted on appeal: right, not wrong. The second
+	// tour is not finished, so B's empty tour there is not charged yet.
+	scheme := `{"tourComp":[3,3],"minus":{"wrong":3,"emptyTour":true}}`
+	state := `{
+		"teams":[{"name":"B","number":2},{"name":"C","number":3}],
+		"entries":[[2,-3],[],[],[],[],[]],
+		"completed":[true,true,true,true,false,false],
+		"contested":[{"question":0,"number":3,"status":"accepted"}]
+	}`
+	res, err := ComputeODResults(scheme, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, team := range res.Teams {
+		if team.Total != 1 || team.Wrong != 0 || team.Right != 1 {
+			t.Errorf("team %d: total %d right %d wrong %d, want 1/1/0", team.Number, team.Total, team.Right, team.Wrong)
+		}
+		if team.Place != "1–2" {
+			t.Errorf("team %d place %q, want a shared 1–2", team.Number, team.Place)
+		}
+	}
+}
+
+func TestODMinusSurvivesAClear(t *testing.T) {
+	scheme := `{"tourComp":[6,6],"minus":{"wrong":3,"allBonus":3,"emptyTour":true}}`
+	shape := od{}.ShapeOf(scheme)
+	rebuilt, _, err := od{}.PristineGame("s", "t", shape)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ParseODMinus(string(rebuilt)); got == nil || *got != (ODMinus{Wrong: 3, AllBonus: 3, EmptyTour: true}) {
+		t.Fatalf("minus after a clear = %+v", got)
 	}
 }

@@ -106,6 +106,9 @@ export function installCellNavBar(options: CellNavBarOptions = {}): CellNavBar {
 
 export interface VirtualKeypadOptions {
   onDigit?: (digit: string) => void;
+  // minus adds a «−» key that types "-" through onDigit, and the zero key
+  // gives up its double width for it.
+  minus?: boolean;
   onBackspace?: () => void;
   onNav?: (dx: number, dy: number) => void;
 }
@@ -143,7 +146,7 @@ function keypadKey(label: string, aria: string, className: string, handler?: () 
 }
 
 // keypadRows is the keypad's arrow row and its digit block.
-function keypadRows({onDigit, onBackspace, onNav}: VirtualKeypadOptions): HTMLElement[] {
+function keypadRows({onDigit, onBackspace, onNav, minus}: VirtualKeypadOptions): HTMLElement[] {
   const navRow = document.createElement("div");
   navRow.className = "entry-keypad-nav";
   navRow.append(
@@ -158,7 +161,8 @@ function keypadRows({onDigit, onBackspace, onNav}: VirtualKeypadOptions): HTMLEl
   for (let n = 1; n <= KEYPAD_LAST_DIGIT; n++) {
     digits.appendChild(keypadKey(String(n), String(n), "entry-keypad-key", () => onDigit?.(String(n))));
   }
-  digits.appendChild(keypadKey("0", "0", "entry-keypad-key entry-keypad-zero", () => onDigit?.("0")));
+  if (minus) digits.appendChild(keypadKey("−", S.widgets.keypad.minus(), "entry-keypad-key", () => onDigit?.("-")));
+  digits.appendChild(keypadKey("0", "0", minus ? "entry-keypad-key" : "entry-keypad-key entry-keypad-zero", () => onDigit?.("0")));
   digits.appendChild(keypadKey("⌫", S.widgets.keypad.backspace(), "entry-keypad-key entry-keypad-back", () => onBackspace?.()));
 
   return [navRow, digits];

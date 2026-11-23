@@ -181,3 +181,35 @@ test("a спорный on a question the team took anyway waits for nothing", ()
   }, {}, 1);
   assert.equal(od.pendingCount(state, 0), 0);
 });
+
+test("a minus game scores points per tour, charges an empty tour and breaks ties on right answers", () => {
+  // The same fixture as games.TestComputeODResultsMinus, so the two scorers agree.
+  const scheme = {tourComp: [3, 3], minus: {wrong: 3, allBonus: 3, emptyTour: true}};
+  const raw = {
+    teams: [{name: "A", number: 1}, {name: "B", number: 2}, {name: "C", number: 3}, {name: "D", number: 4}],
+    entries: [[1, 2, -3], [1, 2], [1], [1, 2], [-1, 2], []],
+    completed: [true, true, true, true, true, true],
+  };
+  const state = od.parseState(raw, scheme, 6);
+  assert.deepEqual(state.entries[0], [1, 2, -3, 0], "a minus game keeps −number");
+  const rows = od.rows(state, [3, 3], undefined, od.minusRulesOf(scheme));
+  assert.deepEqual(rows.map((row) => [state.teams[row.index].number, row.place, row.total, row.tourSums]), [
+    [1, "1", 4, [6, -2]],
+    [2, "2", 4, [2, 2]],
+    [4, "3", 0, [0, 0]],
+    [3, "4", -6, [-3, -3]],
+  ]);
+});
+
+test("a plain game drops −number, and a minus game's accepted appeal turns a wrong answer right", () => {
+  assert.deepEqual(od.parseState({teams: [{number: 1}], entries: [[-1]]}, {tourComp: [1]}, 1).entries[0], [0]);
+  const scheme = {tourComp: [3, 3], minus: {wrong: 3, emptyTour: true}};
+  const state = od.parseState({
+    teams: [{name: "B", number: 2}, {name: "C", number: 3}],
+    entries: [[2, -3], [], [], [], [], []],
+    completed: [true, true, true, true, false, false],
+    contested: [{question: 0, number: 3, status: "accepted"}],
+  }, scheme, 6);
+  const rows = od.rows(state, [3, 3], undefined, od.minusRulesOf(scheme));
+  assert.deepEqual(rows.map((row) => [row.total, row.place]), [[1, "1–2"], [1, "1–2"]]);
+});

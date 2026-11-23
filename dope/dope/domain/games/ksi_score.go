@@ -45,16 +45,7 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 			return nil, fmt.Errorf("parse KSI state: %w", err)
 		}
 	}
-	stickersMode := false
-	if schemeJSON != "" {
-		var scheme struct {
-			Stickers KSIStickerConfig `json:"stickers"`
-		}
-		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err == nil {
-			stickersMode = len(scheme.Stickers.Types) > 0
-		}
-	}
-
+	stickers := ParseKSIStickerConfig(schemeJSON)
 	mark := func(theme, player, answer int) string {
 		if theme >= len(state.Themes) {
 			return ""
@@ -65,17 +56,6 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 		}
 		return answers[player][answer]
 	}
-	themeSticker := func(theme, player int) (string, bool) {
-		if !stickersMode {
-			return KSIStickerNeutral, true
-		}
-		if theme < len(state.Stickers) && player < len(state.Stickers[theme]) {
-			if id := state.Stickers[theme][player]; id != "" {
-				return id, true
-			}
-		}
-		return "", false
-	}
 
 	ranked := make([]KSIResultsTeam, 0, len(state.Participants))
 	for p := range state.Participants {
@@ -84,7 +64,7 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 		}
 		team := KSIResultsTeam{Index: p, Correct: map[int]int{}}
 		for t := range state.Themes {
-			sticker, scored := themeSticker(t, p)
+			sticker, scored := stickers.ThemeSticker(state.Stickers, t, p)
 			if !scored {
 				continue
 			}
@@ -92,9 +72,7 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 				m := mark(t, p, a)
 				cv := KSIStickerMarkValue(sticker, m, value)
 				team.Total += cv
-				if cv > 0 {
-					team.Plus += cv
-				}
+				team.Plus += KSIPlusOf(stickers.Plus, m, cv, value)
 				if m == "right" {
 					team.Correct[value]++
 				}

@@ -110,7 +110,7 @@ let participants: string[] = [];
 let themesCount = SI_THEMES;
 // Sticker configuration for the "KSI with stickers" variant, parsed from
 // scheme.stickers. Empty for plain KSI/SI games (stickersEnabled() is false).
-let rules: KSIRules = {teamMode: false, themesCount: SI_THEMES, stickers: [], stickerById: new Map()};
+let rules: KSIRules = {teamMode: false, themesCount: SI_THEMES, stickers: [], stickerById: new Map(), plusNominal: false, missingSticker: ""};
 let activeCell: ActiveCell = {player: 0, theme: 0, answer: 0};
 let renderedTable: HTMLElement | null = null;
 let renderedTab: string | null = null;

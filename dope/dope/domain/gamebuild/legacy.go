@@ -67,6 +67,7 @@ func specShape(spec Spec) games.Shape {
 	}
 	return games.Shape{
 		Tours:     tours,
+		Minus:     spec.ODMinus,
 		Tables:    spec.KDTables,
 		Themes:    spec.KSIThemes,
 		Stickers:  spec.KSIStickers,

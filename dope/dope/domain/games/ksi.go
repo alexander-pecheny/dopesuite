@@ -123,6 +123,57 @@ type KSIStickerType struct {
 // KSIStickerConfig is the scheme-level `stickers` block of a stickers game.
 type KSIStickerConfig struct {
 	Types []KSIStickerType `json:"types"`
+	// Plus is what the first tiebreaker sums. Empty: every positive
+	// contribution as its sticker scored it, doubling included.
+	// KSIPlusNominal: the nominals of the right answers, with no sticker's
+	// doubling (Samarium 2026's regulation: the sum without minuses or doubling).
+	Plus string `json:"plus,omitempty"`
+	// Missing is the sticker a sheet without one is scored under. Empty
+	// leaves such a theme unscored until a sticker is chosen.
+	Missing string `json:"missing,omitempty"`
+}
+
+// KSIPlusNominal is KSIStickerConfig.Plus for the sum of right answers'
+// nominals.
+const KSIPlusNominal = "nominal"
+
+// KSIPlusOf is a right answer's or any mark's share of the first tiebreaker:
+// its contribution under the sticker, or with plus = KSIPlusNominal the
+// nominal of a right answer alone.
+func KSIPlusOf(plus, mark string, contribution, value int) int {
+	if plus == KSIPlusNominal {
+		if mark == "right" {
+			return value
+		}
+		return 0
+	}
+	return max(contribution, 0)
+}
+
+// ParseKSIStickerConfig reads a scheme's stickers block; a plain KSI's has
+// no types.
+func ParseKSIStickerConfig(schemeJSON string) KSIStickerConfig {
+	var scheme struct {
+		Stickers KSIStickerConfig `json:"stickers"`
+	}
+	if schemeJSON == "" || json.Unmarshal([]byte(schemeJSON), &scheme) != nil {
+		return KSIStickerConfig{}
+	}
+	return scheme.Stickers
+}
+
+// ThemeSticker is the sticker a team's theme is scored under, from the
+// themes × teams grid of chosen stickers: neutral in a plain KSI (no
+// types), the chosen one, else Missing; ok is false for a theme left
+// unscored.
+func (c KSIStickerConfig) ThemeSticker(grid [][]string, theme, player int) (string, bool) {
+	if len(c.Types) == 0 {
+		return KSIStickerNeutral, true
+	}
+	if theme < len(grid) && player < len(grid[theme]) && grid[theme][player] != "" {
+		return grid[theme][player], true
+	}
+	return c.Missing, c.Missing != ""
 }
 
 // KSIStickerMarkValue returns the signed point value of a single answer mark of

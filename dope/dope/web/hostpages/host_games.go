@@ -220,6 +220,9 @@ var formatForms = map[string]formatForm{
 				dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
 				dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("od_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
 				dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
+				dopeui.Field(dopeui.Label(s.Host.Games.OdMinusWrongLabel()), dopeui.Textfield(dopeui.Name("od_minus_wrong"), dopeui.Inputmode("numeric"), dopeui.Value("0"))),
+				dopeui.Field(dopeui.Label(s.Host.Games.OdMinusBonusLabel()), dopeui.Textfield(dopeui.Name("od_minus_bonus"), dopeui.Inputmode("numeric"), dopeui.Value("0"))),
+				dopeui.Checkbox(dopeui.Name("od_minus_empty"), dopeui.Value("1"), dopeui.Text(s.Host.Games.OdMinusEmptyLabel())),
 			}
 		},
 		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
@@ -227,7 +230,10 @@ var formatForms = map[string]formatForm{
 			if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", s.Host.Games.OdToursLabel(), 1, maxFormTours); err != nil {
 				return err
 			}
-			spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", s.Host.Games.OdQuestionsLabel(), 1, maxFormQuestions)
+			if spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", s.Host.Games.OdQuestionsLabel(), 1, maxFormQuestions); err != nil {
+				return err
+			}
+			spec.ODMinus, err = odMinusFromForm(form)
 			return err
 		},
 	},
@@ -256,6 +262,8 @@ var formatForms = map[string]formatForm{
 					stickerRow(s.Host.Games.StickerX2Row(), "ksis_x2_max", "2", "ksis_x2_color", games.KSIStickerX2Color),
 					stickerRow(s.Host.Games.StickerNowrongRow(), "ksis_nowrong_max", "1", "ksis_nowrong_color", games.KSIStickerNoWrongColor),
 					stickerRow(s.Host.Games.StickerEmptywrongRow(), "ksis_emptywrong_max", "1", "ksis_emptywrong_color", games.KSIStickerEmptyWrongColor),
+					dopeui.Checkbox(dopeui.Name("ksis_plus_nominal"), dopeui.Value("1"), dopeui.Text(s.Host.Games.StickerPlusNominalLabel())),
+					dopeui.Checkbox(dopeui.Name("ksis_missing_emptywrong"), dopeui.Value("1"), dopeui.Text(s.Host.Games.StickerMissingEmptywrongLabel())),
 				}
 			},
 			read: func(spec *gamebuild.Spec, form url.Values) (err error) {
@@ -754,6 +762,16 @@ type GameCreateRequest struct {
 		Color string `json:"color"`
 		Max   int    `json:"max"`
 	} `json:"stickers"`
+	// StickerPlusNominal makes a stickers KSI's first tiebreaker the right
+	// answers' nominals; StickerMissingEmptyWrong scores a sheet without a
+	// sticker as the emptywrong sticker.
+	StickerPlusNominal       bool `json:"sticker_plus_nominal"`
+	StickerMissingEmptyWrong bool `json:"sticker_missing_emptywrong"`
+	// The OD minus game (Tminnoe pole): what a wrong answer costs (0: plain
+	// ChGK), the bonus for a whole tour, and the empty-tour charge.
+	ODMinusWrong int  `json:"od_minus_wrong"`
+	ODMinusBonus int  `json:"od_minus_bonus"`
+	ODMinusEmpty bool `json:"od_minus_empty"`
 }
 
 // setKnobs sets the flat formats' number fields the request gives.
@@ -770,6 +788,16 @@ func (req GameCreateRequest) setKnobs(form url.Values) {
 	setIfGiven("kd_tables", req.KDTables)
 	setIfGiven("ksi_themes", req.KSIThemes)
 	setIfGiven("ksis_themes", req.KSIThemes)
+	setIfGiven("od_minus_wrong", req.ODMinusWrong)
+	setIfGiven("od_minus_bonus", req.ODMinusBonus)
+	setIfTrue := func(key string, v bool) {
+		if v {
+			form.Set(key, "1")
+		}
+	}
+	setIfTrue("od_minus_empty", req.ODMinusEmpty)
+	setIfTrue("ksis_plus_nominal", req.StickerPlusNominal)
+	setIfTrue("ksis_missing_emptywrong", req.StickerMissingEmptyWrong)
 }
 
 func (req GameCreateRequest) form() url.Values {
@@ -892,7 +920,28 @@ func ksiStickerConfigFromForm(form url.Values) (json.RawMessage, error) {
 			Max:   &maxCopy,
 		})
 	}
+	if form.Get("ksis_plus_nominal") != "" {
+		cfg.Plus = games.KSIPlusNominal
+	}
+	if form.Get("ksis_missing_emptywrong") != "" {
+		cfg.Missing = games.KSIStickerEmptyWrong
+	}
 	return json.Marshal(cfg)
+}
+
+// odMinusFromForm reads the OD minus fields; a wrong answer that costs
+// nothing is a plain ChGK, and nil.
+func odMinusFromForm(form url.Values) (*games.ODMinus, error) {
+	s := dopestrings.Default
+	wrong, err := parseNonNegativeFormInt(form, "od_minus_wrong", s.Host.Games.OdMinusWrongLabel(), 0, maxFormQuestions)
+	if err != nil || wrong == 0 {
+		return nil, err
+	}
+	bonus, err := parseNonNegativeFormInt(form, "od_minus_bonus", s.Host.Games.OdMinusBonusLabel(), 0, maxFormQuestions)
+	if err != nil {
+		return nil, err
+	}
+	return &games.ODMinus{Wrong: wrong, AllBonus: bonus, EmptyTour: form.Get("od_minus_empty") != ""}, nil
 }
 
 func stickerColorFromForm(form url.Values, field, fallback string) string {
