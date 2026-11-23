@@ -76,6 +76,46 @@ order by f.first, f.first_id, n.slot`, c.Year, c.Year)
 	return append(contest.Counted(nominators, c.MainSlots), sortedIDs(free)...), nil
 }
 
+// longList is the questions the nominations put in the long list as they
+// stand: what numbering would number now.
+func longList(ctx context.Context, q store.Querier, c contest.Contest) (map[int64]bool, error) {
+	ids, err := counted(ctx, q, c)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
+}
+
+// longListNote says on a question's page whether it is in the long list
+// now, and if not, why: none of its nominations counts, or it is only in
+// reserve slots; out says it is not in. A merged or rejected question says
+// so in its status, and has no note.
+func longListNote(ctx context.Context, q store.Querier, c contest.Contest, qq store.Question, in map[int64]bool) (note string, out bool, err error) {
+	switch {
+	case qq.MergedInto != 0 || qq.Status == store.StatusRejected:
+		return "", false, nil
+	case in[qq.ID]:
+		return str.Admin.Question.InLongList(), false, nil
+	}
+	var n int
+	err = q.QueryRowContext(ctx, `
+select count(*) from nominations n
+join users u on u.id = n.user_id
+join questions qq on qq.id = n.question_id
+where n.year = ? and coalesce(qq.merged_into, qq.id) = ? and `+sheetInUse, c.Year, qq.ID).Scan(&n)
+	if err != nil {
+		return "", false, err
+	}
+	if n == 0 {
+		return str.Admin.Question.OutNoNomination(), true, nil
+	}
+	return str.Admin.Question.OutReserve(), true, nil
+}
+
 func sortedIDs(set map[int64]bool) []int64 {
 	out := make([]int64, 0, len(set))
 	for id := range set {
@@ -275,6 +315,18 @@ func publishedBadge(q store.Question) ui.Item {
 	return ui.Badge(ui.BadgeNeutral, text(str.Admin.Questions.PublishedNo()))
 }
 
+// longListBadge says whether the question is in the long list now; a
+// merged one counts as the question it went into and shows nothing.
+func longListBadge(q store.Question, in map[int64]bool) ui.Item {
+	switch {
+	case q.MergedInto != 0:
+		return ui.Text("")
+	case in[q.ID]:
+		return ui.Badge(ui.BadgePositive, text(str.Admin.Questions.LongListYes()))
+	}
+	return ui.Badge(ui.BadgeNegative, text(str.Admin.Questions.LongListNo()))
+}
+
 // datesNote says whether the tournament started inside the window of
 // eligible tournaments.
 func datesNote(c contest.Contest, q store.Question) string {
@@ -313,6 +365,10 @@ func (s *server) handleQuestionList(w http.ResponseWriter, r *http.Request, _ ro
 	if err != nil {
 		return err
 	}
+	in, err := longList(ctx, s.db, c)
+	if err != nil {
+		return err
+	}
 	var all, withPending int
 	if err := s.db.QueryRowContext(ctx, `select count(*), count(*) filter (where `+filterWhere(inPending)+`) from questions where year = ?`,
 		c.Year).Scan(&all, &withPending); err != nil {
@@ -329,12 +385,13 @@ func (s *server) handleQuestionList(w http.ResponseWriter, r *http.Request, _ ro
 	filters := ui.Row(ui.SpaceSM, ui.Wrap(), filterButton("", str.Admin.Questions.All(strconv.Itoa(all))),
 		filterButton(inPending, str.Admin.Questions.Pending(strconv.Itoa(withPending))))
 	rows := []ui.Item{ui.Scroll(), headRow(str.Admin.Questions.Number(), str.Admin.Questions.Answer(),
-		str.Admin.Questions.Status(), str.Admin.Questions.Published(), str.Admin.Questions.Suggestions(), str.Admin.Questions.Dates())}
+		str.Admin.Questions.Status(), str.Admin.Questions.LongList(), str.Admin.Questions.Published(), str.Admin.Questions.Suggestions(), str.Admin.Questions.Dates())}
 	for _, q := range qs {
 		rows = append(rows, ui.Trow(
 			ui.Cell(ui.Button(ui.Href(withFilter(questionHref(q.ID), f)), ui.Ghost, ui.Small(), text(questionName(q)))),
 			ui.Cell(text(clip(q.Orig.Answer, answerPreview))),
 			ui.Cell(text(statusName(q))),
+			ui.Cell(longListBadge(q, in)),
 			ui.Cell(publishedBadge(q)),
 			ui.Cell(text(strconv.Itoa(pending[q.ID]))),
 			ui.Cell(text(datesNote(c, q)))))
@@ -522,6 +579,19 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 	}
 
 	about := []ui.Item{hint(str.Admin.Question.StatusLine(statusName(q), datesNote(c, q)))}
+	in, err := longList(ctx, s.db, c)
+	if err != nil {
+		return err
+	}
+	note, out, err := longListNote(ctx, s.db, c, q, in)
+	if err != nil {
+		return err
+	}
+	if out {
+		about = append(about, dangerHint(note))
+	} else if note != "" {
+		about = append(about, hint(note))
+	}
 	for _, n := range noms {
 		about = append(about, hint(str.Admin.Question.NominatedBy(n.telegram, n.rating, slotLabel(c, n.slot))))
 	}

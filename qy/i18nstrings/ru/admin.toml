@@ -108,6 +108,11 @@ published_yes = "Опубликован"
 published_no = "Не опубликован"
 all = 'Все: {{.n}}'
 pending = 'С правками: {{.n}}'
+# Whether the question is in the long list as the nominations stand now: the
+# same count the numbering makes.
+long_list = "Лонг-лист"
+long_list_yes = "Входит"
+long_list_no = "Не входит"
 
 [question]
 prev = "← Предыдущий"
@@ -123,6 +128,11 @@ no_text = "Нет текста"
 dates_unknown = "Даты неизвестны"
 dates_ok = "Даты подходят"
 dates_off = "Даты не подходят"
+# The question page: whether the nominations as they stand put it in the long
+# list, and why not.
+in_long_list = "Сейчас входит в лонг-лист."
+out_no_nomination = "Сейчас не входит в лонг-лист: ни одна его номинация не учитывается (у тех, кто номинировал через форму, предварительная таблица не считается)."
+out_reserve = "Сейчас не входит в лонг-лист: он только в запасных слотах, а основные вопросы этих номинаторов не отклонены."
 status_line = '{{.status}}. {{.dates}}.'
 nominated_by = 'Номинировал(а) {{.who}}, ID на турнирном сайте {{.rating}}, {{.slot}}.'
 open_link = "Открыть ссылку"

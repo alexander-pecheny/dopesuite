@@ -52,6 +52,19 @@ func TestThePreliminarySheetCountsUntilTheFormIsUsed(t *testing.T) {
 			t.Errorf("the nominations page lacks %q", want)
 		}
 	}
+	// The questions list and the question's page say so before numbering.
+	list := w.get(w.admin, "/admin/contest/2026/questions", http.StatusOK)
+	if strings.Count(list, "Не входит") != 1 || strings.Count(list, "Входит") != 3 {
+		t.Errorf("the list should mark Alice's sheet question alone as out of the long list: %s", list)
+	}
+	alices := w.get(w.admin, "/admin/question/"+strconv.Itoa(w.count(`select id from questions where gq_id = 902`)), http.StatusOK)
+	if !strings.Contains(alices, "Сейчас не входит в лонг-лист: ни одна его номинация не учитывается") {
+		t.Errorf("Alice's sheet question should say why it is out")
+	}
+	carols := w.get(w.admin, "/admin/question/"+strconv.Itoa(w.count(`select id from questions where gq_id = 900`)), http.StatusOK)
+	if !strings.Contains(carols, "Сейчас входит в лонг-лист.") {
+		t.Errorf("Carol's sheet question should say it is in")
+	}
 	w.ts.SetNow(day(t, "2026-11-24", 12))
 	w.post(w.admin, "/admin/contest/2026/deal", nil, http.StatusSeeOther)
 	for answer, want := range map[string]bool{"альфа": true, "девятьсот": true, "девятьсот один": true, "девятьсот два": false} {

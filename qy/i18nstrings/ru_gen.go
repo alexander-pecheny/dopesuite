@@ -178,6 +178,7 @@ var RU = Strings{
 			FileMissing:       func() string { return "Выберите файл." },
 			FileRemove:        func() string { return "Убрать" },
 			FileRemoveConfirm: func(name string) string { return fmt.Sprintf("Убрать файл %s?", name) },
+			InLongList:        func() string { return "Сейчас входит в лонг-лист." },
 			Link:              func() string { return "Ссылка на вопрос" },
 			MergeConfirm: func() string {
 				return "Объединить? Этот вопрос будет отклонён, а его номинации перейдут к выбранному."
@@ -204,6 +205,12 @@ var RU = Strings{
 			},
 			OrigHint: func() string {
 				return "Здесь правится вопрос так, как его номинировали: его видят оргкомитет и итоги. Поля текста для жюри, которые совпадали с прежним вариантом, поменяются вместе с ним. То, что прислал номинатор, останется как было."
+			},
+			OutNoNomination: func() string {
+				return "Сейчас не входит в лонг-лист: ни одна его номинация не учитывается (у тех, кто номинировал через форму, предварительная таблица не считается)."
+			},
+			OutReserve: func() string {
+				return "Сейчас не входит в лонг-лист: он только в запасных слотах, а основные вопросы этих номинаторов не отклонены."
 			},
 			Parse: func() string { return "Распознать" },
 			ParseFailed: func() string {
@@ -249,6 +256,9 @@ var RU = Strings{
 				return fmt.Sprintf("Всего %d %s.", n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"))
 			},
 			Dates:        func() string { return "Даты" },
+			LongList:     func() string { return "Лонг-лист" },
+			LongListNo:   func() string { return "Не входит" },
+			LongListYes:  func() string { return "Входит" },
 			Number:       func() string { return "Номер" },
 			Pending:      func(n string) string { return fmt.Sprintf("С правками: %s", n) },
 			Published:    func() string { return "Публикация" },
