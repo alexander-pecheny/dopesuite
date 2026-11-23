@@ -385,6 +385,21 @@ function wire(card: HTMLElement): void {
 
 for (const card of document.querySelectorAll<HTMLElement>("form[data-nominate] [data-slot], [data-question-editor]")) wire(card);
 
+// A form as stored has nothing to save: its button waits for the first
+// change, and the line saying it is saved goes then.
+const nominateForm = document.querySelector<HTMLFormElement>("form[data-nominate]");
+const saveRow = nominateForm?.querySelector<HTMLElement>("[data-save-row][data-saved]");
+if (nominateForm && saveRow) {
+  const save = saveRow.querySelector<HTMLElement>("[data-save]");
+  if (save) save.hidden = true;
+  nominateForm.addEventListener("qy:unsaved", () => {
+    if (save) save.hidden = false;
+    const note = saveRow.querySelector<HTMLElement>("[data-saved-note]");
+    if (note) note.hidden = true;
+    for (const el of nominateForm.querySelectorAll<HTMLElement>("[data-appeal-saved]")) el.hidden = true;
+  });
+}
+
 // Enter in a one-line field would submit the form through its first submit
 // button, which is the first slot's clear. The source box loads its own slot
 // (above); the other fields do nothing.

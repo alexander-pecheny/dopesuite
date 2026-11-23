@@ -433,6 +433,7 @@ export type Strings = {
     };
     lint: {
       appeal: () => string;
+      appealSaved: () => string;
       authorBarred: (name: string) => string;
       datesOff: (date: string, from: string, to: string) => string;
       editorBarred: (name: string) => string;
@@ -449,6 +450,7 @@ export type Strings = {
       lead: (main: string, reserves: string, until: string) => string;
       notSaved: () => string;
       reserves: () => string;
+      saved: () => string;
       submit: () => string;
       title: () => string;
     };

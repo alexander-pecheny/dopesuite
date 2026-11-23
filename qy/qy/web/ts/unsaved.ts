@@ -10,8 +10,12 @@ function counts(form: HTMLFormElement): boolean {
   return !form.hasAttribute("data-autosave") && form.method !== "get";
 }
 
+// A form that turns unsaved hears "qy:unsaved" once, so it can show its
+// save button (nominate.ts).
 export function markUnsaved(form: HTMLFormElement | null | undefined): void {
-  if (form && counts(form)) unsaved.add(form);
+  if (!form || !counts(form) || unsaved.has(form)) return;
+  unsaved.add(form);
+  form.dispatchEvent(new Event("qy:unsaved"));
 }
 
 function onEdit(event: Event): void {

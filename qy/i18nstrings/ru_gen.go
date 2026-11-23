@@ -582,6 +582,9 @@ var RU = Strings{
 		},
 		Lint: NominateLintStrings{
 			Appeal: func() string { return "Почему проверка ошиблась" },
+			AppealSaved: func() string {
+				return "Объяснение сохранено. Оргкомитет проверит вопрос вручную."
+			},
 			AuthorBarred: func(name string) string {
 				return fmt.Sprintf("Автор вопроса %s входит в жюри или оргкомитет конкурса.", name)
 			},
@@ -624,6 +627,7 @@ var RU = Strings{
 				return "Номинация не сохранена. Исправьте отмеченные вопросы и сохраните ещё раз."
 			},
 			Reserves: func() string { return "Запасные вопросы" },
+			Saved:    func() string { return "Все изменения сохранены." },
 			Submit:   func() string { return "Сохранить номинацию" },
 			Title:    func() string { return "Номинация вопросов" },
 		},

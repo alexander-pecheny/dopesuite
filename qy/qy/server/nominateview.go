@@ -54,13 +54,32 @@ func nominationFormItems(c contest.Contest, f nominationForm) []ui.Item {
 	}
 	form := []ui.Item{ui.Method("post"), ui.Action(nominatePath(c.Year)), ui.Enctype("multipart/form-data"), ui.DirCol, ui.SpaceLG,
 		ui.Data("nominate", ""), ui.Field(rating...)}
+	filled := false
 	for slot := 1; slot <= c.MainSlots+c.ReserveSlots; slot++ {
 		if slot == c.MainSlots+1 {
 			form = append(form, subhead(str.Nominate.Page.Reserves()))
 		}
-		form = append(form, slotCard(c, slot, f.slots[slot]))
+		v := f.slots[slot]
+		v.appealSaved = f.saved && v.in.appeal != ""
+		filled = filled || !v.in.empty()
+		form = append(form, slotCard(c, slot, v))
 	}
-	return append(form, ui.Row(ui.Button(ui.Primary, ui.Submit(), text(str.Nominate.Page.Submit()))))
+	return append(form, saveRow(f.saved, filled))
+}
+
+// saveRow is the save button and, for a form as stored, the line that says
+// it is. nominate.ts hides the button of a stored form until something in it
+// changes, and the line with it; without the script the button stays.
+func saveRow(saved, filled bool) ui.Item {
+	row := []ui.Item{ui.SpaceMD, ui.AlignCenter, ui.Wrap(), ui.Data("save-row", ""),
+		ui.Button(ui.Primary, ui.Submit(), ui.Data("save", ""), text(str.Nominate.Page.Submit()))}
+	if saved {
+		row = append(row, ui.Data("saved", ""))
+		if filled {
+			row = append(row, ui.Hint(ui.Data("saved-note", ""), ui.Text(str.Nominate.Page.Saved())))
+		}
+	}
+	return ui.Row(row...)
 }
 
 func slotLabel(c contest.Contest, slot int) string {

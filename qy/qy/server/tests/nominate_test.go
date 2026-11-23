@@ -45,6 +45,9 @@ func TestAnIncompleteQuestionIsNotSaved(t *testing.T) {
 	if !strings.Contains(body, "Номинация не сохранена") || !strings.Contains(body, "Заполните обязательные поля") {
 		t.Error("the form should say what is missing")
 	}
+	if strings.Contains(body, "Все изменения сохранены.") || strings.Contains(body, "data-saved") {
+		t.Error("a form shown again unsaved should keep its save button and not claim to be saved")
+	}
 	if !strings.Contains(body, "Хороший вопрос.") {
 		t.Error("the form shown again should keep what was typed")
 	}
@@ -318,8 +321,14 @@ func TestTheRulesCheckWarnsAndTheAppealReachesTheAdmins(t *testing.T) {
 			t.Errorf("the form should warn: %s", want)
 		}
 	}
+	if !strings.Contains(page, "Все изменения сохранены.") || strings.Contains(page, "Объяснение сохранено") {
+		t.Error("a stored form should say it is saved, and there is no appeal yet")
+	}
 	form.Set("slot1_appeal", "Это другой Пётр Петров.")
 	w.post(alice, "/2026/nominate", form, http.StatusSeeOther)
+	if page := w.get(alice, "/2026/nominate", http.StatusOK); !strings.Contains(page, "Объяснение сохранено. Оргкомитет проверит вопрос вручную.") {
+		t.Error("a stored appeal should say nothing more is needed")
+	}
 	admin := w.get(w.admin, "/admin/question/"+strconv.FormatInt(w.questionID("петр"), 10), http.StatusOK)
 	if !strings.Contains(admin, "Это другой Пётр Петров.") || !strings.Contains(admin, "Автор вопроса Пётр Петров") {
 		t.Error("the admin should see the check and the appeal")

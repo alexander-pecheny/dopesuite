@@ -116,6 +116,8 @@ type slotView struct {
 	lint       lintResult
 	view       string
 	from       int // the slot the question was in when the page was drawn, 0 for this one
+	// appealSaved is an appeal the form shows as stored.
+	appealSaved bool
 }
 
 // origin is the slot this one's question came from: itself unless the
@@ -139,6 +141,8 @@ type nominationForm struct {
 	slots     map[int]slotView
 	parseOnly bool // a parse, a load or a clear was asked for, not a save
 	loads     []int
+	// saved is a form drawn from what is stored: nothing in it to save yet.
+	saved bool
 }
 
 // check lists the mistakes of every slot, once the loads are done.

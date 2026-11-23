@@ -152,6 +152,9 @@ func lintBox(c contest.Contest, slot int, v slotView) ui.Item {
 		hint(str.Nominate.Lint.WhatNow()),
 		ui.Field(ui.Label(str.Nominate.Lint.Appeal()),
 			ui.Editor(ui.Name(slotKey(slot, "appeal")), ui.Rows("1"), ui.Data("autogrow", ""), ui.Text(v.in.appeal)))}
+	if v.appealSaved {
+		box = append(box, ui.Hint(ui.Data("appeal-saved", ""), ui.Text(str.Nominate.Lint.AppealSaved())))
+	}
 	if len(texts) == 0 {
 		box = append(box, ui.Hidden())
 	}

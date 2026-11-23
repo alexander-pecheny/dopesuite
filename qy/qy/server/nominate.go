@@ -120,7 +120,7 @@ func (s *server) handleNominatePage(w http.ResponseWriter, r *http.Request, sc r
 	if err := s.lintSlots(r.Context(), c, slots); err != nil {
 		return err
 	}
-	return s.ok(w, r, s.nominationView(r, c, sc, nominationForm{rating: rating, slots: slots}))
+	return s.ok(w, r, s.nominationView(r, c, sc, nominationForm{rating: rating, slots: slots, saved: true}))
 }
 
 // parseRatingID reads the rating id field: digits only, and required.
