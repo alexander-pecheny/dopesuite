@@ -190,7 +190,9 @@ func (s *server) slotCells(c contest.Contest, p nominatorRow, byID map[int64]sto
 		}
 		q := byID[sl.questionID]
 		items := []ui.Item{ui.Row(ui.SpaceSM, ui.AlignCenter, ui.Wrap(), ui.Button(ui.Href(questionHref(q.ID)), ui.Ghost, ui.Small(),
-			text(str.Admin.Nominations.Slot(questionName(q), statusName(q)))), longListMark(in[cmp.Or(q.MergedInto, q.ID)]), publishedBadge(q))}
+			text(str.Admin.Nominations.Slot(questionName(q), statusName(q)))),
+			// The two badges keep to one line, the button wrapping alone.
+			ui.Row(ui.SpaceSM, ui.AlignCenter, longListMark(in[cmp.Or(q.MergedInto, q.ID)]), publishedBadge(q)))}
 		body := "<p>" + plain(q.SourceText) + "</p>"
 		if !q.Orig.Empty() {
 			body = questionHTML(card{qy: q.QY, q: q.Orig, images: imageLinks(q), tournament: q.TournamentTitle})
