@@ -32,8 +32,12 @@ func TestTheAdminSeesWhetherAQuestionIsInTheLongList(t *testing.T) {
 	if !strings.Contains(page("запасной"), "Сейчас не входит в лонг-лист: он только в запасных слотах") {
 		t.Error("a reserve should say it is out while the main questions stand")
 	}
-	if list := w.get(w.admin, "/admin/contest/2026/questions", http.StatusOK); strings.Count(list, "Не входит") != 1 {
+	list := w.get(w.admin, "/admin/contest/2026/questions", http.StatusOK)
+	if strings.Count(list, "Не входит") != 1 {
 		t.Error("the list should mark the reserve alone as out")
+	}
+	if !strings.Contains(list, "Всего 6 вопросов.") || !strings.Contains(list, "В лонг-листе сейчас 5 вопросов") {
+		t.Error("the list should count all the questions and the long list's apart")
 	}
 	main := "/admin/question/" + strconv.FormatInt(w.questionID("основной"), 10)
 	w.post(w.admin, main, url.Values{"status": {"rejected"}, "text": {"Основной вопрос Алисы."}, "answer": {"основной"}, "pin": {""}}, http.StatusSeeOther)

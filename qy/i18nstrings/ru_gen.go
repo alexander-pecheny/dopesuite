@@ -255,7 +255,10 @@ var RU = Strings{
 			Count: func(n int) string {
 				return fmt.Sprintf("Всего %d %s.", n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"))
 			},
-			Dates:        func() string { return "Даты" },
+			Dates: func() string { return "Даты" },
+			InLongList: func(n int) string {
+				return fmt.Sprintf("В лонг-листе сейчас %d %s: запасные, которые не понадобились, не считаются.", n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"))
+			},
 			LongList:     func() string { return "Лонг-лист" },
 			LongListNo:   func() string { return "Не входит" },
 			LongListYes:  func() string { return "Входит" },

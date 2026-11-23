@@ -401,9 +401,10 @@ func (s *server) handleQuestionList(w http.ResponseWriter, r *http.Request, _ ro
 			ui.Cell(text(datesNote(c, q)))))
 	}
 	y := strconv.Itoa(c.Year)
-	body := []ui.Item{ui.Section(filters, hint(str.Admin.Questions.Count(len(qs))))}
+	counts := []ui.Item{hint(str.Admin.Questions.Count(len(qs))), hint(str.Admin.Questions.InLongList(len(in)))}
+	body := []ui.Item{ui.Section(append([]ui.Item{filters}, counts...)...)}
 	if len(qs) > 0 {
-		body = []ui.Item{ui.Section(ui.Data("questions", ""), filters, hint(str.Admin.Questions.Count(len(qs))), ui.Table(rows...))}
+		body = []ui.Item{ui.Section(append(append([]ui.Item{ui.Data("questions", ""), filters}, counts...), ui.Table(rows...))...)}
 	}
 	return s.ok(w, r, view{
 		title: str.Admin.Contest.Questions(),

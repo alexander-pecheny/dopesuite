@@ -185,6 +185,7 @@ export type Strings = {
       answer: () => string;
       count: (n: number) => string;
       dates: () => string;
+      inLongList: (n: number) => string;
       longList: () => string;
       longListNo: () => string;
       longListYes: () => string;
