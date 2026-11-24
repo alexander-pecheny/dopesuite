@@ -526,8 +526,9 @@ func (s *server) pathQuestion(r *http.Request) (store.Question, contest.Contest,
 }
 
 type nominator struct {
-	telegram, rating, appeal string
-	slot                     int
+	telegram, appeal string
+	rating           int64 // 0 for none
+	slot             int
 }
 
 func (s *server) nominatorsOf(ctx context.Context, questionID int64) ([]nominator, error) {
@@ -541,16 +542,35 @@ from nominations n join users u on u.id = n.user_id where n.question_id = ? orde
 	var out []nominator
 	for rows.Next() {
 		var n nominator
-		var rating int64
-		if err := rows.Scan(&n.telegram, &rating, &n.slot, &n.appeal); err != nil {
+		if err := rows.Scan(&n.telegram, &n.rating, &n.slot, &n.appeal); err != nil {
 			return nil, err
-		}
-		if rating > 0 {
-			n.rating = idstr.Format(rating)
 		}
 		out = append(out, n)
 	}
 	return out, rows.Err()
+}
+
+// nominatedBy is a line per nominator: the handle, the rating ID with the
+// name the rating site has for it, and the slot.
+func (s *server) nominatedBy(ctx context.Context, c contest.Contest, noms []nominator) []ui.Item {
+	var ids []int64
+	for _, n := range noms {
+		if n.rating > 0 {
+			ids = append(ids, n.rating)
+		}
+	}
+	names := s.buff.Players(ctx, ids)
+	var out []ui.Item
+	for _, n := range noms {
+		slot := slotLabel(c, n.slot)
+		if n.rating == 0 {
+			out = append(out, hint(str.Admin.Question.NominatedBy(n.telegram, slot)))
+			continue
+		}
+		who := strings.TrimSpace(idstr.Format(n.rating) + " " + names[n.rating])
+		out = append(out, hint(str.Admin.Question.NominatedByRating(n.telegram, who, slot)))
+	}
+	return out
 }
 
 // duplicates are the other questions of the year with the same answer, which
@@ -642,9 +662,7 @@ func (s *server) handleQuestionPage(w http.ResponseWriter, r *http.Request, _ ro
 	} else if note != "" {
 		about = append(about, hint(note))
 	}
-	for _, n := range noms {
-		about = append(about, hint(str.Admin.Question.NominatedBy(n.telegram, n.rating, slotLabel(c, n.slot))))
-	}
+	about = append(about, s.nominatedBy(ctx, c, noms)...)
 	if q.Link != "" {
 		about = append(about, ui.Row(ui.Button(ui.Href(q.Link), ui.Ghost, ui.Small(), ui.IconLink, text(str.Admin.Question.OpenLink()))))
 	}

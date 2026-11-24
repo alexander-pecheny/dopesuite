@@ -218,8 +218,11 @@ var RU = Strings{
 			New:     func() string { return "Не проверен" },
 			Next:    func() string { return "Следующий →" },
 			NoText:  func() string { return "Нет текста" },
-			NominatedBy: func(who string, rating string, slot string) string {
-				return fmt.Sprintf("Номинировал(а) %s, ID на турнирном сайте %s, %s.", who, rating, slot)
+			NominatedBy: func(who string, slot string) string {
+				return fmt.Sprintf("Номинировал(а) %s, %s.", who, slot)
+			},
+			NominatedByRating: func(who string, rating string, slot string) string {
+				return fmt.Sprintf("Номинировал(а) %s (%s), %s.", who, rating, slot)
 			},
 			OpenLink:       func() string { return "Открыть ссылку" },
 			OpenMerged:     func(name string) string { return fmt.Sprintf("Открыть %s", name) },

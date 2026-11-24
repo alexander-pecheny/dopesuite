@@ -378,6 +378,24 @@ func TestTheRatingSitesNameShowsWhenTelegramsDiffers(t *testing.T) {
 	}
 }
 
+// The question page names each nominator by handle, rating ID and the
+// rating site's name for them.
+func TestTheQuestionPageNamesTheNominatorsRatingID(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.ts.SetBuff(qyserver.Buff{101: "Алиса Иванова"})
+	alice, bob := w.user("alice"), w.user("bob")
+	w.post(alice, "/2026/nominate", slots("101", map[int]string{1: pasted("Вопрос Алисы.", "альфа", "Кто-то")}), http.StatusSeeOther)
+	w.post(bob, "/2026/nominate", slots("202", map[int]string{1: pasted("Вопрос Боба.", "гамма", "Кто-то")}), http.StatusSeeOther)
+	if body := w.get(w.admin, "/admin/question/"+strconv.FormatInt(w.questionID("альфа"), 10), http.StatusOK); !strings.Contains(body, "Номинировал(а) alice (101 Алиса Иванова), ") {
+		t.Errorf("the nominator should be named with the rating site's name:\n%s", body)
+	}
+	// The rating site does not know Bob: the ID alone.
+	if body := w.get(w.admin, "/admin/question/"+strconv.FormatInt(w.questionID("гамма"), 10), http.StatusOK); !strings.Contains(body, "Номинировал(а) bob (202), ") {
+		t.Errorf("a nominator the rating site does not know should have the ID alone:\n%s", body)
+	}
+}
+
 func TestAnAdminFixesTheNominatedText(t *testing.T) {
 	w := newWorld(t)
 	w.ts.SetNow(day(t, "2026-11-10", 12))
