@@ -64,3 +64,36 @@ func TestTheAdminsSeeHowEachJurorVoted(t *testing.T) {
 		t.Error("the final's table should show the expert's mark")
 	}
 }
+
+// The votes page narrows the first stage to one portion: a juror's likes
+// from the others drop out, their favourite stays.
+func TestTheVotesPageShowsOnePortion(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.post(w.user("alice"), "/2026/nominate", slots("101", map[int]string{
+		1: pasted("Вопрос про альфу.", "альфа", "Алиса"),
+		2: pasted("Вопрос про бету.", "бета", "Алиса"),
+	}), http.StatusSeeOther)
+	w.ts.Exec(`update contests set portion_size = 1`)
+	w.ts.SetNow(day(t, "2026-11-24", 12))
+	w.post(w.admin, "/admin/contest/2026/deal", nil, http.StatusSeeOther)
+	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Эксперт Один"}, "telegram": {"ex1"}, "kind": {"expert"}}, http.StatusSeeOther)
+	w.user("ex1")
+	w.ts.Exec(`insert into likes(user_id, question_id, favourite, created_at)
+  select u.id, q.id, q.qy = 2, '2026-11-24' from users u, questions q where u.username = 'ex1'`)
+	answer := func(qy int) string {
+		var a string
+		w.ts.DB().QueryRow(`select json_extract(clean, '$.answer') from questions where qy = ?`, qy).Scan(&a)
+		return strings.TrimRight(a, ". ")
+	}
+	page := w.get(w.admin, "/admin/contest/2026/votes?portion=1", http.StatusOK)
+	if !strings.Contains(page, "Все порции") || !strings.Contains(page, "QY1 ("+answer(1)+")") {
+		t.Fatalf("portion 1 should be there with its tabs: %s", page)
+	}
+	if strings.Contains(page, "Порция 2:") || !strings.Contains(page, "QY2 ("+answer(2)+")") {
+		t.Error("portion 2's likes should drop out, the favourite from it should stay")
+	}
+	if all := w.get(w.admin, "/admin/contest/2026/votes", http.StatusOK); !strings.Contains(all, "Порция 2:") {
+		t.Error("all the portions should show by default")
+	}
+}

@@ -27,7 +27,7 @@ type jurorVotes struct {
 	name, kind string
 	anonymous  bool
 	liked      []store.Question // in QY order
-	favourite  int              // its QY, 0 for none
+	favourite  store.Question   // the zero question for none
 	scores     []jurorScore     // in QY order
 }
 
@@ -45,13 +45,27 @@ func (s *server) handleVotesReport(w http.ResponseWriter, r *http.Request, _ rou
 	if err != nil {
 		return err
 	}
+	total, err := portionCount(r.Context(), s.db, c)
+	if err != nil {
+		return err
+	}
+	// ?portion=K narrows the first stage to that portion; none is all of them.
+	k, err := strconv.Atoi(r.URL.Query().Get("portion"))
+	if err != nil || k < 1 || k > total {
+		k = 0
+	}
 	base := contestHref(c.Year)
 	y := strconv.Itoa(c.Year)
 	body := []ui.Item{ui.Section(hint(str.Admin.Votes.Lead()))}
 	if len(jurors) == 0 {
 		body = append(body, ui.Section(hint(str.Admin.Votes.NoJurors())))
 	} else {
-		body = append(body, ui.Section(subhead(str.Admin.Votes.Stage1()), ui.Table(likesRows(c, jurors)...)))
+		stage1 := []ui.Item{subhead(str.Admin.Votes.Stage1())}
+		if total > 1 {
+			stage1 = append(stage1, votesPortionTabs(c, total, k))
+		}
+		stage1 = append(stage1, ui.Table(likesRows(c, inPortion(c, jurors, k))...))
+		body = append(body, ui.Section(stage1...))
 		if scored := scoreRows(c, jurors); scored != nil {
 			body = append(body, ui.Section(subhead(str.Admin.Votes.Final()), ui.Table(scored...)))
 		}
@@ -61,6 +75,45 @@ func (s *server) handleVotesReport(w http.ResponseWriter, r *http.Request, _ rou
 		trail: adminTrail(crumb{base, str.Admin.Contests.Row(y)}, crumb{"", str.Admin.Votes.Title()}),
 		body:  body,
 	})
+}
+
+// votesPortionTabs pick all the portions or one.
+func votesPortionTabs(c contest.Contest, total, current int) ui.Item {
+	tab := func(k int, label string) ui.Item {
+		look, href := ui.Ghost, contestHref(c.Year)+"/votes"
+		if k == current {
+			look = ui.Primary
+		}
+		if k > 0 {
+			href += "?portion=" + strconv.Itoa(k)
+		}
+		return ui.Button(ui.Href(href), ui.Small(), look, text(label))
+	}
+	items := []ui.Item{ui.SpaceXS, ui.Wrap(), ui.Aria("label", str.Vote.Portion.Tabs()), tab(0, str.Admin.Votes.AllPortions())}
+	for i := 1; i <= total; i++ {
+		items = append(items, tab(i, strconv.Itoa(i)))
+	}
+	return ui.Row(items...)
+}
+
+// inPortion is the jurors with only what they liked in portion k; 0 keeps
+// everything. The favourite stays, wherever it is.
+func inPortion(c contest.Contest, jurors []jurorVotes, k int) []jurorVotes {
+	if k == 0 {
+		return jurors
+	}
+	out := make([]jurorVotes, len(jurors))
+	for i, j := range jurors {
+		var liked []store.Question
+		for _, q := range j.liked {
+			if c.Portion(q.QY) == k {
+				liked = append(liked, q)
+			}
+		}
+		j.liked = liked
+		out[i] = j
+	}
+	return out
 }
 
 func jurorCell(j jurorVotes) ui.Item {
@@ -109,10 +162,8 @@ func likesRows(c contest.Contest, jurors []jurorVotes) []ui.Item {
 	rows := []ui.Item{ui.Scroll(), headRow(str.Admin.Votes.Juror(), str.Admin.Votes.Likes(), str.Admin.Votes.Favourite(), str.Admin.Votes.Liked())}
 	for _, j := range jurors {
 		fav := ui.Cell(text(""))
-		for _, q := range j.liked {
-			if q.QY == j.favourite {
-				fav = ui.Cell(ui.Richtext(ui.Raw(qyLink(q, qyName(q)))))
-			}
+		if q := j.favourite; q.ID != 0 {
+			fav = ui.Cell(ui.Richtext(ui.Raw(qyLink(q, qyName(q)))))
 		}
 		liked := byPortion(c, j.liked, func(q store.Question) int { return q.QY }, func(q store.Question) string { return qyLink(q, qyName(q)) })
 		rows = append(rows, ui.Trow(jurorCell(j), ui.Cell(text(strconv.Itoa(len(j.liked)))), fav, liked))
@@ -207,7 +258,7 @@ func (s *server) addVotes(ctx context.Context, j *jurorVotes, user int64, byID m
 		if q, ok := byID[id]; ok {
 			j.liked = append(j.liked, q)
 			if fav {
-				j.favourite = q.QY
+				j.favourite = q
 			}
 		}
 		return nil

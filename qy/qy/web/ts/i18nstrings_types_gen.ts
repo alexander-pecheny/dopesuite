@@ -272,6 +272,7 @@ export type Strings = {
       uk: () => string;
     };
     votes: {
+      allPortions: () => string;
       anonymous: () => string;
       expert: () => string;
       favourite: () => string;

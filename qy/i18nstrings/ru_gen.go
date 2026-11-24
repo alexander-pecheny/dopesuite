@@ -379,11 +379,12 @@ var RU = Strings{
 			Uk:    func() string { return "Украинский" },
 		},
 		Votes: AdminVotesStrings{
-			Anonymous: func() string { return "Анонимно" },
-			Expert:    func() string { return "Экспертное жюри" },
-			Favourite: func() string { return "Любимый" },
-			Final:     func() string { return "Финал" },
-			Juror:     func() string { return "Член жюри" },
+			AllPortions: func() string { return "Все порции" },
+			Anonymous:   func() string { return "Анонимно" },
+			Expert:      func() string { return "Экспертное жюри" },
+			Favourite:   func() string { return "Любимый" },
+			Final:       func() string { return "Финал" },
+			Juror:       func() string { return "Член жюри" },
 			Lead: func() string {
 				return "Как голосует каждый член жюри: какие вопросы отметил на первом этапе, какой выбрал любимым и какие оценки поставил в финале. Баллы по вопросам есть в отчёте первого этапа."
 			},

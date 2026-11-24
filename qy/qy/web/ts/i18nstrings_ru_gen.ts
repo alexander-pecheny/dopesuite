@@ -273,6 +273,7 @@ export const RU: Strings = {
       uk: () => "Украинский",
     },
     votes: {
+      allPortions: () => "Все порции",
       anonymous: () => "Анонимно",
       expert: () => "Экспертное жюри",
       favourite: () => "Любимый",

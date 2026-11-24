@@ -309,3 +309,4 @@ scores = "Оценки"
 question = '{{.qy}} ({{.answer}})'
 score = '{{.question}}: {{.score}}'
 portion = 'Порция {{.n}}:'
+all_portions = "Все порции"
