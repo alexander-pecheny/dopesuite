@@ -152,6 +152,31 @@ var RU = Strings{
 		Page: AdminPageStrings{
 			Title: func() string { return "Оргкомитет" },
 		},
+		Portions: AdminPortionsStrings{
+			About: func(n string, date string) string {
+				return fmt.Sprintf("Порция %s. Жюри увидит её %s, если к этому дню она отмечена проверенной. Если что-то не так, поправьте вопрос здесь же в «Править» или откройте его страницу.", n, date)
+			},
+			Check:      func() string { return "Отметить порцию проверенной" },
+			CheckedTab: func() string { return "Проверена" },
+			Confirm: func(n int) string {
+				return fmt.Sprintf("Одобрить %d %s порции и открыть её жюри в её день?", n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"))
+			},
+			Edit: func() string { return "Править" },
+			Empty: func(qy string) string {
+				return fmt.Sprintf("У вопроса %s пустой текст для жюри. Заполните его или отклоните вопрос.", qy)
+			},
+			IsChecked: func() string {
+				return "Порция проверена: жюри видит её с её дня. Правки здесь сразу видны жюри."
+			},
+			Missing: func() string { return "Такой порции нет." },
+			NotDealt: func() string {
+				return "Вопросам ещё не розданы номера, поэтому порций пока нет."
+			},
+			Open:     func(qy string) string { return fmt.Sprintf("Открыть %s", qy) },
+			Rejected: func() string { return "Отклонён, жюри его не увидит" },
+			Title:    func() string { return "Порции первого этапа" },
+			Uncheck:  func() string { return "Снять отметку" },
+		},
 		Question: AdminQuestionStrings{
 			AiFailed: func(error string) string { return fmt.Sprintf("Модель не ответила: %s", error) },
 			Appeal: func(who string, text string) string {
@@ -751,10 +776,14 @@ var RU = Strings{
 			Next: func(date string) string {
 				return fmt.Sprintf("Следующая порция откроется %s.", date)
 			},
-			NotOpen: func() string { return "Эта порция ещё не открыта." },
-			Opens:   func(date string) string { return fmt.Sprintf("Откроется %s", date) },
-			Tabs:    func() string { return "Порции" },
-			Title:   func(n string, date string) string { return fmt.Sprintf("Порция %s, открыта %s.", n, date) },
+			NextPreparing: func() string {
+				return "Следующая порция откроется, как только оргкомитет её проверит."
+			},
+			NotOpen:   func() string { return "Эта порция ещё не открыта." },
+			Opens:     func(date string) string { return fmt.Sprintf("Откроется %s", date) },
+			Preparing: func() string { return "Скоро откроется" },
+			Tabs:      func() string { return "Порции" },
+			Title:     func(n string, date string) string { return fmt.Sprintf("Порция %s, открыта %s.", n, date) },
 		},
 	},
 }

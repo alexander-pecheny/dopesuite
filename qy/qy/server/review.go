@@ -713,7 +713,7 @@ func questionForm(action string, q store.Question) []ui.Item {
 		option(store.StatusRejected, str.Admin.Question.Rejected(), q.Status))
 	form := []ui.Item{ui.Method("post"), ui.Action(action), ui.DirCol, ui.SpaceSM,
 		ui.Field(ui.Label(str.Admin.Question.Status()), status), hint(str.Admin.Question.EditHint())}
-	form = append(form, questionEditor(q))
+	form = append(form, questionEditor(q, viewPreview))
 	pin := ui.Selectfield(ui.Name("pin"),
 		option("", str.Admin.Question.PinNone(), q.Pin),
 		option("add", str.Admin.Question.PinAdd(), q.Pin),

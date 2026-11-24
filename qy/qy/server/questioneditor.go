@@ -18,7 +18,9 @@ import (
 
 const handoutField = "handout"
 
-func questionEditor(q store.Question) ui.Item {
+// questionEditor opens on the tab view: the preview on the question's page,
+// the fields on a portion's, where the jury's card is right above.
+func questionEditor(q store.Question, view string) ui.Item {
 	handout, rest := question.SplitHandout(q.Clean.Text)
 	fields := q.Clean
 	fields.Text, fields.Author = rest, q.Orig.Author
@@ -39,8 +41,8 @@ func questionEditor(q store.Question) ui.Item {
 	}
 	images, _ := json.Marshal(imageLinks(q))
 	return ui.Card(ui.DirCol, ui.SpaceMD, ui.Data("question-editor", ""), ui.Data("prefix", ""),
-		ui.Data("state", stateEditor), ui.Data("view", viewPreview), ui.Data("images", string(images)),
-		ui.Hiddenfield(ui.Name("view"), ui.Value(viewPreview)),
+		ui.Data("state", stateEditor), ui.Data("view", view), ui.Data("images", string(images)),
+		ui.Hiddenfield(ui.Name("view"), ui.Value(view)),
 		ui.Tabs(ui.Data("part", "tabs"),
 			ui.Tab(ui.View(viewPreview), text(str.Nominate.Slot.TabPreview())),
 			ui.Tab(ui.View(viewFields), text(str.Nominate.Slot.TabFields())),

@@ -110,6 +110,14 @@ CREATE TABLE popular_votes(
   primary key(year, user_id)
 );
 
+-- table portion_checks
+CREATE TABLE portion_checks(
+  year integer not null,
+  portion integer not null,
+  checked_at text not null,
+  primary key(year, portion)
+);
+
 -- table question_files
 CREATE TABLE question_files(
   id integer primary key,

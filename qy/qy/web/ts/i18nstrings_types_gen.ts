@@ -115,6 +115,21 @@ export type Strings = {
     page: {
       title: () => string;
     };
+    portions: {
+      about: (n: string, date: string) => string;
+      check: () => string;
+      checkedTab: () => string;
+      confirm: (n: number) => string;
+      edit: () => string;
+      empty: (qy: string) => string;
+      isChecked: () => string;
+      missing: () => string;
+      notDealt: () => string;
+      open: (qy: string) => string;
+      rejected: () => string;
+      title: () => string;
+      uncheck: () => string;
+    };
     question: {
       aiFailed: (error: string) => string;
       appeal: (who: string, text: string) => string;
@@ -538,8 +553,10 @@ export type Strings = {
       empty: () => string;
       lead: (days: number) => string;
       next: (date: string) => string;
+      nextPreparing: () => string;
       notOpen: () => string;
       opens: (date: string) => string;
+      preparing: () => string;
       tabs: () => string;
       title: (n: string, date: string) => string;
     };

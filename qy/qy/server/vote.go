@@ -60,6 +60,32 @@ func portionQuestions(ctx context.Context, q store.Querier, c contest.Contest, j
 	return store.Questions(ctx, q, c.Year, where, from, to)
 }
 
+// checkedPortions are the year's portions an admin has marked checked.
+func checkedPortions(ctx context.Context, q store.Querier, year int) (map[int]bool, error) {
+	ks, err := store.Collect(ctx, q, store.Scalar[int64], `select portion from portion_checks where year = ?`, year)
+	out := make(map[int]bool, len(ks))
+	for _, k := range ks {
+		out[int(k)] = true
+	}
+	return out, err
+}
+
+// portionsOpen is how many portions the jury can read now: those whose day
+// has come, up to the first one no admin has checked yet.
+func (s *server) portionsOpen(ctx context.Context, q store.Querier, c contest.Contest, total int) (int, error) {
+	checked, err := checkedPortions(ctx, q, c.Year)
+	if err != nil {
+		return 0, err
+	}
+	open := c.PortionsOpen(s.now(), total)
+	for k := 1; k <= open; k++ {
+		if !checked[k] {
+			return k - 1, nil
+		}
+	}
+	return open, nil
+}
+
 func portionCount(ctx context.Context, q store.Querier, c contest.Contest) (int, error) {
 	var maxQY int
 	if err := q.QueryRowContext(ctx, `select coalesce(max(qy), 0) from questions where year = ?`, c.Year).Scan(&maxQY); err != nil {
@@ -130,7 +156,10 @@ func (s *server) portionBody(ctx context.Context, r *http.Request, c contest.Con
 	if err != nil {
 		return nil, err
 	}
-	open := c.PortionsOpen(s.now(), total)
+	open, err := s.portionsOpen(ctx, s.db, c, total)
+	if err != nil {
+		return nil, err
+	}
 	if open == 0 {
 		return []ui.Item{ui.Section(hint(str.Vote.Page.NothingYet()))}, nil
 	}
@@ -156,7 +185,11 @@ func (s *server) portionBody(ctx context.Context, r *http.Request, c contest.Con
 		hint(str.Vote.Portion.Title(strconv.Itoa(k), dayText(c.PortionOpens(k).Format(contest.DateLayout)))),
 	}
 	if k < total && k == open {
-		head = append(head, hint(str.Vote.Portion.Next(dayText(c.PortionOpens(k+1).Format(contest.DateLayout)))))
+		next := str.Vote.Portion.Next(dayText(c.PortionOpens(k + 1).Format(contest.DateLayout)))
+		if k < c.PortionsOpen(s.now(), total) {
+			next = str.Vote.Portion.NextPreparing()
+		}
+		head = append(head, hint(next))
 	}
 	if len(qs) == 0 {
 		return []ui.Item{ui.Section(head...), ui.Section(ui.Empty(text(str.Vote.Portion.Empty())))}, nil
@@ -188,7 +221,11 @@ func (s *server) portionTabs(ctx context.Context, c contest.Contest, current str
 	if err != nil {
 		return nil, err
 	}
-	open := c.PortionsOpen(s.now(), total)
+	open, err := s.portionsOpen(ctx, s.db, c, total)
+	if err != nil {
+		return nil, err
+	}
+	dated := c.PortionsOpen(s.now(), total)
 	tab := func(to, label string, icon ...ui.Item) ui.Item {
 		look := ui.Ghost
 		if to == current {
@@ -200,8 +237,12 @@ func (s *server) portionTabs(ctx context.Context, c contest.Contest, current str
 	for i := 1; i <= total; i++ {
 		n := strconv.Itoa(i)
 		if i > open {
-			items = append(items, ui.Button(ui.Small(), ui.Ghost, ui.Disabled(),
-				ui.Title(str.Vote.Portion.Opens(dayText(c.PortionOpens(i).Format(contest.DateLayout)))), text(n)))
+			// A portion whose day has come waits for the admins to check it.
+			title := str.Vote.Portion.Opens(dayText(c.PortionOpens(i).Format(contest.DateLayout)))
+			if i <= dated {
+				title = str.Vote.Portion.Preparing()
+			}
+			items = append(items, ui.Button(ui.Small(), ui.Ghost, ui.Disabled(), ui.Title(title), text(n)))
 			continue
 		}
 		items = append(items, tab(n, n))
@@ -392,7 +433,11 @@ func (s *server) voteScope(ctx context.Context, tx *sql.Tx, c contest.Contest, j
 		if err != nil {
 			return nil, err
 		}
-		if k < 1 || k > c.PortionsOpen(s.now(), total) {
+		open, err := s.portionsOpen(ctx, tx, c, total)
+		if err != nil {
+			return nil, err
+		}
+		if k < 1 || k > open {
 			return nil, userError(str.Vote.Portion.NotOpen())
 		}
 		return portionQuestions(ctx, tx, c, j, k)

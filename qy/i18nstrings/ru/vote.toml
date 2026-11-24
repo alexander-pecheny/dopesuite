@@ -15,6 +15,9 @@ next = 'Следующая порция откроется {{.date}}.'
 empty = "В этой порции для вас вопросов нет."
 not_open = "Эта порция ещё не открыта."
 opens = 'Откроется {{.date}}'
+# A portion whose day has come that the organisers have not checked yet.
+preparing = "Скоро откроется"
+next_preparing = "Следующая порция откроется, как только оргкомитет её проверит."
 
 # The tab after the last portion: every question the juror liked.
 [liked]

@@ -212,6 +212,16 @@ func TestAContestEndToEnd(t *testing.T) {
 	noHandle := w.ts.AddUser("nohandle")
 	w.ts.Exec(`update users set telegram_username = null, telegram_user_id = 448180345 where id = ?`, noHandle)
 	w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {"Эксперт Без Ника"}, "telegram": {"448180345"}, "kind": {"expert"}}, http.StatusSeeOther)
+	// The jury reads a portion only once an admin has read it and marked it
+	// checked.
+	if body := w.get(ex, "/2026/vote", http.StatusOK); strings.Contains(body, `name="like"`) || !strings.Contains(body, "Вопросы ещё не опубликованы") {
+		t.Error("a portion nobody has checked should stay closed to the jury")
+	}
+	// Checking the portion approves what is in it; Alice's reserve is
+	// rejected first, so the jury reads the other three.
+	w.post(w.admin, "/admin/question/"+strconv.FormatInt(w.questionID("запас алисы"), 10),
+		url.Values{"status": {"rejected"}, "text": {"Запасной вопрос Алисы."}, "answer": {"запас алисы"}, "pin": {""}}, http.StatusSeeOther)
+	w.post(w.admin, "/admin/contest/2026/portions/1/check", nil, http.StatusSeeOther)
 	if body := w.get(w.ts.As(noHandle), "/2026/vote", http.StatusOK); strings.Count(body, `name="like"`) != 3 {
 		t.Error("a juror named by telegram id should see the likes")
 	}

@@ -267,3 +267,21 @@ changes = "Что изменилось в тексте для жюри"
 save = "Сохранить перевод"
 retranslate = "Перевести заново"
 retranslate_confirm = "Перевести заново? Ручные правки перевода пропадут."
+
+# The admins' reading of the first stage's portions before the jury: each
+# question as the jury will see it, fixed in place, then the portion marked
+# checked, which approves its questions and lets the jury read it.
+[portions]
+title = "Порции первого этапа"
+not_dealt = "Вопросам ещё не розданы номера, поэтому порций пока нет."
+about = 'Порция {{.n}}. Жюри увидит её {{.date}}, если к этому дню она отмечена проверенной. Если что-то не так, поправьте вопрос здесь же в «Править» или откройте его страницу.'
+checked_tab = "Проверена"
+open = 'Открыть {{.qy}}'
+rejected = "Отклонён, жюри его не увидит"
+edit = "Править"
+check = "Отметить порцию проверенной"
+confirm = 'Одобрить {{.n}} {{plural .n "вопрос" "вопроса" "вопросов"}} порции и открыть её жюри в её день?'
+is_checked = "Порция проверена: жюри видит её с её дня. Правки здесь сразу видны жюри."
+uncheck = "Снять отметку"
+missing = "Такой порции нет."
+empty = 'У вопроса {{.qy}} пустой текст для жюри. Заполните его или отклоните вопрос.'

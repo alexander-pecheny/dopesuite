@@ -37,6 +37,8 @@ func TestAJurorsFavouriteIsWorthThreeLikes(t *testing.T) {
 	w.post(w.admin, "/admin/contest/2026/deal", nil, http.StatusSeeOther)
 	w.ts.Exec(`update questions set status = 'approved'`)
 	w.ts.Exec(`update contests set portion_size = 2`)
+	w.post(w.admin, "/admin/contest/2026/portions/1/check", nil, http.StatusSeeOther)
+	w.post(w.admin, "/admin/contest/2026/portions/2/check", nil, http.StatusSeeOther)
 	for _, h := range []string{"ex1", "ex2"} {
 		w.post(w.admin, "/admin/contest/2026/jurors", url.Values{"name": {h}, "telegram": {h}, "kind": {"expert"}}, http.StatusSeeOther)
 	}

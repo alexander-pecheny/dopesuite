@@ -296,6 +296,17 @@ alter table questions add column translation_error text not null default '';
 	// which counts for more than a like (tally.FavouritePoints). The server
 	// keeps it to one per juror and year.
 	{Version: 8, Name: "the favourite question of a juror", Up: schema.Exec(`alter table likes add column favourite integer not null default 0;`)},
+	{Version: 9, Name: "portions the admins have read", Up: schema.Exec(`
+-- A portion of the first stage an admin has read through and marked checked.
+-- The jury reads a portion once its day has come and it and every portion
+-- before it are checked.
+create table portion_checks(
+  year integer not null,
+  portion integer not null,
+  checked_at text not null,
+  primary key(year, portion)
+);
+`)},
 }
 
 func Migrate(db *sql.DB) error { return schema.Apply(db, Migrations) }
