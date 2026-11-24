@@ -270,6 +270,23 @@ export type Strings = {
       title: () => string;
       uk: () => string;
     };
+    votes: {
+      anonymous: () => string;
+      expert: () => string;
+      favourite: () => string;
+      final: () => string;
+      juror: () => string;
+      lead: () => string;
+      liked: () => string;
+      likes: () => string;
+      noJurors: () => string;
+      people: () => string;
+      score: (qy: string, score: string) => string;
+      scored: () => string;
+      scores: () => string;
+      stage1: () => string;
+      title: () => string;
+    };
   };
   anon: {
     placeholder: () => string;

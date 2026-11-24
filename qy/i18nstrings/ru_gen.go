@@ -375,6 +375,25 @@ var RU = Strings{
 			Title: func() string { return "Язык и перевод" },
 			Uk:    func() string { return "Украинский" },
 		},
+		Votes: AdminVotesStrings{
+			Anonymous: func() string { return "Анонимно" },
+			Expert:    func() string { return "Экспертное жюри" },
+			Favourite: func() string { return "Любимый" },
+			Final:     func() string { return "Финал" },
+			Juror:     func() string { return "Член жюри" },
+			Lead: func() string {
+				return "Как голосует каждый член жюри: какие вопросы отметил на первом этапе, какой выбрал любимым и какие оценки поставил в финале. Баллы по вопросам есть в отчёте первого этапа."
+			},
+			Liked:    func() string { return "Отмеченные вопросы" },
+			Likes:    func() string { return "Отмечено" },
+			NoJurors: func() string { return "Жюри этого года ещё не назначено." },
+			People:   func() string { return "Народное жюри" },
+			Score:    func(qy string, score string) string { return fmt.Sprintf("%s: %s", qy, score) },
+			Scored:   func() string { return "Оценено" },
+			Scores:   func() string { return "Оценки" },
+			Stage1:   func() string { return "Первый этап" },
+			Title:    func() string { return "Голоса жюри" },
+		},
 	},
 	Anon: AnonStrings{
 		Placeholder: func() string { return "[автор вопроса]" },

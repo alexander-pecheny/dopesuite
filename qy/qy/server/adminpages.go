@@ -244,6 +244,7 @@ func (s *server) handleContestPage(w http.ResponseWriter, r *http.Request, _ rou
 					ui.Listrow(ui.Href(base+"/questions"), ui.Listtitle(text(str.Admin.Contest.Questions()))),
 					ui.Listrow(ui.Href(base+"/portions"), ui.Listtitle(text(str.Admin.Portions.Title()))),
 					ui.Listrow(ui.Href(base+"/stage1"), ui.Listtitle(text(str.Admin.Contest.Stage1()))),
+					ui.Listrow(ui.Href(base+"/votes"), ui.Listtitle(text(str.Admin.Votes.Title()))),
 					ui.Listrow(ui.Href(base+"/final"), ui.Listtitle(text(str.Admin.Contest.Final()))),
 				),
 			}, noticeOf(r)...)...),
