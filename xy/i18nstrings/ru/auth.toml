@@ -16,6 +16,8 @@ forbidden = "сюда API-токен не пускают — нужен вход
 # handleTgClaim — claiming a Telegram login code from the site.
 # Username format gate, shared with first-Telegram-login signup.
 username_format = "логин: 3–64 символа, латиница, цифры, . _ -"
+# Starting a Telegram login on an instance that runs no bot of its own.
+not_configured = "вход через телеграм на этом сайте не настроен"
 # The code the site showed is unknown or already consumed.
 code_missing = "код не найден, начните заново"
 # The username names an existing password account and the password is wrong.

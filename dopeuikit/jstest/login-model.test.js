@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {claimOutcome, loginMethods, loginRedirect, pollTelegram, tgStartView} from "../assets/js/dist/esm/login-model.js";
+import {claimOutcome, loginMethods, loginRedirect, pollTelegram, resumeOutcome, tgStartView} from "../assets/js/dist/esm/login-model.js";
 
 test("tgStartView builds the deep link only when the bot is known", () => {
   const full = tgStartView({code: "AB CD", bot_username: "dope_bot"});
@@ -8,6 +8,19 @@ test("tgStartView builds the deep link only when the bot is known", () => {
   assert.equal(full.deepLinkLabel, "t.me/dope_bot");
   assert.equal(full.deepLinkHref, "https://t.me/dope_bot?start=AB%20CD");
   assert.equal(tgStartView({code: "x"}).deepLinkHref, null);
+});
+
+test("a pending login resumes wherever the bot left it", () => {
+  assert.deepEqual(resumeOutcome({status: "ready"}), {kind: "redirect"});
+  assert.deepEqual(resumeOutcome({status: "choose_username", code: "AB"}), {kind: "username", code: "AB"});
+  const shown = resumeOutcome({status: "pending", code: "AB", bot_username: "qy_bot"});
+  assert.equal(shown.kind, "code");
+  assert.equal(shown.view.deepLinkHref, "https://t.me/qy_bot?start=AB");
+  // nothing pending, a lapsed one, or a server too old to say
+  assert.deepEqual(resumeOutcome({status: "not_found"}), {kind: "none"});
+  assert.deepEqual(resumeOutcome({status: "expired"}), {kind: "none"});
+  assert.deepEqual(resumeOutcome({status: "pending"}), {kind: "none"});
+  assert.deepEqual(resumeOutcome(undefined), {kind: "none"});
 });
 
 function pollDeps(statuses) {

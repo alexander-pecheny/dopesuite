@@ -44,7 +44,7 @@ export const EN: Strings = {
     },
     link: {
       cancel: () => "That is not me, I will choose another username",
-      hint: () => "That user already exists. If it is you, enter the password to link the account.",
+      hint: (telegram: string, username: string) => `That username is taken. If it is you, enter the password to link telegram ${telegram} to username ${username}:`,
       submit: () => "Link",
     },
     message: {

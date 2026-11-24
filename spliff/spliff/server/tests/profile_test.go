@@ -57,7 +57,7 @@ func TestPasswordChangeProvesTheCurrentOneAndForgetsEveryOtherSession(t *testing
 	anon := w.ts.Anonymous()
 	if code := anon.Do(http.MethodPost, "/api/auth/login-password", map[string]any{
 		"username": "alice", "password": "hunter2hunter2",
-	}).Code; code != http.StatusBadRequest {
+	}).Code; code != http.StatusUnauthorized {
 		t.Fatalf("the old password still logs in: %d", code)
 	}
 	if code := anon.Do(http.MethodPost, "/api/auth/login-password", map[string]any{

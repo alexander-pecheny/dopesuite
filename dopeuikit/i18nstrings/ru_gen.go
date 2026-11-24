@@ -2,6 +2,10 @@
 
 package i18nstrings
 
+import (
+	"fmt"
+)
+
 // RU is the ru Catalog.
 var RU = Strings{
 	Admin: AdminStrings{
@@ -49,8 +53,8 @@ var RU = Strings{
 		},
 		Link: LoginLinkStrings{
 			Cancel: func() string { return "Это не я, выберу другой логин" },
-			Hint: func() string {
-				return "Такой пользователь уже существует. Если это вы, введите пароль, чтобы привязать аккаунт."
+			Hint: func(telegram string, username string) string {
+				return fmt.Sprintf("Это имя пользователя занято. Если это вы, введите пароль, чтобы привязать телеграм %s к имени пользователя %s:", telegram, username)
 			},
 			Submit: func() string { return "Привязать" },
 		},

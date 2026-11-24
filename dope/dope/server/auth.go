@@ -7,17 +7,18 @@ import (
 	"dope/dope/platform/util"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authcred"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/authweb"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/tglogin"
 
+	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
 	"dope/dope/web/route"
 	dopestrings "dope/i18nstrings"
@@ -56,10 +57,38 @@ type telegramSender func(ctx context.Context, chatID int64, text string) error
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
-// The Telegram handshake (start → status poll → claim) is dopecore/tglogin's
-// state machine over dope's users table; these handlers keep dope's write
-// transaction, its validation and its error text.
-func (s *server) handshake() tglogin.Handshake { return tglogin.Handshake{Users: dopeUsers{}} }
+// web is the shared login endpoints (dopecore/authweb) over dope's users
+// table, its write transaction, its words and its route errors.
+func (s *server) web() authweb.Web {
+	str := dopestrings.Default
+	return authweb.Web{
+		Handshake: tglogin.Handshake{Users: dopeUsers{}},
+		Passwords: dopePasswords{},
+		WriteTx: func(ctx context.Context, _ string, fn func(ctx context.Context, tx *sql.Tx) error) error {
+			return s.inWriteTx(ctx, func(tx *sql.Tx) error { return fn(ctx, tx) })
+		},
+		ReadJSON: route.DecodeJSON,
+		Refuse:   func(code int, msg string) error { return &route.Status{Code: code, Msg: msg} },
+		Me: func(ctx context.Context, tx *sql.Tx, id int64) (any, error) {
+			u, err := loadUserTx(ctx, tx, id)
+			return meResponseFor(u), err
+		},
+		HasBot:         func() bool { return strings.TrimSpace(s.getenv("TELEGRAM_BOT_TOKEN")) != "" },
+		TelegramStatus: s.telegramStatus,
+		BotUsername:    botUsername,
+		ValidUsername:  util.ValidUsername,
+		Words: authweb.Words{
+			NotConfigured:   str.Auth.Login.TgNotConfigured(),
+			CodeMissing:     str.Auth.Login.CodeMissing(),
+			CodeNotFound:    str.Auth.Login.CodeNotFound(),
+			UsernameInvalid: str.Auth.Login.UsernameInvalid(),
+			PasswordWrong:   str.Auth.Login.PasswordWrong(),
+			TelegramTaken:   str.Auth.Login.TelegramLinked(),
+			FieldsRequired:  str.Auth.Login.CredentialsMissing(),
+			LoginInvalid:    str.Auth.Login.CredentialsInvalid(),
+		},
+	}
+}
 
 // inWriteTx runs fn in one locked write transaction and commits it.
 func (s *server) inWriteTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
@@ -111,49 +140,27 @@ func (s *server) handleAuthPassword(w http.ResponseWriter, r *http.Request) {
 	s.api().Serve(route.Session, s.authPassword)(w, r)
 }
 
-// The /api/auth/methods contract the kit's login page reads (login-model.ts):
-// `telegram` is the bare on/off an older page understands, `telegram_status`
-// says which kind of no it is, so the page can name the problem.
-const (
-	tgStatusOK            = "ok"
-	tgStatusMisconfigured = "misconfigured"
-	tgStatusUnreachable   = "unreachable"
-)
-
 // telegramStatus is whether this instance can log somebody in by telegram.
 // No token means it was never meant to (staging); a token nobody is polling
 // means the bot failed to start or another process holds it.
 func (s *server) telegramStatus() string {
-	if strings.TrimSpace(s.getenv("TELEGRAM_BOT_TOKEN")) == "" {
-		return tgStatusMisconfigured
-	}
-	if !s.botPolling.Load() {
-		return tgStatusUnreachable
-	}
-	return tgStatusOK
+	return authweb.TelegramState(strings.TrimSpace(s.getenv("TELEGRAM_BOT_TOKEN")) != "", s.botPolling.Load())
 }
 
-func (s *server) authLoginMethods(w http.ResponseWriter, _ *http.Request, _ route.Scope) error {
-	st := s.telegramStatus()
-	return route.JSON(w, map[string]any{"telegram": st == tgStatusOK, "telegram_status": st})
+func (s *server) authLoginMethods(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	return s.web().Methods(w, r)
 }
-
 func (s *server) authTgStart(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
-	// An instance with no token has no bot to answer the code, so minting one
-	// would only leave the visitor polling. The bot not polling right now is
-	// different: the code keeps, and the bot may be back before it expires.
-	if s.telegramStatus() == tgStatusMisconfigured {
-		return &route.Status{Code: http.StatusServiceUnavailable, Msg: dopestrings.Default.Auth.Login.TgNotConfigured()}
-	}
-	var res tglogin.StartResult
-	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
-		res, err = s.handshake().Start(r.Context(), tx, time.Now())
-		return err
-	})
-	if err != nil {
-		return err
-	}
-	return route.JSON(w, session.StartRegisterResponse{Code: res.Code, ExpiresAt: rfc3339(res.ExpiresAt), BotUsername: botUsername()})
+	return s.web().Start(w, r)
+}
+func (s *server) authTgStatus(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	return s.web().Status(w, r)
+}
+func (s *server) authTgClaim(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	return s.web().Claim(w, r)
+}
+func (s *server) authLoginPassword(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
+	return s.web().LoginPassword(w, r)
 }
 
 // getenv reads the process environment, unless the test seam has shadowed
@@ -172,58 +179,6 @@ func botUsername() string {
 		return v
 	}
 	return "dope_pecheny_bot"
-}
-
-func (s *server) authTgStatus(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
-	code := strings.TrimSpace(r.URL.Query().Get("code"))
-	if code == "" {
-		return route.BadRequest(dopestrings.Default.Auth.Login.CodeMissing())
-	}
-	var out tglogin.Outcome
-	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
-		out, err = s.handshake().Resolve(r.Context(), tx, code, time.Now())
-		return err
-	})
-	return writeOutcome(w, out, err)
-}
-
-func (s *server) authTgClaim(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
-	var req struct {
-		Code     string `json:"code"`
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if err := route.DecodeJSON(r, &req); err != nil {
-		return err
-	}
-	username := strings.TrimSpace(req.Username)
-	if !util.ValidUsername(username) {
-		return route.BadRequest(dopestrings.Default.Auth.Login.UsernameInvalid())
-	}
-	var out tglogin.Outcome
-	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) (err error) {
-		out, err = s.handshake().Claim(r.Context(), tx, req.Code, username, req.Password, time.Now())
-		switch {
-		case errors.Is(err, tglogin.ErrCodeNotFound):
-			return route.BadRequest(dopestrings.Default.Auth.Login.CodeNotFound())
-		case errors.Is(err, tglogin.ErrWrongPassword):
-			return route.Unauthorized(dopestrings.Default.Auth.Login.PasswordWrong())
-		case errors.Is(err, tglogin.ErrTelegramLinked):
-			return route.Conflict(dopestrings.Default.Auth.Login.TelegramLinked())
-		}
-		return err
-	})
-	return writeOutcome(w, out, err)
-}
-
-func writeOutcome(w http.ResponseWriter, out tglogin.Outcome, err error) error {
-	if err != nil {
-		return err
-	}
-	if out.Token != "" {
-		session.SetCookie(w, out.Token)
-	}
-	return route.JSON(w, session.RegisterStatusResponse{Status: out.Status, Username: out.Username})
 }
 
 // dopeUsers is dope's users table as the handshake needs it: system accounts
@@ -258,6 +213,9 @@ func scanAccount(row *sql.Row) (tglogin.Account, bool, error) {
 }
 
 func (dopeUsers) Create(ctx context.Context, tx tglogin.Tx, id tglogin.Identity, username string, now time.Time) (int64, error) {
+	if !adminusers.MayTake(festaccess.SiteAdminEnv, username, id.Username.String) {
+		return 0, route.Conflict(dopestrings.Default.Auth.Username.Taken())
+	}
 	res, err := tx.ExecContext(ctx, `
 insert into users(telegram_user_id, telegram_username, telegram_name, username, is_system, created_at, updated_at)
 values(?, ?, ?, ?, 0, ?, ?)`, id.TelegramUserID, id.Username, id.Name, username, rfc3339(now), rfc3339(now))
@@ -274,66 +232,38 @@ update users set telegram_user_id = ?, telegram_username = ?, telegram_name = ?,
 	return err
 }
 
-func (s *server) authLoginPassword(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
-	var req loginPasswordRequest
-	if err := route.DecodeJSON(r, &req); err != nil {
-		return err
+// dopePasswords is dope's users table as password login reads it. A system
+// account has a password but is not a person, and says so rather than
+// answering "wrong password".
+type dopePasswords struct{}
+
+func (dopePasswords) ByUsername(ctx context.Context, tx tglogin.Tx, username string) (tglogin.Account, bool, error) {
+	id, err := store.UserIDByName(ctx, tx, username)
+	if errors.Is(err, sql.ErrNoRows) {
+		return tglogin.Account{}, false, nil
 	}
-	username := strings.TrimSpace(req.Username)
-	password := req.Password
-	if username == "" || password == "" {
-		return route.BadRequest(dopestrings.Default.Auth.Login.CredentialsMissing())
-	}
-	var user session.User
-	var token string
-	err := s.inWriteTx(r.Context(), func(tx *sql.Tx) error {
-		ctx := r.Context()
-		var (
-			hash     sql.NullString
-			salt     sql.NullString
-			isSystem int
-		)
-		userID, err := store.UserIDByName(ctx, tx, username)
-		if err == nil {
-			err = tx.QueryRowContext(ctx, `
-select password_hash, password_salt, is_system from users where id = ?`, userID).Scan(&hash, &salt, &isSystem)
-		}
-		if errors.Is(err, sql.ErrNoRows) || (err == nil && !hash.Valid) {
-			return route.Unauthorized(dopestrings.Default.Auth.Login.CredentialsInvalid())
-		}
-		if err != nil {
-			return err
-		}
-		if isSystem == 1 {
-			return route.Forbid(dopestrings.Default.Auth.Login.SystemUser())
-		}
-		ok, upgraded, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, password)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return route.Unauthorized(dopestrings.Default.Auth.Login.CredentialsInvalid())
-		}
-		if upgraded != "" {
-			// Lazy migration: a legacy SHA256 hash becomes bcrypt on the first
-			// successful login, so the weaker hash leaves the database.
-			if _, err := tx.ExecContext(ctx, `
-update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
-				upgraded, util.UtcNow(), userID); err != nil {
-				return err
-			}
-		}
-		if token, err = createSessionTx(ctx, tx, userID, time.Now().UTC()); err != nil {
-			return err
-		}
-		user, err = loadUserTx(ctx, tx, userID)
-		return err
-	})
 	if err != nil {
-		return err
+		return tglogin.Account{}, false, err
 	}
-	session.SetCookie(w, token)
-	return route.JSON(w, meResponseFor(user))
+	a := tglogin.Account{ID: id}
+	var isSystem int
+	err = tx.QueryRowContext(ctx, `select password_hash, password_salt, is_system from users where id = ?`, id).
+		Scan(&a.PasswordHash, &a.PasswordSalt, &isSystem)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return a, false, nil
+	case err != nil:
+		return a, false, err
+	case isSystem == 1 && a.PasswordHash.Valid:
+		return a, false, route.Forbid(dopestrings.Default.Auth.Login.SystemUser())
+	}
+	return a, true, nil
+}
+
+func (dopePasswords) SetPasswordHash(ctx context.Context, tx *sql.Tx, userID int64, hash string, _ time.Time) error {
+	_, err := tx.ExecContext(ctx, `
+update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`, hash, util.UtcNow(), userID)
+	return err
 }
 
 func (s *server) authMe(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -492,52 +422,6 @@ func meResponseFor(user session.User) meResponse {
 		resp.Telegram = &v
 	}
 	return resp
-}
-
-const (
-	telegramAPIBase     = "https://api.telegram.org"
-	telegramSendTimeout = 10 * time.Second
-)
-
-// newTelegramSendRequest builds the Bot API sendMessage call for one HTML
-// message.
-func newTelegramSendRequest(ctx context.Context, token string, chatID int64, text string) (*http.Request, error) {
-	values := url.Values{}
-	values.Set("chat_id", fmt.Sprintf("%d", chatID))
-	values.Set("text", text)
-	values.Set("parse_mode", "HTML")
-	endpoint := fmt.Sprintf("%s/bot%s/sendMessage", telegramAPIBase, token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return req, nil
-}
-
-func sendTelegramMessageFromEnv(ctx context.Context, chatID int64, text string) error {
-	token := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
-	if token == "" {
-		return errors.New("telegram bot token is not configured")
-	}
-	req, err := newTelegramSendRequest(ctx, token, chatID, text)
-	if err != nil {
-		return err
-	}
-	client := &http.Client{Timeout: telegramSendTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("telegram sendMessage status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return nil
 }
 
 // RequireSameOriginUnsafe is route.SameOriginUnsafe, kept under the name the

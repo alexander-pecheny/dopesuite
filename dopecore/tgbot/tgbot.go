@@ -152,7 +152,7 @@ func New(cfg Config) *Client {
 		allowedUpdates: cfg.AllowedUpdates,
 		retryDelay:     cfg.RetryDelay,
 		conflictDelay:  cfg.ConflictDelay,
-		http:           &http.Client{Timeout: cfg.HTTPTimeout},
+		http:           &http.Client{Timeout: cfg.HTTPTimeout, Transport: newTransport()},
 	}
 }
 
@@ -239,6 +239,9 @@ func (c *Client) RunAll(ctx context.Context, h Handler) error {
 					"updates are being split between us at random. Find it and stop it. (%v)", err)
 			} else {
 				log.Printf("getUpdates: %v", err)
+				// A long poll that timed out may have died with its connection,
+				// and the next one must not queue behind it on the same socket.
+				c.http.CloseIdleConnections()
 			}
 			select {
 			case <-ctx.Done():
@@ -285,7 +288,7 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64) ([]Update, error)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.roundTrip(req)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +345,7 @@ func (c *Client) send(ctx context.Context, chatID int64, text, parseMode string)
 		return
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.http.Do(req)
+	resp, err := c.roundTrip(req)
 	if err != nil {
 		log.Printf("sendMessage to %d: %v", chatID, err)
 		return
@@ -352,6 +355,16 @@ func (c *Client) send(ctx context.Context, chatID int64, text, parseMode string)
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("sendMessage to %d: status %d", chatID, resp.StatusCode)
 	}
+}
+
+// roundTrip sends req and keeps the token out of the error: a *url.Error carries the
+// full URL, the token is part of it, and the error ends up in the journal.
+func (c *Client) roundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := c.http.Do(req)
+	if ue, ok := errors.AsType[*url.Error](err); ok {
+		ue.URL = strings.ReplaceAll(ue.URL, c.token, redactedToken)
+	}
+	return resp, err
 }
 
 func (c *Client) method(name string) string {
@@ -454,7 +467,7 @@ func (c *Client) CallMultipart(ctx context.Context, method string, fields map[st
 }
 
 func (c *Client) do(ctx context.Context, method string, req *http.Request) (json.RawMessage, error) {
-	resp, err := c.http.Do(req)
+	resp, err := c.roundTrip(req)
 	if err != nil {
 		return nil, err
 	}

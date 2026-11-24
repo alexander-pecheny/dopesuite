@@ -131,7 +131,7 @@ func (s *server) handler() http.Handler {
 	if s.cfg.Local {
 		return routes(s)
 	}
-	return webassets.Gzip(guardOrigin(routes(s)))
+	return webassets.Gzip(guardOrigin(s.web().FinishPending(routes(s))))
 }
 
 // handleIndex serves the board-list home page (client-side auth-gated).

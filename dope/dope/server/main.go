@@ -291,7 +291,7 @@ func Main() {
 	srv.startBot(context.Background())
 
 	httpSrv := &http.Server{
-		Handler:           securityHeaders(auditmw.ContextMiddleware(&srv.eng, webassets.Gzip(slideSessionCookie(mux), "/events", "/host-events"))),
+		Handler:           securityHeaders(auditmw.ContextMiddleware(&srv.eng, webassets.Gzip(slideSessionCookie(srv.web().FinishPending(mux)), "/events", "/host-events"))),
 		ReadHeaderTimeout: readHeaderTimeout,
 		// No WriteTimeout: SSE responses are intentionally long-lived.
 		IdleTimeout: idleTimeout,

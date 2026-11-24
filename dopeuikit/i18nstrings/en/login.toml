@@ -22,7 +22,7 @@ hint = "Choose a username of Latin letters and digits, such as ivanov. A dot, a 
 submit = "Continue"
 
 [link]
-hint = "That user already exists. If it is you, enter the password to link the account."
+hint = "That username is taken. If it is you, enter the password to link telegram {{.telegram}} to username {{.username}}:"
 submit = "Link"
 cancel = "That is not me, I will choose another username"
 

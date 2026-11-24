@@ -89,7 +89,7 @@ func TestRegisterLinkPasswordAccount(t *testing.T) {
 
 	// wrong password is rejected
 	resp = c.do("POST", "/api/auth/tg/claim", map[string]string{"code": rs.Code, "username": "alice", "password": "nope"})
-	mustStatus(t, resp, 400)
+	mustStatus(t, resp, 401)
 
 	// correct password links and logs in
 	resp = c.do("POST", "/api/auth/tg/claim", map[string]string{"code": rs.Code, "username": "alice", "password": "correct-horse-battery"})

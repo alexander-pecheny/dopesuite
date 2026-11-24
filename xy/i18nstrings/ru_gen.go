@@ -272,6 +272,9 @@ var RU = Strings{
 			NoMoreSnoozes: func() string {
 				return "откладывать больше нельзя, привяжите телеграм"
 			},
+			NotConfigured: func() string {
+				return "вход через телеграм на этом сайте не настроен"
+			},
 			PasswordWrong: func() string { return "неверный пароль" },
 			TelegramTaken: func() string {
 				return "этот телеграм уже привязан к другому аккаунту"

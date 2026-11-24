@@ -93,6 +93,21 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
+// readJSONErr is readJSON for handlers that answer with an error rather than
+// writing their own 400 (the shared login endpoints, dopecore/authweb).
+func readJSONErr(r *http.Request, v any) error {
+	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, maxJSONBody))
+	if err == nil {
+		dec := json.NewDecoder(bytes.NewReader(renameLegacyFields(body)))
+		dec.DisallowUnknownFields()
+		err = dec.Decode(v)
+	}
+	if err != nil {
+		return &appError{status: http.StatusBadRequest, msg: "invalid request body"}
+	}
+	return nil
+}
+
 // httpError writes a plain-text error with the given status.
 func httpError(w http.ResponseWriter, status int, msg string) {
 	http.Error(w, msg, status)

@@ -7,7 +7,7 @@
 // The flow decisions live in login-model.ts; this file only binds the DOM.
 
 import S from "./i18nstrings.js";
-import { claimOutcome, errorMessage, loginMethods, loginRedirect, pollTelegram, tgStartView, type Remembered } from "./login-model";
+import { claimOutcome, errorMessage, loginMethods, loginRedirect, pollTelegram, resumeOutcome, tgStartView, type Remembered } from "./login-model";
 import { qrSvg } from "./qr";
 
 // How long a copied code shows its "copied" mark.
@@ -48,6 +48,7 @@ const usernameMessage = byId("usernameMessage");
 const linkForm = byId<HTMLFormElement>("linkForm");
 const linkPassword = byId<HTMLInputElement>("linkPassword");
 const linkMessage = byId("linkMessage");
+const linkHint = byId("linkHint");
 const linkCancelBtn = byId<HTMLButtonElement>("linkCancelBtn");
 
 const passwordForm = byId<HTMLFormElement>("passwordForm");
@@ -75,15 +76,11 @@ const redirectTarget = loginRedirect(
 void bootstrap();
 
 async function bootstrap(): Promise<void> {
-  try {
-    const me = await fetchJSON("/api/auth/me");
-    if (me && (me as { user_id?: number }).user_id) {
-      redirectToHost();
-      return;
-    }
-  } catch {
-    // not logged in — fine
+  if (await loggedIn()) {
+    redirectToHost();
+    return;
   }
+  if (await resumePending()) return;
   let methods = loginMethods(undefined);
   try {
     methods = loginMethods((await fetchJSON("/api/auth/methods")) as { telegram?: boolean; telegram_status?: string });
@@ -101,6 +98,42 @@ async function bootstrap(): Promise<void> {
     return;
   }
   showStep("method");
+}
+
+async function loggedIn(): Promise<boolean> {
+  try {
+    const me = await fetchJSON("/api/auth/me");
+    return Boolean(me && (me as { user_id?: number }).user_id);
+  } catch {
+    return false; // not logged in — fine
+  }
+}
+
+// resumePending picks up a telegram login this browser started in another tab
+// (or in this one before a reload), and reports whether it did.
+async function resumePending(): Promise<boolean> {
+  let outcome = resumeOutcome(undefined);
+  try {
+    outcome = resumeOutcome((await fetchJSON("/api/auth/tg/status")) as { status?: string; code?: string });
+  } catch {
+    return false; // an older server wants a code: nothing to resume
+  }
+  switch (outcome.kind) {
+    case "redirect":
+      redirectToHost();
+      return true;
+    case "username":
+      code = outcome.code;
+      showStep("username");
+      return true;
+    case "code":
+      code = outcome.view.code;
+      showCode(outcome.view);
+      showStep("code");
+      void poll();
+      return true;
+  }
+  return false;
 }
 
 tgLoginBtn.addEventListener("click", () => void startTelegram());
@@ -186,6 +219,12 @@ async function poll(): Promise<void> {
     sleep,
   });
   polling = false;
+  // A code that is gone may have been spent by another tab of this browser,
+  // which finished the login for both of us.
+  if (outcome.kind === "message" && (await loggedIn())) {
+    redirectToHost();
+    return;
+  }
   if (outcome.kind === "redirect") redirectToHost();
   else if (outcome.kind === "step") showStep(outcome.step);
   else if (outcome.kind === "message") setText(codeMessage, outcome.text);
@@ -217,13 +256,14 @@ async function claim(password: string, messageNode: HTMLElement): Promise<void> 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code, username, password }),
-    })) as { status?: string };
+    })) as { status?: string; telegram?: string };
     const outcome = claimOutcome(res.status);
     if (outcome.kind === "redirect") {
       redirectToHost();
       return;
     }
     if (outcome.kind === "step") {
+      setText(linkHint, S.login.link.hint(res.telegram ?? "", username));
       linkPassword.value = "";
       showStep(outcome.step);
       setStatus("saved");

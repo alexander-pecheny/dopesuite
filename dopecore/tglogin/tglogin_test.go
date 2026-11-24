@@ -350,6 +350,9 @@ func TestClaimLinksPasswordAccountOnProof(t *testing.T) {
 		t.Fatal(err)
 	}
 	want(t, out, PasswordRequired, "alice")
+	if out.Telegram == nil || *out.Telegram != "@tg" {
+		t.Fatalf("telegram to link = %v, want @tg", out.Telegram)
+	}
 	if _, err := f.claim(code, "alice", "nope"); !errors.Is(err, ErrWrongPassword) {
 		t.Fatalf("wrong password: %v", err)
 	}

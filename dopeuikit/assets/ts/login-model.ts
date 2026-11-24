@@ -57,6 +57,28 @@ export function loginMethods(
   return { telegram, telegramNote: telegram ? "" : (TG_NOTES[res?.telegram_status ?? ""] ?? "") };
 }
 
+// A login this browser has pending, as /api/auth/tg/status answers it when
+// asked with no code (the server keeps the code in a cookie). The login page
+// asks on every load, so a tab that did not start the login picks it up where
+// it is: a known telegram the bot has confirmed logs straight in, a new one
+// goes to its username, and one the bot has not seen yet shows its code and
+// polls. Anything else — nothing pending, an older server — is a fresh start.
+export type ResumeOutcome =
+  | { kind: "redirect" }
+  | { kind: "username"; code: string }
+  | { kind: "code"; view: TgStartView }
+  | { kind: "none" };
+
+export function resumeOutcome(
+  res: { status?: string; code?: string; bot_username?: string } | null | undefined,
+): ResumeOutcome {
+  if (res?.status === "ready") return { kind: "redirect" };
+  if (!res?.code) return { kind: "none" };
+  if (res.status === "choose_username") return { kind: "username", code: res.code };
+  if (res.status === "pending") return { kind: "code", view: tgStartView(res) };
+  return { kind: "none" };
+}
+
 export type PollOutcome =
   | { kind: "redirect" }
   | { kind: "step"; step: "username" }

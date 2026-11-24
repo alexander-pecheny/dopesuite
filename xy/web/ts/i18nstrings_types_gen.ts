@@ -217,6 +217,7 @@ export type Strings = {
       accountLinked: () => string;
       codeMissing: () => string;
       noMoreSnoozes: () => string;
+      notConfigured: () => string;
       passwordWrong: () => string;
       telegramTaken: () => string;
       usernameFormat: () => string;
