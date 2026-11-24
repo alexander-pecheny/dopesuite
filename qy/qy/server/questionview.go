@@ -13,6 +13,7 @@ import (
 	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 
 	"qy/qy/storage/store"
+	"qy/qy/web/ui"
 )
 
 // card is a question as one page shows it. The jury's pages leave the credits
@@ -59,6 +60,12 @@ func (c card) withoutFactcheck() card {
 	return c
 }
 
+// answersToggle opens every answer on the page at once and closes them again
+// (web/ts/forms.ts); it needs the script, which shows it.
+func answersToggle() ui.Item {
+	return ui.Row(ui.Button(ui.Ghost, ui.Small(), ui.Data("toggle-answers", ""), ui.Hidden(), text(str.Forms.ShowAnswers())))
+}
+
 func qyLabel(n int) string { return "QY" + strconv.Itoa(n) }
 
 // questionHTML is a card's frame: the number and the text, then the answer and
@@ -92,7 +99,7 @@ func questionHTML(c card) string {
 			html.EscapeString(str.Question.Translation()) + `</button></div>`)
 	}
 	b.WriteString(`<p data-part="question"><b>` + html.EscapeString(label) + `</b> ` + plain(c.q.Text) + "</p>")
-	b.WriteString("<details><summary>" + html.EscapeString(str.Question.ShowAnswer()) + "</summary>")
+	b.WriteString(`<details data-part="answer"><summary>` + html.EscapeString(str.Question.ShowAnswer()) + "</summary>")
 	b.WriteString(`<div data-part="fields"><p>` + plain(question.FormatFields(c.q)) + "</p></div>")
 	if c.tournament != "" {
 		b.WriteString(`<div class="pv-field"><strong class="pv-label">` + html.EscapeString(str.Question.Tournament()) +

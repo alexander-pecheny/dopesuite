@@ -66,6 +66,7 @@ func (s *server) handlePortions(w http.ResponseWriter, r *http.Request, _ route.
 	head := []ui.Item{portionAdminTabs(c, total, k, checked)}
 	head = append(head, noticeOf(r)...)
 	head = append(head, hint(str.Admin.Portions.About(strconv.Itoa(k), dayText(c.PortionOpens(k).Format(contest.DateLayout)))))
+	head = append(head, answersToggle())
 	items := []ui.Item{ui.Section(head...)}
 	for _, q := range qs {
 		items = append(items, portionQuestion(c, k, q))

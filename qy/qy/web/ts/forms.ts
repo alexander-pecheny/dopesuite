@@ -47,16 +47,37 @@ document.addEventListener("change", (event) => {
   if (form && form.hasAttribute("data-autosave")) void save(form);
 });
 
-const toggleAll = document.getElementById("toggle-all-details");
-if (toggleAll) {
-  toggleAll.classList.add("btn");
-  toggleAll.addEventListener("click", () => {
-    const all = [...document.querySelectorAll("details")];
+// The button that opens every answer at once and closes them again: on the
+// archive's results pages (#toggle-all-details, written into the page) and
+// over the question cards of the jury's and the admins' pages
+// (data-toggle-answers, hidden until here). Where the cards mark their
+// answers (data-part=answer), only those open, not an admin's editor; an
+// archive page marks none, and every disclosure on it is an answer. The
+// label follows the answers as they are opened one by one too.
+function answers(): HTMLDetailsElement[] {
+  const marked = [...document.querySelectorAll<HTMLDetailsElement>("details[data-part=answer]")];
+  return marked.length > 0 ? marked : [...document.querySelectorAll<HTMLDetailsElement>("details")];
+}
+
+const answerToggles = [...document.querySelectorAll<HTMLElement>("#toggle-all-details, [data-toggle-answers]")];
+
+function syncAnswerToggles(): void {
+  const all = answers();
+  const open = all.length > 0 && all.every((d) => d.open);
+  for (const t of answerToggles) t.textContent = open ? S.forms.hideAnswers() : S.forms.showAnswers();
+}
+
+for (const toggle of answerToggles) {
+  toggle.classList.add("btn");
+  toggle.hidden = false;
+  toggle.addEventListener("click", () => {
+    const all = answers();
     const open = all.some((d) => !d.open);
     for (const d of all) d.open = open;
-    toggleAll.textContent = open ? S.forms.hideAnswers() : S.forms.showAnswers();
+    syncAnswerToggles();
   });
 }
+if (answerToggles.length > 0) document.addEventListener("toggle", syncAnswerToggles, true);
 import "./nominate.js";
 import "./questions.js";
 import "./fold.js";

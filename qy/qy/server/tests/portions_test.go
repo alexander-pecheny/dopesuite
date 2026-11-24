@@ -36,6 +36,9 @@ func TestTheAdminsReadAPortionBeforeTheJury(t *testing.T) {
 	if !strings.Contains(page, `id="QY1"`) || !strings.Contains(page, "Отклонён, жюри его не увидит") || !strings.Contains(page, "/admin/question/"+qy1+"/jury-copy") {
 		t.Error("the portion should show its questions as the jury will, the rejected one marked, each with its editor")
 	}
+	if !strings.Contains(page, "data-toggle-answers") || !strings.Contains(page, `<details data-part="answer">`) {
+		t.Error("the portion should have the button that shows and hides every answer")
+	}
 
 	// A fix in place goes back to the question on the portion's page.
 	res := w.admin.Post("/admin/question/"+qy1+"/jury-copy", url.Values{"portion": {"1"}, "text": {"Исправленный вопрос."}, "answer": {"ответ"}, "author": {"Алиса"}})
@@ -56,6 +59,9 @@ func TestTheAdminsReadAPortionBeforeTheJury(t *testing.T) {
 	vote := w.get(ex, "/2026/vote", http.StatusOK)
 	if !strings.Contains(vote, "Исправленный вопрос.") || strings.Count(vote, `name="like"`) != 1 {
 		t.Error("the jury should read the checked portion, without the rejected question")
+	}
+	if !strings.Contains(vote, "data-toggle-answers") {
+		t.Error("the jury's portion should have the button that shows and hides every answer")
 	}
 
 	// Portion 2 checked before its day stays closed until the day comes.

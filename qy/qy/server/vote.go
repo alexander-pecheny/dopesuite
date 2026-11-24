@@ -194,6 +194,7 @@ func (s *server) portionBody(ctx context.Context, r *http.Request, c contest.Con
 	if len(qs) == 0 {
 		return []ui.Item{ui.Section(head...), ui.Section(ui.Empty(text(str.Vote.Portion.Empty())))}, nil
 	}
+	head = append(head, answersToggle())
 	form := []ui.Item{
 		ui.Hiddenfield(ui.Name("portion"), ui.Value(strconv.Itoa(k)))}
 	for _, q := range inReaderOrder(qs, fmt.Sprintf("%d/%d/%d", c.Year, k, j.userID)) {
@@ -302,10 +303,11 @@ func (s *server) likedBody(ctx context.Context, c contest.Contest, j juror) ([]u
 	if err != nil {
 		return nil, err
 	}
-	head := ui.Section(hint(str.Vote.Portion.Lead(c.PortionDays)), tabs, hint(str.Vote.Liked.Lead(tally.FavouritePoints)))
+	lead := []ui.Item{hint(str.Vote.Portion.Lead(c.PortionDays)), tabs, hint(str.Vote.Liked.Lead(tally.FavouritePoints))}
 	if len(qs) == 0 {
-		return []ui.Item{head, ui.Section(ui.Empty(text(str.Vote.Liked.Empty())))}, nil
+		return []ui.Item{ui.Section(lead...), ui.Section(ui.Empty(text(str.Vote.Liked.Empty())))}, nil
 	}
+	head := ui.Section(append(lead, answersToggle())...)
 	form := []ui.Item{
 		ui.Hiddenfield(ui.Name("portion"), ui.Value(likedTab)),
 		ui.Row(favouriteToggle("", str.Vote.Liked.NoFavourite(), fav == 0, nil))}
