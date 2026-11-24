@@ -2,6 +2,7 @@ package qyserver
 
 import (
 	"net/http"
+	"strings"
 
 	"qy/qy/web/route"
 )
@@ -95,6 +96,13 @@ func routes(s *server) *http.ServeMux {
 	}
 	public := pages.Serve(route.Public, s.handlePublic)
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		// /admin/ is /admin, as a browser's autocomplete often has it. A CMS
+		// page lives at its path with the slash, so only the app's own routes
+		// lose it.
+		if to, ok := withoutSlash(mux, r); ok {
+			http.Redirect(w, r, to, http.StatusMovedPermanently)
+			return
+		}
 		if page := yearPageOf(r.URL.Path); page != "" {
 			yearPages[page](w, r)
 			return
@@ -102,6 +110,23 @@ func routes(s *server) *http.ServeMux {
 		public(w, r)
 	})
 	return mux
+}
+
+// withoutSlash is the request's address without its trailing slash, when
+// that is one of the routes rather than the catch-all.
+func withoutSlash(mux *http.ServeMux, r *http.Request) (string, bool) {
+	p := strings.TrimRight(r.URL.Path, "/")
+	if p == "" || p == r.URL.Path {
+		return "", false
+	}
+	to := *r.URL
+	to.Path, to.RawPath = p, ""
+	probe := r.Clone(r.Context())
+	probe.URL = &to
+	if _, pattern := mux.Handler(probe); pattern == "" || pattern == "GET /" {
+		return "", false
+	}
+	return to.RequestURI(), true
 }
 
 // questionRoutes are an admin's review of one question: the jury's copy, the

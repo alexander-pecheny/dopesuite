@@ -138,3 +138,26 @@ func TestTheRulesSayTheJuryIsComingUntilItIsEntered(t *testing.T) {
 		t.Error("the jury should replace the placeholder")
 	}
 }
+
+// An admin page asked for with a slash goes to its address without one.
+func TestAnAdminAddressWithASlashRedirects(t *testing.T) {
+	w := newWorld(t)
+	anon := w.ts.Anonymous()
+	if res := anon.Get("/admin/?x=1"); res.Code != http.StatusMovedPermanently || res.Header().Get("Location") != "/admin?x=1" {
+		t.Errorf("/admin/ should go to /admin: %d %s", res.Code, res.Header().Get("Location"))
+	}
+	if res := anon.Get("/admin/contest/2026/votes/"); res.Code != http.StatusMovedPermanently || res.Header().Get("Location") != "/admin/contest/2026/votes" {
+		t.Errorf("a nested admin page should lose its slash too: %d %s", res.Code, res.Header().Get("Location"))
+	}
+}
+
+// The menu learns from /api/auth/me whether to offer the admin page.
+func TestTheMenuOffersTheAdminPageToAnAdminOnly(t *testing.T) {
+	w := newWorld(t)
+	if body := w.get(w.admin, "/api/auth/me", http.StatusOK); !strings.Contains(body, `"admin":true`) {
+		t.Errorf("an admin should be told so: %s", body)
+	}
+	if body := w.get(w.user("alice"), "/api/auth/me", http.StatusOK); strings.Contains(body, `"admin"`) {
+		t.Errorf("a nominator should not: %s", body)
+	}
+}

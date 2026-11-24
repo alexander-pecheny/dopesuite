@@ -44,6 +44,8 @@ type meResponse struct {
 	UserID   int64   `json:"user_id"`
 	Username *string `json:"username"`
 	Telegram *string `json:"telegram"`
+	// Admin puts the admin page in the menu.
+	Admin bool `json:"admin,omitempty"`
 }
 
 func meOf(u session.User) meResponse {
@@ -57,8 +59,14 @@ func meOf(u session.User) meResponse {
 	return out
 }
 
-func (s *server) handleMe(w http.ResponseWriter, _ *http.Request, sc route.Scope) error {
-	return writeJSON(w, meOf(sc.User))
+func (s *server) handleMe(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	me := meOf(sc.User)
+	admin, err := s.isAdmin(r.Context(), sc.User)
+	if err != nil {
+		return err
+	}
+	me.Admin = admin
+	return writeJSON(w, me)
 }
 
 func (s *server) handleLogout(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
