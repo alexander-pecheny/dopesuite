@@ -146,9 +146,9 @@ func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 			name := []dopeui.Item{dopeui.Text(t.Name)}
 			switch {
 			case t.Hand:
-				name = []dopeui.Item{dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(), dopeui.Paragraph(dopeui.Text(t.Name)), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeHand())))}
+				name = []dopeui.Item{dopeui.Inline(dopeui.Text(t.Name+" "), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeHand())))}
 			case t.Edited:
-				name = []dopeui.Item{dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(), dopeui.Paragraph(dopeui.Text(t.Name)), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeEdited())))}
+				name = []dopeui.Item{dopeui.Inline(dopeui.Text(t.Name+" "), dopeui.Badge(dopeui.Text(s.Host.Roster.BadgeEdited())))}
 			}
 			cells := []dopeui.Item{}
 			if numbered {

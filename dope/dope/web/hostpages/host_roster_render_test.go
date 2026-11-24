@@ -174,7 +174,7 @@ func TestHostTeamsDocShowsBadgedNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	for _, want := range []string{">Сборная<", ">Бобры<", "вручную", "изменена", `data-team-edit="2"`, `data-team-add="/api/fest/5"`} {
+	for _, want := range []string{">Сборная <span class=\"badge\">вручную<", ">Бобры <span class=\"badge\">изменена<", `data-team-edit="2"`, `data-team-add="/api/fest/5"`} {
 		if !strings.Contains(string(html), want) {
 			t.Errorf("teams page is missing %s", want)
 		}
