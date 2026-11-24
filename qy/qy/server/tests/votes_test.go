@@ -48,7 +48,7 @@ func TestTheAdminsSeeHowEachJurorVoted(t *testing.T) {
 	}
 	pe := page[strings.Index(page, "Народ Один"):]
 	pe = pe[:strings.Index(pe, "</tr>")]
-	if !strings.Contains(pe, ">1<") || !strings.Contains(pe, qy(alpha)) || strings.Contains(pe, qy(beta)) {
+	if !strings.Contains(pe, ">1<") || !strings.Contains(pe, "Порция 1:") || !strings.Contains(pe, qy(alpha)+" (альфа)</a>") || strings.Contains(pe, qy(beta)) {
 		t.Errorf("the people's juror's row should hold their one like: %s", pe)
 	}
 	silent := page[strings.Index(page, "Эксперт Молчун"):]
@@ -60,7 +60,7 @@ func TestTheAdminsSeeHowEachJurorVoted(t *testing.T) {
 		t.Error("the final's table should wait for a mark")
 	}
 	w.ts.Exec(`insert into scores(user_id, question_id, score, updated_at) values((select id from users where username = 'ex1'), ?, 7, '2026-12-31')`, beta)
-	if page := w.get(w.admin, "/admin/contest/2026/votes", http.StatusOK); !strings.Contains(page, "Финал") || !strings.Contains(page, qy(beta)+": 7") {
+	if page := w.get(w.admin, "/admin/contest/2026/votes", http.StatusOK); !strings.Contains(page, "Финал") || !strings.Contains(page, qy(beta)+" (бета): 7") {
 		t.Error("the final's table should show the expert's mark")
 	}
 }

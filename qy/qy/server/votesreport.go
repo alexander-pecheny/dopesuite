@@ -3,9 +3,11 @@ package qyserver
 import (
 	"context"
 	"database/sql"
+	"html"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 
 	"qy/qy/domain/contest"
 	"qy/qy/storage/store"
@@ -49,8 +51,8 @@ func (s *server) handleVotesReport(w http.ResponseWriter, r *http.Request, _ rou
 	if len(jurors) == 0 {
 		body = append(body, ui.Section(hint(str.Admin.Votes.NoJurors())))
 	} else {
-		body = append(body, ui.Section(subhead(str.Admin.Votes.Stage1()), ui.Table(likesRows(jurors)...)))
-		if scored := scoreRows(jurors); scored != nil {
+		body = append(body, ui.Section(subhead(str.Admin.Votes.Stage1()), ui.Table(likesRows(c, jurors)...)))
+		if scored := scoreRows(c, jurors); scored != nil {
 			body = append(body, ui.Section(subhead(str.Admin.Votes.Final()), ui.Table(scored...)))
 		}
 	}
@@ -73,30 +75,54 @@ func jurorCell(j jurorVotes) ui.Item {
 	return ui.Cell(ui.Col(items...))
 }
 
-func qyButton(q store.Question, label string) ui.Item {
-	return ui.Button(ui.Href(questionHref(q.ID)), ui.Ghost, ui.Small(), text(label))
+// qyLink is a question as an inline link: its number and its answer.
+func qyLink(q store.Question, label string) string {
+	return `<a href="` + html.EscapeString(questionHref(q.ID)) + `">` + html.EscapeString(label) + `</a>`
 }
 
-func likesRows(jurors []jurorVotes) []ui.Item {
+// qyName is a question's number with its answer, the first line of it.
+func qyName(q store.Question) string {
+	answer, _, _ := strings.Cut(strings.TrimSpace(q.Clean.Answer), "\n")
+	return str.Admin.Votes.Question(qyLabel(q.QY), strings.TrimRight(answer, ". "))
+}
+
+// byPortion is the links, a line per portion in order, each line headed
+// by its portion.
+func byPortion[T any](c contest.Contest, items []T, qy func(T) int, link func(T) string) ui.Item {
+	var lines []string
+	last := 0
+	for _, it := range items {
+		if k := c.Portion(qy(it)); k != last {
+			last = k
+			lines = append(lines, "<strong>"+html.EscapeString(str.Admin.Votes.Portion(strconv.Itoa(k)))+"</strong> "+link(it))
+			continue
+		}
+		lines[len(lines)-1] += ", " + link(it)
+	}
+	if len(lines) == 0 {
+		return ui.Cell(text(""))
+	}
+	return ui.Cell(ui.Richtext(ui.Raw("<p>" + strings.Join(lines, "</p><p>") + "</p>")))
+}
+
+func likesRows(c contest.Contest, jurors []jurorVotes) []ui.Item {
 	rows := []ui.Item{ui.Scroll(), headRow(str.Admin.Votes.Juror(), str.Admin.Votes.Likes(), str.Admin.Votes.Favourite(), str.Admin.Votes.Liked())}
 	for _, j := range jurors {
 		fav := ui.Cell(text(""))
-		var liked []ui.Item
 		for _, q := range j.liked {
-			liked = append(liked, qyButton(q, qyLabel(q.QY)))
 			if q.QY == j.favourite {
-				fav = ui.Cell(qyButton(q, qyLabel(q.QY)))
+				fav = ui.Cell(ui.Richtext(ui.Raw(qyLink(q, qyName(q)))))
 			}
 		}
-		rows = append(rows, ui.Trow(jurorCell(j), ui.Cell(text(strconv.Itoa(len(j.liked)))), fav,
-			ui.Cell(ui.Row(append([]ui.Item{ui.SpaceXS, ui.Wrap()}, liked...)...))))
+		liked := byPortion(c, j.liked, func(q store.Question) int { return q.QY }, func(q store.Question) string { return qyLink(q, qyName(q)) })
+		rows = append(rows, ui.Trow(jurorCell(j), ui.Cell(text(strconv.Itoa(len(j.liked)))), fav, liked))
 	}
 	return rows
 }
 
 // scoreRows are the final's marks, juror by juror; nil while nobody has
 // given one.
-func scoreRows(jurors []jurorVotes) []ui.Item {
+func scoreRows(c contest.Contest, jurors []jurorVotes) []ui.Item {
 	rows := []ui.Item{ui.Scroll(), headRow(str.Admin.Votes.Juror(), str.Admin.Votes.Scored(), str.Admin.Votes.Scores())}
 	marked := false
 	for _, j := range jurors {
@@ -104,12 +130,10 @@ func scoreRows(jurors []jurorVotes) []ui.Item {
 			continue
 		}
 		marked = marked || len(j.scores) > 0
-		var marks []ui.Item
-		for _, sc := range j.scores {
-			marks = append(marks, qyButton(sc.q, str.Admin.Votes.Score(qyLabel(sc.q.QY), strconv.Itoa(sc.score))))
-		}
-		rows = append(rows, ui.Trow(jurorCell(j), ui.Cell(text(strconv.Itoa(len(j.scores)))),
-			ui.Cell(ui.Row(append([]ui.Item{ui.SpaceXS, ui.Wrap()}, marks...)...))))
+		marks := byPortion(c, j.scores, func(sc jurorScore) int { return sc.q.QY }, func(sc jurorScore) string {
+			return qyLink(sc.q, str.Admin.Votes.Score(qyName(sc.q), strconv.Itoa(sc.score)))
+		})
+		rows = append(rows, ui.Trow(jurorCell(j), ui.Cell(text(strconv.Itoa(len(j.scores)))), marks))
 	}
 	if !marked {
 		return nil

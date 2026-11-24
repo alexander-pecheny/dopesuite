@@ -305,4 +305,7 @@ favourite = "Любимый"
 liked = "Отмеченные вопросы"
 scored = "Оценено"
 scores = "Оценки"
-score = '{{.qy}}: {{.score}}'
+# A question in the lists: its number and its answer, to tell it by.
+question = '{{.qy}} ({{.answer}})'
+score = '{{.question}}: {{.score}}'
+portion = 'Порция {{.n}}:'
