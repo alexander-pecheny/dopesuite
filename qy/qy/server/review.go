@@ -207,10 +207,20 @@ func (s *server) handleDeal(w http.ResponseWriter, r *http.Request, _ route.Scop
 	if err != nil {
 		return err
 	}
-	if st := c.StageAt(s.now()); st == contest.Before || st == contest.Nomination {
-		return userError(str.Admin.Numbering.AfterNomination(dayText(c.NominationEnd)))
+	if _, err := s.deal(r.Context(), c); err != nil {
+		return err
 	}
-	err = s.withWriteTx(r.Context(), "deal", func(ctx context.Context, tx *sql.Tx) error {
+	return seeOther(w, r, contestHref(c.Year)+"/questions")
+}
+
+// deal numbers the questions the nominations count, at random, once a year
+// and only after the nomination stage; it says how many it numbered.
+func (s *server) deal(ctx context.Context, c contest.Contest) (int, error) {
+	if st := c.StageAt(s.now()); st == contest.Before || st == contest.Nomination {
+		return 0, userError(str.Admin.Numbering.AfterNomination(dayText(c.NominationEnd)))
+	}
+	n := 0
+	err := s.withWriteTx(ctx, "deal", func(ctx context.Context, tx *sql.Tx) error {
 		var numbered sql.NullString
 		if err := tx.QueryRowContext(ctx, `select numbered_at from contests where year = ?`, c.Year).Scan(&numbered); err != nil {
 			return err
@@ -222,18 +232,16 @@ func (s *server) handleDeal(w http.ResponseWriter, r *http.Request, _ route.Scop
 		if err != nil {
 			return err
 		}
-		for id, n := range contest.Deal(ids, cryptoRand()) {
-			if _, err := tx.ExecContext(ctx, `update questions set qy = ? where id = ?`, n, id); err != nil {
+		for id, qy := range contest.Deal(ids, cryptoRand()) {
+			if _, err := tx.ExecContext(ctx, `update questions set qy = ? where id = ?`, qy, id); err != nil {
 				return err
 			}
 		}
+		n = len(ids)
 		_, err = tx.ExecContext(ctx, `update contests set numbered_at = ? where year = ?`, s.stamp(), c.Year)
 		return err
 	})
-	if err != nil {
-		return err
-	}
-	return seeOther(w, r, contestHref(c.Year)+"/questions")
+	return n, err
 }
 
 // ---- the question list ----

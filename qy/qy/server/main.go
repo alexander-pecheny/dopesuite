@@ -6,12 +6,15 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/buildinfo"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/webassets"
+
+	"qy/qy/storage/store"
 )
 
 const (
@@ -61,8 +64,10 @@ func runCommand(cmd string, args []string) {
 		runImportGQ(args)
 	case "import-sheet":
 		runImportSheet(args)
+	case "deal":
+		runDeal(args)
 	default:
-		log.Fatalf("unknown command %q (adduser, import-archive, import-gq, import-sheet, version)", cmd)
+		log.Fatalf("unknown command %q (adduser, deal, import-archive, import-gq, import-sheet, version)", cmd)
 	}
 }
 
@@ -93,4 +98,32 @@ func mustServer() *server {
 		log.Fatal(err)
 	}
 	return srv
+}
+
+// runDeal is the contest page's «deal» button from the shell:
+//
+//	qy-server deal <year>
+func runDeal(args []string) {
+	if len(args) != 1 {
+		log.Fatal("usage: qy-server deal <year>")
+	}
+	year, err := strconv.Atoi(args[0])
+	if err != nil {
+		log.Fatal("usage: qy-server deal <year>")
+	}
+	s, err := newServer()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer s.db.Close()
+	ctx := context.Background()
+	c, err := store.Contest(ctx, s.db, year)
+	if err != nil {
+		log.Fatal(err)
+	}
+	n, err := s.deal(ctx, c)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("deal: numbered %d questions for %d", n, year)
 }
