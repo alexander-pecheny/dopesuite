@@ -2,6 +2,7 @@ package question
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -126,5 +127,16 @@ func TestANoteToTheHostDoesNotPartTwoCopies(t *testing.T) {
 	noted.Text += "\n[Если есть возможность, сначала покажите видеокомментарий к ответу: https://www.youtube.com/watch?v=NVCz-QBY15o ]\n{Ведущему: читать медленно, по просьбам игроков повторить}"
 	if !Same(a, noted) {
 		t.Error("a note to the host is not part of the question")
+	}
+}
+
+// A channel's pass rate under a label leaves the question with the bare one.
+func TestALabelledPassRateIsDropped(t *testing.T) {
+	q, ok := Parse("Вопрос 1\nКакое слово мы заменили словом ТАКОЙ?\nОтвет: двенадцатый.\nКомментарий: каждый двенадцатый житель Земли.\nВзятия: 37/267 (14%)\nИсточник: https://example.org\nАвтор: Михаил Карпук")
+	if !ok || strings.Contains(q.Comment, "37/267") || strings.Contains(q.Source, "37/267") || q.Comment != "каждый двенадцатый житель Земли." {
+		t.Errorf("parsed: %+v", q)
+	}
+	if q, _ := Parse("Вопрос 2\nСколько?\nОтвет: два.\nКомментарий: для взятия вопроса нужно знать счёт.\nИсточник: x\nАвтор: y"); q.Comment != "для взятия вопроса нужно знать счёт." {
+		t.Errorf("a comment that only mentions taking the question should stay: %+v", q)
 	}
 }

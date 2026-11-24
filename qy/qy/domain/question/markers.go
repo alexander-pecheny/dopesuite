@@ -14,8 +14,8 @@ import (
 var metaLineRe = regexp.MustCompile(`(?i)^\s*(название турнира|турнир|ссылка на турнир|ссылка на вопрос)\s*:`)
 
 // statsLineRe is the line a channel closes a played question with: how many
-// teams took it, "2/42", then who.
-var statsLineRe = regexp.MustCompile(`^\s*\d+\s*/\s*\d+(\s|$)`)
+// teams took it, "2/42", then who, or under a label, "Взятия: 37/267 (14%)".
+var statsLineRe = regexp.MustCompile(`(?i)^\s*(?:(?:взяти[яейю]|взятий|взяли)\s*:?\s*)?\d+\s*/\s*\d+(\s|$)`)
 
 // numberRe is the line a pasted question opens with, "Вопрос 12".
 var numberRe = regexp.MustCompile(`(?im)^\s*вопрос\s+(\d+)\b`)
