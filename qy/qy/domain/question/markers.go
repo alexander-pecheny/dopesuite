@@ -37,10 +37,13 @@ func isMetaLine(line string) bool {
 
 var (
 	gqLinkRe         = regexp.MustCompile(`https?://(?:www\.)?gotquestions\.online/question/(\d+)`)
-	tournamentLinkRe = regexp.MustCompile(`rating\.chgk\.info/tournaments?/(\d+)(?:#(\d+))?`)
-	parenRe          = regexp.MustCompile(`\([^)]*\)`)
-	authorSplitRe    = regexp.MustCompile(`\s*,\s*|\s+и\s+`)
-	yo               = strings.NewReplacer("ё", "е")
+	tournamentLinkRe = regexp.MustCompile(`(?:rating\.chgk\.info|rating\.pecheny\.(?:me|kz|ru))/tournaments?/(\d+)(?:#(\d+))?`)
+	// ratingMirrorRe is a mirror of rating.chgk.info, whose tournament ids
+	// are the site's own.
+	ratingMirrorRe = regexp.MustCompile(`rating\.pecheny\.(?:me|kz|ru)`)
+	parenRe        = regexp.MustCompile(`\([^)]*\)`)
+	authorSplitRe  = regexp.MustCompile(`\s*,\s*|\s+и\s+`)
+	yo             = strings.NewReplacer("ё", "е")
 )
 
 // WithHandout puts a handout in front of the question text, the way a

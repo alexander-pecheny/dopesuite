@@ -53,7 +53,7 @@ func (s *server) runReviewPass(ctx context.Context) {
 // more work: the redactions and the handout's pictures first, since the
 // translation is made from the copy they produce.
 func (s *server) passSteps() []func(context.Context) (bool, error) {
-	return []func(context.Context) (bool, error){s.reviewOne, s.keepPictureOne, s.detectLangs, s.translateOne}
+	return []func(context.Context) (bool, error){s.reviewOne, s.fillDatesOne, s.keepPictureOne, s.detectLangs, s.translateOne}
 }
 
 // reviewOne handles the oldest pending question and reports whether there
@@ -115,6 +115,40 @@ func (s *server) fillTournament(ctx context.Context, q *store.Question) error {
 	}
 	q.TournamentStart, q.TournamentEnd = t.Start, t.End
 	return nil
+}
+
+// fillDatesOne gives the first question with a tournament and no dates its
+// tournament's dates: one whose tournament an admin set after the review,
+// or whose link the review could not read then. A tournament the site does
+// not answer for is not asked again until the server restarts.
+func (s *server) fillDatesOne(ctx context.Context) (bool, error) {
+	ids, err := store.Collect(ctx, s.db, store.Scalar[int64], `
+select id from questions where tournament_id > 0 and coalesce(tournament_start, '') = '' and ai_status != ? order by id`, store.AIPending)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range ids {
+		q, err := store.GetQuestion(ctx, s.db, id)
+		if err != nil {
+			return false, err
+		}
+		if _, tried := s.datesTried.Load(q.TournamentID); tried {
+			continue
+		}
+		err = s.fillTournament(ctx, &q)
+		// A tournament that gave no dates keeps why, for a debugger to read.
+		s.datesTried.Store(q.TournamentID, err)
+		if err != nil || q.TournamentStart == "" {
+			return true, nil
+		}
+		return true, s.withWriteTx(ctx, "tournament-dates", func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `
+update questions set tournament_title = coalesce(nullif(tournament_title, ''), ?), tournament_start = ?, tournament_end = ?
+where tournament_id = ? and coalesce(tournament_start, '') = ''`, q.TournamentTitle, q.TournamentStart, q.TournamentEnd, q.TournamentID)
+			return err
+		})
+	}
+	return false, nil
 }
 
 func (s *server) askModel(ctx context.Context, q store.Question) ([]anon.Suggestion, error) {

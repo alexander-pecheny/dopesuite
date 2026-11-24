@@ -70,6 +70,9 @@ type server struct {
 	// fetched since the server started, whether they gave a picture or not.
 	pics      picture.Source
 	picsTried sync.Map
+	// datesTried are the tournaments the pass asked the rating site for
+	// dates since the server started, with what it answered.
+	datesTried sync.Map
 	// wake nudges the background pass when a question arrives.
 	wake chan struct{}
 	now  func() time.Time

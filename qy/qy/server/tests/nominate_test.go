@@ -451,3 +451,28 @@ func TestTheNominatePageSaysWhetherNominationIsToComeOrOver(t *testing.T) {
 		t.Error("after the stage the admin should read that it is closed")
 	}
 }
+
+// A tournament link to a mirror of the rating site counts as the site's own:
+// it is stored as the site's link, and the question gets the dates.
+func TestAMirrorTournamentLinkIsTheRatingSites(t *testing.T) {
+	w := newWorld(t)
+	w.ts.SetNow(day(t, "2026-11-10", 12))
+	w.ts.SetRating(rating.Fixed{13919: {Title: "Турнир на зеркале", Start: "2026-03-01", End: "2026-03-02"}})
+	for i, host := range []string{"rating.pecheny.me", "rating.pecheny.kz", "rating.pecheny.ru"} {
+		form := slots("101", map[int]string{1: pasted("Вопрос с зеркала "+host+".", "зеркало"+strconv.Itoa(i), "Алиса")})
+		form.Set("slot1_tournament", "https://"+host+"/tournaments/13919")
+		w.post(w.user("u"+strconv.Itoa(i)), "/2026/nominate", form, http.StatusSeeOther)
+	}
+	w.ts.ReviewPending()
+	if n := w.count(`select count(*) from questions where tournament_id = 13919 and tournament_link = 'https://rating.chgk.info/tournaments/13919' and tournament_start = '2026-03-01'`); n != 3 {
+		t.Errorf("%d of 3 mirror links stored as the site's with the dates", n)
+	}
+
+	// A tournament an admin sets after the review gets its dates on the next pass.
+	w.ts.SetRating(rating.Fixed{13919: {Start: "2026-03-01", End: "2026-03-02"}, 14143: {Start: "2026-04-05", End: "2026-04-06"}})
+	w.ts.Exec(`update questions set tournament_id = 14143, tournament_start = '', tournament_end = '' where json_extract(orig, '$.answer') = 'зеркало0'`)
+	w.ts.ReviewPending()
+	if w.count(`select count(*) from questions where tournament_id = 14143 and tournament_start = '2026-04-05'`) != 1 {
+		t.Error("the pass should fill the dates of a tournament set later")
+	}
+}

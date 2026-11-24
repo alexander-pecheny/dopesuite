@@ -253,6 +253,12 @@ func FindLinks(text string) Links {
 	return l
 }
 
+// WithoutMirror is text with every link to a mirror of rating.chgk.info
+// pointing at the site itself.
+func WithoutMirror(text string) string {
+	return ratingMirrorRe.ReplaceAllString(text, "rating.chgk.info")
+}
+
 // AuthorNames splits a credit line into the names it gives, without the
 // cities in parentheses.
 func AuthorNames(author string) []string {

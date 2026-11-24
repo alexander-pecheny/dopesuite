@@ -245,7 +245,7 @@ func (s *server) slotChanges(ctx context.Context, c contest.Contest, before, aft
 func (s *server) fieldsQuestion(ctx context.Context, year int, in slotInput) store.Question {
 	orig := in.question()
 	q := store.Question{
-		Year: int64(year), SourceText: in.raw, TournamentLink: in.tournament,
+		Year: int64(year), SourceText: in.raw, TournamentLink: question.WithoutMirror(in.tournament),
 		TournamentID: question.FindLinks(in.tournament).TournamentID,
 		Orig:         orig, Clean: orig.Anonymous(), Published: in.published(),
 	}
