@@ -24,9 +24,18 @@ const (
 	stateEditor = "editor"
 )
 
-func closedNominationView(c contest.Contest) view {
+// closedNominationView is the page outside the nomination stage: when it
+// opens, or that it is over.
+func closedNominationView(c contest.Contest, stage contest.Stage) view {
 	return view{title: str.Nominate.Page.Title(), trail: []crumb{{"", str.Nominate.Page.Title()}},
-		body: []ui.Item{ui.Section(hint(str.Nominate.Page.Closed(dayText(c.NominationStart), dayText(c.NominationEnd))))}}
+		body: []ui.Item{ui.Section(hint(closedLine(c, stage)))}}
+}
+
+func closedLine(c contest.Contest, stage contest.Stage) string {
+	if stage == contest.Before {
+		return str.Nominate.Page.NotOpen(dayText(c.NominationStart), dayText(c.NominationEnd))
+	}
+	return str.Nominate.Page.Closed(dayText(c.NominationEnd))
 }
 
 func (s *server) nominationView(r *http.Request, c contest.Contest, sc route.Scope, f nominationForm) view {
@@ -35,8 +44,11 @@ func (s *server) nominationView(r *http.Request, c contest.Contest, sc route.Sco
 		hint(str.Nominate.Page.Eligible(dayText(c.QuestionsFrom), dayText(c.QuestionsTo))),
 		hint(str.Nominate.Page.HowTo()),
 	}
-	if c.StageAt(s.now()) != contest.Nomination && sc.IsAdmin {
+	switch stage := c.StageAt(s.now()); {
+	case stage == contest.Before && sc.IsAdmin:
 		lead = append(lead, hint(str.Nominate.Page.AdminPreview()))
+	case stage != contest.Nomination && sc.IsAdmin:
+		lead = append(lead, hint(str.Nominate.Page.AdminAfter()))
 	}
 	lead = append(lead, noticeOf(r)...)
 	if f.hasErrors() || f.ratingErr != nil {

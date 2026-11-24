@@ -608,11 +608,14 @@ var RU = Strings{
 			},
 		},
 		Page: NominatePageStrings{
+			AdminAfter: func() string {
+				return "Номинация уже закрыта. Вы видите форму, потому что вы админ. Изменения, сохранённые сейчас, попадут в конкурс."
+			},
 			AdminPreview: func() string {
 				return "Номинация ещё не открыта. Вы видите форму, потому что вы админ. Сохранённые сейчас вопросы попадут в конкурс, поэтому после проверки очистите их."
 			},
-			Closed: func(from string, to string) string {
-				return fmt.Sprintf("Номинация вопросов идёт с %s по %s.", from, to)
+			Closed: func(to string) string {
+				return fmt.Sprintf("Номинация вопросов закончилась %s.", to)
 			},
 			Eligible: func(from string, to string) string {
 				return fmt.Sprintf("Подходят вопросы турниров, отыгрыш которых начался с %s по %s.", from, to)
@@ -622,6 +625,9 @@ var RU = Strings{
 			},
 			Lead: func(main string, reserves string, until string) string {
 				return fmt.Sprintf("Можно номинировать до %s вопросов и %s запасных. Форму можно менять до %s включительно.", main, reserves, until)
+			},
+			NotOpen: func(from string, to string) string {
+				return fmt.Sprintf("Номинация вопросов откроется %s и продлится по %s включительно.", from, to)
 			},
 			NotSaved: func() string {
 				return "Номинация не сохранена. Исправьте отмеченные вопросы и сохраните ещё раз."

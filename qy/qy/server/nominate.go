@@ -107,7 +107,7 @@ func (s *server) handleNominatePage(w http.ResponseWriter, r *http.Request, sc r
 		return err
 	}
 	if !s.nominationOpen(c, sc) {
-		return s.ok(w, r, closedNominationView(c))
+		return s.ok(w, r, closedNominationView(c, c.StageAt(s.now())))
 	}
 	slots, err := s.nominationSlots(r.Context(), c.Year, sc.User.UserID)
 	if err != nil {
@@ -141,7 +141,7 @@ func (s *server) handleNominate(w http.ResponseWriter, r *http.Request, sc route
 		return err
 	}
 	if !s.nominationOpen(c, sc) {
-		return userError(str.Nominate.Page.Closed(dayText(c.NominationStart), dayText(c.NominationEnd)))
+		return userError(closedLine(c, c.StageAt(s.now())))
 	}
 	before, err := s.nominationSlots(r.Context(), c.Year, sc.User.UserID)
 	if err != nil {

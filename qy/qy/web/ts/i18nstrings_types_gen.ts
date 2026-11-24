@@ -443,11 +443,13 @@ export type Strings = {
       whatNow: () => string;
     };
     page: {
+      adminAfter: () => string;
       adminPreview: () => string;
-      closed: (from: string, to: string) => string;
+      closed: (to: string) => string;
       eligible: (from: string, to: string) => string;
       howTo: () => string;
       lead: (main: string, reserves: string, until: string) => string;
+      notOpen: (from: string, to: string) => string;
       notSaved: () => string;
       reserves: () => string;
       saved: () => string;

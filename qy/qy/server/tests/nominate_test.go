@@ -429,3 +429,25 @@ func TestAnEditorBarsOnlyTheirOwnTour(t *testing.T) {
 		t.Errorf("gotquestions says Petr edited it: %s", res)
 	}
 }
+
+// Outside the nomination stage the page says whether it is still to come or
+// already over, to a player and to an admin who sees the form anyway.
+func TestTheNominatePageSaysWhetherNominationIsToComeOrOver(t *testing.T) {
+	w := newWorld(t)
+	alice := w.user("alice")
+	w.ts.SetNow(day(t, "2026-11-01", 12))
+	if page := w.get(alice, "/2026/nominate", http.StatusOK); !strings.Contains(page, "Номинация вопросов откроется 9 ноября 2026") {
+		t.Error("before the stage the page should say when it opens")
+	}
+	if page := w.get(w.admin, "/2026/nominate", http.StatusOK); !strings.Contains(page, "Номинация ещё не открыта") {
+		t.Error("before the stage the admin should read that it is not open yet")
+	}
+	w.ts.SetNow(day(t, "2026-11-24", 12))
+	page := w.get(alice, "/2026/nominate", http.StatusOK)
+	if !strings.Contains(page, "Номинация вопросов закончилась 23 ноября 2026.") || strings.Contains(page, "откроется") {
+		t.Error("after the stage the page should say it is over")
+	}
+	if page := w.get(w.admin, "/2026/nominate", http.StatusOK); !strings.Contains(page, "Номинация уже закрыта") || strings.Contains(page, "ещё не открыта") {
+		t.Error("after the stage the admin should read that it is closed")
+	}
+}
