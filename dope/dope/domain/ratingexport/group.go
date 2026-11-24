@@ -218,7 +218,7 @@ func (b *builder) compareFlags(ctx context.Context, team festTeam, site siteTeam
 	shorts := roster.FlagShortNames(team.flags)
 	dope, other := ratingsync.FlagsBase(team.ratingID, shorts), ratingsync.FlagsBase(team.ratingID, site.flags)
 	if b.decide(team, dope, other, onSite, strings.Join(shorts, ", "), strings.Join(site.flags, ", "),
-		func(f *Fact) { f.Flags = site.flags }) != ratingsync.Send {
+		func(f *Fact) { f.Flags = append(append([]string{}, site.flags...), team.outside...) }) != ratingsync.Send {
 		return nil
 	}
 	if err := b.loadFlagIDs(ctx); err != nil {

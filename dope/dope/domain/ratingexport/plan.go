@@ -135,6 +135,29 @@ type festTeam struct {
 	name, city                  string
 	players                     []festPlayer
 	flags                       []roster.FestRosterFlag
+	// outside is the team's Flags the game ranks out of competition: they are
+	// the fest's own, so the export neither compares nor sends them, and a
+	// take from the site keeps them.
+	outside []string
+}
+
+// keepOutside moves the Flags the game ranks out of competition off each
+// team's flags and into its outside ones.
+func keepOutside(teams []festTeam, outside []string) {
+	if len(outside) == 0 {
+		return
+	}
+	for i := range teams {
+		var kept []roster.FestRosterFlag
+		for _, f := range teams[i].flags {
+			if slices.Contains(outside, f.Short) {
+				teams[i].outside = append(teams[i].outside, f.Short)
+			} else {
+				kept = append(kept, f)
+			}
+		}
+		teams[i].flags = kept
+	}
 }
 
 type festPlayer struct {
@@ -197,6 +220,11 @@ func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site, cho
 	if err != nil {
 		return p, err
 	}
+	var outside string
+	if err := db.QueryRowContext(ctx, `select coalesce(outside_divisions, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&outside); err != nil {
+		return p, err
+	}
+	keepOutside(teams, store.ParseHiddenDivisions(outside))
 	groups, err := p.group(ctx, site, kind, venues)
 	if err != nil {
 		return p, err

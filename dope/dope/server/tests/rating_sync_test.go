@@ -123,3 +123,73 @@ join fest_teams t on t.id = tp.team_id where t.fest_id = ? order by tp.roster_or
 		t.Fatalf("after the export the two still differ: %+v", again.Facts)
 	}
 }
+
+// A зачёт the ОД ranks вне зачёта is the fest's own (coaches typed in dope):
+// the export neither compares nor sends it, so a team that carries it as well
+// as the site's зачёт agrees with the site.
+func TestTheExportLeavesTheOutsideDivisionsInDope(t *testing.T) {
+	t.Parallel()
+	site := &fakeRatingSite{t: t}
+	fake := httptest.NewServer(site)
+	t.Cleanup(fake.Close)
+	srv := newAuthTestServer(t)
+	srv.Eng().RatingAPI = fake.URL
+	db := srv.Eng().DB
+	res, err := db.Exec(`insert into fests(title, rating_id, revision, created_at, updated_at, kind) values('Синхрон', 555, 1, '2026-10-25', '2026-10-25', ?)`, multifest.Synch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	festID, _ := res.LastInsertId()
+	brest := multifest.RatingVenue{ID: 20, Request: 200, Title: "Брест"}
+	teams := []roster.FestRosterImportTeam{
+		{RatingID: 3, Name: "Гамма", Venue: brest, Players: []roster.FestRosterImportPlayer{{RatingID: 30, FirstName: "Гамма", LastName: "Капитан"}},
+			Flags: []roster.FestRosterFlag{{RatingID: 59, Short: "ЧР", Full: "Выводящий зачёт ЧР"}}},
+	}
+	if _, err := entrants.ImportFestRoster(srv.Eng(), t.Context(), festID, 555, teams, imports.RosterChoice{}); err != nil {
+		t.Fatal(err)
+	}
+	var gameID int64
+	withTx(t, db, func(ctx context.Context, tx *sql.Tx) error {
+		id, _, err := festops.CreateGameTx(ctx, tx, gamebuild.Spec{FestID: festID, Type: games.OD, Label: "ОД", TourComp: []int{2}})
+		gameID = id
+		return err
+	})
+	site.rosters = map[int64][]int64{3: {30}}
+	site.requests = map[int64]int64{3: 200}
+	site.masks = map[int64]string{}
+	site.flags = map[int64][]int64{3: {59}}
+	var teamID int64
+	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = 3`, festID).Scan(&teamID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`insert into fest_team_flags(team_id, position, short, full) values(?, 2, 'Тр', 'Тренеры')`, teamID); err != nil {
+		t.Fatal(err)
+	}
+	adminID, token := createAPITestSession(t, srv, "boss")
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	if resp := scopedAPIRequest(t, srv, http.MethodPut, "/api/auth/rating-token", map[string]string{"token": "rt_secret"}, token); resp.Code != http.StatusOK {
+		t.Fatalf("save the token: %d %s", resp.Code, resp.Body)
+	}
+	exportURL := fmt.Sprintf("/api/fest/%d/rating-export?game=%d", festID, gameID)
+	type answer struct {
+		Plan ratingexport.Plan `json:"plan"`
+	}
+	flagFacts := func() []ratingexport.Fact {
+		var out []ratingexport.Fact
+		for _, f := range decodeInto[answer](t, scopedAPIRequest(t, srv, http.MethodGet, exportURL, nil, token)).Plan.Facts {
+			if f.Fact == ratingsync.Flags {
+				out = append(out, f)
+			}
+		}
+		return out
+	}
+	if got := flagFacts(); len(got) != 1 {
+		t.Fatalf("before Тр is вне зачёта the export should offer Гамма's зачёты: %+v", got)
+	}
+	if _, err := db.Exec(`update games set outside_divisions = '["Тр"]' where id = ?`, gameID); err != nil {
+		t.Fatal(err)
+	}
+	if got := flagFacts(); len(got) != 0 {
+		t.Fatalf("Тр вне зачёта still goes to the site: %+v", got)
+	}
+}

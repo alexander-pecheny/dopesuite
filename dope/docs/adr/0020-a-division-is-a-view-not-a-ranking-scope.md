@@ -67,3 +67,7 @@ rest and lists the teams вне зачёта below them, ranked among themselves
 the рейтинг is reckoned over everyone, and the server's standings (the
 results API, a seed from this game) do not know of it. A seed that should leave
 the coaches out names its зачёт with `division:`.
+
+Such a зачёт is the fest's own: organizers type it in dope, and the rating
+site has no use for it. The export to the site neither compares nor sends it,
+and a team whose зачёты it takes from the site keeps it.
