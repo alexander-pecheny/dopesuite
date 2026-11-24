@@ -88,6 +88,11 @@ func TestShuffleIsStablePerSeed(t *testing.T) {
 	if reflect.DeepEqual(a, Shuffle(ids, "2026/1/8")) {
 		t.Error("two seeds gave the same order")
 	}
+	// A question taken out leaves the others where they were.
+	without := Shuffle(slices.DeleteFunc(slices.Clone(ids), func(id int64) bool { return id == 5 }), "2026/1/7")
+	if !reflect.DeepEqual(without, slices.DeleteFunc(slices.Clone(a), func(id int64) bool { return id == 5 })) {
+		t.Error("taking a question out moved the others")
+	}
 	slices.Sort(a)
 	if !reflect.DeepEqual(a, ids) {
 		t.Error("shuffle lost or added a question")

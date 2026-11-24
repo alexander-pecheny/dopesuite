@@ -4,9 +4,12 @@
 package contest
 
 import (
-	"hash/fnv"
+	"cmp"
+	"crypto/sha256"
+	"encoding/binary"
 	"math/rand/v2"
 	"slices"
+	"strconv"
 	"time"
 )
 
@@ -173,16 +176,21 @@ func (c Contest) Next() Contest {
 	return n
 }
 
-// Shuffle orders ids the way one reader sees them. The order depends only on
-// the seed, so a juror who reloads the page finds the questions where they
-// left them, and two jurors see different orders.
+// Shuffle orders ids the way one reader sees them. Each question's place
+// comes from a hash of the seed and the question alone, so a juror who
+// reloads the page finds the questions where they left them, two jurors see
+// different orders, and a question taken out of the page or put back leaves
+// the others in the order they were.
 func Shuffle(ids []int64, seed string) []int64 {
-	h := fnv.New64a()
-	h.Write([]byte(seed))
-	s := h.Sum64()
+	// A cryptographic hash, so ids that differ in a digit land far apart.
+	key := func(id int64) uint64 {
+		sum := sha256.Sum256([]byte(seed + "/" + strconv.Itoa(int(id))))
+		return binary.BigEndian.Uint64(sum[:])
+	}
 	out := slices.Clone(ids)
-	slices.Sort(out)
-	rand.New(rand.NewPCG(s, s>>1|1)).Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
+	slices.SortFunc(out, func(a, b int64) int {
+		return cmp.Or(cmp.Compare(key(a), key(b)), cmp.Compare(a, b))
+	})
 	return out
 }
 
