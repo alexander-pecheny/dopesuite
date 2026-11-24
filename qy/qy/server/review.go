@@ -339,16 +339,48 @@ func longListMark(in bool) ui.Item {
 	return ui.Badge(ui.BadgeNegative, text(str.Admin.Questions.LongListNo()))
 }
 
-// datesNote says whether the tournament started inside the window of
+// dates is whether the question's tournament started inside the window of
 // eligible tournaments.
-func datesNote(c contest.Contest, q store.Question) string {
+type dates int
+
+const (
+	datesUnknown dates = iota
+	datesOk
+	datesOff
+)
+
+func datesOf(c contest.Contest, q store.Question) dates {
 	switch {
 	case q.TournamentStart == "":
-		return str.Admin.Question.DatesUnknown()
+		return datesUnknown
 	case q.TournamentStart >= c.QuestionsFrom && q.TournamentStart <= c.QuestionsTo:
-		return str.Admin.Question.DatesOk()
+		return datesOk
 	}
-	return str.Admin.Question.DatesOff()
+	return datesOff
+}
+
+// datesNote says whether the tournament started inside the window.
+func datesNote(c contest.Contest, q store.Question) string {
+	switch datesOf(c, q) {
+	case datesOk:
+		return str.Admin.Question.DatesOk()
+	case datesOff:
+		return str.Admin.Question.DatesOff()
+	}
+	return str.Admin.Question.DatesUnknown()
+}
+
+// datesBadge is datesNote as a badge: green when the dates fit, red when
+// they do not, grey when they are unknown.
+func datesBadge(c contest.Contest, q store.Question) ui.Item {
+	look := ui.BadgeNeutral
+	switch datesOf(c, q) {
+	case datesOk:
+		look = ui.BadgePositive
+	case datesOff:
+		look = ui.BadgeNegative
+	}
+	return ui.Badge(look, text(datesNote(c, q)))
 }
 
 func clip(s string, n int) string {

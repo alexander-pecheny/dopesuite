@@ -97,7 +97,7 @@ func portionAdminTabs(c contest.Contest, total, current int, checked map[int]boo
 func portionQuestion(c contest.Contest, k int, q store.Question) ui.Item {
 	badges := []ui.Item{ui.SpaceSM, ui.AlignCenter, ui.Wrap(),
 		ui.Button(ui.Href(questionHref(q.ID)), ui.Ghost, ui.Small(), ui.IconLink, text(str.Admin.Portions.Open(qyLabel(q.QY)))),
-		publishedBadge(q)}
+		publishedBadge(q), datesBadge(c, q)}
 	if q.Status == store.StatusRejected {
 		badges = append(badges, ui.Badge(ui.BadgeNegative, text(str.Admin.Portions.Rejected())))
 	}

@@ -39,6 +39,9 @@ func TestTheAdminsReadAPortionBeforeTheJury(t *testing.T) {
 	if !strings.Contains(page, "data-toggle-answers") || !strings.Contains(page, `<details data-part="answer">`) {
 		t.Error("the portion should have the button that shows and hides every answer")
 	}
+	if !strings.Contains(page, `class="badge">Даты неизвестны<`) {
+		t.Error("each question should say whether its dates fit")
+	}
 
 	// A fix in place goes back to the question on the portion's page.
 	res := w.admin.Post("/admin/question/"+qy1+"/jury-copy", url.Values{"portion": {"1"}, "text": {"Исправленный вопрос."}, "answer": {"ответ"}, "author": {"Алиса"}})
