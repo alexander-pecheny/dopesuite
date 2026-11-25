@@ -5,13 +5,17 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"code.pecheny.me/pecheny/dopesuite/dopecore/adminusers"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/authweb"
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sameorigin"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"code.pecheny.me/pecheny/dopesuite/dopecore/sqlitex"
@@ -101,20 +105,31 @@ func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
 	})
 }
 
-// storageCell reads "0.16 / 25 MB" — the unit is stated once, and the admin's
-// own uncapped account says so instead of naming a limit.
-func storageCell(u adminUserRow) string {
+// storageCell reads "0.16 /" over an editable "25" field (quota_<id>, saved by
+// the table's form); the MB unit is in the column header, since the page sheet
+// is too narrow to repeat it per row. The admin's own uncapped account has no
+// field and reads "0.16 / ∞".
+func storageCell(u adminUserRow) ui.Item {
 	if u.Unlimited {
-		return humanMB(u.Used) + " / ∞"
+		return ui.Cell(ui.Text(mbNum(u.Used) + " / ∞"))
 	}
-	return mbNum(u.Used) + " / " + humanMB(u.Quota)
+	return ui.Cell(ui.Col(ui.SpaceXS,
+		ui.Line(ui.Text(mbNum(u.Used)+" /")),
+		ui.Numfield(ui.Name(quotaField(u.ID)), ui.Value(mbNum(u.Quota)), ui.Narrow(), ui.Min("0"), ui.Step("any")),
+	))
 }
+
+// quotaFieldPrefix names a row's quota input: quota_<user id>, in MB.
+const quotaFieldPrefix = "quota_"
+
+func quotaField(id int64) string { return quotaFieldPrefix + idstr.Format(id) }
 
 // adminUsersDoc builds the /admin/users page: every account with its telegram
 // handle, storage against quota, and last activity. Login and handle share one
 // column — two lines of the same fact, and three columns fit a phone where five
 // did not.
-func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
+// The table sits in one POST form back to the same URL, so saving keeps the sort.
+func adminUsersDoc(users []adminUserRow, s adminusers.Sort, action string) *ui.Doc {
 	str := xystrings.Default
 	var body ui.Item
 	if len(users) > 0 {
@@ -131,10 +146,13 @@ func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 			rows = append(rows, ui.Trow(
 				who,
 				ui.Cell(ui.Text(kit.AdminTime(u.LastSeenAt))),
-				ui.Cell(ui.Text(storageCell(u))),
+				storageCell(u),
 			))
 		}
-		body = ui.Section(ui.Table(rows...))
+		body = ui.Section(ui.Form(ui.DirCol, ui.SpaceMD, ui.Method("post"), ui.Action(action), ui.Autocomplete("off"),
+			ui.Table(rows...),
+			ui.Row(ui.Button(ui.Submit(), ui.Text(str.Admin.Users.Save()))),
+		))
 	} else {
 		body = ui.Section(ui.Hint(ui.Text(str.Admin.Users.Empty())))
 	}
@@ -151,8 +169,17 @@ func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 // HandleAdminUsers serves /admin/users — the account list, ordered by ?sort/?dir.
 // Activity is the newest session's last_seen_at, not its created_at: sessions
 // slide, so someone who visits daily on the same cookie never logs in again.
+// POST saves the edited quotas and redirects back to the same view.
 func (s *server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAdmin(w, r); !ok {
+		return
+	}
+	if r.Method == http.MethodPost {
+		if !sameorigin.Allowed(r, os.Getenv(trustedOriginHostsEnv)) {
+			http.Error(w, "bad origin", http.StatusForbidden)
+			return
+		}
+		s.handleAdminQuotasSubmit(w, r)
 		return
 	}
 	users, err := s.loadAdminUsers(r.Context())
@@ -162,7 +189,80 @@ func (s *server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	order := adminusers.ParseSort(r.URL.Query(), "used", "last")
 	sortAdminUsers(users, order)
-	s.renderAdminPage(w, adminUsersDoc(users, order))
+	s.renderAdminPage(w, adminUsersDoc(users, order, r.URL.RequestURI()))
+}
+
+// maxQuotaMB is the largest quota whose byte count still fits an int64.
+const maxQuotaMB = math.MaxInt64 / bytesPerMiB
+
+// parseQuotaMB reads one quota field, in MB ("2.5" or "2,5"), as bytes. NaN
+// fails both comparisons and ±Inf fails one, so neither gets through.
+func parseQuotaMB(v string) (int64, bool) {
+	mb, err := strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(v), ",", "."), floatBits)
+	if err != nil || !(mb >= 0 && mb <= maxQuotaMB) {
+		return 0, false
+	}
+	return int64(math.Round(mb * bytesPerMiB)), true
+}
+
+// parseQuotas reads the quota_<id> fields into bytes per user id. One bad
+// value fails the whole save.
+func parseQuotas(form map[string][]string) (map[int64]int64, error) {
+	out := map[int64]int64{}
+	for key, vals := range form {
+		idStr, ok := strings.CutPrefix(key, quotaFieldPrefix)
+		if !ok || len(vals) == 0 {
+			continue
+		}
+		id, err := idstr.Parse(idStr)
+		if err != nil {
+			return nil, errors.New("bad quota field " + key)
+		}
+		q, ok := parseQuotaMB(vals[0])
+		if !ok {
+			return nil, errors.New("bad quota for user " + idStr)
+		}
+		out[id] = q
+	}
+	return out, nil
+}
+
+// handleAdminQuotasSubmit saves the edited quotas, then sends the admin back to
+// the same view.
+func (s *server) handleAdminQuotasSubmit(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	quotas, err := parseQuotas(r.PostForm)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	err = s.withWriteTx(r.Context(), "admin-quotas", func(ctx context.Context, tx *sql.Tx) error {
+		return saveQuotas(ctx, tx, quotas, time.Now())
+	})
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	http.Redirect(w, r, r.URL.RequestURI(), http.StatusSeeOther)
+}
+
+// saveQuotas writes every changed quota. A value that shows as the same MB
+// figure (two decimals, as mbNum rounds) is left alone, so saving an untouched
+// row never rewrites a quota set in bytes that the page rounds. Unknown ids
+// match no row.
+func saveQuotas(ctx context.Context, tx *sql.Tx, quotas map[int64]int64, now time.Time) error {
+	for id, q := range quotas {
+		if _, err := tx.ExecContext(ctx, `
+update users set quota_bytes = ?, updated_at = ?
+where id = ? and round(quota_bytes * 1.0 / ?, 2) <> round(? * 1.0 / ?, 2)`,
+			q, rfc3339(now), id, bytesPerMiB, q, bytesPerMiB); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // loadAdminUsers reads every account, then prices each one's storage. The

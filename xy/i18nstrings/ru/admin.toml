@@ -19,9 +19,11 @@ title = "Пользователи · Админка"
 # The table's column headers.
 col_user = "Пользователь"
 col_activity = "Активность"
-col_storage = "Хранилище"
+col_storage = "Хранилище, МБ"
 # The users page's empty state.
 empty = "Пользователей нет."
+# The button that saves the edited quotas.
+save = "Сохранить лимиты"
 
 [create_users]
 # The reason beside a username this app's rules rejected, handed to

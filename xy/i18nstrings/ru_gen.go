@@ -21,10 +21,11 @@ var RU = Strings{
 		},
 		Users: AdminUsersStrings{
 			ColActivity: func() string { return "Активность" },
-			ColStorage:  func() string { return "Хранилище" },
+			ColStorage:  func() string { return "Хранилище, МБ" },
 			ColUser:     func() string { return "Пользователь" },
 			Empty:       func() string { return "Пользователей нет." },
 			Name:        func() string { return "Пользователи" },
+			Save:        func() string { return "Сохранить лимиты" },
 			Title:       func() string { return "Пользователи · Админка" },
 		},
 	},

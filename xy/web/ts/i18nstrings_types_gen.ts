@@ -18,6 +18,7 @@ export type Strings = {
       colUser: () => string;
       empty: () => string;
       name: () => string;
+      save: () => string;
       title: () => string;
     };
   };

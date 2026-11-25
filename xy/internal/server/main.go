@@ -176,6 +176,7 @@ func routes(srv *server) *http.ServeMux {
 	mux.HandleFunc("GET /admin/create_users", srv.serverOnly(srv.HandleAdminCreateUsers))
 	mux.HandleFunc("POST /admin/create_users", srv.serverOnly(srv.HandleAdminCreateUsers))
 	mux.HandleFunc("GET /admin/users", srv.serverOnly(srv.HandleAdminUsers))
+	mux.HandleFunc("POST /admin/users", srv.serverOnly(srv.HandleAdminUsers))
 
 	// ---- PWA: service worker + manifest at the site root (scope '/') ----
 	mux.HandleFunc("GET /sw.js", srv.serveRootAsset(
