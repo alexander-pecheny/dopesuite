@@ -5309,3 +5309,13 @@ body.is-fullscreen.od-page .match-main {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* A two-seat bout drawn without places (Brain's `bold_winner`): the name
+   and Σ, the winner in bold once the bout is finished. */
+.grid-slot-grid.grid-slot-grid-placeless {
+  grid-template-columns: minmax(0, 1fr) var(--grid-num-col);
+}
+
+.grid-slot-cell.grid-slot-winner {
+  font-weight: var(--fw-bold);
+}

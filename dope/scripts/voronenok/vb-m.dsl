@@ -11,6 +11,8 @@
 
 [defaults]
 questions: 5
+# Бои на Сетке без мест: победитель жирным.
+bold_winner: true
 
 [scheme]
 kind: swiss_classic
@@ -33,3 +35,4 @@ bouts.r5: [Финал: III.1-1 IV.1-1]
 questions.r3: 7
 questions.r4: 7
 questions.r5: 9
+title.r5: Финал

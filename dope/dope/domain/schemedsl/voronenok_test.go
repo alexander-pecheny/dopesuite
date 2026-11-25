@@ -39,6 +39,9 @@ func TestVoronenokSchemesCompile(t *testing.T) {
 		if q := stageConfig(t, stage)["questions"]; q != wantQuestions {
 			t.Errorf("%s: final plays %v questions, want %v", file, q, wantQuestions)
 		}
+		if file == "vb-m.dsl" && stage.Title != "Плей-офф. Финал" {
+			t.Errorf("%s: the final is titled %q, want «Плей-офф. Финал»", file, stage.Title)
+		}
 	}
 }
 
@@ -110,6 +113,99 @@ func TestWrittenSingleEliminationRefuses(t *testing.T) {
 			t.Errorf("%s: compiled", name)
 		} else {
 			t.Logf("%s: %v", name, err)
+		}
+	}
+}
+
+// rotate_venues moves the venue a short last wave leaves empty one venue back
+// each round, the empty table's bout just before it: 37 teams at ten venues
+// play a round as ten bouts and nine, and the organizers' table leaves venue
+// 10 idle in round 1, venue 9 in round 2, and so on round the venues.
+func TestSwissRotatesTheShortWavesEmptyVenue(t *testing.T) {
+	src := `
+[defaults]
+venues: 10
+questions: 5
+
+[scheme]
+kind: swiss_classic
+rounds: 11
+rotate_venues: true
+`
+	scheme := compileSrc(t, src, Input{Slug: "vb", Title: "Вопросики быстрые", GameType: games.Brain, Entrants: troikaEntrants(37)})
+	for r := 1; r <= 11; r++ {
+		first := stageByCode(t, scheme, "s1-r"+strconv.Itoa(r)+"-w1")
+		for i, match := range first.Matches {
+			if match.Venue != i+1 {
+				t.Errorf("round %d, wave 1: %s at venue %d, want %d", r, match.Code, match.Venue, i+1)
+			}
+		}
+		second := stageByCode(t, scheme, "s1-r"+strconv.Itoa(r)+"-w2")
+		if len(second.Matches) != 9 {
+			t.Fatalf("round %d, wave 2 has %d бои, want 9", r, len(second.Matches))
+		}
+		empty := 10 - (r-1)%10
+		used := map[int]bool{}
+		for _, match := range second.Matches {
+			used[match.Venue] = true
+		}
+		if used[empty] || len(used) != 9 {
+			t.Errorf("round %d, wave 2 plays at %v, want every venue but %d", r, used, empty)
+		}
+		table := second.Matches[len(second.Matches)-1]
+		if want := (empty+8)%10 + 1; table.Venue != want {
+			t.Errorf("round %d: the empty table at venue %d, want %d, just before the empty venue %d", r, table.Venue, want, empty)
+		}
+	}
+}
+
+// Without rotate_venues the short wave keeps its venues every round: the
+// wave's bouts from venue 1, the venues after them empty.
+func TestSwissKeepsTheShortWaveInPlace(t *testing.T) {
+	src := `
+[defaults]
+venues: 10
+
+[scheme]
+kind: swiss_classic
+rounds: 3
+`
+	scheme := compileSrc(t, src, Input{Slug: "vb", Title: "Вопросики быстрые", GameType: games.Brain, Entrants: troikaEntrants(37)})
+	for r := 1; r <= 3; r++ {
+		second := stageByCode(t, scheme, "s1-r"+strconv.Itoa(r)+"-w2")
+		for i, match := range second.Matches {
+			if match.Venue != i+1 {
+				t.Errorf("round %d, wave 2: %s at venue %d, want %d", r, match.Code, match.Venue, i+1)
+			}
+		}
+	}
+}
+
+// The Воронёнок's schemes switch on the formats' own keys: ЭК reads its
+// shootout themes after the first from 50 down (2.1.11), and the Вопросики
+// быстрые draw their bouts on the grid with the winner in bold, not places.
+func TestVoronenokFormatKeys(t *testing.T) {
+	for file, want := range map[string]struct {
+		gameType, key string
+		teams         int
+	}{
+		"ek-m.dsl":  {games.EK, "reverseShootout", 16},
+		"ek-sh.dsl": {games.EK, "reverseShootout", 32},
+		"vb-m.dsl":  {games.Brain, "boldWinner", 23},
+		"vb-sh.dsl": {games.Brain, "boldWinner", 23},
+	} {
+		src, err := os.ReadFile("../../../scripts/voronenok/" + file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		scheme := compileSrc(t, string(src), Input{Slug: "v", Title: "Воронёнок", GameType: want.gameType, Entrants: troikaEntrants(want.teams)})
+		for _, stage := range scheme.Stages {
+			if len(stage.Matches) == 0 {
+				continue
+			}
+			if got := stageConfig(t, stage)[want.key]; got != true {
+				t.Errorf("%s: %s has %s = %v, want true", file, stage.Code, want.key, got)
+			}
 		}
 	}
 }

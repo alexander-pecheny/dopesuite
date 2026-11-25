@@ -11,6 +11,11 @@
 # before_rulings: true
 # division: Ш
 
+# Регламент 2.1.10–2.1.11: при равенстве одна дополнительная тема по правилам
+# полуоткрытого раунда, затем темы обратной перестрелки (с 50 вниз), П2 и далее.
+[defaults]
+reverse_shootout: true
+
 [scheme]
 kind: single_elimination
 title: Эрудит-квартет

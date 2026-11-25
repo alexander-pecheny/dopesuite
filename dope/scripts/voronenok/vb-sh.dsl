@@ -11,6 +11,8 @@
 
 [defaults]
 questions: 5
+# Бои на Сетке без мест: победитель жирным.
+bold_winner: true
 
 [scheme]
 kind: swiss_classic
@@ -18,6 +20,9 @@ title: Отборочный этап
 rounds: 7
 zero_draw_points: 0
 proceeding_participants: 8
+# Площадка, где во втором заходе нет боя, сдвигается на одну назад каждый
+# круг, стол перед ней; при одном заходе ничего не меняет.
+rotate_venues: true
 ---
 kind: double_elimination
 title: Плей-офф

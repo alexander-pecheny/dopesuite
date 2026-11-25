@@ -48,7 +48,7 @@ interface FestInfo {
   gameName?: string;
   gameType?: string;
   schemaJson?: unknown;
-  stages?: FestGridStage[];
+  stages?: Array<FestGridStage & {config?: {config?: StageParams} | null}>;
   [key: string]: unknown;
 }
 
@@ -66,8 +66,14 @@ interface SchemeStage {
   stage_type?: string;
   matches?: SchemeMatch[];
   members?: string[];
-  config?: {rules?: {bout?: {points?: string}}; entrants?: Array<{label?: string}>};
+  config?: {rules?: {bout?: {points?: string}}; entrants?: Array<{label?: string}>} & StageParams;
   grain?: {block?: string; group?: string};
+}
+
+// StageParams are the protocol's params a stage's config carries (the DSL's
+// format keys, cascaded per Round).
+interface StageParams {
+  reverseShootout?: boolean;
 }
 
 interface EKScheme {
@@ -114,7 +120,7 @@ const answers = stackedSheet({
   bouts: () => tabBouts(page.tab()),
   codeOf: (bout: BoutEntry) => bout.code,
   rowsOf: (bout: BoutEntry) => seatsOf(bout.view).map((_id, seat) => ({seat})),
-  columnsOf: (bout: BoutEntry) => ek.sheetColumns(themeCountOf(bout.view), shootoutCount(bout.code)),
+  columnsOf: (bout: BoutEntry) => ek.sheetColumns(themeCountOf(bout.view), shootoutCount(bout.code), reverseShootout(bout.code)),
   marks: {
     markOf: (cell) => {
       const view = page.view(cell.match);
@@ -195,6 +201,20 @@ function shootoutCount(code: string): number {
   return Math.max(0, ...[...stateOf(code).sections.values()].map((section) => section.shootoutThemes.length));
 }
 
+// reverseShootout is whether the bout's stage plays its shootout themes after
+// the first backwards: the fest view's copy of the stage config, else the
+// scheme's.
+function reverseShootout(code: string): boolean {
+  const live = fest?.stages?.find((stage) => stage?.matches?.some((match) => match.code === code));
+  const planned = scheme.stages?.find((stage) => stage.matches?.some((match) => match.code === code));
+  return Boolean(live?.config?.config?.reverseShootout ?? planned?.config?.reverseShootout);
+}
+
+// backwards is whether a theme column of the bout is read from 50 down.
+function backwards(code: string, kind: ThemeKind, theme: number): boolean {
+  return ek.readsBackwards(kind, theme, reverseShootout(code));
+}
+
 function seatCap(view: EKMatchView | undefined): number {
   return Math.max(1, view?.players || 1);
 }
@@ -212,7 +232,7 @@ interface ThemeColumn {
 
 // themeColumns are the sheet's themes, each over its questions' columns.
 function themeColumns(code: string): ThemeColumn[] {
-  return ek.sheetColumns(themeCountOf(page.view(code)), shootoutCount(code))
+  return ek.sheetColumns(themeCountOf(page.view(code)), shootoutCount(code), reverseShootout(code))
     .filter((column) => column.q === 0)
     .map(({cellKind, theme}) => ({kind: cellKind, theme}));
 }
@@ -248,7 +268,7 @@ function buildBout(bout: BoutEntry): HTMLElement {
     placeColumn: true,
     themes: columns.map((column) => ({
       label: column.kind === "themes" ? S.ek.theme.column(String(column.theme + 1)) : S.ek.shootout.column(String(column.theme + 1)),
-      questionLabels: values,
+      questionLabels: ek.questionOrder(backwards(code, column.kind, column.theme)).map((q) => values[q]),
       questionClassName: column.kind === "shootoutThemes" ? "question-head shootout-head" : undefined,
       labelClassName: column.kind === "shootoutThemes" ? "theme-head shootout-head" : undefined,
     })),
@@ -355,7 +375,8 @@ function themeRow(bout: BoutEntry, seat: number, column: ThemeColumn, editable: 
     attrs: {rowSpan},
     dataset: figureData("score", {seat, cellKind: column.kind, theme: column.theme}),
   };
-  const answers = values.map((_value, q) => markCell(bout, seat, column, q, theme?.answers[q] || "", editable));
+  const answers = ek.questionOrder(backwards(code, column.kind, column.theme))
+    .map((q) => markCell(bout, seat, column, q, theme?.answers[q] || "", editable));
   // A player seats himself in individual SI: his row has no player cell.
   if (individual) return {scoreCell, answers};
   if (viewer) return {playerCell: readonlyPlayerCell(bout, seat, theme?.players || []), scoreCell, answers};
@@ -427,7 +448,8 @@ function markCell(bout: BoutEntry, seat: number, column: ThemeColumn, q: number,
 }
 
 // boutHeader is the sheet's name column head: the bout's lettered name, where
-// and when it is played, and for a host the finished tick.
+// and when it is played, and the finished tick: a host ticks it, a spectator
+// sees whether the bout is over.
 function boutHeader(bout: BoutEntry): HTMLElement {
   const node = th("", "battle");
   const layout = document.createElement("span");
@@ -437,7 +459,7 @@ function boutHeader(bout: BoutEntry): HTMLElement {
   title.textContent = boutTitle(bout);
   layout.appendChild(title);
   layout.append(...page.whereWhen(bout.code, {title: title.textContent || "", venueAlways: !viewer, className: "battle-venue"}));
-  if (!viewer) layout.appendChild(page.finishToggle(bout.code, {title: S.ek.bout.finished()}));
+  layout.appendChild(page.finishToggle(bout.code, {title: S.ek.bout.finished()}));
   node.appendChild(layout);
   return node;
 }

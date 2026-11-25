@@ -24,12 +24,15 @@ type ek struct{}
 
 func (ek) Code() string { return "ek" }
 
-// Params: how many themes a Block's matches play, and how many players a team
-// seats on one — one in EK, where the quartet sends a player per theme.
+// Params: how many themes a Block's matches play, how many players a team
+// seats on one — one in EK, where the quartet sends a player per theme — and
+// whether the shootout themes after the first are read from the dearest
+// question down (the Voronenok's reverse shootout, regulations 2.1.11).
 func (ek) Params() []Param {
 	return []Param{
 		{Key: "themes", Config: "themes"},
 		{Key: "players", Config: "players", Default: EKPlayersPerTheme},
+		{Key: "reverse_shootout", Config: "reverseShootout", Bool: true},
 	}
 }
 

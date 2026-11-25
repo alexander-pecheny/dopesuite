@@ -591,3 +591,25 @@ test("a seat the server marks as a seed's shows its number", () => {
   });
   assert.deepEqual(texts(grid, "seed-number"), ["3"]);
 });
+
+// Brain's bold_winner: a бой of two drops М, and once it is finished its
+// winner's row is bold. A бой still playing, or drawn, bolds nobody.
+test("bold_winner draws a бой of two without places, its winner bold", () => {
+  const bout = (code, status, places) => ({
+    code, status, participantCount: 2, slots: [{label: "А"}, {label: "Б"}],
+    participants: [{name: "А", total: 3, place: places[0]}, {name: "Б", total: 1, place: places[1]}],
+  });
+  const stage = (boldWinner) => ({
+    code: "s1-r1", title: "Круг 1", stage_type: "matches", config: {config: {boldWinner}},
+    matches: [bout("s1-r1-m1", "finished", [1, 2]), bout("s1-r1-m2", "live", [1, 2]), bout("s1-r1-m3", "finished", [1, 1])],
+  });
+  const bold = buildFestGrid({stages: [stage(true)]});
+  assert.deepEqual(column(bold, "place"), []);
+  assert.equal(withClass(bold, "grid-slot-grid-placeless").length, 3);
+  const winners = withClass(bold, "grid-slot-winner");
+  assert.deepEqual(winners.map((cell) => cell.textContent), ["", "3"]);
+  assert.deepEqual(withClass(winners[0], "name-cell-text").map((n) => n.textContent), ["А"]);
+  const plain = buildFestGrid({stages: [stage(false)]});
+  assert.deepEqual(column(plain, "place"), ["М", "М", "М", "1", "2", "1", "2", "1", "1"]);
+  assert.equal(withClass(plain, "grid-slot-winner").length, 0);
+});

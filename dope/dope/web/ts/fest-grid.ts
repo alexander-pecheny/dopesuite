@@ -108,6 +108,16 @@ export interface FestGridStage {
   reseedEntries?: ReseedEntry[];
   reseedBlockedMessage?: string;
   reseedPendingMatches?: Array<string | number | null | undefined>;
+  // config is the stage's config: the fest view wraps the stage's own in
+  // config.config, the scheme's copy is the stage's own.
+  config?: ({config?: GridStageParams | null} & GridStageParams) | null;
+}
+
+// GridStageParams are the protocol params a grid reads off a stage: Brain's
+// bold_winner drops the places from a two-seat bout's box and sets its
+// winner in bold.
+export interface GridStageParams {
+  boldWinner?: boolean;
 }
 
 export interface FestGridData {
@@ -791,12 +801,13 @@ function drawOptions(draw: DrawSlot): Array<{id: number; name: string; source?: 
   return [...(draw.candidates || []), ...(draw.substitutes || [])];
 }
 
-function buildMatchBoxes({live, boxes}: GridBoxes, ctx: PaintContext): HTMLElement {
+function buildMatchBoxes({stage, live, boxes}: GridBoxes, ctx: PaintContext): HTMLElement {
   const matches = document.createElement("div");
   matches.className = "grid-matches";
   const liveMatches = new Map((live.matches || []).map((match) => [match.code, match]));
+  const bold = Boolean(live.config?.config?.boldWinner ?? stage.config?.boldWinner);
   for (const item of boxes) {
-    const box = buildMatchBox(item.match, liveMatches.get(item.match.code), item.rows, ctx);
+    const box = buildMatchBox(item.match, liveMatches.get(item.match.code), item.rows, ctx, undefined, bold);
     spanRows(box, item);
     matches.appendChild(box);
   }
@@ -827,18 +838,21 @@ function spanRows(box: HTMLElement, item: GridItem): void {
   box.style.setProperty("grid-row", item.row ? `${item.row} / span ${item.units}` : `span ${item.units}`);
 }
 
-function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefined, rows: number, ctx: PaintContext, extra?: BoutColumn): HTMLElement {
+// boldWinner, on a bout of two seats, leaves the place out and sets the
+// winner's row in bold instead; a bout of more seats keeps its places.
+function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefined, rows: number, ctx: PaintContext, extra?: BoutColumn, boldWinner = false): HTMLElement {
   const box = document.createElement("article");
   box.className = `grid-box grid-match ${liveMatch?.status || "pending"}`;
   box.dataset.matchCode = match.code || "";
   if (match.bracket) box.dataset.bracket = match.bracket;
 
+  const placeless = boldWinner && !extra && rows - 1 === 2;
   const venue = firstVenue(liveMatch?.venue, match.venue);
   const grid = document.createElement("div");
-  grid.className = extra ? "grid-slot-grid grid-slot-grid-extra" : "grid-slot-grid";
+  grid.className = extra ? "grid-slot-grid grid-slot-grid-extra" : placeless ? "grid-slot-grid grid-slot-grid-placeless" : "grid-slot-grid";
   grid.appendChild(matchHeadCell(match, venue, ctx, liveMatch?.startsAt ?? match.startsAt));
   grid.appendChild(gridHeadCell("slot-total-head", "Σ"));
-  grid.appendChild(gridHeadCell("slot-place-head", S.fest.grid.colPlace()));
+  if (!placeless) grid.appendChild(gridHeadCell("slot-place-head", S.fest.grid.colPlace()));
   if (extra) grid.appendChild(gridHeadCell("slot-total-head", extra.head));
   const liveTeams = liveMatch?.participants || [];
   const slots = match.slots || [];
@@ -846,7 +860,7 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
   for (let index = 0; index < rows - 1; index += 1) {
     const slot = slots[index];
     if (!slot) {
-      phantomSlotCells().forEach((cell) => grid.appendChild(cell));
+      phantomSlotCells().slice(0, placeless ? 2 : 3).forEach((cell) => grid.appendChild(cell));
       if (extra) grid.appendChild(gridCell("slot-total grid-slot-phantom-cell", ""));
       continue;
     }
@@ -854,8 +868,12 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
     const cells = [
       slotTeamCell(slotLabel(slot, live, ctx.letters), slotSeed(slot, live)),
       gridCell("slot-total", scoreText(live.total)),
-      gridCell("slot-place", placeText(live.place)),
     ];
+    if (!placeless) cells.push(gridCell("slot-place", placeText(live.place)));
+    // A finished bout's winner: the one place 1 of the two (a draw has two).
+    if (placeless && liveMatch?.status === "finished" && live.place === 1 && liveTeams.filter((team) => team?.place === 1).length === 1) {
+      cells.forEach((cell) => cell.classList.add("grid-slot-winner"));
+    }
     if (extra) cells.push(gridCell("slot-total", extra.values[index] || ""));
     realRows.push(cells);
     cells.forEach((cell) => grid.appendChild(cell));

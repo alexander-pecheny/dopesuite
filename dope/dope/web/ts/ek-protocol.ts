@@ -129,18 +129,37 @@ export function shootoutThemePath(id: number, theme: number): Array<string | num
   return ["participants", String(id), "shootoutThemes", theme];
 }
 
+// readsBackwards is whether a theme is read from its dearest question down:
+// with the reverse shootout (the scheme's `reverse_shootout`), every shootout
+// theme after the first is. The regulations play one extra theme as the
+// half-open round, then reverse shootout themes until the score changes.
+export function readsBackwards(kind: ThemeKind, theme: number, reverseShootout: boolean): boolean {
+  return reverseShootout && kind === "shootoutThemes" && theme > 0;
+}
+
+// questionOrder is the order a theme's questions are read and drawn in, as
+// indexes into its answers: a mark stays under its value whichever way the
+// theme runs.
+export function questionOrder(backwards: boolean): number[] {
+  const order = Array.from({length: QUESTIONS}, (_, q) => q);
+  return backwards ? order.reverse() : order;
+}
+
 // SheetColumn is one answer column of a bout sheet; sheetColumns are a bout's
-// in order: the regular themes, then the shootout themes, five questions each.
+// in order: the regular themes, then the shootout themes, five questions each,
+// in the order they are read.
 export interface SheetColumn {
   cellKind: ThemeKind;
   theme: number;
   q: number;
 }
 
-export function sheetColumns(themes: number, shootouts: number): SheetColumn[] {
+export function sheetColumns(themes: number, shootouts: number, reverseShootout = false): SheetColumn[] {
   const out: SheetColumn[] = [];
   const add = (kind: ThemeKind, count: number) => {
-    for (let theme = 0; theme < count; theme++) for (let q = 0; q < QUESTIONS; q++) out.push({cellKind: kind, theme, q});
+    for (let theme = 0; theme < count; theme++) {
+      for (const q of questionOrder(readsBackwards(kind, theme, reverseShootout))) out.push({cellKind: kind, theme, q});
+    }
   };
   add("themes", themes);
   add("shootoutThemes", shootouts);

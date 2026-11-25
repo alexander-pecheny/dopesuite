@@ -422,9 +422,9 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   table.classList.toggle("match-finished", Boolean(view.finished));
   table.dataset.match = code;
 
-  // When the bout starts, once the host gave it a time, with its venue, and
-  // the host's pencil that sets both.
-  const whereWhen = page.whereWhen(code, {title: view.title || code, venueAlways: false, className: "battle-venue"});
+  // Where the bout is played, when it starts once the host gave it a time,
+  // and the host's pencil that sets both: a host finds their bouts by venue.
+  const whereWhen = page.whereWhen(code, {title: view.title || code, venueAlways: true, className: "battle-venue"});
   // The time goes over the table; the pencil sits by the finished tick, so a
   // bout with no time keeps the one head row it always had.
   const pencil = whereWhen.find((node) => node.classList.contains("venue-edit-button"));

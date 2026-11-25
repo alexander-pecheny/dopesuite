@@ -32,10 +32,13 @@ type brain struct{}
 func (brain) Code() string { return "brain" }
 
 // questions is always written: reseed share metrics divide by it.
+// bold_winner draws a bout's box on the grid without its places, the winner
+// in bold: of two seats the place says no more than who won.
 func (brain) Params() []Param {
 	return []Param{
 		{Key: "questions", Config: "questions", Default: BrainQuestionCount},
 		{Key: "tiebreak_questions", Config: "tiebreakQuestions", Bool: true},
+		{Key: "bold_winner", Config: "boldWinner", Bool: true},
 	}
 }
 

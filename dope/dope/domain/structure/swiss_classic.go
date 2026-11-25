@@ -35,7 +35,7 @@ type swissClassic struct{}
 func (swissClassic) Code() string { return "swiss_classic" }
 func (swissClassic) Word() string { return "swiss_classic" }
 func (swissClassic) Keys() []Key {
-	return []Key{{Name: "participants"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "zero_draw_points"}}
+	return []Key{{Name: "participants"}, {Name: "rounds"}, {Name: "points", Cascade: true}, {Name: "zero_draw_points"}, {Name: "rotate_venues"}}
 }
 
 // SwissClassicConfig is what both the table and a round's pairing read: what
@@ -106,6 +106,7 @@ func (swissClassic) Expand(b Block) (Outputs, error) {
 		}
 	}
 
+	rotate, _ := b.Bool("rotate_venues")
 	blockCode := b.Code()
 	conf.Code = blockCode + "-table"
 	pairs := participants / 2
@@ -158,6 +159,9 @@ func (swissClassic) Expand(b Block) (Outputs, error) {
 				ParticipantCount: 2,
 				Slots:            []store.SchemeSlot{last, bye},
 			})
+		}
+		if rotate {
+			rotateShortWave(matches, lanes, r)
 		}
 		emitted, err := b.Emit(Stage{
 			Code:        stageCode,
@@ -571,4 +575,27 @@ func orderPairs(pairs [][2]int64, ids []int64) [][2]int64 {
 	}
 	sort.Slice(out, func(i, j int) bool { return at[out[i][0]] < at[out[j][0]] })
 	return out
+}
+
+// rotateShortWave moves the venues a round's last wave leaves empty one venue
+// back each round, so no venue sits idle every round: with 37 teams at ten
+// venues in two waves, round 1 leaves venue 10 empty in its second wave,
+// round 2 venue 9, and so on. The wave's bouts take the venues after the
+// empty ones, round and round, so its last bout, the empty table's when the
+// field is odd, sits at the venue just before them.
+func rotateShortWave(matches []store.SchemeMatch, lanes Lanes, round int) {
+	per := lanes.PerWave()
+	if per == 0 {
+		return
+	}
+	waves := (len(matches) + per - 1) / per
+	first := per * (waves - 1)
+	empty := per - (len(matches) - first)
+	if empty == 0 {
+		return
+	}
+	lastEmpty := ((per-1-round)%per + per) % per
+	for i := range matches[first:] {
+		matches[first+i].Venue = lanes.Pick((lastEmpty+1+i)%per + 1)
+	}
 }
