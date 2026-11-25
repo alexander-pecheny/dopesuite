@@ -876,7 +876,6 @@ shootout: true
       stickerEmptywrongRow: () => "Пустой = минус (пустые = −номинал)",
       stickerMaxField: () => "Максимум стикеров",
       stickerMaxLabel: () => "Макс.",
-      stickerMissingEmptywrongLabel: () => "Бланк без стикера считается стикером «Пустой = минус»",
       stickerNeutral: () => "Обычный",
       stickerNowrong: () => "Без минуса",
       stickerNowrongRow: () => "Без минуса (неправильные = 0)",

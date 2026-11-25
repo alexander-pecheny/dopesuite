@@ -69,7 +69,7 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 		}
 		team := KSIResultsTeam{Index: p, Correct: map[int]int{}}
 		for t := range state.Themes {
-			sticker, scored := stickers.ThemeSticker(state.Stickers, state.Themes, t, p)
+			sticker, scored := stickers.ThemeSticker(state.Stickers, t, p)
 			if !scored {
 				continue
 			}

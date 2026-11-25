@@ -854,7 +854,6 @@ export type Strings = {
       stickerEmptywrongRow: () => string;
       stickerMaxField: () => string;
       stickerMaxLabel: () => string;
-      stickerMissingEmptywrongLabel: () => string;
       stickerNeutral: () => string;
       stickerNowrong: () => string;
       stickerNowrongRow: () => string;

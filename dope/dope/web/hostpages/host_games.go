@@ -274,7 +274,6 @@ var formatForms = map[string]formatForm{
 					stickerRow(s.Host.Games.StickerNowrongRow(), "ksis_nowrong_max", "1", "ksis_nowrong_color", games.KSIStickerNoWrongColor),
 					stickerRow(s.Host.Games.StickerEmptywrongRow(), "ksis_emptywrong_max", "1", "ksis_emptywrong_color", games.KSIStickerEmptyWrongColor),
 					dopeui.Checkbox(dopeui.Name("ksis_plus_nominal"), dopeui.Value("1"), dopeui.Text(s.Host.Games.StickerPlusNominalLabel())),
-					dopeui.Checkbox(dopeui.Name("ksis_missing_emptywrong"), dopeui.Value("1"), dopeui.Text(s.Host.Games.StickerMissingEmptywrongLabel())),
 				}
 			},
 			read: func(spec *gamebuild.Spec, form url.Values) (err error) {
@@ -844,10 +843,8 @@ type GameCreateRequest struct {
 		Max   int    `json:"max"`
 	} `json:"stickers"`
 	// StickerPlusNominal makes a stickers KSI's first tiebreaker the right
-	// answers' nominals; StickerMissingEmptyWrong scores a sheet without a
-	// sticker as the emptywrong sticker.
-	StickerPlusNominal       bool `json:"sticker_plus_nominal"`
-	StickerMissingEmptyWrong bool `json:"sticker_missing_emptywrong"`
+	// answers' nominals.
+	StickerPlusNominal bool `json:"sticker_plus_nominal"`
 	// The minefield: what a wrong answer costs (0: DefaultODMinus's), the
 	// bonus for a whole tour, and the empty-tour charge.
 	MinusWrong int  `json:"minus_wrong"`
@@ -883,7 +880,6 @@ func (req GameCreateRequest) setKnobs(form url.Values) {
 	}
 	setIfTrue("mp_empty", req.MinusEmpty)
 	setIfTrue("ksis_plus_nominal", req.StickerPlusNominal)
-	setIfTrue("ksis_missing_emptywrong", req.StickerMissingEmptyWrong)
 }
 
 func (req GameCreateRequest) form() url.Values {
@@ -1011,9 +1007,6 @@ func ksiStickerConfigFromForm(form url.Values) (json.RawMessage, error) {
 	}
 	if form.Get("ksis_plus_nominal") != "" {
 		cfg.Plus = games.KSIPlusNominal
-	}
-	if form.Get("ksis_missing_emptywrong") != "" {
-		cfg.Missing = games.KSIStickerEmptyWrong
 	}
 	return json.Marshal(cfg)
 }

@@ -84,8 +84,6 @@ sticker_emptywrong_row = "Пустой = минус (пустые = −номи�
 # The stickers-KSI checkbox: the first tiebreaker sums the right answers'
 # nominals, without minuses or doubling.
 sticker_plus_nominal_label = "Первый доппоказатель — сумма номиналов правильных ответов (без минусов и удвоений)"
-# The stickers-KSI checkbox: a sheet with no sticker scores as «Пустой = минус».
-sticker_missing_emptywrong_label = "Бланк без стикера считается стикером «Пустой = минус»"
 # Sticker labels the scheme config stores for the special stickers.
 sticker_nowrong = "Без минуса"
 sticker_emptywrong = "Пустой = минус"

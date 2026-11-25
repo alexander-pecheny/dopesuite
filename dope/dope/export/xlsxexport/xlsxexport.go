@@ -200,7 +200,7 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 		total := 0
 		rowCells := []interface{}{participantExportName(state.Participants, p), nil}
 		for t := 0; t < themesCount; t++ {
-			sticker, scored := state.stickers.ThemeSticker(state.Stickers, state.Themes, t, p)
+			sticker, scored := state.stickers.ThemeSticker(state.Stickers, t, p)
 			themeScore := 0
 			for a := 0; a < nv; a++ {
 				var cell interface{}

@@ -34,7 +34,6 @@ export interface KSIScheme {
   stickers?: {
     types?: Array<{id?: unknown; label?: unknown; color?: unknown; max?: unknown} | null | undefined>;
     plus?: unknown;
-    missing?: unknown;
   } | null;
   [key: string]: unknown;
 }
@@ -61,11 +60,9 @@ export interface KSIRules {
   stickers: StickerType[];
   stickerById: Map<string, StickerType>;
   // plusNominal: the first tiebreaker sums the right answers' nominals, with
-  // no sticker's doubling, instead of every positive contribution.
+  // no sticker's doubling, instead of every positive contribution
+  // (the server's games.KSIStickerConfig.Plus).
   plusNominal: boolean;
-  // missingSticker scores a sheet without a sticker; "" leaves it unscored.
-  // The server's games.KSIStickerConfig carries both.
-  missingSticker: string;
 }
 
 export function isTeamMode(scheme: KSIScheme): boolean {
@@ -98,17 +95,7 @@ export function rulesOf(scheme: KSIScheme): KSIRules {
     });
   }
   const stickerById = new Map(stickers.map((t) => [t.id, t]));
-  return {teamMode, themesCount, stickers, stickerById, ...stickerOptions(scheme, stickerById)};
-}
-
-// stickerOptions reads the stickers block's plus and missing options (the
-// server's games.KSIStickerConfig).
-function stickerOptions(scheme: KSIScheme, stickerById: Map<string, StickerType>): {plusNominal: boolean; missingSticker: string} {
-  const missing = scheme.stickers?.missing;
-  return {
-    plusNominal: scheme.stickers?.plus === "nominal",
-    missingSticker: typeof missing === "string" && stickerById.has(missing) ? missing : "",
-  };
+  return {teamMode, themesCount, stickers, stickerById, plusNominal: scheme.stickers?.plus === "nominal"};
 }
 
 // stickersEnabled gates the sticker UI and scoring: only a KSI team game that
@@ -223,21 +210,11 @@ export function stickerValue(state: KSIState, player: number, theme: number): st
 }
 
 // scoredSticker is the sticker a team's theme is scored under: neutral in a
-// plain game, the chosen one in a stickers game, else the configured
-// missingSticker once the theme is played; "" is a theme left unscored.
+// plain game, the chosen one in a stickers game; "" is a theme whose sticker
+// is not chosen yet, left unscored (games.KSIStickerConfig.ThemeSticker).
 export function scoredSticker(state: KSIState, rules: KSIRules, player: number, theme: number): string {
   if (!stickersEnabled(rules)) return STICKER_NEUTRAL;
-  const chosen = stickerValue(state, player, theme);
-  if (chosen) return chosen;
-  return themePlayed(state, theme) ? rules.missingSticker : "";
-}
-
-// themePlayed says a theme has begun: some team has a mark in it or a sticker
-// on it (games.KSIThemePlayed). Before that a sheet without a sticker is not
-// yet missing one.
-export function themePlayed(state: KSIState, theme: number): boolean {
-  if ((state.stickers?.[theme] || []).some((id) => Boolean(id))) return true;
-  return (state.themes[theme]?.answers || []).some((row) => row.some((mark) => Boolean(mark)));
+  return stickerValue(state, player, theme);
 }
 
 // markContribution is the signed value of one answer mark under a sticker. It

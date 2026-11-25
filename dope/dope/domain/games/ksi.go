@@ -3,7 +3,6 @@ package games
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 )
 
@@ -129,9 +128,6 @@ type KSIStickerConfig struct {
 	// KSIPlusNominal: the nominals of the right answers, with no sticker's
 	// doubling (Samarium 2026's regulation: the sum without minuses or doubling).
 	Plus string `json:"plus,omitempty"`
-	// Missing is the sticker a sheet without one is scored under. Empty
-	// leaves such a theme unscored until a sticker is chosen.
-	Missing string `json:"missing,omitempty"`
 }
 
 // KSIPlusNominal is KSIStickerConfig.Plus for the sum of right answers'
@@ -165,30 +161,17 @@ func ParseKSIStickerConfig(schemeJSON string) KSIStickerConfig {
 
 // ThemeSticker is the sticker a team's theme is scored under, from the
 // themes × teams grid of chosen stickers: neutral in a plain KSI (no
-// types), the chosen one, else Missing once the theme is played (KSIThemePlayed);
-// ok is false for a theme left unscored.
-func (c KSIStickerConfig) ThemeSticker(grid [][]string, themes []KSITheme, theme, player int) (string, bool) {
+// types), else the chosen one; ok is false for a theme whose sticker is not
+// chosen yet, which is left unscored. A sheet handed in without a sticker is
+// marked by a host with the sticker the regulation gives it.
+func (c KSIStickerConfig) ThemeSticker(grid [][]string, theme, player int) (string, bool) {
 	if len(c.Types) == 0 {
 		return KSIStickerNeutral, true
 	}
 	if theme < len(grid) && player < len(grid[theme]) && grid[theme][player] != "" {
 		return grid[theme][player], true
 	}
-	return c.Missing, c.Missing != "" && KSIThemePlayed(grid, themes, theme)
-}
-
-// KSIThemePlayed says a theme has begun: some team has a mark in it or a
-// sticker on it. Before that a sheet without a sticker is not yet missing one.
-func KSIThemePlayed(grid [][]string, themes []KSITheme, theme int) bool {
-	if theme < len(grid) && slices.ContainsFunc(grid[theme], func(id string) bool { return id != "" }) {
-		return true
-	}
-	if theme >= len(themes) {
-		return false
-	}
-	return slices.ContainsFunc(themes[theme].Answers, func(row []string) bool {
-		return slices.ContainsFunc(row, func(mark string) bool { return mark != "" })
-	})
+	return "", false
 }
 
 // KSIStickerMarkValue returns the signed point value of a single answer mark of

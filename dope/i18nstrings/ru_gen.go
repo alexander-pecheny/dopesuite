@@ -1181,12 +1181,9 @@ var RU = Strings{
 			StickerEmptywrongRow: func() string { return "Пустой = минус (пустые = −номинал)" },
 			StickerMaxField:      func() string { return "Максимум стикеров" },
 			StickerMaxLabel:      func() string { return "Макс." },
-			StickerMissingEmptywrongLabel: func() string {
-				return "Бланк без стикера считается стикером «Пустой = минус»"
-			},
-			StickerNeutral:    func() string { return "Обычный" },
-			StickerNowrong:    func() string { return "Без минуса" },
-			StickerNowrongRow: func() string { return "Без минуса (неправильные = 0)" },
+			StickerNeutral:       func() string { return "Обычный" },
+			StickerNowrong:       func() string { return "Без минуса" },
+			StickerNowrongRow:    func() string { return "Без минуса (неправильные = 0)" },
 			StickerPlusNominalLabel: func() string {
 				return "Первый доппоказатель — сумма номиналов правильных ответов (без минусов и удвоений)"
 			},

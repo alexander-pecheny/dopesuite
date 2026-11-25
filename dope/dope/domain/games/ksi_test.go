@@ -64,10 +64,9 @@ func TestKSIStickerOptions(t *testing.T) {
 	// Team А: a ×2 theme with a right 50; team Б: two plain themes with a
 	// right 50 and a right 30, and a wrong 10. Total: А 100, Б 70.
 	state := `{"participants":[{"number":1,"name":"А"},{"number":2,"name":"Б"}],
-	  "stickers":[["x2","neutral"],["","neutral"],["",""]],
+	  "stickers":[["x2","neutral"],["","neutral"]],
 	  "themes":[{"answers":[["","","","","right"],["","","","","right"]]},
-	            {"answers":[["","","","",""],["wrong","","right","",""]]},
-	            {"answers":[["","","","",""],["","","","",""]]}]}`
+	            {"answers":[["","","","",""],["wrong","","right","",""]]}]}`
 	values := []int{10, 20, 30, 40, 50}
 	types := `"types":[{"id":"neutral"},{"id":"x2"},{"id":"emptywrong"}]`
 
@@ -81,10 +80,9 @@ func TestKSIStickerOptions(t *testing.T) {
 		t.Errorf("default: first = %+v, want А with 100/100", ranked[0])
 	}
 
-	// nominal: the plus is the right answers' nominals; missing: А's sheet with
-	// no sticker scores as «Пустой = минус», −150 for five empty answers. The
-	// third theme is not played yet: nobody's sheet in it costs anything.
-	ranked, err = ComputeKSIResults(`{"stickers":{`+types+`,"plus":"nominal","missing":"emptywrong"}}`, state, values)
+	// nominal: the plus is the right answers' nominals; А's sheet with no
+	// sticker is still not scored, until a host marks it.
+	ranked, err = ComputeKSIResults(`{"stickers":{`+types+`,"plus":"nominal"}}`, state, values)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,8 +90,8 @@ func TestKSIStickerOptions(t *testing.T) {
 	for _, team := range ranked {
 		byIndex[team.Index] = team
 	}
-	if a := byIndex[0]; a.Total != 100-150 || a.Plus != 50 {
-		t.Errorf("А = total %d plus %d, want −50 and 50", a.Total, a.Plus)
+	if a := byIndex[0]; a.Total != 100 || a.Plus != 50 {
+		t.Errorf("А = total %d plus %d, want 100 and 50", a.Total, a.Plus)
 	}
 	if b := byIndex[1]; b.Total != 70 || b.Plus != 80 {
 		t.Errorf("Б = total %d plus %d, want 70 and 80", b.Total, b.Plus)
