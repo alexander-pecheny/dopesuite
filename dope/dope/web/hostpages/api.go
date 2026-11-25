@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"dope/dope/domain/games"
 	"encoding/json"
 	"errors"
 	"io"
@@ -430,24 +431,37 @@ type apiGameSettings struct {
 	// GridWidth is the width of a column of the Game's grid in pixels, 0
 	// for the default.
 	GridWidth int `json:"grid_width"`
+	// Contested says whether the Game takes contested answers; only a format
+	// that takes them has the field.
+	Contested *bool `json:"contested,omitempty"`
+	// VenueRooms names the Game's bouts' venues by their rooms, not their numbers.
+	VenueRooms bool `json:"venue_rooms"`
 }
 
 func (g apiGameSettings) settings() GameSettings {
 	hidden := append([]string{}, g.HiddenDivisions...)
 	outside := append([]string{}, g.OutsideDivisions...)
 	width := g.GridWidth
-	return GameSettings{Title: g.Title, Slug: g.Slug, SchemeDSL: g.SchemeDSL, HiddenDivisions: &hidden, OutsideDivisions: &outside, GridWidth: &width}
+	rooms := g.VenueRooms
+	return GameSettings{Title: g.Title, Slug: g.Slug, SchemeDSL: g.SchemeDSL, HiddenDivisions: &hidden, OutsideDivisions: &outside, GridWidth: &width,
+		Contested: g.Contested, VenueRooms: &rooms}
 }
 
 func (s *Server) loadGameSettings(ctx context.Context, festID, gameID int64) (apiGameSettings, error) {
 	var g apiGameSettings
 	var slug sql.NullString
 	var hidden, outside string
+	var contestedOn bool
 	err := s.h.Engine().DB.QueryRowContext(ctx, `
-select id, code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, ''), coalesce(outside_divisions, ''), grid_width from games where id = ? and fest_id = ?`, gameID, festID).
-		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden, &outside, &g.GridWidth)
+select g.id, g.code, g.title, g.game_type, g.slug, coalesce(g.scheme_dsl, ''), coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), g.grid_width,
+  coalesce(g.contested, f.kind = 'synch'), g.venue_rooms
+from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`, gameID, festID).
+		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden, &outside, &g.GridWidth, &contestedOn, &g.VenueRooms)
 	if err != nil {
 		return g, err
+	}
+	if _, ok := games.As[games.Contestable](g.Type); ok {
+		g.Contested = &contestedOn
 	}
 	g.Slug = slug.String
 	g.HiddenDivisions = store.ParseHiddenDivisions(hidden)

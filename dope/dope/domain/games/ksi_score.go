@@ -18,9 +18,24 @@ type KSIState struct {
 	Participants []KSIParticipant `json:"participants"`
 	Declined     map[string]bool  `json:"declined"`
 	Stickers     [][]string       `json:"stickers"`
-	Themes       []struct {
-		Answers [][]string `json:"answers"`
-	} `json:"themes"`
+	Themes       []KSITheme       `json:"themes"`
+}
+
+// Mark is a team's mark on one answer of a theme, "" where the document has none.
+func (s KSIState) Mark(theme, player, answer int) string {
+	if theme >= len(s.Themes) {
+		return ""
+	}
+	answers := s.Themes[theme].Answers
+	if player >= len(answers) || answer >= len(answers[player]) {
+		return ""
+	}
+	return answers[player][answer]
+}
+
+// KSITheme is one theme of a KSI document: a row of answer marks per team.
+type KSITheme struct {
+	Answers [][]string `json:"answers"`
 }
 
 // KSIResultsTeam is one ranked team: its participant index, shared numeric
@@ -46,16 +61,6 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 		}
 	}
 	stickers := ParseKSIStickerConfig(schemeJSON)
-	mark := func(theme, player, answer int) string {
-		if theme >= len(state.Themes) {
-			return ""
-		}
-		answers := state.Themes[theme].Answers
-		if player >= len(answers) || answer >= len(answers[player]) {
-			return ""
-		}
-		return answers[player][answer]
-	}
 
 	ranked := make([]KSIResultsTeam, 0, len(state.Participants))
 	for p := range state.Participants {
@@ -64,12 +69,12 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 		}
 		team := KSIResultsTeam{Index: p, Correct: map[int]int{}}
 		for t := range state.Themes {
-			sticker, scored := stickers.ThemeSticker(state.Stickers, t, p)
+			sticker, scored := stickers.ThemeSticker(state.Stickers, state.Themes, t, p)
 			if !scored {
 				continue
 			}
 			for a, value := range values {
-				m := mark(t, p, a)
+				m := state.Mark(t, p, a)
 				cv := KSIStickerMarkValue(sticker, m, value)
 				team.Total += cv
 				team.Plus += KSIPlusOf(stickers.Plus, m, cv, value)

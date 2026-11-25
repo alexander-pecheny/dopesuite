@@ -1247,6 +1247,21 @@ alter table game_venues add column hidden integer not null default 0;
 	{Version: 62, Name: "a game's divisions outside the standings", Up: func(db *sql.DB) error {
 		return store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{{Name: "outside_divisions", Type: "TEXT"}})
 	}},
+	// Contested answers and venue names by room are a Game's settings, not
+	// the fest's: each Game starts as its fest was set. A Game's contested
+	// stays NULL where its fest's was (only a synch fest's Games take them).
+	// The fests' two columns stay, unread.
+	{Version: 63, Name: "contested and venue rooms per game", Up: func(db *sql.DB) error {
+		if err := store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{{Name: "contested", Type: "INTEGER"}}); err != nil {
+			return err
+		}
+		_, err := db.Exec(`
+alter table games add column venue_rooms integer not null default 0;
+update games set contested = (select f.contested from fests f where f.id = games.fest_id),
+  venue_rooms = (select f.venue_rooms from fests f where f.id = games.fest_id);
+`)
+		return err
+	}},
 }
 
 // overridesToHandRosters keeps every Game's teams playing with whom they play

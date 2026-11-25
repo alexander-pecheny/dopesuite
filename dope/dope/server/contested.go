@@ -16,12 +16,12 @@ import (
 )
 
 // A Game's contested answers, with their text: what the hosts' suggest list and the
-// jury's tab read. Without the fest's switch on there are none. The jury rules
+// jury's tab read. Without the Game's switch on there are none. The jury rules
 // on an answer without knowing who gave it, so it gets each answer once and
 // no team.
 func (s *server) scopedContested(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	list := []contested.Answer{}
-	if on, err := contested.Enabled(r.Context(), s.eng.DB, sc.FestID); err != nil {
+	if on, err := contested.Enabled(r.Context(), s.eng.DB, sc.FestID, sc.GameID); err != nil {
 		return err
 	} else if on {
 		if list, err = contested.List(r.Context(), s.eng.DB, sc.FestID, sc.GameID); err != nil {
@@ -96,7 +96,7 @@ func (s *server) contestedWrite(w http.ResponseWriter, r *http.Request, sc route
 	}
 	_, err := s.pageServer().Commit(r.Context(), sc.FestID, "contested", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
 		write := core.FestWrite{Event: "contested", Payload: req}
-		if on, err := contested.Enabled(ctx, tx, sc.FestID); err != nil {
+		if on, err := contested.Enabled(ctx, tx, sc.FestID, sc.GameID); err != nil {
 			return write, err
 		} else if !on {
 			return write, route.NotFound

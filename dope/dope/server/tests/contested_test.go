@@ -14,7 +14,7 @@ import (
 
 // A host records спорные; the document every viewer gets carries them without
 // their text; the jury reads the text, rules once per answer, and the ruling
-// moves the standings either way; the fest's switch takes them all away.
+// moves the standings either way; the Game's switch takes them all away.
 func TestContestedAreRuledOnPerAnswer(t *testing.T) {
 	t.Parallel()
 	srv := newAuthTestServer(t)
@@ -22,7 +22,10 @@ func TestContestedAreRuledOnPerAnswer(t *testing.T) {
 	db := srv.Eng().DB
 	seedFestTeams(t, db, festID, 3)
 	gameID := createSchemeGame(t, db, festID, "od", "od", "")
-	if _, err := db.Exec(`update fests set contested = 1, is_public = 1 where id = ?`, festID); err != nil {
+	if _, err := db.Exec(`update fests set is_public = 1 where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`update games set contested = 1 where id = ?`, gameID); err != nil {
 		t.Fatal(err)
 	}
 	adminID, admin := createAPITestSession(t, srv, "boss")
@@ -113,11 +116,11 @@ func TestContestedAreRuledOnPerAnswer(t *testing.T) {
 		t.Fatalf("after a save of two teams and a refused one: %+v", got)
 	}
 
-	if resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/settings", festID), map[string]any{"contested": false}, admin); resp.Code != http.StatusOK {
+	if resp := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/games/%d/settings", festID, gameID), map[string]any{"contested": false}, admin); resp.Code != http.StatusOK {
 		t.Fatalf("switch off: %d %s", resp.Code, resp.Body.String())
 	}
 	if got := contestedOf(); len(got) != 0 {
-		t.Fatalf("a fest without спорные keeps them in the document: %+v", got)
+		t.Fatalf("a Game without спорные keeps them in the document: %+v", got)
 	}
 	call(http.MethodPost, "/contested", map[string]any{"question": 0, "number": 3, "answer": "Гоголь"}, host, http.StatusNotFound)
 }
@@ -131,7 +134,10 @@ func TestContestedAnswerMovesAndGoes(t *testing.T) {
 	db := srv.Eng().DB
 	seedFestTeams(t, db, festID, 3)
 	gameID := createSchemeGame(t, db, festID, "od", "od", "")
-	if _, err := db.Exec(`update fests set contested = 1, is_public = 1 where id = ?`, festID); err != nil {
+	if _, err := db.Exec(`update fests set is_public = 1 where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`update games set contested = 1 where id = ?`, gameID); err != nil {
 		t.Fatal(err)
 	}
 	adminID, admin := createAPITestSession(t, srv, "boss")

@@ -29,7 +29,7 @@ func Load(ctx context.Context, q store.Queryer, festID, gameID int64) (store.Fes
 	var updatedAt, hidden, outside string
 	if err := q.QueryRowContext(ctx, `
 select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, ''), coalesce(g.title, ''), coalesce(g.game_type, ''),
-  coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), t.venue_rooms, coalesce(g.grid_width, 0)
+  coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), coalesce(g.venue_rooms, 0), coalesce(g.grid_width, 0)
 from fests t
 left join games g on g.fest_id = t.id and g.id = ?
 where t.id = ?`, gameID, festID).

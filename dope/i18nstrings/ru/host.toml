@@ -10,6 +10,12 @@ divisions_label = "Зачёты"
 # The settings page's width of a бой's box on the game's Сетка, in pixels;
 # empty keeps the default.
 grid_width_label = "Ширина боя на Сетке, px (пусто — по умолчанию, 240)"
+# The Game's switch for спорные: hosts record them, the game's jury rules. A
+# Game of a synch fest takes them until it is switched off.
+contested_label = "Спорные ответы (ведущие отмечают, жюри принимает или отклоняет)"
+# The Game's switch: a bout's venue reads as its title (the room) rather than
+# its number.
+venue_rooms_label = "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)"
 error_grid_width = 'Ширина боя на Сетке должна быть от {{.min}} до {{.max}}.'
 divisions_hint = "Отмеченные зачёты можно выбрать на страницах этой игры. Снимите отметку с зачёта, который в этой игре не нужен."
 # The ОД settings page's вне-зачёта boxes, one per зачёт: a ticked one's
@@ -380,12 +386,6 @@ delete_note = "Удаление убирает фест со всеми игра
 delete_submit = "Удалить фест"
 # The fest-edit form: fields and submit.
 public_label = "Публичный"
-# The fest's switch for спорные in its ОД, with the hint under it.
-contested_label = "Спорные ответы в ОД"
-# The fest's switch: a bout's venue reads as its title (the room) rather than
-# its number.
-venue_rooms_label = "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)"
-contested_hint = "Ведущие отмечают спорные ответы, жюри игры их принимает или отклоняет. На синхроне включено сразу."
 title_label = "Название"
 description_label = "Описание (markdown)"
 slug_label = "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"

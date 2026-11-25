@@ -9,6 +9,7 @@ package festops
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/contested"
 	"errors"
 	"slices"
 	"strconv"
@@ -84,6 +85,12 @@ type Settings struct {
 	// GridWidth is the width of a column of the Game's grid in pixels, 0
 	// for the default; nil leaves it as it is.
 	GridWidth *int `json:"grid_width"`
+	// Contested says whether the Game takes contested answers (a Game whose
+	// format takes none ignores it); nil leaves it as it is.
+	Contested *bool `json:"contested"`
+	// VenueRooms names the Game's bouts' venues by their titles (the rooms)
+	// rather than their numbers; nil leaves it as it is.
+	VenueRooms *bool `json:"venue_rooms"`
 }
 
 // MinGridWidth and MaxGridWidth bound a Game's grid column width, in pixels.
@@ -152,6 +159,9 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 		}
 	}
 	written := core.FestWrite{Event: "game:settings", Payload: map[string]any{"gameID": gameID}}
+	if written.Broadcast.States, err = writeSwitchesTx(ctx, tx, festID, gameID, g); err != nil {
+		return core.FestWrite{}, err
+	}
 	if !schemeChanged {
 		return written, nil
 	}
@@ -159,6 +169,29 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 		return core.FestWrite{}, compileErrorForHost(err)
 	}
 	return written, nil
+}
+
+// writeSwitchesTx saves the Game's contested and venue-rooms switches the
+// Settings name. A changed contested switch gives the Game its list again, so
+// turned off, its accepted answers leave the standings; the document is what
+// the write then broadcasts.
+func writeSwitchesTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g Settings) ([]core.GameState, error) {
+	if g.VenueRooms != nil {
+		if _, err := tx.ExecContext(ctx, `update games set venue_rooms = ? where id = ? and fest_id = ?`, util.BoolToInt(*g.VenueRooms), gameID, festID); err != nil {
+			return nil, err
+		}
+	}
+	if g.Contested == nil {
+		return nil, nil
+	}
+	if _, err := tx.ExecContext(ctx, `update games set contested = ? where id = ? and fest_id = ?`, util.BoolToInt(*g.Contested), gameID, festID); err != nil {
+		return nil, err
+	}
+	state, err := contested.RefreshTx(ctx, tx, festID, gameID)
+	if err != nil || state == nil {
+		return nil, err
+	}
+	return []core.GameState{{GameID: gameID, StateJSON: state}}, nil
 }
 
 // loadStoredSettingsTx reads what a save compares with. A Game that is not in

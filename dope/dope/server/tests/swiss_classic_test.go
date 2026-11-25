@@ -218,10 +218,10 @@ func TestVoronenokSeedsOnTwoToursBeforeTheRulings(t *testing.T) {
 	db := srv.Eng().DB
 	token := createTestSession(t, srv, systemUserID(t, db))
 	seedFestTeams(t, db, festID, 4)
-	if _, err := db.Exec(`update fests set contested = 1 where id = ?`, festID); err != nil {
+	odID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "od", "od_tours": "3", "od_questions": "2"})
+	if _, err := db.Exec(`update games set contested = 1 where id = ?`, odID); err != nil {
 		t.Fatal(err)
 	}
-	odID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "od", "od_tours": "3", "od_questions": "2"})
 	var odCode string
 	if err := db.QueryRow(`select code from games where id = ?`, odID).Scan(&odCode); err != nil {
 		t.Fatal(err)

@@ -111,20 +111,23 @@ test("the stickers block's plus and missing options score as games.TestKSISticke
   const types = [{id: "neutral"}, {id: "x2"}, {id: "emptywrong"}];
   const raw = {
     participants: [{number: 1, name: "А"}, {number: 2, name: "Б"}],
-    stickers: [["x2", "neutral"], ["", "neutral"]],
+    stickers: [["x2", "neutral"], ["", "neutral"], ["", ""]],
     themes: [{answers: [["", "", "", "", "right"], ["", "", "", "", "right"]]},
-      {answers: [["", "", "", "", ""], ["wrong", "", "right", "", ""]]}],
+      {answers: [["", "", "", "", ""], ["wrong", "", "right", "", ""]]},
+      {answers: [["", "", "", "", ""], ["", "", "", "", ""]]}],
   };
-  const plain = {gameType: "ksi", themes: 2, stickers: {types}};
+  const plain = {gameType: "ksi", themes: 3, stickers: {types}};
   const rules = ksi.rulesOf(plain);
   const state = ksi.parseState(structuredClone(raw), rules, []);
   assert.deepEqual(ksi.resultMetrics(state, rules, 0), {total: 100, plus: 100, correct: {10: 0, 20: 0, 30: 0, 40: 0, 50: 1}});
 
-  const configured = {gameType: "ksi", themes: 2, stickers: {types, plus: "nominal", missing: "emptywrong"}};
+  const configured = {gameType: "ksi", themes: 3, stickers: {types, plus: "nominal", missing: "emptywrong"}};
   const strict = ksi.rulesOf(configured);
   const strictState = ksi.parseState(structuredClone(raw), strict, []);
   assert.equal(ksi.resultMetrics(strictState, strict, 0).total, -50);
   assert.equal(ksi.resultMetrics(strictState, strict, 0).plus, 50);
   assert.equal(ksi.resultMetrics(strictState, strict, 1).plus, 80);
   assert.equal(ksi.computeThemeValue(strictState, strict, 0, 1).scored, true);
+  // The third theme is not played yet: no sheet in it is missing a sticker.
+  assert.equal(ksi.computeThemeValue(strictState, strict, 0, 2).scored, false);
 });

@@ -124,7 +124,7 @@ func (s *server) gameContested(r *http.Request, scope festScope, enter bool) *ga
 	if _, ok := games.As[games.Contestable](gameType); !ok {
 		return nil
 	}
-	if on, err := contested.Enabled(ctx, s.eng.DB, scope.FestID); err != nil || !on {
+	if on, err := contested.Enabled(ctx, s.eng.DB, scope.FestID, scope.GameID); err != nil || !on {
 		return nil
 	}
 	out := &gameContested{Enter: enter}

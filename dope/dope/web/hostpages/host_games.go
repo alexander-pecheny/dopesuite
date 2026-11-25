@@ -70,6 +70,11 @@ type hostGameSettingsData struct {
 	// the default).
 	Grid      bool
 	GridWidth int
+	// Contested is whether the Game takes contested answers, nil for a format
+	// that takes none; VenueRooms whether its bouts name their venues by
+	// room, nil for a format without bouts.
+	Contested  *bool
+	VenueRooms *bool
 }
 
 type hostGameCreateData struct {
@@ -493,6 +498,12 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 		form = append(form, dopeui.Field(dopeui.Label(s.Host.Games.GridWidthLabel()),
 			dopeui.Textfield(dopeui.Name("grid_width"), dopeui.Value(width), dopeui.Inputmode("numeric"))))
 	}
+	if data.Contested != nil {
+		form = append(form, settingsSwitch("contested", *data.Contested, s.Host.Games.ContestedLabel()))
+	}
+	if data.VenueRooms != nil {
+		form = append(form, settingsSwitch("venue_rooms", *data.VenueRooms, s.Host.Games.VenueRoomsLabel()))
+	}
 	if data.HasDSL {
 		form = append(form,
 			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
@@ -508,6 +519,25 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
 
+// settingsSwitch is a checkbox of the settings form, with a hidden field that
+// tells the box left unticked apart from a form that has no box.
+func settingsSwitch(name string, on bool, label string) *dopeui.Element {
+	box := []dopeui.Item{dopeui.Name(name), dopeui.Value("1"), dopeui.Text(label)}
+	if on {
+		box = append(box, dopeui.Checked())
+	}
+	return dopeui.Col(dopeui.Hiddenfield(dopeui.Name(name+"_present"), dopeui.Value("1")), dopeui.Checkbox(box...))
+}
+
+// formSwitch reads a settingsSwitch: nil when the form has no such box.
+func formSwitch(form url.Values, name string) *bool {
+	if form.Get(name+"_present") != "1" {
+		return nil
+	}
+	on := form.Get(name) == "1"
+	return &on
+}
+
 func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64, errMsg string) {
 	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
 		var (
@@ -519,10 +549,22 @@ func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, 
 			hidden    string
 			outside   string
 			gridWidth int
+			contested bool
+			rooms     bool
 		)
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_divisions, ''), coalesce(outside_divisions, ''), grid_width from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden, &outside, &gridWidth); err != nil {
+select g.code, g.title, g.game_type, g.slug, coalesce(g.scheme_dsl, ''), coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), g.grid_width,
+  coalesce(g.contested, f.kind = 'synch'), g.venue_rooms
+from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`, gameID, festID).
+			Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden, &outside, &gridWidth, &contested, &rooms); err != nil {
 			return nil, err
+		}
+		data := hostGameSettingsData{}
+		if _, ok := games.As[games.Contestable](gameType); ok {
+			data.Contested = &contested
+		}
+		if !games.Get(gameType).Flat {
+			data.VenueRooms = &rooms
 		}
 		divisions, err := festops.OfferedDivisions(r.Context(), s.h.Engine().DB, festID, gameType)
 		if err != nil {
@@ -534,7 +576,9 @@ select code, title, game_type, slug, coalesce(scheme_dsl, ''), coalesce(hidden_d
 			schemeDSL = r.Form.Get("scheme_dsl")
 		}
 		return hostGameSettingsDoc(hostGameSettingsData{
-			Fest: fest,
+			Contested:  data.Contested,
+			VenueRooms: data.VenueRooms,
+			Fest:       fest,
 			Game: PublicFestGame{
 				ID:    gameID,
 				Slug:  slug.String,
@@ -583,6 +627,7 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		}
 		g.GridWidth = &width
 	}
+	g.Contested, g.VenueRooms = formSwitch(r.Form, "contested"), formSwitch(r.Form, "venue_rooms")
 	if r.Form.Get("divisions_present") != "" {
 		// The boxes say which offered Divisions are shown (festops.Settings).
 		shown := r.Form["division_shown"]

@@ -224,10 +224,20 @@ export function stickerValue(state: KSIState, player: number, theme: number): st
 
 // scoredSticker is the sticker a team's theme is scored under: neutral in a
 // plain game, the chosen one in a stickers game, else the configured
-// missingSticker; "" is a theme left unscored.
+// missingSticker once the theme is played; "" is a theme left unscored.
 export function scoredSticker(state: KSIState, rules: KSIRules, player: number, theme: number): string {
   if (!stickersEnabled(rules)) return STICKER_NEUTRAL;
-  return stickerValue(state, player, theme) || rules.missingSticker;
+  const chosen = stickerValue(state, player, theme);
+  if (chosen) return chosen;
+  return themePlayed(state, theme) ? rules.missingSticker : "";
+}
+
+// themePlayed says a theme has begun: some team has a mark in it or a sticker
+// on it (games.KSIThemePlayed). Before that a sheet without a sticker is not
+// yet missing one.
+export function themePlayed(state: KSIState, theme: number): boolean {
+  if ((state.stickers?.[theme] || []).some((id) => Boolean(id))) return true;
+  return (state.themes[theme]?.answers || []).some((row) => row.some((mark) => Boolean(mark)));
 }
 
 // markContribution is the signed value of one answer mark under a sticker. It

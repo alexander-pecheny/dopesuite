@@ -749,8 +749,6 @@ export const RU: Strings = {
       colNickname: () => "Никнейм",
       colRole: () => "Роль",
       colVenues: () => "Площадки",
-      contestedHint: () => "Ведущие отмечают спорные ответы, жюри игры их принимает или отклоняет. На синхроне включено сразу.",
-      contestedLabel: () => "Спорные ответы в ОД",
       deleteAccessConfirm: (name: string) => `Удалить доступ для ${name}?`,
       deleteBtn: () => "Удалить",
       deleteConfirm: () => "Удалить турнир? Все игры, команды и результаты будут удалены.",
@@ -791,7 +789,6 @@ export const RU: Strings = {
       synchImportLink: () => "Загрузить площадки",
       teamsNumbered: (n: string, numbered: string) => `${n}, с номером: ${numbered}`,
       titleLabel: () => "Название",
-      venueRoomsLabel: () => "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)",
       venuesHint: () => "Ведущий площадки ведёт её игры и правит её команды и номера.",
     },
     festVenues: {
@@ -808,6 +805,7 @@ export const RU: Strings = {
     },
     games: {
       brainHint: () => "Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, kind: roundrobin / single_elimination / double_elimination.",
+      contestedLabel: () => "Спорные ответы (ведущие отмечают, жюри принимает или отклоняет)",
       createCrumb: () => "Добавить игру",
       createSubmit: () => "Создать",
       createTitle: (title: string) => `${title} · новая игра`,
@@ -901,6 +899,7 @@ shootout: true
       typeOd: () => "ОД",
       typeSi: () => "Личная СИ",
       typeTroika: () => "Тройка",
+      venueRoomsLabel: () => "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)",
       wholeRosterHint: () => "Играют все команды феста, под теми же номерами. Кто не играл, отмечается во вкладке «Отказы» на странице игры.",
     },
     invites: {

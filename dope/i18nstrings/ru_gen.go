@@ -1001,14 +1001,10 @@ var RU = Strings{
 			ClearConfirm: func() string {
 				return "Очистить игру? Будут удалены все результаты, список участников вместе с отказами и посев: игра вернётся в исходное состояние, и отказы придётся отметить заново. Настройки и ссылка сохранятся."
 			},
-			ColGames:    func() string { return "Игры" },
-			ColNickname: func() string { return "Никнейм" },
-			ColRole:     func() string { return "Роль" },
-			ColVenues:   func() string { return "Площадки" },
-			ContestedHint: func() string {
-				return "Ведущие отмечают спорные ответы, жюри игры их принимает или отклоняет. На синхроне включено сразу."
-			},
-			ContestedLabel:      func() string { return "Спорные ответы в ОД" },
+			ColGames:            func() string { return "Игры" },
+			ColNickname:         func() string { return "Никнейм" },
+			ColRole:             func() string { return "Роль" },
+			ColVenues:           func() string { return "Площадки" },
 			DeleteAccessConfirm: func(name string) string { return fmt.Sprintf("Удалить доступ для %s?", name) },
 			DeleteBtn:           func() string { return "Удалить" },
 			DeleteConfirm: func() string {
@@ -1061,9 +1057,6 @@ var RU = Strings{
 			SynchImportLink: func() string { return "Загрузить площадки" },
 			TeamsNumbered:   func(n string, numbered string) string { return fmt.Sprintf("%s, с номером: %s", n, numbered) },
 			TitleLabel:      func() string { return "Название" },
-			VenueRoomsLabel: func() string {
-				return "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)"
-			},
 			VenuesHint: func() string {
 				return "Ведущий площадки ведёт её игры и правит её команды и номера."
 			},
@@ -1087,6 +1080,9 @@ var RU = Strings{
 		Games: HostGamesStrings{
 			BrainHint: func() string {
 				return "Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, kind: roundrobin / single_elimination / double_elimination."
+			},
+			ContestedLabel: func() string {
+				return "Спорные ответы (ведущие отмечают, жюри принимает или отклоняет)"
 			},
 			CreateCrumb:  func() string { return "Добавить игру" },
 			CreateSubmit: func() string { return "Создать" },
@@ -1216,6 +1212,9 @@ var RU = Strings{
 			TypeOd:          func() string { return "ОД" },
 			TypeSi:          func() string { return "Личная СИ" },
 			TypeTroika:      func() string { return "Тройка" },
+			VenueRoomsLabel: func() string {
+				return "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)"
+			},
 			WholeRosterHint: func() string {
 				return "Играют все команды феста, под теми же номерами. Кто не играл, отмечается во вкладке «Отказы» на странице игры."
 			},

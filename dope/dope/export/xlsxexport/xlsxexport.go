@@ -138,12 +138,7 @@ func BuildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber
 // --- KSI: the detailed and results sheets -------------------------------------
 
 type ksiExportState struct {
-	Participants []games.KSIParticipant `json:"participants"`
-	Declined     map[string]bool        `json:"declined"`
-	Stickers     [][]string             `json:"stickers"`
-	Themes       []struct {
-		Answers [][]string `json:"answers"`
-	} `json:"themes"`
+	games.KSIState
 	// stickers is the scheme's stickers block, which says what sticker each
 	// theme is scored under (games.KSIStickerConfig.ThemeSticker).
 	stickers games.KSIStickerConfig
@@ -164,17 +159,6 @@ func BuildKSISheets(f *excelize.File, schemeJSON, stateJSON string) error {
 		return err
 	}
 	return buildKSIResultsSheet(f, &state, schemeJSON, stateJSON)
-}
-
-func ksiMark(state *ksiExportState, theme, player, answer int) string {
-	if theme >= len(state.Themes) {
-		return ""
-	}
-	answers := state.Themes[theme].Answers
-	if player >= len(answers) || answer >= len(answers[player]) {
-		return ""
-	}
-	return answers[player][answer]
 }
 
 func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
@@ -216,12 +200,12 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 		total := 0
 		rowCells := []interface{}{participantExportName(state.Participants, p), nil}
 		for t := 0; t < themesCount; t++ {
-			sticker, scored := state.stickers.ThemeSticker(state.Stickers, t, p)
+			sticker, scored := state.stickers.ThemeSticker(state.Stickers, state.Themes, t, p)
 			themeScore := 0
 			for a := 0; a < nv; a++ {
 				var cell interface{}
 				if scored {
-					mark := ksiMark(state, t, p, a)
+					mark := state.Mark(t, p, a)
 					cv := games.KSIStickerMarkValue(sticker, mark, store.QuestionValues[a])
 					if mark == "right" || mark == "wrong" || cv != 0 {
 						cell = cv

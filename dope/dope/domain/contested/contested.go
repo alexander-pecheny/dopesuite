@@ -36,12 +36,33 @@ type Answer struct {
 	Status   string `json:"status"`
 }
 
-// Enabled says whether the fest's OD takes contested answers: as the fest was set, or,
-// when it was never set, only for a synch fest.
-func Enabled(ctx context.Context, q store.Queryer, festID int64) (bool, error) {
+// Enabled says whether the Game takes contested answers: as its settings say, or,
+// when they were never set, only in a synch fest.
+func Enabled(ctx context.Context, q store.Queryer, festID, gameID int64) (bool, error) {
 	var on bool
-	err := q.QueryRowContext(ctx, `select coalesce(contested, kind = 'synch') from fests where id = ?`, festID).Scan(&on)
+	err := q.QueryRowContext(ctx, `
+select coalesce(g.contested, f.kind = 'synch') from games g join fests f on f.id = g.fest_id
+where g.id = ? and g.fest_id = ?`, gameID, festID).Scan(&on)
 	return on, err
+}
+
+// AnyEnabled says whether some Game of the fest takes contested answers, which
+// is when the fest has a jury to invite.
+func AnyEnabled(ctx context.Context, q store.Queryer, festID int64) (bool, error) {
+	type game struct {
+		gameType string
+		on       bool
+	}
+	list, err := store.CollectRows(ctx, q, `
+select g.game_type, coalesce(g.contested, f.kind = 'synch') from games g join fests f on f.id = g.fest_id where g.fest_id = ?`,
+		[]any{festID}, func(rows *sql.Rows) (game, error) {
+			var g game
+			return g, rows.Scan(&g.gameType, &g.on)
+		})
+	return slices.ContainsFunc(list, func(g game) bool {
+		_, ok := games.As[games.Contestable](g.gameType)
+		return ok && g.on
+	}), err
 }
 
 // Key is what makes two answers one for a ruling: case and spacing aside.
@@ -331,7 +352,7 @@ func RefreshTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) ([]byte, e
 		return nil, nil
 	}
 	var summary []games.ODContested
-	on, err := Enabled(ctx, tx, festID)
+	on, err := Enabled(ctx, tx, festID, gameID)
 	if err != nil {
 		return nil, err
 	}

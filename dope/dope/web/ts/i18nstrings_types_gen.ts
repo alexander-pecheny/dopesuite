@@ -748,8 +748,6 @@ export type Strings = {
       colNickname: () => string;
       colRole: () => string;
       colVenues: () => string;
-      contestedHint: () => string;
-      contestedLabel: () => string;
       deleteAccessConfirm: (name: string) => string;
       deleteBtn: () => string;
       deleteConfirm: () => string;
@@ -790,7 +788,6 @@ export type Strings = {
       synchImportLink: () => string;
       teamsNumbered: (n: string, numbered: string) => string;
       titleLabel: () => string;
-      venueRoomsLabel: () => string;
       venuesHint: () => string;
     };
     festVenues: {
@@ -807,6 +804,7 @@ export type Strings = {
     };
     games: {
       brainHint: () => string;
+      contestedLabel: () => string;
       createCrumb: () => string;
       createSubmit: () => string;
       createTitle: (title: string) => string;
@@ -879,6 +877,7 @@ export type Strings = {
       typeOd: () => string;
       typeSi: () => string;
       typeTroika: () => string;
+      venueRoomsLabel: () => string;
       wholeRosterHint: () => string;
     };
     invites: {
