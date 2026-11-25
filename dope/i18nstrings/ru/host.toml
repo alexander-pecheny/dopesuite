@@ -43,12 +43,17 @@ type_multi = "Мультиигры"
 type_troika = "Тройка"
 type_hamsa = "Хамса"
 type_kd = "Кубок Дружбы"
+type_mp = "Минное поле"
 # The OD settings fields; also the field names their out-of-range errors name.
 od_tours_label = "Количество туров"
 od_questions_label = "Количество вопросов в туре"
-# The OD minus fields (Тминное поле): what a wrong answer costs and what
-# taking a whole tour adds; 0 points for a wrong answer is a plain ЧГК. Also
-# the field names their errors name.
+# The field taking the tours from rating.chgk.info instead of the two above,
+# and its errors.
+od_rating_label = "Или взять туры с турнирного сайта: ID турнира"
+error_rating_tours = 'Турнирный сайт не отдал туры турнира {{.id}}: {{.err}}'
+error_rating_no_tours = 'У турнира {{.id}} на турнирном сайте не указаны туры'
+# The minefield's fields: what a wrong answer costs and what taking a whole
+# tour adds. Also the field names their errors name.
 od_minus_wrong_label = "Штраф за неправильный ответ"
 od_minus_bonus_label = "Бонус за взятый тур целиком"
 # The checkbox charging an empty tour as a third of its questions wrong.

@@ -89,7 +89,7 @@ func writeRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []roster
 		out.Updates = updates
 		for _, u := range updates {
 			switch u.GameType {
-			case games.OD:
+			case games.OD, games.MP:
 				out.odGames++
 			case games.KSI:
 				out.ksiGames++

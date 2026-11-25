@@ -652,6 +652,9 @@ export type Strings = {
     ksi: {
       label: () => string;
     };
+    mp: {
+      label: () => string;
+    };
     multi: {
       barNoTasksAfter: (n: string, name: string) => string;
       barNoTasksBefore: (n: string, name: string) => string;
@@ -816,6 +819,8 @@ export type Strings = {
       errorGridWidth: (min: string, max: string) => string;
       errorMinigames: (err: string) => string;
       errorMultiSorting: (err: string) => string;
+      errorRatingNoTours: (id: string) => string;
+      errorRatingTours: (id: string, err: string) => string;
       errorSchemeNotEditable: (kind: string) => string;
       errorSlugInvalid: (err: string) => string;
       errorSlugTaken: () => string;
@@ -837,6 +842,7 @@ export type Strings = {
       odMinusEmptyLabel: () => string;
       odMinusWrongLabel: () => string;
       odQuestionsLabel: () => string;
+      odRatingLabel: () => string;
       odToursLabel: () => string;
       outsideHint: () => string;
       outsideLabel: () => string;
@@ -868,6 +874,7 @@ export type Strings = {
       typeKsi: () => string;
       typeKsiStickers: () => string;
       typeLabel: () => string;
+      typeMp: () => string;
       typeMulti: () => string;
       typeOd: () => string;
       typeSi: () => string;

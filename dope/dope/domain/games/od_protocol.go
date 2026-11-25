@@ -137,7 +137,7 @@ func resultTeamCount(results ODResults) int {
 // fifteen, which is what a clear always rebuilt it with.
 func (od) PristineGame(slug, title string, shape Shape) ([]byte, []byte, error) {
 	scheme, state := ODEmptyGameJSON(slug, title, shape.Tours)
-	return withODMinus(scheme, state, shape.Minus)
+	return scheme, state, nil
 }
 
 // odDefaultTourQuestions is the one tour an OD game has when its scheme
@@ -149,25 +149,7 @@ func (od) ShapeOf(schemeJSON string) Shape {
 	if len(tours) == 0 {
 		tours = []int{odDefaultTourQuestions}
 	}
-	return Shape{Tours: tours, Minus: ParseODMinus(schemeJSON)}
-}
-
-// withODMinus puts a minus game's block into its pristine scheme.
-func withODMinus(scheme, state []byte, minus *ODMinus) ([]byte, []byte, error) {
-	if minus == nil {
-		return scheme, state, nil
-	}
-	obj, err := RawJSONObject(string(scheme))
-	if err != nil {
-		return nil, nil, err
-	}
-	block, err := json.Marshal(minus)
-	if err != nil {
-		return nil, nil, err
-	}
-	obj["minus"] = block
-	scheme, err = json.Marshal(obj)
-	return scheme, state, err
+	return Shape{Tours: tours}
 }
 
 func (od) FoldRoster(schemeJSON, stateJSON string, teams []RosterTeam, entryRemap map[int]int) ([]byte, []byte, error) {

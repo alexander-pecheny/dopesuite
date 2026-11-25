@@ -653,6 +653,9 @@ export const RU: Strings = {
     ksi: {
       label: () => "КСИ",
     },
+    mp: {
+      label: () => "Минное поле",
+    },
     multi: {
       barNoTasksAfter: (n: string, name: string) => `строка ${n}, ${name}: «|» без заданий после него`,
       barNoTasksBefore: (n: string, name: string) => `строка ${n}, ${name}: «|» без заданий перед ним`,
@@ -817,6 +820,8 @@ export const RU: Strings = {
       errorGridWidth: (min: string, max: string) => `Ширина боя на Сетке должна быть от ${min} до ${max}.`,
       errorMinigames: (err: string) => `Мини-игры: ${err}`,
       errorMultiSorting: (err: string) => `Что решает при равном итоге: ${err}`,
+      errorRatingNoTours: (id: string) => `У турнира ${id} на турнирном сайте не указаны туры`,
+      errorRatingTours: (id: string, err: string) => `Турнирный сайт не отдал туры турнира ${id}: ${err}`,
       errorSchemeNotEditable: (kind: string) => `Схему игры типа ${kind} здесь поменять нельзя. Удалите игру и создайте её заново.`,
       errorSlugInvalid: (err: string) => `Slug: ${err}`,
       errorSlugTaken: () => "Slug уже занят в этом фесте.",
@@ -859,6 +864,7 @@ shootout: true
       odMinusEmptyLabel: () => "Тур без единого ответа — минус треть вопросов тура как неправильные",
       odMinusWrongLabel: () => "Штраф за неправильный ответ",
       odQuestionsLabel: () => "Количество вопросов в туре",
+      odRatingLabel: () => "Или взять туры с турнирного сайта: ID турнира",
       odToursLabel: () => "Количество туров",
       outsideHint: () => "Команды отмеченного зачёта (например, тренеры) играют наравне со всеми, но в общей таблице стоят ниже всех и места не получают. В таблице своего зачёта места у них есть.",
       outsideLabel: () => "Вне зачёта",
@@ -890,6 +896,7 @@ shootout: true
       typeKsi: () => "КСИ",
       typeKsiStickers: () => "КСИ со стикерами",
       typeLabel: () => "Тип игры",
+      typeMp: () => "Минное поле",
       typeMulti: () => "Мультиигры",
       typeOd: () => "ОД",
       typeSi: () => "Личная СИ",

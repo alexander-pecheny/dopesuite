@@ -865,6 +865,9 @@ var RU = Strings{
 		Ksi: GamesKsiStrings{
 			Label: func() string { return "КСИ" },
 		},
+		Mp: GamesMpStrings{
+			Label: func() string { return "Минное поле" },
+		},
 		Multi: GamesMultiStrings{
 			BarNoTasksAfter: func(n string, name string) string {
 				return fmt.Sprintf("строка %s, %s: «|» без заданий после него", n, name)
@@ -1107,6 +1110,12 @@ var RU = Strings{
 			ErrorMultiSorting: func(err string) string {
 				return fmt.Sprintf("Что решает при равном итоге: %s", err)
 			},
+			ErrorRatingNoTours: func(id string) string {
+				return fmt.Sprintf("У турнира %s на турнирном сайте не указаны туры", id)
+			},
+			ErrorRatingTours: func(id string, err string) string {
+				return fmt.Sprintf("Турнирный сайт не отдал туры турнира %s: %s", id, err)
+			},
 			ErrorSchemeNotEditable: func(kind string) string {
 				return fmt.Sprintf("Схему игры типа %s здесь поменять нельзя. Удалите игру и создайте её заново.", kind)
 			},
@@ -1152,7 +1161,10 @@ var RU = Strings{
 			},
 			OdMinusWrongLabel: func() string { return "Штраф за неправильный ответ" },
 			OdQuestionsLabel:  func() string { return "Количество вопросов в туре" },
-			OdToursLabel:      func() string { return "Количество туров" },
+			OdRatingLabel: func() string {
+				return "Или взять туры с турнирного сайта: ID турнира"
+			},
+			OdToursLabel: func() string { return "Количество туров" },
 			OutsideHint: func() string {
 				return "Команды отмеченного зачёта (например, тренеры) играют наравне со всеми, но в общей таблице стоят ниже всех и места не получают. В таблице своего зачёта места у них есть."
 			},
@@ -1199,6 +1211,7 @@ var RU = Strings{
 			TypeKsi:         func() string { return "КСИ" },
 			TypeKsiStickers: func() string { return "КСИ со стикерами" },
 			TypeLabel:       func() string { return "Тип игры" },
+			TypeMp:          func() string { return "Минное поле" },
 			TypeMulti:       func() string { return "Мультиигры" },
 			TypeOd:          func() string { return "ОД" },
 			TypeSi:          func() string { return "Личная СИ" },

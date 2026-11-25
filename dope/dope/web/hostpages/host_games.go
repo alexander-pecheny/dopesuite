@@ -1,6 +1,7 @@
 package hostpages
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -220,22 +221,22 @@ type formVariant struct {
 var formatForms = map[string]formatForm{
 	games.OD: {
 		knobs: func() []dopeui.Item {
+			return append(toursKnobs(games.OD), dopeui.Hint(dopeui.Text(dopestrings.Default.Host.Games.WholeRosterHint())))
+		},
+		read: func(spec *gamebuild.Spec, form url.Values) error { return readTours(spec, form, games.OD) },
+	},
+	games.MP: {
+		knobs: func() []dopeui.Item {
 			s := dopestrings.Default
-			return []dopeui.Item{
-				dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
-				dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name("od_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
+			return append(toursKnobs(games.MP),
 				dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
-				dopeui.Field(dopeui.Label(s.Host.Games.OdMinusWrongLabel()), dopeui.Textfield(dopeui.Name("od_minus_wrong"), dopeui.Inputmode("numeric"), dopeui.Value("0"))),
-				dopeui.Field(dopeui.Label(s.Host.Games.OdMinusBonusLabel()), dopeui.Textfield(dopeui.Name("od_minus_bonus"), dopeui.Inputmode("numeric"), dopeui.Value("0"))),
-				dopeui.Checkbox(dopeui.Name("od_minus_empty"), dopeui.Value("1"), dopeui.Text(s.Host.Games.OdMinusEmptyLabel())),
-			}
+				dopeui.Field(dopeui.Label(s.Host.Games.OdMinusWrongLabel()), dopeui.Textfield(dopeui.Name("mp_wrong"), dopeui.Inputmode("numeric"), dopeui.Value(strconv.Itoa(games.DefaultODMinus.Wrong)))),
+				dopeui.Field(dopeui.Label(s.Host.Games.OdMinusBonusLabel()), dopeui.Textfield(dopeui.Name("mp_bonus"), dopeui.Inputmode("numeric"), dopeui.Value("0"))),
+				dopeui.Checkbox(dopeui.Name("mp_empty"), dopeui.Value("1"), dopeui.Text(s.Host.Games.OdMinusEmptyLabel())),
+			)
 		},
 		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
-			s := dopestrings.Default
-			if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", s.Host.Games.OdToursLabel(), 1, maxFormTours); err != nil {
-				return err
-			}
-			if spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", s.Host.Games.OdQuestionsLabel(), 1, maxFormQuestions); err != nil {
+			if err = readTours(spec, form, games.MP); err != nil {
 				return err
 			}
 			spec.ODMinus, err = odMinusFromForm(form)
@@ -780,11 +781,13 @@ type GameCreateRequest struct {
 	EntrantRefs []string `json:"entrant_refs"`
 	// DSL is the format's scheme in the scheme language (brain, si, troika,
 	// hamsa, ek, es). Every format with a bracket needs one.
-	DSL         string `json:"dsl"`
-	ODTours     int    `json:"od_tours"`
-	ODQuestions int    `json:"od_questions"`
-	// KDTables is how many tables a friendship cup seats; its tours and
-	// questions come in od_tours and od_questions.
+	DSL string `json:"dsl"`
+	// A ChGK sheet's tours (OD, the minefield, the friendship cup): so many
+	// of so many questions, or the tours of a rating.chgk.info tournament.
+	ODTours          int   `json:"od_tours"`
+	ODQuestions      int   `json:"od_questions"`
+	RatingTournament int64 `json:"rating_tournament"`
+	// KDTables is how many tables a friendship cup seats.
 	KDTables     int    `json:"kd_tables"`
 	KSIThemes    int    `json:"ksi_themes"`
 	MultiGames   string `json:"multi_games"`
@@ -800,11 +803,11 @@ type GameCreateRequest struct {
 	// sticker as the emptywrong sticker.
 	StickerPlusNominal       bool `json:"sticker_plus_nominal"`
 	StickerMissingEmptyWrong bool `json:"sticker_missing_emptywrong"`
-	// The OD minus game (Tminnoe pole): what a wrong answer costs (0: plain
-	// ChGK), the bonus for a whole tour, and the empty-tour charge.
-	ODMinusWrong int  `json:"od_minus_wrong"`
-	ODMinusBonus int  `json:"od_minus_bonus"`
-	ODMinusEmpty bool `json:"od_minus_empty"`
+	// The minefield: what a wrong answer costs (0: DefaultODMinus's), the
+	// bonus for a whole tour, and the empty-tour charge.
+	MinusWrong int  `json:"minus_wrong"`
+	MinusBonus int  `json:"minus_bonus"`
+	MinusEmpty bool `json:"minus_empty"`
 }
 
 // setKnobs sets the flat formats' number fields the request gives.
@@ -814,21 +817,26 @@ func (req GameCreateRequest) setKnobs(form url.Values) {
 			form.Set(key, strconv.Itoa(v))
 		}
 	}
-	setIfGiven("od_tours", req.ODTours)
-	setIfGiven("od_questions", req.ODQuestions)
+	for _, prefix := range []string{games.OD, games.MP} {
+		setIfGiven(prefix+"_tours", req.ODTours)
+		setIfGiven(prefix+"_questions", req.ODQuestions)
+		if req.RatingTournament != 0 {
+			form.Set(prefix+"_rating_id", fmt.Sprint(req.RatingTournament))
+		}
+	}
 	setIfGiven("kd_tours", req.ODTours)
 	setIfGiven("kd_questions", req.ODQuestions)
 	setIfGiven("kd_tables", req.KDTables)
 	setIfGiven("ksi_themes", req.KSIThemes)
 	setIfGiven("ksis_themes", req.KSIThemes)
-	setIfGiven("od_minus_wrong", req.ODMinusWrong)
-	setIfGiven("od_minus_bonus", req.ODMinusBonus)
+	setIfGiven("mp_wrong", cmp.Or(req.MinusWrong, games.DefaultODMinus.Wrong))
+	setIfGiven("mp_bonus", req.MinusBonus)
 	setIfTrue := func(key string, v bool) {
 		if v {
 			form.Set(key, "1")
 		}
 	}
-	setIfTrue("od_minus_empty", req.ODMinusEmpty)
+	setIfTrue("mp_empty", req.MinusEmpty)
 	setIfTrue("ksis_plus_nominal", req.StickerPlusNominal)
 	setIfTrue("ksis_missing_emptywrong", req.StickerMissingEmptyWrong)
 }
@@ -906,6 +914,9 @@ func (s *Server) createHostGame(ctx context.Context, festID int64, gameType stri
 	if !games.Known(gameType) && gameType != ksiStickersGameType {
 		return 0, corei18n.User(dopestrings.Default.Host.Games.ErrorTypeMissing())
 	}
+	if err := s.ratingTours(ctx, gameType, form); err != nil {
+		return 0, err
+	}
 	var gameID int64
 	_, err := s.commit(ctx, festID, "game-create", nil, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
 		spec, err := gameSpecFromForm(ctx, tx, festID, gameType, form)
@@ -966,15 +977,74 @@ func ksiStickerConfigFromForm(form url.Values) (json.RawMessage, error) {
 // nothing is a plain ChGK, and nil.
 func odMinusFromForm(form url.Values) (*games.ODMinus, error) {
 	s := dopestrings.Default
-	wrong, err := parseNonNegativeFormInt(form, "od_minus_wrong", s.Host.Games.OdMinusWrongLabel(), 0, maxFormQuestions)
-	if err != nil || wrong == 0 {
-		return nil, err
-	}
-	bonus, err := parseNonNegativeFormInt(form, "od_minus_bonus", s.Host.Games.OdMinusBonusLabel(), 0, maxFormQuestions)
+	wrong, err := parsePositiveFormInt(form, "mp_wrong", s.Host.Games.OdMinusWrongLabel(), 1, maxFormQuestions)
 	if err != nil {
 		return nil, err
 	}
-	return &games.ODMinus{Wrong: wrong, AllBonus: bonus, EmptyTour: form.Get("od_minus_empty") != ""}, nil
+	bonus, err := parseNonNegativeFormInt(form, "mp_bonus", s.Host.Games.OdMinusBonusLabel(), 0, maxFormQuestions)
+	if err != nil {
+		return nil, err
+	}
+	return &games.ODMinus{Wrong: wrong, AllBonus: bonus, EmptyTour: form.Get("mp_empty") != ""}, nil
+}
+
+// toursKnobs are a ChGK sheet's tours: so many of so many questions, or a
+// rating.chgk.info tournament whose tours it takes. prefix keeps each
+// format's fields apart, since every section posts.
+func toursKnobs(prefix string) []dopeui.Item {
+	s := dopestrings.Default
+	return []dopeui.Item{
+		dopeui.Field(dopeui.Label(s.Host.Games.OdToursLabel()), dopeui.Textfield(dopeui.Name(prefix+"_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
+		dopeui.Field(dopeui.Label(s.Host.Games.OdQuestionsLabel()), dopeui.Textfield(dopeui.Name(prefix+"_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
+		dopeui.Field(dopeui.Label(s.Host.Games.OdRatingLabel()), dopeui.Textfield(dopeui.Name(prefix+"_rating_id"), dopeui.Inputmode("numeric"))),
+	}
+}
+
+// readTours reads toursKnobs: the tours ratingTours fetched, else so many
+// of so many questions.
+func readTours(spec *gamebuild.Spec, form url.Values, prefix string) (err error) {
+	s := dopestrings.Default
+	if comp := strings.TrimSpace(form.Get(prefix + "_tour_comp")); comp != "" {
+		spec.TourComp = games.ParseTourComp(`{"tourComp":"` + comp + `"}`)
+		if len(spec.TourComp) == 0 || len(spec.TourComp) > maxFormTours ||
+			slices.ContainsFunc(spec.TourComp, func(n int) bool { return n < 1 || n > maxFormQuestions }) {
+			return corei18n.User(s.Host.Games.ErrorRatingNoTours(form.Get(prefix + "_rating_id")))
+		}
+		return nil
+	}
+	if spec.ODTours, err = parsePositiveFormInt(form, prefix+"_tours", s.Host.Games.OdToursLabel(), 1, maxFormTours); err != nil {
+		return err
+	}
+	spec.ODQuestions, err = parsePositiveFormInt(form, prefix+"_questions", s.Host.Games.OdQuestionsLabel(), 1, maxFormQuestions)
+	return err
+}
+
+// ratingTours fetches the tours of the rating.chgk.info tournament the form
+// names for the format picked into <type>_tour_comp, before the write: the
+// fetch is a network call and must not hold the write lock.
+func (srv *Server) ratingTours(ctx context.Context, gameType string, form url.Values) error {
+	raw := strings.TrimSpace(form.Get(gameType + "_rating_id"))
+	if raw == "" {
+		return nil
+	}
+	s := dopestrings.Default
+	id, err := strconv.Atoi(raw)
+	if err != nil || id <= 0 {
+		return corei18n.User(s.Host.Games.ErrorRatingNoTours(raw))
+	}
+	tours, err := srv.h.Engine().RatingSite("").Tours(ctx, int64(id))
+	if err != nil {
+		return corei18n.User(s.Host.Games.ErrorRatingTours(raw, err.Error()))
+	}
+	comp := make([]string, 0, len(tours))
+	for _, n := range tours {
+		comp = append(comp, strconv.Itoa(n))
+	}
+	if len(comp) == 0 {
+		return corei18n.User(s.Host.Games.ErrorRatingNoTours(raw))
+	}
+	form.Set(gameType+"_tour_comp", strings.Join(comp, ","))
+	return nil
 }
 
 func stickerColorFromForm(form url.Values, field, fallback string) string {

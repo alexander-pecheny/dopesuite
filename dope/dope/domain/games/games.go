@@ -28,6 +28,7 @@ const (
 	Troika = "troika" // troika — a match of two troikas over themes of three questions
 	Hamsa  = "hamsa"  // hamsa — four-seat bouts of five game rounds, the last one played on a bet
 	KD     = "kd"     // friendship cup — an OD whose tables reshuffle their players every tour
+	MP     = "mp"     // minefield — an OD where a wrong answer costs points
 )
 
 // Default is the game type assumed when a game has none recorded.
@@ -240,7 +241,7 @@ func KeepsEntrantList(code string) bool {
 // the creation form offers them. Each format's Definition, with its Protocol,
 // is in its own <format>_protocol.go (or <format>.go) beside its document.
 var registry = []Definition{
-	odFormat, ksiFormat, brainFormat, ekFormat, esFormat, siFormat,
+	odFormat, mpFormat, ksiFormat, brainFormat, ekFormat, esFormat, siFormat,
 	multiFormat, troikaFormat, hamsaFormat, kdFormat,
 }
 

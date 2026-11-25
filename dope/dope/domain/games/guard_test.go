@@ -23,10 +23,10 @@ var guardAllowed = map[string][]string{
 	// The fixture fest seeds one Game of each format and deals each its own
 	// plausible document; it is test data that names what it builds.
 	"domain/fixture/": nil,
-	// The roster import's result names the OD and KSI Games it updated, in
+	// The roster import's result names the OD (a minefield too) and KSI Games it updated, in
 	// fields of the API answer and of the stored journal event.
 	"domain/imports/handroster.go": {
-		`case games.OD:`,
+		`case games.OD, games.MP:`,
 		`case games.KSI:`,
 	},
 	// The legacy seed source "the fest's first KSI": the EK page's import
@@ -44,7 +44,7 @@ func TestNoFormatSwitchOutsideTheRegistry(t *testing.T) {
 	for _, d := range All() {
 		codes = append(codes, regexp.QuoteMeta(d.Code))
 	}
-	consts = []string{"EK", "ES", "OD", "KSI", "SI", "Brain", "Multi", "Troika", "Hamsa", "KD"}
+	consts = []string{"EK", "ES", "OD", "KSI", "SI", "Brain", "Multi", "Troika", "Hamsa", "KD", "MP"}
 	if len(consts) != len(codes) {
 		t.Fatalf("the guard names %d format constants, the registry has %d formats: add the new one's constant", len(consts), len(codes))
 	}

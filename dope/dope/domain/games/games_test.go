@@ -42,6 +42,7 @@ var formatFacts = map[string]struct {
 	individual, troikas, ekBout, flat, handRoster, divisions, pasted, toursSeed bool
 }{
 	OD:     {flat: true, divisions: true, toursSeed: true},
+	MP:     {flat: true, divisions: true, toursSeed: true},
 	KSI:    {flat: true, handRoster: true, divisions: true},
 	Brain:  {handRoster: true},
 	EK:     {ekBout: true, handRoster: true, pasted: true},
@@ -108,7 +109,7 @@ func TestTheFormatListsThatUsedToDisagree(t *testing.T) {
 		// ЭС's chosen entrants all along.
 		{"entrant list", func(d Definition) bool { return KeepsEntrantList(d.Code) }, []string{Brain, EK, ES, SI, Troika, Hamsa}},
 		// A flat format refuses a chosen entrant list.
-		{"flat", func(d Definition) bool { return d.Flat }, []string{OD, KSI, Multi, KD}},
+		{"flat", func(d Definition) bool { return d.Flat }, []string{OD, MP, KSI, Multi, KD}},
 		// CONTEXT.md, Состав в игре: the team buzzer formats and КСИ. Личная
 		// СИ seats players and Тройка troikas, whose people the troikas page
 		// edits. ОД and Мультиигры score no player, and nothing reads who
@@ -116,7 +117,7 @@ func TestTheFormatListsThatUsedToDisagree(t *testing.T) {
 		{"hand roster", func(d Definition) bool { return d.HandRoster }, []string{KSI, Brain, EK, ES, Hamsa}},
 		// The formats whose results carry зачёт chips. A friendship cup's
 		// tables carry no Flags.
-		{"divisions", func(d Definition) bool { return d.Divisions }, []string{OD, KSI, Multi}},
+		{"divisions", func(d Definition) bool { return d.Divisions }, []string{OD, MP, KSI, Multi}},
 		{"individual", func(d Definition) bool { return d.Individual }, []string{SI}},
 		{"EK's bout", func(d Definition) bool { return d.EKBout }, []string{EK, ES}},
 		{"DSL refused", func(d Definition) bool { return d.DSL == DSLRefused }, []string{Multi}},

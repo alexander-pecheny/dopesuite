@@ -1,6 +1,7 @@
 package gameexport
 
 import (
+	"slices"
 	"testing"
 
 	"dope/dope/domain/games"
@@ -16,10 +17,10 @@ func TestEveryFormatHasAnExport(t *testing.T) {
 	}
 }
 
-// Only OD and the friendship cup answer the results view.
+// Only OD, the minefield and the friendship cup answer the results view.
 func TestResultsViewFormats(t *testing.T) {
 	got := games.Codes(func(d games.Definition) bool { return d.Results != nil })
-	if len(got) != 2 || got[0] != games.OD || got[1] != games.KD {
+	if !slices.Equal(got, []string{games.OD, games.MP, games.KD}) {
 		t.Errorf("results view: %v", got)
 	}
 }

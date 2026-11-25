@@ -66,6 +66,11 @@ label = "Брейн"
 # The kind's display name (the games registry Label).
 label = "ЧГК"
 
+[mp]
+# The kind's display name (the games registry Label): a ChGK where a wrong
+# answer costs points.
+label = "Минное поле"
+
 [kd]
 # The kind's display name (the games registry Label): an ОД whose tables
 # reshuffle their players every tour, with a personal standings.

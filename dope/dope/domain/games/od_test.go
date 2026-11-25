@@ -1,6 +1,7 @@
 package games
 
 import (
+	"encoding/json"
 	"slices"
 	"testing"
 )
@@ -170,12 +171,35 @@ func TestComputeODResultsMinusContestedAndUnfinishedTour(t *testing.T) {
 
 func TestODMinusSurvivesAClear(t *testing.T) {
 	scheme := `{"tourComp":[6,6],"minus":{"wrong":3,"allBonus":3,"emptyTour":true}}`
-	shape := od{}.ShapeOf(scheme)
-	rebuilt, _, err := od{}.PristineGame("s", "t", shape)
+	shape := mp{}.ShapeOf(scheme)
+	rebuilt, _, err := mp{}.PristineGame("s", "t", shape)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := ParseODMinus(string(rebuilt)); got == nil || *got != (ODMinus{Wrong: 3, AllBonus: 3, EmptyTour: true}) {
 		t.Fatalf("minus after a clear = %+v", got)
+	}
+}
+
+// A minefield created without rules takes DefaultODMinus, and says it is
+// one in its scheme; a plain OD has no minus block.
+func TestMinefieldIsItsOwnGame(t *testing.T) {
+	scheme, _, err := mp{}.PristineGame("s", "t", Shape{Tours: []int{18, 15}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ParseODMinus(string(scheme)); got == nil || *got != DefaultODMinus {
+		t.Fatalf("default minus = %+v", got)
+	}
+	var head struct {
+		GameType string `json:"gameType"`
+		TourComp []int  `json:"tourComp"`
+	}
+	if err := json.Unmarshal(scheme, &head); err != nil || head.GameType != MP || !slices.Equal(head.TourComp, []int{18, 15}) {
+		t.Fatalf("scheme head = %+v, %v", head, err)
+	}
+	plain, _, _ := od{}.PristineGame("s", "t", Shape{Tours: []int{6}})
+	if ParseODMinus(string(plain)) != nil {
+		t.Fatal("a plain OD carries a minus block")
 	}
 }

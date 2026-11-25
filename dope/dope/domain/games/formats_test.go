@@ -44,6 +44,7 @@ func TestPristineGameSurvivesItsOwnShape(t *testing.T) {
 	shapes := map[string]Shape{
 		OD:    {Tours: []int{12, 15}},
 		KD:    {Tours: []int{4, 4, 4}, Tables: 5},
+		MP:    {Tours: []int{18, 18, 15}, Minus: &ODMinus{Wrong: 3, AllBonus: 3, EmptyTour: true}},
 		KSI:   {Themes: 12, Stickers: json.RawMessage(`{"types":[{"id":"x2","label":"×2","color":"#fdf66f","max":2}]}`)},
 		Multi: {Minigames: []MultiGame{{Name: "Раз", Columns: []MultiColumn{{Values: []int{1, 2}}}}}, Sorting: []string{"total"}},
 	}
