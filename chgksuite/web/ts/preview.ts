@@ -10,6 +10,7 @@ import { chgk4s } from "./chgk.js";
 import { splitTheme } from "./themes.js";
 import S from "./i18nstrings.js";
 import { exportMarker, isTheme, KIND } from "./cardkind.js";
+import { describe, printable } from "./fontcoverage.js";
 import type { HandoutPiece, ScreenValue } from "./chgk.js";
 
 export interface PvCard { id: number; kind: string; desc: string; listId?: number }
@@ -71,8 +72,9 @@ export function renderRich(text: string, imgMap: Map<string, string>, opts: Rich
       frag.append(el("a", { class: "pv-link", href: val, target: "_blank", rel: "noopener noreferrer", text: val }));
       continue;
     }
-    if (!type) { frag.append(document.createTextNode(nb(val as string))); continue; }
-    const span = el("span", { text: nb(val as string) });
+    if (!type) { frag.append(markUnprintable(nb(val as string))); continue; }
+    const span = el("span");
+    span.append(markUnprintable(nb(val as string)));
     if (type.includes("italic")) span.style.fontStyle = "italic";
     if (type.includes("bold")) span.style.fontWeight = "bold";
     if (type.includes("underline")) span.style.textDecoration = "underline";
@@ -80,6 +82,22 @@ export function renderRich(text: string, imgMap: Map<string, string>, opts: Rich
     if (type === "sc") span.classList.add("pv-sc");
     frag.append(span);
   }
+  return frag;
+}
+
+// markUnprintable is text as DOM, with every character the PDF export has no
+// face for marked: the browser draws it, so the author would never learn it
+// prints as a box.
+function markUnprintable(text: string): DocumentFragment {
+  const frag = document.createDocumentFragment();
+  let plain = "";
+  for (const ch of text) {
+    if (printable(ch)) { plain += ch; continue; }
+    if (plain) frag.append(document.createTextNode(plain));
+    plain = "";
+    frag.append(el("span", { class: "pv-unprintable", title: S.chgk.preview.unprintable(describe([ch])), text: ch }));
+  }
+  if (plain) frag.append(document.createTextNode(plain));
   return frag;
 }
 

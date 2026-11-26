@@ -9,6 +9,7 @@
 import { xyApp } from "./app.js";
 import { xySync } from "./sync.js";
 import { chgk4s } from "./chgk/chgk.js";
+import { describe, unprintable } from "./chgk/fontcoverage.js";
 import { xyListExport } from "./listexport.js";
 import { modal } from "./modal.js";
 import { createTelegramExport } from "./tgexport.js";
@@ -18,6 +19,10 @@ import type { BoardCard } from "./unlock.js";
 import S from "./i18nstrings.js";
 
 const { byId, errMsg, downloadBlob } = xyApp;
+
+// The formats typst sets, in chgksuite's fonts. Word sets the .docx in fonts
+// of its own and finds one for anything, so only these can lose a character.
+const PDF_FORMATS = new Set(["pdf", "pdf_mobile", "handouts"]);
 
 export function createExportPanel(board: Board, attachments: Pick<Attachments, "appendImages">): ListPanel {
 
@@ -190,6 +195,15 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
     return fd;
   }
 
+  // confirmPrintable asks before a PDF whose text has characters none of the
+  // fonts chgksuite embeds has: the browser drew them, the PDF would show a
+  // box. false is the reader calling the export off.
+  function confirmPrintable(formats: string[], source: string, hndt: string): boolean {
+    if (!formats.some((f) => PDF_FORMATS.has(f))) return true;
+    const chars = unprintable(formats.includes("handouts") ? source + hndt : source);
+    return !chars.length || confirm(S.export.run.unprintableConfirm(describe(chars)));
+  }
+
   const telegram = createTelegramExport({ boardId: () => board.id });
 
   // runExport renders the chosen formats. A bare .4s with no images never touches
@@ -213,6 +227,7 @@ export function createExportPanel(board: Board, attachments: Pick<Attachments, "
 
     const msg = byId("exportMessage");
     if (!xySync.requireOnline(S.export.run.offlineFormats(), msg)) return;
+    if (!confirmPrintable(formats, source, hndt)) return;
     // Telegram is a conversation, not a download: it hands over to its own
     // dialog, which asks where to post and then reports what the bot is doing.
     if (formats.length === 1 && formats[0] === "telegram") {

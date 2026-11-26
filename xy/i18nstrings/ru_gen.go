@@ -1914,6 +1914,9 @@ var RU = Strings{
 			ProgressHandouts: func() string {
 				return "Экспорт… (вёрстка раздаток может занять время)"
 			},
+			UnprintableConfirm: func(chars string) string {
+				return fmt.Sprintf("В PDF эти символы выйдут квадратиками, для них нет шрифта: %s. Продолжить?", chars)
+			},
 		},
 	},
 	Gallery: GalleryStrings{

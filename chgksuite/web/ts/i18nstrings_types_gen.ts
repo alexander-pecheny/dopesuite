@@ -40,6 +40,7 @@ export type Strings = {
     };
     preview: {
       imageMissing: (name: string) => string;
+      unprintable: (chars: string) => string;
     };
   };
   chgkimport: {

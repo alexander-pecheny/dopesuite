@@ -34,5 +34,8 @@ progress_handouts = "Экспорт… (вёрстка раздаток може
 # Confirm when images a format needs are missing from the attachments;
 # names is the comma-joined list of missing names.
 missing_images_confirm = 'Не найдены изображения: {{.names}}. Продолжить?'
+# Confirm before a PDF export when the text has characters no font in the PDF
+# has; chars lists each with its code point.
+unprintable_confirm = 'В PDF эти символы выйдут квадратиками, для них нет шрифта: {{.chars}}. Продолжить?'
 # Failure line; error is the message of whatever threw.
 failed = 'Экспорт не удался: {{.error}}'

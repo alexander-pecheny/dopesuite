@@ -1441,6 +1441,7 @@ export type Strings = {
       offlineFormats: () => string;
       progress: () => string;
       progressHandouts: () => string;
+      unprintableConfirm: (chars: string) => string;
     };
   };
   gallery: {

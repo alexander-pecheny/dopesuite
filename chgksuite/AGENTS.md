@@ -195,9 +195,12 @@ typstdoc/              parsed structure → .typ → PDF via typst (the same was
                        cap-height→baseline by default, which makes Word's flush paragraphs overlap by a
                        descender — hence top-edge/bottom-edge + leading: 0 in the preamble. Noto Sans has no
                        `smcp`, so (sc …) small caps are synthesized (upper + 0.8em), as Word synthesizes them.
-fallbackfont/          the Noto faces typst falls back on where Noto Sans has no glyph (Armenian,
-                       Georgian, Hebrew, Arabic, Indic, Thai, Ethiopic, symbols, math, SC, KR
-                       Hangul), built by scripts/fallbackfonts.py. The typst binary reads them all
+fallbackfont/          the faces typst falls back on where Noto Sans has no glyph: every Noto family
+                       for a script it lacks (scripts/fallbackfonts.json), then Unifont cut down to
+                       what no Noto face has, built by scripts/fallbackfonts.py, which also writes
+                       web/ts/fontcoverage_gen.ts: the browser's table of what the PDF can show,
+                       which fontcoverage.ts marks in the preview and xy's export confirms before a
+                       PDF (a test holds the table to the faces). The typst binary reads them all
                        from its --font-path; the wasm pool loads a family into an instance only
                        when a source it compiles has a character of it (Set.For), and drops it
                        at the next SetImages

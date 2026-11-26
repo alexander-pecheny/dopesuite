@@ -45,6 +45,9 @@ var RU = Strings{
 		},
 		Preview: ChgkPreviewStrings{
 			ImageMissing: func(name string) string { return fmt.Sprintf("[изображение: %s]", name) },
+			Unprintable: func(chars string) string {
+				return fmt.Sprintf("В PDF этот символ выйдет квадратиком: для %s нет шрифта", chars)
+			},
 		},
 	},
 	Chgkimport: ChgkimportStrings{

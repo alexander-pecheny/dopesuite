@@ -62,4 +62,6 @@
 /* block, like the image it stands in for — renderRich swallows the source
    newline after an (img …), so an inline placeholder would glue to the text */
 .pv-img-missing { display: block; color: var(--muted); font-style: italic; }
+/* a character the PDF has no font for: the browser draws it, the PDF would not */
+.pv-unprintable { background: var(--warn-bg); text-decoration: wavy underline var(--danger); cursor: help; }
 

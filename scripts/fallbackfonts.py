@@ -5,21 +5,29 @@
 """Build the fallback faces typst reaches for when Noto Sans lacks a character.
 
 typst sees no font but the ones chgksuite hands it, and Noto Sans covers Latin,
-Greek and Cyrillic only. An Armenian or Georgian word in a comment, a Hebrew
-quote or a Chinese character came out of the PDF export and the handouts as
-tofu. typst falls back on its own to any loaded face that has the glyph, so
-loading these is the whole fix: the document still names Noto Sans alone.
+Greek and Cyrillic only. A browser always finds some font for a character, so
+an author may paste in anything and expect to see it in the PDF too. This
+builds a face for every script Unicode has, in two tiers:
 
-Each face is the Noto family for one script, from one google/fonts commit and
-checksummed, so a rerun is byte-stable. google/fonts ships them variable; typst
-would set a variable face at its default instance only, so this pins a static
-Regular and Bold out of each. A script added later is one line in FACES.
+  · every Noto family google/fonts carries for a script Noto Sans lacks,
+    listed with its checksum in fallbackfonts.json. Where a script has both,
+    the sans is taken and the serif left out; the UI, Display, Mono and
+    looped variants and the extra CJK regions (HK, TC, JP) are left out too,
+    since SC has the Han and the kana. Most are Regular only; a script a
+    ЧГК author plausibly sets in bold has "weights": [400, 700]. Korean is
+    cut down to Hangul ("keep": "hangul"), as SC already has the hanja;
+  · GNU Unifont and Unifont Upper as the last resort, cut down to the
+    characters no Noto face has. They are bitmap-style glyphs, plain but
+    legible, which beats a box. The ~70,000 rare CJK ideographs of the
+    extension blocks are the one thing left out on purpose: no Noto face
+    has them and a font that does costs 30-70 MB.
 
-CJK is Noto Sans SC, Regular alone: it is 17 MB variable and ~10 MB per static
-weight, and every typst instance in xy's pool holds its own copy. SC carries
-the kana too, so it covers Japanese as well as Chinese. Korean is Noto Sans KR
-cut down to Hangul: SC already has the hanja, and the rest of KR would double
-the cost.
+google/fonts ships most Noto families variable. typst would set a variable
+face at its default instance only, so this pins static instances. Every
+download is pinned and checksummed, so a rerun is byte-stable.
+
+The faces cost binary size only: xy's typst pool loads a family into an
+instance only when a source has a character of it (chgksuite/fallbackfont).
 
 Run from the repo root:  uv run scripts/fallbackfonts.py
 """
@@ -27,103 +35,159 @@ Run from the repo root:  uv run scripts/fallbackfonts.py
 from __future__ import annotations
 
 import io
+import json
+import re
 import sys
+from pathlib import PurePosixPath
 
 from fontTools import subset
+from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
 
 from fontsource import ROOT, fetch, load
 
 COMMIT = "3b1480ea4b6e15fed70a42f4cb29216476a044ed"  # google/fonts main, 2026-08
+MANIFEST = ROOT / "scripts/fallbackfonts.json"
 OUT = ROOT / "chgksuite/fallbackfont/fonts"
+COVERAGE_TS = ROOT / "chgksuite/web/ts/fontcoverage_gen.ts"
+BASE = [ROOT / "chgksuite/handout/assets" / f"NotoSans-{s}.ttf"
+        for s in ("Regular", "Bold", "Italic", "BoldItalic")]
 
-REGULAR, BOLD = 400, 700
-BOTH = (REGULAR, BOLD)
+REGULAR = 400
+BOLD = 700
+STYLE = {REGULAR: "Regular", BOLD: "Bold"}
 
 # Hangul: the jamo, the compatibility jamo, extended A and B, the syllables.
-HANGUL = [*range(0x1100, 0x1200), *range(0x3130, 0x3190), *range(0xA960, 0xA980),
-          *range(0xAC00, 0xD7B0), *range(0xD7B0, 0xD800)]
+HANGUL_BLOCKS = ((0x1100, 0x1200), (0x3130, 0x3190), (0xA960, 0xA980), (0xAC00, 0xD7B0), (0xD7B0, 0xD800))
+KEEP = {"hangul": [cp for first, end in HANGUL_BLOCKS for cp in range(first, end)]}
 
-# (google/fonts path under ofl/, sha256, weights to pin, a character it must
-# cover, and the code points to keep, or None for all of them)
-FACES = [
-    ("notosansarmenian/NotoSansArmenian[wdth,wght].ttf",
-     "0870908d8318435a5daf1cd280ae15063f990cd9ad60f3e94c734ce9e1ffef71", BOTH, "օ", None),
-    ("notosansgeorgian/NotoSansGeorgian[wdth,wght].ttf",
-     "dc591156f36842d38996c4a7a17fee9bb58e45da3e2cac7a31b7d33de700adb9", BOTH, "ა", None),
-    ("notosanshebrew/NotoSansHebrew[wdth,wght].ttf",
-     "7ef36a2c3593758cdb622e1bdef4f84523e92fbc3ccc667438dd80ff54c2de88", BOTH, "ש", None),
-    ("notosansarabic/NotoSansArabic[wdth,wght].ttf",
-     "63111b5b2e074dd48cc67692e0a2726d86ee94c1c37fe8598257b7b4e87e869e", BOTH, "ع", None),
-    ("notosansdevanagari/NotoSansDevanagari[wdth,wght].ttf",
-     "9ce7b04f60e363d8870e5997744cf85cf69d38a4d7d129d364d92a3b14b461d7", BOTH, "क", None),
-    ("notosansbengali/NotoSansBengali[wdth,wght].ttf",
-     "dcd42978094e584a849c84a51450eeac40c8826057d566ea6d4b9627a403a05a", BOTH, "ক", None),
-    ("notosanstamil/NotoSansTamil[wdth,wght].ttf",
-     "aa3a9b321f4b0bb2c40203ffbde9af89713227866e0e13f76e5b9eeea727cf88", BOTH, "த", None),
-    ("notosansthai/NotoSansThai[wdth,wght].ttf",
-     "5a1c559bb539583c8a1fd99d1c5b9491e5e14478c9cd2bd0970d5c3096cc9ef8", BOTH, "ก", None),
-    ("notosansethiopic/NotoSansEthiopic[wdth,wght].ttf",
-     "0dbccc00b22d180ebd6a4bd8a733918a29e709fa6798023adc3e6cd40da65077", BOTH, "ሀ", None),
-    ("notosanssymbols/NotoSansSymbols[wght].ttf",
-     "f7e7e04b4a24b6c78893d50cbfd2b2f6cae49617ab047bfef668d252adb128f7", BOTH, "♈", None),
-    ("notosanssymbols2/NotoSansSymbols2-Regular.ttf",
-     "7d5fb73b7ca67a6798101741f5d280a3d016a56a197afcd4199dbb57b4b82a21", (REGULAR,), "♔", None),
-    ("notosansmath/NotoSansMath-Regular.ttf",
-     "3f495fe933c06786e4d5f6d86b8ee70b6753a68ee3b9d87528726de0f6e2c47d", (REGULAR,), "∮", None),
-    ("notosanssc/NotoSansSC[wght].ttf",
-     "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da", (REGULAR,), "中", None),
-    ("notosanskr/NotoSansKR[wght].ttf",
-     "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252", (REGULAR,), "한", HANGUL),
+# The Private Use Areas: the BMP's, and planes 15 and 16 whole.
+PUA_FIRST = 0xE000
+PUA_LAST = 0xF8FF
+PUA_PLANES = 0xF0000
+
+UNIFONT_VERSION = "17.0.05"
+UNIFONT_URL = f"https://unifoundry.com/pub/unifont/unifont-{UNIFONT_VERSION}/font-builds/"
+# (file, sha256, the name it is written under). Unifont sorts after every Noto
+# face, which is the order fallbackfont tries them in.
+LAST_RESORT = [
+    (f"unifont-{UNIFONT_VERSION}.otf",
+     "85701ab9b1e251ee16f4df00b13f22eac311d72b7dab427a7d975fe7f5064702", "Unifont-Regular.otf"),
+    (f"unifont_upper-{UNIFONT_VERSION}.otf",
+     "f4fd6d5d752726d384feef175bb780c9f29382cd4941c9e1e6990d7c3822a090", "UnifontUpper-Regular.otf"),
 ]
 
-STYLE = {REGULAR: "Regular", BOLD: "Bold"}
+
+def private(cp: int) -> bool:
+    """The Private Use Areas, whose characters mean whatever one font says:
+    Unifont's glyphs there would stand for nothing an author typed."""
+    return PUA_FIRST <= cp <= PUA_LAST or cp >= PUA_PLANES
 
 
 def family_file(path: str) -> str:
     """NotoSansArmenian out of notosansarmenian/NotoSansArmenian[wdth,wght].ttf."""
-    name = path.split("/")[1]
-    return name.split("[")[0].split("-")[0].removesuffix(".ttf")
+    return re.match(r"[A-Za-z0-9]+", PurePosixPath(path).name).group()
 
 
-def build(path: str, digest: str, weight: int, probe: str, keep: list[int] | None) -> bytes:
-    name = path.split("/")[1]
-    data = fetch(f"fallback/{name}", f"https://raw.githubusercontent.com/google/fonts/{COMMIT}/ofl/{path}", digest)
+def static(font: TTFont, weight: int) -> TTFont:
+    """The instance at `weight`, every other axis at its default."""
+    pin = {a.axisTag: a.defaultValue for a in font["fvar"].axes}
+    if "wght" in pin:
+        pin["wght"] = weight
+    try:
+        font = instancer.instantiateVariableFont(font, pin, updateFontNames=True)
+    except ValueError:
+        # No STAT values to name the instance by. The names stay the variable
+        # font's, whose default is the Regular this pins anyway.
+        font = instancer.instantiateVariableFont(font, pin)
+    font.recalcTimestamp = False
+    return font
+
+
+def cut(font: TTFont, unicodes) -> None:
+    opts = subset.Options()
+    opts.layout_features = ["*"]
+    opts.name_IDs = ["*"]
+    opts.notdef_outline = True
+    subsetter = subset.Subsetter(opts)
+    subsetter.populate(unicodes=unicodes)
+    subsetter.subset(font)
+
+
+def build(entry: dict, weight: int) -> TTFont:
+    path = entry["path"]
+    name = PurePosixPath(path).name
+    data = fetch(f"fallback/{name}", f"https://raw.githubusercontent.com/google/fonts/{COMMIT}/ofl/{path}",
+                 entry["sha256"])
     font = load(data)
     if "fvar" in font:
-        axes = {a.axisTag: a for a in font["fvar"].axes}
-        pin = {"wght": weight}
-        if "wdth" in axes:
-            pin["wdth"] = 100
-        font = instancer.instantiateVariableFont(font, pin, updateFontNames=True)
-        font.recalcTimestamp = False
-    if keep is not None:
-        opts = subset.Options()
-        opts.layout_features = ["*"]
-        opts.name_IDs = ["*"]
-        opts.notdef_outline = True
-        subsetter = subset.Subsetter(opts)
-        subsetter.populate(unicodes=keep)
-        subsetter.subset(font)
-    if ord(probe) not in font.getBestCmap():
+        font = static(font, weight)
+    if "keep" in entry:
+        cut(font, KEEP[entry["keep"]])
+    probe = entry.get("probe")
+    if probe and ord(probe) not in font.getBestCmap():
         sys.exit(f"{name} lacks {probe!r}")
-    if font["OS/2"].usWeightClass != weight:
+    if BOLD in entry.get("weights", ()) and font["OS/2"].usWeightClass != weight:
         sys.exit(f"{name}: weight {font['OS/2'].usWeightClass}, wanted {weight}")
+    return font
+
+
+def save(font: TTFont, target) -> None:
     out = io.BytesIO()
     font.save(out)
-    return out.getvalue()
+    target.write_bytes(out.getvalue())
+    print(f"+ {target.relative_to(ROOT)} ({target.stat().st_size} bytes)")
+
+
+def write_coverage(covered: set[int]) -> None:
+    """Every character some face has, as ranges, for the editor in the browser:
+    it warns about a character the PDF cannot show while the author types it.
+    fallbackfont's tests hold the table to the embedded faces."""
+    firsts = [cp for cp in sorted(covered) if cp - 1 not in covered]
+    lasts = [cp for cp in sorted(covered) if cp + 1 not in covered]
+    lines = [f"  0x{a:X}, 0x{b:X}," for a, b in zip(firsts, lasts)]
+    COVERAGE_TS.write_text(
+        "// Code generated by scripts/fallbackfonts.py. DO NOT EDIT.\n\n"
+        "// The characters the PDF export has a face for (Noto Sans and the fallback\n"
+        "// faces), as inclusive [first, last] pairs in ascending order.\n"
+        "export const COVERED = [\n" + "\n".join(lines) + "\n];\n")
+    print(f"+ {COVERAGE_TS.relative_to(ROOT)} ({len(lines)} ranges)")
+
+
+def build_noto(covered: set[int]) -> set[str]:
+    """The Noto faces of the manifest; adds what they cover to `covered`."""
+    written = set()
+    for entry in json.loads(MANIFEST.read_text()):
+        for w in entry.get("weights", [REGULAR]):
+            font = build(entry, w)
+            covered |= set(font.getBestCmap())
+            target = OUT / f"{family_file(entry['path'])}-{STYLE[w]}.ttf"
+            save(font, target)
+            written.add(target.name)
+    return written
+
+
+def build_last_resort(covered: set[int]) -> set[str]:
+    """Unifont, cut down to what nothing before it covers."""
+    written = set()
+    for name, digest, out_name in LAST_RESORT:
+        font = load(fetch(f"fallback/{name}", UNIFONT_URL + name, digest))
+        rest = [cp for cp in font.getBestCmap() if cp not in covered and not private(cp)]
+        cut(font, rest)
+        covered |= set(rest)
+        save(font, OUT / out_name)
+        written.add(out_name)
+    return written
 
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    wanted = set()
-    for path, digest, weights, probe, keep in FACES:
-        for w in weights:
-            target = OUT / f"{family_file(path)}-{STYLE[w]}.ttf"
-            target.write_bytes(build(path, digest, w, probe, keep))
-            wanted.add(target.name)
-            print(f"+ {target.relative_to(ROOT)} ({target.stat().st_size} bytes)")
-    for stale in OUT.glob("*.ttf"):
+    covered = set()
+    for p in BASE:
+        covered |= set(TTFont(p, lazy=True).getBestCmap())
+    wanted = build_noto(covered) | build_last_resort(covered)
+    write_coverage(covered)
+    for stale in [*OUT.glob("*.ttf"), *OUT.glob("*.otf")]:
         if stale.name not in wanted:
             stale.unlink()
             print(f"- {stale.relative_to(ROOT)}")

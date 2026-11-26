@@ -19,7 +19,7 @@ import (
 	"golang.org/x/image/font/sfnt"
 )
 
-//go:embed fonts/*.ttf
+//go:embed fonts/*.ttf fonts/*.otf
 var fontFS embed.FS
 
 const dir = "fonts"
@@ -132,6 +132,23 @@ func (s *Set) For(text string) []Family {
 		}
 	}
 	return out
+}
+
+// Covers reports whether some face, a base one or a fallback, has r.
+func (s *Set) Covers(r rune) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, f := range s.base {
+		if s.has(f, r) {
+			return true
+		}
+	}
+	for _, f := range families() {
+		if s.has(f.first, r) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Set) familyFor(fams []parsedFamily, r rune) int {

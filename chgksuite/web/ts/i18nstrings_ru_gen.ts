@@ -40,6 +40,7 @@ export const RU: Strings = {
     },
     preview: {
       imageMissing: (name: string) => `[изображение: ${name}]`,
+      unprintable: (chars: string) => `В PDF этот символ выйдет квадратиком: для ${chars} нет шрифта`,
     },
   },
   chgkimport: {

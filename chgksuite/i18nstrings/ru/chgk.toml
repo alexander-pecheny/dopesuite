@@ -65,3 +65,5 @@ image_handout_note = '[{{.label}}: см. изображение]'
 [preview]
 # The placeholder shown where a handout image has not loaded yet (preview.ts).
 image_missing = '[изображение: {{.name}}]'
+# The tooltip on a character the PDF export has no font for (preview.ts).
+unprintable = 'В PDF этот символ выйдет квадратиком: для {{.chars}} нет шрифта'
