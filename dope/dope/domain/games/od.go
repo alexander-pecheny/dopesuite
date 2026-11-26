@@ -36,6 +36,10 @@ type ODState struct {
 	// Contested are the contested answers, which the server writes here from its own
 	// tables (domain/contested) without their text.
 	Contested []ODContested `json:"contested,omitempty"`
+	// Ticks are a minus game's (ODMinus) finished tours, by the team's Number
+	// and then by tour: a team's answers on a tour count once the host ticked
+	// it. Completed says nothing there.
+	Ticks map[string][]bool `json:"ticks,omitempty"`
 }
 
 // ODContested is one team's contested answer on one question, under the team's Number.
@@ -257,27 +261,34 @@ func ParseODMinus(schemeJSON string) *ODMinus {
 // teams that took question q, and wrong[q] those of a minus game whose
 // number was entered with a minus there and who did not also take it (an
 // accepted contested answer enters it as taken). An unfinished question has
-// nil sets.
+// nil sets. In a minus game ticked[team][tour] is which tours each team
+// finished, and a question holds the answers of those teams alone.
 type odAnswers struct {
 	took, wrong []map[int]bool
+	ticked      [][]bool
 }
 
-func odAnswersOf(state ODState, indexByNumber map[int64]int) (odAnswers, bool) {
+func odAnswersOf(state ODState, indexByNumber map[int64]int, tours []int, minus bool) (odAnswers, bool) {
 	a := odAnswers{took: make([]map[int]bool, len(state.Entries)), wrong: make([]map[int]bool, len(state.Entries))}
+	counts, done := odCompleted(state)
+	if minus {
+		a.ticked = odTicked(state, tours)
+		counts, done = odTickedCounts(a.ticked, tours)
+	}
 	anyCompleted := false
 	for q, column := range state.Entries {
-		if q < len(state.Completed) && !state.Completed[q] {
+		if !done(q) {
 			continue
 		}
 		anyCompleted = true
 		a.took[q], a.wrong[q] = map[int]bool{}, map[int]bool{}
 		for _, num := range column {
-			if idx, ok := indexByNumber[num]; ok {
+			if idx, ok := indexByNumber[num]; ok && counts(q, idx) {
 				a.took[q][idx] = true
 			}
 		}
 		for _, num := range column {
-			if idx, ok := indexByNumber[-num]; ok && num < 0 && !a.took[q][idx] {
+			if idx, ok := indexByNumber[-num]; ok && num < 0 && !a.took[q][idx] && counts(q, idx) {
 				a.wrong[q][idx] = true
 			}
 		}
@@ -285,9 +296,64 @@ func odAnswersOf(state ODState, indexByNumber map[int64]int) (odAnswers, bool) {
 	return a, anyCompleted
 }
 
-// tour counts one team's right and wrong answers over the questions of a
-// tour, and says whether every one of them is completed.
-func (a odAnswers) tour(from, size, teamIdx int) (right, wrong int, done bool) {
+// ODTaken is, for each completed question, the team rows that took it, as
+// the standings count them (state already Scored); nil for a question not
+// completed.
+func ODTaken(schemeJSON string, state ODState, tours []int) []map[int]bool {
+	indexByNumber := make(map[int64]int, len(state.Teams))
+	for i, t := range state.Teams {
+		if t.Number != 0 {
+			indexByNumber[t.Number] = i
+		}
+	}
+	answers, _ := odAnswersOf(state, indexByNumber, tours, ParseODMinus(schemeJSON) != nil)
+	return answers.took
+}
+
+// odCompleted is whose answers on a question count, and whether it is done:
+// everyone's, once the question is completed.
+func odCompleted(state ODState) (counts func(q, idx int) bool, done func(q int) bool) {
+	done = func(q int) bool { return q >= len(state.Completed) || state.Completed[q] }
+	return func(q, _ int) bool { return done(q) }, done
+}
+
+// odTickedCounts is odCompleted for a minus game: a row's answers count
+// once it ticked the question's tour, and the question is done once some row
+// did.
+func odTickedCounts(ticked [][]bool, tours []int) (counts func(q, idx int) bool, done func(q int) bool) {
+	tourOf := odTourOf(tours)
+	counts = func(q, idx int) bool { return q < len(tourOf) && ticked[idx][tourOf[q]] }
+	done = func(q int) bool {
+		return slices.ContainsFunc(ticked, func(row []bool) bool { return q < len(tourOf) && row[tourOf[q]] })
+	}
+	return counts, done
+}
+
+// odTicked is each team row's ticked tours.
+func odTicked(state ODState, tours []int) [][]bool {
+	out := make([][]bool, len(state.Teams))
+	for i, team := range state.Teams {
+		out[i] = make([]bool, len(tours))
+		copy(out[i], state.Ticks[fmt.Sprint(team.Number)])
+	}
+	return out
+}
+
+// odTourOf is the tour of each question.
+func odTourOf(tours []int) []int {
+	var out []int
+	for t, size := range tours {
+		for range size {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// tour counts one team's right and wrong answers over tour t's questions,
+// and says whether the tour is finished: every question completed, or in a
+// minus game the team's tour ticked.
+func (a odAnswers) tour(t, from, size, teamIdx int) (right, wrong int, done bool) {
 	done = size > 0
 	for q := from; q < from+size; q++ {
 		if q >= len(a.took) || a.took[q] == nil {
@@ -300,6 +366,9 @@ func (a odAnswers) tour(from, size, teamIdx int) (right, wrong int, done bool) {
 			wrong++
 		}
 	}
+	if a.ticked != nil {
+		done = size > 0 && a.ticked[teamIdx][t]
+	}
 	return right, wrong, done
 }
 
@@ -310,7 +379,7 @@ func odMinusTours(minus ODMinus, tours []int, answers odAnswers, teamIdx int) (p
 	done := make([]bool, len(tours))
 	from := 0
 	for t, size := range tours {
-		right[t], wrongs[t], done[t] = answers.tour(from, size, teamIdx)
+		right[t], wrongs[t], done[t] = answers.tour(t, from, size, teamIdx)
 		from += size
 	}
 	answered := sumInts(right)+sumInts(wrongs) > 0
@@ -353,47 +422,13 @@ func ComputeODResults(schemeJSON, stateJSON string) (ODResults, error) {
 			indexByNumber[t.Number] = i
 		}
 	}
-	answers, anyCompleted := odAnswersOf(state, indexByNumber)
-	took := answers.took
 	minus := ParseODMinus(schemeJSON)
+	answers, anyCompleted := odAnswersOf(state, indexByNumber, tours, minus != nil)
+	took := answers.took
 
 	teams := make([]ODResultsTeam, teamCount)
-	totalQuestions := 0
-	for _, tourSize := range tours {
-		totalQuestions += tourSize
-	}
 	for teamIdx, team := range state.Teams {
-		tourTotals := make([]int, len(tours))
-		total := 0
-		rating := 0
-		var mask strings.Builder
-		mask.Grow(totalQuestions)
-		qBase := 0
-		for tourIdx, tourSize := range tours {
-			for i := 0; i < tourSize; i++ {
-				q := qBase + i
-				if q < len(took) && took[q] != nil && took[q][teamIdx] {
-					total++
-					tourTotals[tourIdx]++
-					rating += teamCount - len(took[q]) + 1
-					mask.WriteByte('1')
-				} else {
-					mask.WriteByte('0')
-				}
-			}
-			qBase += tourSize
-		}
-		row := ODResultsTeam{
-			Index:      teamIdx,
-			Number:     team.Number,
-			Name:       team.Name,
-			City:       team.City,
-			Total:      total,
-			TourTotals: tourTotals,
-			Rating:     rating,
-			Mask:       mask.String(),
-			rank:       []int{total},
-		}
+		row := odTeamRow(team, teamIdx, teamCount, tours, took)
 		if minus != nil {
 			row.scoreMinus(*minus, tours, answers)
 		}
@@ -415,23 +450,53 @@ func ComputeODResults(schemeJSON, stateJSON string) (ODResults, error) {
 		ranked[rank] = teams[teamIdx]
 	}
 	if anyCompleted {
-		for i := 0; i < len(ranked); {
-			j := i
-			for j+1 < len(ranked) && ranked[j+1].SharesPlace(ranked[i]) {
-				j++
-			}
-			label := strconv.Itoa(i + 1)
-			if j > i {
-				label = fmt.Sprintf("%d–%d", i+1, j+1)
-			}
-			for k := i; k <= j; k++ {
-				ranked[k].Place = label
-			}
-			i = j + 1
-		}
+		labelPlaces(ranked)
 	}
 
 	return ODResults{TourComp: tours, Teams: ranked}, nil
+}
+
+// odTeamRow is a team's row as a plain ChGK scores it: the questions it
+// took, per tour and overall, its rating and its mask.
+func odTeamRow(team ODTeam, teamIdx, teamCount int, tours []int, took []map[int]bool) ODResultsTeam {
+	row := ODResultsTeam{Index: teamIdx, Number: team.Number, Name: team.Name, City: team.City, TourTotals: make([]int, len(tours))}
+	var mask strings.Builder
+	q := 0
+	for tourIdx, tourSize := range tours {
+		for range tourSize {
+			if q < len(took) && took[q] != nil && took[q][teamIdx] {
+				row.Total++
+				row.TourTotals[tourIdx]++
+				row.Rating += teamCount - len(took[q]) + 1
+				mask.WriteByte('1')
+			} else {
+				mask.WriteByte('0')
+			}
+			q++
+		}
+	}
+	row.Mask = mask.String()
+	row.rank = []int{row.Total}
+	return row
+}
+
+// labelPlaces gives ranked rows their places, a shared one ("2–4") to rows
+// level on everything that places them.
+func labelPlaces(ranked []ODResultsTeam) {
+	for i := 0; i < len(ranked); {
+		j := i
+		for j+1 < len(ranked) && ranked[j+1].SharesPlace(ranked[i]) {
+			j++
+		}
+		label := strconv.Itoa(i + 1)
+		if j > i {
+			label = fmt.Sprintf("%d–%d", i+1, j+1)
+		}
+		for k := i; k <= j; k++ {
+			ranked[k].Place = label
+		}
+		i = j + 1
+	}
 }
 
 // scoreMinus rescores a row as a minus game does: points, and the places

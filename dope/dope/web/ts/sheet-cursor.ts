@@ -64,11 +64,15 @@ export function cycleMark(cell: Element): Mark {
 }
 
 // markKey maps a keydown to the mark it sets, or null when the key is not a
-// mark key. q/w are the two home-row keys under either the Latin or the Russian layout.
+// mark key. q/w are the two home-row keys under either the Latin or the Russian
+// layout; 1 and 0 read as right and wrong, as a pasted mark does.
+const RIGHT_KEYS = ["q", "й", "+", "1"];
+const WRONG_KEYS = ["w", "ц", "-", "2", "0"];
+
 export function markKey(event: {key: string; code?: string}): Mark | null {
   const key = event.key.toLowerCase();
-  if (key === "q" || key === "й" || key === "+" || key === "1" || event.code === "NumpadAdd") return "right";
-  if (key === "w" || key === "ц" || key === "-" || key === "2" || event.code === "NumpadSubtract") return "wrong";
+  if (RIGHT_KEYS.includes(key) || event.code === "NumpadAdd") return "right";
+  if (WRONG_KEYS.includes(key) || event.code === "NumpadSubtract") return "wrong";
   return null;
 }
 

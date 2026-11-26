@@ -44,6 +44,9 @@ total = "Σ"
 [detailed]
 # The tour column's label in the detailed table: Т1, Т2, …
 tour = 'Т{{.n}}'
+# The minefield's tick after a team's tour on the detailed sheet: the host
+# ticks it once the team's tour is entered, and only then does it score.
+tick = 'Тур {{.tour}} команды «{{.team}}» заполнен'
 
 [shootout]
 # The label of the n-th shootout round — the entry sheet's column head, the

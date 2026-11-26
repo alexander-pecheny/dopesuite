@@ -110,7 +110,7 @@ func TestComputeODResultsMinus(t *testing.T) {
 	state := `{
 		"teams":[{"name":"A","number":1},{"name":"B","number":2},{"name":"C","number":3},{"name":"D","number":4}],
 		"entries":[[1,2,-3],[1,2],[1],[1,2],[-1,2],[]],
-		"completed":[true,true,true,true,true,true]
+		"ticks":{"1":[true,true],"2":[true,true],"3":[true,true],"4":[true,true]}
 	}`
 	res, err := ComputeODResults(scheme, state)
 	if err != nil {
@@ -146,13 +146,13 @@ func TestComputeODResultsMinus(t *testing.T) {
 }
 
 func TestComputeODResultsMinusContestedAndUnfinishedTour(t *testing.T) {
-	// C's wrong answer on q0 is accepted on appeal: right, not wrong. The second
-	// tour is not finished, so B's empty tour there is not charged yet.
+	// C's wrong answer on q0 is accepted on appeal: right, not wrong. Nobody
+	// ticked the second tour, so B's empty tour there is not charged yet.
 	scheme := `{"tourComp":[3,3],"minus":{"wrong":3,"emptyTour":true}}`
 	state := `{
 		"teams":[{"name":"B","number":2},{"name":"C","number":3}],
 		"entries":[[2,-3],[],[],[],[],[]],
-		"completed":[true,true,true,true,false,false],
+		"ticks":{"2":[true],"3":[true,false]},
 		"contested":[{"question":0,"number":3,"status":"accepted"}]
 	}`
 	res, err := ComputeODResults(scheme, state)
@@ -166,6 +166,36 @@ func TestComputeODResultsMinusContestedAndUnfinishedTour(t *testing.T) {
 		if team.Place != "1–2" {
 			t.Errorf("team %d place %q, want a shared 1–2", team.Number, team.Place)
 		}
+	}
+}
+
+// A minus game's tour counts for a team once its tour is ticked: until then
+// its answers there score nothing and its empty tour is not charged, whatever
+// the other teams ticked.
+func TestComputeODResultsMinusCountsTickedTours(t *testing.T) {
+	scheme := `{"tourComp":[3,3],"minus":{"wrong":1,"emptyTour":true}}`
+	state := `{
+		"teams":[{"name":"A","number":1},{"name":"B","number":2}],
+		"entries":[[1,-2],[1,2],[],[2],[],[]],
+		"completed":[true,true,true,true,true,true],
+		"ticks":{"1":[true,false],"2":[false,true]}
+	}`
+	res, err := ComputeODResults(scheme, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byNumber := map[int64]ODResultsTeam{}
+	for _, team := range res.Teams {
+		byNumber[team.Number] = team
+	}
+	// A: tour 1 ticked, two right; its tour 2 is not ticked, so not charged.
+	if a := byNumber[1]; a.Total != 2 || !slices.Equal(a.TourTotals, []int{2, 0}) {
+		t.Errorf("A = %+v, want 2 from tour 1 alone", a)
+	}
+	// B: tour 1 is not ticked, so its wrong and right answers there wait;
+	// tour 2 is ticked, one right.
+	if b := byNumber[2]; b.Total != 1 || b.Wrong != 0 || !slices.Equal(b.TourTotals, []int{0, 1}) {
+		t.Errorf("B = %+v, want 1 from tour 2 alone", b)
 	}
 }
 

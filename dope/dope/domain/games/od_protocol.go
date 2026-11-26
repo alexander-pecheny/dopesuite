@@ -3,6 +3,7 @@ package games
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"dope/dope/domain/structure"
 	dopestrings "dope/i18nstrings"
@@ -210,30 +211,11 @@ func odRosterState(raw string, teams []RosterTeam, entryRemap map[int]int) ([]by
 	}
 	obj["teams"] = teamJSON
 
-	if rawEntries, ok := obj["entries"]; ok && len(rawEntries) > 0 {
-		var entries [][]int
-		if err := json.Unmarshal(rawEntries, &entries); err == nil {
-			for i := range entries {
-				entries[i] = resizeIntSlice(entries[i], len(teams))
-				if len(entryRemap) > 0 {
-					for j, value := range entries[i] {
-						entries[i][j] = remapEntry(value, entryRemap)
-					}
-				}
-			}
-			entriesJSON, err := json.Marshal(entries)
-			if err != nil {
-				return nil, err
-			}
-			obj["entries"] = entriesJSON
-		}
+	if err := resizeEntries(obj, len(teams), entryRemap); err != nil {
+		return nil, err
 	}
-	if len(entryRemap) > 0 {
-		if rawRounds, ok := obj["shootoutRounds"]; ok && len(rawRounds) > 0 {
-			if roundsJSON, err := remapChGKShootoutRounds(rawRounds, entryRemap); err == nil {
-				obj["shootoutRounds"] = roundsJSON
-			}
-		}
+	if err := remapNumbers(obj, entryRemap); err != nil {
+		return nil, err
 	}
 	var completed []bool
 	if raw, ok := obj["completed"]; ok {
@@ -245,6 +227,66 @@ func odRosterState(raw string, teams []RosterTeam, entryRemap map[int]int) ([]by
 	delete(obj, "answers")
 	delete(obj, "finished")
 	return json.Marshal(obj)
+}
+
+// resizeEntries gives each question's entries a slot per team, the numbers
+// renumbered by entryRemap.
+func resizeEntries(obj map[string]json.RawMessage, size int, entryRemap map[int]int) error {
+	rawEntries, ok := obj["entries"]
+	var entries [][]int
+	if !ok || len(rawEntries) == 0 || json.Unmarshal(rawEntries, &entries) != nil {
+		return nil
+	}
+	for i := range entries {
+		entries[i] = resizeIntSlice(compactEntries(entries[i], size), size)
+		for j, value := range entries[i] {
+			entries[i][j] = remapEntry(value, entryRemap)
+		}
+	}
+	var err error
+	obj["entries"], err = json.Marshal(entries)
+	return err
+}
+
+// remapNumbers moves the ticks and the shootout rounds to the teams' new
+// numbers.
+func remapNumbers(obj map[string]json.RawMessage, entryRemap map[int]int) error {
+	if len(entryRemap) == 0 {
+		return nil
+	}
+	if err := remapTicks(obj, entryRemap); err != nil {
+		return err
+	}
+	if rawRounds, ok := obj["shootoutRounds"]; ok && len(rawRounds) > 0 {
+		if roundsJSON, err := remapChGKShootoutRounds(rawRounds, entryRemap); err == nil {
+			obj["shootoutRounds"] = roundsJSON
+		}
+	}
+	return nil
+}
+
+// remapTicks moves a minus game's ticks (ODState.Ticks) to the teams' new
+// numbers.
+func remapTicks(obj map[string]json.RawMessage, entryRemap map[int]int) error {
+	raw, ok := obj["ticks"]
+	if !ok {
+		return nil
+	}
+	var ticks map[string][]bool
+	if err := json.Unmarshal(raw, &ticks); err != nil {
+		return nil
+	}
+	moved := make(map[string][]bool, len(ticks))
+	for key, tours := range ticks {
+		number, err := strconv.Atoi(key)
+		if mapped, ok := entryRemap[number]; err == nil && ok {
+			key = strconv.Itoa(mapped)
+		}
+		moved[key] = tours
+	}
+	var err error
+	obj["ticks"], err = json.Marshal(moved)
+	return err
 }
 
 func remapChGKShootoutRounds(raw json.RawMessage, entryRemap map[int]int) (json.RawMessage, error) {

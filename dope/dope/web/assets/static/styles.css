@@ -2439,6 +2439,14 @@ body:not(.embedded-match) .grid-match {
   width: 100%;
 }
 
+/* Over the minefield's detailed sheet the same buttons read across one row. */
+.sheet-bar .od-shootout-controls-panel {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  width: auto;
+}
+
 .od-shootout-controls-panel .btn {
   min-height: 28px;
   padding: 0 10px;
@@ -3923,6 +3931,8 @@ body:not(.embedded-match) .grid-match {
   /* The neutral sticker's outline: it is white by default, on a light page. */
   --ksi-sticker-outline: var(--uchu-gray-5);
   --ksi-sticker-outline-width: 1px;
+  /* The minefield's tick after a team's tour, on its detailed sheet. */
+  --mp-tick-col: 28px;
   --transition-fast: 120ms ease;
 }
 
@@ -4276,6 +4286,19 @@ body.is-fullscreen.od-page .match-main {
   padding: 0;
   background: var(--cell-fill);
   border-color: var(--structure);
+  vertical-align: middle;
+  border-right: var(--theme-gap-col) solid transparent;
+  background-clip: padding-box;
+}
+
+/* The minefield's tick after a team's tour lives in the tour's spacer
+   column, which widens to hold it, as KSI's sticker does. */
+.match-table.od-detailed .mp-tick-cell {
+  width: calc(var(--mp-tick-col) + var(--theme-gap-col));
+  min-width: calc(var(--mp-tick-col) + var(--theme-gap-col));
+  max-width: calc(var(--mp-tick-col) + var(--theme-gap-col));
+  padding: 0;
+  text-align: center;
   vertical-align: middle;
   border-right: var(--theme-gap-col) solid transparent;
   background-clip: padding-box;

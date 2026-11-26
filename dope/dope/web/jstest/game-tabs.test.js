@@ -137,6 +137,9 @@ test("КСИ and ЧГК keep their fixed strips, host-only tabs gated", () => {
   assert.deepEqual(keys(gameTabs([], {game: "ksi", viewer: true})), ["detailed", "results", "roster"]);
   assert.deepEqual(keys(gameTabs([], {game: "od", viewer: false})), ["results", "detailed", "input", "screen", "roster", "entrants"]);
   assert.deepEqual(keys(gameTabs([], {game: "od", viewer: true})), ["results", "detailed", "input", "roster"]);
+  // The minefield enters on its detailed sheet: no input tab.
+  assert.deepEqual(keys(gameTabs([], {game: "mp", viewer: false})), ["results", "detailed", "screen", "roster", "entrants"]);
+  assert.deepEqual(keys(gameTabs([], {game: "mp", viewer: true})), ["results", "detailed", "roster"]);
 });
 
 // A Block is named by the групп's common prefix («1-й групповой этап. Группа 1»

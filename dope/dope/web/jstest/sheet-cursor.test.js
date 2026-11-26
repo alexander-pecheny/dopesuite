@@ -32,7 +32,7 @@ test("a rect is normalized whichever way it was dragged", () => {
 
 test("mark keys under either layout, digits, and the numpad", () => {
   for (const key of ["q", "й", "Q", "+", "1"]) assert.equal(markKey({key}), "right", key);
-  for (const key of ["w", "ц", "-", "2"]) assert.equal(markKey({key}), "wrong", key);
+  for (const key of ["w", "ц", "-", "2", "0"]) assert.equal(markKey({key}), "wrong", key);
   assert.equal(markKey({key: "Unidentified", code: "NumpadAdd"}), "right");
   assert.equal(markKey({key: "Unidentified", code: "NumpadSubtract"}), "wrong");
   assert.equal(markKey({key: "e"}), null);

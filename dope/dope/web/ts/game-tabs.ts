@@ -4,7 +4,7 @@ import S from "./i18nstrings.js";
 // Which tabs a Game page shows is Block / Round / Group knowledge, held here
 // once; pages render the array and derive nothing of their own.
 
-export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "kd" | "troika" | "hamsa";
+export type GameKind = "ek" | "es" | "si" | "brain" | "ksi" | "od" | "mp" | "kd" | "troika" | "hamsa";
 
 export type TabKind =
   | "grid" | "block" | "pods" | "round" | "protocol" | "reseed" | "stage"
@@ -57,6 +57,11 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "od":
     return [...fixedTabs(["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()], ["input", S.screen.tabs.input()],
       ...when(Boolean(options.contested), ["contested", S.od.contested.tab()]), ...when(host, ["screen", S.screen.tabs.screen()]), ["roster", S.screen.tabs.roster()]), ...entrantsTab(host)];
+  // The minefield enters its answers on the detailed sheet itself, a team's
+  // tour at a time, so it has no input tab.
+  case "mp":
+    return [...fixedTabs(["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()],
+      ...when(host, ["screen", S.screen.tabs.screen()]), ["roster", S.screen.tabs.roster()]), ...entrantsTab(host)];
   // The friendship cup is OD's sheet over tables: the personal standings come
   // first, the tables' own results next, and its players replace the fest
   // roster, which it does not seat (ADR-0026).

@@ -59,6 +59,25 @@ func teamParticipantsFromRoster(teams []RosterTeam) []KSIParticipant {
 	return out
 }
 
+// compactEntries is a question's entries with the numbers ahead of the
+// blank slots when they no longer all fit in size: a smaller roster then
+// drops blanks, never a number.
+func compactEntries(values []int, size int) []int {
+	if len(values) <= size {
+		return values
+	}
+	out := make([]int, 0, len(values))
+	for _, v := range values {
+		if v != 0 {
+			out = append(out, v)
+		}
+	}
+	for len(out) < len(values) {
+		out = append(out, 0)
+	}
+	return out
+}
+
 func resizeIntSlice(values []int, size int) []int {
 	if len(values) > size {
 		return values[:size]

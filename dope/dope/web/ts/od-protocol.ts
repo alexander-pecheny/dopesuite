@@ -67,6 +67,10 @@ export interface ODState {
   // then say nothing until flattenVenues folds the sheets into them.
   venues?: Record<string, ODSheet>;
   contested?: ODContested[];
+  // A minus game's finished tours, by the team's number and then by tour: a
+  // team's answers on a tour count once the host ticked it (the server's
+  // ODState.Ticks). completed says nothing there.
+  ticks?: Record<string, boolean[]>;
   answers?: unknown;
   finished?: unknown;
 }
@@ -88,6 +92,9 @@ export interface QuestionStat {
   // The rows that answered wrong: in a minus game, entered as −number, and
   // not also taking the question.
   wrong: Set<number>;
+  // In a minus game, the rows whose tour of this question is ticked: the
+  // only ones whose answers count.
+  ticked?: Set<number>;
 }
 
 // MinusRules is the scheme's minus block: a ChGK where a wrong answer costs
@@ -205,9 +212,52 @@ export function parseState(raw: unknown, scheme: ODScheme, totalQuestions: numbe
     .filter((round) => round.teams.length > 0);
   if (state.venues && typeof state.venues === "object") parseVenueSheets(state, totalQuestions, floor);
   state.contested = parseContested(state.contested);
+  state.ticks = minusRulesOf(scheme) ? parseTicks(state.ticks) : undefined;
   delete state.answers;
   delete state.finished;
   return state;
+}
+
+// parseTicks keeps the ticks that are a list per team number.
+function parseTicks(raw: unknown): Record<string, boolean[]> {
+  const out: Record<string, boolean[]> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [number, tours] of Object.entries(raw as Record<string, unknown>)) {
+    if (Array.isArray(tours)) out[number] = tours.map(Boolean);
+  }
+  return out;
+}
+
+// tourTicked says the team numbered number finished tour t of a minus game.
+export function tourTicked(state: ODState, number: number, tour: number): boolean {
+  return Boolean(state.ticks?.[String(number)]?.[tour]);
+}
+
+// tourOfQuestion is each question's tour.
+export function tourOfQuestion(tourLengths: number[]): number[] {
+  return tourLengths.flatMap((size, tour) => Array<number>(size).fill(tour));
+}
+
+// entryMark is what the team numbered number has on question q, as entered:
+// its number is a right answer, its −number a wrong one.
+export function entryMark(state: ODState, number: number, q: number): "right" | "wrong" | "" {
+  const column = state.entries[q] || [];
+  if (!number) return "";
+  if (column.includes(number)) return "right";
+  return column.includes(-number) ? "wrong" : "";
+}
+
+// markSlot is where a mark of the team at teamIndex goes in question q's
+// column: the slot that holds its number already, else its own row's slot
+// when that is free, else the first free one. A team's own slot keeps two
+// hosts marking different teams of one question from writing one slot.
+export function markSlot(state: ODState, teamIndex: number, q: number): number {
+  const column = state.entries[q] || [];
+  const number = teamNumber(state, teamIndex);
+  const held = column.findIndex((value) => number && Math.abs(value) === number);
+  if (held >= 0) return held;
+  if (!column[teamIndex]) return teamIndex;
+  return column.findIndex((value) => !value);
 }
 
 // parseVenueSheets gives each venue's sheet a column per question with a slot
@@ -419,29 +469,51 @@ export function numberIndex(state: ODState): Map<number, number> {
 // questionStats folds the entries grid once: per question, who took it (by
 // team row) and how many did — what every total and rating reads.
 // A contested answer the jury accepted counts as taken; the server's Scored reckons
-// the same.
-export function questionStats(state: ODState, totalQuestions: number, index: Map<number, number> = numberIndex(state)): QuestionStat[] {
-  const stats: QuestionStat[] = [];
-  for (let q = 0; q < totalQuestions; q++) {
-    const counts = new Map<number, number>();
-    if (state.completed[q]) {
-      for (const value of state.entries[q] || []) {
-        const teamIndex = index.get(value);
-        if (teamIndex === undefined) continue;
-        counts.set(teamIndex, (counts.get(teamIndex) || 0) + 1);
-      }
-    }
-    stats.push({completed: Boolean(state.completed[q]), counts, validCount: counts.size, wrong: new Set()});
-  }
+// the same. In a minus game (state.ticks, read against tourLengths) a
+// question counts the answers of the teams that ticked its tour, and is
+// completed once one did; the server's odAnswersOf reckons the same.
+export function questionStats(state: ODState, totalQuestions: number, index: Map<number, number> = numberIndex(state), tourLengths?: number[]): QuestionStat[] {
+  const ticked = state.ticks && tourLengths ? tickedRows(state, tourLengths) : null;
+  const stats = Array.from({length: totalQuestions}, (_, q) => questionStat(state, q, index, ticked?.[q]));
   for (const item of state.contested || []) {
     const stat = stats[item.question];
     const teamIndex = index.get(item.number);
     if (item.status !== "accepted" || !stat?.completed || teamIndex === undefined || stat.counts.has(teamIndex)) continue;
+    if (!counted(stat, teamIndex)) continue;
     stat.counts.set(teamIndex, 1);
     stat.validCount = stat.counts.size;
   }
   stats.forEach((stat, q) => markWrong(stat, state.entries[q] || [], index));
   return stats;
+}
+
+// questionStat is who took question q: in a minus game, of the rows that
+// ticked its tour (ticked) alone.
+function questionStat(state: ODState, q: number, index: Map<number, number>, ticked: Set<number> | undefined): QuestionStat {
+  const completed = ticked ? ticked.size > 0 : Boolean(state.completed[q]);
+  const stat: QuestionStat = {completed, counts: new Map(), validCount: 0, wrong: new Set(), ...(ticked ? {ticked} : {})};
+  if (!completed) return stat;
+  for (const value of state.entries[q] || []) {
+    const teamIndex = index.get(value);
+    if (teamIndex === undefined || !counted(stat, teamIndex)) continue;
+    stat.counts.set(teamIndex, (stat.counts.get(teamIndex) || 0) + 1);
+  }
+  stat.validCount = stat.counts.size;
+  return stat;
+}
+
+// counted says the row's answers on the question count: always, but in a
+// minus game only once the row ticked the question's tour.
+function counted(stat: QuestionStat, teamIndex: number): boolean {
+  return !stat.ticked || stat.ticked.has(teamIndex);
+}
+
+// tickedRows is, per question, the team rows that ticked its tour.
+function tickedRows(state: ODState, tourLengths: number[]): Array<Set<number>> {
+  const byTour = tourLengths.map((_, tour) => new Set(state.teams
+    .map((_, row) => row)
+    .filter((row) => tourTicked(state, teamNumber(state, row), tour))));
+  return tourOfQuestion(tourLengths).map((tour) => byTour[tour]);
 }
 
 // markWrong collects a completed question's wrong answers: a minus game's
@@ -450,7 +522,8 @@ function markWrong(stat: QuestionStat, column: number[], index: Map<number, numb
   if (!stat.completed) return;
   for (const value of column) {
     const teamIndex = index.get(-value);
-    if (value < 0 && teamIndex !== undefined && !stat.counts.has(teamIndex)) stat.wrong.add(teamIndex);
+    if (value >= 0 || teamIndex === undefined || stat.counts.has(teamIndex)) continue;
+    if (counted(stat, teamIndex)) stat.wrong.add(teamIndex);
   }
 }
 
@@ -521,11 +594,13 @@ export interface MinusScore {
 }
 
 // tourAnswers counts one team's right and wrong answers over a tour's
-// questions, and says whether every one of them is completed.
+// questions, and says whether the tour is finished: every question
+// completed, or in a minus game the team's tour ticked.
 function tourAnswers(stats: QuestionStat[], teamIndex: number, from: number, size: number): {right: number; wrong: number; done: boolean} {
   const out = {right: 0, wrong: 0, done: size > 0};
   for (let q = from; q < from + size; q++) {
-    if (!stats[q]?.completed) out.done = false;
+    const ticked = stats[q]?.ticked;
+    if (ticked ? !ticked.has(teamIndex) : !stats[q]?.completed) out.done = false;
     else if (teamTookQuestion(stats, teamIndex, q)) out.right++;
     else if (teamWrongOnQuestion(stats, teamIndex, q)) out.wrong++;
   }
@@ -705,7 +780,7 @@ export interface ODRow {
 
 export function rows(state: ODState, tourLengths: number[], members?: readonly number[], minus: MinusRules | null = null): ODRow[] {
   const total = tourLengths.reduce((acc, n) => acc + n, 0);
-  const stats = questionStats(state, total);
+  const stats = questionStats(state, total, numberIndex(state), tourLengths);
   const scores = minus ? state.teams.map((_, i) => minusScore(stats, i, tourLengths, minus)) : null;
   const totals = state.teams.map((_, i) => scores ? scores[i].points : sumRow(stats, i));
   const tiebreaks = state.teams.map((_, i) => [...(scores ? minusTiebreak(scores[i]) : []), ...shootoutTiebreakForTeam(state, i)]);

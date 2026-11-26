@@ -21,6 +21,7 @@ import {gameVenue, parseGameRoute, venuePageURL} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {fitScrollFade, installVirtualKeypad, renderTabBar, tabPicker} from "./widgets.js";
 import {createSheetCursor} from "./sheet-cursor.js";
+import type {CellCoord, CellEdit, Mark} from "./sheet-cursor.js";
 import type {EditPlace, VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
 import {createGameTeamsTab} from "./game-teams.js";
@@ -206,6 +207,11 @@ const UNDO_LIMIT = 100;
 // A friendship cup (ADR-0026) rides this page: its document is an OD one whose
 // teams are the tables, and it adds the personal standings and its players.
 const kdGame = (gameInit?.scheme as {gameType?: unknown} | null | undefined)?.gameType === "kd";
+// The minefield enters on the detailed sheet: a host marks each team's
+// answers there and ticks a team's tour once it is entered, which is when
+// the tour scores (od.questionStats). It has no input tab.
+const mpGame = (gameInit?.scheme as {gameType?: unknown} | null | undefined)?.gameType === "mp";
+const mpEditor = mpGame && !viewer;
 // What this visitor may do with the Game's contested answers (the init payload): record
 // them, rule on them. Only they read the answers' text, which the document
 // leaves out. Answers are recorded on the /host page only. The jury rules on
@@ -220,11 +226,24 @@ let contestedRowsCache: Array<Map<number, ODContested>> | null = null;
 // The entry tab's button for contested answers, renamed when the selected cell holds one.
 let contestedButton: HTMLButtonElement | null = null;
 // A host who records contested answers reads the tab too; only the jury rules.
-const TABS = gameTabs([], {game: kdGame ? "kd" : "od", viewer, contested: contestedEnter || contestedJudge});
+const TABS = gameTabs([], {game: pageGameKind(), viewer, contested: contestedEnter || contestedJudge});
 // The host's entrants tab: who plays this Game (game-teams.ts).
 const gameTeams = !viewer && route.apiBase ? createGameTeamsTab(route.apiBase) : null;
 
-let activeTab = tabFromHash(TABS) || (viewer ? (kdGame ? "personal" : "results") : "input");
+let activeTab = tabFromHash(TABS) || openingTab();
+
+// pageGameKind is which of the formats on this page the Game is.
+function pageGameKind(): "kd" | "mp" | "od" {
+  if (kdGame) return "kd";
+  return mpGame ? "mp" : "od";
+}
+
+// openingTab is the tab the page opens on when the URL names none: a
+// viewer's standings, a host's sheet to enter on.
+function openingTab(): string {
+  if (viewer) return kdGame ? "personal" : "results";
+  return mpGame ? "detailed" : "input";
+}
 // The teams as the viewer looks at them: the Division chosen in the URL
 // (ADR-0020), its members, badges and chips, and the detailed sheet's order.
 const lens = createTeamLens({
@@ -557,7 +576,7 @@ function teamIndexByNumber(number: number): number {
 function questionStats(): QuestionStat[] {
   if (!questionStatsCache) {
     if (!numberToIndexCache) numberToIndexCache = od.numberIndex(state);
-    questionStatsCache = od.questionStats(state, totalQuestions, numberToIndexCache);
+    questionStatsCache = od.questionStats(state, totalQuestions, numberToIndexCache, tourLengths);
   }
   return questionStatsCache;
 }
@@ -720,8 +739,14 @@ function render(): void {
   }
   restoreTabScroll(activeTab);
   if (activeTab === "screen") scheduleScreenFit();
-  positionInvertOverlay();
+  refreshCursors();
   shell.presence.refresh();
+}
+
+// refreshCursors puts the tab's cell cursor back on the cells just drawn.
+function refreshCursors(): void {
+  positionInvertOverlay();
+  if (mpEditor && activeTab === "detailed") mpSheet.refresh();
 }
 
 function getTabPane(tab: string): HTMLElement {
@@ -1093,6 +1118,26 @@ const sheet = createSheetCursor({
   classes: {selected: "entry-selected", anchor: "", top: "entry-selection-top", bottom: "entry-selection-bottom", left: "entry-selection-left", right: "entry-selection-right", active: "", row: ""},
 });
 sheet.bind();
+
+// The minefield's sheet as one cursor's: row = the team as the sheet draws
+// it, col = the question, then the shootout's questions. A cell holds a mark
+// (sheet-cursor's mark keys: q/1/+ right, w/0/− wrong).
+const mpSheet = createSheetCursor({
+  root: odRoot,
+  cellSelector: ".od-detailed [data-mp-row]",
+  rows: () => mpRows.length,
+  cols: () => totalQuestions + mpShootoutColumns(),
+  readonly: () => !mpEditing(),
+  active: () => mpEditing() && activeTab === "detailed",
+  coordOf: (cell) => {
+    const data = (cell as HTMLElement).dataset;
+    return data.mpRow === undefined ? null : {row: Number(data.mpRow), col: Number(data.mpCol)};
+  },
+  cellAt: mpCellAt,
+  values: "marks",
+  applyValues: applyMpEdits,
+});
+if (mpEditor) mpSheet.bind();
 
 function entryCellNode(qIndex: number, rowIndex: number): HTMLElement | null {
   return entryRoot().querySelector<HTMLElement>(`.entry-cell[data-q="${cssEscape(String(qIndex))}"][data-row="${cssEscape(String(rowIndex))}"]:not([data-entry-kind="shootout"])`);
@@ -1489,7 +1534,13 @@ function shootoutControlsHeaderCell(attrs: {rowSpan?: number} = {}, options: {in
   const cell = document.createElement("th");
   cell.className = "od-shootout-controls-head";
   if (attrs.rowSpan) cell.rowSpan = attrs.rowSpan;
+  cell.appendChild(shootoutControlsPanel(options));
+  return cell;
+}
 
+// shootoutControlsPanel is the shootout's buttons: a new round, and a
+// question more or less in each round (or in the one roundIndex names).
+function shootoutControlsPanel(options: {includeAddRound?: boolean; roundIndex?: number} = {}): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "od-shootout-controls-panel";
 
@@ -1535,9 +1586,7 @@ function shootoutControlsHeaderCell(attrs: {rowSpan?: number} = {}, options: {in
 
     panel.appendChild(group);
   });
-
-  cell.appendChild(panel);
-  return cell;
+  return panel;
 }
 
 function shootoutControlsBodyCell(): HTMLElement {
@@ -2495,8 +2544,139 @@ function pendingScore(value: number, teamIndex: number, from = 0, to = Infinity)
 function buildDetailedTable(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-detailed-wrap";
+  if (mpEditor && !allTeamsNumbered()) wrapper.appendChild(buildNumberingGuard());
+  else if (mpEditor) wrapper.appendChild(mpShootoutBar());
   wrapper.appendChild(buildDetailedScoreTable());
   return wrapper;
+}
+
+// === the minefield's sheet ===
+
+// mpEditing says the host enters the minefield on this sheet now: every team
+// numbered, as the server requires of a write.
+function mpEditing(): boolean {
+  return mpEditor && allTeamsNumbered();
+}
+
+// mpRows is the detailed sheet's team rows as last drawn, top to bottom: the
+// cursor's rows.
+let mpRows: number[] = [];
+
+// mpShootoutBar is the minefield's shootout controls over its sheet: a new
+// round, and a question more or less in each.
+function mpShootoutBar(): HTMLElement {
+  const bar = document.createElement("div");
+  bar.className = "sheet-bar u-row u-gap-sm u-align-center";
+  bar.appendChild(shootoutControlsPanel());
+  return bar;
+}
+
+// mpAnswerCell is one question of a team as the host enters it: the mark as
+// entered, whether or not the team's tour is ticked.
+function mpAnswerCell(teamIndex: number, qIndex: number, row: number, first: boolean): CellSpec {
+  const mark = od.entryMark(state, teamNumber(teamIndex), qIndex);
+  const classes = ["answer-cell", "theme-block"];
+  if (mark) classes.push(mark);
+  if (first) classes.push("theme-block-top-left", "theme-block-bottom-left");
+  return {
+    content: mark === "right" ? String(qIndex + 1) : "",
+    className: classes.join(" "),
+    dataset: {mpRow: row, mpCol: qIndex, team: teamIndex, q: qIndex},
+  };
+}
+
+// mpTickCell is the tick after a team's tour: ticked, the tour scores.
+function mpTickCell(teamIndex: number, tour: number): HTMLElement {
+  const cell = document.createElement("td");
+  cell.className = "gap mp-tick-cell";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = od.tourTicked(state, teamNumber(teamIndex), tour);
+  box.setAttribute("aria-label", S.od.detailed.tick(String(tour + 1), teamLabel(teamIndex)));
+  box.addEventListener("change", () => setTourTicked(teamIndex, tour, box.checked));
+  cell.appendChild(box);
+  return cell;
+}
+
+function setTourTicked(teamIndex: number, tour: number, ticked: boolean): void {
+  const key = String(teamNumber(teamIndex));
+  if (!state.ticks) state.ticks = {};
+  const tours = state.ticks[key] || [];
+  while (tours.length <= tour) tours.push(false);
+  tours[tour] = ticked;
+  state.ticks[key] = tours;
+  saveState(["ticks", key, tour], ticked);
+  mpRedraw();
+}
+
+// mpCellAt is the editable cell at a cursor coordinate.
+function mpCellAt(coord: CellCoord): HTMLElement | null {
+  return odRoot.querySelector<HTMLElement>(`.od-detailed [data-mp-row="${cssEscape(String(coord.row))}"][data-mp-col="${cssEscape(String(coord.col))}"]`);
+}
+
+// mpShootoutColumns is how many shootout questions follow the tours.
+function mpShootoutColumns(): number {
+  return state.shootoutRounds.reduce((n, round) => n + round.answers.length, 0);
+}
+
+// applyMpEdits writes the marks the cursor set: a question's in the
+// question's column, a shootout question's in its round.
+function applyMpEdits(edits: CellEdit[]): void {
+  if (!mpEditing()) return;
+  let shootout = false;
+  for (const {cell, value} of edits) {
+    const data = (cell as HTMLElement).dataset;
+    const mark = markOf(value);
+    if (data.round !== undefined) {
+      shootout = setMpShootoutMark(Number(data.round), Number(data.question), Number(data.teamNumber), mark) || shootout;
+      continue;
+    }
+    setMpMark(Number(data.team), Number(data.q), mark);
+  }
+  if (shootout) saveState(["shootoutRounds"], state.shootoutRounds);
+  mpRedraw();
+}
+
+// setMpMark enters one team's mark on a question: its number for a right
+// answer, −number for a wrong one, in one slot of the column (od.markSlot);
+// any other slot holding it is cleared.
+function setMpMark(teamIndex: number, qIndex: number, mark: Mark): void {
+  const number = teamNumber(teamIndex);
+  const column = state.entries[qIndex];
+  if (!number || !column) return;
+  const slot = od.markSlot(state, teamIndex, qIndex);
+  if (slot < 0) return;
+  const value = {right: number, wrong: -number, "": 0}[mark];
+  column.forEach((held, at) => {
+    if (at === slot || Math.abs(held) !== number) return;
+    column[at] = 0;
+    saveState(["entries", qIndex, at], 0);
+  });
+  if (column[slot] === value) return;
+  column[slot] = value;
+  saveState(["entries", qIndex, slot], value);
+}
+
+// setMpShootoutMark enters a team's shootout answer; a shootout question
+// counts once a host entered anything on it.
+function setMpShootoutMark(roundIndex: number, questionIndex: number, number: number, mark: Mark): boolean {
+  const round = state.shootoutRounds[roundIndex];
+  const at = round ? round.teams.indexOf(number) : -1;
+  if (!round || at < 0 || !setShootoutEntryValue(roundIndex, questionIndex, at, mark === "right" ? number : 0)) return false;
+  round.completed[questionIndex] = true;
+  return true;
+}
+
+// markOf is the mark a cursor edit carries.
+function markOf(value: unknown): Mark {
+  return value === "right" || value === "wrong" ? value : "";
+}
+
+// mpRedraw draws the sheet and the standings again after an edit.
+function mpRedraw(): void {
+  invalidateScoreCaches();
+  updateHeaderProgress();
+  render();
 }
 
 // detailedQuestionHeadLabel stacks the number of teams that took the question
@@ -2533,6 +2713,7 @@ function detailedAnswerCell(teamIndex: number, qIndex: number, stats: QuestionSt
 
 function buildDetailedScoreTable(): HTMLTableElement {
   const stats = questionStats();
+  const editing = mpEditing();
   const themes: ScoreTableTheme[] = [];
   let qNum = 1;
   tourLengths.forEach((tourSize, tourIndex) => {
@@ -2552,7 +2733,8 @@ function buildDetailedScoreTable(): HTMLTableElement {
   const order = spansVenues()
     ? [...lens.order("name", members)].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b), "ru"))
     : lens.order("number", members);
-  const rows = order.map((teamIndex): ScoreTableRow => {
+  mpRows = order;
+  const rows = order.map((teamIndex, row): ScoreTableRow => {
     const team = state.teams[teamIndex];
     const minusTours = minus ? tourSumsForTeam(teamIndex, stats) : null;
     let qIndex = 0;
@@ -2565,17 +2747,18 @@ function buildDetailedScoreTable(): HTMLTableElement {
         const answers = [];
         for (let i = 0; i < tourSize; i++) {
           if (teamTookQuestion(teamIndex, qIndex, stats)) tourSum += 1;
-          answers.push(detailedAnswerCell(teamIndex, qIndex, stats, i === 0));
+          answers.push(detailedCell(editing, teamIndex, qIndex, row, i === 0, stats));
           qIndex++;
         }
         return {
           answers,
           scoreCell: {
-            content: minusTours ? minusTours[tourIndex] : tourSum,
+            content: detailedTourScore(teamIndex, tourIndex, minusTours ? minusTours[tourIndex] : tourSum),
             className: "number theme-score theme-block theme-block-score",
           },
+          gapCell: detailedGap(editing, teamIndex, tourIndex),
         };
-      }).concat(shootoutThemeCells(teamIndex, {editable: false})),
+      }).concat(shootoutThemeCells(teamIndex, {editable: editing, row})),
     };
   });
 
@@ -2593,9 +2776,28 @@ function buildDetailedScoreTable(): HTMLTableElement {
   });
 }
 
-function shootoutThemeCells(teamIndex: number, options: {editable?: boolean} = {}): ScoreTableThemeRow[] {
-  void options;
+// detailedCell is a team's question on the detailed sheet: as the
+// standings count it, or as entered on the minefield's sheet a host enters.
+function detailedCell(editing: boolean, teamIndex: number, qIndex: number, row: number, first: boolean, stats: QuestionStat[]): CellSpec {
+  return editing ? mpAnswerCell(teamIndex, qIndex, row, first) : detailedAnswerCell(teamIndex, qIndex, stats, first);
+}
+
+// detailedGap is what follows a tour: the minefield's tick for a host.
+function detailedGap(editing: boolean, teamIndex: number, tour: number): HTMLElement | undefined {
+  return editing ? mpTickCell(teamIndex, tour) : undefined;
+}
+
+// detailedTourScore is a team's score for a tour on the detailed sheet:
+// none yet for a minefield tour the team has not finished (ticked).
+function detailedTourScore(teamIndex: number, tour: number, score: number): number | string {
+  return !mpGame || od.tourTicked(state, teamNumber(teamIndex), tour) ? score : "";
+}
+
+// shootoutThemeCells is a team's shootout rounds on the detailed sheet; on
+// the minefield's sheet a host enters them there (editable, the cursor's row).
+function shootoutThemeCells(teamIndex: number, options: {editable?: boolean; row?: number} = {}): ScoreTableThemeRow[] {
   const number = teamNumber(teamIndex);
+  let col = totalQuestions;
   return state.shootoutRounds.map((round, roundIndex): ScoreTableThemeRow => {
     const participantIndex = round.teams.indexOf(number);
     let score = 0;
@@ -2605,9 +2807,16 @@ function shootoutThemeCells(teamIndex: number, options: {editable?: boolean} = {
         ? normalizeShootoutMark(round.answers[questionIndex]?.[participantIndex])
         : "";
       if (mark === "right") score++;
-      return shootoutAnswerCell(teamIndex, roundIndex, questionIndex, mark, {
+      const cell = shootoutAnswerCell(teamIndex, roundIndex, questionIndex, mark, {
         participating: participantIndex >= 0,
       });
+      if (options.editable && participantIndex >= 0) {
+        cell.classList.remove("readonly");
+        cell.dataset.mpRow = String(options.row);
+        cell.dataset.mpCol = String(col);
+      }
+      col++;
+      return cell;
     });
     return {
       answers,
@@ -2771,6 +2980,10 @@ function createShootoutRound(numbers: number[]): void {
   state.shootoutRounds.push(round);
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
+  if (mpGame) {
+    render();
+    return;
+  }
   activeTab = "input";
   setHashTab("input");
   render();
@@ -2790,7 +3003,7 @@ function addShootoutQuestion(roundIndex: number): void {
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
   render();
-  focusShootoutInput(roundIndex, round.entries.length - 1, 0);
+  if (!mpGame) focusShootoutInput(roundIndex, round.entries.length - 1, 0);
 }
 
 function removeShootoutQuestion(roundIndex: number): void {
@@ -2811,14 +3024,15 @@ function removeShootoutQuestion(roundIndex: number): void {
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
   render();
-  if (!lastQuestion) focusShootoutInput(roundIndex, round.entries.length - 1, 0);
+  if (!lastQuestion && !mpGame) focusShootoutInput(roundIndex, round.entries.length - 1, 0);
 }
 
 // === Results ===
 
 function lastEnteredQuestion(): number {
-  for (let q = state.completed.length - 1; q >= 0; q--) {
-    if (state.completed[q]) return q + 1;
+  const stats = questionStats();
+  for (let q = stats.length - 1; q >= 0; q--) {
+    if (stats[q].completed) return q + 1;
   }
   return 0;
 }

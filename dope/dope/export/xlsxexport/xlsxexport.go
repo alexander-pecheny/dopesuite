@@ -66,28 +66,9 @@ func BuildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber
 	const sheet = "Worksheet"
 	f.SetSheetName("Sheet1", sheet)
 
-	// number → team index, mirroring the live grid's number-keyed scoring.
-	indexByNumber := make(map[int64]int, len(state.Teams))
-	for i, t := range state.Teams {
-		if t.Number != 0 {
-			indexByNumber[t.Number] = i
-		}
-	}
-	// took[questionIndex][teamIndex]: a team "took" a completed question when its
-	// number appears in that question's entries (questionStats in od.js).
-	took := make([]map[int]bool, len(state.Entries))
-	for q := range state.Entries {
-		if q < len(state.Completed) && !state.Completed[q] {
-			continue
-		}
-		set := make(map[int]bool)
-		for _, num := range state.Entries[q] {
-			if idx, ok := indexByNumber[num]; ok {
-				set[idx] = true
-			}
-		}
-		took[q] = set
-	}
+	// took[questionIndex][teamIndex]: who took a completed question, as the
+	// standings count it.
+	took := games.ODTaken(schemeJSON, state, tours)
 
 	maxTour := 0
 	for _, n := range tours {
