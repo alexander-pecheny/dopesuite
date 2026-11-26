@@ -702,7 +702,8 @@
 
 /* Подробно question header: count of teams that took the question, muted and
    smaller, stacked in the free space above the question number. */
-.match-table.od-detailed thead th.question-head:has(.od-detailed-qhead) {
+.match-table.od-detailed thead th.question-head:has(.od-detailed-qhead),
+.match-table.od-detailed thead th.theme-head:has(.od-detailed-qhead) {
   vertical-align: bottom;
   height: calc(var(--question-size) + 11px);
 }
@@ -1881,13 +1882,14 @@ body:not(.embedded-match) .grid-match {
    tab per pane is — in a row of their own at the top of the sheet, which is
    what they filter. The sheet scrolls sideways under them, so the row is only
    as wide as its chips and sticks to the frame's left edge. An ОД sheet's
-   venue picker and buttons (.sheet-bar) stay put the same way. */
+   venue picker and buttons (.sheet-bar) stay put the same way, and wrap
+   within the screen, not within the wide sheet under them. */
 .division-chips,
 .sheet-bar {
   position: sticky;
   left: 0;
   width: max-content;
-  max-width: 100%;
+  max-width: min(100%, calc(100vw - var(--space-4)));
   flex-wrap: wrap;
   padding: var(--space-2) var(--space-2) var(--space-1);
 }
@@ -2440,6 +2442,13 @@ body:not(.embedded-match) .grid-match {
 }
 
 /* Over the minefield's detailed sheet the same buttons read across one row. */
+/* Division chips inside a bar with other controls: the bar pads and pins
+   the row. */
+.sheet-bar .division-chips {
+  position: static;
+  padding: 0;
+}
+
 .sheet-bar .od-shootout-controls-panel {
   flex-direction: row;
   flex-wrap: wrap;
@@ -4302,6 +4311,14 @@ body.is-fullscreen.od-page .match-main {
   vertical-align: middle;
   border-right: var(--theme-gap-col) solid transparent;
   background-clip: padding-box;
+}
+
+/* A grid of its own rather than the kit's inline one, so the cell's middle
+   alignment centres the box and not the line it would sit on; still a grid,
+   which centres the kit's drawn tick. */
+.match-table.od-detailed .mp-tick-cell input {
+  display: grid;
+  margin: 0 auto;
 }
 
 .ksi-sticker-wrap {

@@ -793,7 +793,7 @@ function getTabPane(tab: string): HTMLElement {
     }
   }
   if (tab === "results" || tab === "detailed") {
-    const chips = lens.chips();
+    const chips = sheetChips(tab);
     if (chips) pane.appendChild(chips);
   }
   pane.appendChild(node);
@@ -2545,7 +2545,6 @@ function buildDetailedTable(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-detailed-wrap";
   if (mpEditor && !allTeamsNumbered()) wrapper.appendChild(buildNumberingGuard());
-  else if (mpEditor) wrapper.appendChild(mpShootoutBar());
   wrapper.appendChild(buildDetailedScoreTable());
   return wrapper;
 }
@@ -2562,11 +2561,15 @@ function mpEditing(): boolean {
 // cursor's rows.
 let mpRows: number[] = [];
 
-// mpShootoutBar is the minefield's shootout controls over its sheet: a new
-// round, and a question more or less in each.
-function mpShootoutBar(): HTMLElement {
+// sheetChips is the row over the standings and the detailed sheet: the
+// Division chips, and on the minefield's sheet the shootout's controls beside
+// them (a new round, a question more or less in each).
+function sheetChips(tab: string): HTMLElement | null {
+  const chips = lens.chips();
+  if (tab !== "detailed" || !mpEditing()) return chips;
   const bar = document.createElement("div");
   bar.className = "sheet-bar u-row u-gap-sm u-align-center";
+  if (chips) bar.appendChild(chips);
   bar.appendChild(shootoutControlsPanel());
   return bar;
 }
@@ -2687,10 +2690,27 @@ function detailedQuestionHeadLabel(displayNumber: number, stat: QuestionStat | u
   wrap.className = "od-detailed-qhead";
   const count = document.createElement("span");
   count.className = "od-detailed-qcount";
-  // Once the question is entered (ticked on the entry page) show the team count even when
-  // it's 0; before that the slot stays empty.
-  count.textContent = stat?.completed ? String(stat.validCount || 0) : "";
+  // Once the question is entered (ticked on the entry page, or a minefield
+  // tour ticked) show the team count even when it's 0; before that a dash
+  // says why the number sits lower than the sheet's other heads.
+  count.textContent = stat?.completed ? String(stat.validCount || 0) : S.od.detailed.noCount();
   wrap.append(count, questionNumberNode(displayNumber));
+  return wrap;
+}
+
+// detailedTourHeadLabel is a tour's head: over its label, the teams' takes
+// summed over its entered questions, the way each question's head counts
+// them.
+function detailedTourHeadLabel(tourIndex: number, tourStats: QuestionStat[]): HTMLElement {
+  const wrap = document.createElement("span");
+  wrap.className = "od-detailed-qhead";
+  const count = document.createElement("span");
+  count.className = "od-detailed-qcount";
+  const entered = tourStats.filter((stat) => stat?.completed);
+  count.textContent = entered.length ? String(entered.reduce((sum, stat) => sum + stat.validCount, 0)) : S.od.detailed.noCount();
+  const label = document.createElement("span");
+  label.textContent = S.od.detailed.tour(String(tourIndex + 1));
+  wrap.append(count, label);
   return wrap;
 }
 
@@ -2722,7 +2742,7 @@ function buildDetailedScoreTable(): HTMLTableElement {
       questionLabels.push(detailedQuestionHeadLabel(qNum, stats[qNum - 1]));
       qNum++;
     }
-    themes.push({label: S.od.detailed.tour(String(tourIndex + 1)), questionLabels});
+    themes.push({label: detailedTourHeadLabel(tourIndex, stats.slice(qNum - 1 - tourSize, qNum - 1)), questionLabels});
   });
   themes.push(...shootoutThemeHeaders());
 

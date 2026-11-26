@@ -44,6 +44,11 @@ total = "Σ"
 [detailed]
 # The tour column's label in the detailed table: Т1, Т2, …
 tour = 'Т{{.n}}'
+# What stands over a question number on the detailed sheet before the
+# question is entered (on the minefield, before any team ticked its tour),
+# in place of how many teams took it; and over a tour's label before any of
+# its questions is.
+no_count = "–"
 # The minefield's tick after a team's tour on the detailed sheet: the host
 # ticks it once the team's tour is entered, and only then does it score.
 tick = 'Тур {{.tour}} команды «{{.team}}» заполнен'

@@ -2371,6 +2371,7 @@ var RU = Strings{
 			TeamPlaceholder: func() string { return "Через запятую: 3, 7, 12" },
 		},
 		Detailed: OdDetailedStrings{
+			NoCount: func() string { return "–" },
 			Tick: func(tour string, team string) string {
 				return fmt.Sprintf("Тур %s команды «%s» заполнен", tour, team)
 			},

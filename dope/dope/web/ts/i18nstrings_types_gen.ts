@@ -1622,6 +1622,7 @@ export type Strings = {
       teamPlaceholder: () => string;
     };
     detailed: {
+      noCount: () => string;
       tick: (tour: string, team: string) => string;
       tour: (n: string) => string;
     };

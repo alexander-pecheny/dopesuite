@@ -1644,6 +1644,7 @@ shootout: true
       teamPlaceholder: () => "Через запятую: 3, 7, 12",
     },
     detailed: {
+      noCount: () => "–",
       tick: (tour: string, team: string) => `Тур ${tour} команды «${team}» заполнен`,
       tour: (n: string) => `Т${n}`,
     },
