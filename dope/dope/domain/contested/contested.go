@@ -36,12 +36,15 @@ type Answer struct {
 	Status   string `json:"status"`
 }
 
-// Enabled says whether the Game takes contested answers: as its settings say, or,
-// when they were never set, only in a synch fest.
+// EnabledSQL is whether a Game (g) of a fest (f) takes contested answers:
+// only in a synch fest, and there unless its settings turned them off.
+const EnabledSQL = "(f.kind = 'synch' and coalesce(g.contested, 1))"
+
+// Enabled says whether the Game takes contested answers (EnabledSQL).
 func Enabled(ctx context.Context, q store.Queryer, festID, gameID int64) (bool, error) {
 	var on bool
 	err := q.QueryRowContext(ctx, `
-select coalesce(g.contested, f.kind = 'synch') from games g join fests f on f.id = g.fest_id
+select `+EnabledSQL+` from games g join fests f on f.id = g.fest_id
 where g.id = ? and g.fest_id = ?`, gameID, festID).Scan(&on)
 	return on, err
 }
@@ -54,7 +57,7 @@ func AnyEnabled(ctx context.Context, q store.Queryer, festID int64) (bool, error
 		on       bool
 	}
 	list, err := store.CollectRows(ctx, q, `
-select g.game_type, coalesce(g.contested, f.kind = 'synch') from games g join fests f on f.id = g.fest_id where g.fest_id = ?`,
+select g.game_type, `+EnabledSQL+` from games g join fests f on f.id = g.fest_id where g.fest_id = ?`,
 		[]any{festID}, func(rows *sql.Rows) (game, error) {
 			var g game
 			return g, rows.Scan(&g.gameType, &g.on)

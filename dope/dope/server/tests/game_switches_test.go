@@ -10,8 +10,9 @@ import (
 )
 
 // Contested answers and venue names by room are a Game's settings: an OD's
-// carries the contested switch, a KSI's does not, and either saves its own
-// venue_rooms without touching the other Game's.
+// of a synch fest carries the contested switch, a regular fest's and a KSI's
+// do not, and either saves its own venue_rooms without touching the other
+// Game's.
 func TestContestedAndVenueRoomsAreAGamesSettings(t *testing.T) {
 	t.Parallel()
 	srv := newAuthTestServer(t)
@@ -35,13 +36,19 @@ func TestContestedAndVenueRoomsAreAGamesSettings(t *testing.T) {
 		}
 		return got
 	}
-	if got := call(http.MethodGet, odID, nil); got.Contested == nil || *got.Contested || got.VenueRooms {
-		t.Fatalf("a new OD of a regular fest: %+v, want contested off and venues by number", got)
+	if got := call(http.MethodGet, odID, nil); got.Contested != nil || got.VenueRooms {
+		t.Fatalf("a new OD of a regular fest: %+v, want no contested switch and venues by number", got)
+	}
+	if _, err := db.Exec(`update fests set kind = 'synch' where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	if got := call(http.MethodGet, odID, nil); got.Contested == nil || !*got.Contested {
+		t.Fatalf("an OD of a synch fest: %+v, want contested on", got)
 	}
 	if got := call(http.MethodGet, ksiID, nil); got.Contested != nil {
 		t.Fatalf("a KSI takes no contested answers, yet its settings carry the switch")
 	}
-	if got := call(http.MethodPatch, odID, map[string]any{"contested": true, "venue_rooms": true}); got.Contested == nil || !*got.Contested || !got.VenueRooms {
+	if got := call(http.MethodPatch, odID, map[string]any{"contested": false, "venue_rooms": true}); got.Contested == nil || *got.Contested || !got.VenueRooms {
 		t.Fatalf("after the switches: %+v", got)
 	}
 	if got := call(http.MethodGet, ksiID, nil); got.VenueRooms {

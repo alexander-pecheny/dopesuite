@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dope/dope/domain/contested"
 	"dope/dope/domain/core"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
@@ -546,27 +547,29 @@ func formSwitch(form url.Values, name string) *bool {
 func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64, errMsg string) {
 	s.festPage(w, r, festID, func(fest view.HostFest) (*dopeui.Doc, error) {
 		var (
-			code      string
-			title     string
-			gameType  string
-			slug      sql.NullString
-			schemeDSL string
-			hidden    string
-			outside   string
-			gridWidth int
-			contested bool
-			rooms     bool
+			code        string
+			title       string
+			gameType    string
+			slug        sql.NullString
+			schemeDSL   string
+			hidden      string
+			outside     string
+			gridWidth   int
+			contestedOn bool
+			synch       bool
+			rooms       bool
 		)
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
 select g.code, g.title, g.game_type, g.slug, coalesce(g.scheme_dsl, ''), coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), g.grid_width,
-  coalesce(g.contested, f.kind = 'synch'), g.venue_rooms
+  `+contested.EnabledSQL+`, f.kind = 'synch', g.venue_rooms
 from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`, gameID, festID).
-			Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden, &outside, &gridWidth, &contested, &rooms); err != nil {
+			Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden, &outside, &gridWidth, &contestedOn, &synch, &rooms); err != nil {
 			return nil, err
 		}
 		data := hostGameSettingsData{}
-		if _, ok := games.As[games.Contestable](gameType); ok {
-			data.Contested = &contested
+		// Contested answers are a synch fest's alone.
+		if _, ok := games.As[games.Contestable](gameType); ok && synch {
+			data.Contested = &contestedOn
 		}
 		if !games.Get(gameType).Flat {
 			data.VenueRooms = &rooms

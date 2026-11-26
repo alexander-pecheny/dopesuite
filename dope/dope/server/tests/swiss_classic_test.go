@@ -219,6 +219,10 @@ func TestVoronenokSeedsOnTwoToursBeforeTheRulings(t *testing.T) {
 	token := createTestSession(t, srv, systemUserID(t, db))
 	seedFestTeams(t, db, festID, 4)
 	odID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "od", "od_tours": "3", "od_questions": "2"})
+	// Contested answers are a synch fest's alone.
+	if _, err := db.Exec(`update fests set kind = 'synch' where id = (select fest_id from games where id = ?)`, odID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.Exec(`update games set contested = 1 where id = ?`, odID); err != nil {
 		t.Fatal(err)
 	}

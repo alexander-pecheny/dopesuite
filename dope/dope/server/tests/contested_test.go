@@ -25,6 +25,10 @@ func TestContestedAreRuledOnPerAnswer(t *testing.T) {
 	if _, err := db.Exec(`update fests set is_public = 1 where id = ?`, festID); err != nil {
 		t.Fatal(err)
 	}
+	// Contested answers are a synch fest's alone.
+	if _, err := db.Exec(`update fests set kind = 'synch' where id = (select fest_id from games where id = ?)`, gameID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.Exec(`update games set contested = 1 where id = ?`, gameID); err != nil {
 		t.Fatal(err)
 	}
@@ -135,6 +139,10 @@ func TestContestedAnswerMovesAndGoes(t *testing.T) {
 	seedFestTeams(t, db, festID, 3)
 	gameID := createSchemeGame(t, db, festID, "od", "od", "")
 	if _, err := db.Exec(`update fests set is_public = 1 where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	// Contested answers are a synch fest's alone.
+	if _, err := db.Exec(`update fests set kind = 'synch' where id = (select fest_id from games where id = ?)`, gameID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`update games set contested = 1 where id = ?`, gameID); err != nil {

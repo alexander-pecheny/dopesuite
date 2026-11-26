@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 
+	"dope/dope/domain/contested"
 	"dope/dope/domain/festops"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/multifest"
@@ -460,16 +461,17 @@ func (s *Server) loadGameSettings(ctx context.Context, festID, gameID int64) (ap
 	var g apiGameSettings
 	var slug sql.NullString
 	var hidden, outside string
-	var contestedOn bool
+	var contestedOn, synch bool
 	err := s.h.Engine().DB.QueryRowContext(ctx, `
 select g.id, g.code, g.title, g.game_type, g.slug, coalesce(g.scheme_dsl, ''), coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), g.grid_width,
-  coalesce(g.contested, f.kind = 'synch'), g.venue_rooms
+  `+contested.EnabledSQL+`, f.kind = 'synch', g.venue_rooms
 from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`, gameID, festID).
-		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden, &outside, &g.GridWidth, &contestedOn, &g.VenueRooms)
+		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden, &outside, &g.GridWidth, &contestedOn, &synch, &g.VenueRooms)
 	if err != nil {
 		return g, err
 	}
-	if _, ok := games.As[games.Contestable](g.Type); ok {
+	// Contested answers are a synch fest's alone.
+	if _, ok := games.As[games.Contestable](g.Type); ok && synch {
 		g.Contested = &contestedOn
 	}
 	if tours, err := loadGameTours(ctx, s.h.Engine().DB, festID, gameID); err != nil {

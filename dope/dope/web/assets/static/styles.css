@@ -3920,6 +3920,9 @@ body:not(.embedded-match) .grid-match {
   --screen-muted-default: #5f6b7a;
   --ksi-sticker-col: 36px;
   --ksi-sticker-menu-icon: 22px;
+  /* The neutral sticker's outline: it is white by default, on a light page. */
+  --ksi-sticker-outline: var(--uchu-gray-5);
+  --ksi-sticker-outline-width: 1px;
   --transition-fast: 120ms ease;
 }
 
@@ -4298,6 +4301,12 @@ body.is-fullscreen.od-page .match-main {
   filter: var(--ksi-sticker-dim, none);
 }
 
+.ksi-sticker-outlined svg path:first-child {
+  stroke: var(--ksi-sticker-outline);
+  stroke-width: var(--ksi-sticker-outline-width);
+  vector-effect: non-scaling-stroke;
+}
+
 .ksi-sticker-icon svg {
   width: 28px;
   height: 28px;
@@ -4367,7 +4376,13 @@ body.is-fullscreen.od-page .match-main {
   font-weight: var(--fw-bold);
 }
 
-.ksi-sticker-option .ksi-sticker-icon svg {
+.ksi-sticker-option .ksi-sticker-outlined svg path:first-child {
+  stroke: var(--ksi-sticker-outline);
+  stroke-width: var(--ksi-sticker-outline-width);
+  vector-effect: non-scaling-stroke;
+}
+
+.ksi-sticker-icon svg {
   width: var(--ksi-sticker-menu-icon);
   height: var(--ksi-sticker-menu-icon);
 }

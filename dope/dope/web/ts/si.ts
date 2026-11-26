@@ -662,8 +662,8 @@ function stickerSelectCell(playerIndex: number, themeIndex: number): HTMLElement
   control.dataset.player = String(playerIndex);
   control.dataset.theme = String(themeIndex);
   control.disabled = state!.finished || viewer;
-  control.title = S.si.sticker.title(participantLabel(playerIndex), String(themeIndex + 1));
-  control.setAttribute("aria-label", control.title);
+  // No title: the browser's tooltip would sit over the menu the click opens.
+  control.setAttribute("aria-label", S.si.sticker.title(participantLabel(playerIndex), String(themeIndex + 1)));
   control.setAttribute("aria-haspopup", "listbox");
   control.setAttribute("aria-expanded", "false");
   control.addEventListener("click", () => toggleStickerMenu(control, playerIndex, themeIndex));
@@ -679,17 +679,19 @@ function stickerSelectCell(playerIndex: number, themeIndex: number): HTMLElement
 
 // stickerIcon is the sticker drawn in a type's colour; "" draws it uncoloured,
 // for a picker that colours it when a sticker is chosen.
-function stickerIcon(color: string): HTMLElement {
+function stickerIcon(color: string, id = ""): HTMLElement {
   const icon = document.createElement("span");
   icon.className = "ksi-sticker-icon";
   icon.innerHTML = STICKER_ICON_SVG;
-  if (color) paintSticker(icon, color);
+  if (color) paintSticker(icon, color, id);
   return icon;
 }
 
 // paintSticker gives the icon's main face the exact picked colour and its peel
-// corner a shade darker.
-function paintSticker(icon: HTMLElement, color: string): void {
+// corner a shade darker. The neutral sticker, white by default, gets an
+// outline so it shows on a light page.
+function paintSticker(icon: HTMLElement, color: string, id: string): void {
+  icon.classList.toggle("ksi-sticker-outlined", id === STICKER_NEUTRAL);
   const paths = icon.querySelectorAll("svg path");
   if (paths[0]) paths[0].setAttribute("fill", color);
   if (paths[1]) {
@@ -707,7 +709,7 @@ function applyStickerColor(control: HTMLElement, stickerId: string): void {
   if (mark) mark.textContent = type && stickerId === "x2" ? S.si.sticker.x2Mark() : "";
   if (type && type.color) {
     if (icon) {
-      paintSticker(icon, type.color);
+      paintSticker(icon, type.color, stickerId);
       icon.hidden = false;
     }
     wrap?.classList.add("has-sticker");
@@ -739,7 +741,7 @@ function openStickerMenu(control: HTMLButtonElement, player: number, theme: numb
   const panel = document.createElement("div");
   panel.className = "popover menu-dropdown ksi-sticker-menu";
   panel.setAttribute("role", "listbox");
-  panel.setAttribute("aria-label", control.title);
+  panel.setAttribute("aria-label", control.getAttribute("aria-label") || "");
   const choose = (id: string): void => {
     closeParkedPanel();
     setSticker(player, theme, id);
@@ -749,7 +751,7 @@ function openStickerMenu(control: HTMLButtonElement, player: number, theme: numb
   for (const type of stickerTypes.list) {
     const count = used[type.id] || 0;
     const limit = type.max != null ? S.si.sticker.used(String(count), String(type.max)) : "";
-    rows.push(stickerOption(type.id, type.label, stickerIcon(type.color), limit, type.max != null && count > type.max, current, choose));
+    rows.push(stickerOption(type.id, type.label, stickerIcon(type.color, type.id), limit, type.max != null && count > type.max, current, choose));
   }
   panel.append(...rows);
   panel.addEventListener("keydown", (event) => stepStickerMenu(event, rows));
