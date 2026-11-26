@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fallbackfont"
 	"code.pecheny.me/pecheny/dopesuite/chgksuite/xyimage"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -62,10 +63,17 @@ type instance struct {
 	reset    api.Function
 	compile  api.Function
 	measure  api.Function
+
+	// fallback says which fallback families a source needs; loaded is the
+	// ones this instance has, until the next SetImages drops them.
+	fallback *fallbackfont.Set
+	loaded   map[string]bool
 }
 
 // NewPool compiles the module once, instantiates `size` copies and loads the fonts
-// into each.
+// into each. The fallback faces (fallbackfont) are not loaded up front: an
+// instance adds a family the first time a source it compiles has a character
+// that only that family covers, and keeps it until the next SetImages.
 //
 // cacheDir is where wazero keeps the compiled machine code. It matters a lot:
 // compiling 30 MB of wasm takes ~15s cold but ~0.5s from the cache, and the cache
@@ -98,6 +106,7 @@ func NewPool(ctx context.Context, fonts [][]byte, cacheDir string, size int) (*P
 	}
 
 	p := &Pool{rt: rt, closeCtx: ctx, free: make(chan *instance, size)}
+	fallback := fallbackfont.NewSet(fonts)
 	for i := range size {
 		// No filesystem, no env, no args: the guest could not reach the host's disk
 		// even if typst tried to, which is the whole point of the exercise.
@@ -118,6 +127,7 @@ func NewPool(ctx context.Context, fonts [][]byte, cacheDir string, size int) (*P
 			reset:    mod.ExportedFunction("reset_files"),
 			compile:  mod.ExportedFunction("compile"),
 			measure:  mod.ExportedFunction("measure"),
+			fallback: fallback,
 		}
 		for name, f := range map[string]api.Function{
 			"alloc": in.alloc, "dealloc": in.dealloc, "add_font": in.addFont,
@@ -174,6 +184,7 @@ func (p *Pool) SetImages(ctx context.Context, images map[string][]byte) error {
 		if _, err := in.reset.Call(ctx); err != nil {
 			return fmt.Errorf("reset_files: %w", err)
 		}
+		in.loaded = nil
 		for name, data := range images {
 			add := in.addImage
 			if family, ok := strings.CutPrefix(name, xyimage.FontKeyPrefix); ok {
@@ -261,6 +272,26 @@ func (in *instance) addNamedFont(ctx context.Context, family string, data []byte
 	return in.callNamed(ctx, in.addNamed, "add_named_font", family, data)
 }
 
+// loadFallbacks adds the fallback families typ needs and this instance does
+// not have yet, every face under the family's own name.
+func (in *instance) loadFallbacks(ctx context.Context, typ string) error {
+	for _, fam := range in.fallback.For(typ) {
+		if in.loaded[fam.Name] {
+			continue
+		}
+		for _, face := range fam.Faces {
+			if err := in.addNamedFont(ctx, fam.Name, face); err != nil {
+				return err
+			}
+		}
+		if in.loaded == nil {
+			in.loaded = map[string]bool{}
+		}
+		in.loaded[fam.Name] = true
+	}
+	return nil
+}
+
 // callNamed hands the guest a name and a buffer, the shape of both add_file
 // and add_named_font.
 func (in *instance) callNamed(ctx context.Context, fn api.Function, what, name string, data []byte) error {
@@ -285,6 +316,9 @@ func (in *instance) callNamed(ctx context.Context, fn api.Function, what, name s
 // measureOn calls the guest's measure export, whose payload is the y position
 // in millimetres as decimal text.
 func (in *instance) measureOn(ctx context.Context, typ string) (int, float64, error) {
+	if err := in.loadFallbacks(ctx, typ); err != nil {
+		return 0, 0, err
+	}
 	src, err := in.write(ctx, []byte(typ))
 	if err != nil {
 		return 0, 0, err
@@ -343,6 +377,9 @@ const (
 )
 
 func (in *instance) compileOn(ctx context.Context, typ string, want uint64) ([]byte, int, error) {
+	if err := in.loadFallbacks(ctx, typ); err != nil {
+		return nil, 0, err
+	}
 	src, err := in.write(ctx, []byte(typ))
 	if err != nil {
 		return nil, 0, err

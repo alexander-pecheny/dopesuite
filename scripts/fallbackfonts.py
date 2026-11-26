@@ -35,7 +35,7 @@ from fontTools.varLib import instancer
 from fontsource import ROOT, fetch, load
 
 COMMIT = "3b1480ea4b6e15fed70a42f4cb29216476a044ed"  # google/fonts main, 2026-08
-OUT = ROOT / "chgksuite/handout/assets/fallback"
+OUT = ROOT / "chgksuite/fallbackfont/fonts"
 
 REGULAR, BOLD = 400, 700
 BOTH = (REGULAR, BOLD)

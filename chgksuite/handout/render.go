@@ -6,38 +6,14 @@ import (
 	"embed"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sync"
+
+	"code.pecheny.me/pecheny/dopesuite/chgksuite/fallbackfont"
 )
 
 //go:embed assets/NotoSans-Regular.ttf assets/NotoSans-Bold.ttf assets/NotoSans-Italic.ttf assets/NotoSans-BoldItalic.ttf
-//go:embed assets/fallback/*.ttf
 var fontFS embed.FS
-
-// fallbackDir holds the Noto face of each script Noto Sans lacks (Armenian,
-// Georgian, Hebrew, Arabic, CJK, …), built by scripts/fallbackfonts.py. The
-// documents name Noto Sans alone; typst falls back to any loaded face that
-// has the glyph, so loading these is what keeps such a word from coming out
-// as tofu.
-const fallbackDir = "assets/fallback"
-
-// typstFontPaths is every embedded face typst gets: Noto Sans first, then the
-// fallbacks.
-var typstFontPaths = sync.OnceValue(func() []string {
-	paths := make([]string, 0, len(fontNames))
-	for _, n := range fontNames {
-		paths = append(paths, "assets/"+n)
-	}
-	entries, err := fontFS.ReadDir(fallbackDir)
-	if err != nil {
-		panic(err) // embedded at build time
-	}
-	for _, e := range entries {
-		paths = append(paths, fallbackDir+"/"+e.Name())
-	}
-	return paths
-})
 
 var fontNames = []string{
 	"NotoSans-Regular.ttf", "NotoSans-Bold.ttf", "NotoSans-Italic.ttf", "NotoSans-BoldItalic.ttf",
@@ -62,12 +38,17 @@ var bundledFontDir = sync.OnceValues(func() (string, error) {
 	if err := os.MkdirAll(dir, fontDirMode); err != nil {
 		return "", err
 	}
-	for _, p := range typstFontPaths() {
-		b, err := fontFS.ReadFile(p)
+	for _, n := range fontNames {
+		b, err := fontFS.ReadFile("assets/" + n)
 		if err != nil {
 			return "", err
 		}
-		if err := writeFontFile(filepath.Join(dir, path.Base(p)), b); err != nil {
+		if err := writeFontFile(filepath.Join(dir, n), b); err != nil {
+			return "", err
+		}
+	}
+	for _, f := range fallbackfont.Files() {
+		if err := writeFontFile(filepath.Join(dir, f.Name), f.Data); err != nil {
 			return "", err
 		}
 	}
@@ -165,15 +146,15 @@ func prepare(ctx context.Context, hndt string, images map[string][]byte, a Args,
 	return GenerateTyp(hndt, a), nil
 }
 
-// BundledFonts returns the embedded faces as bytes: the Noto Sans faces, in
-// BundledFontNames order, then the fallbacks. The wasm typst (typstwasm)
-// serves fonts from memory, so it needs the bytes rather than a directory to
-// point --font-path at.
+// BundledFonts returns the embedded Noto Sans faces as bytes, in
+// BundledFontNames order. The wasm typst (typstwasm) serves fonts from memory,
+// so it needs the bytes rather than a directory to point --font-path at. The
+// fallback faces are not among them: the pool loads one into an instance only
+// for a source that needs it (fallbackfont).
 func BundledFonts() ([][]byte, error) {
-	paths := typstFontPaths()
-	out := make([][]byte, 0, len(paths))
-	for _, p := range paths {
-		b, err := fontFS.ReadFile(p)
+	out := make([][]byte, 0, len(fontNames))
+	for _, n := range fontNames {
+		b, err := fontFS.ReadFile("assets/" + n)
 		if err != nil {
 			return nil, err
 		}
