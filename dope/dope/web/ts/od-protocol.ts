@@ -159,6 +159,22 @@ function entryFloor(scheme: ODScheme): number {
 // renderers can trust: the team list (from the scheme when the document has
 // none), an entries grid of exactly totalQuestions rows × teams, a completed
 // flag per question, normalised shootout rounds; retired fields dropped.
+// questionsStored is how many questions a document as the server sent it
+// has columns for: its own sheet's, or its widest venue sheet's on a synch
+// fest. A count other than the page's tours says the tours changed (the
+// scheme carries them), so the page fetches the scheme too.
+export function questionsStored(raw: unknown): number | null {
+  if (!raw || typeof raw !== "object") return null;
+  const doc = raw as {completed?: unknown; venues?: unknown};
+  let n: number | null = Array.isArray(doc.completed) ? doc.completed.length : null;
+  if (doc.venues && typeof doc.venues === "object") {
+    for (const sheet of Object.values(doc.venues as Record<string, {completed?: unknown}>)) {
+      if (sheet && Array.isArray(sheet.completed)) n = Math.max(n ?? 0, sheet.completed.length);
+    }
+  }
+  return n;
+}
+
 export function parseState(raw: unknown, scheme: ODScheme, totalQuestions: number): ODState {
   const state = (raw && typeof raw === "object" ? raw : {}) as ODState;
   if (!Array.isArray(state.teams)) {

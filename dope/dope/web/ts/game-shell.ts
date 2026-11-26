@@ -243,6 +243,9 @@ export interface GameDocument {
   readonly scope: string;
   // Adopt the first snapshot, connect the events and the host presence.
   load(): Promise<void>;
+  // Fetch the whole document again: a change the state alone does not
+  // carry (an OD's new tours live in its scheme).
+  refresh(): Promise<void>;
   // One patch of the document, coalesced and retried by the writer.
   save(path: PatchPath, value: unknown): void;
   // A remote state with the page's pending edits overlaid.
@@ -263,6 +266,15 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
   let writer: ScopedWriter | null = null;
 
   const base = (state: unknown) => spec.base ? spec.base(state) : state;
+  // The document fetched afresh, adopted when it differs from the page's.
+  async function refresh(): Promise<void> {
+    const before = JSON.stringify(spec.current());
+    const fresh = await fetchGameData(route);
+    loader.writeSnapshot(fresh);
+    const based = {...fresh, state: base(fresh.state)};
+    if (JSON.stringify({scheme: based.scheme, state: based.state, fest: based.fest ?? null}) === before) return;
+    spec.adopt(based);
+  }
   const loader = createGameDataLoader({
     route,
     cachePrefix: spec.cachePrefix,
@@ -273,14 +285,7 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
       }
       spec.adopt({...snapshot, state: base(snapshot.state)});
     },
-    revalidate: async () => {
-      const before = JSON.stringify(spec.current());
-      const fresh = await fetchGameData(route);
-      loader.writeSnapshot(fresh);
-      const based = {...fresh, state: base(fresh.state)};
-      if (JSON.stringify({scheme: based.scheme, state: based.state, fest: based.fest ?? null}) === before) return;
-      spec.adopt(based);
-    },
+    revalidate: refresh,
   });
 
   function sync(): {live: LiveEvents; writer: ScopedWriter} {
@@ -353,6 +358,7 @@ export function mountGameDocument(spec: GameDocumentSpec): GameDocument {
   return {
     scope,
     load,
+    refresh,
     save: (path, value) => sync().writer.patch(scope, path, value),
     overlay,
     recover,

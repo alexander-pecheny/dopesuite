@@ -11,6 +11,8 @@ import type {CellContent} from "./cells.js";
 import {nameCell} from "./name-cell.js";
 import {resultsTeamCell, standingsTable} from "./standings.js";
 import {buildRosterView} from "./fest-roster.js";
+import {createGameTeamsTab} from "./game-teams.js";
+import type {GameTeamsTab} from "./game-teams.js";
 import {mountGameDocument, mountGamePage} from "./game-shell.js";
 import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
@@ -85,7 +87,11 @@ const TABS = [
   {key: "results", label: S.multi.tabs.results()},
   ...(viewer ? [] : [{key: "refusals", label: S.multi.tabs.refusals()}]),
   {key: "roster", label: S.multi.tabs.roster()},
+  ...(viewer ? [] : [{key: "entrants", label: S.entrants.tab()}]),
 ];
+// The host's entrants tab: who plays this Game (game-teams.ts).
+const gameTeams = !viewer && route.apiBase ? createGameTeamsTab(route.apiBase) : null;
+let renderedTab = "";
 let activeTab = tabFromHash(TABS) || "detailed";
 
 // The teams as the viewer looks at them: the Division chosen in the URL
@@ -695,14 +701,23 @@ function render(): void {
       ? buildTeamsPanel()
       : activeTab === "roster"
         ? rosterView()
-        : buildTable();
+        : activeTab === "entrants" && gameTeams
+          ? gameTeamsView(gameTeams)
+          : buildTable();
+  renderedTab = activeTab;
   const chips = activeTab === "results" ? lens.chips() : null;
   root.replaceChildren(...(chips ? [chips, node] : [node]));
-  root.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "refusals");
+  root.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "refusals" || activeTab === "entrants");
   if (activeTab === "detailed") sheet.refresh();
 }
 
 let rosterCache: HTMLElement | null = null;
+// gameTeamsView is the entrants tab, read afresh each time it is opened.
+function gameTeamsView(tab: GameTeamsTab): HTMLElement {
+  if (renderedTab !== "entrants") tab.refresh();
+  return tab.element();
+}
+
 function rosterView(): HTMLElement {
   if (!rosterCache) rosterCache = buildRosterView(route.festID, route.gameID);
   return rosterCache;

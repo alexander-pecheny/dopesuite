@@ -1262,6 +1262,20 @@ update games set contested = (select f.contested from fests f where f.id = games
 `)
 		return err
 	}},
+	// A flat Game seats the fest's whole roster until the host gives it a
+	// list of its own (roster.SetOwnTeamsTx): own_teams says it has one, and
+	// game_teams holds who is on it.
+	{Version: 64, Name: "a flat game's own team list", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+alter table games add column own_teams integer not null default 0;
+create table game_teams (
+  game_id integer not null references games(id) on delete cascade,
+  team_id integer not null references fest_teams(id) on delete cascade,
+  primary key (game_id, team_id)
+);
+`)
+		return err
+	}},
 }
 
 // overridesToHandRosters keeps every Game's teams playing with whom they play

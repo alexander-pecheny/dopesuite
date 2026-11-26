@@ -521,18 +521,6 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
     return wrap;
   }
 
-  function actionButton(name: IconName, label: string, disabled: boolean, onClick: () => void): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "action-icon";
-    button.title = label;
-    button.setAttribute("aria-label", label);
-    button.disabled = disabled;
-    button.appendChild(icon(name));
-    button.addEventListener("click", onClick);
-    return button;
-  }
-
   // ---- adding one ----
 
   function addForm(current: EntrantsView): HTMLElement {
@@ -615,20 +603,34 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
   };
 }
 
-function hint(text: string, danger = false): HTMLElement {
+// actionButton is a row's icon action, labelled for its tooltip and for a
+// screen reader.
+export function actionButton(name: IconName, label: string, disabled: boolean, onClick: () => void): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "action-icon";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.disabled = disabled;
+  button.appendChild(icon(name));
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+export function hint(text: string, danger = false): HTMLElement {
   const node = document.createElement("p");
   node.className = danger ? "hint hint-danger" : "hint";
   node.textContent = text;
   return node;
 }
 
-function emptyNote(text: string): HTMLElement {
+export function emptyNote(text: string): HTMLElement {
   const node = document.createElement("p");
   node.className = "empty";
   node.textContent = text;
   return node;
 }
 
-function errorText(error: unknown): string {
+export function errorText(error: unknown): string {
   return error instanceof Error ? error.message.trim() : String(error);
 }

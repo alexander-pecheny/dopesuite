@@ -131,10 +131,11 @@ test("брейн: legacy #table and #protocol land on the first Block's pair", (
   assert.equal(canonicalKey(gameTabs([], {game: "brain", viewer: true}), "table"), "table");
 });
 
+// A host also gets the Участники tab: who plays the Game (game-teams.ts).
 test("КСИ and ЧГК keep their fixed strips, host-only tabs gated", () => {
-  assert.deepEqual(keys(gameTabs([], {game: "ksi", viewer: false})), ["detailed", "results", "refusals", "roster"]);
+  assert.deepEqual(keys(gameTabs([], {game: "ksi", viewer: false})), ["detailed", "results", "refusals", "roster", "entrants"]);
   assert.deepEqual(keys(gameTabs([], {game: "ksi", viewer: true})), ["detailed", "results", "roster"]);
-  assert.deepEqual(keys(gameTabs([], {game: "od", viewer: false})), ["results", "detailed", "input", "screen", "roster"]);
+  assert.deepEqual(keys(gameTabs([], {game: "od", viewer: false})), ["results", "detailed", "input", "screen", "roster", "entrants"]);
   assert.deepEqual(keys(gameTabs([], {game: "od", viewer: true})), ["results", "detailed", "input", "roster"]);
 });
 

@@ -55,9 +55,19 @@ od_tours_label = "Количество туров"
 od_questions_label = "Количество вопросов в туре"
 # The field taking the tours from rating.chgk.info instead of the two above,
 # and its errors.
-od_rating_label = "Или взять туры с турнирного сайта: ID турнира"
+od_rating_label = "Или загрузить туры с турнирного сайта: ID турнира"
 error_rating_tours = 'Турнирный сайт не отдал туры турнира {{.id}}: {{.err}}'
 error_rating_no_tours = 'У турнира {{.id}} на турнирном сайте не указаны туры'
+# The settings page's tours field of a ЧГК or a minefield, its two loaders and
+# the loaders' errors.
+tours_label = "Туры: сколько вопросов в каждом туре"
+tours_save = "Сохранить туры"
+tours_from_site = "Загрузить с турнирного сайта"
+tours_site_label = "ID турнира"
+tours_from_game = "Загрузить из другой игры"
+tours_game_label = "Игра"
+error_tours = 'Впишите, сколько вопросов в каждом туре, через пробел, например «15 15 15». Туров не больше {{.tours}}, вопросов в туре от 1 до {{.questions}}.'
+error_tours_game = "Выберите игру, из которой загрузить туры."
 # The minefield's fields: what a wrong answer costs and what taking a whole
 # tour adds. Also the field names their errors name.
 od_minus_wrong_label = "Штраф за неправильный ответ"
@@ -105,7 +115,7 @@ minigames_share_hint = "«Название →0..100: …» — мини-игр�
 multi_sorting_label = "Что решает при равном итоге (необязательно)"
 multi_sorting_hint = "Через запятую: total — итог, plus — сумма положительных, place_sum — сумма мест по мини-играм (меньше — лучше), game1, game2… — подытоги мини-игр по порядку. Пусто — команды с равным итогом делят место."
 # Hint under the troika scheme editor.
-troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. swap_outriders: true — порядок опроса меняется в середине боя: рассадку вводят один раз, а со второй половины тем (с 4-й из 6, с 5-й из 8) Пристяжной 1 и Пристяжной 2 меняются местами сами. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама возьмёт тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
+troika_hint = "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. swap_outriders: true — порядок опроса меняется в середине боя: рассадку вводят один раз, а со второй половины тем (с 4-й из 6, с 5-й из 8) Пристяжной 1 и Пристяжной 2 меняются местами сами. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама загрузит тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
 # The scheme the hamsa creation form prefills: the tournament's own shape at
 # its smallest, with n the participants the fest can seat four to a table. It
 # is text a host reads and edits, so it lives here rather than in the form.
@@ -257,7 +267,7 @@ kept_removed = 'убранных игроков: {{.n}}'
 conflicts_title = "Спорные игроки"
 conflicts_hint = "На rating.chgk.info эти игроки теперь в других командах, а вы ставили их сами. Отмеченные перейдут в команду с сайта. Остальные останутся там, куда их поставили вы."
 conflict_player = '{{.player}}: у вас в «{{.hand}}», на сайте в «{{.site}}»'
-conflict_take_site = "Взять с сайта"
+conflict_take_site = "перевести в команду с сайта"
 confirm_submit = "Импортировать"
 # Undo of the last import, while no hand edit has been made since.
 undo_note = 'Последний импорт можно отменить, пока составы не правили вручную. Сохранено: {{.at}}.'
@@ -692,7 +702,7 @@ merged_game = '{{.title}} (сводная)'
 [rating_export]
 title = 'Выгрузка на турнирный сайт · {{.fest}}'
 crumb = "Выгрузка на турнирный сайт"
-lead = "dope сравнит составы, зачёты и ответы в ОД каждой команды с турнирным сайтом и отправит туда только то, что поменялось в dope. Что поменяли только на сайте, там и останется, а составы и зачёты dope возьмёт себе. Если команду поменяли и в dope, и на сайте, выберите, чья версия верна. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить»."
+lead = "dope сравнит составы, зачёты и ответы в ОД каждой команды с турнирным сайтом и отправит туда только то, что поменялось в dope. Что поменяли только на сайте, там и останется, а составы и зачёты dope загрузит к себе. Если команду поменяли и в dope, и на сайте, выберите, чья версия верна. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить»."
 game_label = "Игра"
 no_game = "В фесте нет ОД всех команд, выгружать нечего."
 no_token = "Чтобы выгружать на турнирный сайт, сохраните в профиле свой токен турнирного сайта."
@@ -750,7 +760,7 @@ fact_flags = "зачёты"
 fact_answers = "ответы"
 # A fact of a team the site's version of which stands; .site is that version.
 take_line = '{{.team}}, {{.fact}}. Останется версия сайта: {{.site}}'
-take_into_dope = "dope возьмёт её себе."
+take_into_dope = "dope загрузит её к себе."
 ask_label = '{{.team}}, {{.fact}}'
 choice_none = "Выберите версию"
 choice_dope = 'Версия dope: {{.value}}'

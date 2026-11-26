@@ -16,9 +16,11 @@ import {parseGameRoute} from "./game-page.js";
 import type {GameDataSnapshot, GameInitLike} from "./game-page.js";
 import {clamp, fitScrollFade, renderTabBar} from "./widgets.js";
 import type {EditPlace} from "./widgets.js";
+import {closeParkedPanel, isParkedOn, parkPanel} from "./parked-panel.js";
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {CellCoord, CellEdit} from "./sheet-cursor.js";
 import {gameTabs} from "./game-tabs.js";
+import {createGameTeamsTab} from "./game-teams.js";
 import {setHashTab, tabFromHash} from "./url-state.js";
 import * as ksi from "./ksi-protocol.js";
 import {KSI_THEMES, QUESTION_VALUES, RESULT_VALUES, SI_THEMES, STICKER_NEUTRAL} from "./ksi-protocol.js";
@@ -125,6 +127,8 @@ const tabScroll = new Map<string, {top: number; left: number}>();
 // The refusals tab is a host-only control surface; its effect — declined teams
 // dropping out of the results ranking — is visible to spectators in that tab.
 const TABS = gameTabs([], {game: "ksi", viewer});
+// The host's entrants tab: who plays this Game (game-teams.ts).
+const gameTeams = !viewer && route.apiBase ? createGameTeamsTab(route.apiBase) : null;
 let activeTab = tabFromHash(TABS) || "detailed";
 // The teams as the viewer looks at them: the Division chosen in the URL
 // (ADR-0020), its members, badges and chips, and the detailed sheet's order.
@@ -240,7 +244,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   if (team) {
     // The roster tab fits the frame and wraps rather than scrolling sideways like a
     // score board, so the host drops its max-content sizing.
-    siRoot.classList.toggle("fits-frame", activeTab === "roster");
+    siRoot.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "entrants");
     renderedTab = activeTab;
     restoreTabScroll(activeTab);
   } else {
@@ -262,8 +266,16 @@ function teamTabNode(): HTMLElement {
     case "results": return buildResultsTable();
     case "refusals": return buildRefusalsTable();
     case "roster": return rosterView();
+    case "entrants": return gameTeamsView();
     default: return buildTable();
   }
+}
+
+// gameTeamsView is the entrants tab, read afresh each time it is opened.
+function gameTeamsView(): HTMLElement {
+  if (!gameTeams) return buildTable();
+  if (renderedTab !== "entrants") gameTeams.refresh();
+  return gameTeams.element();
 }
 
 // restoreCursor re-points the sheet cursor at the active cell after a rebuild;
@@ -628,7 +640,7 @@ function answerCell(playerIndex: number, themeIndex: number, answerIndex: number
 
 // stickerSelectCell builds the per-(team, theme) sticker picker that sits in
 // the theme's spacer column. Unselected: plain chevron. Selected: SVG icon in
-// sticker colour. A transparent <select> overlay handles interaction.
+// sticker colour. A transparent button over the cell opens the sticker menu.
 function stickerSelectCell(playerIndex: number, themeIndex: number): HTMLElement {
   const cell = document.createElement("td");
   cell.className = "gap ksi-sticker-cell";
@@ -638,65 +650,145 @@ function stickerSelectCell(playerIndex: number, themeIndex: number): HTMLElement
   const wrap = document.createElement("div");
   wrap.className = "ksi-sticker-wrap";
 
-  const icon = document.createElement("span");
-  icon.className = "ksi-sticker-icon";
-  icon.innerHTML = STICKER_ICON_SVG;
+  const icon = stickerIcon("");
   icon.hidden = true;
 
   const mark = document.createElement("span");
   mark.className = "ksi-sticker-mark";
 
-  const select = document.createElement("select");
-  select.className = "ksi-sticker-select";
-  select.dataset.player = String(playerIndex);
-  select.dataset.theme = String(themeIndex);
-  select.disabled = state!.finished || viewer;
-  select.title = S.si.sticker.title(participantLabel(playerIndex), String(themeIndex + 1));
-
-  const blank = document.createElement("option");
-  blank.value = "";
-  blank.textContent = "—";
-  select.appendChild(blank);
-  for (const type of stickerTypes.list) {
-    const opt = document.createElement("option");
-    opt.value = type.id;
-    opt.textContent = type.label;
-    select.appendChild(opt);
-  }
+  const control = document.createElement("button");
+  control.type = "button";
+  control.className = "ksi-sticker-select";
+  control.dataset.player = String(playerIndex);
+  control.dataset.theme = String(themeIndex);
+  control.disabled = state!.finished || viewer;
+  control.title = S.si.sticker.title(participantLabel(playerIndex), String(themeIndex + 1));
+  control.setAttribute("aria-label", control.title);
+  control.setAttribute("aria-haspopup", "listbox");
+  control.setAttribute("aria-expanded", "false");
+  control.addEventListener("click", () => toggleStickerMenu(control, playerIndex, themeIndex));
 
   const current = stickerValue(playerIndex, themeIndex);
-  select.value = current;
   wrap.appendChild(icon);
   wrap.appendChild(mark);
-  wrap.appendChild(select);
+  wrap.appendChild(control);
   cell.appendChild(wrap);
-  applyStickerColor(select, current);
+  applyStickerColor(control, current);
   return cell;
 }
 
-function applyStickerColor(select: HTMLSelectElement, stickerId: string): void {
+// stickerIcon is the sticker drawn in a type's colour; "" draws it uncoloured,
+// for a picker that colours it when a sticker is chosen.
+function stickerIcon(color: string): HTMLElement {
+  const icon = document.createElement("span");
+  icon.className = "ksi-sticker-icon";
+  icon.innerHTML = STICKER_ICON_SVG;
+  if (color) paintSticker(icon, color);
+  return icon;
+}
+
+// paintSticker gives the icon's main face the exact picked colour and its peel
+// corner a shade darker.
+function paintSticker(icon: HTMLElement, color: string): void {
+  const paths = icon.querySelectorAll("svg path");
+  if (paths[0]) paths[0].setAttribute("fill", color);
+  if (paths[1]) {
+    paths[1].setAttribute("fill", darkenHex(color, STICKER_PEEL_FACTOR));
+    paths[1].setAttribute("opacity", "1");
+  }
+}
+
+function applyStickerColor(control: HTMLElement, stickerId: string): void {
   const type = stickerId ? stickerById.get(stickerId) : null;
-  const wrap = select.closest(".ksi-sticker-wrap");
+  control.dataset.sticker = stickerId;
+  const wrap = control.closest(".ksi-sticker-wrap");
   const icon = wrap?.querySelector<HTMLElement>(".ksi-sticker-icon");
-  const svg = icon?.querySelector("svg");
   const mark = wrap?.querySelector<HTMLElement>(".ksi-sticker-mark");
   if (mark) mark.textContent = type && stickerId === "x2" ? S.si.sticker.x2Mark() : "";
   if (type && type.color) {
-    if (svg) {
-      // Main face = exact picked colour; peel corner = a shade darker.
-      const paths = svg.querySelectorAll("path");
-      if (paths[0]) paths[0].setAttribute("fill", type.color);
-      if (paths[1]) {
-        paths[1].setAttribute("fill", darkenHex(type.color, STICKER_PEEL_FACTOR));
-        paths[1].setAttribute("opacity", "1");
-      }
+    if (icon) {
+      paintSticker(icon, type.color);
+      icon.hidden = false;
     }
-    if (icon) icon.hidden = false;
     wrap?.classList.add("has-sticker");
   } else {
     if (icon) icon.hidden = true;
     wrap?.classList.remove("has-sticker");
   }
+}
+
+function toggleStickerMenu(control: HTMLButtonElement, player: number, theme: number): void {
+  if (isParkedOn(control)) {
+    closeParkedPanel();
+    return;
+  }
+  openStickerMenu(control, player, theme);
+}
+
+// openStickerMenu lists the stickers under the control, each in its colour,
+// with how many of its kind the team has stuck against its limit. A sticker
+// over the limit can still be chosen: the sheet then flags the team's themes
+// (refreshStickerLimits), as it does a miscounted paper sheet.
+function openStickerMenu(control: HTMLButtonElement, player: number, theme: number): void {
+  const current = stickerValue(player, theme);
+  const used: Record<string, number> = {};
+  for (let other = 0; other < themesCount; other++) {
+    const id = other === theme ? "" : stickerValue(player, other);
+    if (id) used[id] = (used[id] || 0) + 1;
+  }
+  const panel = document.createElement("div");
+  panel.className = "popover menu-dropdown ksi-sticker-menu";
+  panel.setAttribute("role", "listbox");
+  panel.setAttribute("aria-label", control.title);
+  const choose = (id: string): void => {
+    closeParkedPanel();
+    setSticker(player, theme, id);
+    control.focus();
+  };
+  const rows = [stickerOption("", S.si.sticker.none(), null, "", false, current, choose)];
+  for (const type of stickerTypes.list) {
+    const count = used[type.id] || 0;
+    const limit = type.max != null ? S.si.sticker.used(String(count), String(type.max)) : "";
+    rows.push(stickerOption(type.id, type.label, stickerIcon(type.color), limit, type.max != null && count > type.max, current, choose));
+  }
+  panel.append(...rows);
+  panel.addEventListener("keydown", (event) => stepStickerMenu(event, rows));
+  parkPanel(control, panel);
+  (rows.find((row) => row.getAttribute("aria-selected") === "true") || rows[0])?.focus();
+}
+
+// stickerOption is one row of the sticker menu: the sticker in its colour,
+// its label, and how many of it the team has stuck out of its limit, in the
+// danger colour once over it.
+function stickerOption(id: string, label: string, icon: HTMLElement | null, count: string, over: boolean,
+  current: string, choose: (id: string) => void): HTMLButtonElement {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "menu-item ksi-sticker-option";
+  row.setAttribute("role", "option");
+  row.setAttribute("aria-selected", String(id === current));
+  if (icon) row.appendChild(icon);
+  const name = document.createElement("span");
+  name.className = "ksi-sticker-option-label";
+  name.textContent = label;
+  row.appendChild(name);
+  if (count) {
+    const note = document.createElement("span");
+    note.className = over ? "ksi-sticker-option-count ksi-sticker-option-over" : "ksi-sticker-option-count";
+    note.textContent = count;
+    row.appendChild(note);
+  }
+  row.addEventListener("click", () => choose(id));
+  return row;
+}
+
+// stepStickerMenu moves the focus down or up the menu's rows, round the end.
+function stepStickerMenu(event: KeyboardEvent, rows: HTMLButtonElement[]): void {
+  const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+  if (!step) return;
+  event.preventDefault();
+  const at = rows.indexOf(document.activeElement as HTMLButtonElement);
+  rows[(at + step + rows.length) % rows.length]?.focus();
 }
 
 function setSticker(player: number, theme: number, rawId: string): void {
@@ -710,11 +802,8 @@ function setSticker(player: number, theme: number, rawId: string): void {
   setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
   setNodeText(scoreNode("total", {player}), scores.totals[player]);
   refreshPlaces(scores.places);
-  const select = stickerSelectNode(player, theme);
-  if (select) {
-    select.value = id;
-    applyStickerColor(select, id);
-  }
+  const control = stickerSelectNode(player, theme);
+  if (control) applyStickerColor(control, id);
   refreshStickerLimits(player);
   saveState(["stickers", theme, player], id);
 }
@@ -725,8 +814,8 @@ function stickerCellNode(player: number, theme: number): HTMLElement | null {
   );
 }
 
-function stickerSelectNode(player: number, theme: number): HTMLSelectElement | null {
-  return siRoot.querySelector<HTMLSelectElement>(
+function stickerSelectNode(player: number, theme: number): HTMLButtonElement | null {
+  return siRoot.querySelector<HTMLButtonElement>(
     `.ksi-sticker-select[data-player="${cssEscape(String(player))}"][data-theme="${cssEscape(String(theme))}"]`,
   );
 }
@@ -818,14 +907,6 @@ function handleTableFocusIn(event: Event): void {
 
 function handleTableChange(event: Event): void {
   const target = event.target;
-  if (target instanceof HTMLSelectElement && target.classList.contains("ksi-sticker-select")) {
-    if (viewer || state!.finished) return;
-    const player = Number(target.dataset.player);
-    const theme = Number(target.dataset.theme);
-    if (!Number.isInteger(player) || !Number.isInteger(theme)) return;
-    setSticker(player, theme, target.value);
-    return;
-  }
   if (target instanceof HTMLInputElement && target.classList.contains("finish-toggle")) {
     if (viewer) return;
     state!.finished = target.checked;
@@ -1007,7 +1088,7 @@ function rememberChangedTheme(changedThemes: Map<number, Set<number>>, player: n
 function canPatchState(previous: KSIState | null, next: KSIState | null): boolean {
   if (!renderedTable || !previous || !next) return false;
   if (previous.finished !== next.finished) return false;
-  // A sticker change re-scores whole themes and re-selects dropdowns; rebuild
+  // A sticker change re-scores whole themes and recolours the pickers; rebuild
   // the sheet rather than try to patch it cell by cell.
   if (stickersEnabled() && JSON.stringify(previous.stickers || []) !== JSON.stringify(next.stickers || [])) return false;
   // A refusal toggle adds/removes a team from the detailed sheet and results ranking

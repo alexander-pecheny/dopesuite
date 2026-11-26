@@ -75,6 +75,9 @@ type hostGameSettingsData struct {
 	// room, nil for a format without bouts.
 	Contested  *bool
 	VenueRooms *bool
+	// Tours is the tours block of a format whose tours change after
+	// creation, nil for any other.
+	Tours *gameTours
 }
 
 type hostGameCreateData struct {
@@ -515,6 +518,9 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	}
 	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.SaveSubmit()))))
 	page = append(page, dopeui.Form(form...))
+	if data.Tours != nil {
+		page = append(page, toursBlock("/host/fest/"+festRef+"/game/"+data.Game.Ref()+"/tours", *data.Tours)...)
+	}
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
 
@@ -569,6 +575,10 @@ from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`,
 		if err != nil {
 			return nil, err
 		}
+		tours, err := loadGameTours(r.Context(), s.h.Engine().DB, festID, gameID)
+		if err != nil {
+			return nil, err
+		}
 		editable := games.Get(gameType).DSL == games.DSLEditable
 		hasDSL := editable && strings.TrimSpace(schemeDSL) != ""
 		if submitted := strings.TrimSpace(r.Form.Get("scheme_dsl")); submitted != "" && errMsg != "" {
@@ -577,6 +587,7 @@ from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`,
 		return hostGameSettingsDoc(hostGameSettingsData{
 			Contested:  data.Contested,
 			VenueRooms: data.VenueRooms,
+			Tours:      tours,
 			Fest:       fest,
 			Game: PublicFestGame{
 				ID:    gameID,
@@ -636,17 +647,24 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		outside := r.Form["division_outside"]
 		g.OutsideDivisions = &outside
 	}
-	if err := s.UpdateGameSettings(r.Context(), festID, gameID, g); errors.Is(err, sql.ErrNoRows) {
-		// The Game left the fest after the router found it.
+	err := s.UpdateGameSettings(r.Context(), festID, gameID, g)
+	gameRef := strings.TrimSpace(g.Slug)
+	if gameRef == "" {
+		gameRef = fmt.Sprintf("%d", gameID)
+	}
+	s.settingsWritten(w, r, festID, gameID, gameRef, err)
+}
+
+// settingsWritten ends a post of the settings page: a Game that left the fest
+// after the router found it is not found, a refused write draws the page
+// again with the reason, and a saved one goes back to the page at gameRef.
+func (s *Server) settingsWritten(w http.ResponseWriter, r *http.Request, festID, gameID int64, gameRef string, err error) {
+	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return
 	} else if err != nil {
 		s.renderHostGameSettings(w, r, festID, gameID, err.Error())
 		return
-	}
-	gameRef := strings.TrimSpace(g.Slug)
-	if gameRef == "" {
-		gameRef = fmt.Sprintf("%d", gameID)
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/game/%s/settings", s.festRefOrID(r.Context(), festID), gameRef), http.StatusSeeOther)
 }

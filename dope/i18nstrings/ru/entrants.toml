@@ -97,14 +97,14 @@ kept = 'Сетка осталась прежней: {{.reason}}'
 # An import from another source than the list's kept the host's additions and
 # removals but not the moves: a place in one source's order means nothing in
 # another's. {{.n}} is how many moves.
-moves_dropped = 'Список взят из другого источника, поэтому ручные перестановки ({{.n}}) не применены. Добавленные и убранные вручную участники учтены.'
+moves_dropped = 'Список загружен из другого источника, поэтому ручные перестановки ({{.n}}) не применены. Добавленные и убранные вручную участники учтены.'
 # The import had nothing to rank these entrants by: nobody in them is on the
 # fest roster. They were seeded last, in their order in the Game.
 # {{.names}} is the list, comma-separated.
 unranked = 'Посеяны последними, потому что никого из их игроков нет в составах фестиваля: {{.names}}.'
 # Once something is entered the Structure stays as it is.
 fixed = "В игре уже есть результаты, поэтому сетка больше не меняется. Изменения списка затрагивают только бои, которые ещё не начались."
-empty = "В списке пока никого нет. Возьмите его из источника или добавьте участников по одному."
+empty = "В списке пока никого нет. Загрузите его из источника или добавьте участников по одному."
 # The summary line: seated out of the seats, then everybody active.
 summary = 'Мест в сетке: {{.size}}, занято {{.seated}}. Всего в списке без отказавшихся: {{.active}}.'
 # A write that failed; {{.err}} is the server's message.
@@ -120,3 +120,33 @@ one_off_troika = "Тройку нельзя вписать названием: �
 played = '«{{.name}}» уже играет в этой игре, поэтому его нельзя убрать, заменить, переименовать или передвинуть.'
 replace_self = "Участника нельзя заменить им самим."
 rename_fest = "Переименовать здесь можно только разового участника. Команду феста переименуйте в списке команд феста, тройку на странице «Тройки»."
+
+[own]
+# A flat Game's Участники tab (ЧГК, минное поле, КСИ, Мультиигры): who plays
+# it, the fest's whole team list or a list of the Game's own
+# (dope/dope/domain/roster/gameteams.go, web/ts/game-teams.ts).
+follow = "Как на турнирном сайте"
+follow_hint = "В игре все команды феста. Список обновляется вместе с импортом с турнирного сайта и правками на странице «Команды»."
+own = "Свой список"
+own_hint = "Список игры больше не меняется сам: новые команды феста в него не попадают, убранные здесь остаются в фесте. Названия, составы и зачёты команды берут из феста."
+# Confirm before going back to the fest's list.
+follow_confirm = "Вернуть в игру все команды феста? Свой список игры пропадёт."
+# The table's columns and a row's action.
+number = "№"
+name = "Команда"
+remove = "Убрать из игры"
+remove_confirm = 'Убрать «{{.name}}» из этой игры? В фесте команда останется.'
+# A team the Game holds answers for cannot leave it; the row says why.
+entered_note = "В игре уже есть её ответы"
+# The add row: a fest team that is not on the list.
+add_pick = "Команда феста"
+add_submit = "Добавить"
+add_none = "Все команды феста уже в игре."
+# The summary line over the table.
+summary = '{{.n}} {{plural .n "команда" "команды" "команд"}} в игре'
+empty = "В игре пока нет команд."
+# The refusals.
+not_flat = "У этой игры свой список участников: его правят на вкладке «Участники» игры."
+no_team = "Такой команды в фесте нет."
+follows = "Сначала выберите «Свой список»: пока игра идёт по списку феста, её команды меняются на странице «Команды»."
+entered = '«{{.name}}» нельзя убрать: в игре уже есть её ответы. Сначала очистите их.'

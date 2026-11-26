@@ -23,6 +23,7 @@ import {fitScrollFade, installVirtualKeypad, renderTabBar, tabPicker} from "./wi
 import {createSheetCursor} from "./sheet-cursor.js";
 import type {EditPlace, VirtualKeypad} from "./widgets.js";
 import { gameTabs } from "./game-tabs.js";
+import {createGameTeamsTab} from "./game-teams.js";
 import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
 import * as od from "./od-protocol.js";
@@ -220,6 +221,8 @@ let contestedRowsCache: Array<Map<number, ODContested>> | null = null;
 let contestedButton: HTMLButtonElement | null = null;
 // A host who records contested answers reads the tab too; only the jury rules.
 const TABS = gameTabs([], {game: kdGame ? "kd" : "od", viewer, contested: contestedEnter || contestedJudge});
+// The host's entrants tab: who plays this Game (game-teams.ts).
+const gameTeams = !viewer && route.apiBase ? createGameTeamsTab(route.apiBase) : null;
 
 let activeTab = tabFromHash(TABS) || (viewer ? (kdGame ? "personal" : "results") : "input");
 // The teams as the viewer looks at them: the Division chosen in the URL
@@ -312,9 +315,14 @@ const doc = mountGameDocument({
   } : undefined,
 });
 
+// storedQuestions is how many questions the server's last document had
+// columns for (od.questionsStored).
+let storedQuestions: number | null = null;
+
 // adoptGameSnapshot takes a fresh document — the first snapshot, or a
 // revalidation that found a change — and renders it.
 function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest}: GameDataSnapshot): void {
+  storedQuestions = od.questionsStored(nextState);
   scheme = nextScheme as ODScheme;
   state = nextState as ODState;
   fest = (nextFest as FestInfo | null) || null;
@@ -691,6 +699,8 @@ function render(): void {
   renderTabs();
   updateHeaderProgress();
   const activePane = getTabPane(activeTab);
+  // The entrants tab reads the fest's teams afresh each time it is opened.
+  if (activeTab === "entrants" && renderedTab !== "entrants") gameTeams?.refresh();
   for (const pane of tabCache.values()) pane.hidden = pane !== activePane;
   if (!activePane.isConnected) odRoot.appendChild(activePane);
   renderedTab = activeTab;
@@ -702,7 +712,7 @@ function render(): void {
   // of scrolling sideways like a score board, so the host drops its max-content
   // sizing — the same class-toggle the grid uses, rather than a :has() the
   // layout silently depends on.
-  odRoot.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "players" ||
+  odRoot.classList.toggle("fits-frame", activeTab === "roster" || activeTab === "entrants" || activeTab === "players" ||
     (activeTab === "input" && !entryNumbered()));
   if (activeTab === "players" && playersDraft) {
     restoreDraft(activePane, playersDraft);
@@ -721,6 +731,7 @@ function getTabPane(tab: string): HTMLElement {
   if (tab === "input") node = buildInputView();
   else if (tab === "detailed") node = buildDetailedTable();
   else if (tab === "roster") node = buildRosterView(route.festID, route.gameID, pageVenue);
+  else if (tab === "entrants" && gameTeams) node = gameTeams.element();
   else if (tab === "screen") node = buildScreenView();
   else if (tab === "contested") {
     node = buildContestedView({
@@ -747,7 +758,7 @@ function getTabPane(tab: string): HTMLElement {
   pane.className = "od-pane";
   pane.dataset.tab = tab;
   // The contested answers are the whole fest's at once, so that tab has no venue to pick.
-  if (tab !== "input" && tab !== "contested") {
+  if (tab !== "input" && tab !== "contested" && tab !== "entrants") {
     const venues = venueChips(tab);
     if (venues) {
       const bar = document.createElement("div");
@@ -3487,6 +3498,11 @@ function repaintEntrySheet(): void {
 }
 
 function applyRemoteState(nextState: unknown): void {
+  // The host gave the Game new tours when the server's sheet grew or shrank:
+  // they are in the scheme, which the page fetches.
+  const stored = od.questionsStored(nextState);
+  if (stored !== null && storedQuestions !== null && stored !== storedQuestions) void doc.refresh();
+  storedQuestions = stored ?? storedQuestions;
   const active = document.activeElement as HTMLElement | null;
   const editingInput = active && active.classList.contains("entry-input");
   const focusedLock = Boolean(active && active.classList.contains("entry-lock-checkbox"));

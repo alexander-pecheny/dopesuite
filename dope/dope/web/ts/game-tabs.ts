@@ -53,10 +53,10 @@ export function gameTabs(stages: StageRef[], options: GameTabsOptions): GameTab[
   case "hamsa":
     return hamsaTabs(stages, host);
   case "ksi":
-    return fixedTabs(["detailed", S.screen.tabs.detailed()], ["results", S.screen.tabs.results()], ...when(host, ["refusals", S.screen.tabs.refusals()]), ["roster", S.screen.tabs.roster()]);
+    return [...fixedTabs(["detailed", S.screen.tabs.detailed()], ["results", S.screen.tabs.results()], ...when(host, ["refusals", S.screen.tabs.refusals()]), ["roster", S.screen.tabs.roster()]), ...entrantsTab(host)];
   case "od":
-    return fixedTabs(["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()], ["input", S.screen.tabs.input()],
-      ...when(Boolean(options.contested), ["contested", S.od.contested.tab()]), ...when(host, ["screen", S.screen.tabs.screen()]), ["roster", S.screen.tabs.roster()]);
+    return [...fixedTabs(["results", S.screen.tabs.results()], ["detailed", S.screen.tabs.detailed()], ["input", S.screen.tabs.input()],
+      ...when(Boolean(options.contested), ["contested", S.od.contested.tab()]), ...when(host, ["screen", S.screen.tabs.screen()]), ["roster", S.screen.tabs.roster()]), ...entrantsTab(host)];
   // The friendship cup is OD's sheet over tables: the personal standings come
   // first, the tables' own results next, and its players replace the fest
   // roster, which it does not seat (ADR-0026).

@@ -266,6 +266,27 @@ export type Strings = {
       label: () => string;
       run: () => string;
     };
+    own: {
+      addNone: () => string;
+      addPick: () => string;
+      addSubmit: () => string;
+      empty: () => string;
+      entered: (name: string) => string;
+      enteredNote: () => string;
+      follow: () => string;
+      followConfirm: () => string;
+      followHint: () => string;
+      follows: () => string;
+      name: () => string;
+      noTeam: () => string;
+      notFlat: () => string;
+      number: () => string;
+      own: () => string;
+      ownHint: () => string;
+      remove: () => string;
+      removeConfirm: (name: string) => string;
+      summary: (n: number) => string;
+    };
     row: {
       declinedLabel: (name: string) => string;
       down: () => string;
@@ -680,6 +701,7 @@ export type Strings = {
     };
     od: {
       label: () => string;
+      toursDropAnswers: (total: string, questions: string) => string;
     };
     si: {
       label: () => string;
@@ -823,6 +845,8 @@ export type Strings = {
       errorSlugInvalid: (err: string) => string;
       errorSlugTaken: () => string;
       errorTitleRequired: () => string;
+      errorTours: (tours: string, questions: string) => string;
+      errorToursGame: () => string;
       errorTypeMissing: () => string;
       esHint: () => string;
       gridWidthLabel: () => string;
@@ -862,6 +886,12 @@ export type Strings = {
       stickersHint: () => string;
       themesLabel: () => string;
       titleLabel: () => string;
+      toursFromGame: () => string;
+      toursFromSite: () => string;
+      toursGameLabel: () => string;
+      toursLabel: () => string;
+      toursSave: () => string;
+      toursSiteLabel: () => string;
       troikaHint: () => string;
       typeBrain: () => string;
       typeEk: () => string;
@@ -2058,7 +2088,9 @@ export type Strings = {
       team: () => string;
     };
     sticker: {
+      none: () => string;
       title: (name: string, n: string) => string;
+      used: (used: string, max: string) => string;
       x2Mark: () => string;
     };
     theme: {

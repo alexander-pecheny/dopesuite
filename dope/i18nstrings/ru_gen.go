@@ -341,6 +341,43 @@ var RU = Strings{
 			Label:     func() string { return "Откуда загрузить список" },
 			Run:       func() string { return "Загрузить список" },
 		},
+		Own: EntrantsOwnStrings{
+			AddNone:   func() string { return "Все команды феста уже в игре." },
+			AddPick:   func() string { return "Команда феста" },
+			AddSubmit: func() string { return "Добавить" },
+			Empty:     func() string { return "В игре пока нет команд." },
+			Entered: func(name string) string {
+				return fmt.Sprintf("«%s» нельзя убрать: в игре уже есть её ответы. Сначала очистите их.", name)
+			},
+			EnteredNote: func() string { return "В игре уже есть её ответы" },
+			Follow:      func() string { return "Как на турнирном сайте" },
+			FollowConfirm: func() string {
+				return "Вернуть в игру все команды феста? Свой список игры пропадёт."
+			},
+			FollowHint: func() string {
+				return "В игре все команды феста. Список обновляется вместе с импортом с турнирного сайта и правками на странице «Команды»."
+			},
+			Follows: func() string {
+				return "Сначала выберите «Свой список»: пока игра идёт по списку феста, её команды меняются на странице «Команды»."
+			},
+			Name:   func() string { return "Команда" },
+			NoTeam: func() string { return "Такой команды в фесте нет." },
+			NotFlat: func() string {
+				return "У этой игры свой список участников: его правят на вкладке «Участники» игры."
+			},
+			Number: func() string { return "№" },
+			Own:    func() string { return "Свой список" },
+			OwnHint: func() string {
+				return "Список игры больше не меняется сам: новые команды феста в него не попадают, убранные здесь остаются в фесте. Названия, составы и зачёты команды берут из феста."
+			},
+			Remove: func() string { return "Убрать из игры" },
+			RemoveConfirm: func(name string) string {
+				return fmt.Sprintf("Убрать «%s» из этой игры? В фесте команда останется.", name)
+			},
+			Summary: func(n int) string {
+				return fmt.Sprintf("%d %s в игре", n, core.Plural("ru", n, "команда", "команды", "команд"))
+			},
+		},
 		Row: EntrantsRowStrings{
 			DeclinedLabel: func(name string) string { return fmt.Sprintf("Отказ: %s", name) },
 			Down:          func() string { return "Ниже" },
@@ -377,7 +414,7 @@ var RU = Strings{
 		},
 		State: EntrantsStateStrings{
 			Empty: func() string {
-				return "В списке пока никого нет. Возьмите его из источника или добавьте участников по одному."
+				return "В списке пока никого нет. Загрузите его из источника или добавьте участников по одному."
 			},
 			Failed: func(err string) string { return fmt.Sprintf("Не получилось: %s", err) },
 			Fixed: func() string {
@@ -387,7 +424,7 @@ var RU = Strings{
 				return fmt.Sprintf("Сетка осталась прежней: %s", reason)
 			},
 			MovesDropped: func(n string) string {
-				return fmt.Sprintf("Список взят из другого источника, поэтому ручные перестановки (%s) не применены. Добавленные и убранные вручную участники учтены.", n)
+				return fmt.Sprintf("Список загружен из другого источника, поэтому ручные перестановки (%s) не применены. Добавленные и убранные вручную участники учтены.", n)
 			},
 			Resizes: func() string {
 				return "Пока в игре нет результатов, сетка строится заново под список, если схема это позволяет. Если нет, сетка остаётся прежней, а лишние участники ждут в листе ожидания."
@@ -921,6 +958,9 @@ var RU = Strings{
 		},
 		Od: GamesOdStrings{
 			Label: func() string { return "ЧГК" },
+			ToursDropAnswers: func(total string, questions string) string {
+				return fmt.Sprintf("В новых турах %s вопросов, а ответы или отметки есть и на вопросах %s. Сначала очистите их.", total, questions)
+			},
 		},
 		Si: GamesSiStrings{
 			Label: func() string { return "Личная СИ" },
@@ -1118,7 +1158,11 @@ var RU = Strings{
 			ErrorSlugInvalid:   func(err string) string { return fmt.Sprintf("Slug: %s", err) },
 			ErrorSlugTaken:     func() string { return "Slug уже занят в этом фесте." },
 			ErrorTitleRequired: func() string { return "Название обязательно." },
-			ErrorTypeMissing:   func() string { return "выберите тип игры" },
+			ErrorTours: func(tours string, questions string) string {
+				return fmt.Sprintf("Впишите, сколько вопросов в каждом туре, через пробел, например «15 15 15». Туров не больше %s, вопросов в туре от 1 до %s.", tours, questions)
+			},
+			ErrorToursGame:   func() string { return "Выберите игру, из которой загрузить туры." },
+			ErrorTypeMissing: func() string { return "выберите тип игры" },
 			EsHint: func() string {
 				return "Тот же язык схем, что у ЭК. players — сколько игроков команда выводит на тему (по умолчанию 3, можно по раундам: players.r3: 2)."
 			},
@@ -1158,7 +1202,7 @@ var RU = Strings{
 			OdMinusWrongLabel: func() string { return "Штраф за неправильный ответ" },
 			OdQuestionsLabel:  func() string { return "Количество вопросов в туре" },
 			OdRatingLabel: func() string {
-				return "Или взять туры с турнирного сайта: ID турнира"
+				return "Или загрузить туры с турнирного сайта: ID турнира"
 			},
 			OdToursLabel: func() string { return "Количество туров" },
 			OutsideHint: func() string {
@@ -1191,10 +1235,16 @@ var RU = Strings{
 			StickersHint: func() string {
 				return "Для каждого стикера задайте, сколько штук есть у команды (0 — стикер не используется) и цвет для подсветки. «Обычный» стикер работает как стандартная тема КСИ."
 			},
-			ThemesLabel: func() string { return "Количество тем" },
-			TitleLabel:  func() string { return "Название" },
+			ThemesLabel:    func() string { return "Количество тем" },
+			TitleLabel:     func() string { return "Название" },
+			ToursFromGame:  func() string { return "Загрузить из другой игры" },
+			ToursFromSite:  func() string { return "Загрузить с турнирного сайта" },
+			ToursGameLabel: func() string { return "Игра" },
+			ToursLabel:     func() string { return "Туры: сколько вопросов в каждом туре" },
+			ToursSave:      func() string { return "Сохранить туры" },
+			ToursSiteLabel: func() string { return "ID турнира" },
 			TroikaHint: func() string {
-				return "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. swap_outriders: true — порядок опроса меняется в середине боя: рассадку вводят один раз, а со второй половины тем (с 4-й из 6, с 5-й из 8) Пристяжной 1 и Пристяжной 2 меняются местами сами. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама возьмёт тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
+				return "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. swap_outriders: true — порядок опроса меняется в середине боя: рассадку вводят один раз, а со второй половины тем (с 4-й из 6, с 5-й из 8) Пристяжной 1 и Пристяжной 2 меняются местами сами. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама загрузит тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
 			},
 			TypeBrain:       func() string { return "Брейн" },
 			TypeEk:          func() string { return "ЭК" },
@@ -1483,7 +1533,7 @@ var RU = Strings{
 				return "Записать выбранные ID в составы? Новые команды и игроки появятся на турнирном сайте."
 			},
 			Lead: func() string {
-				return "dope сравнит составы, зачёты и ответы в ОД каждой команды с турнирным сайтом и отправит туда только то, что поменялось в dope. Что поменяли только на сайте, там и останется, а составы и зачёты dope возьмёт себе. Если команду поменяли и в dope, и на сайте, выберите, чья версия верна. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить»."
+				return "dope сравнит составы, зачёты и ответы в ОД каждой команды с турнирным сайтом и отправит туда только то, что поменялось в dope. Что поменяли только на сайте, там и останется, а составы и зачёты dope загрузит к себе. Если команду поменяли и в dope, и на сайте, выберите, чья версия верна. Новые команды каждой площадки попадут в заявку её представителя. Сначала посмотрите, что уйдёт, а потом нажмите «Выгрузить»."
 			},
 			MoveLine: func(team string, venue string) string {
 				return fmt.Sprintf("%s уже есть на сайте в другой заявке. Её перенесут в заявку площадки %s.", team, venue)
@@ -1554,7 +1604,7 @@ var RU = Strings{
 			},
 			SkippedLine:    func(team string, reason string) string { return fmt.Sprintf("%s: %s", team, reason) },
 			SkippedSubhead: func() string { return "Не уйдёт на сайт" },
-			TakeIntoDope:   func() string { return "dope возьмёт её себе." },
+			TakeIntoDope:   func() string { return "dope загрузит её к себе." },
 			TakeLine: func(team string, fact string, site string) string {
 				return fmt.Sprintf("%s, %s. Останется версия сайта: %s", team, fact, site)
 			},
@@ -1610,7 +1660,7 @@ var RU = Strings{
 				return fmt.Sprintf("%s: у вас в «%s», на сайте в «%s»", player, hand, site)
 			},
 			ConflictSubmit:   func() string { return "Продолжить импорт" },
-			ConflictTakeSite: func() string { return "Взять с сайта" },
+			ConflictTakeSite: func() string { return "перевести в команду с сайта" },
 			ConflictTeam:     func(number string, team string) string { return fmt.Sprintf("№%s %s", number, team) },
 			ConflictTitle:    func() string { return "Команды с результатами уходят из списка" },
 			ConflictsHint: func() string {
@@ -1896,7 +1946,7 @@ var RU = Strings{
 				return fmt.Sprintf("sorting: %s — игра %s такой метрики не считает", metric, code)
 			},
 			MultipleStandings: func(code string, n int) string {
-				return fmt.Sprintf("у игры %s %d %s — посев берётся из игры с одной", code, n, core.Plural("ru", n, "таблиц", "таблиц", "таблиц"))
+				return fmt.Sprintf("у игры %s %d %s — посев можно загрузить только из игры с одной таблицей", code, n, core.Plural("ru", n, "таблиц", "таблиц", "таблиц"))
 			},
 			NoNumberedTeams: func() string { return "в фесте нет пронумерованных команд" },
 			NoStandings:     func(code string) string { return fmt.Sprintf("у игры %s ещё нет таблицы", code) },
@@ -1944,7 +1994,7 @@ var RU = Strings{
 				return fmt.Sprintf("sorting: %s не считается — есть %s", metric, known)
 			},
 			MultipleStandings: func(code string) string {
-				return fmt.Sprintf("у игры %s несколько таблиц — посев по игрокам берётся из игры с одной", code)
+				return fmt.Sprintf("у игры %s несколько таблиц — посев по игрокам можно загрузить только из игры с одной таблицей", code)
 			},
 			NoGames: func() string {
 				return "посев по игрокам: схема не называет игры-источники"
@@ -2855,7 +2905,7 @@ var RU = Strings{
 		},
 		Seed: SchemeSeedStrings{
 			DivisionTroikaOnly: func() string {
-				return "division без seed бывает только у Тройки: так игра берёт тройки своего зачёта. В других играх division пишется вместе с seed."
+				return "division без seed бывает только у Тройки: так игра загружает тройки своего зачёта. В других играх division пишется вместе с seed."
 			},
 			PlayersNeedGames: func() string {
 				return "seed: players — нужен games: [игра, игра], откуда берутся места игроков"
@@ -3049,7 +3099,9 @@ var RU = Strings{
 			Team:         func() string { return "Команда" },
 		},
 		Sticker: SiStickerStrings{
+			None:   func() string { return "Без стикера" },
 			Title:  func(name string, n string) string { return fmt.Sprintf("%s, Т%s: стикер", name, n) },
+			Used:   func(used string, max string) string { return fmt.Sprintf("%s из %s", used, max) },
 			X2Mark: func() string { return "×2" },
 		},
 		Theme: SiThemeStrings{
@@ -3469,7 +3521,7 @@ var RU = Strings{
 			BattleShort: func(n string) string { return fmt.Sprintf("пл. %s", n) },
 			Delete:      func() string { return "Удалить площадку" },
 			GameIntro: func() string {
-				return "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры, снять площадку, на которой игра не идёт, и добавить свою. Пустое поле берёт значение феста."
+				return "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры, снять площадку, на которой игра не идёт, и добавить свою. Если поле пустое, действует значение феста."
 			},
 			HostsColumn:   func() string { return "Ведущие" },
 			NameColumn:    func() string { return "Название" },

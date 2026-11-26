@@ -65,6 +65,10 @@ label = "Брейн"
 [od]
 # The kind's display name (the games registry Label).
 label = "ЧГК"
+# New tours with fewer questions than some answers sit on: {{.total}} is
+# how many questions the new tours have, {{.questions}} the numbers holding
+# something.
+tours_drop_answers = 'В новых турах {{.total}} вопросов, а ответы или отметки есть и на вопросах {{.questions}}. Сначала очистите их.'
 
 [mp]
 # The kind's display name (the games registry Label): a ChGK where a wrong

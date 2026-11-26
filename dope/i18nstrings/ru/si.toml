@@ -31,6 +31,11 @@ answer_title = '{{.name}}, Т{{.n}}, {{.value}}'
 [sticker]
 # The sticker dropdown's tooltip on the «Подробно» sheet: the team, the theme.
 title = '{{.name}}, Т{{.n}}: стикер'
+# The sticker menu's first row, which takes the sticker off.
+none = "Без стикера"
+# Beside a sticker with a limit: how many the team has stuck on its other
+# themes, out of how many it may.
+used = '{{.used}} из {{.max}}'
 # Printed on the ×2 sticker itself. The other stickers carry no mark: their
 # colour says which one it is.
 x2_mark = "×2"

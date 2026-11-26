@@ -5,6 +5,15 @@ import * as od from "./dist/od-protocol.js";
 globalThis.window = {};
 globalThis.document = {activeElement: null};
 
+// A document's column count is how the page learns the host changed the
+// tours: its own sheet's, or its widest venue sheet's on a synch fest.
+test("questionsStored counts the sheet's questions, venue sheets too", () => {
+  assert.equal(od.questionsStored({completed: [false, true, false]}), 3);
+  assert.equal(od.questionsStored({completed: [], venues: {"7": {completed: [false, false]}, "8": {completed: [true]}}}), 2);
+  assert.equal(od.questionsStored({teams: []}), null);
+  assert.equal(od.questionsStored(null), null);
+});
+
 test("parseTourComp reads lists, compact strings and the default", () => {
   assert.deepEqual(od.parseTourComp([15, "15", 0]), [15, 15]);
   assert.deepEqual(od.parseTourComp("12*3"), [12, 12, 12]);

@@ -58,6 +58,12 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("POST "+fest+"/games", route.Manager, s.apiCreateGame)
 	t.Handle("GET "+game+"/settings", route.Manager, s.apiGameSettings)
 	t.Handle("PATCH "+game+"/settings", route.Manager, s.apiUpdateGame)
+	t.Handle("POST "+game+"/tours", route.Manager, s.apiGameTours)
+	// A flat Game's entrants tab (game_teams.go).
+	t.Handle("GET "+game+"/teams", route.Editor, s.apiGameTeams)
+	t.Handle("PUT "+game+"/teams", route.Editor.Numbered(), s.apiSetGameTeamsMode)
+	t.Handle("POST "+game+"/teams", route.Editor.Numbered(), s.apiAddGameTeam)
+	t.Handle("DELETE "+game+"/teams/{team}", route.Editor.Numbered(), s.apiRemoveGameTeam)
 	t.Handle("DELETE "+game, route.Manager, s.apiDeleteGame)
 	t.Handle("POST "+game+"/clear", route.Manager, s.apiClearGame)
 	t.Handle("GET "+game+"/journal", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -436,6 +442,9 @@ type apiGameSettings struct {
 	Contested *bool `json:"contested,omitempty"`
 	// VenueRooms names the Game's bouts' venues by their rooms, not their numbers.
 	VenueRooms bool `json:"venue_rooms"`
+	// Tours is how many questions each tour has, for a format whose tours
+	// change after creation; POST …/tours changes them.
+	Tours []int `json:"tours,omitempty"`
 }
 
 func (g apiGameSettings) settings() GameSettings {
@@ -462,6 +471,11 @@ from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`,
 	}
 	if _, ok := games.As[games.Contestable](g.Type); ok {
 		g.Contested = &contestedOn
+	}
+	if tours, err := loadGameTours(ctx, s.h.Engine().DB, festID, gameID); err != nil {
+		return g, err
+	} else if tours != nil {
+		g.Tours = tours.Tours
 	}
 	g.Slug = slug.String
 	g.HiddenDivisions = store.ParseHiddenDivisions(hidden)

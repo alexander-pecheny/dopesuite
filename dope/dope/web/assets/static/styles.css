@@ -3919,6 +3919,7 @@ body:not(.embedded-match) .grid-match {
   --screen-fg-default: #000000;
   --screen-muted-default: #5f6b7a;
   --ksi-sticker-col: 36px;
+  --ksi-sticker-menu-icon: 22px;
   --transition-fast: 120ms ease;
 }
 
@@ -4351,6 +4352,45 @@ body.is-fullscreen.od-page .match-main {
 
 .ksi-sticker-wrap:not(.has-sticker):has(.ksi-sticker-select:disabled)::after {
   content: none;
+}
+
+/* The sticker menu, parked on <body> like the seat picker's panel: a row per
+   sticker, its colour drawn as the sticker itself, the label, and how many of
+   it the team has stuck out of its limit. The kit's .menu-item is the row. */
+.ksi-sticker-menu {
+  overflow-y: auto;
+  min-width: 200px;
+}
+
+.ksi-sticker-option[aria-selected="true"] {
+  background: var(--hover-bg);
+  font-weight: var(--fw-bold);
+}
+
+.ksi-sticker-option .ksi-sticker-icon svg {
+  width: var(--ksi-sticker-menu-icon);
+  height: var(--ksi-sticker-menu-icon);
+}
+
+/* The «Без стикера» row has no icon; its label lines up with the others'. */
+.ksi-sticker-option:not(:has(.ksi-sticker-icon))::before {
+  content: "";
+  width: var(--ksi-sticker-menu-icon);
+}
+
+.ksi-sticker-option-label {
+  flex: 1;
+}
+
+.ksi-sticker-option-count {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The team has already stuck more of this sticker than it may. */
+.ksi-sticker-option-count.ksi-sticker-option-over {
+  color: var(--danger-text);
 }
 
 /* Over the allowed count: thick red inset border on the cell. */

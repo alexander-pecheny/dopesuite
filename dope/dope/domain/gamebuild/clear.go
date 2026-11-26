@@ -124,7 +124,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		if err != nil {
 			return "", err
 		}
-		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, multiFestVenueID, gameType, emptyScheme, emptyState); err != nil {
+		if newScheme, state, err = pristineFlatTx(ctx, tx, festID, gameID, multiFestVenueID, gameType, emptyScheme, emptyState); err != nil {
 			return "", err
 		}
 		if keeps {

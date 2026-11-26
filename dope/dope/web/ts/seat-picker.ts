@@ -20,12 +20,8 @@
 //     .popover-inline       the whole seating, never shown: the popover reads it
 
 import {markNameControl} from "./name-cell.js";
-import {clamp, floatingPopover} from "./widgets.js";
+import {closeParkedPanel, isParkedOn, parkPanel} from "./parked-panel.js";
 import S from "./i18nstrings.js";
-
-// Space the panel keeps from the viewport edge, and its smallest height.
-const PANEL_MARGIN_PX = 8;
-const PANEL_MIN_HEIGHT_PX = 120;
 
 export interface SeatOption {
   id: string;
@@ -187,13 +183,10 @@ function setText(node: Element, text: string): void {
 
 // --- the tickbox panel ------------------------------------------------------
 
-let panelNode: HTMLElement | null = null;
-let panelTrigger: HTMLElement | null = null;
-
 function togglePanel(trigger: HTMLButtonElement, picker: SeatPicker, spec: SeatPickerSpec, cap: number,
   choose: (seated: string[]) => void): void {
-  if (panelTrigger === trigger) {
-    closePanel();
+  if (isParkedOn(trigger)) {
+    closeParkedPanel();
     return;
   }
   openPanel(trigger, picker, spec, cap, choose);
@@ -203,7 +196,6 @@ function togglePanel(trigger: HTMLButtonElement, picker: SeatPicker, spec: SeatP
 // seating, which the page keeps current through update().
 function openPanel(trigger: HTMLButtonElement, picker: SeatPicker, spec: SeatPickerSpec, cap: number,
   choose: (seated: string[]) => void): void {
-  closePanel();
   const panel = document.createElement("div");
   panel.className = "popover menu-dropdown seat-picker-panel";
   panel.setAttribute("role", "group");
@@ -238,73 +230,6 @@ function openPanel(trigger: HTMLButtonElement, picker: SeatPicker, spec: SeatPic
     panel.appendChild(empty);
   }
   refreshDisabled();
-  document.body.appendChild(panel);
-  panelNode = panel;
-  panelTrigger = trigger;
-  trigger.setAttribute("aria-expanded", "true");
-  // The hover popovers stand down while a panel is open: two floating surfaces
-  // over one cell is one too many.
-  document.documentElement.classList.add("seat-picker-open");
-  floatingPopover().hide();
-  positionPanel();
+  parkPanel(trigger, panel);
   boxes[0]?.focus();
-  document.addEventListener("pointerdown", onPointerDown, true);
-  document.addEventListener("keydown", onKeydown, true);
-  window.addEventListener("scroll", positionPanel, {capture: true, passive: true});
-  window.addEventListener("resize", positionPanel);
-}
-
-function closePanel(): void {
-  if (!panelNode) return;
-  panelNode.remove();
-  panelNode = null;
-  panelTrigger?.setAttribute("aria-expanded", "false");
-  panelTrigger = null;
-  document.documentElement.classList.remove("seat-picker-open");
-  document.removeEventListener("pointerdown", onPointerDown, true);
-  document.removeEventListener("keydown", onKeydown, true);
-  window.removeEventListener("scroll", positionPanel, {capture: true} as EventListenerOptions);
-  window.removeEventListener("resize", positionPanel);
-}
-
-function onPointerDown(event: PointerEvent): void {
-  if (!(event.target instanceof Node)) return;
-  if (panelNode?.contains(event.target) || panelTrigger?.contains(event.target)) return;
-  closePanel();
-}
-
-// Esc closes the panel and hands the focus back to its button, so the next
-// arrow key moves the sheet cursor rather than the tickboxes.
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key !== "Escape" || !panelNode) return;
-  const trigger = panelTrigger;
-  event.preventDefault();
-  event.stopPropagation();
-  closePanel();
-  trigger?.focus();
-}
-
-// positionPanel parks the panel under its button, kept inside the viewport and
-// flipped above when the button is near the bottom: a sheet scrolls in both
-// directions, so no fixed side can be assumed. A sheet redrawn under the panel
-// takes its button away, and the panel goes with it.
-function positionPanel(): void {
-  const panel = panelNode;
-  const trigger = panelTrigger;
-  if (!panel || !trigger) return;
-  if (!trigger.isConnected) {
-    closePanel();
-    return;
-  }
-  const rect = trigger.getBoundingClientRect();
-  const margin = PANEL_MARGIN_PX;
-  panel.style.position = "fixed";
-  panel.style.maxHeight = `${Math.max(PANEL_MIN_HEIGHT_PX, window.innerHeight - 2 * margin)}px`;
-  const width = panel.offsetWidth;
-  const height = panel.offsetHeight;
-  const left = clamp(rect.left, margin, Math.max(margin, window.innerWidth - width - margin));
-  const below = rect.bottom + margin + height <= window.innerHeight;
-  const top = below ? rect.bottom + 2 : Math.max(margin, rect.top - height - 2);
-  panel.style.left = `${left}px`;
-  panel.style.top = `${top}px`;
 }

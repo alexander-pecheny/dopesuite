@@ -17,6 +17,7 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/entrants"
+	"dope/dope/domain/flatgame"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/roster"
@@ -91,7 +92,16 @@ type Settings struct {
 	// VenueRooms names the Game's bouts' venues by their titles (the rooms)
 	// rather than their numbers; nil leaves it as it is.
 	VenueRooms *bool `json:"venue_rooms"`
+	// Tours is how many questions each tour has, for a format whose tours
+	// change after creation (games.Retourer); nil leaves them as they are.
+	Tours *[]int `json:"tours"`
 }
+
+// MaxTours and MaxTourQuestions bound the tours a host gives a Game.
+const (
+	MaxTours         = 20
+	MaxTourQuestions = 100
+)
 
 // MinGridWidth and MaxGridWidth bound a Game's grid column width, in pixels.
 const (
@@ -140,26 +150,11 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 		title, slug, util.UtcNow(), gameID, festID); err != nil {
 		return core.FestWrite{}, err
 	}
-	if err := writeHiddenDivisionsTx(ctx, tx, festID, gameID, g, stored); err != nil {
+	if err := writeViewSettingsTx(ctx, tx, festID, gameID, g, stored); err != nil {
 		return core.FestWrite{}, err
 	}
-	if g.OutsideDivisions != nil {
-		if _, err := tx.ExecContext(ctx, `update games set outside_divisions = ? where id = ? and fest_id = ?`,
-			store.HiddenDivisionsValue(roster.CleanDivisions(*g.OutsideDivisions)), gameID, festID); err != nil {
-			return core.FestWrite{}, err
-		}
-	}
-	if g.GridWidth != nil {
-		width := max(*g.GridWidth, 0)
-		if width != 0 && (width < MinGridWidth || width > MaxGridWidth) {
-			return core.FestWrite{}, corei18n.User(s.Host.Games.ErrorGridWidth(strconv.Itoa(MinGridWidth), strconv.Itoa(MaxGridWidth)))
-		}
-		if _, err := tx.ExecContext(ctx, `update games set grid_width = ? where id = ? and fest_id = ?`, width, gameID, festID); err != nil {
-			return core.FestWrite{}, err
-		}
-	}
 	written := core.FestWrite{Event: "game:settings", Payload: map[string]any{"gameID": gameID}}
-	if written.Broadcast.States, err = writeSwitchesTx(ctx, tx, festID, gameID, g); err != nil {
+	if written.Broadcast.States, err = writeDocumentSettingsTx(ctx, tx, festID, gameID, g); err != nil {
 		return core.FestWrite{}, err
 	}
 	if !schemeChanged {
@@ -169,6 +164,43 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 		return core.FestWrite{}, compileErrorForHost(err)
 	}
 	return written, nil
+}
+
+// writeViewSettingsTx saves the Settings that change how the Game's pages
+// show it: the divisions it hides and ranks outside, and its grid's width.
+func writeViewSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g Settings, stored storedSettings) error {
+	if err := writeHiddenDivisionsTx(ctx, tx, festID, gameID, g, stored); err != nil {
+		return err
+	}
+	if g.OutsideDivisions != nil {
+		if _, err := tx.ExecContext(ctx, `update games set outside_divisions = ? where id = ? and fest_id = ?`,
+			store.HiddenDivisionsValue(roster.CleanDivisions(*g.OutsideDivisions)), gameID, festID); err != nil {
+			return err
+		}
+	}
+	if g.GridWidth == nil {
+		return nil
+	}
+	width := max(*g.GridWidth, 0)
+	if width != 0 && (width < MinGridWidth || width > MaxGridWidth) {
+		return corei18n.User(dopestrings.Default.Host.Games.ErrorGridWidth(strconv.Itoa(MinGridWidth), strconv.Itoa(MaxGridWidth)))
+	}
+	_, err := tx.ExecContext(ctx, `update games set grid_width = ? where id = ? and fest_id = ?`, width, gameID, festID)
+	return err
+}
+
+// writeDocumentSettingsTx saves the Settings that rewrite the Game's
+// document, the tours and the switches, and answers the document to send.
+func writeDocumentSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g Settings) ([]core.GameState, error) {
+	retoured, err := retourTx(ctx, tx, festID, gameID, g.Tours)
+	if err != nil {
+		return nil, err
+	}
+	states, err := writeSwitchesTx(ctx, tx, festID, gameID, g)
+	if err != nil || len(states) > 0 || retoured == nil {
+		return states, err
+	}
+	return []core.GameState{{GameID: gameID, StateJSON: retoured}}, nil
 }
 
 // writeSwitchesTx saves the Game's contested and venue-rooms switches the
@@ -192,6 +224,54 @@ func writeSwitchesTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g Se
 		return nil, err
 	}
 	return []core.GameState{{GameID: gameID, StateJSON: state}}, nil
+}
+
+// SetToursTx gives the Game new tours, alone (retourTx).
+func SetToursTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, tours []int) (core.FestWrite, error) {
+	state, err := retourTx(ctx, tx, festID, gameID, &tours)
+	if err != nil {
+		return core.FestWrite{}, err
+	}
+	written := core.FestWrite{Event: "game:settings", Payload: map[string]any{"gameID": gameID}}
+	if state != nil {
+		written.Broadcast.States = []core.GameState{{GameID: gameID, StateJSON: state}}
+	}
+	return written, nil
+}
+
+// retourTx gives the Game the tours, when its format takes new ones and they
+// differ from its own (games.Retourer), and answers the document it wrote.
+func retourTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, tours *[]int) ([]byte, error) {
+	if tours == nil {
+		return nil, nil
+	}
+	s := dopestrings.Default
+	if len(*tours) == 0 || len(*tours) > MaxTours || slices.ContainsFunc(*tours, func(n int) bool { return n < 1 || n > MaxTourQuestions }) {
+		return nil, corei18n.User(s.Host.Games.ErrorTours(strconv.Itoa(MaxTours), strconv.Itoa(MaxTourQuestions)))
+	}
+	doc, err := store.LoadGameDoc(ctx, tx, festID, gameID)
+	if err != nil {
+		return nil, err
+	}
+	retourer, ok := games.As[games.Retourer](doc.GameType)
+	if !ok || slices.Equal(games.ParseTourComp(doc.SchemeJSON), *tours) {
+		return nil, nil
+	}
+	schemeJSON, stateJSON, err := retourer.Retour(doc.SchemeJSON, doc.State, *tours)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `update games set scheme_json = ?, updated_at = ? where id = ? and fest_id = ?`,
+		string(schemeJSON), util.UtcNow(), gameID, festID); err != nil {
+		return nil, err
+	}
+	if err := flatgame.SetStateTx(ctx, tx, festID, gameID, string(stateJSON)); err != nil {
+		return nil, err
+	}
+	if refreshed, err := contested.RefreshTx(ctx, tx, festID, gameID); err != nil || refreshed != nil {
+		return refreshed, err
+	}
+	return stateJSON, nil
 }
 
 // loadStoredSettingsTx reads what a save compares with. A Game that is not in

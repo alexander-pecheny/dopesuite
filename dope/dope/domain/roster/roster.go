@@ -124,43 +124,72 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 		return nil, err
 	}
 	var updates []GameStateBroadcast
+	// A Game with a list of its own seats who is on it, as the roster stands
+	// now: the teams an import brings may not have their rows yet.
+	var stored []FestRosterImportTeam
 	for _, doc := range docs {
-		folder, ok := games.As[games.RosterFolder](doc.GameType)
-		if !ok {
+		if _, ok := games.As[games.RosterFolder](doc.GameType); !ok {
 			continue
 		}
-		folded := RosterTeams(OnVenue(teams, placement, doc.MultiFestVenueID))
-		var entryRemap map[int]int
-		if doc.MultiFestVenueID == remap.Venue {
-			entryRemap = remap.Numbers
-		}
-		schemeJSON, stateJSON, err := folder.FoldRoster(doc.SchemeJSON, doc.State, folded, entryRemap)
+		members, err := ownTeamsTx(ctx, tx, doc.GameID)
 		if err != nil {
-			return nil, fmt.Errorf("game %d: %w", doc.GameID, err)
+			return nil, err
 		}
-		// A Game of the whole fest keeps a renumbered venue's sheet in step.
-		if sheets, ok := games.As[games.VenueSheets](doc.GameType); ok && doc.MultiFestVenueID == 0 && remap.Venue > 0 {
-			if stateJSON, err = sheets.RemapVenueSheet(stateJSON, remap.Venue, remap.Numbers); err != nil {
-				return nil, fmt.Errorf("game %d: %w", doc.GameID, err)
+		seated := teams
+		if members != nil {
+			if stored == nil {
+				if stored, err = LoadFestRosterImportTeamsTx(ctx, tx, festID); err != nil {
+					return nil, err
+				}
 			}
+			seated = onList(stored, members)
 		}
-		if _, err := tx.ExecContext(ctx, `
-update games set scheme_json = ?, updated_at = ?
-where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), doc.GameID, festID); err != nil {
+		update, err := foldGameTx(ctx, tx, festID, doc, RosterTeams(OnVenue(seated, placement, doc.MultiFestVenueID)), remap)
+		if err != nil {
 			return nil, err
 		}
-		if err := flatgame.SetStateTx(ctx, tx, festID, doc.GameID, string(stateJSON)); err != nil {
-			return nil, err
-		}
-		// A renumbered team's contested answers follow it.
-		if refreshed, err := contested.RefreshTx(ctx, tx, festID, doc.GameID); err != nil {
-			return nil, err
-		} else if refreshed != nil {
-			stateJSON = refreshed
-		}
-		updates = append(updates, GameStateBroadcast{GameID: doc.GameID, GameType: doc.GameType, StateJSON: stateJSON})
+		updates = append(updates, update)
 	}
 	return updates, nil
+}
+
+// foldGameTx folds teams into one flat Game's document (its Protocol a
+// games.RosterFolder) and writes it:
+// remap renumbers the cells keyed on a Number when the Game is on its venue.
+func foldGameTx(ctx context.Context, tx *sql.Tx, festID int64, doc store.GameDoc, teams []games.RosterTeam, remap Remap) (GameStateBroadcast, error) {
+	folder, ok := games.As[games.RosterFolder](doc.GameType)
+	if !ok {
+		return GameStateBroadcast{}, fmt.Errorf("game %d folds no roster", doc.GameID)
+	}
+	var entryRemap map[int]int
+	if doc.MultiFestVenueID == remap.Venue {
+		entryRemap = remap.Numbers
+	}
+	schemeJSON, stateJSON, err := folder.FoldRoster(doc.SchemeJSON, doc.State, teams, entryRemap)
+	if err != nil {
+		return GameStateBroadcast{}, fmt.Errorf("game %d: %w", doc.GameID, err)
+	}
+	// A Game of the whole fest keeps a renumbered venue's sheet in step.
+	if sheets, ok := games.As[games.VenueSheets](doc.GameType); ok && doc.MultiFestVenueID == 0 && remap.Venue > 0 {
+		if stateJSON, err = sheets.RemapVenueSheet(stateJSON, remap.Venue, remap.Numbers); err != nil {
+			return GameStateBroadcast{}, fmt.Errorf("game %d: %w", doc.GameID, err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+update games set scheme_json = ?, updated_at = ?
+where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), doc.GameID, festID); err != nil {
+		return GameStateBroadcast{}, err
+	}
+	if err := flatgame.SetStateTx(ctx, tx, festID, doc.GameID, string(stateJSON)); err != nil {
+		return GameStateBroadcast{}, err
+	}
+	// A renumbered team's contested answers follow it.
+	if refreshed, err := contested.RefreshTx(ctx, tx, festID, doc.GameID); err != nil {
+		return GameStateBroadcast{}, err
+	} else if refreshed != nil {
+		stateJSON = refreshed
+	}
+	return GameStateBroadcast{GameID: doc.GameID, GameType: doc.GameType, StateJSON: stateJSON}, nil
 }
 
 // ScoredNumbers reports which team numbers already carry something a host
@@ -426,6 +455,7 @@ order by position, id`, []any{festID}, func(rows *sql.Rows) (loaded, error) {
 		if err := rows.Scan(&row.id, &row.team.RatingID, &row.team.Name, &row.team.City, &row.team.Country, &row.team.Number); err != nil {
 			return row, err
 		}
+		row.team.LocalID = row.id
 		return row, nil
 	})
 	if err != nil {

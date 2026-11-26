@@ -10,7 +10,6 @@ import (
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/games"
-	"dope/dope/domain/multifest"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -47,7 +46,7 @@ func createFlatGameTx(ctx context.Context, tx *sql.Tx, festID, multiFestVenueID 
 	if err != nil {
 		return 0, err
 	}
-	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, multiFestVenueID, def.Code, emptyScheme, emptyState)
+	schemeJSON, stateJSON, err := pristineFlatTx(ctx, tx, festID, 0, multiFestVenueID, def.Code, emptyScheme, emptyState)
 	if err != nil {
 		return 0, err
 	}
@@ -87,19 +86,15 @@ func sameTours(tours, questions int) []int {
 	return tourComp
 }
 
-// pristineFlatTx is a flat game's empty scheme and state with the fest's
-// roster (its venue's part, for a Game on one) already folded in through its Protocol — what creation and Clear
-// write.
-func pristineFlatTx(ctx context.Context, tx *sql.Tx, festID, multiFestVenueID int64, gameType string, schemeJSON, stateJSON []byte) ([]byte, []byte, error) {
-	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+// pristineFlatTx is a flat game's empty scheme and state with the teams it
+// seats (the fest's roster, its venue's part for a Game on one, or its own
+// list) already folded in through its Protocol — what creation (gameID 0)
+// and Clear write.
+func pristineFlatTx(ctx context.Context, tx *sql.Tx, festID, gameID, multiFestVenueID int64, gameType string, schemeJSON, stateJSON []byte) ([]byte, []byte, error) {
+	teams, err := roster.GameSeatsTeamsTx(ctx, tx, festID, gameID, multiFestVenueID)
 	if err != nil {
 		return nil, nil, err
 	}
-	placement, err := multifest.LoadPlacement(ctx, tx, festID)
-	if err != nil {
-		return nil, nil, err
-	}
-	teams = roster.OnVenue(teams, placement, multiFestVenueID)
 	if len(teams) == 0 {
 		return schemeJSON, stateJSON, nil
 	}

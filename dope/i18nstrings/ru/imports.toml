@@ -61,7 +61,7 @@ no_troikas = "В фесте нет троек в этом зачёте."
 game_missing = 'в фесте нет игры с кодом {{.code}}'
 # A source game with no, or more than one, ranked table to seed from.
 no_standings = 'у игры {{.code}} ещё нет таблицы'
-multiple_standings = 'у игры {{.code}} {{.n}} {{plural .n "таблиц" "таблиц" "таблиц"}} — посев берётся из игры с одной'
+multiple_standings = 'у игры {{.code}} {{.n}} {{plural .n "таблиц" "таблиц" "таблиц"}} — посев можно загрузить только из игры с одной таблицей'
 source_no_teams = "в игре-источнике нет команд"
 # The [init] sorting naming a metric the source game's table does not carry.
 metric_unknown = 'sorting: {{.metric}} — игра {{.code}} такой метрики не считает'
@@ -101,7 +101,7 @@ self_reference = '{{.grain}}.{{.name}}: правило зависит от са�
 # A seed.<metric> rule that is not mean/min/max/sum/count of a metric.
 aggregate_expected = 'seed.{{.name}}: жду mean(метрика), min, max, sum или count'
 # A source game with more than one ranked table: no single place per team.
-multiple_standings = 'у игры {{.code}} несколько таблиц — посев по игрокам берётся из игры с одной'
+multiple_standings = 'у игры {{.code}} несколько таблиц — посев по игрокам можно загрузить только из игры с одной таблицей'
 
 [rating]
 # The roster import button's request to rating.chgk.net.
