@@ -27,7 +27,7 @@ func TestTypParity(t *testing.T) {
 			if err != nil {
 				t.Skipf("no oracle for %s", name)
 			}
-			got := GenerateTyp(string(src), DefaultArgs())
+			got := ourDeviations.Replace(GenerateTyp(string(src), DefaultArgs()))
 			// chgksuite writes the file without a trailing newline; tolerate one.
 			if strings.TrimRight(got, "\n") != strings.TrimRight(string(oracle), "\n") {
 				t.Errorf(".typ mismatch for %s\n--- chgksuite ---\n%s\n--- go ---\n%s",
@@ -36,6 +36,16 @@ func TestTypParity(t *testing.T) {
 		})
 	}
 }
+
+// ourDeviations undoes, for the comparison, the changes this template makes
+// to chgksuite's on purpose: the cut lines are grey, not black, so that the
+// only black on a sheet is the handout itself.
+var ourDeviations = strings.NewReplacer(
+	"// The cut lines are grey, the colour of the question label, so that the only\n"+
+		"// black on the sheet is the handout itself.\n", "",
+	"#let _solid = 0.8pt + gray", "#let _solid = 0.8pt + black",
+	`#let _dashed = (paint: gray,`, `#let _dashed = (paint: black,`,
+)
 
 // tailLines returns the last few lines (the per-question content; the header is
 // identical) to keep failure output readable.

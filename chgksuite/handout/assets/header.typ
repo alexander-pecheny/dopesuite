@@ -12,8 +12,10 @@
 #set par(justify: false, leading: 0.55em)
 #set block(spacing: 0pt)
 
-#let _solid = 0.8pt + black
-#let _dashed = (paint: black, thickness: 0.5pt, dash: "dashed")
+// The cut lines are grey, the colour of the question label, so that the only
+// black on the sheet is the handout itself.
+#let _solid = 0.8pt + gray
+#let _dashed = (paint: gray, thickness: 0.5pt, dash: "dashed")
 
 // One team: a box of tcols x trows identical cells separated inside by dashed
 // lines, each cell's content aligned and vertically centred. Cells are flush so
