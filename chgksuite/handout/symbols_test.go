@@ -39,7 +39,7 @@ func TestBundledFontsCoverTransplantedSymbols(t *testing.T) {
 // font but the bundled ones, so a script none of them covers is tofu in the
 // PDF export and the handouts: an Armenian word in a comment came out as
 // boxes. If this fails after a font rebuild, rerun that script.
-var fallbackProbes = []rune("օაשعकকதกሀ♈♔∮中あ")
+var fallbackProbes = []rune("օაשعकকதกሀ♈♔∮中あ한")
 
 func TestBundledFontsCoverOtherScripts(t *testing.T) {
 	fonts, err := BundledFonts()

@@ -216,12 +216,12 @@ func TestExportPDFFallsBackPastNotoSans(t *testing.T) {
 		t.Fatalf("typst pool: %v", err)
 	}
 	defer pool.Close()
-	src := "? Вопрос\n! Ответ\n/ «\u0585\u057f\u0561\u0580», «\u10e3\u10ea\u10ee\u10dd», «\u05d2\u05d5\u05d9», «\u5916\u56fd\u4eba»\n"
+	src := "? Вопрос\n! Ответ\n/ «\u0585\u057f\u0561\u0580», «\u10e3\u10ea\u10ee\u10dd», «\u05d2\u05d5\u05d9», «\u5916\u56fd\u4eba»\n^ https://en.namu.wiki/w/\ud55c\uad6d\uc5b4\n"
 	pdf, err := typstdoc.Export(context.Background(), parse(t, src), nil, pool, typstdoc.Options{})
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
-	for _, face := range []string{"NotoSansArmenian", "NotoSansGeorgian", "NotoSansHebrew", "NotoSansSC"} {
+	for _, face := range []string{"NotoSansArmenian", "NotoSansGeorgian", "NotoSansHebrew", "NotoSansSC", "NotoSansKR"} {
 		if !bytes.Contains(pdf, []byte(face)) {
 			t.Errorf("the PDF embeds no %s", face)
 		}
