@@ -701,11 +701,23 @@
 }
 
 /* Подробно question header: count of teams that took the question, muted and
-   smaller, stacked in the free space above the question number. */
+   smaller, stacked in the free space above the question number. A blank line
+   as tall as the count goes under the number, so the stack, centred like
+   every other head, puts the question numbers and the tours' labels on the
+   centre line of Команда, Σ and М, and the counts on one line above. The
+   tours' heads drop their padding to match the questions'. */
 .match-table.od-detailed thead th.question-head:has(.od-detailed-qhead),
 .match-table.od-detailed thead th.theme-head:has(.od-detailed-qhead) {
-  vertical-align: bottom;
+  vertical-align: middle;
+  padding-block: 0;
   height: calc(var(--question-size) + 11px);
+}
+
+.match-table.od-detailed .od-detailed-qhead::after {
+  content: "\00a0";
+  visibility: hidden;
+  font-size: 0.62em;
+  line-height: 1.1;
 }
 
 /* The line-height is `em` and not a bare 1.1 on purpose. A bare number is
