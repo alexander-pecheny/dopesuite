@@ -207,8 +207,14 @@ func (s *server) portionBody(ctx context.Context, r *http.Request, c contest.Con
 // button saves it without the script.
 func likesForm(c contest.Contest, items []ui.Item) ui.Item {
 	form := append([]ui.Item{ui.Method("post"), ui.Action(yearPath(c.Year, votePage)), ui.DirCol, ui.SpaceMD, ui.Data("autosave", "")}, items...)
-	return ui.Form(append(form, ui.Row(ui.SpaceSM, ui.AlignCenter,
-		ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save())), ui.Message(ui.ID("autosaveStatus"))))...)
+	return ui.Form(append(form, autosaveRow())...)
+}
+
+// autosaveRow ends a form that saves itself: its button saves it without the
+// script, and its message shows how the last save went.
+func autosaveRow() ui.Item {
+	return ui.Row(ui.SpaceSM, ui.AlignCenter,
+		ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save())), ui.Message(ui.Data("autosave-status", "")))
 }
 
 // likedTab is the portion tab, after the last portion, with every question
@@ -341,6 +347,10 @@ func (s *server) factcheckBody(ctx context.Context, c contest.Contest, j juror) 
 		return nil, err
 	}
 	head := ui.Section(hint(str.Vote.Factcheck.Lead(dayText(c.FactcheckEnd))))
+	tiebreak, err := s.tiebreakBody(ctx, c, j)
+	if err != nil {
+		return nil, err
+	}
 	var form []ui.Item
 	shown := 0
 	for _, q := range inReaderOrder(qs, fmt.Sprintf("%d/factcheck/%d", c.Year, j.userID)) {
@@ -351,9 +361,107 @@ func (s *server) factcheckBody(ctx context.Context, c contest.Contest, j juror) 
 		form = append(form, likeCard(q, juryCard(q), true))
 	}
 	if shown == 0 {
-		return []ui.Item{head, ui.Section(ui.Empty(text(str.Vote.Factcheck.Nothing())))}, nil
+		return append(tiebreak, head, ui.Section(ui.Empty(text(str.Vote.Factcheck.Nothing())))), nil
 	}
-	return []ui.Item{head, ui.Section(likesForm(c, form))}, nil
+	return append(tiebreak, head, ui.Section(likesForm(c, form))), nil
+}
+
+// tiedQuestions are the questions in the year's tie-break round: every one
+// tied at a cut of the shortlist, settled or not, since a mark still to come
+// may change the count. A frozen shortlist has no round.
+func tiedQuestions(ctx context.Context, q store.Querier, c contest.Contest) ([]store.Question, error) {
+	if c.ShortlistFrozenAt != "" {
+		return nil, nil
+	}
+	_, o, err := shortlistNow(ctx, q, c)
+	if err != nil {
+		return nil, err
+	}
+	tied := map[int64]bool{}
+	for _, t := range o.Ties {
+		for _, id := range t.IDs {
+			tied[id] = true
+		}
+	}
+	if len(tied) == 0 {
+		return nil, nil
+	}
+	all, err := store.Questions(ctx, q, c.Year, "qy is not null")
+	var out []store.Question
+	for _, qq := range all {
+		if tied[qq.ID] {
+			out = append(out, qq)
+		}
+	}
+	return out, err
+}
+
+// tiebreakBody is the tie-break round for an expert juror, at the top of the
+// factcheck page: each tied question with the 1–10 scale.
+func (s *server) tiebreakBody(ctx context.Context, c contest.Contest, j juror) ([]ui.Item, error) {
+	if j.kind != store.Expert {
+		return nil, nil
+	}
+	qs, err := tiedQuestions(ctx, s.db, c)
+	if err != nil || len(qs) == 0 {
+		return nil, err
+	}
+	marks, err := store.Counts(ctx, s.db, `select question_id, score from `+tiebreakMarks+` where user_id = ?`, j.userID)
+	if err != nil {
+		return nil, err
+	}
+	marked := 0
+	form := []ui.Item{ui.Method("post"), ui.Action(yearPath(c.Year, votePage) + "/tiebreak"), ui.DirCol, ui.SpaceMD, ui.Data("autosave", "")}
+	for _, q := range inReaderOrder(qs, fmt.Sprintf("%d/tiebreak/%d", c.Year, j.userID)) {
+		if marks[q.ID] > 0 {
+			marked++
+		}
+		form = append(form, markCard(q, "mark", marks[q.ID]))
+	}
+	return []ui.Item{
+		ui.Section(subhead(str.Vote.Tiebreak.Title()), hint(str.Vote.Tiebreak.Lead(dayText(c.FactcheckEnd))),
+			hint(str.Final.Jury.Progress(strconv.Itoa(marked), len(qs)))),
+		ui.Section(ui.Form(append(form, autosaveRow())...)),
+	}, nil
+}
+
+// handleTiebreak saves an expert juror's marks in the tie-break round. The
+// questions tied when the form is posted are the scope.
+func (s *server) handleTiebreak(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	if err := parseForm(w, r); err != nil {
+		return err
+	}
+	ctx := r.Context()
+	c, j, err := s.yearJuror(r, sc)
+	if err != nil {
+		return err
+	}
+	if j.kind != store.Expert {
+		return route.Forbidden(str.Final.Jury.NotExpert())
+	}
+	if c.StageAt(s.now()) != contest.Factcheck {
+		return userError(str.Vote.Page.Closed(dayText(c.PrelimStart), dayText(c.FactcheckEnd)))
+	}
+	err = s.withWriteTx(ctx, "tiebreak", func(ctx context.Context, tx *sql.Tx) error {
+		qs, err := tiedQuestions(ctx, tx, c)
+		if err != nil {
+			return err
+		}
+		for _, q := range qs {
+			n, _ := strconv.Atoi(r.FormValue("mark" + idstr.Format(q.ID)))
+			if err := s.setMark(ctx, tx, tiebreakMarks, j.userID, q.ID, n); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if wantsJSON(r) {
+		return writeJSON(w, map[string]string{"status": str.Common.Saved()})
+	}
+	return seeOther(w, r, yearPath(c.Year, votePage)+"?done="+doneSaved)
 }
 
 // handleVote saves the likes on one page. What the page showed is the scope:

@@ -13,7 +13,7 @@ qy/                     module root (go.mod: module "qy")
   qy/server/            the trunk: routes, pages, forms, the background pass
   qy/domain/            pure logic, each package tested on its own
     contest/            stages by date, portions, the 5+3 rule, the deal
-    tally/              the shortlist cut and the final count
+    tally/              the shortlist cut, its tie-break round, and the final count
     question/           parsing a pasted question (chgksuite's textparse)
     anon/               the rule pass, the model prompt, applying a redaction
     lang/, translate/   a question's language; the prompt that puts it into Russian

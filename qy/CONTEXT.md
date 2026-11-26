@@ -56,10 +56,18 @@ telegram handle. The people's jury reads only published Questions.
 **Like.** A juror's mark on a Question in the first stage. During the factcheck
 a juror may withdraw a like but not add one.
 
-**Shortlist.** The expert jury's top `expert_cutoff` by likes, ties included,
-then the people's jury's top `people_cutoff` from the rest, then any Question an
-admin pinned. A declined author or an admin's removal takes a Question out
-before the count. An admin freezes the Shortlist, which opens the final.
+**Shortlist.** Exactly the expert jury's top `expert_cutoff` by likes (12 by
+the rules), then the people's jury's top `people_cutoff` from the rest (3),
+then any Question an admin pinned. A declined author or an admin's removal
+takes a Question out before the count. An admin freezes the Shortlist, which
+opens the final, and cannot while a Tie is open.
+
+**Tie.** Questions with equal points at a cut of the Shortlist, more of them
+than the places left. During the factcheck the expert jury marks them from 1 to
+10 in a tie-break round, counted like a Ballot. Only a juror who marked every
+tied Question counts, and the Tie is settled once the count has no tie at the
+border. While the expert jury's Tie is open, the people's cut is made as if
+every Question in it were through.
 
 **Ballot.** An expert juror's 1–10 marks for the frozen Shortlist. It counts
 only when every Question is marked. The jury's order is the sum of ranks (Borda

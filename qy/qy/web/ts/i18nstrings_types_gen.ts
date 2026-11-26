@@ -220,7 +220,9 @@ export type Strings = {
     };
     stage1: {
       byExpert: () => string;
+      byExpertTiebreak: () => string;
       byPeople: () => string;
+      byPeopleTiebreak: () => string;
       byPin: () => string;
       expert: () => string;
       freeze: () => string;
@@ -231,9 +233,15 @@ export type Strings = {
       lead: (favourite: number, expert: number, people: number) => string;
       people: () => string;
       shortlist: () => string;
+      tieExpert: (places: number, n: number, points: number) => string;
+      tieOpen: () => string;
+      tiePeople: (places: number, n: number, points: number) => string;
+      tieSettled: () => string;
+      tied: () => string;
       unfreeze: () => string;
       unfreezeConfirm: () => string;
       unfreezePublished: () => string;
+      unsettled: () => string;
     };
     suggestions: {
       accept: () => string;
@@ -580,6 +588,10 @@ export type Strings = {
       preparing: () => string;
       tabs: () => string;
       title: (n: string, date: string) => string;
+    };
+    tiebreak: {
+      lead: (date: string) => string;
+      title: () => string;
     };
   };
 };

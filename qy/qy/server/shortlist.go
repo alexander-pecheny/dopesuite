@@ -66,7 +66,7 @@ func candidates(ctx context.Context, q store.Querier, c contest.Contest) ([]cand
 	return out, nil
 }
 
-func computeShortlist(c contest.Contest, cands []candidate) []tally.Pick {
+func computeShortlist(c contest.Contest, cands []candidate, marks []tally.Ballot) tally.Outcome {
 	in := make([]tally.Candidate, len(cands))
 	for i, cd := range cands {
 		in[i] = tally.Candidate{
@@ -75,24 +75,60 @@ func computeShortlist(c contest.Contest, cands []candidate) []tally.Pick {
 			Pinned:   cd.Pin == "add",
 		}
 	}
-	return tally.Shortlist(in, c.ExpertCutoff, c.PeopleCutoff)
+	return tally.Shortlist(in, c.ExpertCutoff, c.PeopleCutoff, marks)
+}
+
+// expertUserIDs are the users on the year's expert jury.
+func expertUserIDs(ctx context.Context, q store.Querier, year int) ([]int64, error) {
+	return store.Collect(ctx, q, store.Scalar[int64], `
+select u.id from jurors j join users u on `+store.JurorIsUser+`
+where j.year = ? and j.kind = ?`, year, store.Expert)
+}
+
+// tiebreakBallots are the expert jurors' marks in the year's tie-break round,
+// one ballot per juror, however few questions it marks.
+func tiebreakBallots(ctx context.Context, q store.Querier, year int) ([]tally.Ballot, error) {
+	experts, err := expertUserIDs(ctx, q, year)
+	if err != nil {
+		return nil, err
+	}
+	var out []tally.Ballot
+	for _, id := range experts {
+		marks, err := store.Counts(ctx, q, `
+select t.question_id, t.score from `+tiebreakMarks+` t
+join questions qq on qq.id = t.question_id and qq.year = ?
+where t.user_id = ?`, year, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, tally.Ballot(marks))
+	}
+	return out, nil
+}
+
+// shortlistNow is the shortlist as the likes and the tie-break marks make it
+// now, with the candidates it was made from.
+func shortlistNow(ctx context.Context, q store.Querier, c contest.Contest) ([]candidate, tally.Outcome, error) {
+	cands, err := candidates(ctx, q, c)
+	if err != nil {
+		return nil, tally.Outcome{}, err
+	}
+	marks, err := tiebreakBallots(ctx, q, c.Year)
+	if err != nil {
+		return nil, tally.Outcome{}, err
+	}
+	return cands, computeShortlist(c, cands, marks), nil
 }
 
 // shortlistIDs is the shortlist as it stands: the frozen one when there is
-// one, the computed one before.
+// one. Before that it is the preliminary shortlist, with every question still
+// in a tie-break round.
 func shortlistIDs(ctx context.Context, q store.Querier, c contest.Contest) ([]int64, error) {
 	if c.ShortlistFrozenAt != "" {
 		return store.Collect(ctx, q, store.Scalar[int64], `select question_id from shortlist where year = ?`, c.Year)
 	}
-	cands, err := candidates(ctx, q, c)
-	if err != nil {
-		return nil, err
-	}
-	var out []int64
-	for _, p := range computeShortlist(c, cands) {
-		out = append(out, p.ID)
-	}
-	return out, nil
+	_, o, err := shortlistNow(ctx, q, c)
+	return o.Contenders(), err
 }
 
 // shortlistQuestions loads the shortlist's questions in QY order.

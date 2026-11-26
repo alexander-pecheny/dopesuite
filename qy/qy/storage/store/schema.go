@@ -307,6 +307,18 @@ create table portion_checks(
   primary key(year, portion)
 );
 `)},
+	{Version: 10, Name: "the tie-break round of the shortlist", Up: schema.Exec(`
+-- An expert juror's 1–10 mark in the tie-break round: the questions tied at a
+-- cut of the shortlist (tally.Tie). It is kept apart from the final's scores,
+-- because a tied question may make the shortlist and be marked again there.
+create table tiebreak_scores(
+  user_id integer not null references users(id) on delete cascade,
+  question_id integer not null references questions(id) on delete cascade,
+  score integer not null check (score between 1 and 10),
+  updated_at text not null,
+  primary key(user_id, question_id)
+);
+`)},
 }
 
 func Migrate(db *sql.DB) error { return schema.Apply(db, Migrations) }

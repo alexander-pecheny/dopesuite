@@ -225,6 +225,15 @@ CREATE TABLE telegram_posts(
   primary key(channel, message_id)
 );
 
+-- table tiebreak_scores
+CREATE TABLE tiebreak_scores(
+  user_id integer not null references users(id) on delete cascade,
+  question_id integer not null references questions(id) on delete cascade,
+  score integer not null check (score between 1 and 10),
+  updated_at text not null,
+  primary key(user_id, question_id)
+);
+
 -- table users
 CREATE TABLE users(
   id integer primary key,

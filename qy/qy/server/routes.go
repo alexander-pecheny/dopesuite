@@ -40,6 +40,7 @@ func routes(s *server) *http.ServeMux {
 	api.Handle("POST /api/nominate/preview", route.LoggedIn, s.handlePreviewQuestion)
 	api.Handle("POST /api/nominate/check", route.LoggedIn, s.handleCheckQuestion)
 	pages.Handle("POST /{year}/vote", route.LoggedIn, s.handleVote)
+	pages.Handle("POST /{year}/vote/tiebreak", route.LoggedIn, s.handleTiebreak)
 	pages.Handle("POST /{year}/final", route.LoggedIn, s.handleJuryScores)
 	pages.Handle("POST /{year}/popular", route.LoggedIn, s.handlePopularVote)
 

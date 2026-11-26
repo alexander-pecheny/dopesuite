@@ -20,13 +20,17 @@ import (
 // make, and the final count. Each page also holds the step that makes its
 // result public.
 
-func whyName(why string) string {
-	switch why {
-	case tally.ByExpert:
+func whyName(p tally.Pick) string {
+	switch {
+	case p.Why == tally.ByExpert && p.Tiebreak:
+		return str.Admin.Stage1.ByExpertTiebreak()
+	case p.Why == tally.ByPeople && p.Tiebreak:
+		return str.Admin.Stage1.ByPeopleTiebreak()
+	case p.Why == tally.ByExpert:
 		return str.Admin.Stage1.ByExpert()
-	case tally.ByPeople:
+	case p.Why == tally.ByPeople:
 		return str.Admin.Stage1.ByPeople()
-	case tally.ByPin:
+	case p.Why == tally.ByPin:
 		return str.Admin.Stage1.ByPin()
 	}
 	return ""
@@ -38,13 +42,22 @@ func (s *server) handleStage1Report(w http.ResponseWriter, r *http.Request, _ ro
 		return err
 	}
 	ctx := r.Context()
-	cands, err := candidates(ctx, s.db, c)
+	cands, o, err := shortlistNow(ctx, s.db, c)
+	if err != nil {
+		return err
+	}
+	experts, err := expertUserIDs(ctx, s.db, c.Year)
 	if err != nil {
 		return err
 	}
 	why := map[int64]string{}
-	for _, p := range computeShortlist(c, cands) {
-		why[p.ID] = whyName(p.Why)
+	for _, t := range o.Ties {
+		for _, id := range t.IDs {
+			why[id] = str.Admin.Stage1.Tied()
+		}
+	}
+	for _, p := range o.Picks {
+		why[p.ID] = whyName(p)
 	}
 	slices.SortStableFunc(cands, func(a, b candidate) int {
 		return cmp.Or(cmp.Compare(b.expert, a.expert), cmp.Compare(b.people, a.people), cmp.Compare(a.QY, b.QY))
@@ -66,25 +79,62 @@ func (s *server) handleStage1Report(w http.ResponseWriter, r *http.Request, _ ro
 	}
 	base := contestHref(c.Year)
 	step := []ui.Item{subhead(str.Admin.Stage1.FreezeTitle())}
-	if c.ShortlistFrozenAt == "" {
-		step = append(step, hint(str.Admin.Stage1.FreezeHint(len(why))),
+	switch {
+	case c.ShortlistFrozenAt == "" && !o.Settled():
+		step = append(step, hint(str.Admin.Stage1.Unsettled()))
+	case c.ShortlistFrozenAt == "":
+		step = append(step, hint(str.Admin.Stage1.FreezeHint(len(o.Picks))),
 			ui.Form(ui.Method("post"), ui.Action(base+"/freeze"), ui.Data("confirm", str.Admin.Stage1.FreezeConfirm()),
 				ui.Button(ui.Submit(), ui.Primary, ui.IconLock, text(str.Admin.Stage1.Freeze()))))
-	} else {
+	default:
 		step = append(step, hint(str.Admin.Stage1.Frozen(sinceStamp(c.ShortlistFrozenAt))),
 			ui.Form(ui.Method("post"), ui.Action(base+"/unfreeze"), ui.Data("confirm", str.Admin.Stage1.UnfreezeConfirm()),
 				ui.Button(ui.Submit(), ui.Ghost, text(str.Admin.Stage1.Unfreeze()))))
 	}
 	y := strconv.Itoa(c.Year)
+	body := []ui.Item{ui.Section(hint(str.Admin.Stage1.Lead(tally.FavouritePoints, c.ExpertCutoff, c.PeopleCutoff)))}
+	if c.ShortlistFrozenAt == "" {
+		for _, t := range o.Ties {
+			body = append(body, tieSection(t, cands, len(experts)))
+		}
+	}
 	return s.ok(w, r, view{
 		title: str.Admin.Contest.Stage1(),
 		trail: adminTrail(crumb{base, str.Admin.Contests.Row(y)}, crumb{"", str.Admin.Contest.Stage1()}),
-		body: []ui.Item{
-			ui.Section(hint(str.Admin.Stage1.Lead(tally.FavouritePoints, c.ExpertCutoff, c.PeopleCutoff))),
-			ui.Section(step...),
-			ui.Section(ui.Table(rows...)),
-		},
+		body:  append(body, ui.Section(step...), ui.Section(ui.Table(rows...))),
 	})
+}
+
+// tieSection is one tie of the shortlist on the admins' report: what is tied,
+// how many ballots the round has, and its count so far.
+func tieSection(t tally.Tie, cands []candidate, experts int) ui.Item {
+	lead := str.Admin.Stage1.TieExpert(t.Places, len(t.IDs), t.Points)
+	if t.Why == tally.ByPeople {
+		lead = str.Admin.Stage1.TiePeople(t.Places, len(t.IDs), t.Points)
+	}
+	status := str.Admin.Stage1.TieOpen()
+	if t.Settled {
+		status = str.Admin.Stage1.TieSettled()
+	}
+	items := []ui.Item{subhead(str.Vote.Tiebreak.Title()), hint(lead),
+		hint(str.Admin.Final.Ballots(strconv.Itoa(t.Ballots), experts)), hint(status)}
+	if len(t.Rows) == 0 {
+		return ui.Section(items...)
+	}
+	byID := map[int64]candidate{}
+	for _, cd := range cands {
+		byID[cd.ID] = cd
+	}
+	rows := []ui.Item{ui.Scroll(), headRow(str.Admin.Questions.Number(), str.Admin.Questions.Answer(),
+		str.Admin.Final.JuryPlace(), str.Admin.Final.RankSum(), str.Admin.Final.Points())}
+	for _, row := range t.Rows {
+		cd := byID[row.ID]
+		rows = append(rows, ui.Trow(
+			ui.Cell(ui.Button(ui.Href(questionHref(cd.ID)), ui.Ghost, ui.Small(), text(qyLabel(cd.QY)))),
+			ui.Cell(text(clip(cd.Orig.Answer, answerPreview))),
+			ui.Cell(text(placesText(row.Place))), ui.Cell(text(rankSumText(row.RankSum))), ui.Cell(text(strconv.Itoa(row.Points)))))
+	}
+	return ui.Section(append(items, ui.Table(rows...))...)
 }
 
 func (s *server) handleFreeze(w http.ResponseWriter, r *http.Request, _ route.Scope) error {
@@ -93,14 +143,17 @@ func (s *server) handleFreeze(w http.ResponseWriter, r *http.Request, _ route.Sc
 		return err
 	}
 	err = s.withWriteTx(r.Context(), "freeze", func(ctx context.Context, tx *sql.Tx) error {
-		cands, err := candidates(ctx, tx, c)
+		_, o, err := shortlistNow(ctx, tx, c)
 		if err != nil {
 			return err
+		}
+		if !o.Settled() {
+			return userError(str.Admin.Stage1.Unsettled())
 		}
 		if _, err := tx.ExecContext(ctx, `delete from shortlist where year = ?`, c.Year); err != nil {
 			return err
 		}
-		for _, p := range computeShortlist(c, cands) {
+		for _, p := range o.Picks {
 			if _, err := tx.ExecContext(ctx, `insert into shortlist(year, question_id) values(?, ?)`, c.Year, p.ID); err != nil {
 				return err
 			}

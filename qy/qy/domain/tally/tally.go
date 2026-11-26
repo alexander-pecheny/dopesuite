@@ -19,25 +19,37 @@ type Count struct {
 	N  int
 }
 
-// AtLeast takes the questions with the most likes, best first, until it has at
-// least n, and then every question tied with the last one taken. Questions in
-// skip are passed over, and a question nobody liked is never taken.
-func AtLeast(counts []Count, n int, skip map[int64]bool) []Count {
+// Cut takes the n questions with the most points, best first. Questions in
+// skip are passed over, and a question nobody liked is never taken. When the
+// nth question and the next one have the same points, Cut takes only the
+// questions above them and returns every question with those points as tied:
+// a tie-break round decides which of them fill the places left.
+func Cut(counts []Count, n int, skip map[int64]bool) (in, tied []Count) {
 	sorted := slices.Clone(counts)
 	slices.SortStableFunc(sorted, func(a, b Count) int {
 		return cmp.Or(cmp.Compare(b.N, a.N), cmp.Compare(a.QY, b.QY))
 	})
-	var out []Count
+	var open []Count
 	for _, c := range sorted {
-		if skip[c.ID] || c.N == 0 {
-			continue
+		if !skip[c.ID] && c.N > 0 {
+			open = append(open, c)
 		}
-		if len(out) >= n && c.N < out[len(out)-1].N {
-			break
-		}
-		out = append(out, c)
 	}
-	return out
+	if len(open) <= n {
+		return open, nil
+	}
+	if n == 0 || open[n-1].N != open[n].N {
+		return open[:n], nil
+	}
+	edge := open[n-1].N
+	for _, c := range open {
+		if c.N > edge {
+			in = append(in, c)
+		} else if c.N == edge {
+			tied = append(tied, c)
+		}
+	}
+	return in, tied
 }
 
 // Candidate is a question as the shortlist sees it.
@@ -64,12 +76,96 @@ type Pick struct {
 	ID  int64
 	QY  int
 	Why string
+	// Tiebreak is set on a question that won its place in a tie-break round.
+	Tiebreak bool
 }
 
-// Shortlist is the rule of the first stage: the expert jury's top expertN with
-// ties, then the people's jury's top peopleN with ties among the rest, then
-// the pinned questions.
-func Shortlist(cands []Candidate, expertN, peopleN int) []Pick {
+// Tie is a run of questions with equal points at one jury's cut, more of them
+// than there are places left. The expert jury marks each of them from 1 to 10,
+// and the round is counted like the final: by the sum of ranks, then by the
+// sum of marks.
+type Tie struct {
+	Why    string
+	Points int
+	// Places is how many of the tied questions make the shortlist.
+	Places int
+	IDs    []int64
+	// Rows is the round's count, best first; Ballots is how many jurors marked
+	// every tied question. Only such a ballot counts.
+	Rows    []JuryRow
+	Ballots int
+	// Settled is set once the count puts exactly Places questions above the rest.
+	Settled bool
+}
+
+// settle counts the tie-break marks for t.
+func (t *Tie) settle(marks []Ballot) {
+	var ballots []Ballot
+	for _, m := range marks {
+		b := Ballot{}
+		for _, id := range t.IDs {
+			if m[id] > 0 {
+				b[id] = m[id]
+			}
+		}
+		if len(b) == len(t.IDs) {
+			ballots = append(ballots, b)
+		}
+	}
+	t.Ballots = len(ballots)
+	if t.Ballots == 0 {
+		return
+	}
+	t.Rows = Jury(t.IDs, ballots)
+	t.Settled = t.Rows[t.Places-1].Place.To == t.Places
+}
+
+// Outcome is the shortlist as the likes and the tie-break marks make it.
+type Outcome struct {
+	Picks []Pick
+	// Ties are the cuts the likes leave tied, the expert jury's first. While the
+	// expert jury's tie is not settled, the people's cut is made as if every
+	// question in it were on the shortlist, so it may still change.
+	Ties []Tie
+}
+
+// Settled reports whether every tie is settled, so the shortlist is final.
+func (o Outcome) Settled() bool {
+	for _, t := range o.Ties {
+		if !t.Settled {
+			return false
+		}
+	}
+	return true
+}
+
+// Contenders are the shortlist with every tied question: the preliminary
+// shortlist the factcheck is about.
+func (o Outcome) Contenders() []int64 {
+	var out []int64
+	seen := map[int64]bool{}
+	add := func(id int64) {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	for _, p := range o.Picks {
+		add(p.ID)
+	}
+	for _, t := range o.Ties {
+		for _, id := range t.IDs {
+			add(id)
+		}
+	}
+	return out
+}
+
+// Shortlist is the rule of the first stage: the expert jury's top expertN,
+// then the people's jury's top peopleN among the rest, then the pinned
+// questions. A tie at either cut goes to a tie-break round, whose marks are
+// the expert jurors' ballots in marks.
+func Shortlist(cands []Candidate, expertN, peopleN int, marks []Ballot) Outcome {
 	skip := map[int64]bool{}
 	var expert, people []Count
 	for _, c := range cands {
@@ -79,22 +175,47 @@ func Shortlist(cands []Candidate, expertN, peopleN int) []Pick {
 		expert = append(expert, Count{c.ID, c.QY, c.Expert})
 		people = append(people, Count{c.ID, c.QY, c.People})
 	}
-	var out []Pick
-	take := func(cs []Count, why string) {
-		for _, c := range cs {
-			out = append(out, Pick{c.ID, c.QY, why})
-			skip[c.ID] = true
+	var o Outcome
+	take := func(id int64, qy int, why string, tiebreak bool) {
+		o.Picks = append(o.Picks, Pick{id, qy, why, tiebreak})
+		skip[id] = true
+	}
+	qyOf := map[int64]int{}
+	for _, c := range cands {
+		qyOf[c.ID] = c.QY
+	}
+	cut := func(cs []Count, n int, why string) {
+		in, tied := Cut(cs, n, skip)
+		for _, c := range in {
+			take(c.ID, c.QY, why, false)
+		}
+		if len(tied) == 0 {
+			return
+		}
+		t := Tie{Why: why, Points: tied[0].N, Places: n - len(in)}
+		for _, c := range tied {
+			t.IDs = append(t.IDs, c.ID)
+		}
+		t.settle(marks)
+		o.Ties = append(o.Ties, t)
+		if !t.Settled {
+			for _, id := range t.IDs {
+				skip[id] = true
+			}
+			return
+		}
+		for _, r := range t.Rows[:t.Places] {
+			take(r.ID, qyOf[r.ID], why, true)
 		}
 	}
-	take(AtLeast(expert, expertN, skip), ByExpert)
-	take(AtLeast(people, peopleN, skip), ByPeople)
+	cut(expert, expertN, ByExpert)
+	cut(people, peopleN, ByPeople)
 	for _, c := range cands {
 		if c.Pinned && !skip[c.ID] {
-			out = append(out, Pick{c.ID, c.QY, ByPin})
-			skip[c.ID] = true
+			take(c.ID, c.QY, ByPin, false)
 		}
 	}
-	return out
+	return o
 }
 
 // Places is a place that two or more questions may share: From == To unless

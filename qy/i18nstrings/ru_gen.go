@@ -139,12 +139,12 @@ var RU = Strings{
 			Title: func() string { return "QY-номера" },
 		},
 		Numbers: AdminNumbersStrings{
-			ExpertCutoff: func() string { return "Шорт-лист экспертного жюри, не меньше" },
+			ExpertCutoff: func() string { return "Мест в шорт-листе от экспертного жюри" },
 			Invalid: func(field string) string {
 				return fmt.Sprintf("Поле «%s» должно быть целым числом больше нуля.", field)
 			},
 			MainSlots:    func() string { return "Вопросов на номинатора" },
-			PeopleCutoff: func() string { return "Шорт-лист народного жюри, не меньше" },
+			PeopleCutoff: func() string { return "Мест в шорт-листе от народного жюри" },
 			PortionDays:  func() string { return "Дней на порцию" },
 			PortionSize:  func() string { return "Вопросов в порции" },
 			ReserveSlots: func() string { return "Запасных вопросов на номинатора" },
@@ -305,10 +305,16 @@ var RU = Strings{
 		},
 		Stage1: AdminStage1Strings{
 			ByExpert: func() string { return "По экспертному жюри" },
+			ByExpertTiebreak: func() string {
+				return "По экспертному жюри, после дополнительного тура"
+			},
 			ByPeople: func() string { return "По народному жюри" },
-			ByPin:    func() string { return "Вручную" },
-			Expert:   func() string { return "Экспертное" },
-			Freeze:   func() string { return "Утвердить" },
+			ByPeopleTiebreak: func() string {
+				return "По народному жюри, после дополнительного тура"
+			},
+			ByPin:  func() string { return "Вручную" },
+			Expert: func() string { return "Экспертное" },
+			Freeze: func() string { return "Утвердить" },
 			FreezeConfirm: func() string {
 				return "Утвердить шорт-лист? После этого отметки жюри на него не влияют."
 			},
@@ -318,16 +324,30 @@ var RU = Strings{
 			FreezeTitle: func() string { return "Утвердить шорт-лист" },
 			Frozen:      func(date string) string { return fmt.Sprintf("Шорт-лист утверждён %s.", date) },
 			Lead: func(favourite int, expert int, people int) string {
-				return fmt.Sprintf("Каждая отметка жюри даёт вопросу очко, а любимый вопрос члена жюри получает от него %d %s. В шорт-лист попадают не меньше %d %s по очкам экспертного жюри и не меньше %d %s по очкам народного, вместе с вопросами, у которых столько же очков, сколько у последнего прошедшего.", favourite, core.Plural("ru", favourite, "очко", "очка", "очков"), expert, core.Plural("ru", expert, "вопроса", "вопросов", "вопросов"), people, core.Plural("ru", people, "вопроса", "вопросов", "вопросов"))
+				return fmt.Sprintf("Каждая отметка жюри даёт вопросу очко, а любимый вопрос члена жюри получает от него %d %s. В шорт-лист попадают %d %s с наибольшим числом очков экспертного жюри, затем %d %s народного жюри из остальных. Если на границе прохода у нескольких вопросов поровну очков, их проход решает дополнительный тур: экспертное жюри оценивает их по десятибалльной шкале, итоги подводятся по сумме рангов.", favourite, core.Plural("ru", favourite, "очко", "очка", "очков"), expert, core.Plural("ru", expert, "вопрос", "вопроса", "вопросов"), people, core.Plural("ru", people, "лучший вопрос", "лучших вопроса", "лучших вопросов"))
 			},
 			People:    func() string { return "Народное" },
 			Shortlist: func() string { return "Шорт-лист" },
-			Unfreeze:  func() string { return "Вернуть к подсчёту по отметкам" },
+			TieExpert: func(places int, n int, points int) string {
+				return fmt.Sprintf("На %d %s от экспертного жюри претендуют %d %s с %d %s.", places, core.Plural("ru", places, "место", "места", "мест"), n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"), points, core.Plural("ru", points, "очком", "очками", "очками"))
+			},
+			TieOpen: func() string {
+				return "Ничья пока не разрешена. Нужен хотя бы один бюллетень, где оценены все эти вопросы, и итог без равенства на границе прохода."
+			},
+			TiePeople: func(places int, n int, points int) string {
+				return fmt.Sprintf("На %d %s от народного жюри претендуют %d %s с %d %s.", places, core.Plural("ru", places, "место", "места", "мест"), n, core.Plural("ru", n, "вопрос", "вопроса", "вопросов"), points, core.Plural("ru", points, "очком", "очками", "очками"))
+			},
+			TieSettled: func() string { return "Ничья разрешена." },
+			Tied:       func() string { return "Ничья, дополнительный тур" },
+			Unfreeze:   func() string { return "Вернуть к подсчёту по отметкам" },
 			UnfreezeConfirm: func() string {
 				return "Шорт-лист снова будет считаться по отметкам. Вернуть?"
 			},
 			UnfreezePublished: func() string {
 				return "Итоги уже опубликованы, шорт-лист менять нельзя."
+			},
+			Unsettled: func() string {
+				return "Шорт-лист можно утвердить, когда разрешены все ничьи."
 			},
 		},
 		Suggestions: AdminSuggestionsStrings{
@@ -809,6 +829,12 @@ var RU = Strings{
 			Preparing: func() string { return "Скоро откроется" },
 			Tabs:      func() string { return "Порции" },
 			Title:     func(n string, date string) string { return fmt.Sprintf("Порция %s, открыта %s.", n, date) },
+		},
+		Tiebreak: VoteTiebreakStrings{
+			Lead: func(date string) string {
+				return fmt.Sprintf("У этих вопросов поровну очков на границе прохода в шорт-лист. Оцените каждый по десятибалльной шкале до %s включительно. Оценки сохраняются сразу. Бюллетень засчитывается, только когда оценены все вопросы.", date)
+			},
+			Title: func() string { return "Дополнительный тур" },
 		},
 	},
 }

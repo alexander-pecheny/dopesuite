@@ -88,26 +88,31 @@ func (s *server) handleJuryPage(w http.ResponseWriter, r *http.Request, sc route
 		if scores[q.ID] > 0 {
 			marked++
 		}
-		name := "score" + idstr.Format(q.ID)
-		var radios []ui.Item
-		for n := 1; n <= maxScore; n++ {
-			items := []ui.Item{ui.Name(name), ui.Value(strconv.Itoa(n)), text(strconv.Itoa(n))}
-			if scores[q.ID] == n {
-				items = append(items, ui.Checked())
-			}
-			radios = append(radios, ui.Radio(items...))
-		}
-		form = append(form, ui.Card(ui.DirCol, ui.SpaceSM,
-			ui.Richtext(ui.Raw(questionHTML(juryCard(q)))),
-			ui.Row(append([]ui.Item{ui.SpaceSM, ui.Wrap(), ui.Aria("label", str.Final.Jury.Scale())}, radios...)...)))
+		form = append(form, markCard(q, "score", scores[q.ID]))
 	}
-	form = append(form, ui.Row(ui.SpaceSM, ui.AlignCenter,
-		ui.Button(ui.Submit(), ui.Primary, text(str.Common.Save())), ui.Message(ui.ID("autosaveStatus"))))
+	form = append(form, autosaveRow())
 	v.body = []ui.Item{
 		ui.Section(append([]ui.Item{hint(str.Final.Jury.Lead(dayText(c.FinalEnd))), hint(str.Final.Jury.Progress(strconv.Itoa(marked), len(qs)))}, noticeOf(r)...)...),
 		ui.Section(ui.Form(form...)),
 	}
 	return s.ok(w, r, v)
+}
+
+// markCard is a question with the jury's 1–10 scale under it, the radios
+// named prefix and the question's id.
+func markCard(q store.Question, prefix string, mark int) ui.Item {
+	name := prefix + idstr.Format(q.ID)
+	var radios []ui.Item
+	for n := 1; n <= maxScore; n++ {
+		items := []ui.Item{ui.Name(name), ui.Value(strconv.Itoa(n)), text(strconv.Itoa(n))}
+		if mark == n {
+			items = append(items, ui.Checked())
+		}
+		radios = append(radios, ui.Radio(items...))
+	}
+	return ui.Card(ui.DirCol, ui.SpaceSM,
+		ui.Richtext(ui.Raw(questionHTML(juryCard(q)))),
+		ui.Row(append([]ui.Item{ui.SpaceSM, ui.Wrap(), ui.Aria("label", str.Final.Jury.Scale())}, radios...)...))
 }
 
 func (s *server) handleJuryScores(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
@@ -129,7 +134,7 @@ func (s *server) handleJuryScores(w http.ResponseWriter, r *http.Request, sc rou
 	err = s.withWriteTx(ctx, "jury-scores", func(ctx context.Context, tx *sql.Tx) error {
 		for _, q := range qs {
 			n, _ := strconv.Atoi(r.FormValue("score" + idstr.Format(q.ID)))
-			if err := s.setScore(ctx, tx, j.userID, q.ID, n); err != nil {
+			if err := s.setMark(ctx, tx, finalMarks, j.userID, q.ID, n); err != nil {
 				return err
 			}
 		}
@@ -144,14 +149,21 @@ func (s *server) handleJuryScores(w http.ResponseWriter, r *http.Request, sc rou
 	return seeOther(w, r, yearPath(c.Year, finalPage)+"?done="+doneSaved)
 }
 
-// setScore writes one mark; anything off the scale clears it.
-func (s *server) setScore(ctx context.Context, tx *sql.Tx, userID, questionID int64, n int) error {
+// The tables an expert juror's 1–10 marks go to: the final's, and the
+// tie-break round's.
+const (
+	finalMarks    = "scores"
+	tiebreakMarks = "tiebreak_scores"
+)
+
+// setMark writes one mark to table; anything off the scale clears it.
+func (s *server) setMark(ctx context.Context, tx *sql.Tx, table string, userID, questionID int64, n int) error {
 	if n < 1 || n > maxScore {
-		_, err := tx.ExecContext(ctx, `delete from scores where user_id = ? and question_id = ?`, userID, questionID)
+		_, err := tx.ExecContext(ctx, `delete from `+table+` where user_id = ? and question_id = ?`, userID, questionID)
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `
-insert into scores(user_id, question_id, score, updated_at) values(?, ?, ?, ?)
+insert into `+table+`(user_id, question_id, score, updated_at) values(?, ?, ?, ?)
 on conflict(user_id, question_id) do update set score = excluded.score, updated_at = excluded.updated_at`,
 		userID, questionID, n, s.stamp())
 	return err
@@ -281,22 +293,10 @@ func (s *server) countFinal(ctx context.Context, c contest.Contest) (finalTally,
 	for _, q := range qs {
 		t.byID[q.ID], qy[q.ID] = q, q.QY
 	}
-	rows, err := s.db.QueryContext(ctx, `
-select u.id from jurors j join users u on `+store.JurorIsUser+`
-where j.year = ? and j.kind = ?`, c.Year, store.Expert)
+	experts, err := expertUserIDs(ctx, s.db, c.Year)
 	if err != nil {
 		return t, err
 	}
-	var experts []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return t, err
-		}
-		experts = append(experts, id)
-	}
-	rows.Close()
 	t.experts = len(experts)
 	var ballots []tally.Ballot
 	for _, id := range experts {

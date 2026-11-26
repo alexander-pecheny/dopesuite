@@ -23,7 +23,7 @@ document.addEventListener("submit", (event) => {
 });
 
 async function save(form: HTMLFormElement): Promise<void> {
-  const status = form.querySelector("#autosaveStatus");
+  const status = form.querySelector("[data-autosave-status]");
   if (status) status.textContent = S.forms.saving();
   let text: string;
   try {
