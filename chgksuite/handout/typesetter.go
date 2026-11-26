@@ -98,7 +98,8 @@ type CLITypesetter struct {
 type CLIOptions struct {
 	// Bin is the typst executable; empty is "typst" on PATH.
 	Bin string
-	// FontDir is an extra --font-path; empty is the bundled Noto Sans.
+	// FontDir is an extra --font-path; empty is the bundled Noto Sans and its
+	// fallbacks.
 	FontDir string
 	// SystemFonts lets typst see the machine's own fonts as well, which is what
 	// chgksuite does and what --font needs to mean anything. Off keeps a render

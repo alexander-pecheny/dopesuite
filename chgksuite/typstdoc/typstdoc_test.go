@@ -203,6 +203,31 @@ func TestExportPDF(t *testing.T) {
 	t.Logf("rendered %d-byte PDF", len(pdf))
 }
 
+// A word in a script Noto Sans lacks is set in that script's fallback face,
+// not as tofu: typst sees only the bundled fonts, and an Armenian word in a
+// comment used to come out of the PDF as boxes.
+func TestExportPDFFallsBackPastNotoSans(t *testing.T) {
+	fonts, err := handout.BundledFonts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool, err := typstwasm.NewPool(context.Background(), fonts, filepath.Join(os.TempDir(), "xy-wazero-cache"), 1)
+	if err != nil {
+		t.Fatalf("typst pool: %v", err)
+	}
+	defer pool.Close()
+	src := "? Вопрос\n! Ответ\n/ «\u0585\u057f\u0561\u0580», «\u10e3\u10ea\u10ee\u10dd», «\u05d2\u05d5\u05d9», «\u5916\u56fd\u4eba»\n"
+	pdf, err := typstdoc.Export(context.Background(), parse(t, src), nil, pool, typstdoc.Options{})
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	for _, face := range []string{"NotoSansArmenian", "NotoSansGeorgian", "NotoSansHebrew", "NotoSansSC"} {
+		if !bytes.Contains(pdf, []byte(face)) {
+			t.Errorf("the PDF embeds no %s", face)
+		}
+	}
+}
+
 // testPNG is a 2×1 PNG (the smallest thing the image pipeline will accept).
 func testPNG(t *testing.T) []byte {
 	t.Helper()
