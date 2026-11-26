@@ -11,8 +11,8 @@ import (
 
 // A ЧГК's tours change on a Game under way: the answers keep their question
 // numbers and only the tour boundaries move. Tours that would drop a question
-// something is entered on are refused. The tours also load from the
-// tournament site and from another Game of the fest.
+// something is entered on are refused. The tours also load from the fest's
+// tournament on the tournament site.
 func TestAGamesToursChangeWithItsAnswersKept(t *testing.T) {
 	t.Parallel()
 	site := http.NewServeMux()
@@ -44,7 +44,6 @@ func TestAGamesToursChangeWithItsAnswersKept(t *testing.T) {
 		return game.ID
 	}
 	mines := create("mp", 3, 3)
-	other := create("od", 2, 5)
 	// Team 2 answers question 5 (index 4), which is tour 2's second.
 	if code, body := api(http.MethodPatch, fmt.Sprintf("/games/%d/state", mines), map[string]any{"ops": []map[string]any{
 		{"op": "set", "path": []any{"entries", 4, 1}, "value": 2},
@@ -92,24 +91,24 @@ func TestAGamesToursChangeWithItsAnswersKept(t *testing.T) {
 		t.Fatal("a tour of no questions was taken")
 	}
 
-	if code, body := retour(map[string]any{"tournament": 777}); code != http.StatusOK {
+	if code, _ := retour(map[string]any{"from_site": true}); code == http.StatusOK {
+		t.Fatal("a fest with no tournament loaded tours from the site")
+	}
+	if _, err := db.Exec(`update fests set rating_id = 777 where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := retour(map[string]any{"from_site": true}); code != http.StatusOK {
 		t.Fatalf("from the site: %d %s", code, body)
 	}
 	if tours, entries, _ = read(); !slices.Equal(tours, []int{4, 4}) || entries[4][1] != 2 {
 		t.Fatalf("from the site: tours %v, entries %v", tours, entries)
 	}
-	if code, body := retour(map[string]any{"game": other}); code != http.StatusOK {
-		t.Fatalf("from the other game: %d %s", code, body)
-	}
-	if tours, _, _ = read(); !slices.Equal(tours, []int{5, 5}) {
-		t.Fatalf("from the other game: tours %v", tours)
-	}
-	// The minefield scores its tours as they are now: tour 1 holds the answer.
+	// The minefield scores its tours as they are now: tour 2 holds the answer.
 	_, body := api(http.MethodGet, fmt.Sprintf("/games/%d/scheme", mines), nil)
 	var scheme struct {
 		TourComp []int `json:"tourComp"`
 	}
-	if json.Unmarshal([]byte(body), &scheme) != nil || !slices.Equal(scheme.TourComp, []int{5, 5}) {
+	if json.Unmarshal([]byte(body), &scheme) != nil || !slices.Equal(scheme.TourComp, []int{4, 4}) {
 		t.Fatalf("scheme: %s", body)
 	}
 }

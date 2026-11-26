@@ -58,16 +58,12 @@ od_questions_label = "Количество вопросов в туре"
 od_rating_label = "Или загрузить туры с турнирного сайта: ID турнира"
 error_rating_tours = 'Турнирный сайт не отдал туры турнира {{.id}}: {{.err}}'
 error_rating_no_tours = 'У турнира {{.id}} на турнирном сайте не указаны туры'
-# The settings page's tours field of a ЧГК or a minefield, its two loaders and
-# the loaders' errors.
+# The settings page's tours field of a ЧГК or a minefield, its save, the load
+# from the fest's tournament, and the field's error.
 tours_label = "Туры: сколько вопросов в каждом туре"
 tours_save = "Сохранить туры"
 tours_from_site = "Загрузить с турнирного сайта"
-tours_site_label = "ID турнира"
-tours_from_game = "Загрузить из другой игры"
-tours_game_label = "Игра"
 error_tours = 'Впишите, сколько вопросов в каждом туре, через пробел, например «15 15 15». Туров не больше {{.tours}}, вопросов в туре от 1 до {{.questions}}.'
-error_tours_game = "Выберите игру, из которой загрузить туры."
 # The minefield's fields: what a wrong answer costs and what taking a whole
 # tour adds. Also the field names their errors name.
 od_minus_wrong_label = "Штраф за неправильный ответ"

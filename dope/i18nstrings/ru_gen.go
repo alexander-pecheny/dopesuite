@@ -1161,7 +1161,6 @@ var RU = Strings{
 			ErrorTours: func(tours string, questions string) string {
 				return fmt.Sprintf("Впишите, сколько вопросов в каждом туре, через пробел, например «15 15 15». Туров не больше %s, вопросов в туре от 1 до %s.", tours, questions)
 			},
-			ErrorToursGame:   func() string { return "Выберите игру, из которой загрузить туры." },
 			ErrorTypeMissing: func() string { return "выберите тип игры" },
 			EsHint: func() string {
 				return "Тот же язык схем, что у ЭК. players — сколько игроков команда выводит на тему (по умолчанию 3, можно по раундам: players.r3: 2)."
@@ -1235,14 +1234,11 @@ var RU = Strings{
 			StickersHint: func() string {
 				return "Для каждого стикера задайте, сколько штук есть у команды (0 — стикер не используется) и цвет для подсветки. «Обычный» стикер работает как стандартная тема КСИ."
 			},
-			ThemesLabel:    func() string { return "Количество тем" },
-			TitleLabel:     func() string { return "Название" },
-			ToursFromGame:  func() string { return "Загрузить из другой игры" },
-			ToursFromSite:  func() string { return "Загрузить с турнирного сайта" },
-			ToursGameLabel: func() string { return "Игра" },
-			ToursLabel:     func() string { return "Туры: сколько вопросов в каждом туре" },
-			ToursSave:      func() string { return "Сохранить туры" },
-			ToursSiteLabel: func() string { return "ID турнира" },
+			ThemesLabel:   func() string { return "Количество тем" },
+			TitleLabel:    func() string { return "Название" },
+			ToursFromSite: func() string { return "Загрузить с турнирного сайта" },
+			ToursLabel:    func() string { return "Туры: сколько вопросов в каждом туре" },
+			ToursSave:     func() string { return "Сохранить туры" },
 			TroikaHint: func() string {
 				return "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. swap_outriders: true — порядок опроса меняется в середине боя: рассадку вводят один раз, а со второй половины тем (с 4-й из 6, с 5-й из 8) Пристяжной 1 и Пристяжной 2 меняются местами сами. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама загрузит тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
 			},
