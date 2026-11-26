@@ -691,6 +691,9 @@ export type Strings = {
       rangeDescending: (domain: string) => string;
       rangeTooWide: (domain: string, max: string) => string;
       repeatCount: (spec: string) => string;
+      reshapeDropsGame: (name: string) => string;
+      reshapeDropsTask: (name: string, n: string) => string;
+      reshapeOutOfDomain: (name: string, n: string, value: string) => string;
       specExpected: (spec: string) => string;
     };
     multiGuest: {
@@ -843,6 +846,7 @@ export type Strings = {
       errorRatingNoTours: (id: string) => string;
       errorRatingTours: (id: string, err: string) => string;
       errorSchemeNotEditable: (kind: string) => string;
+      errorShapeNotEditable: (kind: string) => string;
       errorSlugInvalid: (err: string) => string;
       errorSlugTaken: () => string;
       errorTitleRequired: () => string;
@@ -872,6 +876,7 @@ export type Strings = {
       saveSubmit: () => string;
       schemeLabel: () => string;
       schemePastedNote: () => string;
+      shapeSave: () => string;
       siHint: () => string;
       slugLabel: () => string;
       stickerEmptywrong: () => string;

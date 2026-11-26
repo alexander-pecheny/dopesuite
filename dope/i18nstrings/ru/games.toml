@@ -36,6 +36,14 @@ range_too_wide = '{{.domain}} — диапазон шире {{.max}} значе�
 # A domain list item that is not a number; domain is the braced spec, item
 # the Go-quoted token.
 not_a_number = '{{.domain}} — "{{.item}}" не число'
+# A new set of mini-games, on a Game under way, would drop a mini-game that
+# has results: it is gone, or renamed.
+reshape_drops_game = 'Мини-игра «{{.name}}» с результатами исчезает. Её результаты нужно сначала стереть.'
+# The new mini-game has fewer tasks than results entered in it; n is the
+# 1-based task that holds one.
+reshape_drops_task = 'В мини-игре «{{.name}}» есть результат в задании {{.n}}, а такого задания больше нет.'
+# A result entered in a task is not a value the task takes now.
+reshape_out_of_domain = 'В мини-игре «{{.name}}» в задании {{.n}} стоит {{.value}}, а теперь там нельзя столько.'
 # A sorting comparator naming no metric these mini-games measure; known is
 # the comma-joined list of countable names.
 metric_unknown = '{{.metric}} не считается — есть {{.known}}'

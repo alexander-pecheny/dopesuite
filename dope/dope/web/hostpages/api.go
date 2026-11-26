@@ -60,6 +60,7 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("GET "+game+"/settings", route.Manager, s.apiGameSettings)
 	t.Handle("PATCH "+game+"/settings", route.Manager, s.apiUpdateGame)
 	t.Handle("POST "+game+"/tours", route.Manager, s.apiGameTours)
+	t.Handle("POST "+game+"/shape", route.Manager, s.apiGameShape)
 	// A flat Game's entrants tab (game_teams.go).
 	t.Handle("GET "+game+"/teams", route.Editor, s.apiGameTeams)
 	t.Handle("PUT "+game+"/teams", route.Editor.Numbered(), s.apiSetGameTeamsMode)
@@ -446,6 +447,9 @@ type apiGameSettings struct {
 	// Tours is how many questions each tour has, for a format whose tours
 	// change after creation; POST …/tours changes them.
 	Tours []int `json:"tours,omitempty"`
+	// Shape is a Multi game's minigames and sorting, as the creation
+	// form takes them; POST …/shape changes them.
+	Shape *GameShape `json:"shape,omitempty"`
 }
 
 func (g apiGameSettings) settings() GameSettings {
@@ -478,6 +482,9 @@ from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`,
 		return g, err
 	} else if tours != nil {
 		g.Tours = tours.Tours
+	}
+	if g.Shape, err = loadGameShape(ctx, s.h.Engine().DB, festID, gameID); err != nil {
+		return g, err
 	}
 	g.Slug = slug.String
 	g.HiddenDivisions = store.ParseHiddenDivisions(hidden)

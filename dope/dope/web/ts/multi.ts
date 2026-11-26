@@ -133,7 +133,18 @@ function describeCellEdit(path: ReadonlyArray<string | number>): EditPlace | nul
   };
 }
 
+// The shape the page's scheme is for (games.MultiShapeKey): the host can write
+// the minigames again, and a state stamped with another shape means the
+// columns moved, so the page fetches the scheme with them.
+let shape = "";
+
+function shapeOf(raw: unknown): string {
+  const stamp = raw && typeof raw === "object" ? (raw as {shape?: unknown}).shape : undefined;
+  return typeof stamp === "string" ? stamp : "";
+}
+
 function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest}: GameDataSnapshot): void {
+  shape = shapeOf(nextState);
   scheme = nextScheme as MultiScheme;
   state = nextState as MultiState;
   fest = (nextFest as FestInfo | null) || null;
@@ -144,6 +155,10 @@ function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest
 }
 
 function applyRemoteState(next: unknown): void {
+  if (shapeOf(next) !== shape) {
+    void doc.refresh();
+    return;
+  }
   state = multi.parseState(next, rules, participants);
   render();
 }
@@ -186,7 +201,7 @@ function buildTable(): HTMLElement {
     const uniform = uniformNominal(game);
     game.columns.forEach((column, c) => {
       if (c > 0 && column.block !== game.columns[c - 1].block) valuesRow.appendChild(th("", "gap-head"));
-      valuesRow.appendChild(th(questionHead(column.label || c + 1, uniform ? null : maxOf(column.values)), "nominal"));
+      valuesRow.appendChild(th(questionHead(c + 1, column.label, uniform ? null : maxOf(column.values)), "nominal"));
     });
     valuesRow.appendChild(th("Σ", "theme-block-score"));
   });
@@ -280,8 +295,8 @@ function gameHead(game: MultiRules["minigames"][number], pins: Pins): CellConten
 
 // A head is the question's number, or the name the spec gave the task — with
 // its nominal above, muted, where the minigame pays unevenly (OD's qhead stack).
-function questionHead(num: number | string, nominal: number | null): CellContent {
-  const head = typeof num === "number" ? questionNumberNode(num) : document.createTextNode(num);
+function questionHead(num: number, label: string, nominal: number | null): CellContent {
+  const head = label ? document.createTextNode(label) : questionNumberNode(num);
   if (nominal === null) return head;
   const wrap = document.createElement("span");
   wrap.className = "od-detailed-qhead";

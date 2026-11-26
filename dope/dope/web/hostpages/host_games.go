@@ -79,6 +79,8 @@ type hostGameSettingsData struct {
 	// Tours is the tours block of a format whose tours change after
 	// creation, nil for any other.
 	Tours *gameTours
+	// Shape is a Multi game's minigames block; nil for other formats.
+	Shape *GameShape
 }
 
 type hostGameCreateData struct {
@@ -522,6 +524,9 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	if data.Tours != nil {
 		page = append(page, toursBlock("/host/fest/"+festRef+"/game/"+data.Game.Ref()+"/tours", *data.Tours)...)
 	}
+	if data.Shape != nil {
+		page = append(page, shapeBlock("/host/fest/"+festRef+"/game/"+data.Game.Ref()+"/shape", *data.Shape)...)
+	}
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
 
@@ -582,6 +587,10 @@ from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`,
 		if err != nil {
 			return nil, err
 		}
+		shape, err := s.settingsShape(r, festID, gameID, errMsg)
+		if err != nil {
+			return nil, err
+		}
 		editable := games.Get(gameType).DSL == games.DSLEditable
 		hasDSL := editable && strings.TrimSpace(schemeDSL) != ""
 		if submitted := strings.TrimSpace(r.Form.Get("scheme_dsl")); submitted != "" && errMsg != "" {
@@ -591,6 +600,7 @@ from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`,
 			Contested:  data.Contested,
 			VenueRooms: data.VenueRooms,
 			Tours:      tours,
+			Shape:      shape,
 			Fest:       fest,
 			Game: PublicFestGame{
 				ID:    gameID,

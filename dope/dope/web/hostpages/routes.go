@@ -143,6 +143,7 @@ func (s *Server) buildRoutes() *route.Table {
 	}))
 	t.Handle("POST "+game+"/settings", route.Manager, gamePage(s.handleHostUpdateGameSettings))
 	t.Handle("POST "+game+"/tours", route.Manager, gamePage(s.handleHostGameTours))
+	t.Handle("POST "+game+"/shape", route.Manager, gamePage(s.handleHostGameShape))
 	t.Handle("GET "+fest+"/numbers", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		// A venue numbers its teams on its own page.
 		if venue, _, err := s.pages().NumbersVenue(r, sc); err != nil {

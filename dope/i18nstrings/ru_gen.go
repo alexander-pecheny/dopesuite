@@ -942,6 +942,15 @@ var RU = Strings{
 			RepeatCount: func(spec string) string {
 				return fmt.Sprintf("\"%s\" — повтор xN считается от 1", spec)
 			},
+			ReshapeDropsGame: func(name string) string {
+				return fmt.Sprintf("Мини-игра «%s» с результатами исчезает. Её результаты нужно сначала стереть.", name)
+			},
+			ReshapeDropsTask: func(name string, n string) string {
+				return fmt.Sprintf("В мини-игре «%s» есть результат в задании %s, а такого задания больше нет.", name, n)
+			},
+			ReshapeOutOfDomain: func(name string, n string, value string) string {
+				return fmt.Sprintf("В мини-игре «%s» в задании %s стоит %s, а теперь там нельзя столько.", name, n, value)
+			},
 			SpecExpected: func(spec string) string {
 				return fmt.Sprintf("\"%s\" — жду {значения} или {a-b}, можно с xN", spec)
 			},
@@ -1158,9 +1167,10 @@ var RU = Strings{
 			ErrorSchemeNotEditable: func(kind string) string {
 				return fmt.Sprintf("Схему игры типа %s здесь поменять нельзя. Удалите игру и создайте её заново.", kind)
 			},
-			ErrorSlugInvalid:   func(err string) string { return fmt.Sprintf("Slug: %s", err) },
-			ErrorSlugTaken:     func() string { return "Slug уже занят в этом фесте." },
-			ErrorTitleRequired: func() string { return "Название обязательно." },
+			ErrorShapeNotEditable: func(kind string) string { return fmt.Sprintf("У игры типа %s нет мини-игр.", kind) },
+			ErrorSlugInvalid:      func(err string) string { return fmt.Sprintf("Slug: %s", err) },
+			ErrorSlugTaken:        func() string { return "Slug уже занят в этом фесте." },
+			ErrorTitleRequired:    func() string { return "Название обязательно." },
 			ErrorTours: func(tours string, questions string) string {
 				return fmt.Sprintf("Впишите, сколько вопросов в каждом туре, через пробел, например «15 15 15». Туров не больше %s, вопросов в туре от 1 до %s.", tours, questions)
 			},
@@ -1219,6 +1229,7 @@ var RU = Strings{
 			SchemePastedNote: func() string {
 				return "Эта игра создана из вставленного JSON, у неё нет схемы. Её сетку здесь поменять нельзя."
 			},
+			ShapeSave: func() string { return "Сохранить мини-игры" },
 			SiHint: func() string {
 				return "Тот же язык схем: за столом сидят игроки, а не команды. Бой на троих — match_size: 3, проходят двое — winning_places: 2."
 			},

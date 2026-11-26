@@ -274,6 +274,34 @@ func retourTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, tours *[]in
 	return stateJSON, nil
 }
 
+// SetShapeTx gives the Game a new shape (games.Reshaper): a Multi game's
+// minigames and sorting, written as the creation form takes them. The
+// document keeps every value entered, or the write is refused.
+func SetShapeTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, spec, sorting string) (core.FestWrite, error) {
+	doc, err := store.LoadGameDoc(ctx, tx, festID, gameID)
+	if err != nil {
+		return core.FestWrite{}, err
+	}
+	reshaper, ok := games.As[games.Reshaper](doc.GameType)
+	if !ok {
+		return core.FestWrite{}, corei18n.User(dopestrings.Default.Host.Games.ErrorShapeNotEditable(games.Label(doc.GameType)))
+	}
+	schemeJSON, stateJSON, err := reshaper.Reshape(doc.SchemeJSON, doc.State, spec, sorting)
+	if err != nil {
+		return core.FestWrite{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `update games set scheme_json = ?, updated_at = ? where id = ? and fest_id = ?`,
+		string(schemeJSON), util.UtcNow(), gameID, festID); err != nil {
+		return core.FestWrite{}, err
+	}
+	if err := flatgame.SetStateTx(ctx, tx, festID, gameID, string(stateJSON)); err != nil {
+		return core.FestWrite{}, err
+	}
+	written := core.FestWrite{Event: "game:settings", Payload: map[string]any{"gameID": gameID}}
+	written.Broadcast.States = []core.GameState{{GameID: gameID, StateJSON: stateJSON}}
+	return written, nil
+}
+
 // loadStoredSettingsTx reads what a save compares with. A Game that is not in
 // the fest is sql.ErrNoRows, which both the form and the JSON twin answer with
 // a 404.
