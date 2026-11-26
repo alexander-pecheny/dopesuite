@@ -1,9 +1,7 @@
 # Интеллектуальный воронёнок 2026, медиа-игры: one Мультиигры game.
 # «Мини-игры»:
-Морской бой →0..100: {0-30}
-Катакана →0..100: {0-100}
-Медиа-Эрудит (вне итога): {0-1000}
-# «Сортировка»: total, game3
-# Морской бой: 20 cells of ships and a point for each of the 10 ships.
-# Катакана pays a point a slide; 100 stands in until its slide count is known.
-# Медиа-Эрудит is typed in from that game's results, to break a tie alone.
+Морской бой →0..100: Ячейки{0-20} Корабли{0-10}
+Катакана →0..100: {0-3}x20
+# «Сортировка»: total
+# Морской бой: a point for each of the 20 cells of ships, and one for each of the 10 ships.
+# Катакана: up to 3 points for each of its 20 matrices.

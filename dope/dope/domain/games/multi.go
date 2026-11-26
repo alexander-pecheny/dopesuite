@@ -25,11 +25,14 @@ import (
 // and it is the cell editor — a domain of two or three values is a cell you
 // click through, a wider one is a cell you type into.
 
-// MultiColumn is one task: the values its cell may hold, ascending, and the
-// block of the sheet it stands in — «|» in the spec closes one.
+// MultiColumn is one task: the values its cell may hold, ascending, the
+// block of the sheet it stands in — «|» in the spec closes one — and, when the
+// spec names it (`Ships{0-10}`), the label its head shows instead of its
+// number: a minigame of two counts, ships and cells, reads better by name.
 type MultiColumn struct {
-	Values []int `json:"values"`
-	Block  int   `json:"block,omitempty"`
+	Values []int  `json:"values"`
+	Block  int    `json:"block,omitempty"`
+	Label  string `json:"label,omitempty"`
 }
 
 // Max is the most a task can pay — what the sheet prints as its nominal value.
@@ -67,7 +70,7 @@ type MultiGame struct {
 	// Tiebreak: the minigame breaks ties and nothing more — its points stay
 	// out of the total, Σ+ and the sum of places, and a scheme ranks on it as
 	// gameN. Its name says so, «(вне итога)», and keeps saying it on the
-	// sheet. The Воронёнок's media games break a tie on the Медиа-Эрудит.
+	// sheet.
 	Tiebreak bool `json:"tiebreak,omitempty"`
 }
 
@@ -82,7 +85,7 @@ const MultiNormalMax = 100.0
 // than a sheet nobody can draw.
 const multiRangeSpan = 1000
 
-var multiSpecRe = regexp.MustCompile(`^\{([^}]*)\}(?:[xх]([0-9]+))?$`)
+var multiSpecRe = regexp.MustCompile(`^([^{}]*)\{([^}]*)\}(?:[xх]([0-9]+))?$`)
 
 // The arrow may be typed either way — «→0..100» reads best, «->0..100» is what
 // a keyboard offers.
@@ -149,19 +152,24 @@ func parseMultiSpec(spec string) ([]MultiColumn, error) {
 	if parts == nil {
 		return nil, corei18n.User(dopestrings.Default.Games.Multi.SpecExpected(spec))
 	}
-	values, err := parseMultiDomain(parts[1])
+	label := parts[1]
+	values, err := parseMultiDomain(parts[2])
 	if err != nil {
 		return nil, err
 	}
 	count := 1
-	if parts[2] != "" {
-		if count, err = strconv.Atoi(parts[2]); err != nil || count < 1 {
+	if parts[3] != "" {
+		if count, err = strconv.Atoi(parts[3]); err != nil || count < 1 {
 			return nil, corei18n.User(dopestrings.Default.Games.Multi.RepeatCount(spec))
+		}
+		// A label names one task; repeated, it would name several alike.
+		if label != "" {
+			return nil, corei18n.User(dopestrings.Default.Games.Multi.LabelRepeated(spec))
 		}
 	}
 	columns := make([]MultiColumn, count)
 	for i := range columns {
-		columns[i] = MultiColumn{Values: values}
+		columns[i] = MultiColumn{Values: values, Label: label}
 	}
 	return columns, nil
 }

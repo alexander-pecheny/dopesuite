@@ -18,6 +18,12 @@ test("rulesOf reads the мини-игры and notices a minus", () => {
   assert.deepEqual(multi.rulesOf({minigames: [scheme.minigames[0]]}).signed, false);
 });
 
+test("rulesOf keeps a task's label and leaves the unnamed ones blank", () => {
+  const rules = multi.rulesOf({minigames: [{name: "Морской бой",
+    columns: [{values: [0, 20], label: "Ячейки"}, {values: [0, 10]}, {values: [0, 1], label: 7}]}]});
+  assert.deepEqual(rules.minigames[0].columns.map((column) => column.label), ["Ячейки", "", ""]);
+});
+
 test("parseState pads every grid to the scheme's width", () => {
   const rules = multi.rulesOf(scheme);
   const state = multi.parseState({participants: [{number: 1, name: "А"}], games: [{cells: [[1]]}]}, rules, []);

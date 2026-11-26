@@ -24,6 +24,9 @@ no_games = "ни одной мини-игры"
 spec_expected = '"{{.spec}}" — жду {значения} или {a-b}, можно с xN'
 # An xN repeat smaller than one; spec is the Go-quoted spec token.
 repeat_count = '"{{.spec}}" — повтор xN считается от 1'
+# A named task spec (`Корабли{0-10}`) with an xN repeat; spec is the
+# Go-quoted spec token.
+label_repeated = '"{{.spec}}" — название даётся одному заданию, без xN'
 # A domain with nothing between the braces.
 domain_empty = "пустой домен {}"
 # A range domain written high-to-low; domain is the braced spec as written.

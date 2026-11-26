@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -74,6 +75,8 @@ func TestParseMultiGamesRefusesNonsense(t *testing.T) {
 		"Фоторяд: {0,x}",
 		"Фоторяд:",
 		"{0,1}x10",
+		"Фоторяд: Кадр{0,1}x3",
+		"Фоторяд: Кадр {0,1}",
 	} {
 		if _, err := ParseMultiGames(src); err == nil {
 			t.Errorf("ParseMultiGames(%q) = nil error, want a complaint", src)
@@ -315,10 +318,33 @@ func TestVoronenokMediaGamesParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(minigames) != 3 || !minigames[0].Normalized || !minigames[1].Normalized || !minigames[2].Tiebreak {
+	if len(minigames) != 2 || !minigames[0].Normalized || !minigames[1].Normalized {
 		t.Fatalf("minigames = %+v", minigames)
 	}
-	if _, err := ParseMultiSorting(minigames, "total, game3"); err != nil {
+	ships := minigames[0].Columns
+	if len(ships) != 2 || ships[0].Label != "Ячейки" || ships[0].Max() != 20 || ships[1].Label != "Корабли" || ships[1].Max() != 10 {
+		t.Fatalf("Морской бой = %+v", ships)
+	}
+	if katakana := minigames[1].Columns; len(katakana) != 20 || katakana[0].Max() != 3 || katakana[0].Label != "" {
+		t.Fatalf("Катакана = %+v", katakana)
+	}
+	if _, err := ParseMultiSorting(minigames, "total"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A spec may name its task, and the head shows the name instead of the number;
+// the name sticks to the braces and stays off the unnamed tasks beside it.
+func TestParseMultiGamesReadsColumnLabels(t *testing.T) {
+	minigames, err := ParseMultiGames("Морской бой: Ячейки{0-20} {0,1} Корабли{0-10}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var labels []string
+	for _, column := range minigames[0].Columns {
+		labels = append(labels, column.Label)
+	}
+	if want := []string{"Ячейки", "", "Корабли"}; !slices.Equal(labels, want) {
+		t.Fatalf("labels = %q, want %q", labels, want)
 	}
 }

@@ -12,6 +12,9 @@ export const CYCLE_LIMIT = 3;
 export interface MultiColumn {
   block: number;
   values: number[];
+  // The name the spec gave the task (games.MultiColumn.Label), which its head
+  // shows instead of its number; "" for a numbered task.
+  label: string;
 }
 
 export interface MultiMinigame {
@@ -32,7 +35,7 @@ export const NORMAL_MAX = 100;
 export interface MultiScheme {
   gameType?: string;
   title?: string;
-  minigames?: Array<{name?: unknown; normalized?: unknown; tiebreak?: unknown; columns?: Array<{values?: unknown; block?: unknown} | null> | null} | null>;
+  minigames?: Array<{name?: unknown; normalized?: unknown; tiebreak?: unknown; columns?: Array<{values?: unknown; block?: unknown; label?: unknown} | null> | null} | null>;
   sorting?: unknown;
   participants?: string[];
   [key: string]: unknown;
@@ -67,7 +70,8 @@ export function rulesOf(scheme: MultiScheme): MultiRules {
         ? (column!.values as unknown[]).filter((v): v is number => typeof v === "number" && Number.isFinite(v))
         : [];
       const block = typeof column?.block === "number" && column.block > 0 ? Math.floor(column.block) : 0;
-      columns.push({values: values.length ? values : [0], block});
+      const label = typeof column?.label === "string" ? column.label : "";
+      columns.push({values: values.length ? values : [0], block, label});
     }
     minigames.push({
       name: typeof raw.name === "string" ? raw.name : "",

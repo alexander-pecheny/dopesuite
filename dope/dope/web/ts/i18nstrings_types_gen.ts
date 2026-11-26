@@ -681,6 +681,7 @@ export type Strings = {
       barNoTasksBefore: (n: string, name: string) => string;
       domainEmpty: () => string;
       label: () => string;
+      labelRepeated: (spec: string) => string;
       lineExpected: (n: string) => string;
       linePrefix: (n: string, name: string, msg: string) => string;
       metricUnknown: (metric: string, known: string) => string;

@@ -186,7 +186,7 @@ function buildTable(): HTMLElement {
     const uniform = uniformNominal(game);
     game.columns.forEach((column, c) => {
       if (c > 0 && column.block !== game.columns[c - 1].block) valuesRow.appendChild(th("", "gap-head"));
-      valuesRow.appendChild(th(questionHead(c + 1, uniform ? null : maxOf(column.values)), "nominal"));
+      valuesRow.appendChild(th(questionHead(column.label || c + 1, uniform ? null : maxOf(column.values)), "nominal"));
     });
     valuesRow.appendChild(th("Σ", "theme-block-score"));
   });
@@ -278,16 +278,17 @@ function gameHead(game: MultiRules["minigames"][number], pins: Pins): CellConten
   return pins.markTrailing(span);
 }
 
-// A head is the question's number — with its nominal above, muted, where the
-// minigame pays unevenly (OD's qhead stack).
-function questionHead(num: number, nominal: number | null): CellContent {
-  if (nominal === null) return questionNumberNode(num);
+// A head is the question's number, or the name the spec gave the task — with
+// its nominal above, muted, where the minigame pays unevenly (OD's qhead stack).
+function questionHead(num: number | string, nominal: number | null): CellContent {
+  const head = typeof num === "number" ? questionNumberNode(num) : document.createTextNode(num);
+  if (nominal === null) return head;
   const wrap = document.createElement("span");
   wrap.className = "od-detailed-qhead";
   const price = document.createElement("span");
   price.className = "od-detailed-qcount";
   price.textContent = String(nominal);
-  wrap.append(price, questionNumberNode(num));
+  wrap.append(price, head);
   return wrap;
 }
 

@@ -761,7 +761,8 @@ func buildMultiDetailedSheet(f *excelize.File, scheme *games.MultiScheme, state 
 	_ = f.MergeCell(sheet, "B1", "B2")
 
 	// Two header rows, as KSI's: the minigame merged across its block, and
-	// beneath it each column's maximum — the top of its declared domain.
+	// beneath it each column's maximum — the top of its declared domain — or
+	// the name the spec gave the task, as the sheet's head shows it.
 	col := firstBlockCol
 	for _, game := range scheme.Minigames {
 		left, _ := excelize.CoordinatesToCellName(col, 1)
@@ -770,6 +771,10 @@ func buildMultiDetailedSheet(f *excelize.File, scheme *games.MultiScheme, state 
 		_ = f.MergeCell(sheet, left, right)
 		sub := make([]interface{}, 0, len(game.Columns)+1)
 		for _, column := range game.Columns {
+			if column.Label != "" {
+				sub = append(sub, column.Label)
+				continue
+			}
 			sub = append(sub, column.Max())
 		}
 		sub = append(sub, "Σ")
