@@ -267,25 +267,29 @@ export type Strings = {
       run: () => string;
     };
     own: {
-      addNone: () => string;
-      addPick: () => string;
-      addSubmit: () => string;
+      city: () => string;
+      clear: () => string;
+      clearConfirm: () => string;
       empty: () => string;
       entered: (name: string) => string;
       enteredNote: () => string;
+      flags: () => string;
       follow: () => string;
       followConfirm: () => string;
-      followHint: () => string;
       follows: () => string;
       name: () => string;
-      noTeam: () => string;
+      nameMissing: (row: string) => string;
+      newTeam: () => string;
       notFlat: () => string;
       number: () => string;
+      numberMissing: (name: string) => string;
+      numberTaken: (number: string, first: string, second: string) => string;
       own: () => string;
-      ownHint: () => string;
+      players: () => string;
       remove: () => string;
-      removeConfirm: (name: string) => string;
       summary: (n: number) => string;
+      xlsxImport: () => string;
+      xlsxSample: () => string;
     };
     row: {
       declinedLabel: (name: string) => string;

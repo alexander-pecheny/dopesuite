@@ -123,30 +123,35 @@ rename_fest = "Переименовать здесь можно только р�
 
 [own]
 # A flat Game's Участники tab (ЧГК, минное поле, КСИ, Мультиигры): who plays
-# it, the fest's whole team list or a list of the Game's own
+# it, the fest's teams or the Game's separate list
 # (dope/dope/domain/roster/gameteams.go, web/ts/game-teams.ts).
 follow = "Как на турнирном сайте"
-follow_hint = "В игре все команды феста. Список обновляется вместе с импортом с турнирного сайта и правками на странице «Команды»."
-own = "Свой список"
-own_hint = "Список игры больше не меняется сам: новые команды феста в него не попадают, убранные здесь остаются в фесте. Названия, составы и зачёты команды берут из феста."
-# Confirm before going back to the fest's list.
-follow_confirm = "Вернуть в игру все команды феста? Свой список игры пропадёт."
-# The table's columns and a row's action.
+own = "Отдельный список"
+# Confirm going back to the fest's teams once the Game has results.
+follow_confirm = "В игре уже есть результаты. Вернуться к командам с турнирного сайта? Результаты команд, которых там нет, пропадут."
+# The separate list's buttons.
+clear = "Очистить"
+clear_confirm = "Убрать из списка все команды?"
+xlsx_import = "Загрузить из xlsx"
+xlsx_sample = "Скачать образец xlsx"
+# The table's columns.
 number = "№"
 name = "Команда"
-remove = "Убрать из игры"
-remove_confirm = 'Убрать «{{.name}}» из этой игры? В фесте команда останется.'
-# A team the Game holds answers for cannot leave it; the row says why.
+city = "Город"
+flags = "Зачёты"
+players = "Игроки"
+# A row's action, and why a team the Game holds answers for keeps its row.
+remove = "Убрать из списка"
 entered_note = "В игре уже есть её ответы"
-# The add row: a fest team that is not on the list.
-add_pick = "Команда феста"
-add_submit = "Добавить"
-add_none = "Все команды феста уже в игре."
+# The empty row under the list that adds a team.
+new_team = "Новая команда"
 # The summary line over the table.
 summary = '{{.n}} {{plural .n "команда" "команды" "команд"}} в игре'
 empty = "В игре пока нет команд."
 # The refusals.
 not_flat = "У этой игры свой список участников: его правят на вкладке «Участники» игры."
-no_team = "Такой команды в фесте нет."
-follows = "Сначала выберите «Свой список»: пока игра идёт по списку феста, её команды меняются на странице «Команды»."
+follows = "Сначала выберите «Отдельный список»."
 entered = '«{{.name}}» нельзя убрать: в игре уже есть её ответы. Сначала очистите их.'
+name_missing = 'Впишите название команды в строке {{.row}}.'
+number_missing = 'Впишите номер команды «{{.name}}».'
+number_taken = 'Номер {{.number}} у двух команд: «{{.first}}» и «{{.second}}».'

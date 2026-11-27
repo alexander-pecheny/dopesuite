@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"io"
+	"strconv"
 	"strings"
 
 	"dope/dope/domain/roster"
@@ -49,7 +50,12 @@ func BuildRosterXLSX(ctx context.Context, q store.Queryer, festID int64) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	teams := roster.SortedFestRosterImportTeams(activeRoster(state))
+	return RosterSheetXLSX(roster.SortedFestRosterImportTeams(activeRoster(state)))
+}
+
+// RosterSheetXLSX is teams as a roster workbook, in the order given: the fest
+// roster's layout, which a flat Game's separate list reads and writes too.
+func RosterSheetXLSX(teams []roster.FestRosterImportTeam) ([]byte, error) {
 	book := excelize.NewFile()
 	defer book.Close()
 	if err := writeRosterSheet(book, teams); err != nil {
@@ -114,6 +120,9 @@ func optionalInt(v int64) any {
 
 // SheetTeam is one team as a roster sheet gives it.
 type SheetTeam struct {
+	// Number is the sheet's number for the team, 0 when it gives none. The
+	// fest roster keeps its own numbers; a Game's separate list takes these.
+	Number   int64
 	RatingID int64
 	Name     string
 	City     string
@@ -185,7 +194,8 @@ func ParseRosterXLSX(r io.Reader) ([]SheetTeam, error) {
 		}
 		at, seen := index[key]
 		if !seen {
-			team := SheetTeam{RatingID: ratingID, Name: name, City: city}
+			number, _ := strconv.Atoi(get(row, colNumber))
+			team := SheetTeam{Number: int64(number), RatingID: ratingID, Name: name, City: city}
 			if hasFlags {
 				flags := get(row, colFlags)
 				team.Flags = &flags
@@ -278,11 +288,7 @@ func setSheetFlagsTx(ctx context.Context, tx *sql.Tx, festID, teamID int64, type
 	if typed == nil {
 		return nil
 	}
-	var flags []roster.FestRosterFlag
-	for _, part := range strings.Split(*typed, ",") {
-		flags = append(flags, roster.FestRosterFlag{Short: part, Full: part})
-	}
-	flags = roster.NormalizeFlags(flags)
+	flags := roster.ParseFlags(*typed)
 	if strings.Join(roster.FlagShortNames(now[teamID]), ",") == strings.Join(roster.FlagShortNames(flags), ",") {
 		return nil
 	}

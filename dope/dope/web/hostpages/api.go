@@ -64,8 +64,9 @@ func (s *Server) APIRoutes(t *route.Table) {
 	// A flat Game's entrants tab (game_teams.go).
 	t.Handle("GET "+game+"/teams", route.Editor, s.apiGameTeams)
 	t.Handle("PUT "+game+"/teams", route.Editor.Numbered(), s.apiSetGameTeamsMode)
-	t.Handle("POST "+game+"/teams", route.Editor.Numbered(), s.apiAddGameTeam)
-	t.Handle("DELETE "+game+"/teams/{team}", route.Editor.Numbered(), s.apiRemoveGameTeam)
+	t.Handle("PUT "+game+"/teams/list", route.Editor.Numbered(), s.apiSaveGameTeams)
+	t.Handle("POST "+game+"/teams/xlsx", route.Editor.Numbered(), s.apiImportGameTeamsXLSX)
+	t.Handle("GET "+game+"/teams/sample.xlsx", route.Editor, s.apiGameTeamsSheet)
 	t.Handle("DELETE "+game, route.Manager, s.apiDeleteGame)
 	t.Handle("POST "+game+"/clear", route.Manager, s.apiClearGame)
 	t.Handle("GET "+game+"/journal", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {

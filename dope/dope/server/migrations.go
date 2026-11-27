@@ -1276,6 +1276,16 @@ create table game_teams (
 `)
 		return err
 	}},
+	// A flat Game's separate list is the Game's own teams, not a pick of the
+	// fest's: own_roster holds them as JSON (roster.OwnTeam), and game_teams,
+	// which no Game had used, goes.
+	{Version: 65, Name: "a flat game's separate team list", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+alter table games add column own_roster text not null default '';
+drop table game_teams;
+`)
+		return err
+	}},
 }
 
 // overridesToHandRosters keeps every Game's teams playing with whom they play

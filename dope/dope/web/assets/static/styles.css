@@ -1217,6 +1217,50 @@ button.seat-picker-control {
   font-variant-numeric: tabular-nums;
 }
 
+/* A flat game's Участники tab: the separate list's columns, each a field
+   (game-teams.ts), and the same columns read-only while the game plays the
+   fest's teams. Their heads sit over the fields' text. */
+.game-teams-table {
+  --game-teams-name-col: 260px;
+  --game-teams-city-col: 160px;
+  --game-teams-flags-col: 120px;
+  --game-teams-players-col: 360px;
+  /* How far a field's text sits in from its cell: .venue-input's padding
+     and border. */
+  --game-teams-field-inset: 7px;
+}
+
+.game-teams-table thead th:is(.game-teams-name, .game-teams-city, .game-teams-flags, .game-teams-players) {
+  text-indent: var(--game-teams-field-inset);
+}
+
+.game-teams-table .game-teams-name,
+.game-teams-table .game-teams-city,
+.game-teams-table .game-teams-flags,
+.game-teams-table .game-teams-players {
+  text-align: left;
+}
+
+.game-teams-table .game-teams-name {
+  width: var(--game-teams-name-col);
+  min-width: var(--game-teams-name-col);
+}
+
+.game-teams-table .game-teams-city {
+  width: var(--game-teams-city-col);
+  min-width: var(--game-teams-city-col);
+}
+
+.game-teams-table .game-teams-flags {
+  width: var(--game-teams-flags-col);
+  min-width: var(--game-teams-flags-col);
+}
+
+.game-teams-table .game-teams-players {
+  width: var(--game-teams-players-col);
+  min-width: var(--game-teams-players-col);
+}
+
 .seed-import-table .seed-declined-head,
 .seed-import-table .seed-declined-cell {
   width: 120px;

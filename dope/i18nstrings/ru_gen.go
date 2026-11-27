@@ -342,41 +342,41 @@ var RU = Strings{
 			Run:       func() string { return "Загрузить список" },
 		},
 		Own: EntrantsOwnStrings{
-			AddNone:   func() string { return "Все команды феста уже в игре." },
-			AddPick:   func() string { return "Команда феста" },
-			AddSubmit: func() string { return "Добавить" },
-			Empty:     func() string { return "В игре пока нет команд." },
+			City:         func() string { return "Город" },
+			Clear:        func() string { return "Очистить" },
+			ClearConfirm: func() string { return "Убрать из списка все команды?" },
+			Empty:        func() string { return "В игре пока нет команд." },
 			Entered: func(name string) string {
 				return fmt.Sprintf("«%s» нельзя убрать: в игре уже есть её ответы. Сначала очистите их.", name)
 			},
 			EnteredNote: func() string { return "В игре уже есть её ответы" },
+			Flags:       func() string { return "Зачёты" },
 			Follow:      func() string { return "Как на турнирном сайте" },
 			FollowConfirm: func() string {
-				return "Вернуть в игру все команды феста? Свой список игры пропадёт."
+				return "В игре уже есть результаты. Вернуться к командам с турнирного сайта? Результаты команд, которых там нет, пропадут."
 			},
-			FollowHint: func() string {
-				return "В игре все команды феста. Список обновляется вместе с импортом с турнирного сайта и правками на странице «Команды»."
+			Follows: func() string { return "Сначала выберите «Отдельный список»." },
+			Name:    func() string { return "Команда" },
+			NameMissing: func(row string) string {
+				return fmt.Sprintf("Впишите название команды в строке %s.", row)
 			},
-			Follows: func() string {
-				return "Сначала выберите «Свой список»: пока игра идёт по списку феста, её команды меняются на странице «Команды»."
-			},
-			Name:   func() string { return "Команда" },
-			NoTeam: func() string { return "Такой команды в фесте нет." },
+			NewTeam: func() string { return "Новая команда" },
 			NotFlat: func() string {
 				return "У этой игры свой список участников: его правят на вкладке «Участники» игры."
 			},
-			Number: func() string { return "№" },
-			Own:    func() string { return "Свой список" },
-			OwnHint: func() string {
-				return "Список игры больше не меняется сам: новые команды феста в него не попадают, убранные здесь остаются в фесте. Названия, составы и зачёты команды берут из феста."
+			Number:        func() string { return "№" },
+			NumberMissing: func(name string) string { return fmt.Sprintf("Впишите номер команды «%s».", name) },
+			NumberTaken: func(number string, first string, second string) string {
+				return fmt.Sprintf("Номер %s у двух команд: «%s» и «%s».", number, first, second)
 			},
-			Remove: func() string { return "Убрать из игры" },
-			RemoveConfirm: func(name string) string {
-				return fmt.Sprintf("Убрать «%s» из этой игры? В фесте команда останется.", name)
-			},
+			Own:     func() string { return "Отдельный список" },
+			Players: func() string { return "Игроки" },
+			Remove:  func() string { return "Убрать из списка" },
 			Summary: func(n int) string {
 				return fmt.Sprintf("%d %s в игре", n, core.Plural("ru", n, "команда", "команды", "команд"))
 			},
+			XlsxImport: func() string { return "Загрузить из xlsx" },
+			XlsxSample: func() string { return "Скачать образец xlsx" },
 		},
 		Row: EntrantsRowStrings{
 			DeclinedLabel: func(name string) string { return fmt.Sprintf("Отказ: %s", name) },

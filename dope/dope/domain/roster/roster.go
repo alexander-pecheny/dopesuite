@@ -61,6 +61,15 @@ type FestRosterFlag struct {
 	Full     string
 }
 
+// ParseFlags reads Flags as a host types them, apart by commas.
+func ParseFlags(typed string) []FestRosterFlag {
+	var flags []FestRosterFlag
+	for _, part := range strings.Split(typed, ",") {
+		flags = append(flags, FestRosterFlag{Short: part, Full: part})
+	}
+	return NormalizeFlags(flags)
+}
+
 // FlagShortNames is a team's Flags as the documents and the pages carry them:
 // the short names alone, in position order.
 func FlagShortNames(flags []FestRosterFlag) []string {
@@ -124,27 +133,19 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 		return nil, err
 	}
 	var updates []GameStateBroadcast
-	// A Game with a list of its own seats who is on it, as the roster stands
-	// now: the teams an import brings may not have their rows yet.
-	var stored []FestRosterImportTeam
 	for _, doc := range docs {
 		if _, ok := games.As[games.RosterFolder](doc.GameType); !ok {
 			continue
 		}
-		members, err := ownTeamsTx(ctx, tx, doc.GameID)
+		// A Game that plays its separate list does not follow the fest.
+		list, err := loadOwnList(ctx, tx, doc.GameID)
 		if err != nil {
 			return nil, err
 		}
-		seated := teams
-		if members != nil {
-			if stored == nil {
-				if stored, err = LoadFestRosterImportTeamsTx(ctx, tx, festID); err != nil {
-					return nil, err
-				}
-			}
-			seated = onList(stored, members)
+		if list.own {
+			continue
 		}
-		update, err := foldGameTx(ctx, tx, festID, doc, RosterTeams(OnVenue(seated, placement, doc.MultiFestVenueID)), remap)
+		update, err := foldGameTx(ctx, tx, festID, doc, RosterTeams(OnVenue(teams, placement, doc.MultiFestVenueID)), remap)
 		if err != nil {
 			return nil, err
 		}

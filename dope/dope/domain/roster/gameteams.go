@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/multifest"
@@ -16,78 +18,85 @@ import (
 // A flat Game's teams (OD, the minefield, KSI, Multi): by default the
 // fest's whole roster, its venue's part for a Game on one, kept in step with
 // every rating import and every hand edit on the fest teams page
-// (PropagateRosterTx). The host may give the Game a list of its own on its
-// entrants tab: the roster as it stands at that moment, which from then on
-// changes only there. The teams on it still take their names, cities,
-// players and Flags from the fest roster; who plays is the Game's own.
+// (PropagateRosterTx). The host may switch the Game to a separate list on its
+// entrants tab. The list starts as a copy of the teams the Game seats at that
+// moment and from then on is the Game's alone: its names, cities, numbers,
+// Divisions and people change only there, by hand or from a roster sheet.
+// The Game keeps the list when it goes back to the fest's teams, so the host
+// may switch back and forth.
 
-// GameTeam is a team on a flat Game's entrants tab, or one it may add.
-// Entered says the Game holds something a host entered for it.
-type GameTeam struct {
-	ID      int64  `json:"id"`
-	Number  int64  `json:"number,omitempty"`
-	Name    string `json:"name"`
-	City    string `json:"city,omitempty"`
-	Entered bool   `json:"entered,omitempty"`
+// OwnTeam is a team on a flat Game's separate list. On a save, Prev is the
+// number the row had before, which carries the team's answers to its new
+// one; Entered says the Game holds something a host entered for the team.
+// Neither is stored.
+type OwnTeam struct {
+	Number   int64       `json:"number"`
+	Name     string      `json:"name"`
+	City     string      `json:"city,omitempty"`
+	RatingID int64       `json:"ratingID,omitempty"`
+	Flags    []string    `json:"flags,omitempty"`
+	Players  []OwnPlayer `json:"players,omitempty"`
+	Prev     int64       `json:"prev,omitempty"`
+	Entered  bool        `json:"entered,omitempty"`
 }
 
-// GameTeamsView is a flat Game's entrants tab: whether it keeps a list of
-// its own, who plays it, and, with a list of its own, the fest's teams that
-// are not on it.
+// OwnPlayer is one person on a separate list's team.
+type OwnPlayer struct {
+	Name     string `json:"name"`
+	RatingID int64  `json:"ratingID,omitempty"`
+}
+
+// GameTeamsView is a flat Game's entrants tab: whether it plays its separate
+// list, and the teams it seats (the list, or the fest's teams).
 type GameTeamsView struct {
-	Own        bool       `json:"own"`
-	Teams      []GameTeam `json:"teams"`
-	Candidates []GameTeam `json:"candidates"`
+	Own   bool      `json:"own"`
+	Teams []OwnTeam `json:"teams"`
 }
 
-// ownTeamsTx is the Game's own list by fest team id, nil for a Game that
-// seats the fest's roster, and for one not made yet (gameID 0).
-func ownTeamsTx(ctx context.Context, q store.Queryer, gameID int64) (map[int64]bool, error) {
+// ownList is a Game's separate list as stored, and whether the Game plays it.
+type ownList struct {
+	own   bool
+	teams []OwnTeam
+}
+
+// loadOwnList reads the Game's separate list; none for a Game not made yet
+// (gameID 0).
+func loadOwnList(ctx context.Context, q store.Queryer, gameID int64) (ownList, error) {
 	if gameID == 0 {
-		return nil, nil
+		return ownList{}, nil
 	}
-	var own bool
-	if err := q.QueryRowContext(ctx, `select own_teams from games where id = ?`, gameID).Scan(&own); err != nil || !own {
-		return nil, err
+	var list ownList
+	var raw string
+	if err := q.QueryRowContext(ctx, `select own_teams, own_roster from games where id = ?`, gameID).Scan(&list.own, &raw); err != nil {
+		return list, err
 	}
-	ids, err := store.CollectRows(ctx, q, `select team_id from game_teams where game_id = ?`, []any{gameID}, func(rows *sql.Rows) (int64, error) {
-		var id int64
-		return id, rows.Scan(&id)
-	})
+	if raw == "" {
+		return list, nil
+	}
+	return list, json.Unmarshal([]byte(raw), &list.teams)
+}
+
+// storeOwnList writes the Game's separate list and whether it plays it.
+func storeOwnList(ctx context.Context, tx *sql.Tx, gameID int64, list ownList) error {
+	stored := make([]OwnTeam, len(list.teams))
+	for i, team := range list.teams {
+		team.Prev, team.Entered = 0, false
+		stored[i] = team
+	}
+	raw, err := json.Marshal(stored)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	members := make(map[int64]bool, len(ids))
-	for _, id := range ids {
-		members[id] = true
-	}
-	return members, nil
+	_, err = tx.ExecContext(ctx, `update games set own_teams = ?, own_roster = ? where id = ?`, list.own, string(raw), gameID)
+	return err
 }
 
-// onList is the roster's teams that are on the list, in the roster's order.
-func onList(teams []FestRosterImportTeam, members map[int64]bool) []FestRosterImportTeam {
-	out := make([]FestRosterImportTeam, 0, len(members))
-	for _, team := range teams {
-		if members[team.LocalID] {
-			out = append(out, team)
-		}
-	}
-	return out
-}
-
-// GameSeatsTeamsTx is the fest's teams a flat Game seats now: its own list,
-// or the roster, each on the Game's venue under the venue's numbers.
-func GameSeatsTeamsTx(ctx context.Context, q store.Queryer, festID, gameID, venueID int64) ([]FestRosterImportTeam, error) {
+// festSeated is the fest's teams a Game on venueID seats, under the venue's
+// numbers.
+func festSeated(ctx context.Context, q store.Queryer, festID, venueID int64) ([]FestRosterImportTeam, error) {
 	teams, err := LoadFestRosterImportTeamsTx(ctx, q, festID)
 	if err != nil {
 		return nil, err
-	}
-	members, err := ownTeamsTx(ctx, q, gameID)
-	if err != nil {
-		return nil, err
-	}
-	if members != nil {
-		teams = onList(teams, members)
 	}
 	placement, err := multifest.LoadPlacement(ctx, q, festID)
 	if err != nil {
@@ -96,154 +105,223 @@ func GameSeatsTeamsTx(ctx context.Context, q store.Queryer, festID, gameID, venu
 	return OnVenue(teams, placement, venueID), nil
 }
 
+// GameSeatsTeamsTx is the teams a flat Game seats now: its separate list, or
+// the fest's roster on the Game's venue under the venue's numbers.
+func GameSeatsTeamsTx(ctx context.Context, q store.Queryer, festID, gameID, venueID int64) ([]FestRosterImportTeam, error) {
+	list, err := loadOwnList(ctx, q, gameID)
+	if err != nil {
+		return nil, err
+	}
+	if list.own {
+		return importTeams(list.teams), nil
+	}
+	return festSeated(ctx, q, festID, venueID)
+}
+
+// importTeams is a separate list as the roster code carries teams.
+func importTeams(list []OwnTeam) []FestRosterImportTeam {
+	out := make([]FestRosterImportTeam, 0, len(list))
+	for _, team := range list {
+		row := FestRosterImportTeam{Number: team.Number, Name: team.Name, City: team.City, RatingID: team.RatingID}
+		for _, flag := range team.Flags {
+			row.Flags = append(row.Flags, FestRosterFlag{Short: flag})
+		}
+		for _, player := range team.Players {
+			first, last, _ := strings.Cut(strings.TrimSpace(player.Name), " ")
+			row.Players = append(row.Players, FestRosterImportPlayer{RatingID: player.RatingID, FirstName: first, LastName: strings.TrimSpace(last)})
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// OwnTeams is the roster code's teams as a separate list's rows.
+func OwnTeams(teams []FestRosterImportTeam) []OwnTeam {
+	out := make([]OwnTeam, 0, len(teams))
+	for _, team := range teams {
+		row := OwnTeam{Number: team.Number, Name: team.Name, City: team.City, RatingID: team.RatingID, Flags: FlagShortNames(team.Flags)}
+		for _, player := range team.Players {
+			row.Players = append(row.Players, OwnPlayer{Name: importPlayerName(player), RatingID: player.RatingID})
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// NumberedOwnTeams gives each team without a number the next one free.
+func NumberedOwnTeams(teams []OwnTeam) []OwnTeam {
+	var top int64
+	for _, team := range teams {
+		top = max(top, team.Number)
+	}
+	for i := range teams {
+		if teams[i].Number <= 0 {
+			top++
+			teams[i].Number = top
+		}
+	}
+	return teams
+}
+
 // LoadGameTeams reads a flat Game's entrants tab.
 func LoadGameTeams(ctx context.Context, q store.Queryer, festID, gameID int64) (GameTeamsView, error) {
-	doc, err := store.LoadGameDoc(ctx, q, festID, gameID)
+	doc, err := flatGame(ctx, q, festID, gameID)
 	if err != nil {
 		return GameTeamsView{}, err
 	}
-	if _, ok := games.As[games.RosterFolder](doc.GameType); !ok {
-		return GameTeamsView{}, corei18n.User(dopestrings.Default.Entrants.Own.NotFlat())
-	}
-	members, err := ownTeamsTx(ctx, q, gameID)
+	teams, err := GameSeatsTeamsTx(ctx, q, festID, gameID, doc.MultiFestVenueID)
 	if err != nil {
 		return GameTeamsView{}, err
 	}
-	entered, err := enteredNumbers(ctx, q, festID, doc)
+	list, err := loadOwnList(ctx, q, gameID)
 	if err != nil {
 		return GameTeamsView{}, err
 	}
-	all, err := LoadFestRosterImportTeamsTx(ctx, q, festID)
-	if err != nil {
-		return GameTeamsView{}, err
-	}
-	placement, err := multifest.LoadPlacement(ctx, q, festID)
-	if err != nil {
-		return GameTeamsView{}, err
-	}
-	view := GameTeamsView{Own: members != nil, Teams: []GameTeam{}, Candidates: []GameTeam{}}
-	for _, team := range OnVenue(all, placement, doc.MultiFestVenueID) {
-		row := GameTeam{ID: team.LocalID, Number: team.Number, Name: team.Name, City: team.City, Entered: entered[team.LocalID]}
-		if members == nil || members[team.LocalID] {
-			view.Teams = append(view.Teams, row)
-		} else {
-			view.Candidates = append(view.Candidates, row)
-		}
+	entered := enteredNumbers(doc)
+	view := GameTeamsView{Own: list.own, Teams: OwnTeams(teams)}
+	for i := range view.Teams {
+		view.Teams[i].Entered = entered[view.Teams[i].Number]
 	}
 	return view, nil
 }
 
-// enteredNumbers is the fest teams, by id, the Game holds something a host
+// GameSheetTeams is the teams a flat Game's entrants tab offers as a roster
+// sheet: its separate list, or the fest's teams it seats.
+func GameSheetTeams(ctx context.Context, q store.Queryer, festID, gameID int64) ([]FestRosterImportTeam, error) {
+	doc, err := flatGame(ctx, q, festID, gameID)
+	if err != nil {
+		return nil, err
+	}
+	return GameSeatsTeamsTx(ctx, q, festID, gameID, doc.MultiFestVenueID)
+}
+
+// OwnRosterView is the roster tab of a flat Game that plays its separate
+// list: its teams with their people. ok is false for a Game that plays the
+// fest's teams, whose tab is the fest roster's.
+func OwnRosterView(ctx context.Context, q store.Queryer, gameID int64) (teams []FestRosterTeamView, ok bool, err error) {
+	list, err := loadOwnList(ctx, q, gameID)
+	if err != nil || !list.own {
+		return nil, false, err
+	}
+	teams = make([]FestRosterTeamView, 0, len(list.teams))
+	for _, team := range list.teams {
+		view := FestRosterTeamView{Number: team.Number, Name: team.Name, City: team.City, RatingID: team.RatingID, Flags: team.Flags, Players: []FestRosterPlayerView{}}
+		for _, player := range team.Players {
+			view.Players = append(view.Players, FestRosterPlayerView{Name: player.Name, RatingID: player.RatingID})
+		}
+		teams = append(teams, view)
+	}
+	return teams, true, nil
+}
+
+// enteredNumbers is the numbers of the teams the Game holds something a host
 // entered for.
-func enteredNumbers(ctx context.Context, q store.Queryer, festID int64, doc store.GameDoc) (map[int64]bool, error) {
+func enteredNumbers(doc store.GameDoc) map[int64]bool {
 	out := map[int64]bool{}
 	counter, ok := games.As[games.Entered](doc.GameType)
 	if !ok {
-		return out, nil
-	}
-	festNumber, err := multifest.FestNumbers(ctx, q, festID, doc.MultiFestVenueID)
-	if err != nil {
-		return nil, err
+		return out
 	}
 	state := json.RawMessage(doc.State)
-	numbers := map[int64]bool{}
 	entered, seats := counter.EnteredSeats(state), counter.Seats(state)
 	for i, seat := range seats {
-		if number, ok := festNumber(seat.Number); ok && i < len(entered) && entered[i] {
-			numbers[number] = true
+		if i < len(entered) && entered[i] {
+			out[seat.Number] = true
 		}
 	}
-	ids, err := store.CollectRows(ctx, q, `select id, coalesce(number, 0) from fest_teams where fest_id = ? and deleted = 0`, []any{festID}, func(rows *sql.Rows) ([2]int64, error) {
-		var row [2]int64
-		return row, rows.Scan(&row[0], &row[1])
-	})
+	return out
+}
+
+// SetOwnTeamsTx has a flat Game play its separate list (own) or the fest's
+// teams. The first time it plays a list, the list is the teams it seats then.
+func SetOwnTeamsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, own bool) (GameStateBroadcast, error) {
+	doc, err := flatGame(ctx, tx, festID, gameID)
 	if err != nil {
-		return nil, err
+		return GameStateBroadcast{}, err
 	}
-	for _, row := range ids {
-		if numbers[row[1]] {
-			out[row[0]] = true
+	list, err := loadOwnList(ctx, tx, gameID)
+	if err != nil {
+		return GameStateBroadcast{}, err
+	}
+	if own && list.teams == nil {
+		seated, err := festSeated(ctx, tx, festID, doc.MultiFestVenueID)
+		if err != nil {
+			return GameStateBroadcast{}, err
+		}
+		list.teams = NumberedOwnTeams(OwnTeams(seated))
+	}
+	list.own = own
+	if err := storeOwnList(ctx, tx, gameID, list); err != nil {
+		return GameStateBroadcast{}, err
+	}
+	return refoldTx(ctx, tx, festID, doc, Remap{})
+}
+
+// SaveOwnTeamsTx replaces a flat Game's separate list. Every team needs a
+// name and a number of its own, and a team the Game holds answers for stays
+// (its Prev names it), its answers following it to a new number.
+func SaveOwnTeamsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, teams []OwnTeam) (GameStateBroadcast, error) {
+	doc, err := flatGame(ctx, tx, festID, gameID)
+	if err != nil {
+		return GameStateBroadcast{}, err
+	}
+	list, err := loadOwnList(ctx, tx, gameID)
+	if err != nil {
+		return GameStateBroadcast{}, err
+	}
+	if !list.own {
+		return GameStateBroadcast{}, corei18n.User(dopestrings.Default.Entrants.Own.Follows())
+	}
+	teams, err = checkOwnTeams(teams, list.teams, enteredNumbers(doc))
+	if err != nil {
+		return GameStateBroadcast{}, err
+	}
+	numbers := map[int]int{}
+	for _, team := range teams {
+		if team.Prev > 0 && team.Prev != team.Number {
+			numbers[int(team.Prev)] = int(team.Number)
+		}
+	}
+	list.teams = teams
+	if err := storeOwnList(ctx, tx, gameID, list); err != nil {
+		return GameStateBroadcast{}, err
+	}
+	return refoldTx(ctx, tx, festID, doc, Remap{Venue: doc.MultiFestVenueID, Numbers: numbers})
+}
+
+// checkOwnTeams tidies a separate list a host sent and refuses one without a
+// name or a number, with a number twice, or without a team the Game holds
+// answers for (before, the list as stored, names it).
+func checkOwnTeams(teams, before []OwnTeam, entered map[int64]bool) ([]OwnTeam, error) {
+	out := make([]OwnTeam, 0, len(teams))
+	byNumber := map[int64]string{}
+	kept := map[int64]bool{}
+	for i, team := range teams {
+		team.Name, team.City = strings.TrimSpace(team.Name), strings.TrimSpace(team.City)
+		team.Flags = FlagShortNames(ParseFlags(strings.Join(team.Flags, ",")))
+		switch {
+		case team.Name == "":
+			return nil, corei18n.User(dopestrings.Default.Entrants.Own.NameMissing(fmt.Sprint(i + 1)))
+		case team.Number <= 0:
+			return nil, corei18n.User(dopestrings.Default.Entrants.Own.NumberMissing(team.Name))
+		case byNumber[team.Number] != "":
+			return nil, corei18n.User(dopestrings.Default.Entrants.Own.NumberTaken(fmt.Sprint(team.Number), byNumber[team.Number], team.Name))
+		}
+		byNumber[team.Number] = team.Name
+		kept[team.Prev] = true
+		out = append(out, team)
+	}
+	for _, team := range before {
+		if entered[team.Number] && !kept[team.Number] {
+			return nil, corei18n.User(dopestrings.Default.Entrants.Own.Entered(team.Name))
 		}
 	}
 	return out, nil
 }
 
-// SetOwnTeamsTx gives a flat Game a list of its own, the teams it seats now,
-// or (own false) has it seat the fest's roster again.
-func SetOwnTeamsTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, own bool) (GameStateBroadcast, error) {
-	doc, err := flatGameTx(ctx, tx, festID, gameID)
-	if err != nil {
-		return GameStateBroadcast{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `delete from game_teams where game_id = ?`, gameID); err != nil {
-		return GameStateBroadcast{}, err
-	}
-	if own {
-		if _, err := tx.ExecContext(ctx, `
-insert into game_teams(game_id, team_id) select ?, id from fest_teams where fest_id = ? and deleted = 0`, gameID, festID); err != nil {
-			return GameStateBroadcast{}, err
-		}
-		if doc.MultiFestVenueID > 0 {
-			// A Game on a venue keeps the venue's teams only.
-			if _, err := tx.ExecContext(ctx, `
-delete from game_teams where game_id = ? and team_id in (
-  select id from fest_teams where fest_id = ? and coalesce(multifest_venue_id, 0) != ?)`, gameID, festID, doc.MultiFestVenueID); err != nil {
-				return GameStateBroadcast{}, err
-			}
-		}
-	}
-	if _, err := tx.ExecContext(ctx, `update games set own_teams = ? where id = ? and fest_id = ?`, own, gameID, festID); err != nil {
-		return GameStateBroadcast{}, err
-	}
-	return refoldTx(ctx, tx, festID, doc)
-}
-
-// AddGameTeamTx puts a fest team on a flat Game's own list.
-func AddGameTeamTx(ctx context.Context, tx *sql.Tx, festID, gameID, teamID int64) (GameStateBroadcast, error) {
-	doc, err := ownListGameTx(ctx, tx, festID, gameID)
-	if err != nil {
-		return GameStateBroadcast{}, err
-	}
-	var exists bool
-	if err := tx.QueryRowContext(ctx, `select count(*) > 0 from fest_teams where id = ? and fest_id = ? and deleted = 0`, teamID, festID).Scan(&exists); err != nil {
-		return GameStateBroadcast{}, err
-	}
-	if !exists {
-		return GameStateBroadcast{}, corei18n.User(dopestrings.Default.Entrants.Own.NoTeam())
-	}
-	if _, err := tx.ExecContext(ctx, `insert or ignore into game_teams(game_id, team_id) values(?, ?)`, gameID, teamID); err != nil {
-		return GameStateBroadcast{}, err
-	}
-	return refoldTx(ctx, tx, festID, doc)
-}
-
-// RemoveGameTeamTx takes a team off a flat Game's own list. A team the Game
-// holds answers for stays: its row would take them with it.
-func RemoveGameTeamTx(ctx context.Context, tx *sql.Tx, festID, gameID, teamID int64) (GameStateBroadcast, error) {
-	doc, err := ownListGameTx(ctx, tx, festID, gameID)
-	if err != nil {
-		return GameStateBroadcast{}, err
-	}
-	entered, err := enteredNumbers(ctx, tx, festID, doc)
-	if err != nil {
-		return GameStateBroadcast{}, err
-	}
-	if entered[teamID] {
-		var name string
-		if err := tx.QueryRowContext(ctx, `select name from fest_teams where id = ?`, teamID).Scan(&name); err != nil {
-			return GameStateBroadcast{}, err
-		}
-		return GameStateBroadcast{}, corei18n.User(dopestrings.Default.Entrants.Own.Entered(name))
-	}
-	if _, err := tx.ExecContext(ctx, `delete from game_teams where game_id = ? and team_id = ?`, gameID, teamID); err != nil {
-		return GameStateBroadcast{}, err
-	}
-	return refoldTx(ctx, tx, festID, doc)
-}
-
-// flatGameTx reads a Game whose format folds the roster in.
-func flatGameTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (store.GameDoc, error) {
-	doc, err := store.LoadGameDoc(ctx, tx, festID, gameID)
+// flatGame reads a Game whose format folds the roster in.
+func flatGame(ctx context.Context, q store.Queryer, festID, gameID int64) (store.GameDoc, error) {
+	doc, err := store.LoadGameDoc(ctx, q, festID, gameID)
 	if err != nil {
 		return doc, err
 	}
@@ -253,27 +331,11 @@ func flatGameTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (store.Ga
 	return doc, nil
 }
 
-// ownListGameTx is flatGameTx for a Game that keeps a list of its own.
-func ownListGameTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (store.GameDoc, error) {
-	doc, err := flatGameTx(ctx, tx, festID, gameID)
-	if err != nil {
-		return doc, err
-	}
-	var own bool
-	if err := tx.QueryRowContext(ctx, `select own_teams from games where id = ?`, gameID).Scan(&own); err != nil {
-		return doc, err
-	}
-	if !own {
-		return doc, corei18n.User(dopestrings.Default.Entrants.Own.Follows())
-	}
-	return doc, nil
-}
-
 // refoldTx seats the Game's teams as they are now.
-func refoldTx(ctx context.Context, tx *sql.Tx, festID int64, doc store.GameDoc) (GameStateBroadcast, error) {
+func refoldTx(ctx context.Context, tx *sql.Tx, festID int64, doc store.GameDoc, remap Remap) (GameStateBroadcast, error) {
 	teams, err := GameSeatsTeamsTx(ctx, tx, festID, doc.GameID, doc.MultiFestVenueID)
 	if err != nil {
 		return GameStateBroadcast{}, err
 	}
-	return foldGameTx(ctx, tx, festID, doc, RosterTeams(teams), Remap{})
+	return foldGameTx(ctx, tx, festID, doc, RosterTeams(teams), remap)
 }

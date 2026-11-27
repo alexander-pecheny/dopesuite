@@ -32,6 +32,13 @@ func (s *server) scopedGameRoster(w http.ResponseWriter, r *http.Request, sc rou
 	if err := s.eng.DB.QueryRowContext(ctx, `select game_type from games where id = ? and fest_id = ?`, sc.GameID, sc.FestID).Scan(&gameType); err != nil {
 		return err
 	}
+	// A flat Game that plays its separate list shows that list's people.
+	if teams, ok, err := roster.OwnRosterView(ctx, s.eng.DB, sc.GameID); err != nil || ok {
+		if err != nil {
+			return err
+		}
+		return route.JSON(w, map[string]any{"teams": teams})
+	}
 	if roster.HandRoster(gameType) {
 		return s.handGameRoster(w, r, sc)
 	}
