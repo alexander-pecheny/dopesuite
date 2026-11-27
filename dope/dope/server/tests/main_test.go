@@ -278,12 +278,9 @@ func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 		e.RT = realtime.NewManager()
 	})
 
-	venues, _, err := srv.UpdateVenue(t.Context(), festID, 1, "Рим")
-	if err != nil {
-		t.Fatalf("update venue: %v", err)
-	}
-	if len(venues) != 1 || venues[0].Title != "Рим" {
-		t.Fatalf("venues = %#v, want renamed venue", venues)
+	// A bout reads its venue's room: renamed, the bout says the new title.
+	if _, err := db.Exec(`update rooms set title = 'Рим' where fest_id = ?`, festID); err != nil {
+		t.Fatalf("rename room: %v", err)
 	}
 	view, err := srv.LoadMatchViewLocked(festID, dopeserver.DefaultMatchCode)
 	if err != nil {

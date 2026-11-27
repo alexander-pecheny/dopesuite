@@ -29,14 +29,6 @@ bad_request = "Некорректный запрос."
 # seedXLSXSource); the HTTP edge shows it to the host verbatim.
 file_missing = "нет файла"
 
-[venue]
-# Why the venues tab refused to add, rename or delete a venue (venues.go).
-# The host reads these as they are.
-title_empty = "Укажите название площадки."
-number_taken = 'Площадка {{.n}} уже есть.'
-unknown = 'Площадки {{.n}} нет.'
-in_use = 'На площадке {{.n}} есть бои. Сначала перенесите их на другую площадку.'
-
 [starts_at]
 # Why a bout's start time was refused (starttimes.go). {{.time}} is what the
 # host typed.

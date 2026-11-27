@@ -13,8 +13,8 @@ import (
 
 // The creation form takes what the settings page edits, so a Game is made
 // with its own title, slug and options at once rather than renamed after: a
-// brain named and slugged with its venues by room; an ОД untitled, so
-// named after its format, with one Division hidden. The JSON twin takes the title and slug too.
+// brain named and slugged; an ОД untitled, so named after its format, with
+// one Division hidden. The JSON twin takes the title and slug too.
 func TestAGameIsCreatedWithItsSettings(t *testing.T) {
 	t.Parallel()
 	srv := newAuthTestServer(t)
@@ -32,7 +32,7 @@ select id, case when number % 2 = 0 then 'М' else 'Ш' end, '', 1 from fest_tea
 	pageResp := httptest.NewRecorder()
 	srv.HostPageServer().HandleHostRouter(pageResp, page)
 	body := pageResp.Body.String()
-	for _, want := range []string{`<select class="input" name="game_type">`, `name="title"`, `name="slug"`, `name="division_shown" value="Ш"`, `name="venue_rooms"`} {
+	for _, want := range []string{`<select class="input" name="game_type">`, `name="title"`, `name="slug"`, `name="division_shown" value="Ш"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("the creation form lacks %s: %s", want, body)
 		}
@@ -49,23 +49,21 @@ select id, case when number % 2 = 0 then 'М' else 'Ш' end, '', 1 from fest_tea
 	}
 	type stored struct {
 		title, slug, hidden string
-		rooms               bool
 	}
 	last := func() (s stored) {
 		t.Helper()
-		if err := db.QueryRow(`select title, coalesce(slug, ''), coalesce(hidden_divisions, ''), venue_rooms from games where fest_id = ? order by id desc limit 1`, festID).
-			Scan(&s.title, &s.slug, &s.hidden, &s.rooms); err != nil {
+		if err := db.QueryRow(`select title, coalesce(slug, ''), coalesce(hidden_divisions, '') from games where fest_id = ? order by id desc limit 1`, festID).
+			Scan(&s.title, &s.slug, &s.hidden); err != nil {
 			t.Fatal(err)
 		}
 		return s
 	}
 	resp := post(url.Values{"game_type": {"brain"}, "brain_dsl": {"[defaults]\nquestions: 5\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n"},
-		"title": {"Вопросики быстрые. М"}, "slug": {"fast-m"},
-		"venue_rooms_present": {"1"}, "venue_rooms": {"1"}})
+		"title": {"Вопросики быстрые. М"}, "slug": {"fast-m"}})
 	if resp.Code != http.StatusSeeOther || !strings.HasSuffix(resp.Header().Get("Location"), "/game/fast-m/") {
 		t.Fatalf("create: %d %s %s", resp.Code, resp.Header().Get("Location"), resp.Body.String())
 	}
-	if got := last(); got.title != "Вопросики быстрые. М" || got.slug != "fast-m" || !got.rooms {
+	if got := last(); got.title != "Вопросики быстрые. М" || got.slug != "fast-m" {
 		t.Fatalf("stored %+v", got)
 	}
 

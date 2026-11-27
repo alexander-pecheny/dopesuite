@@ -89,6 +89,7 @@ type editJob struct {
 	req      edit.PatchRequest
 	finished bool
 	venue    int
+	hosts    *string
 	payload  string          // raw request body, recorded verbatim in the journal
 	ctx      context.Context // detached audit context (actor/request/fest/game), festwrite.WriteTxTimeout-bound
 	cancel   context.CancelFunc
@@ -205,13 +206,14 @@ func (b *Batcher) SubmitMatchFinish(reqCtx context.Context, scope core.FestScope
 }
 
 // SubmitMatchVenue queues a match's venue assignment.
-func (b *Batcher) SubmitMatchVenue(reqCtx context.Context, scope core.FestScope, matchID int64, code string, number int) ([]byte, uint64, error) {
+// hosts, when given, are the bout's own (empty: its venue's).
+func (b *Batcher) SubmitMatchVenue(reqCtx context.Context, scope core.FestScope, matchID int64, code string, number int, hosts *string) ([]byte, uint64, error) {
 	if number <= 0 {
 		return nil, 0, errors.New("bad venue number")
 	}
 	res := b.submit(reqCtx, &editJob{
 		kind: kindMatchVenue, scope: scope, matchID: matchID, code: code,
-		venue: number, payload: util.MustJSON(map[string]any{"venue": number}),
+		venue: number, hosts: hosts, payload: util.MustJSON(map[string]any{"venue": number, "hosts": hosts}),
 	})
 	return res.next, res.seq, res.err
 }
@@ -621,7 +623,7 @@ func (b *Batcher) applyMatchFinishTx(ctx context.Context, tx *sql.Tx, job *editJ
 }
 
 func (b *Batcher) applyMatchVenueTx(ctx context.Context, tx *sql.Tx, job *editJob) error {
-	return matchedit.SetVenueTx(ctx, tx, job.scope, job.matchID, job.venue)
+	return matchedit.SetVenueTx(ctx, tx, job.scope, job.matchID, job.venue, job.hosts)
 }
 
 // recomputeTouched settles every match the window changed (matchedit.SettleTx),

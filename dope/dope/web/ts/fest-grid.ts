@@ -1,6 +1,6 @@
 import {festLetters, letteredTitle, seededName, standingsTable} from "./standings.js";
 import type {StageRef} from "./standings.js";
-import {normalizeVenue, venueLabel, venueShort, venuesByRoom, venuesShort, withStartsAt} from "./venue.js";
+import {normalizeVenue, venueLabel, venueShort, venuesShort, withStartsAt} from "./venue.js";
 import type {Venue} from "./venue.js";
 import {nameCell} from "./name-cell.js";
 import {icon} from "./icons_gen.js";
@@ -616,7 +616,7 @@ function stageWhere(stage: FestGridStage, liveStage: FestGridStage): string {
     found.set(venue.number, venue);
   }
   const venues = [...found.values()];
-  if (venues.length === 1 && !venuesByRoom()) return venueText(venues[0]);
+  if (venues.length === 1) return venueText(venues[0]);
   return venuesShort(venues);
 }
 

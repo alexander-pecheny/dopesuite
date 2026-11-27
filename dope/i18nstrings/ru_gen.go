@@ -277,6 +277,7 @@ var RU = Strings{
 		Venue: EkVenueStrings{
 			Cancel: func() string { return "Отмена" },
 			Edit:   func() string { return "Площадка и время начала" },
+			Hosts:  func() string { return "Ведущие этого боя" },
 			Save:   func() string { return "Сохранить" },
 			Time:   func() string { return "Время начала" },
 			TimeHint: func() string {
@@ -1267,9 +1268,6 @@ var RU = Strings{
 			TypeOd:          func() string { return "ОД" },
 			TypeSi:          func() string { return "Личная СИ" },
 			TypeTroika:      func() string { return "Тройка" },
-			VenueRoomsLabel: func() string {
-				return "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)"
-			},
 			WholeRosterHint: func() string {
 				return "Играют все команды феста, под теми же номерами. Кто не играл, отмечается во вкладке «Отказы» на странице игры."
 			},
@@ -2782,6 +2780,17 @@ var RU = Strings{
 			FormatExpected: func(n string) string { return fmt.Sprintf("строка %s: нужен формат username:role", n) },
 		},
 	},
+	Rooms: RoomsStrings{
+		InUse: func(games string) string {
+			return fmt.Sprintf("Площадка занята в играх %s. Сначала выберите для них другую.", games)
+		},
+		NoVenue:    func(n string) string { return fmt.Sprintf("В этой игре нет площадки %s.", n) },
+		TitleEmpty: func() string { return "Укажите название площадки." },
+		TitleTaken: func(title string) string { return fmt.Sprintf("Площадка «%s» уже есть.", title) },
+		Unknown: func(ref string) string {
+			return fmt.Sprintf("Площадки «%s» нет. Сначала добавьте её на странице площадок феста.", ref)
+		},
+	},
 	RoundOrder: RoundOrderStrings{
 		Begun:  func() string { return "начат" },
 		Button: func() string { return "Порядок боёв" },
@@ -3076,14 +3085,6 @@ var RU = Strings{
 			Bad: func(time string) string {
 				return fmt.Sprintf("Время «%s» не подходит. Напишите его так: 10:30.", time)
 			},
-		},
-		Venue: ServerVenueStrings{
-			InUse: func(n string) string {
-				return fmt.Sprintf("На площадке %s есть бои. Сначала перенесите их на другую площадку.", n)
-			},
-			NumberTaken: func(n string) string { return fmt.Sprintf("Площадка %s уже есть.", n) },
-			TitleEmpty:  func() string { return "Укажите название площадки." },
-			Unknown:     func(n string) string { return fmt.Sprintf("Площадки %s нет.", n) },
 		},
 	},
 	Si: SiStrings{
@@ -3527,27 +3528,28 @@ var RU = Strings{
 		},
 		Venue: WidgetsVenueStrings{
 			Add:         func() string { return "Добавить" },
-			AddNumber:   func() string { return "Номер площадки" },
 			AddTitle:    func() string { return "Новая площадка" },
 			Battle:      func(n string, name string) string { return fmt.Sprintf("пл. %s (%s)", n, name) },
 			BattleShort: func(n string) string { return fmt.Sprintf("пл. %s", n) },
+			CopyFrom:    func() string { return "Скопировать из игры" },
+			CopyPick:    func() string { return "Выберите игру" },
 			Delete:      func() string { return "Удалить площадку" },
 			GameIntro: func() string {
-				return "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры, снять площадку, на которой игра не идёт, и добавить свою. Если поле пустое, действует значение феста."
+				return "Номера площадок задаёт схема игры. Для каждой выберите, где она проходит, и впишите ведущих. Список площадок общий для феста."
 			},
-			HostsColumn:   func() string { return "Ведущие" },
-			NameColumn:    func() string { return "Название" },
+			HostsColumn:  func() string { return "Ведущие" },
+			NameColumn:   func() string { return "Название" },
+			NoRoom:       func() string { return "Не выбрана" },
+			NumberColumn: func() string { return "№" },
+			RoomInUse: func(games string) string {
+				return fmt.Sprintf("Площадка занята в играх: %s", games)
+			},
 			ScheduleBout:  func() string { return "Бой" },
 			ScheduleEmpty: func() string { return "Боёв здесь нет." },
 			ScheduleGame:  func() string { return "Игра" },
-			ScheduleHead:  func(n string, title string) string { return fmt.Sprintf("%s. %s", n, title) },
-			ScheduleHeadGame: func(n string, title string, game string) string {
-				return fmt.Sprintf("%s. %s (только %s)", n, title, game)
-			},
-			ScheduleTime: func() string { return "Время" },
-			UsedColumn:   func() string { return "В этой игре" },
-			WithTime:     func(venue string, time string) string { return fmt.Sprintf("%s %s", venue, time) },
-			WithTitle:    func(where string, title string) string { return fmt.Sprintf("%s, %s", where, title) },
+			ScheduleTime:  func() string { return "Время" },
+			WhereColumn:   func() string { return "Где проходит" },
+			WithTime:      func(venue string, time string) string { return fmt.Sprintf("%s %s", venue, time) },
 		},
 		Viewers: WidgetsViewersStrings{
 			Label: func() string { return "Зрителей онлайн" },

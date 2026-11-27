@@ -23,6 +23,7 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/matchops"
 	"dope/dope/domain/resolver"
+	"dope/dope/domain/rooms"
 	"dope/dope/domain/scoring"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/util"
@@ -81,18 +82,10 @@ func FinishTx(ctx context.Context, tx *sql.Tx, matchID int64, finished bool) err
 	return err
 }
 
-// SetVenueTx seats a match at the fest's venue of that number.
-func SetVenueTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64, number int) error {
-	var venueID int64
-	if err := tx.QueryRowContext(ctx, `
-select id from venues where fest_id = ? and number = ?`, scope.FestID, number).Scan(&venueID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return errors.New("unknown venue")
-		}
-		return err
-	}
-	_, err := tx.ExecContext(ctx, `update matches set venue_id = ? where id = ?`, venueID, matchID)
-	return err
+// SetVenueTx moves a match to another of its game's venues, with its own
+// hosts when hosts is given (rooms.SetBoutVenueTx).
+func SetVenueTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64, number int, hosts *string) error {
+	return rooms.SetBoutVenueTx(ctx, tx, scope.GameID, matchID, number, hosts)
 }
 
 // Change is what a set of edits did to one match: which match, and the

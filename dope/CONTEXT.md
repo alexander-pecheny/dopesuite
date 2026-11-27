@@ -15,6 +15,13 @@ One real event: a gathering on a given date, with a registry of teams, hosts, an
 One place a synch or multi Fest is played at, as the rating site lists it: «ИгрыРазума», «Москва / Кругов Андрей». A fest team plays at one площадка, and a Game on a площадка seats that площадка's teams alone; a Game on none seats the whole roster. The rating import puts each team on its площадка. Each площадка numbers its own teams from 1, and its Games show those numbers; the fest's own Number stays as the team's identity behind them. The screen calls it «Площадка», as it calls the room a бой is played in; both are venues, and the code calls this one a multifest venue (`multifest.Venue`) to keep it apart from a бой's `Venue`. An admin can limit a host to площадки, by hand or with a link to a площадка: such a host runs that площадка's Games and edits its teams and numbers (ADR-0032).
 _Avoid_: город. Two площадки can be in one town, and Moscow had three at Гёмбёц-9.
 
+**Площадка (Room)**:
+A physical place the Fest uses for the day: «Б-414», «Актовый зал». It has a title and nothing else; who hosts there belongs to each Game. The fest's Площадки page lists the rooms and, under each, every бой played in it in time order. A room is deleted only when no Game's venue is in it (ADR-0037).
+
+**Площадка игры (Venue)**:
+One of a Game's numbered places, 1…N as its scheme deals its бои: Вопросики at ten, ЭК at fifteen. The Game's **venue map** puts each in a room («Где проходит», none yet reads «пл. N») and gives it its hosts; the same room is venue 1 in one Game and venue 4 in another, with other hosts. A scheme names no rooms: it is a format, reused from one tournament to the next. A бой sits at one of its Game's venues by number and may name hosts of its own, which stand in for the venue's (a final run by the head judge). «Скопировать из игры» puts another Game's rooms on the same numbers (ADR-0037).
+_Avoid_: стол, for a venue; the screen says «Площадка» throughout.
+
 **Game**:
 One competition inside a Fest, played from start to finish under a single format, such as the ЧГК game or the brain bracket. A Game is one Structure, and all of its Matches run Protocols.
 

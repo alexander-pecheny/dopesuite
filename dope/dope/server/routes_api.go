@@ -25,7 +25,6 @@ import (
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
-	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
 	"dope/dope/web/editbatch"
 	"dope/dope/web/route"
@@ -67,11 +66,10 @@ func (s *server) apiRoutes() *route.Table {
 	const fest, game = "/api/fest/{fest}", "/api/fest/{fest}/games/{game}"
 	t.Handle("GET "+fest, route.Read, s.scopedFest)
 	t.Handle("POST "+fest+"/presence", route.Editor, s.hostPresence)
-	t.Handle("GET "+fest+"/venues", route.Read, s.scopedVenues)
-	t.Handle("GET "+fest+"/venues/schedule", route.Read, s.scopedVenueSchedule)
-	t.Handle("POST "+fest+"/venues", route.Editor, s.scopedVenueCreate)
-	t.Handle("PUT "+fest+"/venues/{n}", route.Editor, s.scopedVenuePut)
-	t.Handle("DELETE "+fest+"/venues/{n}", route.Editor, s.scopedVenueDelete)
+	t.Handle("GET "+fest+"/rooms", route.Read, s.scopedRooms)
+	t.Handle("POST "+fest+"/rooms", route.Editor, s.scopedRoomCreate)
+	t.Handle("PUT "+fest+"/rooms/{room}", route.Editor, s.scopedRoomPut)
+	t.Handle("DELETE "+fest+"/rooms/{room}", route.Editor, s.scopedRoomDelete)
 	t.Handle("GET "+fest+"/roster", route.Read, s.scopedFestRoster)
 	t.Handle("GET "+game, route.Read, s.scopedGame)
 	t.Handle("GET "+game+"/roster", route.Read, s.scopedGameRoster)
@@ -82,9 +80,8 @@ func (s *server) apiRoutes() *route.Table {
 	t.Handle("POST "+game+"/matches/{code}/finish", route.Editor.Numbered(), s.scopedMatchFinish)
 	t.Handle("POST "+game+"/matches/{code}/venue", route.Editor, s.scopedMatchVenue)
 	t.Handle("GET "+game+"/venues", route.Read, s.scopedGameVenues)
+	t.Handle("PUT "+game+"/venues", route.Editor, s.scopedGameVenueMap)
 	t.Handle("PUT "+game+"/venues/{n}", route.Editor, s.scopedGameVenuePut)
-	t.Handle("POST "+game+"/venues", route.Editor, s.scopedGameVenueCreate)
-	t.Handle("DELETE "+game+"/venues/{n}", route.Editor, s.scopedGameVenueDelete)
 	t.Handle("POST "+game+"/matches/{code}/starts-at", route.Editor, s.scopedMatchStartsAt)
 	t.Handle("POST "+game+"/matches/{code}/slot", route.Editor, s.scopedMatchSlot)
 	t.Handle("GET "+game+"/stages/matches", route.Read, s.scopedAllStageMatches)
@@ -219,159 +216,6 @@ func presenceName(user session.User) string {
 	return fmt.Sprintf("user-%d", user.UserID)
 }
 
-func (s *server) scopedVenues(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	venues, err := s.loadVenuesLocked(sc.FestID)
-	if err != nil {
-		return err
-	}
-	return route.JSON(w, venues)
-}
-
-// venueSchedule is the fest's venues page: the venues, every bout played at
-// each in order, and whether the caller may edit the venues.
-type venueSchedule struct {
-	Venues   []store.VenueView `json:"venues"`
-	Bouts    []store.VenueBout `json:"bouts"`
-	Editable bool              `json:"editable"`
-}
-
-func (s *server) scopedVenueSchedule(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	venues, err := s.loadVenuesLocked(sc.FestID)
-	if err != nil {
-		return err
-	}
-	bouts, err := store.LoadVenueBouts(r.Context(), s.eng.DB, sc.FestID)
-	if err != nil {
-		return err
-	}
-	// A public fest's read does not look the role up; the page asks.
-	role := sc.Role
-	if role == "" && sc.HasUser {
-		if role, err = festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, sc.FestID, sc.User.UserID); err != nil {
-			return err
-		}
-	}
-	// A fest with no venues yet answers empty lists, not nulls: the page
-	// draws a host the empty table with its add row.
-	if venues == nil {
-		venues = []store.VenueView{}
-	}
-	if bouts == nil {
-		bouts = []store.VenueBout{}
-	}
-	return route.JSON(w, venueSchedule{Venues: venues, Bouts: bouts, Editable: role != ""})
-}
-
-func (s *server) scopedVenuePut(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	number, err := strconv.Atoi(r.PathValue("n"))
-	if err != nil || number <= 0 {
-		return route.BadRequest("bad venue number")
-	}
-	var req venueUpdateRequest
-	if err := route.DecodeJSON(r, &req); err != nil {
-		return err
-	}
-	venues, revision, err := s.updateVenue(r.Context(), sc.FestID, number, req)
-	if err != nil {
-		return route.BadUser(err)
-	}
-	return route.JSONBytes(w, s.broadcastVenues(sc.FestID, venueChange{Venues: venues, Revision: revision}))
-}
-
-// scopedVenueCreate adds a venue to the fest and seats there the bouts the
-// Games' schemes put at its number. It answers with the fest's venues.
-func (s *server) scopedVenueCreate(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	var req venueCreateRequest
-	if err := route.DecodeJSON(r, &req); err != nil {
-		return err
-	}
-	if req.Number < 0 {
-		return route.BadRequest("bad venue number")
-	}
-	change, err := s.createVenue(r.Context(), sc.FestID, 0, req)
-	if err != nil {
-		return route.BadUser(err)
-	}
-	return route.JSONBytes(w, s.broadcastVenues(sc.FestID, change))
-}
-
-// scopedVenueDelete removes a venue no bout plays at, and answers with the
-// fest's venues.
-func (s *server) scopedVenueDelete(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	number, err := strconv.Atoi(r.PathValue("n"))
-	if err != nil || number <= 0 {
-		return route.BadRequest("bad venue number")
-	}
-	change, err := s.deleteVenue(r.Context(), sc.FestID, 0, number)
-	if err != nil {
-		return route.BadUser(err)
-	}
-	return route.JSONBytes(w, s.broadcastVenues(sc.FestID, change))
-}
-
-// scopedGameVenues answers the fest's venues as the Game shows them: its
-// own title and hosts over the fest's.
-func (s *server) scopedGameVenues(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	venues, err := store.LoadGameVenues(r.Context(), s.eng.DB, sc.FestID, sc.GameID)
-	if err != nil {
-		return err
-	}
-	return route.JSON(w, venues)
-}
-
-// scopedGameVenuePut sets the Game's own title or hosts for a venue; an
-// empty one goes back to the fest's. It answers with the Game's venues.
-func (s *server) scopedGameVenuePut(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	number, err := strconv.Atoi(r.PathValue("n"))
-	if err != nil || number <= 0 {
-		return route.BadRequest("bad venue number")
-	}
-	var req venueUpdateRequest
-	if err := route.DecodeJSON(r, &req); err != nil {
-		return err
-	}
-	change, err := s.updateGameVenue(r.Context(), sc.FestID, sc.GameID, number, req)
-	if err != nil {
-		return route.BadUser(err)
-	}
-	s.broadcastVenues(sc.FestID, change)
-	return s.scopedGameVenues(w, r, sc)
-}
-
-// scopedGameVenueCreate adds a venue of the Game's own and seats there the
-// Game's bouts its scheme puts at that number. It answers with the Game's
-// venues.
-func (s *server) scopedGameVenueCreate(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	var req venueCreateRequest
-	if err := route.DecodeJSON(r, &req); err != nil {
-		return err
-	}
-	if req.Number < 0 {
-		return route.BadRequest("bad venue number")
-	}
-	change, err := s.createVenue(r.Context(), sc.FestID, sc.GameID, req)
-	if err != nil {
-		return route.BadUser(err)
-	}
-	s.broadcastVenues(sc.FestID, change)
-	return s.scopedGameVenues(w, r, sc)
-}
-
-// scopedGameVenueDelete removes a venue of the Game's own that no bout plays
-// at, and answers with the Game's venues.
-func (s *server) scopedGameVenueDelete(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
-	number, err := strconv.Atoi(r.PathValue("n"))
-	if err != nil || number <= 0 {
-		return route.BadRequest("bad venue number")
-	}
-	change, err := s.deleteVenue(r.Context(), sc.FestID, sc.GameID, number)
-	if err != nil {
-		return route.BadUser(err)
-	}
-	s.broadcastVenues(sc.FestID, change)
-	return s.scopedGameVenues(w, r, sc)
-}
-
 // ---- matches ----
 
 func (s *server) matchScopeOf(r *http.Request, sc route.Scope) (matchScope, error) {
@@ -483,7 +327,7 @@ func (s *server) scopedMatchVenue(w http.ResponseWriter, r *http.Request, sc rou
 	if number == 0 {
 		number = req.VenueNumber
 	}
-	data, _, err := s.editor().SubmitMatchVenue(r.Context(), sc.Fest(), mscope.MatchID, mscope.Code, number)
+	data, _, err := s.editor().SubmitMatchVenue(r.Context(), sc.Fest(), mscope.MatchID, mscope.Code, number, req.Hosts)
 	if err != nil {
 		return editRefusal(err)
 	}

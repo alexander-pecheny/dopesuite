@@ -11,93 +11,6 @@ import (
 // summaries and reseed entries into the view types above. They read through a
 // Queryer so callers can pass a pooled connection or a snapshot transaction.
 
-// LoadVenues returns a fest's venues ordered by number.
-func LoadVenues(ctx context.Context, q Queryer, festID int64) ([]VenueView, error) {
-	return CollectRows(ctx, q, `
-select v.number, v.title, v.hosts, (select count(*) from matches m where m.venue_id = v.id), coalesce(g.title, '')
-from venues v
-left join games g on g.id = v.game_id
-where v.fest_id = ?
-order by v.number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
-		var venue VenueView
-		if err := rows.Scan(&venue.Number, &venue.Title, &venue.Hosts, &venue.Bouts, &venue.GameTitle); err != nil {
-			return venue, err
-		}
-		venue.GameOnly = venue.GameTitle != ""
-		return venue, nil
-	})
-}
-
-// LoadGameVenues returns a fest's venues as one Game shows them: each with
-// the Game's own title and hosts over the fest's, and how many of the Game's
-// bouts play at it.
-func LoadGameVenues(ctx context.Context, q Queryer, festID, gameID int64) ([]VenueView, error) {
-	return CollectRows(ctx, q, `
-select v.number, v.title, v.hosts, gv.title, gv.hosts, coalesce(gv.hidden, 0), v.game_id is not null,
-       (select count(*) from matches m where m.venue_id = v.id and m.game_id = ?)
-from venues v
-left join game_venues gv on gv.venue_id = v.id and gv.game_id = ?
-where v.fest_id = ? and (v.game_id is null or v.game_id = ?)
-order by v.number`, []any{gameID, gameID, festID, gameID}, func(rows *sql.Rows) (VenueView, error) {
-		var venue VenueView
-		var ownTitle, ownHosts sql.NullString
-		if err := rows.Scan(&venue.Number, &venue.FestTitle, &venue.FestHosts, &ownTitle, &ownHosts, &venue.Hidden, &venue.GameOnly, &venue.Bouts); err != nil {
-			return venue, err
-		}
-		if venue.GameOnly {
-			venue.Title, venue.Hosts = venue.FestTitle, venue.FestHosts
-			venue.FestTitle, venue.FestHosts = "", ""
-			return venue, nil
-		}
-		venue.Title, venue.Hosts = venue.FestTitle, venue.FestHosts
-		if ownTitle.Valid {
-			venue.Title, venue.OwnTitle = ownTitle.String, &ownTitle.String
-		}
-		if ownHosts.Valid {
-			venue.Hosts, venue.OwnHosts = ownHosts.String, &ownHosts.String
-		}
-		return venue, nil
-	})
-}
-
-// VenueBout is one bout of a fest's schedule at a venue: when it starts, the
-// Game it belongs to (its URL ref and title) and the bout's letter, code and
-// title.
-type VenueBout struct {
-	Venue     int    `json:"venue"`
-	StartsAt  string `json:"startsAt,omitempty"`
-	Game      string `json:"game"`
-	GameTitle string `json:"gameTitle"`
-	Code      string `json:"code"`
-	Letter    string `json:"letter,omitempty"`
-	Title     string `json:"title,omitempty"`
-	Finished  bool   `json:"finished,omitempty"`
-	// Room and Hosts are the Game's own title and hosts for the venue, when
-	// it gave them.
-	Room  string `json:"room,omitempty"`
-	Hosts string `json:"hosts,omitempty"`
-}
-
-// LoadVenueBouts returns every bout of the fest that sits at a venue, venue
-// by venue, in the order they are played: by start time, then the Game's
-// order and the schedule's.
-func LoadVenueBouts(ctx context.Context, q Queryer, festID int64) ([]VenueBout, error) {
-	return CollectRows(ctx, q, `
-select v.number, coalesce(m.starts_at, ''), coalesce(nullif(g.slug, ''), g.code), g.title,
-       m.code, m.letter, m.title, m.status = 'finished', coalesce(gv.title, ''), coalesce(gv.hosts, '')
-from matches m
-join venues v on v.id = m.venue_id
-join games g on g.id = m.game_id
-left join game_venues gv on gv.game_id = m.game_id and gv.venue_id = m.venue_id
-join stages s on s.id = m.stage_id
-where m.fest_id = ?
-order by v.number, coalesce(m.starts_at, '') = '', m.starts_at, g.position, s.position, m.position`, []any{festID},
-		func(rows *sql.Rows) (VenueBout, error) {
-			var b VenueBout
-			return b, rows.Scan(&b.Venue, &b.StartsAt, &b.Game, &b.GameTitle, &b.Code, &b.Letter, &b.Title, &b.Finished, &b.Room, &b.Hosts)
-		})
-}
-
 // LoadReseedEntries returns a stage's reseed entries ordered by rank.
 func LoadReseedEntries(ctx context.Context, q Queryer, stageID int64) ([]ReseedEntryView, error) {
 	return CollectRows(ctx, q, `
@@ -121,10 +34,8 @@ order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error)
 func LoadFestMatches(ctx context.Context, q Queryer, stageID int64, gameType string) ([]FestMatchView, error) {
 	rows, err := q.QueryContext(ctx, `
 select m.id, m.code, m.title, m.letter, m.position, m.participant_count, m.status, m.revision,
-       v.number, coalesce(gv.title, v.title), coalesce(gv.hosts, v.hosts, ''), coalesce(m.starts_at, ''), m.game_id
-from matches m
-left join venues v on v.id = m.venue_id
-left join game_venues gv on gv.game_id = m.game_id and gv.venue_id = m.venue_id
+       `+BoutVenueColumns+`, coalesce(m.starts_at, ''), m.game_id
+from matches m`+BoutVenueJoin+`
 where m.stage_id = ?
 order by m.position, m.id`, stageID)
 	if err != nil {
@@ -140,15 +51,13 @@ order by m.position, m.id`, stageID)
 	for rows.Next() {
 		var matchID int64
 		var match FestMatchView
-		var venueNumber sql.NullInt64
-		var venueTitle sql.NullString
-		var venueHosts string
-		if err := rows.Scan(&matchID, &match.Code, &match.Title, &match.Letter, &match.Position, &match.ParticipantCount, &match.Status, &match.Revision, &venueNumber, &venueTitle, &venueHosts, &match.StartsAt, &match.GameID); err != nil {
+		var venue BoutVenue
+		targets := append([]any{&matchID, &match.Code, &match.Title, &match.Letter, &match.Position, &match.ParticipantCount, &match.Status, &match.Revision},
+			venue.Targets()...)
+		if err := rows.Scan(append(targets, &match.StartsAt, &match.GameID)...); err != nil {
 			return nil, err
 		}
-		if venueNumber.Valid {
-			match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String, Hosts: venueHosts}
-		}
+		match.Venue = venue.View()
 		match.ID = matchID
 		records = append(records, matchRecord{ID: matchID, Match: match})
 	}

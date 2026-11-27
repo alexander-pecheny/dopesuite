@@ -231,10 +231,6 @@ func (s *Server) TgBridge() *telegrambridge.Server { return s.tgBridge() }
 // BotRegistrar is the in-process bot's side of the login conversation.
 func (s *Server) BotRegistrar() tgbot.Registrar { return botRegistrar{s} }
 
-func (s *Server) UpdateVenue(reqCtx context.Context, festID int64, number int, title string) ([]store.VenueView, int64, error) {
-	return s.updateVenue(reqCtx, festID, number, venueUpdateRequest{Title: &title})
-}
-
 func (s *Server) VerifyMatchInScope(ctx context.Context, scope FestScope, code string) (MatchScope, error) {
 	return s.verifyMatchInScope(ctx, scope, code)
 }

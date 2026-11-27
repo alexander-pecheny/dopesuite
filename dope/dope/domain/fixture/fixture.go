@@ -23,6 +23,7 @@ import (
 
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
+	"dope/dope/domain/rooms"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -45,6 +46,12 @@ var troikaDSL string
 
 //go:embed data/hamsa.dsl
 var hamsaDSL string
+
+// hamsaRooms are the rooms the fixture's Hamsa plays in, one a line: its
+// venue map puts venues 1, 2, 3 in them, as a host does (ADR-0037).
+//
+//go:embed data/hamsa-rooms.txt
+var hamsaRooms string
 
 const (
 	lineupSize = 4
@@ -123,6 +130,11 @@ func Build(ctx context.Context, db *sql.DB, opts Options) (int64, error) {
 		if err := playBracket(ctx, tx, festID, gameID, g.gameType); err != nil {
 			return 0, fmt.Errorf("fixture %s: %w", g.gameType, err)
 		}
+		if g.gameType == games.Hamsa {
+			if err := mapRooms(ctx, tx, festID, gameID, strings.Fields(hamsaRooms)); err != nil {
+				return 0, fmt.Errorf("fixture rooms: %w", err)
+			}
+		}
 	}
 
 	// The flat formats seat the fest's roster themselves; only their one
@@ -135,6 +147,18 @@ func Build(ctx context.Context, db *sql.DB, opts Options) (int64, error) {
 		}
 	}
 	return festID, tx.Commit()
+}
+
+// mapRooms makes the rooms titled and puts the game's venues 1, 2, … in them.
+func mapRooms(ctx context.Context, tx *sql.Tx, festID, gameID int64, titles []string) error {
+	edits := make([]rooms.VenueEdit, len(titles))
+	for i, title := range titles {
+		if _, err := rooms.CreateTx(ctx, tx, festID, title); err != nil {
+			return err
+		}
+		edits[i] = rooms.VenueEdit{Number: i + 1, Room: &titles[i]}
+	}
+	return rooms.SetMapTx(ctx, tx, festID, gameID, edits)
 }
 
 // createGame makes a game and pins its random seed before anything is played

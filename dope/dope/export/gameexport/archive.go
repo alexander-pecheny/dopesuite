@@ -98,8 +98,8 @@ var festContextSpecs = []struct {
 	{"participants", `select * from participants where fest_id = ?`},
 	{"players", `select * from players where fest_id = ?`},
 	{"participant_players", `select * from participant_players where participant_id in (select id from participants where fest_id = ?)`},
-	{"venues", `select * from venues where fest_id = ?`},
-	{"game_venues", `select * from game_venues where venue_id in (select id from venues where fest_id = ?)`},
+	{"rooms", `select * from rooms where fest_id = ?`},
+	{"game_venues", `select * from game_venues where game_id in (select id from games where fest_id = ?)`},
 }
 
 // HandleScopedGameArchive serves GET /api/fest/{fid}/games/{gid}/export.json.gz.

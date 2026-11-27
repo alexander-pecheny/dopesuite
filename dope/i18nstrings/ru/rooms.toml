@@ -1,0 +1,11 @@
+# A fest's rooms and each game's venue map (domain/rooms, ADR-0037). The host
+# reads these as they are.
+title_empty = "Укажите название площадки."
+# {{.title}} is the other room's title.
+title_taken = 'Площадка «{{.title}}» уже есть.'
+# {{.ref}} is the room the request named, by id or title.
+unknown = 'Площадки «{{.ref}}» нет. Сначала добавьте её на странице площадок феста.'
+# {{.games}} lists the games, each in «».
+in_use = 'Площадка занята в играх {{.games}}. Сначала выберите для них другую.'
+# {{.n}} is a venue number the game does not have.
+no_venue = 'В этой игре нет площадки {{.n}}.'

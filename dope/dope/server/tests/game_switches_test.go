@@ -9,11 +9,9 @@ import (
 	"dope/dope/platform/roles"
 )
 
-// Contested answers and venue names by room are a Game's settings: an OD's
-// of a synch fest carries the contested switch, a regular fest's and a KSI's
-// do not, and either saves its own venue_rooms without touching the other
-// Game's.
-func TestContestedAndVenueRoomsAreAGamesSettings(t *testing.T) {
+// Contested answers are a Game's setting: an OD's of a synch fest carries
+// the switch, a regular fest's and a KSI's do not.
+func TestContestedIsAGamesSetting(t *testing.T) {
 	t.Parallel()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
@@ -24,8 +22,7 @@ func TestContestedAndVenueRoomsAreAGamesSettings(t *testing.T) {
 	adminID, admin := createAPITestSession(t, srv, "boss")
 	addAPITestRole(t, srv, festID, adminID, roles.Admin)
 	type settings struct {
-		Contested  *bool `json:"contested"`
-		VenueRooms bool  `json:"venue_rooms"`
+		Contested *bool `json:"contested"`
 	}
 	call := func(method string, gameID int64, body any) settings {
 		t.Helper()
@@ -36,8 +33,8 @@ func TestContestedAndVenueRoomsAreAGamesSettings(t *testing.T) {
 		}
 		return got
 	}
-	if got := call(http.MethodGet, odID, nil); got.Contested != nil || got.VenueRooms {
-		t.Fatalf("a new OD of a regular fest: %+v, want no contested switch and venues by number", got)
+	if got := call(http.MethodGet, odID, nil); got.Contested != nil {
+		t.Fatalf("a new OD of a regular fest: %+v, want no contested switch", got)
 	}
 	if _, err := db.Exec(`update fests set kind = 'synch' where id = ?`, festID); err != nil {
 		t.Fatal(err)
@@ -48,10 +45,7 @@ func TestContestedAndVenueRoomsAreAGamesSettings(t *testing.T) {
 	if got := call(http.MethodGet, ksiID, nil); got.Contested != nil {
 		t.Fatalf("a KSI takes no contested answers, yet its settings carry the switch")
 	}
-	if got := call(http.MethodPatch, odID, map[string]any{"contested": false, "venue_rooms": true}); got.Contested == nil || *got.Contested || !got.VenueRooms {
-		t.Fatalf("after the switches: %+v", got)
-	}
-	if got := call(http.MethodGet, ksiID, nil); got.VenueRooms {
-		t.Fatalf("the OD's venue_rooms reached the KSI")
+	if got := call(http.MethodPatch, odID, map[string]any{"contested": false}); got.Contested == nil || *got.Contested {
+		t.Fatalf("after the switch: %+v", got)
 	}
 }

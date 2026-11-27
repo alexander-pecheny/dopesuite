@@ -71,11 +71,15 @@ values(?, ?, ?, ?, 1, ?, ?, 'active', 'fest', 'fest', 1, ?, ?)`,
 	if err != nil {
 		t.Fatalf("insert game: %v", err)
 	}
-	venueID, err := store.InsertReturningID(ctx, tx, `
-insert into venues(fest_id, number, title, created_at, updated_at)
-values(?, 1, ?, ?, ?)`, festID, dopeserver.DefaultVenueTitle, now, now)
+	roomID, err := store.InsertReturningID(ctx, tx, `
+insert into rooms(fest_id, title, position, created_at, updated_at)
+values(?, ?, 1, ?, ?)`, festID, dopeserver.DefaultVenueTitle, now, now)
 	if err != nil {
-		t.Fatalf("insert venue: %v", err)
+		t.Fatalf("insert room: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+insert into game_venues(game_id, number, room_id, hosts, updated_at) values(?, 1, ?, '', ?)`, gameID, roomID, now); err != nil {
+		t.Fatalf("insert venue map: %v", err)
 	}
 	stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
@@ -88,8 +92,8 @@ values(?, ?, 'r16', '1/16 финала', 'matches', 1, 'active', '{}')`, festID,
 		status = "finished"
 	}
 	matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, festID, gameID, stageID, dopeserver.DefaultMatchCode, state.Title, len(state.Participants), venueID, status, util.MaxInt64(state.Revision, 1))
+insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue, status, revision)
+values(?, ?, ?, ?, ?, 1, ?, 1, ?, ?)`, festID, gameID, stageID, dopeserver.DefaultMatchCode, state.Title, len(state.Participants), status, util.MaxInt64(state.Revision, 1))
 	if err != nil {
 		t.Fatalf("insert match: %v", err)
 	}

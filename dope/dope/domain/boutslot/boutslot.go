@@ -112,7 +112,7 @@ type bout struct {
 	round    int
 	wave     int
 	position int
-	venueID  sql.NullInt64
+	venue    sql.NullInt64
 	startsAt sql.NullString
 	status   string
 	state    string
@@ -145,10 +145,10 @@ func SwapTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, gameType, cod
 		var b bout
 		err := tx.QueryRowContext(ctx, `
 select m.id, m.code, m.letter, m.stage_id, coalesce(s.block_code, ''), m.round, m.wave, m.position,
-       m.venue_id, m.starts_at, m.status, m.state_json, m.slot_of
+       m.venue, m.starts_at, m.status, m.state_json, m.slot_of
 from matches m join stages s on s.id = m.stage_id
 where m.game_id = ? and m.code = ?`, scope.GameID, code).Scan(&b.id, &b.code, &b.label, &b.stageID, &b.block, &b.round,
-			&b.wave, &b.position, &b.venueID, &b.startsAt, &b.status, &b.state, &b.slotOf)
+			&b.wave, &b.position, &b.venue, &b.startsAt, &b.status, &b.state, &b.slotOf)
 		if err == sql.ErrNoRows {
 			return b, corei18n.User(dopestrings.Default.Boutslot.Unknown(code))
 		}
@@ -188,8 +188,8 @@ where m.game_id = ? and m.code = ?`, scope.GameID, code).Scan(&b.id, &b.code, &b
 	}
 	update := func(x, into bout) error {
 		_, err := tx.ExecContext(ctx, `
-update matches set slot_of = ?, position = ?, wave = ?, venue_id = ?, starts_at = ?, revision = revision + 1 where id = ?`,
-			slotOf(x, into.slot()), into.position, into.wave, into.venueID, into.startsAt, x.id)
+update matches set slot_of = ?, position = ?, wave = ?, venue = ?, starts_at = ?, revision = revision + 1 where id = ?`,
+			slotOf(x, into.slot()), into.position, into.wave, into.venue, into.startsAt, x.id)
 		return err
 	}
 	if err := update(a, b); err != nil {

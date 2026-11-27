@@ -13,9 +13,6 @@ grid_width_label = "Ширина боя на Сетке, px (пусто — по
 # The Game's switch for спорные: hosts record them, the game's jury rules. A
 # Game of a synch fest takes them until it is switched off.
 contested_label = "Спорные ответы (ведущие отмечают, жюри принимает или отклоняет)"
-# The Game's switch: a bout's venue reads as its title (the room) rather than
-# its number.
-venue_rooms_label = "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)"
 error_grid_width = 'Ширина боя на Сетке должна быть от {{.min}} до {{.max}}.'
 divisions_hint = "Отмеченные зачёты можно выбрать на страницах этой игры. Снимите отметку с зачёта, который в этой игре не нужен."
 # The ОД settings page's вне-зачёта boxes, one per зачёт: a ticked one's

@@ -169,12 +169,28 @@ func RestoreGameCheckpoint(ctx context.Context, tx *sql.Tx, gameID int64, cp *Ga
 			}
 		}
 	}
+	if err := SettleLegacyVenuesTx(ctx, tx, gameID); err != nil {
+		return err
+	}
 	// Converted flat-game checkpoints carry their state on the match row and
 	// blank StateJSON; only restore the game-level auxiliary blob when set.
 	if cp.StateJSON != "" {
 		if _, err := tx.ExecContext(ctx, `update games set state_json = ? where id = ?`, cp.StateJSON, gameID); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// SettleLegacyVenuesTx gives a venue number to the game's bouts that came back
+// from before a bout kept its venue as one (ADR-0037): a checkpoint or a row-op
+// of then carries the old venue row, which keeps its number. A move journaled
+// then is not followed; the bout stays at the number it was restored with.
+func SettleLegacyVenuesTx(ctx context.Context, tx *sql.Tx, gameID int64) error {
+	if _, err := tx.ExecContext(ctx, `
+update matches set venue = (select number from legacy_venues v where v.id = matches.venue_id)
+where game_id = ? and venue is null and venue_id is not null`, gameID); err != nil {
+		return fmt.Errorf("settle legacy venues: %w", err)
 	}
 	return nil
 }

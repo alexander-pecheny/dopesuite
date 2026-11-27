@@ -22,4 +22,4 @@
 # flat game kept a separate team list of its own.
 # Score with sloplint 3ab0283 or newer: an older binary still counts the
 # numbers an ignore comment vouches for, and reads about 0.03 higher.
-max-slop-score = 0.4878
+max-slop-score = 0.4877

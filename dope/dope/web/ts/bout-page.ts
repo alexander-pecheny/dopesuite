@@ -51,8 +51,8 @@ import type {SlotRound} from "./round-order-dialog.js";
 import type {FestGridData, FestGridStage} from "./fest-grid.js";
 import S from "./i18nstrings.js";
 import {icon} from "./icons_gen.js";
-import {boutWhereWhen, buildVenuesTable, nameVenuesByRoom} from "./venue.js";
-import type {Venue, VenueFields} from "./venue.js";
+import {boutWhereWhen, buildGameVenuesTable, venueCopyRow} from "./venue.js";
+import type {GameRef, Room, Venue, VenueLine} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
 import {createUndo, isUndoKey, valueAt} from "./undo.js";
 import type {UndoResult} from "./undo.js";
@@ -104,8 +104,6 @@ export interface BoutFest {
   gameName?: string;
   schemaJson?: unknown;
   stages?: Array<FestGridStage | null>;
-  // venueRooms names the bouts' venues by their titles, not their numbers.
-  venueRooms?: boolean;
   // gridWidth is the Game's grid column width in pixels; 0 is the default.
   gridWidth?: number;
 }
@@ -196,7 +194,7 @@ export interface BoutPage<V extends BoutView, S> {
   resync(): Promise<void>;
   // Drop the roster tab, so the next drawing builds it afresh.
   invalidateRoster(): void;
-  // The fest's venues, one array kept in place, so a dialog opened from an
+  // The game's venues, one array kept in place, so a dialog opened from an
   // older drawing still lists the current ones.
   readonly venues: Venue[];
   festStage(code: string): FestGridStage | undefined;
@@ -268,6 +266,10 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   const festStages = new Map<string, FestGridStage>();
   adoptFest(fest);
   const venues: Venue[] = [];
+  // The fest's rooms and its games with venues, which the venues tab offers:
+  // a room for each venue, another game's rooms to copy.
+  let rooms: Room[] = [];
+  let venueGames: GameRef[] = [];
   let rosterView: HTMLElement | null = null;
   // The venues tab, built again only when the venues change.
   let venuesView: HTMLElement | null = null;
@@ -388,7 +390,6 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   // ---- the bouts ----
 
   function adoptFest(view: BoutFest | null | undefined): void {
-    if (view) nameVenuesByRoom(Boolean(view.venueRooms));
     for (const stage of view?.stages || []) if (stage?.code) festStages.set(stage.code, stage);
     // A host moved a bout to another slot of its Round: the scheme the fest
     // view carries has it in its new place, and the page draws that order.
@@ -509,12 +510,28 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     return true;
   }
 
-  // The fest's venues as this Game shows them: its venues tab, and the
-  // host's pencil, which moves a bout to another.
+  // The game's venues with its map: its venues tab, and the host's pencil,
+  // which moves a bout to another. A host's tab also reads the fest's rooms.
   async function fetchVenues(): Promise<void> {
     const response = await fetch(`${apiBase}/venues`);
     if (!response.ok) throw new Error(`venues ${response.status}`);
-    if (adoptVenues(await response.json())) render();
+    let changed = adoptVenues(await response.json());
+    if (!viewer) changed = await fetchRooms() || changed;
+    if (changed) render();
+  }
+
+  // fetchRooms reads the fest's rooms and its games with venues; it says
+  // whether they changed.
+  async function fetchRooms(): Promise<boolean> {
+    const response = await fetch(`/api/fest/${encodeURIComponent(String(route.festID || ""))}/rooms`);
+    if (!response.ok) return false;
+    const page = await response.json() as {rooms?: Room[]; games?: GameRef[]};
+    const fresh = {rooms: page.rooms || [], games: page.games || []};
+    if (JSON.stringify(fresh) === JSON.stringify({rooms, games: venueGames})) return false;
+    rooms = fresh.rooms;
+    venueGames = fresh.games;
+    venuesView = null;
+    return true;
   }
 
   // ---- the stream and the writer ----
@@ -535,10 +552,8 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
         render();
       },
     }, {
-      // A host renamed, added or removed a venue: the bouts' heads say so,
-      // and an added venue may have seated bouts.
-      // The list it carries is the fest's; the Game's own titles are read
-      // again over it.
+      // A host changed the fest's rooms or a game's venue map: the bouts'
+      // heads say so, and this game's venues are read again.
       prefix: venuesScope,
       adopt: () => {
         fetchVenues().catch(() => indicator.fail());
@@ -598,7 +613,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
         if (adoptView(view) && view?.code) refresh(view.code);
         return;
       }
-      // The Game's venue titles answer with its venues; the bouts' heads
+      // A venue map write answers with the game's venues; the bouts' heads
       // read them on the stream.
       if (scope === gameVenuesScope) {
         adoptVenues(response);
@@ -689,17 +704,14 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     return sent.ok ? "" : sent.error || "";
   }
 
-  // venuesTab is the fest's venues as the Game shows them. A host sets the
-  // Game's own title and hosts there; the fest's venues page adds, deletes
-  // and names them for the whole fest.
+  // venuesTab is the game's venues: each number, the room its map puts it
+  // in and its hosts. A host changes them here and may copy another game's
+  // rooms; the fest's rooms are added and named on the fest's page.
   function venuesTab(): HTMLElement {
-    const table = buildVenuesTable(venues, {
+    const table = buildGameVenuesTable(venues, {
       editable: !viewer,
-      inherit: true,
-      onChange: (number: number, fields: VenueFields) => void writer.send(gameVenuesScope, {url: `${apiBase}/venues/${number}`, method: "PUT", body: fields}),
-      onHide: (number: number, hidden: boolean) => void venueWrite({url: `${apiBase}/venues/${number}`, method: "PUT", body: {hidden}}),
-      onAdd: (title: string, number: number) => venueWrite({url: `${apiBase}/venues`, method: "POST", body: number > 0 ? {title, number} : {title}}),
-      onDelete: (number: number) => venueWrite({url: `${apiBase}/venues/${number}`, method: "DELETE"}),
+      rooms,
+      onChange: (number: number, line: VenueLine) => void venueWrite({url: `${apiBase}/venues/${number}`, method: "PUT", body: line}),
     });
     const box = document.createElement("div");
     box.className = "u-col u-gap-sm";
@@ -714,10 +726,26 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
     link.href = `/fest/${encodeURIComponent(String(route.festID || ""))}/venues`;
     link.textContent = S.host.festVenues.link();
     const links = document.createElement("div");
-    links.className = "u-row";
+    links.className = "u-row u-wrap u-gap-sm u-align-center";
     links.appendChild(link);
+    const others = venueGames.filter((game) => game.ref !== String(route.gameID) && game.title !== fest?.gameName);
+    if (!viewer && others.length) links.appendChild(venueCopyRow(others, (ref) => void copyRooms(ref)));
     box.append(links, table);
     return box;
+  }
+
+  // copyRooms puts another game's rooms on this game's venues of the same
+  // numbers, and leaves their hosts.
+  async function copyRooms(ref: string): Promise<void> {
+    const base = `/api/fest/${encodeURIComponent(String(route.festID || ""))}/games/${encodeURIComponent(ref)}`;
+    const response = await fetch(`${base}/venues`);
+    if (!response.ok) return;
+    const theirs = await response.json() as Venue[];
+    const lines = venues.flatMap((venue) => {
+      const match = theirs.find((other) => other.number === venue.number);
+      return match ? [{number: venue.number, room: match.room ? String(match.room) : ""}] : [];
+    });
+    if (lines.length) await venueWrite({url: `${apiBase}/venues`, method: "PUT", body: {venues: lines}});
   }
 
   function grid(data?: FestGridData): HTMLElement {
@@ -1037,8 +1065,8 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
         venue: view?.venue,
         startsAt: view?.startsAt,
         host: viewer ? undefined : {
-          venues: venues.filter((venue) => !venue.hidden),
-          pickVenue: (number) => void writer.send(matchScope(code), {url: matchURL(code, "venue"), body: {number}}),
+          venues,
+          pickVenue: (number, hosts) => void writer.send(matchScope(code), {url: matchURL(code, "venue"), body: {number, hosts}}),
           saveStartsAt: (time, wave) => void writer.send(matchScope(code), {url: matchURL(code, "starts-at"), body: {time, wave}}),
         },
       });

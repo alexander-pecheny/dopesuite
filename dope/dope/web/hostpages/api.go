@@ -450,8 +450,6 @@ type apiGameSettings struct {
 	// Contested says whether the Game takes contested answers; only a format
 	// that takes them has the field.
 	Contested *bool `json:"contested,omitempty"`
-	// VenueRooms names the Game's bouts' venues by their rooms, not their numbers.
-	VenueRooms bool `json:"venue_rooms"`
 	// Tours is how many questions each tour has, for a format whose tours
 	// change after creation; POST …/tours changes them.
 	Tours []int `json:"tours,omitempty"`
@@ -464,9 +462,8 @@ func (g apiGameSettings) settings() GameSettings {
 	hidden := append([]string{}, g.HiddenDivisions...)
 	outside := append([]string{}, g.OutsideDivisions...)
 	width := g.GridWidth
-	rooms := g.VenueRooms
 	return GameSettings{Title: g.Title, Slug: g.Slug, SchemeDSL: g.SchemeDSL, HiddenDivisions: &hidden, OutsideDivisions: &outside, GridWidth: &width,
-		Contested: g.Contested, VenueRooms: &rooms}
+		Contested: g.Contested}
 }
 
 func (s *Server) loadGameSettings(ctx context.Context, festID, gameID int64) (apiGameSettings, error) {
@@ -476,9 +473,9 @@ func (s *Server) loadGameSettings(ctx context.Context, festID, gameID int64) (ap
 	var contestedOn, synch bool
 	err := s.h.Engine().DB.QueryRowContext(ctx, `
 select g.id, g.code, g.title, g.game_type, g.slug, coalesce(g.scheme_dsl, ''), coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), g.grid_width,
-  `+contested.EnabledSQL+`, f.kind = 'synch', g.venue_rooms
+  `+contested.EnabledSQL+`, f.kind = 'synch'
 from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`, gameID, festID).
-		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden, &outside, &g.GridWidth, &contestedOn, &synch, &g.VenueRooms)
+		Scan(&g.ID, &g.Code, &g.Title, &g.Type, &slug, &g.SchemeDSL, &hidden, &outside, &g.GridWidth, &contestedOn, &synch)
 	if err != nil {
 		return g, err
 	}

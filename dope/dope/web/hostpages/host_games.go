@@ -73,10 +73,8 @@ type hostGameSettingsData struct {
 	Grid      bool
 	GridWidth int
 	// Contested is whether the Game takes contested answers, nil for a format
-	// that takes none; VenueRooms whether its bouts name their venues by
-	// room, nil for a format without bouts.
-	Contested  *bool
-	VenueRooms *bool
+	// that takes none.
+	Contested *bool
 	// Tours is the tours block of a format whose tours change after
 	// creation, nil for any other.
 	Tours *gameTours
@@ -455,8 +453,6 @@ func createOptionFields(data hostGameCreateData) []dopeui.Item {
 	}
 	out = append(out, forTypes(typeValues(func(d games.Definition) bool { return d.DSL == games.DSLEditable }), sel,
 		gridWidthField(form.Get("grid_width"))))
-	out = append(out, forTypes(typeValues(func(d games.Definition) bool { return !d.Flat }), sel,
-		settingsSwitch("venue_rooms", form.Get("venue_rooms") == "1", s.Host.Games.VenueRoomsLabel())))
 	if data.Synch {
 		contestable := typeValues(func(d games.Definition) bool {
 			_, ok := games.As[games.Contestable](d.Code)
@@ -608,9 +604,6 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	if data.Contested != nil {
 		form = append(form, settingsSwitch("contested", *data.Contested, s.Host.Games.ContestedLabel()))
 	}
-	if data.VenueRooms != nil {
-		form = append(form, settingsSwitch("venue_rooms", *data.VenueRooms, s.Host.Games.VenueRoomsLabel()))
-	}
 	if data.HasDSL {
 		form = append(form,
 			dopeui.Field(dopeui.Label(s.Host.Games.SchemeLabel()),
@@ -668,22 +661,18 @@ func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, 
 			gridWidth   int
 			contestedOn bool
 			synch       bool
-			rooms       bool
 		)
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
 select g.code, g.title, g.game_type, g.slug, coalesce(g.scheme_dsl, ''), coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), g.grid_width,
-  `+contested.EnabledSQL+`, f.kind = 'synch', g.venue_rooms
+  `+contested.EnabledSQL+`, f.kind = 'synch'
 from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`, gameID, festID).
-			Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden, &outside, &gridWidth, &contestedOn, &synch, &rooms); err != nil {
+			Scan(&code, &title, &gameType, &slug, &schemeDSL, &hidden, &outside, &gridWidth, &contestedOn, &synch); err != nil {
 			return nil, err
 		}
 		data := hostGameSettingsData{}
 		// Contested answers are a synch fest's alone.
 		if _, ok := games.As[games.Contestable](gameType); ok && synch {
 			data.Contested = &contestedOn
-		}
-		if !games.Get(gameType).Flat {
-			data.VenueRooms = &rooms
 		}
 		divisions, err := festops.OfferedDivisions(r.Context(), s.h.Engine().DB, festID, gameType)
 		if err != nil {
@@ -711,11 +700,10 @@ from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`,
 			tours = &gameTours{Tours: parseTours(r.Form.Get("tours"))}
 		}
 		return hostGameSettingsDoc(hostGameSettingsData{
-			Contested:  data.Contested,
-			VenueRooms: data.VenueRooms,
-			Tours:      tours,
-			Shape:      shape,
-			Fest:       fest,
+			Contested: data.Contested,
+			Tours:     tours,
+			Shape:     shape,
+			Fest:      fest,
 			Game: PublicFestGame{
 				ID:    gameID,
 				Slug:  slug.String,
@@ -784,7 +772,7 @@ func settingsFromForm(form url.Values) GameSettings {
 		}
 		g.GridWidth = &width
 	}
-	g.Contested, g.VenueRooms = formSwitch(form, "contested"), formSwitch(form, "venue_rooms")
+	g.Contested = formSwitch(form, "contested")
 	if form.Get("divisions_present") != "" {
 		// The boxes say which offered Divisions are shown (festops.Settings).
 		shown := form["division_shown"]

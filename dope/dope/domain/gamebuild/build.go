@@ -134,15 +134,11 @@ func Create(ctx context.Context, tx *sql.Tx, spec Spec) (int64, error) {
 	return 0, corei18n.User(dopestrings.Default.Gamebuild.Create.SchemeRequired())
 }
 
-// writePastedStructureTx writes a legacy pasted scheme's venues and Structure
-// with no seat resolved, for Clear: its Participants arrive by seed import,
-// and the resolver seats them then.
+// writePastedStructureTx writes a legacy pasted scheme's Structure with no
+// seat resolved, for Clear: its Participants arrive by seed import, and the
+// resolver seats them then.
 func writePastedStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme store.FestScheme) error {
-	venues, err := upsertVenuesTx(ctx, tx, festID, scheme.Venues)
-	if err != nil {
-		return err
-	}
-	return writeStructureTx(ctx, tx, festID, gameID, scheme.GameType, scheme, venues, unseated, nil)
+	return writeStructureTx(ctx, tx, festID, gameID, scheme.GameType, scheme, unseated, nil)
 }
 
 func unseated(store.SchemeSlot) any { return nil }
@@ -227,16 +223,12 @@ values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 	if placeholders > 0 {
 		// Empty seats stay empty: not the fest's teams, which a Game that named
 		// no entrants would otherwise seat by their numbers.
-		venues, err := schemeVenuesTx(ctx, tx, festID, gameID, scheme.Venues, nil)
-		if err != nil {
-			return 0, err
-		}
-		if err := writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, unseated, nil); err != nil {
+		if err := writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, unseated, nil); err != nil {
 			return 0, err
 		}
 		return gameID, nil
 	}
-	if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme, nil); err != nil {
+	if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
 		return 0, err
 	}
 	if err := recordGameEntrantsTx(ctx, tx, gameID); err != nil {
@@ -409,9 +401,7 @@ func stageEmptyState(gameType string, stage store.SchemeStage, seats, fallbackQu
 // writes game_assignments by seed rank, so creation must not pre-fill them by
 // number — or the Game already named its entrants: seating the registry on
 // top would add the teams this Game does not play.
-// own is the venues this Game's bouts sat at before a clear deleted them, nil
-// for a Game being created.
-func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme, own map[int64]bool) error {
+func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme) error {
 	seated, err := hasAssignmentsTx(ctx, tx, gameID)
 	if err != nil {
 		return err
@@ -425,122 +415,20 @@ func writeCompiledStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID in
 	if err != nil {
 		return err
 	}
-	venues, err := schemeVenuesTx(ctx, tx, festID, gameID, scheme.Venues, own)
-	if err != nil {
-		return err
-	}
-	return writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, seat, nil)
-}
-
-// schemeVenuesTx gives the fest the venues a compiled scheme titles — Hamsa's
-// `venues: [А, Б, В]` are the regulations' venues — and returns, by the
-// scheme's own number, the fest venue each bout is seated at. The fest's
-// venues are shared by its Games and the host retitles them, so a titled
-// venue is found by its title wherever the fest numbers it: Octobearfest's
-// Троечка and Своячок list the same rooms in different orders, and matching
-// by number seated the Своячок's «Актовый зал» bouts in the Троечка's «Фойе».
-// A title the fest does not have yet takes the scheme's number when no other
-// Game seats a bout there — free, or this Game's own room the host retitled
-// («Малый зал» for the scheme's «В»), which stays — and the next free number
-// when another Game plays there. A table the compiler only
-// numbered (`venues: 3`, or none given) carries the default title, which
-// says nothing the number does not: it is the fest's venue of that number,
-// and writes no row.
-//
-// A clear deletes the Game's bouts before it writes them again, so it hands
-// over the rooms they sat at (own): a room there that the host renamed is
-// still the Game's, even when another Game plays there too.
-func schemeVenuesTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, venues []store.SchemeVenue, own map[int64]bool) (map[int]int64, error) {
-	type festVenue struct {
-		id     int64
-		number int
-		title  string
-	}
-	existing, err := store.CollectRows(ctx, tx, `select id, number, title from venues where fest_id = ? order by number`,
-		[]any{festID}, func(rows *sql.Rows) (festVenue, error) {
-			var v festVenue
-			return v, rows.Scan(&v.id, &v.number, &v.title)
-		})
-	if err != nil {
-		return nil, err
-	}
-	byTitle := map[string]int64{}
-	byNumber := map[int]int64{}
-	maxNumber := 0
-	for _, v := range existing {
-		if key := venueKey(v.title); key != "" {
-			if _, seen := byTitle[key]; !seen {
-				byTitle[key] = v.id
-			}
-		}
-		byNumber[v.number] = v.id
-		maxNumber = max(maxNumber, v.number)
-	}
-	now := util.UtcNow()
-	ids := map[int]int64{}
-	// claimed is what this scheme already seats a room at: a venue it named
-	// one line up is not free for the next title.
-	claimed := map[int64]bool{}
-	for _, venue := range venues {
-		title := strings.TrimSpace(venue.Title)
-		if title == "" || title == dopestrings.Default.Scheme.Titles.Venue(fmt.Sprint(venue.Number)) {
-			if id, ok := byNumber[venue.Number]; ok {
-				ids[venue.Number] = id
-			}
-			continue
-		}
-		if id, ok := byTitle[venueKey(title)]; ok {
-			ids[venue.Number], claimed[id] = id, true
-			continue
-		}
-		number := venue.Number
-		if id, taken := byNumber[number]; taken && number > 0 && !claimed[id] {
-			var elsewhere bool
-			if err := tx.QueryRowContext(ctx, `
-select exists(select 1 from matches where venue_id = ? and game_id != ?)`, id, gameID).Scan(&elsewhere); err != nil {
-				return nil, err
-			}
-			if !elsewhere || own[id] {
-				ids[venue.Number], claimed[id] = id, true
-				continue
-			}
-		}
-		if _, taken := byNumber[number]; taken || number <= 0 {
-			maxNumber++
-			number = maxNumber
-		}
-		id, err := store.InsertReturningID(ctx, tx, `
-insert into venues(fest_id, number, title, created_at, updated_at) values(?, ?, ?, ?, ?)`, festID, number, title, now, now)
-		if err != nil {
-			return nil, err
-		}
-		byNumber[number] = id
-		byTitle[venueKey(title)] = id
-		maxNumber = max(maxNumber, number)
-		ids[venue.Number], claimed[id] = id, true
-	}
-	return ids, nil
-}
-
-// venueKey is a venue title as two spellings of one room compare: case and
-// spacing aside, ё as е.
-func venueKey(title string) string {
-	key := strings.ToLower(strings.Join(strings.Fields(title), " "))
-	return strings.ReplaceAll(key, "ё", "е")
+	return writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, seat, nil)
 }
 
 // writeStructureTx is the one writer of a Game's stages, matches and slots —
 // compiled or pasted, created, rebuilt, recompiled or imported. A stage
 // carries its Kind (its stage_type when the scheme names none), a match its
-// letter, its venue when the caller resolved the scheme's venues to rows, and
-// the pristine Protocol document its Protocol asks for; seat says who sits in
+// letter, the venue number the scheme deals it, and the pristine Protocol document its Protocol asks for; seat says who sits in
 // a seed slot.
 //
 // live is the Structure the Game has now, nil for a Game that has none. A
 // stage or bout the scheme still names is then rewritten in place rather
 // than inserted, and what the scheme no longer names is deleted: see
 // liveStructure for what each bout keeps.
-func writeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme, venues map[int]int64, seat func(store.SchemeSlot) any, live *liveStructure) error {
+func writeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme, seat func(store.SchemeSlot) any, live *liveStructure) error {
 	if live == nil {
 		live = &liveStructure{}
 	}
@@ -552,8 +440,8 @@ func writeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gam
 		for matchIndex, match := range stage.Matches {
 			row := matchRow{stageID: stageID, position: matchIndex + 1, match: match,
 				emptyState: stageEmptyState(gameType, stage, len(match.Slots), scheme.Questions)}
-			if id, ok := venues[match.Venue]; ok {
-				row.venueID = id
+			if match.Venue > 0 {
+				row.venue = match.Venue
 			}
 			if err := live.writeMatchTx(ctx, tx, festID, gameID, gameType, row, seat); err != nil {
 				return err
@@ -594,7 +482,9 @@ type matchRow struct {
 	position   int
 	match      store.SchemeMatch
 	emptyState string
-	venueID    any
+	// venue is the number the scheme deals the bout to, nil for none. A bout
+	// already written keeps the one it has: a host may have moved it.
+	venue any
 }
 
 func loadLiveStructureTx(ctx context.Context, tx *sql.Tx, gameID int64) (*liveStructure, error) {
@@ -679,9 +569,9 @@ func (live *liveStructure) writeMatchTx(ctx context.Context, tx *sql.Tx, festID,
 	existing, ok := live.matches[match.Code]
 	if !ok {
 		matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, venue_id, status, revision, state_json)
+insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, venue, status, revision, state_json)
 values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-			festID, gameID, row.stageID, match.Code, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, seats, row.venueID, row.emptyState)
+			festID, gameID, row.stageID, match.Code, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, seats, row.venue, row.emptyState)
 		if err != nil {
 			return err
 		}
@@ -692,8 +582,8 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
 		// The seats it had stay where they are, results and all; the new ones
 		// are added after them.
 		if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, slot_of = ?, participant_count = ?, state_json = ? where id = ?`,
-			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, live.slots[match.Code], seats, string(state), existing.id); err != nil {
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, slot_of = ?, participant_count = ?, state_json = ?, venue = coalesce(venue, ?) where id = ?`,
+			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, live.slots[match.Code], seats, string(state), row.venue, existing.id); err != nil {
 			return err
 		}
 		var have int
@@ -704,8 +594,8 @@ update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?,
 	}
 	if existing.begun(gameType) {
 		_, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, slot_of = ? where id = ?`,
-			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, live.slots[match.Code], existing.id)
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, slot_of = ?, venue = coalesce(venue, ?) where id = ?`,
+			row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, live.slots[match.Code], row.venue, existing.id)
 		return err
 	}
 	// A team-blob бой keys its marks by Participant, and its Protocol calls it
@@ -717,8 +607,8 @@ update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?,
 		state = existing.state
 	}
 	if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, slot_of = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
-		row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, live.slots[match.Code], seats, state, existing.id); err != nil {
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, slot_of = ?, participant_count = ?, status = 'active', state_json = ?, venue = coalesce(venue, ?) where id = ?`,
+		row.stageID, match.Title, match.Letter, row.position, match.BlockRound, match.Wave, live.slots[match.Code], seats, state, row.venue, existing.id); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `delete from match_slots where match_id = ?`, existing.id); err != nil {
@@ -819,15 +709,7 @@ select coalesce(scheme_json, '{}'), game_type, coalesce(scheme_dsl, '') from gam
 	if err != nil {
 		return err
 	}
-	own, err := gameVenueIDsTx(ctx, tx, gameID)
-	if err != nil {
-		return err
-	}
-	venues, err := schemeVenuesTx(ctx, tx, festID, gameID, scheme.Venues, own)
-	if err != nil {
-		return err
-	}
-	if err := writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, venues, seat, live); err != nil {
+	if err := writeStructureTx(ctx, tx, festID, gameID, gameType, scheme, seat, live); err != nil {
 		return err
 	}
 	if unrecorded {
@@ -1033,7 +915,7 @@ func uniqueSchemeSlug(base string) string {
 // holds — its DSL, compiled against its own entrants and seating them again,
 // or its pasted scheme with its venues — and returns the scheme it built.
 // Clear deletes the old rows first and calls this.
-func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, dsl, schemeJSON string, entrants []int64, own map[int64]bool) ([]byte, error) {
+func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, dsl, schemeJSON string, entrants []int64) ([]byte, error) {
 	if strings.TrimSpace(dsl) != "" {
 		var meta struct {
 			Slug  string `json:"slug"`
@@ -1060,7 +942,7 @@ func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, 
 				return nil, err
 			}
 		}
-		if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme, own); err != nil {
+		if err := writeCompiledStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
 			return nil, err
 		}
 		if err := recordGameEntrantsTx(ctx, tx, gameID); err != nil {
@@ -1081,21 +963,4 @@ func rebuildTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType, 
 		return nil, err
 	}
 	return json.Marshal(scheme)
-}
-
-// gameVenueIDsTx is the venues a Game's bouts sit at now.
-func gameVenueIDsTx(ctx context.Context, tx *sql.Tx, gameID int64) (map[int64]bool, error) {
-	ids, err := store.CollectRows(ctx, tx, `select distinct venue_id from matches where game_id = ? and venue_id is not null`,
-		[]any{gameID}, func(rows *sql.Rows) (int64, error) {
-			var id int64
-			return id, rows.Scan(&id)
-		})
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[int64]bool, len(ids))
-	for _, id := range ids {
-		out[id] = true
-	}
-	return out, nil
 }

@@ -316,14 +316,12 @@ func LoadMatchStates(ctx context.Context, q Queryer, sel MatchSelector) ([]DBMat
 	where, args := sel.where()
 	rows, err := q.QueryContext(ctx, `
 select m.id, m.game_id, g.game_type, m.code, m.title, m.status, m.revision, m.state_json,
-       t.revision, t.updated_at, s.code, s.title, v.number, coalesce(gv.title, v.title), coalesce(gv.hosts, v.hosts, ''), g.roster_source,
+       t.revision, t.updated_at, s.code, s.title, `+BoutVenueColumns+`, g.roster_source,
        coalesce(s.config_json, ''), coalesce(m.starts_at, '')
 from matches m
 join fests t on t.id = m.fest_id
 join games g on g.id = m.game_id
-join stages s on s.id = m.stage_id
-left join venues v on v.id = m.venue_id
-left join game_venues gv on gv.game_id = m.game_id and gv.venue_id = m.venue_id
+join stages s on s.id = m.stage_id`+BoutVenueJoin+`
 where `+where+`
 order by s.position, s.id, m.position, m.id`, args...)
 	if err != nil {
@@ -333,12 +331,10 @@ order by s.position, s.id, m.position, m.id`, args...)
 	for rows.Next() {
 		var match DBMatchState
 		var updatedAt, stateJSON, stageConfig string
-		var venueNumber sql.NullInt64
-		var venueTitle sql.NullString
-		var venueHosts string
-		if err := rows.Scan(&match.MatchID, &match.GameID, &match.GameType, &match.Code, &match.Title, &match.Status, &match.Revision, &stateJSON,
-			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &venueHosts, &match.RosterSource,
-			&stageConfig, &match.StartsAt); err != nil {
+		var venue BoutVenue
+		targets := append([]any{&match.MatchID, &match.GameID, &match.GameType, &match.Code, &match.Title, &match.Status, &match.Revision, &stateJSON,
+			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle}, venue.Targets()...)
+		if err := rows.Scan(append(targets, &match.RosterSource, &stageConfig, &match.StartsAt)...); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -354,9 +350,7 @@ order by s.position, s.id, m.position, m.id`, args...)
 			match.Blob = blob
 		}
 		match.UpdatedAt = ParseDBTime(updatedAt)
-		if venueNumber.Valid {
-			match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String, Hosts: venueHosts}
-		}
+		match.Venue = venue.View()
 		match.State = MatchState{
 			Title:     match.Title,
 			Finished:  match.Status == "finished",

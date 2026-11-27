@@ -55,8 +55,13 @@ title = "Скачать журнал состояния этой вкладки 
 place = "М"
 
 [venue]
-# The venues table's name column header.
+# The rooms table's name column header.
 name_column = "Название"
+# A game's venues table: the number column, the room select's column and
+# its option for none, and the hosts column below.
+number_column = "№"
+where_column = "Где проходит"
+no_room = "Не выбрана"
 # A bout's venue with a title: the table number, then the title.
 battle = 'пл. {{.n}} ({{.name}})'
 # A bout's venue without a title, and the short form.
@@ -64,33 +69,28 @@ battle_short = 'пл. {{.n}}'
 # A bout's venue with the start time the host gave it, the venue first.
 # {{.venue}} is the venue as above, and may be empty.
 with_time = '{{.venue}} {{.time}}'
-# A bout's venue number and time, then the venue's title (its room).
-with_title = '{{.where}}, {{.title}}'
 # The venues table's hosts column.
 hosts_column = "Ведущие"
-# The add row under the host's venues table: the title field's placeholder,
-# the number field's label (left empty, the venue takes the next free
-# number, which the field shows as its placeholder) and the button.
+# The add row under the host's rooms table: the title field's placeholder and
+# the button.
 add_title = "Новая площадка"
-add_number = "Номер площадки"
 add = "Добавить"
-# The button that deletes a venue no bout plays at.
+# The button that deletes a room no game's venue is in, and what it says
+# instead while games use the room ({{.games}} are their titles).
 delete = "Удалить площадку"
+room_in_use = 'Площадка занята в играх: {{.games}}'
 # The fest's venues page: each venue's bouts, the column heads, and the
 # line under a venue no bout plays at.
 schedule_time = "Время"
 schedule_game = "Игра"
 schedule_bout = "Бой"
 schedule_empty = "Боёв здесь нет."
-# The line over a Game's venues tab, for a host. An empty field there shows
-# the fest's value, which it holds as its placeholder.
-game_intro = "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры, снять площадку, на которой игра не идёт, и добавить свою. Если поле пустое, действует значение феста."
-# A venue's heading on that page: its number and title.
-schedule_head = '{{.n}}. {{.title}}'
-# The heading of a venue one game has for itself.
-schedule_head_game = '{{.n}}. {{.title}} (только {{.game}})'
-# A game's venues tab: the column that ticks the fest venues the game plays at.
-used_column = "В этой игре"
+# The line over a game's venues tab, for a host.
+game_intro = "Номера площадок задаёт схема игры. Для каждой выберите, где она проходит, и впишите ведущих. Список площадок общий для феста."
+# The row over that tab that copies another game's rooms onto this game's
+# venues of the same numbers: its label and the select's first option.
+copy_from = "Скопировать из игры"
+copy_pick = "Выберите игру"
 
 [profile]
 # The host profile page's password form messages.

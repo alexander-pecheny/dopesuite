@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
 	"time"
 )
@@ -104,29 +105,51 @@ type StandingView struct {
 	Tiebreak int     `json:"tiebreak"`
 }
 
-// VenueView is a match's venue (number + title). In the fest's venue list
-// (LoadVenues) it also says how many bouts play at it, which is what lets a
-// host delete only an unused one.
+// VenueView is one of a game's venues (ADR-0037): its number, the room it is
+// in (Room 0 and Title empty for none yet), and its hosts. On a bout, Hosts
+// is who hosts that bout (its own, else the venue's) and OwnHosts its own;
+// in a game's venue list, Bouts is how many of its bouts sit there.
 type VenueView struct {
-	Number int    `json:"number"`
-	Title  string `json:"title"`
-	// Title is what the participants look for, usually the room (room 308);
-	// Hosts who host there (the host and the assistant).
-	Hosts string `json:"hosts,omitempty"`
-	Bouts int    `json:"bouts,omitempty"`
-	// In a Game's venue list (LoadGameVenues) Title and Hosts are what the
-	// Game shows; FestTitle and FestHosts are the fest's, and OwnTitle and
-	// OwnHosts the Game's own, when it gave one.
-	FestTitle string  `json:"festTitle,omitempty"`
-	FestHosts string  `json:"festHosts,omitempty"`
-	OwnTitle  *string `json:"ownTitle,omitempty"`
-	OwnHosts  *string `json:"ownHosts,omitempty"`
-	// Hidden says the Game does not play at this fest venue; GameOnly that
-	// the venue is the Game's own, which no other Game lists. In the fest's
-	// list a Game's own venue names its Game in GameTitle.
-	Hidden    bool   `json:"hidden,omitempty"`
-	GameOnly  bool   `json:"gameOnly,omitempty"`
-	GameTitle string `json:"gameTitle,omitempty"`
+	Number   int    `json:"number"`
+	Room     int64  `json:"room,omitempty"`
+	Title    string `json:"title"`
+	Hosts    string `json:"hosts,omitempty"`
+	OwnHosts string `json:"ownHosts,omitempty"`
+	Bouts    int    `json:"bouts,omitempty"`
+}
+
+// BoutVenueJoin is the join that puts a bout's venue on a query over matches
+// m: its game's map line gv and the room r.
+const BoutVenueJoin = `
+left join game_venues gv on gv.game_id = m.game_id and gv.number = m.venue
+left join rooms r on r.id = gv.room_id`
+
+// BoutVenueColumns are the columns ScanBoutVenue reads, after BoutVenueJoin.
+const BoutVenueColumns = `m.venue, coalesce(gv.room_id, 0), coalesce(r.title, ''), coalesce(gv.hosts, ''), m.hosts`
+
+// BoutVenue is a scanned bout venue: none when the bout sits at no number.
+type BoutVenue struct {
+	Number     sql.NullInt64
+	Room       int64
+	Title      string
+	Hosts, Own string
+}
+
+// Targets are BoutVenue's scan destinations, in BoutVenueColumns' order.
+func (b *BoutVenue) Targets() []any {
+	return []any{&b.Number, &b.Room, &b.Title, &b.Hosts, &b.Own}
+}
+
+// View is the bout's venue, nil for none.
+func (b BoutVenue) View() *VenueView {
+	if !b.Number.Valid {
+		return nil
+	}
+	hosts := b.Hosts
+	if b.Own != "" {
+		hosts = b.Own
+	}
+	return &VenueView{Number: int(b.Number.Int64), Room: b.Room, Title: b.Title, Hosts: hosts, OwnHosts: b.Own}
 }
 
 // StageMatches is one stage's full match views (the bulk all-stages response
@@ -151,8 +174,6 @@ type FestView struct {
 	RegularThemeCount int         `json:"regularThemeCount"`
 	Venues            []VenueView `json:"venues"`
 	Stages            []StageView `json:"stages"`
-	// VenueRooms names a bout's venue by its title (the room), not its number.
-	VenueRooms bool `json:"venueRooms,omitempty"`
 	// GridWidth is the Game's grid column width in pixels, 0 for the default.
 	GridWidth int `json:"gridWidth,omitempty"`
 	// HiddenDivisions are the Flags whose divisions this game does not show.

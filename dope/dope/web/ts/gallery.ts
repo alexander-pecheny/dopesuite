@@ -3,8 +3,8 @@
 // (phone × desktop × light × dark) cover what 84 live pages did, with no live
 // data, no viewer count and no tab strip to move between two shots. Served at
 // /gallery in dev mode only.
-import {buildVenuesTable} from "./venue.js";
-import type {Venue} from "./venue.js";
+import {buildGameVenuesTable} from "./venue.js";
+import type {Room, Venue} from "./venue.js";
 import {buildGroupStandingsView, resultsTeamCell, standingsTable} from "./standings.js";
 import type {GroupBout} from "./standings.js";
 import {divisionChipRow} from "./divisions.js";
@@ -121,7 +121,8 @@ const individualStats: IndividualStatsRow[] = [
   {player: LONG, sum: 90, plus: 120, battles: 4, right: [1, 1, 0, 1, 1]},
 ];
 
-const venues: Venue[] = [{number: 1, title: "ауд. 308", hosts: "Бобыльков / Банникова", bouts: 4}, {number: 2, title: ""}, {number: 3, title: LONG, bouts: 2}];
+const venues: Venue[] = [{number: 1, title: "ауд. 308", room: 1, hosts: "Бобыльков / Банникова", bouts: 4}, {number: 2, title: ""}, {number: 3, title: LONG, room: 2, bouts: 2}];
+const rooms: Room[] = [{id: 1, title: "ауд. 308"}, {id: 2, title: LONG}];
 
 const roster: RosterTeam[] = [
   {number: 1, name: "Детективы для элит", city: "Санкт-Петербург", ratingID: 1, players: [{name: "Дмитрий Яшин", ratingID: 1}, {name: "Анастасия Банникова"}, {name: "Даниил Чеченин"}, {name: "Денис Потехин"}]},
@@ -245,8 +246,8 @@ function render(root: HTMLElement): void {
     section(S.gallery.section.groupStandings(), "table-host fits-frame", buildGroupStandingsView(groups, {boutBox: galleryBoutBox})),
     section(S.gallery.section.ekStats(), "table-host", buildEKStatsTable(ekStats)),
     section(S.gallery.section.individualStats(), "table-host", buildIndividualStatsTable(individualStats)),
-    section(S.gallery.section.venues(), "table-host", buildVenuesTable(venues)),
-    section(S.gallery.section.venuesHost(), "table-host", buildVenuesTable(venues, {editable: true, onChange: () => {}, onAdd: () => Promise.resolve(""), onDelete: () => Promise.resolve("")})),
+    section(S.gallery.section.venues(), "table-host", buildGameVenuesTable(venues)),
+    section(S.gallery.section.venuesHost(), "table-host", buildGameVenuesTable(venues, {editable: true, rooms, onChange: () => {}})),
     section(S.gallery.section.roster(), "table-host fits-frame", buildRosterTable(roster)),
     section(S.gallery.section.chips(), "fits-frame", chips()),
     section(S.gallery.section.suggest(), "fits-frame", suggestField()),

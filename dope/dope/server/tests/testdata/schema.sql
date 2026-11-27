@@ -28,8 +28,8 @@ CREATE INDEX fest_venue_hosts_user_idx on fest_venue_hosts(fest_id, user_id);
 -- index game_invites_game_idx
 CREATE INDEX game_invites_game_idx on game_invites(game_id);
 
--- index game_venues_venue_idx
-CREATE INDEX game_venues_venue_idx on game_venues(venue_id);
+-- index game_venues_room_idx
+CREATE INDEX game_venues_room_idx on game_venues(room_id);
 
 -- index games_fest_slug_idx
 CREATE UNIQUE INDEX games_fest_slug_idx on games(fest_id, slug) where slug is not null;
@@ -55,6 +55,9 @@ CREATE UNIQUE INDEX participants_fest_roster_number_idx
 
 -- index password_resets_user_idx
 CREATE INDEX password_resets_user_idx on password_resets(user_id);
+
+-- index rooms_fest_idx
+CREATE INDEX rooms_fest_idx on rooms(fest_id);
 
 -- index users_username_nocase
 CREATE UNIQUE INDEX users_username_nocase on users(username collate nocase);
@@ -240,11 +243,11 @@ CREATE TABLE game_team_players(
 -- table game_venues
 CREATE TABLE game_venues(
   game_id integer not null references games(id) on delete cascade,
-  venue_id integer not null references venues(id) on delete cascade,
-  title text,
-  hosts text,
-  updated_at text not null, hidden integer not null default 0,
-  primary key(game_id, venue_id)
+  number integer not null,
+  room_id integer references rooms(id),
+  hosts text not null default '',
+  updated_at text not null,
+  primary key(game_id, number)
 );
 
 -- table games
@@ -350,6 +353,17 @@ CREATE TABLE jury_invites(
   revoked_at text
 );
 
+-- table legacy_venues
+CREATE TABLE "legacy_venues"(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  number integer not null,
+  title text not null,
+  created_at text not null,
+  updated_at text not null, hosts text not null default '', game_id integer references games(id) on delete cascade,
+  unique(fest_id, number)
+);
+
 -- table match_results
 CREATE TABLE match_results(
   match_id integer not null references matches(id) on delete cascade,
@@ -386,9 +400,9 @@ CREATE TABLE matches(
   round integer not null default 0,
   wave integer not null default 0,
   participant_count integer not null,
-  venue_id integer references venues(id),
+  venue_id integer references "legacy_venues"(id),
   status text not null default 'active',
-  revision integer not null default 1, state_json TEXT NOT NULL DEFAULT '{}', letter TEXT NOT NULL DEFAULT '', starts_at TEXT, slot_of text not null default '',
+  revision integer not null default 1, state_json TEXT NOT NULL DEFAULT '{}', letter TEXT NOT NULL DEFAULT '', starts_at TEXT, slot_of text not null default '', venue integer, hosts text not null default '',
   unique(game_id, code)
 );
 
@@ -470,6 +484,16 @@ CREATE TABLE rating_sync_base(
   fact text not null check (fact in ('roster','flags','answers')),
   value text not null,
   primary key (fest_id, rating_team, fact)
+);
+
+-- table rooms
+CREATE TABLE rooms(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  title text not null,
+  position integer not null,
+  created_at text not null,
+  updated_at text not null
 );
 
 -- table schema_versions
@@ -578,17 +602,6 @@ CREATE TABLE venue_invites(
   max_uses integer,
   requires_approval integer not null default 0,
   revoked_at text
-);
-
--- table venues
-CREATE TABLE venues(
-  id integer primary key,
-  fest_id integer not null references fests(id) on delete cascade,
-  number integer not null,
-  title text not null,
-  created_at text not null,
-  updated_at text not null, hosts text not null default '', game_id integer references games(id) on delete cascade,
-  unique(fest_id, number)
 );
 
 -- trigger fest_team_players_max_9
@@ -752,15 +765,15 @@ end;
 CREATE TRIGGER journal_matches_insert after insert on matches
 begin
   insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 1, json_object('t', 'matches', 'r', json_object('id', new."id", 'fest_id', new."fest_id", 'game_id', new."game_id", 'stage_id', new."stage_id", 'code', new."code", 'title', new."title", 'position', new."position", 'round', new."round", 'wave', new."wave", 'participant_count', new."participant_count", 'venue_id', new."venue_id", 'status', new."status", 'revision', new."revision", 'state_json', new."state_json", 'letter', new."letter", 'starts_at', new."starts_at", 'slot_of', new."slot_of")), strftime('%Y-%m-%dT%H:%M:%fZ','now');
+  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 1, json_object('t', 'matches', 'r', json_object('id', new."id", 'fest_id', new."fest_id", 'game_id', new."game_id", 'stage_id', new."stage_id", 'code', new."code", 'title', new."title", 'position', new."position", 'round', new."round", 'wave', new."wave", 'participant_count', new."participant_count", 'venue_id', new."venue_id", 'status', new."status", 'revision', new."revision", 'state_json', new."state_json", 'letter', new."letter", 'starts_at', new."starts_at", 'slot_of', new."slot_of", 'venue', new."venue", 'hosts', new."hosts")), strftime('%Y-%m-%dT%H:%M:%fZ','now');
 end;
 
 -- trigger journal_matches_update
 CREATE TRIGGER journal_matches_update after update on matches
-when old."id" is not new."id" or old."fest_id" is not new."fest_id" or old."game_id" is not new."game_id" or old."stage_id" is not new."stage_id" or old."code" is not new."code" or old."title" is not new."title" or old."position" is not new."position" or old."round" is not new."round" or old."wave" is not new."wave" or old."participant_count" is not new."participant_count" or old."venue_id" is not new."venue_id" or old."status" is not new."status" or old."revision" is not new."revision" or old."letter" is not new."letter" or old."starts_at" is not new."starts_at" or old."slot_of" is not new."slot_of"
+when old."id" is not new."id" or old."fest_id" is not new."fest_id" or old."game_id" is not new."game_id" or old."stage_id" is not new."stage_id" or old."code" is not new."code" or old."title" is not new."title" or old."position" is not new."position" or old."round" is not new."round" or old."wave" is not new."wave" or old."participant_count" is not new."participant_count" or old."venue_id" is not new."venue_id" or old."status" is not new."status" or old."revision" is not new."revision" or old."letter" is not new."letter" or old."starts_at" is not new."starts_at" or old."slot_of" is not new."slot_of" or old."venue" is not new."venue" or old."hosts" is not new."hosts"
 begin
   insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 2, json_object('t', 'matches', 'r', json_remove(json_object('id', new."id", 'fest_id', new."fest_id", 'game_id', new."game_id", 'stage_id', new."stage_id", 'code', new."code", 'title', new."title", 'position', new."position", 'round', new."round", 'wave', new."wave", 'participant_count', new."participant_count", 'venue_id', new."venue_id", 'status', new."status", 'revision', new."revision", 'letter', new."letter", 'starts_at', new."starts_at", 'slot_of', new."slot_of"), case when old."fest_id" is new."fest_id" then '$."fest_id"' else '$."__dope_keep__"' end, case when old."game_id" is new."game_id" then '$."game_id"' else '$."__dope_keep__"' end, case when old."stage_id" is new."stage_id" then '$."stage_id"' else '$."__dope_keep__"' end, case when old."code" is new."code" then '$."code"' else '$."__dope_keep__"' end, case when old."title" is new."title" then '$."title"' else '$."__dope_keep__"' end, case when old."position" is new."position" then '$."position"' else '$."__dope_keep__"' end, case when old."round" is new."round" then '$."round"' else '$."__dope_keep__"' end, case when old."wave" is new."wave" then '$."wave"' else '$."__dope_keep__"' end, case when old."participant_count" is new."participant_count" then '$."participant_count"' else '$."__dope_keep__"' end, case when old."venue_id" is new."venue_id" then '$."venue_id"' else '$."__dope_keep__"' end, case when old."status" is new."status" then '$."status"' else '$."__dope_keep__"' end, case when old."revision" is new."revision" then '$."revision"' else '$."__dope_keep__"' end, case when old."letter" is new."letter" then '$."letter"' else '$."__dope_keep__"' end, case when old."starts_at" is new."starts_at" then '$."starts_at"' else '$."__dope_keep__"' end, case when old."slot_of" is new."slot_of" then '$."slot_of"' else '$."__dope_keep__"' end)), strftime('%Y-%m-%dT%H:%M:%fZ','now');
+  select (select fest_id from games where id = new.game_id), new.game_id, coalesce((select revision from fests where id = (select fest_id from games where id = new.game_id)), 0), strftime('%Y-%m-%dT%H:%M:%fZ','now'), (select actor_user_id from audit_ctx where id = 1), (select request_id from audit_ctx where id = 1), 2, json_object('t', 'matches', 'r', json_remove(json_object('id', new."id", 'fest_id', new."fest_id", 'game_id', new."game_id", 'stage_id', new."stage_id", 'code', new."code", 'title', new."title", 'position', new."position", 'round', new."round", 'wave', new."wave", 'participant_count', new."participant_count", 'venue_id', new."venue_id", 'status', new."status", 'revision', new."revision", 'letter', new."letter", 'starts_at', new."starts_at", 'slot_of', new."slot_of", 'venue', new."venue", 'hosts', new."hosts"), case when old."fest_id" is new."fest_id" then '$."fest_id"' else '$."__dope_keep__"' end, case when old."game_id" is new."game_id" then '$."game_id"' else '$."__dope_keep__"' end, case when old."stage_id" is new."stage_id" then '$."stage_id"' else '$."__dope_keep__"' end, case when old."code" is new."code" then '$."code"' else '$."__dope_keep__"' end, case when old."title" is new."title" then '$."title"' else '$."__dope_keep__"' end, case when old."position" is new."position" then '$."position"' else '$."__dope_keep__"' end, case when old."round" is new."round" then '$."round"' else '$."__dope_keep__"' end, case when old."wave" is new."wave" then '$."wave"' else '$."__dope_keep__"' end, case when old."participant_count" is new."participant_count" then '$."participant_count"' else '$."__dope_keep__"' end, case when old."venue_id" is new."venue_id" then '$."venue_id"' else '$."__dope_keep__"' end, case when old."status" is new."status" then '$."status"' else '$."__dope_keep__"' end, case when old."revision" is new."revision" then '$."revision"' else '$."__dope_keep__"' end, case when old."letter" is new."letter" then '$."letter"' else '$."__dope_keep__"' end, case when old."starts_at" is new."starts_at" then '$."starts_at"' else '$."__dope_keep__"' end, case when old."slot_of" is new."slot_of" then '$."slot_of"' else '$."__dope_keep__"' end, case when old."venue" is new."venue" then '$."venue"' else '$."__dope_keep__"' end, case when old."hosts" is new."hosts" then '$."hosts"' else '$."__dope_keep__"' end)), strftime('%Y-%m-%dT%H:%M:%fZ','now');
 end;
 
 -- trigger journal_stage_standings_delete

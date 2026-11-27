@@ -10,7 +10,7 @@ An ЭК game (`themes` is ЭК's Protocol param):
 
 ```
 [defaults]
-venues: [Москва-1, Москва-2, Москва-3, Москва-4, Москва-5, Рим]
+venues: 6
 sorting: [points, h2h, taken, diff]
 points: [2, 1, 0]
 themes: 6
@@ -30,7 +30,7 @@ participants: 16
 themes: 8
 themes.final: 12
 reseed: semifinal
-venues.final: [Рим]
+venues.final: [6]
 ```
 
 The words are CONTEXT.md's: a Block has a Kind and Participants (a team or a
@@ -181,7 +181,7 @@ Kind does not read is a compile error, so nothing is dropped on the floor:
 |---|---|
 | `kind` | `flat`, `roundrobin`, `single_elimination`, `double_elimination` — the DSL words the registered Kinds declare (`structure.Macro`); a Kind is one Go type in `domain/structure` that names its keys (`Keys()`), expands a Block (`Expand`) and ranks its stages (`Ranker`), and adding one is one file, no compiler edit |
 | `title` | display title: the stage title of a single-group block, a `{title}. Группа N` prefix on multi-group blocks, a `{title}. {round}` prefix on a bracket's rounds when the scheme has more than one block; `title.r3` names one Round |
-| `venues` | restrict the block (or, dotted, one Round) to a venue subset, by title or number |
+| `venues` | restrict the block (or, dotted, one Round) to a venue subset, by number |
 | `sorting`, `points` | ranking comparators and win/draw/loss values for this block's standings. `points` takes fractions — Троечка pays `[1, 0.5, 0]`, half a балл for a ничья. A metric's direction follows the metric — место and жребий ascend, everything else descends — unless the scheme writes `taken asc`. On a block with `reseed: true` the sorting key describes the Edge instead (groups fall back to `[defaults]`/canon) and names reseed metrics: any metric the game's Protocol writes (`taken` for брейн, `total`/`plus`/`correct_50` for ЭК), plus the reseed's own `place_sum`, `draw` and the КИНСБФ 3.3.5 rates `points_share`, `taken_share`, `taken_base`, `diff` (desc; очки from final outcomes, взятые без перестрелок, разница against opponents in own bouts); default is place_sum, then taken. A group's `sorting` likewise names the Protocol's metrics or what a group adds (`points`, `h2h`, `taken`, `conceded`, `diff`, `place_sum`, `bouts`); anything else is a compile error naming the metrics there are. `h2h` is личная встреча among the tied: at a table of two the points of their bouts against each other, at a table of three or more each pair's places in the бой they shared. `points: [2, 1, 0]` is roundrobin's |
 | `reseed` | opt-in re-rank: `true` for the block's incoming Edge (on a DE, between every round too), a round name (`r3`, `semifinal`) for a boundary inside an se block — that round then seats from the re-rank of every place the previous round sent on, bracket-ordered — or `every` for both, the incoming Edge and every se round after it (ТПШ) |
 | `stats_from` | with a reseed only: which blocks' bouts the re-rank metrics are summed over (`stats_from: [s1, s2]`); default is the previous block, or the previous round for a boundary reseed. Naming the block itself at a boundary sums its own rounds so far (СтудЧР's ЭК ranked its пересев перед 1/4 by сумма мест over 1/16 and 1/8 together). Eligibility is independent of the stats scope: the previous block's proceeding places, or every place the previous round sent on |
@@ -225,15 +225,14 @@ extension (`from: block 2 ranks 17-32`), not v1.
 
 ## `[defaults]`-only keys
 
-`venues:` — either a count (`venues: 6`, auto-titled) or a titled list; absent,
-the count is derived as the widest block's lane need. The compiler splits a
-Round with more matches than venues into ⌈matches/venues⌉ Waves (`-w{k}` stage
-codes) in canonical order and maps rr Groups one per venue, cycling
-(`group_venues` gives a Group more). Two Games of one fest share its venues by
-number: Polyfest's two СИ зачёты both write `venues: 12` and take 1–8 and 9–12
-with the block's `venues:` subset. Concrete
-venues stay editable after compilation through the existing venues API; DSL
-names are initial values.
+`venues:` — a count (`venues: 6`); absent, the count is derived as the widest
+block's lane need. The compiler splits a Round with more matches than venues
+into ⌈matches/venues⌉ Waves (`-w{k}` stage codes) in canonical order and maps
+rr Groups one per venue, cycling (`group_venues` gives a Group more). A scheme
+deals numbers and names no rooms (ADR-0037): which room each of the Game's
+venues is in, and its hosts, is the Game's venue map, set on its Площадки tab
+or through `PUT …/games/<game>/venues`. A stored scheme that still lists
+titles (`venues: [А, Б, В]`) compiles as that many numbered venues.
 
 ## Compilation
 

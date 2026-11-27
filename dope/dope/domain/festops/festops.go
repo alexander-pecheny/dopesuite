@@ -105,9 +105,6 @@ type Settings struct {
 	// Contested says whether the Game takes contested answers (a Game whose
 	// format takes none ignores it); nil leaves it as it is.
 	Contested *bool `json:"contested"`
-	// VenueRooms names the Game's bouts' venues by their titles (the rooms)
-	// rather than their numbers; nil leaves it as it is.
-	VenueRooms *bool `json:"venue_rooms"`
 	// Tours is how many questions each tour has, for a format whose tours
 	// change after creation (games.Retourer); nil leaves them as they are.
 	Tours *[]int `json:"tours"`
@@ -219,16 +216,10 @@ func writeDocumentSettingsTx(ctx context.Context, tx *sql.Tx, festID, gameID int
 	return []core.GameState{{GameID: gameID, StateJSON: retoured}}, nil
 }
 
-// writeSwitchesTx saves the Game's contested and venue-rooms switches the
-// Settings name. A changed contested switch gives the Game its list again, so
+// writeSwitchesTx saves the Game's contested switch the Settings name. A changed contested switch gives the Game its list again, so
 // turned off, its accepted answers leave the standings; the document is what
 // the write then broadcasts.
 func writeSwitchesTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, g Settings) ([]core.GameState, error) {
-	if g.VenueRooms != nil {
-		if _, err := tx.ExecContext(ctx, `update games set venue_rooms = ? where id = ? and fest_id = ?`, util.BoolToInt(*g.VenueRooms), gameID, festID); err != nil {
-			return nil, err
-		}
-	}
 	if g.Contested == nil {
 		return nil, nil
 	}

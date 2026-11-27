@@ -1,5 +1,5 @@
 [defaults]
-venues: [А, Б, В]
+venues: 3
 
 [scheme]
 title: Групповой этап

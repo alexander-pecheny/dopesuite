@@ -14,18 +14,13 @@ import (
 )
 
 // Venue-edit request bodies used by the match-update handlers below.
-// venueUpdateRequest is the body of PUT /api/fest/{fest}/venues/{n}: the
-// fields it names change, the ones it leaves out keep their value.
-type venueUpdateRequest struct {
-	Title *string `json:"title,omitempty"`
-	Hosts *string `json:"hosts,omitempty"`
-	// Hidden, on a Game's venue, says whether the Game plays at it.
-	Hidden *bool `json:"hidden,omitempty"`
-}
-
+// matchVenueRequest is the body of POST …/matches/{code}/venue: one of the
+// game's venue numbers, and the bout's own hosts when Hosts is given (empty:
+// the venue's).
 type matchVenueRequest struct {
-	Number      int `json:"number"`
-	VenueNumber int `json:"venueNumber"`
+	Number      int     `json:"number"`
+	VenueNumber int     `json:"venueNumber"`
+	Hosts       *string `json:"hosts"`
 }
 
 func (s *server) loadFestViewLocked(festID, gameID int64) (store.FestView, error) {
@@ -68,12 +63,6 @@ func (s *server) loadFestViewUsing(q store.Queryer, festID, gameID int64) (store
 	ctx, cancel := festwrite.BoundedReadContext()
 	defer cancel()
 	return festview.Load(ctx, q, festID, gameID)
-}
-
-func (s *server) loadVenuesLocked(festID int64) ([]store.VenueView, error) {
-	ctx, cancel := festwrite.BoundedReadContext()
-	defer cancel()
-	return store.LoadVenues(ctx, s.eng.DB, festID)
 }
 
 func (s *server) loadMatchViewLocked(festID int64, code string) (store.MatchView, error) {

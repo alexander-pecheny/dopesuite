@@ -43,6 +43,8 @@ finished = "Закончен"
 edit = "Площадка и время начала"
 cancel = "Отмена"
 save = "Сохранить"
+# The bout's own hosts in the dialog; empty, the venue's hosts stand.
+hosts = "Ведущие этого боя"
 # The start time field of the dialog, its hint, and the box that gives the
 # time to every bout of the same тур.
 time = "Время начала"

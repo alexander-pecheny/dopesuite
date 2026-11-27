@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 
 	"dope/dope/domain/resolver"
+	"dope/dope/domain/rooms"
 	"dope/dope/domain/structure"
 	"dope/dope/storage/store"
 )
@@ -29,25 +30,26 @@ func Load(ctx context.Context, q store.Queryer, festID, gameID int64) (store.Fes
 	var updatedAt, hidden, outside string
 	if err := q.QueryRowContext(ctx, `
 select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, ''), coalesce(g.title, ''), coalesce(g.game_type, ''),
-  coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), coalesce(g.venue_rooms, 0), coalesce(g.grid_width, 0)
+  coalesce(g.hidden_divisions, ''), coalesce(g.outside_divisions, ''), coalesce(g.grid_width, 0)
 from fests t
 left join games g on g.fest_id = t.id and g.id = ?
 where t.id = ?`, gameID, festID).
-		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON, &view.GameName, &view.GameType, &hidden, &outside, &view.VenueRooms, &view.GridWidth); err != nil {
+		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON, &view.GameName, &view.GameType, &hidden, &outside, &view.GridWidth); err != nil {
 		return store.FestView{}, err
 	}
 	view.HiddenDivisions = store.ParseHiddenDivisions(hidden)
 	view.OutsideDivisions = store.ParseHiddenDivisions(outside)
 	view.UpdatedAt = updatedAt
 
-	venues, err := store.LoadVenues(ctx, q, festID)
+	// A game's own venues and their map; the fest's grid of every game reads
+	// each bout's own.
 	if gameID > 0 {
-		venues, err = store.LoadGameVenues(ctx, q, festID, gameID)
+		venues, err := rooms.LoadGameVenues(ctx, q, gameID)
+		if err != nil {
+			return store.FestView{}, err
+		}
+		view.Venues = venues
 	}
-	if err != nil {
-		return store.FestView{}, err
-	}
-	view.Venues = venues
 
 	stageWhere := "fest_id = ?"
 	stageArgs := []any{festID}

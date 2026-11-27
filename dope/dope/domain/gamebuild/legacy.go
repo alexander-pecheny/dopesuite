@@ -144,31 +144,3 @@ values(?, ?, ?, 'main', ?, 1, 1, 1, 0, 'active', 0, ?)`, festID, gameID, stageID
 	}
 	return flatgame.SettleTx(ctx, tx, festID, gameID)
 }
-
-// upsertVenuesTx makes the fest's venues the scheme names and returns them by
-// number, for the matches to point at.
-func upsertVenuesTx(ctx context.Context, tx *sql.Tx, festID int64, venues []store.SchemeVenue) (map[int]int64, error) {
-	now := util.UtcNow()
-	ids := make(map[int]int64, len(venues))
-	for _, venue := range venues {
-		id, err := upsertVenueTx(ctx, tx, festID, venue, now)
-		if err != nil {
-			return nil, err
-		}
-		ids[venue.Number] = id
-	}
-	return ids, nil
-}
-
-func upsertVenueTx(ctx context.Context, tx *sql.Tx, festID int64, venue store.SchemeVenue, now string) (int64, error) {
-	if _, err := tx.ExecContext(ctx, `
-insert into venues(fest_id, number, title, created_at, updated_at)
-values(?, ?, ?, ?, ?)
-on conflict(fest_id, number) do update set title = excluded.title, updated_at = excluded.updated_at`,
-		festID, venue.Number, venue.Title, now, now); err != nil {
-		return 0, err
-	}
-	var id int64
-	err := tx.QueryRowContext(ctx, `select id from venues where fest_id = ? and number = ?`, festID, venue.Number).Scan(&id)
-	return id, err
-}

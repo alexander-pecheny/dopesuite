@@ -41,7 +41,7 @@ func TestABoutMovesToAnotherSlotOfItsRound(t *testing.T) {
 		t.Helper()
 		out := map[string]row{}
 		list, err := store.CollectRows(t.Context(), db, `
-select m.code, m.slot_of, m.round, m.wave, m.position, m.venue_id,
+select m.code, m.slot_of, m.round, m.wave, m.position, m.venue,
        (select group_concat(participant_id) from match_slots where match_id = m.id)
 from matches m where m.game_id = ?`, []any{gameID}, func(rs *sql.Rows) (row, error) {
 			var r row

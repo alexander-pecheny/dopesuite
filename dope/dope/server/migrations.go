@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"dope/dope/domain/flatgame"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/resolver"
+	"dope/dope/domain/rooms"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/schemedsl"
+	"dope/dope/platform/util"
 	"dope/dope/storage/auditmw"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/migrate"
@@ -1286,6 +1289,12 @@ drop table game_teams;
 `)
 		return err
 	}},
+	// A fest's rooms and each game's venue map (ADR-0037): the fest-wide
+	// numbered venues become rooms, every game's venues get the room and
+	// hosts they showed, and a bout keeps its venue as a number. The old
+	// table stays, renamed and unread, with matches.venue_id, which old
+	// checkpoints still carry (journal.RestoreGameCheckpoint).
+	{Version: 66, Name: "rooms and game venue maps", Up: roomsAndVenueMaps},
 }
 
 // overridesToHandRosters keeps every Game's teams playing with whom they play
@@ -1673,6 +1682,235 @@ select (select id from users where username = 'disamone' and telegram_user_id is
 }
 
 func migrateDB(db *sql.DB) error { return schema.Apply(db, migrations) }
+
+// roomsAndVenueMaps is v66. Each fest's titled venues become its rooms (two
+// titles rooms.Key holds equal are one room), and each game gets a map line
+// for every venue number its scheme deals or its bouts sit at: the room of
+// the game's own title for that venue when it gave one, else the venue's, and
+// the game's own hosts, else the venue's. Hidden rows and game-only venues
+// fold into the same lines. Each bout takes the number it sat at, or the one
+// its scheme deals it.
+func roomsAndVenueMaps(db *sql.DB) error {
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	overrides, err := store.CollectRows(ctx, tx, `select game_id, venue_id, title, hosts from game_venues`, nil,
+		func(rows *sql.Rows) (legacyOverride, error) {
+			var o legacyOverride
+			return o, rows.Scan(&o.game, &o.venue, &o.title, &o.hosts)
+		})
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+alter table venues rename to legacy_venues;
+drop table game_venues;
+create table rooms(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  title text not null,
+  position integer not null,
+  created_at text not null,
+  updated_at text not null
+);
+create index rooms_fest_idx on rooms(fest_id);
+create table game_venues(
+  game_id integer not null references games(id) on delete cascade,
+  number integer not null,
+  room_id integer references rooms(id),
+  hosts text not null default '',
+  updated_at text not null,
+  primary key(game_id, number)
+);
+create index game_venues_room_idx on game_venues(room_id);
+alter table matches add column venue integer;
+alter table matches add column hosts text not null default '';
+update matches set venue = (select number from legacy_venues v where v.id = matches.venue_id) where venue_id is not null;
+`); err != nil {
+		return err
+	}
+	fests, err := store.CollectRows(ctx, tx, `select id from fests order by id`, nil, func(rows *sql.Rows) (int64, error) {
+		var id int64
+		return id, rows.Scan(&id)
+	})
+	if err != nil {
+		return err
+	}
+	for _, festID := range fests {
+		if err := festRoomsAndMapsTx(ctx, tx, festID, overrides); err != nil {
+			return fmt.Errorf("fest %d: %w", festID, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// legacyOverride is a row of the old per-game venue overrides.
+type legacyOverride struct {
+	game, venue  int64
+	title, hosts sql.NullString
+}
+
+// legacyVenue is a row of the old fest-wide venues table.
+type legacyVenue struct {
+	id, game     int64
+	number       int
+	title, hosts string
+}
+
+func festRoomsAndMapsTx(ctx context.Context, tx *sql.Tx, festID int64, overrides []legacyOverride) error {
+	venues, err := store.CollectRows(ctx, tx, `
+select id, coalesce(game_id, 0), number, trim(title), trim(hosts) from legacy_venues where fest_id = ?
+order by game_id is not null, number`, []any{festID}, func(rows *sql.Rows) (legacyVenue, error) {
+		var v legacyVenue
+		return v, rows.Scan(&v.id, &v.game, &v.number, &v.title, &v.hosts)
+	})
+	if err != nil {
+		return err
+	}
+	index := roomIndex{festID: festID, ids: map[string]int64{}}
+	for _, v := range venues {
+		if _, err := index.room(ctx, tx, v.title); err != nil {
+			return err
+		}
+	}
+	type game struct {
+		id     int64
+		scheme string
+	}
+	festGames, err := store.CollectRows(ctx, tx, `select id, coalesce(scheme_json, '') from games where fest_id = ?`, []any{festID},
+		func(rows *sql.Rows) (game, error) {
+			var g game
+			return g, rows.Scan(&g.id, &g.scheme)
+		})
+	if err != nil {
+		return err
+	}
+	for _, g := range festGames {
+		if err := seatDealtBoutsTx(ctx, tx, g.id, g.scheme); err != nil {
+			return err
+		}
+		if err := gameVenueMapTx(ctx, tx, g.id, venues, overrides, &index); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// roomIndex is a fest's rooms by rooms.Key, made the first time a title
+// names one.
+type roomIndex struct {
+	festID int64
+	ids    map[string]int64
+}
+
+func (x *roomIndex) room(ctx context.Context, tx *sql.Tx, title string) (sql.NullInt64, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return sql.NullInt64{}, nil
+	}
+	id, ok := x.ids[rooms.Key(title)]
+	if !ok {
+		var err error
+		if id, err = rooms.CreateTx(ctx, tx, x.festID, title); err != nil {
+			return sql.NullInt64{}, err
+		}
+		x.ids[rooms.Key(title)] = id
+	}
+	return sql.NullInt64{Int64: id, Valid: true}, nil
+}
+
+// gameVenueMapTx writes a game's map line for each of its venues that had a
+// room or hosts.
+func gameVenueMapTx(ctx context.Context, tx *sql.Tx, gameID int64, venues []legacyVenue, overrides []legacyOverride, index *roomIndex) error {
+	numbers, err := rooms.GameNumbers(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	now := util.UtcNow()
+	for _, n := range numbers {
+		v, ok := legacyVenueOf(venues, gameID, n)
+		if !ok {
+			continue
+		}
+		title, hosts := legacyLine(v, gameID, overrides)
+		roomID, err := index.room(ctx, tx, title)
+		if err != nil {
+			return err
+		}
+		if !roomID.Valid && hosts == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `insert into game_venues(game_id, number, room_id, hosts, updated_at) values(?, ?, ?, ?, ?)`,
+			gameID, n, roomID, hosts, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// legacyLine is the room title and hosts a game showed at an old venue: its
+// own title and hosts where it gave them, else the venue's.
+func legacyLine(v legacyVenue, gameID int64, overrides []legacyOverride) (string, string) {
+	title, hosts := v.title, v.hosts
+	for _, o := range overrides {
+		if o.game != gameID || o.venue != v.id {
+			continue
+		}
+		if strings.TrimSpace(o.title.String) != "" {
+			title = o.title.String
+		}
+		if o.hosts.Valid {
+			hosts = strings.TrimSpace(o.hosts.String)
+		}
+	}
+	return title, hosts
+}
+
+// legacyVenueOf is the old venue a game's number n meant: the game's own
+// venue of that number, else the fest's.
+func legacyVenueOf(venues []legacyVenue, gameID int64, n int) (legacyVenue, bool) {
+	for _, v := range venues {
+		if v.game == gameID && v.number == n {
+			return v, true
+		}
+	}
+	for _, v := range venues {
+		if v.game == 0 && v.number == n {
+			return v, true
+		}
+	}
+	return legacyVenue{}, false
+}
+
+// seatDealtBoutsTx gives every bout of a game that sat at no venue the number
+// its scheme deals it.
+func seatDealtBoutsTx(ctx context.Context, tx *sql.Tx, gameID int64, schemeJSON string) error {
+	var scheme struct {
+		Stages []struct {
+			Matches []struct {
+				Code  string `json:"code"`
+				Venue int    `json:"venue"`
+			} `json:"matches"`
+		} `json:"stages"`
+	}
+	if json.Unmarshal([]byte(schemeJSON), &scheme) != nil {
+		return nil
+	}
+	for _, stage := range scheme.Stages {
+		for _, m := range stage.Matches {
+			if m.Venue <= 0 || m.Code == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `update matches set venue = ? where game_id = ? and code = ? and venue is null`, m.Venue, gameID, m.Code); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
 
 func settleFlatGamesBackfill(db *sql.DB) error {
 	if _, err := db.Exec(`update stages set kind = 'flat' where code = 'main' and kind = 'matches'`); err != nil {

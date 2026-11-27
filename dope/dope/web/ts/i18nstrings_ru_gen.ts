@@ -223,6 +223,7 @@ export const RU: Strings = {
     venue: {
       cancel: () => "Отмена",
       edit: () => "Площадка и время начала",
+      hosts: () => "Ведущие этого боя",
       save: () => "Сохранить",
       time: () => "Время начала",
       timeHint: () => "Например, 10:30. Если оставить пустым, время не показывается.",
@@ -932,7 +933,6 @@ shootout: true
       typeOd: () => "ОД",
       typeSi: () => "Личная СИ",
       typeTroika: () => "Тройка",
-      venueRoomsLabel: () => "Называть площадки в боях по названию (ауд. 308), а не по номеру (пл. 1)",
       wholeRosterHint: () => "Играют все команды феста, под теми же номерами. Кто не играл, отмечается во вкладке «Отказы» на странице игры.",
     },
     invites: {
@@ -1899,6 +1899,13 @@ shootout: true
       formatExpected: (n: string) => `строка ${n}: нужен формат username:role`,
     },
   },
+  rooms: {
+    inUse: (games: string) => `Площадка занята в играх ${games}. Сначала выберите для них другую.`,
+    noVenue: (n: string) => `В этой игре нет площадки ${n}.`,
+    titleEmpty: () => "Укажите название площадки.",
+    titleTaken: (title: string) => `Площадка «${title}» уже есть.`,
+    unknown: (ref: string) => `Площадки «${ref}» нет. Сначала добавьте её на странице площадок феста.`,
+  },
   roundOrder: {
     begun: () => "начат",
     button: () => "Порядок боёв",
@@ -2083,12 +2090,6 @@ shootout: true
     },
     startsAt: {
       bad: (time: string) => `Время «${time}» не подходит. Напишите его так: 10:30.`,
-    },
-    venue: {
-      inUse: (n: string) => `На площадке ${n} есть бои. Сначала перенесите их на другую площадку.`,
-      numberTaken: (n: string) => `Площадка ${n} уже есть.`,
-      titleEmpty: () => "Укажите название площадки.",
-      unknown: (n: string) => `Площадки ${n} нет.`,
     },
   },
   si: {
@@ -2404,23 +2405,24 @@ shootout: true
     },
     venue: {
       add: () => "Добавить",
-      addNumber: () => "Номер площадки",
       addTitle: () => "Новая площадка",
       battle: (n: string, name: string) => `пл. ${n} (${name})`,
       battleShort: (n: string) => `пл. ${n}`,
+      copyFrom: () => "Скопировать из игры",
+      copyPick: () => "Выберите игру",
       delete: () => "Удалить площадку",
-      gameIntro: () => "Площадки общие для всего феста. Здесь можно задать название и ведущих только для этой игры, снять площадку, на которой игра не идёт, и добавить свою. Если поле пустое, действует значение феста.",
+      gameIntro: () => "Номера площадок задаёт схема игры. Для каждой выберите, где она проходит, и впишите ведущих. Список площадок общий для феста.",
       hostsColumn: () => "Ведущие",
       nameColumn: () => "Название",
+      noRoom: () => "Не выбрана",
+      numberColumn: () => "№",
+      roomInUse: (games: string) => `Площадка занята в играх: ${games}`,
       scheduleBout: () => "Бой",
       scheduleEmpty: () => "Боёв здесь нет.",
       scheduleGame: () => "Игра",
-      scheduleHead: (n: string, title: string) => `${n}. ${title}`,
-      scheduleHeadGame: (n: string, title: string, game: string) => `${n}. ${title} (только ${game})`,
       scheduleTime: () => "Время",
-      usedColumn: () => "В этой игре",
+      whereColumn: () => "Где проходит",
       withTime: (venue: string, time: string) => `${venue} ${time}`,
-      withTitle: (where: string, title: string) => `${where}, ${title}`,
     },
     viewers: {
       label: () => "Зрителей онлайн",

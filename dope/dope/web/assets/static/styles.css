@@ -1385,6 +1385,12 @@ button.seat-picker-control {
   --results-team-col: var(--venue-schedule-game-col);
 }
 
+/* The line under a bout's game on the venues page (its venue number and who
+   hosts it) wraps inside the game column rather than running into the next. */
+.venue-schedule-table .results-team .hint {
+  white-space: normal;
+}
+
 /* A group whose bouts seat three or four takes the whole row: its table,
    then its bouts one table each, a круг to a row (standings.ts). */
 .group-standings-item.group-standings-wide {

@@ -222,6 +222,7 @@ export type Strings = {
     venue: {
       cancel: () => string;
       edit: () => string;
+      hosts: () => string;
       save: () => string;
       time: () => string;
       timeHint: () => string;
@@ -910,7 +911,6 @@ export type Strings = {
       typeOd: () => string;
       typeSi: () => string;
       typeTroika: () => string;
-      venueRoomsLabel: () => string;
       wholeRosterHint: () => string;
     };
     invites: {
@@ -1877,6 +1877,13 @@ export type Strings = {
       formatExpected: (n: string) => string;
     };
   };
+  rooms: {
+    inUse: (games: string) => string;
+    noVenue: (n: string) => string;
+    titleEmpty: () => string;
+    titleTaken: (title: string) => string;
+    unknown: (ref: string) => string;
+  };
   roundOrder: {
     begun: () => string;
     button: () => string;
@@ -2061,12 +2068,6 @@ export type Strings = {
     };
     startsAt: {
       bad: (time: string) => string;
-    };
-    venue: {
-      inUse: (n: string) => string;
-      numberTaken: (n: string) => string;
-      titleEmpty: () => string;
-      unknown: (n: string) => string;
     };
   };
   si: {
@@ -2382,23 +2383,24 @@ export type Strings = {
     };
     venue: {
       add: () => string;
-      addNumber: () => string;
       addTitle: () => string;
       battle: (n: string, name: string) => string;
       battleShort: (n: string) => string;
+      copyFrom: () => string;
+      copyPick: () => string;
       delete: () => string;
       gameIntro: () => string;
       hostsColumn: () => string;
       nameColumn: () => string;
+      noRoom: () => string;
+      numberColumn: () => string;
+      roomInUse: (games: string) => string;
       scheduleBout: () => string;
       scheduleEmpty: () => string;
       scheduleGame: () => string;
-      scheduleHead: (n: string, title: string) => string;
-      scheduleHeadGame: (n: string, title: string, game: string) => string;
       scheduleTime: () => string;
-      usedColumn: () => string;
+      whereColumn: () => string;
       withTime: (venue: string, time: string) => string;
-      withTitle: (where: string, title: string) => string;
     };
     viewers: {
       label: () => string;

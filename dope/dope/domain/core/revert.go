@@ -133,7 +133,7 @@ func ReconstructGameStateAt(ctx context.Context, tx *sql.Tx, gameID, throughID i
 			return fmt.Errorf("replay row op %d (%s %s): %w", o.id, o.op, o.table, err)
 		}
 	}
-	return nil
+	return journal.SettleLegacyVenuesTx(ctx, tx, gameID)
 }
 
 // revertGameToPoint reverts a game to journal point targetID. It reconstructs

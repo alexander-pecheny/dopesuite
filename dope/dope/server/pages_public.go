@@ -240,7 +240,7 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 		Games:       festGames,
 		Venues:      venueGames,
 	}
-	if err := s.eng.DB.QueryRowContext(ctx, `select exists(select 1 from venues where fest_id = ?)`, id).Scan(&detail.BoutVenues); err != nil {
+	if err := s.eng.DB.QueryRowContext(ctx, `select exists(select 1 from rooms where fest_id = ?)`, id).Scan(&detail.BoutVenues); err != nil {
 		return publicFestDetail{}, err
 	}
 	return detail, nil
