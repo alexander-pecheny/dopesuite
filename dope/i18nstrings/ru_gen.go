@@ -1226,7 +1226,6 @@ var RU = Strings{
 			SchemePastedNote: func() string {
 				return "Эта игра создана из вставленного JSON, у неё нет схемы. Её сетку здесь поменять нельзя."
 			},
-			ShapeSave: func() string { return "Сохранить мини-игры" },
 			SiHint: func() string {
 				return "Тот же язык схем: за столом сидят игроки, а не команды. Бой на троих — match_size: 3, проходят двое — winning_places: 2."
 			},

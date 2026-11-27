@@ -518,13 +518,13 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	if data.Pasted {
 		form = append(form, dopeui.Note(dopeui.Text(s.Host.Games.SchemePastedNote())))
 	}
+	if data.Shape != nil {
+		form = append(form, shapeFields(*data.Shape)...)
+	}
 	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.SaveSubmit()))))
 	page = append(page, dopeui.Form(form...))
 	if data.Tours != nil {
 		page = append(page, toursBlock("/host/fest/"+festRef+"/game/"+data.Game.Ref()+"/tours", *data.Tours)...)
-	}
-	if data.Shape != nil {
-		page = append(page, shapeBlock("/host/fest/"+festRef+"/game/"+data.Game.Ref()+"/shape", *data.Shape)...)
 	}
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
@@ -595,6 +595,10 @@ from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`,
 		if submitted := strings.TrimSpace(r.Form.Get("scheme_dsl")); submitted != "" && errMsg != "" {
 			schemeDSL = r.Form.Get("scheme_dsl")
 		}
+		// A refused save shows the title and slug as typed, not as stored.
+		if errMsg != "" && r.Form.Has("title") {
+			title, slug.String = r.Form.Get("title"), r.Form.Get("slug")
+		}
 		return hostGameSettingsDoc(hostGameSettingsData{
 			Contested:  data.Contested,
 			VenueRooms: data.VenueRooms,
@@ -659,7 +663,12 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		outside := r.Form["division_outside"]
 		g.OutsideDivisions = &outside
 	}
-	err := s.UpdateGameSettings(r.Context(), festID, gameID, g)
+	// A changed shape goes first: refused, it keeps the rest unsaved too,
+	// and the page shows what the host typed with the reason.
+	err := s.formShape(r, festID, gameID)
+	if err == nil {
+		err = s.UpdateGameSettings(r.Context(), festID, gameID, g)
+	}
 	gameRef := strings.TrimSpace(g.Slug)
 	if gameRef == "" {
 		gameRef = fmt.Sprintf("%d", gameID)

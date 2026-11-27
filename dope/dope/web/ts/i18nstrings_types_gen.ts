@@ -875,7 +875,6 @@ export type Strings = {
       saveSubmit: () => string;
       schemeLabel: () => string;
       schemePastedNote: () => string;
-      shapeSave: () => string;
       siHint: () => string;
       slugLabel: () => string;
       stickerEmptywrong: () => string;

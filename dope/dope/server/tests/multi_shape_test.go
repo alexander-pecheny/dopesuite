@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 )
@@ -86,5 +89,60 @@ func TestAMultiGamesMinigamesChangeWithItsCellsKept(t *testing.T) {
 		{"path": []any{"games", 1, "cells", 0, 19}, "value": 3},
 	}}); code != http.StatusOK {
 		t.Fatalf("a Катакана matrix: %d %s", code, body)
+	}
+}
+
+// The settings page has one form and one Сохранить: the minigames sent as
+// they are leave the shape alone and the new title and slug are saved; a
+// changed shape the game refuses keeps everything unsaved and the page shows
+// what was typed.
+func TestAMultiGamesSettingsSaveTitleAndMinigamesTogether(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	seedFestTeams(t, db, festID, 2)
+	multiID := createGameThroughForm(t, srv, festID, token, map[string]string{"game_type": "multi", "multi_games": "Морской бой: {0-30}"})
+	post := func(fields url.Values) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/%d/settings", festID, multiID), strings.NewReader(fields.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+		resp := httptest.NewRecorder()
+		srv.HostPageServer().HandleHostRouter(resp, req)
+		return resp
+	}
+	stored := func() (title, slug, scheme string) {
+		t.Helper()
+		if err := db.QueryRow(`select title, coalesce(slug, ''), scheme_json from games where id = ?`, multiID).Scan(&title, &slug, &scheme); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	_, _, before := stored()
+	resp := post(url.Values{"title": {"Медиаигры"}, "slug": {"media"}, "multi_games": {"Морской бой: {0-30}\r\n"}, "multi_sorting": {""}})
+	if resp.Code != http.StatusSeeOther {
+		t.Fatalf("save: %d %s", resp.Code, resp.Body.String())
+	}
+	if title, slug, scheme := stored(); title != "Медиаигры" || slug != "media" || scheme != before {
+		t.Fatalf("stored %q %q, scheme changed %v", title, slug, scheme != before)
+	}
+
+	patch := scopedAPIRequest(t, srv, http.MethodPatch, fmt.Sprintf("/api/fest/%d/games/%d/state", festID, multiID), map[string]any{"ops": []map[string]any{
+		{"path": []any{"games", 0, "cells", 0, 0}, "value": 25},
+	}}, token)
+	if patch.Code != http.StatusOK {
+		t.Fatalf("patch: %d %s", patch.Code, patch.Body.String())
+	}
+	resp = post(url.Values{"title": {"Медийки"}, "slug": {"media2"}, "multi_games": {"Морской бой: {0-20}"}, "multi_sorting": {""}})
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `value="Медийки"`) || !strings.Contains(resp.Body.String(), "{0-20}") {
+		t.Fatalf("a refused save: %d %s", resp.Code, resp.Body.String())
+	}
+	if n := strings.Count(resp.Body.String(), `type="submit"`); n != 1 {
+		t.Fatalf("the settings page has %d buttons, want one Сохранить", n)
+	}
+	if title, slug, _ := stored(); title != "Медиаигры" || slug != "media" {
+		t.Fatalf("a refused save stored %q %q", title, slug)
 	}
 }

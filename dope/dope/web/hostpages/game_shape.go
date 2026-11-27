@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/festops"
@@ -50,16 +51,14 @@ func (s *Server) settingsShape(r *http.Request, festID, gameID int64, errMsg str
 	return &GameShape{Spec: r.Form.Get("multi_games"), Sorting: r.Form.Get("multi_sorting")}, nil
 }
 
-// shapeBlock is the settings page's minigames: the spec, the sorting and
-// their save.
-func shapeBlock(action string, shape GameShape) []dopeui.Item {
+// shapeFields are the settings form's minigames: the spec and the sorting,
+// saved by the form's one button with the title and the rest.
+func shapeFields(shape GameShape) []dopeui.Item {
 	return []dopeui.Item{
-		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(action), dopeui.Autocomplete("off"),
-			dopeui.Field(dopeui.Label(dopestrings.Default.Host.Games.MinigamesLabel()),
-				dopeui.Editor(dopeui.Name("multi_games"), dopeui.Rows("8"), dopeui.Spellcheck("false"), dopeui.Text(shape.Spec))),
-			dopeui.Field(dopeui.Label(dopestrings.Default.Host.Games.MultiSortingLabel()),
-				dopeui.Textfield(dopeui.Name("multi_sorting"), dopeui.Value(shape.Sorting))),
-			dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(dopestrings.Default.Host.Games.ShapeSave())))),
+		dopeui.Field(dopeui.Label(dopestrings.Default.Host.Games.MinigamesLabel()),
+			dopeui.Editor(dopeui.Name("multi_games"), dopeui.Rows("8"), dopeui.Spellcheck("false"), dopeui.Text(shape.Spec))),
+		dopeui.Field(dopeui.Label(dopestrings.Default.Host.Games.MultiSortingLabel()),
+			dopeui.Textfield(dopeui.Name("multi_sorting"), dopeui.Value(shape.Sorting))),
 	}
 }
 
@@ -71,18 +70,33 @@ func (s *Server) SetGameShape(ctx context.Context, festID, gameID int64, shape G
 	return err
 }
 
-func (s *Server) handleHostGameShape(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
+// formShape writes the shape the settings form carries, when it differs
+// from the Game's; a form without the minigames, or with them as they are,
+// writes nothing.
+func (s *Server) formShape(r *http.Request, festID, gameID int64) error {
+	if !r.Form.Has("multi_games") {
+		return nil
 	}
 	shape := GameShape{Spec: r.Form.Get("multi_games"), Sorting: r.Form.Get("multi_sorting")}
-	err := s.SetGameShape(r.Context(), festID, gameID, shape)
-	s.settingsWritten(w, r, festID, gameID, s.gameRefOrID(r.Context(), gameID), err)
+	current, err := loadGameShape(r.Context(), s.h.Engine().DB, festID, gameID)
+	if err != nil || current == nil || normalizedShape(*current) == normalizedShape(shape) {
+		return err
+	}
+	return s.SetGameShape(r.Context(), festID, gameID, shape)
 }
 
-// apiGameShape is handleHostGameShape's twin: POST {spec, sorting}; it
-// answers the Game's settings.
+// normalizedShape compares two shapes as typed: line ends and the space
+// around them do not count.
+func normalizedShape(shape GameShape) GameShape {
+	lines := strings.Split(strings.ReplaceAll(shape.Spec, "\r\n", "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimSpace(line)
+	}
+	return GameShape{Spec: strings.TrimSpace(strings.Join(lines, "\n")), Sorting: strings.TrimSpace(shape.Sorting)}
+}
+
+// apiGameShape is the settings form's minigames as an API call: POST {spec,
+// sorting}; it answers the Game's settings.
 func (s *Server) apiGameShape(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	var shape GameShape
 	if err := route.DecodeJSON(r, &shape); err != nil {
