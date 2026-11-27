@@ -4,6 +4,8 @@
 
 # The tab's name in the tab bar and the crumb trail.
 tab = "Участники"
+# The Тройка game's link to its troikas page.
+troikas_link = "Тройки"
 
 [source]
 # The choices of the source picker. The fest's teams in their own order.

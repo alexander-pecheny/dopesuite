@@ -142,6 +142,9 @@ func (s *Server) buildRoutes() *route.Table {
 		s.renderHostGameSettings(w, r, id, gid, "")
 	}))
 	t.Handle("POST "+game+"/settings", route.Manager, gamePage(s.handleHostUpdateGameSettings))
+	// A Troika game's troikas (ADR-0038).
+	t.Handle("GET "+game+"/troikas", route.Manager, gamePage(s.renderHostGameTroikas))
+	t.Handle("POST "+game+"/troikas", route.Manager, gamePage(s.handleHostSaveGameTroikas))
 	t.Handle("GET "+fest+"/numbers", route.Roster, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 		// A venue numbers its teams on its own page.
 		if venue, _, err := s.pages().NumbersVenue(r, sc); err != nil {

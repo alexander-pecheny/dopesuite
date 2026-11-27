@@ -371,6 +371,7 @@ export const RU: Strings = {
       unranked: (names: string) => `Посеяны последними, потому что никого из их игроков нет в составах фестиваля: ${names}.`,
     },
     tab: () => "Участники",
+    troikasLink: () => "Тройки",
   },
   export: {
     col: {

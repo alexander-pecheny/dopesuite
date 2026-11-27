@@ -370,6 +370,7 @@ export type Strings = {
       unranked: (names: string) => string;
     };
     tab: () => string;
+    troikasLink: () => string;
   };
   export: {
     col: {

@@ -38,6 +38,32 @@ type hostTroikasData struct {
 	Lines  string
 	Error  string
 	Notice string
+	// Game is the Troika game whose page this is (ADR-0038): the forms post
+	// to its address and the trail goes through it. Without one the page is
+	// the fest's.
+	Game *troikasGame
+}
+
+// troikasGame is the game a troikas page belongs to: its address and title.
+type troikasGame struct {
+	Ref, Title string
+}
+
+// troikasBase is where the page's forms post.
+func (d hostTroikasData) troikasBase() string {
+	if d.Game != nil {
+		return "/host/fest/" + d.Fest.Ref() + "/game/" + d.Game.Ref + "/troikas"
+	}
+	return "/host/fest/" + d.Fest.Ref() + "/troikas"
+}
+
+// troikasTrail is the page's breadcrumb trail.
+func (d hostTroikasData) troikasTrail() dopeui.Item {
+	prefix := pages.FestCrumbs(d.Fest.Ref(), d.Fest.Title)
+	if d.Game != nil {
+		prefix = append(prefix, dopeui.Crumb(dopeui.Href("/host/fest/"+d.Fest.Ref()+"/game/"+d.Game.Ref+"/"), dopeui.Text(d.Game.Title)))
+	}
+	return pages.Trail(prefix, dopestrings.Default.Host.Troikas.Crumb())
 }
 
 // troikaPlayerFields is how many name fields the edit dialog offers: the most
@@ -52,10 +78,9 @@ const (
 
 func hostTroikasDoc(data hostTroikasData) *dopeui.Doc {
 	s := dopestrings.Default
-	ref := data.Fest.Ref()
 	page := []dopeui.Item{
 		dopeui.Title(s.Host.Troikas.Title(data.Fest.Title)), dopeui.PagePublic, dopeui.Classicscripts("dist/pageforms.js"),
-		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), s.Host.Troikas.Crumb())),
+		dopeui.Publictopbar(data.troikasTrail()),
 	}
 	if data.Error != "" {
 		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
@@ -120,7 +145,7 @@ func hostTroikasDoc(data hostTroikasData) *dopeui.Doc {
 		page = append(page, dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...))
 		flags := festFlagChoices(data.Teams)
 		for _, t := range data.Troikas {
-			page = append(page, hostTroikaDialog(ref, t, data.Teams, flags))
+			page = append(page, hostTroikaDialog(data.troikasBase(), t, data.Teams, flags))
 		}
 	} else {
 		page = append(page, dopeui.Empty(dopeui.Text(s.Host.Troikas.Empty())))
@@ -128,7 +153,7 @@ func hostTroikasDoc(data hostTroikasData) *dopeui.Doc {
 
 	page = append(page, dopeui.Section(
 		dopeui.Subhead(dopeui.Text(s.Host.Troikas.AddSubhead())),
-		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/troikas"), dopeui.Autocomplete("off"),
+		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(data.troikasBase()), dopeui.Autocomplete("off"),
 			dopeui.Hiddenfield(dopeui.Name("mode"), dopeui.Value("lines")),
 			dopeui.Field(dopeui.Label(s.Host.Troikas.LinesLabel()),
 				dopeui.Editor(dopeui.Name("lines"), dopeui.Rows("8"), dopeui.Placeholder(s.Host.Troikas.LinesPlaceholder()), dopeui.Text(data.Lines))),
@@ -169,7 +194,7 @@ func troikaDialogID(id int64) string { return "troika-" + idstr.Format(id) }
 // hostTroikaDialog edits one troika: its name, up to four people, each a field
 // that suggests the fest's players, the team it counts for and its division.
 // Delete is there only while no Game seats it.
-func hostTroikaDialog(ref string, t roster.Assembled, teams []roster.FestTeamChoice, flags []string) *dopeui.Element {
+func hostTroikaDialog(action string, t roster.Assembled, teams []roster.FestTeamChoice, flags []string) *dopeui.Element {
 	s := dopestrings.Default
 	fields := []dopeui.Item{
 		dopeui.Subhead(dopeui.Text(t.Name)),
@@ -236,7 +261,7 @@ func hostTroikaDialog(ref string, t roster.Assembled, teams []roster.FestTeamCho
 	buttons = append(buttons, dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text(s.Host.Roster.CancelBtn())))
 	fields = append(fields, dopeui.Row(append([]dopeui.Item{dopeui.SpaceSM, dopeui.Wrap()}, buttons...)...))
 	return dopeui.Dialog(dopeui.ID(troikaDialogID(t.ID)),
-		dopeui.Form(append([]dopeui.Item{dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/" + ref + "/troikas"), dopeui.Autocomplete("off")}, fields...)...),
+		dopeui.Form(append([]dopeui.Item{dopeui.DirCol, dopeui.Method("post"), dopeui.Action(action), dopeui.Autocomplete("off")}, fields...)...),
 	)
 }
 
@@ -351,6 +376,29 @@ func (s *Server) troikaWrite(ctx context.Context, festID int64, label string, fn
 // handleHostSaveTroikas takes the page's three forms: pasted lines, one
 // troika's edit, and its delete.
 func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, festID int64) {
+	s.saveTroikas(w, r, festID, nil)
+}
+
+// handleHostSaveGameTroikas is the Troika game's troikas page's save.
+func (s *Server) handleHostSaveGameTroikas(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
+	s.saveTroikas(w, r, festID, s.troikasGameOf(r.Context(), gameID))
+}
+
+// renderHostGameTroikas draws the troikas page of a Troika game.
+func (s *Server) renderHostGameTroikas(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
+	s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Game: s.troikasGameOf(r.Context(), gameID)})
+}
+
+// troikasGameOf is a game's address and title, for its troikas page.
+func (s *Server) troikasGameOf(ctx context.Context, gameID int64) *troikasGame {
+	game := &troikasGame{Ref: s.gameRefOrID(ctx, gameID)}
+	_ = s.h.Engine().DB.QueryRowContext(ctx, `select title from games where id = ?`, gameID).Scan(&game.Title)
+	return game
+}
+
+// saveTroikas runs one write of the troikas page and draws it again, the
+// game's when game is given.
+func (s *Server) saveTroikas(w http.ResponseWriter, r *http.Request, festID int64, game *troikasGame) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
@@ -362,7 +410,7 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 			route.WriteError(w, r, err)
 			return
 		}
-		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Error: message, Lines: lines})
+		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Game: game, Error: message, Lines: lines})
 	}
 	switch r.Form.Get("mode") {
 	case "lines":
@@ -372,7 +420,7 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 			fail(err, lines)
 			return
 		}
-		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Notice: str.Host.Troikas.AddedNotice(added)}, synced...)
+		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Game: game, Notice: str.Host.Troikas.AddedNotice(added)}, synced...)
 	case "edit":
 		id, err := idstr.Parse(r.Form.Get("id"))
 		if err != nil || id <= 0 {
@@ -385,7 +433,7 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 				fail(err, "")
 				return
 			}
-			s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Notice: str.Host.Troikas.DeletedNotice()}, synced...)
+			s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Game: game, Notice: str.Host.Troikas.DeletedNotice()}, synced...)
 			return
 		}
 		placement, err := troikaPlacement(r.Form)
@@ -407,7 +455,7 @@ func (s *Server) handleHostSaveTroikas(w http.ResponseWriter, r *http.Request, f
 			fail(err, "")
 			return
 		}
-		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Notice: str.Host.Troikas.SavedNotice()}, synced...)
+		s.renderHostFestTroikasWith(w, r, festID, hostTroikasData{Game: game, Notice: str.Host.Troikas.SavedNotice()}, synced...)
 	default:
 		http.Error(w, "bad mode", http.StatusBadRequest)
 	}

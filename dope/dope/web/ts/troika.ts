@@ -8,6 +8,7 @@
 // bout page (bout-page.ts). A self-booting side-effect module bundled by
 // pages/troika.ts.
 
+import type {EntrantsHeader} from "./entrants.js";
 import {sameArray, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {icon} from "./icons_gen.js";
@@ -132,6 +133,25 @@ const counts = stackedSheet({
   columnsOf: (bout: BoutEntry) => troika.sheetColumns(stateOf(bout.code)),
 });
 
+// troikasHref is the game's troikas page, for a host.
+function troikasHref(): string {
+  return page.viewer || !page.route.festID || !page.route.gameID ? "" : `/host/fest/${page.route.festID}/game/${page.route.gameID}/troikas`;
+}
+
+// troikasLink is the entrants tab's way to the game's troikas page.
+function troikasLink(href: string): EntrantsHeader {
+  const element = document.createElement("div");
+  element.className = "u-row";
+  if (href) {
+    const link = document.createElement("a");
+    link.className = "btn";
+    link.href = href;
+    link.textContent = S.entrants.troikasLink();
+    element.appendChild(link);
+  }
+  return {element, load: () => {}};
+}
+
 const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   app: "troika",
   root,
@@ -143,8 +163,9 @@ const page: BoutPage<TroikaMatchView, TroikaState> = mountBoutPage({
   parse: (view) => troika.parseState(view.state, view.participants?.length || 2),
   blank: () => troika.parseState(null),
   buildTab,
-  buildRoster: (): HTMLElement => buildGameRosterView(page.route.apiBase || "",
-    {troikasHref: page.viewer || !page.route.festID ? "" : `/host/fest/${page.route.festID}/troikas`}),
+  buildRoster: (): HTMLElement => buildGameRosterView(page.route.apiBase || "", {troikasHref: troikasHref()}),
+  // The game's troikas page, over its entrant list (ADR-0038).
+  entrantsHeader: () => troikasLink(troikasHref()),
   // Groups and bouts wrap into the frame's width rather than pushing the page sideways.
   fitsFrame: (tab, node) => tab?.kind !== "grid" && !node.querySelector(".fest-grid"),
   shape: shapeOf,

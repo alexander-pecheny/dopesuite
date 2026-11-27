@@ -506,7 +506,8 @@ var RU = Strings{
 				return fmt.Sprintf("Посеяны последними, потому что никого из их игроков нет в составах фестиваля: %s.", names)
 			},
 		},
-		Tab: func() string { return "Участники" },
+		Tab:         func() string { return "Участники" },
+		TroikasLink: func() string { return "Тройки" },
 	},
 	Export: ExportStrings{
 		Col: ExportColStrings{
