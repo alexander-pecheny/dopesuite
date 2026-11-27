@@ -150,7 +150,9 @@ func LoadGameRosters(ctx context.Context, q store.Queryer, festID, gameID int64)
 		args[i] = id
 	}
 	rows, err := store.CollectRows(ctx, q, `
-select id, coalesce(number, 0), name, coalesce(city, '') from participants where id in (`+placeholders(len(ids))+`)`, args,
+select p.id, coalesce(p.number, 0), coalesce(gp.name, p.name), coalesce(gp.city, p.city, '') from participants p
+left join game_team_names gp on gp.game_id = ? and gp.participant_id = p.id
+where p.id in (`+placeholders(len(ids))+`)`, append([]any{gameID}, args...),
 		func(rows *sql.Rows) (struct {
 			id int64
 			h  head
@@ -298,6 +300,13 @@ func editableTeam(ctx context.Context, q store.Queryer, festID, gameID, particip
 	}
 	if !HandRoster(game.gameType) {
 		return game, corei18n.User(s.Fest.RosterEdit.WrongFormat())
+	}
+	// A game that follows a source changes its players by overrides.
+	if tethered, err := Tethered(ctx, q, gameID); err != nil || tethered {
+		if err == nil {
+			err = corei18n.User(dopestrings.Default.Entrants.Own.Tethered())
+		}
+		return game, err
 	}
 	ids, err := gameTeamIDs(ctx, q, gameID, game.state)
 	if err != nil {

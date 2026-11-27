@@ -168,7 +168,11 @@ func (s *Server) writeGameTeams(w http.ResponseWriter, r *http.Request, sc route
 		}
 		written := core.FestWrite{Event: event, Payload: map[string]any{"gameID": sc.GameID}}
 		for _, update := range updates {
-			written.Broadcast.States = append(written.Broadcast.States, core.GameState{GameID: update.GameID, StateJSON: update.StateJSON})
+			// A bout game's update carries no document: its pages read its
+			// views again.
+			if len(update.StateJSON) > 0 {
+				written.Broadcast.States = append(written.Broadcast.States, core.GameState{GameID: update.GameID, StateJSON: update.StateJSON})
+			}
 			written.Broadcast.Views = append(written.Broadcast.Views, update.GameID)
 		}
 		return written, nil

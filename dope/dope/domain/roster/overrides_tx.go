@@ -25,6 +25,12 @@ func tetheredGame(ctx context.Context, tx *sql.Tx, festID, gameID int64) (change
 	if src.own {
 		return changed{}, corei18n.User(dopestrings.Default.Entrants.Own.HasList())
 	}
+	// A bout game's first override takes its hand rosters along.
+	if BoutTeamGame(doc.GameType) && src.plain() {
+		if src, err = handRostersToOverrides(ctx, tx, festID, doc, src); err != nil {
+			return changed{}, err
+		}
+	}
 	teams, _, err := resolveTeams(ctx, tx, festID, src, map[int64]bool{})
 	return changed{doc: doc, src: src, teams: teams}, err
 }
@@ -52,6 +58,9 @@ func AddOverrideTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, o Over
 		return nil, err
 	}
 	o.ID = nextOverrideID(c.src.overrides)
+	if BoutTeamGame(c.doc.GameType) && !boutOverride(o.Kind) {
+		return nil, corei18n.User(dopestrings.Default.Entrants.Own.OverrideFailed())
+	}
 	if err := c.prepare(&o); err != nil {
 		return nil, err
 	}
@@ -60,6 +69,16 @@ func AddOverrideTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, o Over
 	}
 	c.src.overrides = append(c.src.overrides, o)
 	return c.save(ctx, tx, festID)
+}
+
+// boutOverride says a bout game takes this kind of override: who a team is,
+// never who sits where (its entrant list says that).
+func boutOverride(kind string) bool {
+	switch kind {
+	case OverrideRename, OverrideCity, OverrideAddPlayer, OverrideRemovePlayer, OverrideMovePlayer:
+		return true
+	}
+	return false
 }
 
 func nextOverrideID(overrides []Override) int64 {

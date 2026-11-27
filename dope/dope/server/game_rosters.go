@@ -67,7 +67,11 @@ func (s *server) handGameRoster(w http.ResponseWriter, r *http.Request, sc route
 	if len(teams) == 0 {
 		return s.scopedFestRoster(w, r, sc)
 	}
-	out := map[string]any{"teams": teams, "game": true}
+	tethered, err := roster.Tethered(ctx, s.eng.DB, sc.GameID)
+	if err != nil {
+		return err
+	}
+	out := map[string]any{"teams": teams, "game": true, "tethered": tethered}
 	if r.URL.Query().Get("choices") == "1" {
 		choices, err := roster.LoadFestPlayerChoices(ctx, s.eng.DB, sc.FestID)
 		if err != nil {

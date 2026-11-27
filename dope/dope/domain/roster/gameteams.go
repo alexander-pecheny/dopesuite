@@ -66,20 +66,55 @@ type GameTeamsView struct {
 	Teams     []OwnTeam    `json:"teams"`
 	Overrides []Override   `json:"overrides"`
 	Conflict  string       `json:"conflict,omitempty"`
+	// Bout marks a bout game, which follows a source for who its teams are
+	// and seats them by its entrant list.
+	Bout bool `json:"bout,omitempty"`
 }
 
 // festSeated is the fest's teams a Game on venueID seats, under the venue's
-// numbers.
+// numbers, each with its players.
 func festSeated(ctx context.Context, q store.Queryer, festID, venueID int64) ([]FestRosterImportTeam, error) {
 	teams, err := LoadFestRosterImportTeamsTx(ctx, q, festID)
 	if err != nil {
 		return nil, err
+	}
+	players, err := festTeamPlayers(ctx, q, festID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range teams {
+		teams[i].Players = players[teams[i].LocalID]
 	}
 	placement, err := multifest.LoadPlacement(ctx, q, festID)
 	if err != nil {
 		return nil, err
 	}
 	return OnVenue(teams, placement, venueID), nil
+}
+
+// festTeamPlayers is each fest team's players, in roster order, by team row.
+func festTeamPlayers(ctx context.Context, q store.Queryer, festID int64) (map[int64][]FestRosterImportPlayer, error) {
+	type row struct {
+		team   int64
+		player FestRosterImportPlayer
+	}
+	rows, err := store.CollectRows(ctx, q, `
+select ftp.team_id, coalesce(p.rating_id, 0), p.first_name, p.last_name
+from fest_team_players ftp join fest_players p on p.id = ftp.player_id
+join fest_teams t on t.id = ftp.team_id
+where t.fest_id = ? and t.deleted = 0
+order by ftp.team_id, ftp.roster_order`, []any{festID}, func(rows *sql.Rows) (row, error) {
+		var r row
+		return r, rows.Scan(&r.team, &r.player.RatingID, &r.player.FirstName, &r.player.LastName)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64][]FestRosterImportPlayer{}
+	for _, r := range rows {
+		out[r.team] = append(out[r.team], r.player)
+	}
+	return out, nil
 }
 
 // GameSeatsTeamsTx is the teams a flat Game seats now, as its source and
@@ -148,7 +183,7 @@ func topNumber(teams []OwnTeam) int64 {
 
 // LoadGameTeams reads a flat Game's entrants tab.
 func LoadGameTeams(ctx context.Context, q store.Queryer, festID, gameID int64) (GameTeamsView, error) {
-	doc, err := flatGame(ctx, q, festID, gameID)
+	doc, err := teamsGame(ctx, q, festID, gameID)
 	if err != nil {
 		return GameTeamsView{}, err
 	}
@@ -156,11 +191,18 @@ func LoadGameTeams(ctx context.Context, q store.Queryer, festID, gameID int64) (
 	if err != nil {
 		return GameTeamsView{}, err
 	}
-	plan, overrides, err := gamePlan(ctx, q, festID, doc)
+	sources, err := sourceGames(ctx, q, festID, doc)
 	if err != nil {
 		return GameTeamsView{}, err
 	}
-	sources, err := sourceGames(ctx, q, festID, doc)
+	if BoutTeamGame(doc.GameType) {
+		teams, overrides, err := boutTeamsView(ctx, q, festID, doc, src)
+		if overrides == nil {
+			overrides = []Override{}
+		}
+		return GameTeamsView{From: src.from, Sources: sources, Teams: teams, Overrides: overrides, Bout: true}, err
+	}
+	plan, overrides, err := gamePlan(ctx, q, festID, doc)
 	if err != nil {
 		return GameTeamsView{}, err
 	}
@@ -244,6 +286,12 @@ func TetheredRosterView(ctx context.Context, q store.Queryer, festID, gameID int
 	if err != nil || src.plain() {
 		return nil, false, err
 	}
+	// A bout game's tab lists the teams it seats, with the players written
+	// for them (refreshBoutTx).
+	var gameType string
+	if err := q.QueryRowContext(ctx, `select game_type from games where id = ?`, gameID).Scan(&gameType); err != nil || BoutTeamGame(gameType) {
+		return nil, false, err
+	}
 	resolved, _, err := resolveTeams(ctx, q, festID, src, map[int64]bool{})
 	if err != nil {
 		return nil, false, err
@@ -266,6 +314,16 @@ func SetTeamsSourceTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, own
 	doc, src, err := changingGame(ctx, tx, festID, gameID)
 	if err != nil {
 		return nil, err
+	}
+	if BoutTeamGame(doc.GameType) {
+		if own {
+			return nil, corei18n.User(dopestrings.Default.Entrants.Own.BoutNoList())
+		}
+		if src.plain() && from > 0 {
+			if src, err = handRostersToOverrides(ctx, tx, festID, doc, src); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if own {
 		teams, _, err := resolveTeams(ctx, tx, festID, src, map[int64]bool{})
@@ -311,7 +369,7 @@ func checkSourceGame(ctx context.Context, q store.Queryer, festID int64, doc sto
 // changingGame reads a flat Game about to change its teams, and records its
 // numbers as they stand, which the fold after the change moves answers by.
 func changingGame(ctx context.Context, tx *sql.Tx, festID, gameID int64) (store.GameDoc, teamsSource, error) {
-	doc, err := flatGame(ctx, tx, festID, gameID)
+	doc, err := teamsGame(ctx, tx, festID, gameID)
 	if err != nil {
 		return doc, teamsSource{}, err
 	}

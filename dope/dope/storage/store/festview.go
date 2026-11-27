@@ -14,9 +14,11 @@ import (
 // LoadReseedEntries returns a stage's reseed entries ordered by rank.
 func LoadReseedEntries(ctx context.Context, q Queryer, stageID int64) ([]ReseedEntryView, error) {
 	return CollectRows(ctx, q, `
-select re.rank, re.participant_id, coalesce(t.name, ''), re.metrics_json
+select re.rank, re.participant_id, coalesce(gp.name, t.name, ''), re.metrics_json
 from stage_standings re
+join stages st on st.id = re.stage_id
 left join participants t on t.id = re.participant_id
+left join game_team_names gp on gp.game_id = st.game_id and gp.participant_id = re.participant_id
 where re.stage_id = ?
 order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error) {
 		var entry ReseedEntryView
@@ -96,11 +98,12 @@ func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64, gameType 
 	}
 	var gameID int64
 	teams, err := CollectRows(ctx, q, `
-select t.name, coalesce(ms.participant_id, 0), m.game_id, ms.slot_index, ms.source_type, ms.source_ref_json,
+select coalesce(gp.name, t.name), coalesce(ms.participant_id, 0), m.game_id, ms.slot_index, ms.source_type, ms.source_ref_json,
        coalesce(r.place, 0), `+score+`, coalesce(r.plus, 0), coalesce(r.tiebreak, 0)
 from match_slots ms
 join matches m on m.id = ms.match_id
 left join participants t on t.id = ms.participant_id
+left join game_team_names gp on gp.game_id = m.game_id and gp.participant_id = ms.participant_id
 left join match_results r on r.match_id = ms.match_id and r.participant_id = ms.participant_id
 where ms.match_id = ?
 order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantSummary, error) {

@@ -339,7 +339,7 @@ var RU = Strings{
 			},
 			File:      func() string { return "Файл" },
 			KeepEdits: func(n string) string { return fmt.Sprintf("Сохранить мои правки (%s)", n) },
-			Label:     func() string { return "Откуда загрузить список" },
+			Label:     func() string { return "Посев" },
 			Run:       func() string { return "Загрузить список" },
 		},
 		Overrides: EntrantsOverridesStrings{
@@ -361,6 +361,7 @@ var RU = Strings{
 			NotApplied:       func() string { return "оверрайд не применён" },
 			Player:           func() string { return "Игрок" },
 			Remove:           func() string { return "Убрать оверрайд" },
+			SourceLabel:      func() string { return "Составы команд" },
 			Team:             func() string { return "Команда" },
 			TextAddPlayer: func(player string, team string) string {
 				return fmt.Sprintf("%s в составе «%s»", player, team)
@@ -389,7 +390,10 @@ var RU = Strings{
 			To:    func() string { return "За какую команду" },
 		},
 		Own: EntrantsOwnStrings{
-			AddTeam:      func() string { return "Добавить команду" },
+			AddTeam: func() string { return "Добавить команду" },
+			BoutNoList: func() string {
+				return "У игры с боями нет отдельного списка: кто играет, решает список участников ниже."
+			},
 			Clear:        func() string { return "Очистить" },
 			ClearConfirm: func() string { return "Убрать из списка все команды?" },
 			Cycle: func() string {
@@ -437,6 +441,9 @@ var RU = Strings{
 			SourceGame: func(game string) string { return fmt.Sprintf("Как в игре «%s»", game) },
 			Summary: func(n int) string {
 				return fmt.Sprintf("%d %s в игре", n, core.Plural("ru", n, "команда", "команды", "команд"))
+			},
+			Tethered: func() string {
+				return "Эта игра берёт составы из источника: игроков меняют оверрайды на вкладке «Участники»."
 			},
 			XlsxImport: func() string { return "Загрузить из xlsx" },
 			XlsxSample: func() string { return "Скачать образец xlsx" },

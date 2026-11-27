@@ -231,6 +231,15 @@ CREATE TABLE game_participants(
   primary key(game_id, participant_id)
 );
 
+-- table game_team_names
+CREATE TABLE game_team_names (
+  game_id integer not null references games(id) on delete cascade,
+  participant_id integer not null references participants(id) on delete cascade,
+  name text not null,
+  city text not null default '',
+  primary key (game_id, participant_id)
+);
+
 -- table game_team_players
 CREATE TABLE game_team_players(
   game_id integer not null references games(id) on delete cascade,

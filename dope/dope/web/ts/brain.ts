@@ -7,6 +7,7 @@
 // page (bout-page.ts). A self-booting side-effect module bundled by
 // pages/brain.ts.
 
+import {teamSourceBlock} from "./game-overrides.js";
 import {formatDisplayText, percentText, td} from "./cells.js";
 import {standingsTable} from "./standings.js";
 import {sheetHead} from "./sheet-pins.js";
@@ -134,6 +135,7 @@ const page: BoutPage<BrainMatchView, BrainMatchState> = mountBoutPage({
   app: "brain",
   root: brainRoot,
   tabsRoot: document.getElementById("brainTabs"),
+  entrantsHeader: teamSourceBlock,
   init,
   scheme,
   fest,

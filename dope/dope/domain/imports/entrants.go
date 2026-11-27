@@ -558,6 +558,14 @@ select id, name, city, game_id is not null from participants where fest_id = ?`,
 	for _, r := range infos {
 		byID[r.id] = r.info
 	}
+	// A game that follows a source names its teams its own way (ADR-0038).
+	if err := gameNames(ctx, q, scope.GameID, func(id int64, name, city string) {
+		i := byID[id]
+		i.name, i.city = name, city
+		byID[id] = i
+	}); err != nil {
+		return SeedImportView{}, err
+	}
 	seats := make(map[int]bool, len(numbers))
 	for _, n := range numbers {
 		seats[n] = true
@@ -801,4 +809,24 @@ from fest_players p where p.id = ? and p.fest_id = ?`, festPlayerID, festID).Sca
 		return 0, err
 	}
 	return EnsureSeedPlayerByNumber(ctx, tx, festID, number, name, festPlayerID)
+}
+
+// gameNames hands each participant the name and city a game gives it of its
+// own (game_team_names, ADR-0038), where it gives one.
+func gameNames(ctx context.Context, q store.Queryer, gameID int64, each func(id int64, name, city string)) error {
+	rows, err := q.QueryContext(ctx, `
+select participant_id, name, city from game_team_names where game_id = ?`, gameID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var name, city string
+		if err := rows.Scan(&id, &name, &city); err != nil {
+			return err
+		}
+		each(id, name, city)
+	}
+	return rows.Err()
 }

@@ -7,6 +7,7 @@
 // page (bout-page.ts). A self-booting side-effect module bundled by
 // pages/hamsa.ts.
 
+import {teamSourceBlock} from "./game-overrides.js";
 import {option, questionNumberNode, td, th} from "./cells.js";
 import type {CellContent, CellSpec} from "./cells.js";
 import {letteredTitle, standingsTable} from "./standings.js";
@@ -121,6 +122,7 @@ const page: BoutPage<HamsaMatchView, HamsaState> = mountBoutPage({
   app: "hamsa",
   root,
   tabsRoot: document.getElementById("hamsaTabs"),
+  entrantsHeader: teamSourceBlock,
   init,
   scheme,
   fest,

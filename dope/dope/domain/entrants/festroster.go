@@ -29,7 +29,13 @@ func followTx(ctx context.Context, tx *sql.Tx, festID, exclude int64) ([]Divisio
 		return nil, nil, err
 	}
 	views, err := TroikaGameIDs(ctx, tx, festID)
-	return followed, views, err
+	if err != nil {
+		return nil, nil, err
+	}
+	// A bout game that follows a source takes its teams' names and players
+	// from it again (ADR-0038).
+	bouts, err := roster.RefreshBoutGamesTx(ctx, tx, festID)
+	return followed, append(views, bouts...), err
 }
 
 // TroikaWrite is what a write on the troikas page did: the fest write to

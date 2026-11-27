@@ -3,6 +3,7 @@ package entrants
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/roster"
 	"slices"
 	"strings"
 
@@ -57,6 +58,16 @@ select coalesce(scheme_dsl, ''), coalesce(scheme_json, '{}') from games where id
 	}
 	saved, err := imports.SaveListTx(ctx, tx, scope, current, next, event)
 	out.view, out.revision, out.stateJSON, out.moved = saved.View, saved.Revision, saved.StateJSON, saved.Moved
+	if err != nil {
+		return out, err
+	}
+	// A game that follows a source names a team it seats now as the source
+	// does (ADR-0038).
+	refreshed, err := roster.RefreshBoutGameTx(ctx, tx, scope.FestID, scope.GameID)
+	if err != nil || !refreshed {
+		return out, err
+	}
+	out.view, err = imports.LoadListView(ctx, tx, scope)
 	return out, err
 }
 

@@ -9,6 +9,7 @@
 // through the bout page (bout-page.ts), the same as Brain's, Hamsa's and
 // Troika's. A self-booting side-effect module bundled by pages/ek.ts.
 
+import {teamSourceBlock} from "./game-overrides.js";
 import {formatPlace, td, th} from "./cells.js";
 import type {CellContent} from "./cells.js";
 import {buildGroupStandingsView, letteredTitle, standingsTable} from "./standings.js";
@@ -141,6 +142,7 @@ const page: BoutPage<EKMatchView, EKState> = mountBoutPage({
   app,
   root,
   tabsRoot: document.getElementById("ekTabs"),
+  entrantsHeader: teamSourceBlock,
   init,
   scheme,
   fest,

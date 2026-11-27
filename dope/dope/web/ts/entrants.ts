@@ -78,10 +78,19 @@ export interface EntrantsView {
   unranked?: string[];
 }
 
+export interface EntrantsHeader {
+  element: HTMLElement;
+  load(): void;
+}
+
 export interface EntrantsTabOptions {
   // The Game's API base (/api/fest/{fest}/games/{game}). The EK page moves
   // between Games without a reload, so it passes a function.
   apiBase: string | (() => string);
+  // header is a block over the list a page may give the tab: a game of
+  // teams says there where its teams' names and players come from
+  // (game-overrides.ts, ADR-0038). changed asks the list to read itself again.
+  header?: (apiBase: () => string, changed: () => void) => EntrantsHeader;
   // The tab drew something new: the page may want to re-measure name fades.
   onRender?: () => void;
   // A write moved entrants between seats: the page's bouts may show others now.
@@ -109,6 +118,9 @@ function sourceKey(source: EntrantSource | undefined): string {
 export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
   const root = document.createElement("section");
   root.className = "results-wrapper seed-import-panel u-col u-gap-md";
+  // Where the teams' names and players come from (ADR-0038); a change there
+  // renames the list's teams, so the list reads itself again.
+  const teams = options.header?.(() => base(), () => void load());
   let view: EntrantsView | null = null;
   let loaded = false;
   let busy = false;
@@ -129,6 +141,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
   async function load(): Promise<void> {
     loaded = true;
     loadedBase = base();
+    teams?.load();
     try {
       const response = await fetch(`${base()}/entrants`);
       if (!response.ok) throw new Error((await response.text()).trim());
@@ -181,6 +194,7 @@ export function createEntrantsTab(options: EntrantsTabOptions): EntrantsTab {
   function render(): void {
     const nodes: HTMLElement[] = [];
     if (view) {
+      if (teams) nodes.push(teams.element);
       nodes.push(sourceBar(view));
       if (notice) nodes.push(hint(notice, noticeError));
       if (view.kept) nodes.push(hint(S.entrants.state.kept(view.kept)));

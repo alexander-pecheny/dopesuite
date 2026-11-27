@@ -126,6 +126,12 @@ func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seat
 	if err != nil {
 		return err
 	}
+	// A participant is the fest's team: it keeps the fest's name, and a game
+	// that names the team its own way (ADR-0038) keeps that name for itself.
+	festNames, err := festTeamNames(ctx, tx, festID)
+	if err != nil {
+		return err
+	}
 	wanted := make([]int64, len(seats))
 	numbered := true
 	for i, seat := range seats {
@@ -140,7 +146,11 @@ func seatTx(ctx context.Context, tx *sql.Tx, festID, gameID, matchID int64, seat
 			numbered = false
 			continue
 		}
-		id, err := store.EnsureParticipantByNumber(ctx, tx, festID, "team", number, seat.Name, seat.City)
+		own, ok := festNames[number]
+		if !ok {
+			own = [2]string{seat.Name, seat.City}
+		}
+		id, err := store.EnsureParticipantByNumber(ctx, tx, festID, "team", number, own[0], own[1])
 		if err != nil {
 			return err
 		}
@@ -162,7 +172,7 @@ select coalesce(participant_id, 0) from match_slots where match_id = ? order by 
 			same = same && current[i] == wanted[i]
 		}
 		if same {
-			return nil
+			return gameNamesTx(ctx, tx, gameID, seats, wanted, festNames, festNumber)
 		}
 	}
 	for _, q := range []string{
@@ -206,6 +216,51 @@ on conflict(game_id, participant_id) do update set position = excluded.position,
 			}
 		}
 	}
-	_, err = tx.ExecContext(ctx, `update matches set participant_count = ? where id = ?`, len(seats), matchID)
-	return err
+	if _, err := tx.ExecContext(ctx, `update matches set participant_count = ? where id = ?`, len(seats), matchID); err != nil {
+		return err
+	}
+	return gameNamesTx(ctx, tx, gameID, seats, wanted, festNames, festNumber)
+}
+
+// festTeamNames is the fest's teams' own names and cities, by number.
+func festTeamNames(ctx context.Context, q store.Queryer, festID int64) (map[int64][2]string, error) {
+	rows, err := store.CollectRows(ctx, q, `
+select number, name, coalesce(city, '') from fest_teams where fest_id = ? and deleted = 0 and number is not null`, []any{festID},
+		func(rows *sql.Rows) (struct {
+			number int64
+			names  [2]string
+		}, error) {
+			var r struct {
+				number int64
+				names  [2]string
+			}
+			return r, rows.Scan(&r.number, &r.names[0], &r.names[1])
+		})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64][2]string, len(rows))
+	for _, r := range rows {
+		out[r.number] = r.names
+	}
+	return out, nil
+}
+
+// gameNamesTx keeps for the game the name and city each seat
+// has in this game where they are not its fest team's own.
+func gameNamesTx(ctx context.Context, tx *sql.Tx, gameID int64, seats []games.Seat, wanted []int64, festNames map[int64][2]string, festNumber func(int64) (int64, bool)) error {
+	for i, seat := range seats {
+		if wanted[i] == 0 {
+			continue
+		}
+		number, _ := festNumber(seat.Number)
+		own, ok := festNames[number]
+		if !ok {
+			continue
+		}
+		if err := store.SetGameTeamName(ctx, tx, gameID, wanted[i], seat.Name, seat.City, own[0], own[1]); err != nil {
+			return err
+		}
+	}
+	return nil
 }

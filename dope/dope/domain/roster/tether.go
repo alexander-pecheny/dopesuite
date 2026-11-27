@@ -245,13 +245,28 @@ func keepNumbers(ctx context.Context, tx *sql.Tx, festID int64, doc store.GameDo
 }
 
 // refoldWithFollowersTx refolds a Game, then every Game that follows it, at
-// any distance, in order.
+// any distance, in order, and every tethered bout game, which may follow one
+// of them. A bout game's update names the game and carries no document.
 func refoldWithFollowersTx(ctx context.Context, tx *sql.Tx, festID int64, doc store.GameDoc) ([]GameStateBroadcast, error) {
+	if BoutTeamGame(doc.GameType) {
+		src, err := loadSource(ctx, tx, doc.GameID)
+		if err != nil {
+			return nil, err
+		}
+		return []GameStateBroadcast{{GameID: doc.GameID, GameType: doc.GameType}}, refreshBoutTx(ctx, tx, festID, doc, src)
+	}
 	out, err := refoldTx(ctx, tx, festID, doc)
 	if err != nil {
 		return nil, err
 	}
 	more, err := refoldFollowersTx(ctx, tx, festID, doc.GameID, false)
+	if err != nil {
+		return nil, err
+	}
+	bouts, err := RefreshBoutGamesTx(ctx, tx, festID)
+	for _, id := range bouts {
+		more = append(more, GameStateBroadcast{GameID: id})
+	}
 	return append(out, more...), err
 }
 

@@ -5,8 +5,9 @@
 // that editor does (playerPicker). The server applies the overrides and says
 // which do not apply any more; the tab only shows it.
 
-import {actionButton, hint} from "./entrants.js";
-import {openTeamDialog, playerPicker} from "./team-editor.js";
+import {actionButton, errorText, hint} from "./entrants.js";
+import {iconed} from "./icons_gen.js";
+import {openTeamDialog, playerPicker, request} from "./team-editor.js";
 import type {Answer, PlayerPicker, TeamDetail, TeamPlayer, TeamSave} from "./team-editor.js";
 import S from "./i18nstrings.js";
 
@@ -42,8 +43,10 @@ export interface Override {
 }
 
 // The kinds the dialog offers, in its order; a number is typed in the table.
+// A bout game takes only who a team is: its entrant list says who sits where.
 const DIALOG_KINDS = ["rename", "city", "flags", "add_team", "remove_team", "add_player", "remove_player", "move_player"] as const;
 type DialogKind = typeof DIALOG_KINDS[number];
+const BOUT_KINDS: readonly DialogKind[] = ["rename", "city", "add_player", "remove_player", "move_player"];
 
 function kindLabel(kind: DialogKind): string {
   const labels: Record<DialogKind, string> = {
@@ -102,6 +105,8 @@ export interface OverrideDialogSpec {
   // api is the game's API base; the person search runs under it.
   api: string;
   teams: OverrideTeam[];
+  // kinds narrows what the dialog offers.
+  kinds?: readonly DialogKind[];
   editorBase(): Promise<TeamDetail | null>;
   send(o: Override): Promise<Answer>;
 }
@@ -147,7 +152,7 @@ export function openOverrideDialog(spec: OverrideDialogSpec): void {
   form.className = "u-col u-gap-md";
   const title = document.createElement("h2");
   title.textContent = S.entrants.overrides.add();
-  const kind = select(S.entrants.overrides.kind(), DIALOG_KINDS.map((k) => [k, kindLabel(k)]));
+  const kind = select(S.entrants.overrides.kind(), (spec.kinds || DIALOG_KINDS).map((k) => [k, kindLabel(k)]));
   const fields = document.createElement("div");
   fields.className = "u-col u-gap-md";
   const error = hint("", true);
@@ -279,4 +284,82 @@ function addTeam(spec: OverrideDialogSpec): void {
       }),
     });
   });
+}
+
+interface TeamsSourceView {
+  bout?: boolean;
+  from: number;
+  sources: Array<{id: number; title: string}>;
+  teams: OverrideTeam[];
+  overrides: Override[];
+}
+
+export interface TeamSourceBlock {
+  element: HTMLElement;
+  load(): void;
+}
+
+// teamSourceBlock is a bout game's team source line over its entrant list
+// (ADR-0038): where its teams' names and players come from, its overrides
+// and the button that adds one. A game that seats no teams draws nothing.
+// changed runs after every change, for the list under it to read its names
+// again.
+export function teamSourceBlock(apiBaseOf: () => string, changed: () => void): TeamSourceBlock {
+  const element = document.createElement("div");
+  element.className = "u-col u-gap-sm";
+  let editorBase: Promise<TeamDetail | null> | null = null;
+  const draw = (view: TeamsSourceView, notice: string): void => {
+    const apiBase = apiBaseOf();
+    if (!view.bout) {
+      element.replaceChildren();
+      return;
+    }
+    const bar = document.createElement("div");
+    bar.className = "u-row u-wrap u-gap-sm u-align-center";
+    const label = document.createElement("span");
+    label.className = "hint";
+    label.textContent = S.entrants.overrides.sourceLabel();
+    const source = document.createElement("select");
+    source.className = "input";
+    source.setAttribute("aria-label", S.entrants.overrides.sourceLabel());
+    source.append(new Option(S.entrants.own.follow(), "0"),
+      ...view.sources.map((game) => new Option(S.entrants.own.sourceGame(game.title), String(game.id))));
+    source.value = String(view.from);
+    source.addEventListener("change", () => void write("", "PUT", {from: Number(source.value)}));
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn";
+    add.append(...iconed("plus", S.entrants.overrides.add()));
+    add.addEventListener("click", () => openOverrideDialog({
+      api: apiBase,
+      teams: view.teams,
+      kinds: BOUT_KINDS,
+      editorBase: () => {
+        editorBase ??= request(`${apiBase}/teams/editor`, "GET").then((answer) => (answer.ok ? answer.data as TeamDetail : null));
+        return editorBase;
+      },
+      send: (o) => write("/overrides", "POST", o),
+    }));
+    bar.append(label, source, add);
+    const nodes: HTMLElement[] = [bar];
+    if (notice) nodes.push(hint(notice, true));
+    if (view.overrides.length) nodes.push(overridesList(view.overrides, false, (id) => void write(`/overrides/${id}`, "DELETE")));
+    element.replaceChildren(...nodes);
+  };
+  const write = async (path: string, method: string, body?: unknown): Promise<Answer> => {
+    const answer = await request(`${apiBaseOf()}/teams${path}`, method, body);
+    if (answer.ok) {
+      draw(answer.data as TeamsSourceView, "");
+      changed();
+    }
+    return answer;
+  };
+  const load = (): void => {
+    editorBase = null;
+    void request(`${apiBaseOf()}/teams`, "GET").then((answer) => {
+      if (answer.ok) draw(answer.data as TeamsSourceView, "");
+      else element.replaceChildren();
+    }).catch((error) => draw({from: 0, sources: [], teams: [], overrides: []}, errorText(error)));
+  };
+  return {element, load};
 }

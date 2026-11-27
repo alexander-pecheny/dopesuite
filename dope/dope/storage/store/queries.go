@@ -72,3 +72,17 @@ insert into participants(fest_id, roster, name, city, number) values(?, ?, ?, ?,
 	}
 	return id, nil
 }
+
+// SetGameTeamName keeps the name and city a team has in one game
+// (game_team_names, ADR-0038), or drops them when they are the participant's
+// own.
+func SetGameTeamName(ctx context.Context, tx *sql.Tx, gameID, participantID int64, name, city, ownName, ownCity string) error {
+	if name == ownName && city == ownCity {
+		_, err := tx.ExecContext(ctx, `delete from game_team_names where game_id = ? and participant_id = ?`, gameID, participantID)
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `
+insert into game_team_names(game_id, participant_id, name, city) values(?, ?, ?, ?)
+on conflict(game_id, participant_id) do update set name = excluded.name, city = excluded.city`, gameID, participantID, name, city)
+	return err
+}

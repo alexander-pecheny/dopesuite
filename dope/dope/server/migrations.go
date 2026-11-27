@@ -1307,6 +1307,23 @@ alter table games add column roster_numbers text not null default '';
 `)
 		return err
 	}},
+	// A game that follows a source shows its teams under the names its
+	// source and overrides give them (ADR-0038): game_team_names keeps the
+	// name and city a team has in one game where they are not the
+	// participant's own. It is derived, written again after every change, so
+	// the journal leaves it out.
+	{Version: 68, Name: "a game's own team names", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+create table game_team_names (
+  game_id integer not null references games(id) on delete cascade,
+  participant_id integer not null references participants(id) on delete cascade,
+  name text not null,
+  city text not null default '',
+  primary key (game_id, participant_id)
+);
+`)
+		return err
+	}},
 }
 
 // overridesToHandRosters keeps every Game's teams playing with whom they play

@@ -352,6 +352,11 @@ func TestAGameFollowsAnotherWithOverrides(t *testing.T) {
 	if s := seats(a); len(s) != 3 || s[1] != "Альфа" {
 		t.Fatalf("A seats %v", s)
 	}
+	// The rename is A's: the fest's participant keeps the fest's name.
+	var festName string
+	if err := db.QueryRow(`select name from participants where fest_id = ? and number = 1 and game_id is null`, festID).Scan(&festName); err != nil || festName != "Участник 1" {
+		t.Fatalf("the fest's participant is named %q (%v)", festName, err)
+	}
 
 	// In B team 2 answers, then takes number 20: its answer follows it, and
 	// it cannot be removed.

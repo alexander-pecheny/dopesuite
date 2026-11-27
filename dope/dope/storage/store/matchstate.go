@@ -451,9 +451,11 @@ func placeholders(n int) string {
 func loadMatchSlots(ctx context.Context, q Queryer, matches []DBMatchState) (map[int64][]slotRecord, error) {
 	ids := matchIDs(matches)
 	rows, err := q.QueryContext(ctx, `
-select ms.match_id, ms.slot_index, ms.participant_id, coalesce(t.name, ''), coalesce(r.place, 0), coalesce(r.total, 0), coalesce(r.plus, 0), ms.source_type, ms.source_ref_json
+select ms.match_id, ms.slot_index, ms.participant_id, coalesce(gp.name, t.name, ''), coalesce(r.place, 0), coalesce(r.total, 0), coalesce(r.plus, 0), ms.source_type, ms.source_ref_json
 from match_slots ms
+join matches m on m.id = ms.match_id
 left join participants t on t.id = ms.participant_id
+left join game_team_names gp on gp.game_id = m.game_id and gp.participant_id = ms.participant_id
 left join match_results r on r.match_id = ms.match_id and r.participant_id = ms.participant_id
 where ms.match_id in (`+placeholders(len(ids))+`)
 order by ms.match_id, ms.slot_index`, ids...)

@@ -286,6 +286,7 @@ export type Strings = {
       notApplied: () => string;
       player: () => string;
       remove: () => string;
+      sourceLabel: () => string;
       team: () => string;
       textAddPlayer: (player: string, team: string) => string;
       textAddTeam: (team: string) => string;
@@ -301,6 +302,7 @@ export type Strings = {
     };
     own: {
       addTeam: () => string;
+      boutNoList: () => string;
       clear: () => string;
       clearConfirm: () => string;
       cycle: () => string;
@@ -327,6 +329,7 @@ export type Strings = {
       removeConfirm: (team: string) => string;
       sourceGame: (game: string) => string;
       summary: (n: number) => string;
+      tethered: () => string;
       xlsxImport: () => string;
       xlsxSample: () => string;
     };

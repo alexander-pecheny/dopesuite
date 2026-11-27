@@ -203,6 +203,9 @@ interface GameRosterData {
   teams: RosterTeam[];
   entrants: boolean;
   game: boolean;
+  // tethered marks a game whose teams follow a source (ADR-0038): its
+  // players change by overrides on the entrants tab, not here.
+  tethered?: boolean;
   choices: FestPlayerChoice[];
 }
 
@@ -236,7 +239,7 @@ export function buildGameRosterView(apiBase: string, options: GameRosterOptions 
       }
       // A Game with no teams of its own yet sends the fest's teams, drawn as
       // the fest roster, with nothing to edit.
-      if (!d.game || !options.editable) return {teams: d.teams, options: {}};
+      if (!d.game || !options.editable || d.tethered) return {teams: d.teams, options: {}};
       return {teams: d.teams, options: {onEdit: (team) => openGameRosterDialog(team, d.choices, apiBase, load)}};
     }));
   };

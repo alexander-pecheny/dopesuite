@@ -265,7 +265,7 @@ export const RU: Strings = {
       done: (n: number) => `В списке ${n} ${plural("ru", n, "участник", "участника", "участников")}.`,
       file: () => "Файл",
       keepEdits: (n: string) => `Сохранить мои правки (${n})`,
-      label: () => "Откуда загрузить список",
+      label: () => "Посев",
       run: () => "Загрузить список",
     },
     overrides: {
@@ -287,6 +287,7 @@ export const RU: Strings = {
       notApplied: () => "оверрайд не применён",
       player: () => "Игрок",
       remove: () => "Убрать оверрайд",
+      sourceLabel: () => "Составы команд",
       team: () => "Команда",
       textAddPlayer: (player: string, team: string) => `${player} в составе «${team}»`,
       textAddTeam: (team: string) => `Добавлена команда «${team}»`,
@@ -302,6 +303,7 @@ export const RU: Strings = {
     },
     own: {
       addTeam: () => "Добавить команду",
+      boutNoList: () => "У игры с боями нет отдельного списка: кто играет, решает список участников ниже.",
       clear: () => "Очистить",
       clearConfirm: () => "Убрать из списка все команды?",
       cycle: () => "Так не получится: эта игра сама берёт команды из выбранной.",
@@ -328,6 +330,7 @@ export const RU: Strings = {
       removeConfirm: (team: string) => `Убрать команду «${team}» из списка игры?`,
       sourceGame: (game: string) => `Как в игре «${game}»`,
       summary: (n: number) => `${n} ${plural("ru", n, "команда", "команды", "команд")} в игре`,
+      tethered: () => "Эта игра берёт составы из источника: игроков меняют оверрайды на вкладке «Участники».",
       xlsxImport: () => "Загрузить из xlsx",
       xlsxSample: () => "Скачать образец xlsx",
     },

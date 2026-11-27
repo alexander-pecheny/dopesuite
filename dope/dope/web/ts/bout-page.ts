@@ -56,7 +56,7 @@ import type {GameRef, Room, Venue, VenueLine} from "./venue.js";
 import {createEntrantsTab} from "./entrants.js";
 import {createUndo, isUndoKey, valueAt} from "./undo.js";
 import type {UndoResult} from "./undo.js";
-import type {EntrantsTab} from "./entrants.js";
+import type {EntrantsTab, EntrantsTabOptions} from "./entrants.js";
 
 // A resync or a fest refresh waits this long, so a burst of events costs one
 // fetch.
@@ -122,6 +122,8 @@ export interface BoutPageSpec<V extends BoutView, S> {
   // overlaid with this page's un-acked edits); blank is a bout not yet seen.
   parse: (view: V) => S;
   blank: () => S;
+  // The block over the entrants tab's list (EntrantsTabOptions.header).
+  entrantsHeader?: EntrantsTabOptions["header"];
   // The page's own tabs; the entrants, roster and venues tabs are the
   // module's. The roster tab is the page's to build (each format links it
   // differently) and the module keeps it until the roster changes.
@@ -278,6 +280,7 @@ export function mountBoutPage<V extends BoutView, S>(spec: BoutPageSpec<V, S>): 
   let entrants: EntrantsTab | null = null;
   const entrantsTab = () => (entrants ||= createEntrantsTab({
     apiBase,
+    header: spec.entrantsHeader,
     onChanged: () => resync(),
     onRebuilt: () => window.location.reload(),
   }));

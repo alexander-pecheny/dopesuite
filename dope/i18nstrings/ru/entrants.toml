@@ -31,7 +31,7 @@ not_carrying = 'Не из зачёта «{{.flag}}»'
 
 [import]
 # The picker's label, and the button that runs it.
-label = "Откуда загрузить список"
+label = "Посев"
 run = "Загрузить список"
 # Beside the import button when the list was edited by hand: a re-import
 # applies those edits again unless the box is cleared (ADR-0025).
@@ -158,6 +158,8 @@ name_missing = 'Впишите название команды в строке {
 number_missing = 'Впишите номер команды «{{.name}}».'
 number_taken = 'Номер {{.number}} у двух команд: «{{.first}}» и «{{.second}}».'
 has_list = "У игры отдельный список: правьте команды прямо в нём."
+tethered = "Эта игра берёт составы из источника: игроков меняют оверрайды на вкладке «Участники»."
+bout_no_list = "У игры с боями нет отдельного списка: кто играет, решает список участников ниже."
 cycle = "Так не получится: эта игра сама берёт команды из выбранной."
 override_failed = "Этот оверрайд не применить к командам игры."
 # A change upstream the Game cannot take: a team with answers needs a number
@@ -168,6 +170,9 @@ number_conflict = 'Список не обновлён: номер {{.number}} н
 # A tethered game's overrides (dope/dope/web/ts/game-overrides.ts, ADR-0038):
 # the list under the table, the dialog that adds one, and the badges.
 title = "Оверрайды"
+# The line over a bout game's entrant list: where its teams' names and
+# players come from.
+source_label = "Составы команд"
 add = "Добавить оверрайд"
 remove = "Убрать оверрайд"
 not_applied = "оверрайд не применён"
