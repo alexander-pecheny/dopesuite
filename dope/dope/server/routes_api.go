@@ -251,6 +251,14 @@ func (s *server) scopedVenueSchedule(w http.ResponseWriter, r *http.Request, sc 
 			return err
 		}
 	}
+	// A fest with no venues yet answers empty lists, not nulls: the page
+	// draws a host the empty table with its add row.
+	if venues == nil {
+		venues = []store.VenueView{}
+	}
+	if bouts == nil {
+		bouts = []store.VenueBout{}
+	}
 	return route.JSON(w, venueSchedule{Venues: venues, Bouts: bouts, Editable: role != ""})
 }
 

@@ -404,6 +404,18 @@ func TestFestVenueSchedule(t *testing.T) {
 	if stranger := read(""); stranger.Editable || len(stranger.Bouts) != placed {
 		t.Fatalf("stranger: editable %v, %d bouts", stranger.Editable, len(stranger.Bouts))
 	}
+	// A fest with no venues yet answers empty lists, which the page draws
+	// as the empty table with its add row; a null broke it.
+	if _, err := db.Exec(`update matches set venue_id = null where fest_id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`delete from venues where fest_id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	resp0 := scopedAPIRequest(t, srv, http.MethodGet, path, nil, hostToken)
+	if body := resp0.Body.String(); !strings.Contains(body, `"venues":[]`) || !strings.Contains(body, `"bouts":[]`) {
+		t.Fatalf("an empty fest's schedule = %s", body)
+	}
 	srv.Eng().Assets = dopeserver.StaticFiles
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/fest/%d/venues", festID), nil)
 	resp := httptest.NewRecorder()
