@@ -67,6 +67,9 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("PUT "+game+"/teams/list", route.Editor.Numbered(), s.apiSaveGameTeams)
 	t.Handle("POST "+game+"/teams/xlsx", route.Editor.Numbered(), s.apiImportGameTeamsXLSX)
 	t.Handle("GET "+game+"/teams/sample.xlsx", route.Editor, s.apiGameTeamsSheet)
+	t.Handle("POST "+game+"/teams/overrides", route.Editor.Numbered(), s.apiAddGameOverride)
+	t.Handle("DELETE "+game+"/teams/overrides/{id}", route.Editor.Numbered(), s.apiDeleteGameOverride)
+	t.Handle("PUT "+game+"/teams/number", route.Editor.Numbered(), s.apiSetGameTeamNumber)
 	// The team editor of the separate list is the fest roster's dialog
 	// (team-editor.ts): its people to suggest and the rating site's search,
 	// here for whoever runs the Game.

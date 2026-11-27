@@ -331,6 +331,47 @@ function playerChoices(team: TeamDetail, q: string, draft: TeamPlayer[], rated: 
   return out.slice(0, PLAYER_CHOICE_LIMIT);
 }
 
+// PlayerPicker is the team editor's add row on its own, for a form that
+// names one person: the fest's people and the rating site's are suggested as
+// the host types. picked is the suggestion taken; typed is the name as typed,
+// for someone the site does not know.
+export interface PlayerPicker {
+  node: HTMLElement;
+  picked(): TeamPlayer | null;
+  typed(): TeamPlayer | null;
+  close(): void;
+}
+
+export function playerPicker(api: string, team: TeamDetail): PlayerPicker {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "input";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.placeholder = S.fest.teamEdit.addPlaceholder();
+  const anchor = document.createElement("span");
+  anchor.className = "suggest-anchor u-col u-grow";
+  anchor.appendChild(input);
+  const byValue = new Map<string, TeamPlayer>();
+  let picked: TeamPlayer | null = null;
+  const rated = remoteChoices<TeamPlayer>((q) => `${api}/rating/players?q=${encodeURIComponent(q)}`, () => suggest.refresh());
+  const suggest = autocomplete(input, (q) => playerChoices(team, q, [], rated(q), byValue), (choice) => {
+    picked = byValue.get(choice.value) || null;
+    if (picked) input.value = fullName(picked);
+    suggest.close();
+  });
+  input.addEventListener("input", () => { picked = null; });
+  return {
+    node: anchor,
+    picked: () => picked,
+    typed: () => {
+      const player = typedPlayer(input.value);
+      return fullName(player) ? player : null;
+    },
+    close: () => suggest.close(),
+  };
+}
+
 export function openTeamDialog(api: string, team: TeamDetail, pageVenue: number, actions: EditorActions): void {
   const isNew = !(team.id > 0) && !team.local;
   const draft: TeamPlayer[] = team.players.slice();

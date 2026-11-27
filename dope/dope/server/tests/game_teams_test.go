@@ -175,13 +175,17 @@ func TestAFlatGameKeepsASeparateTeamList(t *testing.T) {
 		t.Fatalf("the separate list took the new team: %v", s)
 	}
 
-	// Back to the fest's teams and to the list again: the list is as it was.
+	// Back to the fest's teams: the list goes, team 1's answer follows it back
+	// to number 1, and a separate list again is a fresh copy.
 	got = teamsOf(http.MethodPut, game, "", map[string]any{"own": false})
 	if got.Own || !slices.Contains(ownNames(got.Teams), "Новички") {
 		t.Fatalf("back to the fest's teams: %+v", got)
 	}
+	if _, entries := state(game); entries[0][0] != 1 {
+		t.Fatalf("team 1's answer did not come back to 1: %v", entries)
+	}
 	got = teamsOf(http.MethodPut, game, "", map[string]any{"own": true})
-	if want := []string{"Участник 1", "Чёрный ЧГК", "Гости"}; !got.Own || !slices.Equal(ownNames(got.Teams), want) {
+	if !got.Own || slices.Contains(ownNames(got.Teams), "Гости") || !slices.Contains(ownNames(got.Teams), "Новички") {
 		t.Fatalf("the list again: %+v", got)
 	}
 }
@@ -239,5 +243,159 @@ func TestAFlatGameLoadsItsSeparateListFromASheet(t *testing.T) {
 	if len(got.Teams) != 2 || got.Teams[0].Number != 5 || got.Teams[1].Number != 6 ||
 		len(got.Teams[0].Players) != 1 || got.Teams[0].Players[0].Name != "Анна Иванова" {
 		t.Fatalf("loaded: %+v", got.Teams)
+	}
+}
+
+// A game follows another one's teams with its overrides on top, and a chain
+// of followers takes every change in order (ADR-0038). A loop is refused,
+// answers follow a team to the number an override gives it, a team with
+// answers stays when its source drops it, and a game whose answers need a
+// number another team took keeps its teams as they were.
+func TestAGameFollowsAnotherWithOverrides(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	festID := newFest(t, db, "tethered", "Фест", systemUserID(t, db))
+	seedFestTeams(t, db, festID, 3)
+	if _, err := db.Exec(`update fest_teams set hand = 1 where fest_id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	api := func(method, path string, body any) (int, string) {
+		t.Helper()
+		resp := scopedAPIRequest(t, srv, method, fmt.Sprintf("/api/fest/%d%s", festID, path), body, token)
+		return resp.Code, resp.Body.String()
+	}
+	create := func() int64 {
+		t.Helper()
+		code, body := api(http.MethodPost, "/games", map[string]any{"game_type": "od", "od_tours": 1, "od_questions": 3})
+		var game struct {
+			ID int64 `json:"id"`
+		}
+		if code != http.StatusOK || json.Unmarshal([]byte(body), &game) != nil {
+			t.Fatalf("create: %d %s", code, body)
+		}
+		return game.ID
+	}
+	type tab struct {
+		gameTeamsView
+		From      int64             `json:"from"`
+		Overrides []roster.Override `json:"overrides"`
+		Conflict  string            `json:"conflict"`
+	}
+	write := func(method string, gameID int64, path string, body any) tab {
+		t.Helper()
+		code, out := api(method, fmt.Sprintf("/games/%d/teams%s", gameID, path), body)
+		var got tab
+		if code != http.StatusOK || json.Unmarshal([]byte(out), &got) != nil {
+			t.Fatalf("%s teams%s: %d %s", method, path, code, out)
+		}
+		return got
+	}
+	refused := func(method string, gameID int64, path string, body any) {
+		t.Helper()
+		if code, out := api(method, fmt.Sprintf("/games/%d/teams%s", gameID, path), body); code == http.StatusOK {
+			t.Fatalf("%s teams%s went through: %s", method, path, out)
+		}
+	}
+	seats := func(gameID int64) map[int64]string {
+		t.Helper()
+		_, body := api(http.MethodGet, fmt.Sprintf("/games/%d/state", gameID), nil)
+		var doc struct {
+			Teams []struct {
+				Name   string `json:"name"`
+				Number int64  `json:"number"`
+			} `json:"teams"`
+			Entries [][]int64 `json:"entries"`
+		}
+		if err := json.Unmarshal([]byte(body), &doc); err != nil {
+			t.Fatalf("state: %s", body)
+		}
+		out := map[int64]string{}
+		for _, team := range doc.Teams {
+			out[team.Number] = team.Name
+		}
+		return out
+	}
+	entries := func(gameID int64) [][]int64 {
+		t.Helper()
+		_, body := api(http.MethodGet, fmt.Sprintf("/games/%d/state", gameID), nil)
+		var doc struct {
+			Entries [][]int64 `json:"entries"`
+		}
+		json.Unmarshal([]byte(body), &doc)
+		return doc.Entries
+	}
+	answer := func(gameID int64, q, slot int, number int64) {
+		t.Helper()
+		if code, body := api(http.MethodPatch, fmt.Sprintf("/games/%d/state", gameID), map[string]any{"ops": []map[string]any{
+			{"op": "set", "path": []any{"entries", q, slot}, "value": number},
+			{"op": "set", "path": []any{"completed", q}, "value": true},
+		}}); code != http.StatusOK {
+			t.Fatalf("answer: %d %s", code, body)
+		}
+	}
+
+	a, b, c := create(), create(), create()
+	write(http.MethodPut, b, "", map[string]any{"from": a})
+	write(http.MethodPut, c, "", map[string]any{"from": b})
+	refused(http.MethodPut, a, "", map[string]any{"from": c})
+
+	// A renames team 1; B and C follow. B adds a team of its own; C has it,
+	// A does not.
+	key := write(http.MethodGet, a, "", nil).Teams[0].Key
+	write(http.MethodPost, a, "/overrides", roster.Override{Kind: roster.OverrideRename, Team: key, Name: "Альфа"})
+	write(http.MethodPost, b, "/overrides", roster.Override{Kind: roster.OverrideAddTeam, Add: &roster.OwnTeam{Name: "Гости"}})
+	if s := seats(c); s[1] != "Альфа" || s[4] != "Гости" {
+		t.Fatalf("C seats %v", s)
+	}
+	if s := seats(a); len(s) != 3 || s[1] != "Альфа" {
+		t.Fatalf("A seats %v", s)
+	}
+
+	// In B team 2 answers, then takes number 20: its answer follows it, and
+	// it cannot be removed.
+	answer(b, 0, 0, 2)
+	got := write(http.MethodGet, b, "", nil)
+	key2 := got.Teams[1].Key
+	write(http.MethodPut, b, "/number", map[string]any{"team": key2, "number": 20})
+	if e := entries(b); e[0][0] != 20 {
+		t.Fatalf("team 2's answer did not follow it to 20: %v", e)
+	}
+	refused(http.MethodPost, b, "/overrides", roster.Override{Kind: roster.OverrideRemoveTeam, Team: key2})
+
+	// Team 3 answers in B, then A drops it: B keeps it for its answer.
+	answer(b, 1, 0, 3)
+	key3 := write(http.MethodGet, a, "", nil).Teams[2].Key
+	write(http.MethodPost, a, "/overrides", roster.Override{Kind: roster.OverrideRemoveTeam, Team: key3})
+	got = write(http.MethodGet, b, "", nil)
+	if s := seats(b); s[3] != "Участник 3" {
+		t.Fatalf("B lost team 3: %v", s)
+	}
+	if missing := got.Teams[len(got.Teams)-1]; !missing.Missing || missing.Number != 3 {
+		t.Fatalf("team 3 is not marked as kept: %+v", got.Teams)
+	}
+
+	// A adds a team under number 3: B cannot take it and says why.
+	write(http.MethodPost, a, "/overrides", roster.Override{Kind: roster.OverrideAddTeam, Add: &roster.OwnTeam{Name: "Новые", Number: 3}})
+	if got = write(http.MethodGet, b, "", nil); got.Conflict == "" {
+		t.Fatalf("B took a number its answers need: %+v", got)
+	}
+	if s := seats(b); s[3] != "Участник 3" {
+		t.Fatalf("B gave number 3 away: %v", s)
+	}
+
+	// A team the fest gains reaches every game of the chain.
+	if code, body := api(http.MethodPost, "/teams", map[string]any{"name": "Новички", "players": []any{}}); code != http.StatusOK {
+		t.Fatalf("new fest team: %d %s", code, body)
+	}
+	for _, game := range []int64{a, c} {
+		found := false
+		for _, name := range seats(game) {
+			found = found || name == "Новички"
+		}
+		if !found {
+			t.Fatalf("game %d missed the new team: %v", game, seats(game))
+		}
 	}
 }

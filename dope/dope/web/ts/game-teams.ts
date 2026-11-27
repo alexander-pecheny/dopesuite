@@ -1,25 +1,26 @@
-// The entrants tab of a flat Game (OD, the minefield, KSI, Multi): who
-// plays it. Either the fest's teams, which the rating import and the fest
-// teams page keep current, or the Game's separate list: a copy of those teams
-// made the first time, then the Game's alone. The host changes a team's
-// number right in the table and the rest in the fest roster's team editor
-// (team-editor.ts: the rating site's teams and people, and anybody typed by
-// name), adds a team the same way, clears the list or loads it from a roster
-// sheet, and every change is saved at once. The Game keeps the list while it plays the fest's
-// teams, so the host may switch back and forth. The server decides every rule
-// (a team the Game holds answers for stays) and answers the tab afresh after
+// The entrants tab of a flat Game (OD, the minefield, KSI, Multi; ADR-0038):
+// who plays it. The Game follows a source, the rating site or another Game,
+// and adds overrides (game-overrides.ts); its table is read-only but for the
+// number, which is a number override. Or it plays a separate list: a copy of
+// the teams made when it switches, then the Game's alone. There the host
+// changes a team's number right in the table and the rest in the fest
+// roster's team editor (team-editor.ts), adds a team the same way, clears the
+// list or loads it from a roster sheet, and every change is saved at once.
+// Going back to a source drops the list. The server decides every rule (a
+// team the Game holds answers for stays) and answers the tab afresh after
 // each write (roster.GameTeamsView).
 
 import {td, th} from "./cells.js";
-import {resultsPins, resultsTeamCell} from "./standings.js";
+import {resultsTeamCell} from "./standings.js";
 import {sheetHead} from "./sheet-pins.js";
 import {iconed} from "./icons_gen.js";
 import {actionButton, emptyNote, errorText, hint} from "./entrants.js";
 import {openTeamDialog, request} from "./team-editor.js";
 import type {Answer, TeamDetail, TeamPlayer} from "./team-editor.js";
+import {openOverrideDialog, overridesList} from "./game-overrides.js";
+import type {Override} from "./game-overrides.js";
 import S from "./i18nstrings.js";
 
-const TEAM_PINS = resultsPins();
 // How long the tab waits after an edit before it saves, so a run of edits
 // goes as one write.
 const SAVE_DELAY_MS = 300;
@@ -30,6 +31,7 @@ interface GamePlayer {
 }
 
 interface GameTeam {
+  key?: string;
   number: number;
   name: string;
   city?: string;
@@ -40,11 +42,19 @@ interface GameTeam {
   // carries its answers to a new one.
   prev?: number;
   entered?: boolean;
+  // overridden is the overrides that changed the team; missing marks a team
+  // that left the source but stays for its answers.
+  overridden?: string[];
+  missing?: boolean;
 }
 
 interface GameTeamsView {
   own: boolean;
+  from: number;
+  sources: Array<{id: number; title: string}>;
   teams: GameTeam[];
+  overrides: Override[];
+  conflict?: string;
 }
 
 export interface GameTeamsTab {
@@ -163,47 +173,86 @@ export function createGameTeamsTab(apiBase: string): GameTeamsTab {
     const nodes: HTMLElement[] = [];
     if (view) {
       nodes.push(modeChoice(view), noticeSlot);
-      if (view.own) nodes.push(listButtons());
+      if (view.conflict) nodes.push(hint(view.conflict, true));
+      nodes.push(view.own ? listButtons() : overrideButton(view));
       if (view.teams.length) nodes.push(hint(S.entrants.own.summary(view.teams.length)));
       if (view.own) nodes.push(ownTable());
-      else if (view.teams.length) nodes.push(festTable(view.teams));
+      else if (view.teams.length) nodes.push(tetheredTable(view.teams));
       else nodes.push(emptyNote(S.entrants.own.empty()));
+      if (!view.own && view.overrides.length) {
+        nodes.push(overridesList(view.overrides, busy, (id) => void send(`/overrides/${id}`, {method: "DELETE"})));
+      }
     } else {
       nodes.push(noticeSlot);
     }
     root.replaceChildren(...nodes);
   }
 
-  // modeChoice is the two ways the Game takes its teams, on one line.
+  // modeChoice is the two ways the Game takes its teams, on one line: a
+  // source, picked from the rating site and the Games it may follow, or the
+  // separate list.
   function modeChoice(current: GameTeamsView): HTMLElement {
     const group = document.createElement("div");
     group.className = "u-row u-wrap u-gap-md u-align-center";
     group.setAttribute("role", "radiogroup");
     group.setAttribute("aria-label", S.entrants.tab());
-    const choice = (own: boolean, label: string): HTMLElement => {
-      const row = document.createElement("label");
-      row.className = "u-row u-gap-xs u-align-center";
-      const radio = document.createElement("input");
-      radio.type = "radio";
-      radio.name = "game-teams-mode";
-      radio.checked = current.own === own;
-      radio.disabled = busy;
-      radio.addEventListener("change", () => {
-        const entered = current.teams.some((team) => team.entered);
-        if (!own && entered && !window.confirm(S.entrants.own.followConfirm())) {
-          render();
-          return;
-        }
-        window.clearTimeout(saveTimer);
-        void send("", json("PUT", {own}));
-      });
-      const text = document.createElement("strong");
-      text.textContent = label;
-      row.append(radio, text);
-      return row;
+    const source = document.createElement("select");
+    source.className = "input";
+    source.disabled = busy;
+    source.setAttribute("aria-label", S.entrants.own.follow());
+    source.append(new Option(S.entrants.own.follow(), "0"),
+      ...current.sources.map((game) => new Option(S.entrants.own.sourceGame(game.title), String(game.id))));
+    source.value = String(current.from);
+    const radio = (own: boolean): HTMLInputElement => {
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "game-teams-mode";
+      input.checked = current.own === own;
+      input.disabled = busy;
+      input.addEventListener("change", () => switchTo(current, own, Number(source.value)));
+      return input;
     };
-    group.append(choice(false, S.entrants.own.follow()), choice(true, S.entrants.own.own()));
+    source.addEventListener("change", () => switchTo(current, false, Number(source.value)));
+    const follow = document.createElement("label");
+    follow.className = "u-row u-gap-xs u-align-center";
+    follow.append(radio(false), source);
+    const own = document.createElement("label");
+    own.className = "u-row u-gap-xs u-align-center";
+    const text = document.createElement("strong");
+    text.textContent = S.entrants.own.own();
+    own.append(radio(true), text);
+    group.append(follow, own);
     return group;
+  }
+
+  // switchTo changes the Game's source; leaving the separate list asks first,
+  // since the list goes.
+  function switchTo(current: GameTeamsView, own: boolean, from: number): void {
+    if (current.own && !own && !window.confirm(S.entrants.own.dropListConfirm())) {
+      render();
+      return;
+    }
+    window.clearTimeout(saveTimer);
+    void send("", json("PUT", {own, from}));
+  }
+
+  // overrideButton opens the dialog of a new override.
+  function overrideButton(current: GameTeamsView): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "u-row u-wrap u-gap-sm u-align-center";
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn";
+    add.disabled = busy;
+    add.append(...iconed("plus", S.entrants.overrides.add()));
+    add.addEventListener("click", () => openOverrideDialog({
+      api: apiBase,
+      teams: current.teams.filter((team) => !team.missing),
+      editorBase: () => teamDetail(null),
+      send: (o) => persistWith(`/overrides`, json("POST", o)),
+    }));
+    row.appendChild(add);
+    return row;
   }
 
   // listButtons clear the list, load it from a roster sheet, or give the
@@ -262,24 +311,27 @@ export function createGameTeamsTab(apiBase: string): GameTeamsTab {
     return head;
   }
 
-  // festTable is the fest's teams the Game plays, to read.
-  function festTable(teams: GameTeam[]): HTMLElement {
+  // tetheredTable is the teams the Game's source and overrides give it: the
+  // number a field, which keeps a number override, the rest to read, with a
+  // badge on a team an override changed or one kept for its answers.
+  function tetheredTable(teams: GameTeam[]): HTMLElement {
     const node = document.createElement("table");
     node.className = "results-table seed-import-table game-teams-table";
-    const head = document.createElement("tr");
-    head.append(
-      TEAM_PINS.mark(th(S.entrants.own.number(), "results-place-head seed-number-head"), "place"),
-      TEAM_PINS.mark(th(S.entrants.own.name(), "results-team-head seed-team-head"), "name"),
-      th(S.entrants.own.flags(), "game-teams-flags"),
-      th(S.entrants.own.players(), "game-teams-players"),
-    );
-    node.appendChild(sheetHead([{row: head}]));
+    node.appendChild(sheetHead([{row: headRow([
+      [S.entrants.own.number(), "results-place-head seed-number-head"],
+      [S.entrants.own.name(), "results-team-head seed-team-head"],
+      [S.entrants.own.flags(), "game-teams-flags"],
+      [S.entrants.own.players(), "game-teams-players"],
+    ])}]));
     const body = document.createElement("tbody");
     teams.forEach((team, index) => {
       const tr = rowShell(index, teams.length);
+      const badges = team.missing ? [S.entrants.overrides.missing()] : team.overridden?.length ? [S.entrants.overrides.badge()] : [];
       tr.append(
-        TEAM_PINS.mark(td(team.number ? String(team.number) : "", "results-place seed-number-cell"), "place"),
-        TEAM_PINS.mark(resultsTeamCell(team.name, {city: team.city}), "name"),
+        td(team.missing ? String(team.number) : numberField(team, () => {
+          void send("/number", json("PUT", {team: team.key, number: team.number}));
+        }), "results-place seed-number-cell"),
+        resultsTeamCell(team.name, {city: team.city, badges}),
         td((team.flags || []).join(", "), "game-teams-flags"),
         td((team.players || []).map((p) => p.name).join(", "), "game-teams-players"),
       );
@@ -287,6 +339,22 @@ export function createGameTeamsTab(apiBase: string): GameTeamsTab {
     });
     node.appendChild(body);
     return scroll(node);
+  }
+
+  // numberField is a team's number typed in the table.
+  function numberField(team: GameTeam, changed: () => void): HTMLInputElement {
+    const number = document.createElement("input");
+    number.type = "text";
+    number.inputMode = "numeric";
+    number.className = "seed-number-input";
+    number.value = String(team.number || "");
+    number.disabled = busy;
+    number.setAttribute("aria-label", S.entrants.own.number());
+    number.addEventListener("change", () => {
+      team.number = Number(number.value.trim()) || 0;
+      changed();
+    });
+    return number;
   }
 
   function scroll(table: HTMLElement): HTMLElement {
@@ -325,16 +393,7 @@ export function createGameTeamsTab(apiBase: string): GameTeamsTab {
 
   function ownRow(team: GameTeam, index: number): HTMLTableRowElement {
     const tr = rowShell(index, draft.length);
-    const number = document.createElement("input");
-    number.type = "text";
-    number.inputMode = "numeric";
-    number.className = "seed-number-input";
-    number.value = String(team.number || "");
-    number.setAttribute("aria-label", S.entrants.own.number());
-    number.addEventListener("change", () => {
-      team.number = Number(number.value.trim()) || 0;
-      saveSoon();
-    });
+    const number = numberField(team, saveSoon);
     const actions = document.createElement("div");
     actions.className = "u-row u-gap-xs";
     actions.append(
@@ -403,11 +462,18 @@ export function createGameTeamsTab(apiBase: string): GameTeamsTab {
 
   // persist saves the list as the editor's save does: the answer says
   // whether it went through, and why not.
-  async function persist(): Promise<Answer> {
+  function persist(): Promise<Answer> {
     window.clearTimeout(saveTimer);
+    return persistWith("/list", json("PUT", {teams: draft}));
+  }
+
+  // persistWith makes one change for a dialog: the answer says whether it
+  // went through, and why not; one that did draws the tab again.
+  async function persistWith(path: string, init: RequestInit): Promise<Answer> {
     try {
-      adopt(await call("/list", json("PUT", {teams: draft})));
+      adopt(await call(path, init));
       notice = "";
+      render();
       return {ok: true, message: ""};
     } catch (error) {
       return {ok: false, message: errorText(error)};

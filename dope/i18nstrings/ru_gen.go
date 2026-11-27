@@ -342,33 +342,91 @@ var RU = Strings{
 			Label:     func() string { return "Откуда загрузить список" },
 			Run:       func() string { return "Загрузить список" },
 		},
+		Overrides: EntrantsOverridesStrings{
+			Add:              func() string { return "Добавить оверрайд" },
+			Badge:            func() string { return "оверрайд" },
+			City:             func() string { return "Город" },
+			Flags:            func() string { return "Зачёты" },
+			Kind:             func() string { return "Что изменить" },
+			KindAddPlayer:    func() string { return "Добавить игрока" },
+			KindAddTeam:      func() string { return "Добавить команду" },
+			KindCity:         func() string { return "Изменить город команды" },
+			KindFlags:        func() string { return "Изменить зачёты команды" },
+			KindMovePlayer:   func() string { return "Игрок за другую команду" },
+			KindRemovePlayer: func() string { return "Убрать игрока" },
+			KindRemoveTeam:   func() string { return "Убрать команду" },
+			KindRename:       func() string { return "Переименовать команду" },
+			Missing:          func() string { return "нет в источнике" },
+			Name:             func() string { return "Новое название" },
+			NotApplied:       func() string { return "оверрайд не применён" },
+			Player:           func() string { return "Игрок" },
+			Remove:           func() string { return "Убрать оверрайд" },
+			Team:             func() string { return "Команда" },
+			TextAddPlayer: func(player string, team string) string {
+				return fmt.Sprintf("%s в составе «%s»", player, team)
+			},
+			TextAddTeam: func(team string) string { return fmt.Sprintf("Добавлена команда «%s»", team) },
+			TextCity: func(team string, city string) string {
+				return fmt.Sprintf("Город команды «%s»: %s", team, city)
+			},
+			TextFlags: func(team string, flags string) string {
+				return fmt.Sprintf("Зачёты команды «%s»: %s", team, flags)
+			},
+			TextMovePlayer: func(player string, team string) string {
+				return fmt.Sprintf("%s играет за «%s»", player, team)
+			},
+			TextNumber: func(team string, number string) string {
+				return fmt.Sprintf("«%s» под номером %s", team, number)
+			},
+			TextRemovePlayer: func(player string, team string) string {
+				return fmt.Sprintf("%s не в составе «%s»", player, team)
+			},
+			TextRemoveTeam: func(team string) string { return fmt.Sprintf("Убрана команда «%s»", team) },
+			TextRename: func(team string, name string) string {
+				return fmt.Sprintf("«%s» называется «%s»", team, name)
+			},
+			Title: func() string { return "Оверрайды" },
+			To:    func() string { return "За какую команду" },
+		},
 		Own: EntrantsOwnStrings{
 			AddTeam:      func() string { return "Добавить команду" },
 			Clear:        func() string { return "Очистить" },
 			ClearConfirm: func() string { return "Убрать из списка все команды?" },
-			Edit:         func(team string) string { return fmt.Sprintf("Изменить «%s»", team) },
-			Empty:        func() string { return "В игре пока нет команд." },
+			Cycle: func() string {
+				return "Так не получится: эта игра сама берёт команды из выбранной."
+			},
+			DropListConfirm: func() string {
+				return "Отдельный список пропадёт, и игра снова будет брать команды из источника. Продолжить?"
+			},
+			Edit:  func(team string) string { return fmt.Sprintf("Изменить «%s»", team) },
+			Empty: func() string { return "В игре пока нет команд." },
 			Entered: func(name string) string {
 				return fmt.Sprintf("«%s» нельзя убрать: в игре уже есть её ответы. Сначала очистите их.", name)
 			},
 			EnteredNote: func() string { return "В игре уже есть её ответы" },
 			Flags:       func() string { return "Зачёты" },
 			Follow:      func() string { return "Как на турнирном сайте" },
-			FollowConfirm: func() string {
-				return "В игре уже есть результаты. Вернуться к командам с турнирного сайта? Результаты команд, которых там нет, пропадут."
+			Follows:     func() string { return "Сначала выберите «Отдельный список»." },
+			HasList: func() string {
+				return "У игры отдельный список: правьте команды прямо в нём."
 			},
-			Follows: func() string { return "Сначала выберите «Отдельный список»." },
-			Name:    func() string { return "Команда" },
+			Name: func() string { return "Команда" },
 			NameMissing: func(row string) string {
 				return fmt.Sprintf("Впишите название команды в строке %s.", row)
 			},
 			NotFlat: func() string {
 				return "У этой игры свой список участников: его правят на вкладке «Участники» игры."
 			},
-			Number:        func() string { return "№" },
+			Number: func() string { return "№" },
+			NumberConflict: func(number string, held string, team string) string {
+				return fmt.Sprintf("Список не обновлён: номер %s нужен команде «%s», у которой есть результаты, а его заняла «%s».", number, held, team)
+			},
 			NumberMissing: func(name string) string { return fmt.Sprintf("Впишите номер команды «%s».", name) },
 			NumberTaken: func(number string, first string, second string) string {
 				return fmt.Sprintf("Номер %s у двух команд: «%s» и «%s».", number, first, second)
+			},
+			OverrideFailed: func() string {
+				return "Этот оверрайд не применить к командам игры."
 			},
 			Own:     func() string { return "Отдельный список" },
 			Players: func() string { return "Игроки" },
@@ -376,6 +434,7 @@ var RU = Strings{
 			RemoveConfirm: func(team string) string {
 				return fmt.Sprintf("Убрать команду «%s» из списка игры?", team)
 			},
+			SourceGame: func(game string) string { return fmt.Sprintf("Как в игре «%s»", game) },
 			Summary: func(n int) string {
 				return fmt.Sprintf("%d %s в игре", n, core.Plural("ru", n, "команда", "команды", "команд"))
 			},

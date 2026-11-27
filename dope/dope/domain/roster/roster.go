@@ -137,12 +137,13 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 		if _, ok := games.As[games.RosterFolder](doc.GameType); !ok {
 			continue
 		}
-		// A Game that plays its separate list does not follow the fest.
-		list, err := loadOwnList(ctx, tx, doc.GameID)
+		// A Game with a source of its own or overrides is worked out below,
+		// after the plain Games, in the order its sources change.
+		src, err := loadSource(ctx, tx, doc.GameID)
 		if err != nil {
 			return nil, err
 		}
-		if list.own {
+		if !src.plain() {
 			continue
 		}
 		update, err := foldGameTx(ctx, tx, festID, doc, RosterTeams(OnVenue(teams, placement, doc.MultiFestVenueID)), remap)
@@ -151,7 +152,8 @@ func PropagateRosterTx(ctx context.Context, tx *sql.Tx, festID int64, teams []Fe
 		}
 		updates = append(updates, update)
 	}
-	return updates, nil
+	more, err := refoldFollowersTx(ctx, tx, festID, 0, true)
+	return append(updates, more...), err
 }
 
 // foldGameTx folds teams into one flat Game's document (its Protocol a

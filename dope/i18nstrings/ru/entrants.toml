@@ -127,8 +127,10 @@ rename_fest = "Переименовать здесь можно только р�
 # (dope/dope/domain/roster/gameteams.go, web/ts/game-teams.ts).
 follow = "Как на турнирном сайте"
 own = "Отдельный список"
-# Confirm going back to the fest's teams once the Game has results.
-follow_confirm = "В игре уже есть результаты. Вернуться к командам с турнирного сайта? Результаты команд, которых там нет, пропадут."
+# A Game the game may follow, in the source dropdown.
+source_game = 'Как в игре «{{.game}}»'
+# Confirm leaving the separate list, which goes.
+drop_list_confirm = "Отдельный список пропадёт, и игра снова будет брать команды из источника. Продолжить?"
 # The separate list's buttons.
 add_team = "Добавить команду"
 clear = "Очистить"
@@ -155,3 +157,44 @@ entered = '«{{.name}}» нельзя убрать: в игре уже есть 
 name_missing = 'Впишите название команды в строке {{.row}}.'
 number_missing = 'Впишите номер команды «{{.name}}».'
 number_taken = 'Номер {{.number}} у двух команд: «{{.first}}» и «{{.second}}».'
+has_list = "У игры отдельный список: правьте команды прямо в нём."
+cycle = "Так не получится: эта игра сама берёт команды из выбранной."
+override_failed = "Этот оверрайд не применить к командам игры."
+# A change upstream the Game cannot take: a team with answers needs a number
+# another team now has.
+number_conflict = 'Список не обновлён: номер {{.number}} нужен команде «{{.held}}», у которой есть результаты, а его заняла «{{.team}}».'
+
+[overrides]
+# A tethered game's overrides (dope/dope/web/ts/game-overrides.ts, ADR-0038):
+# the list under the table, the dialog that adds one, and the badges.
+title = "Оверрайды"
+add = "Добавить оверрайд"
+remove = "Убрать оверрайд"
+not_applied = "оверрайд не применён"
+badge = "оверрайд"
+missing = "нет в источнике"
+kind = "Что изменить"
+kind_rename = "Переименовать команду"
+kind_city = "Изменить город команды"
+kind_flags = "Изменить зачёты команды"
+kind_add_team = "Добавить команду"
+kind_remove_team = "Убрать команду"
+kind_add_player = "Добавить игрока"
+kind_remove_player = "Убрать игрока"
+kind_move_player = "Игрок за другую команду"
+team = "Команда"
+name = "Новое название"
+city = "Город"
+flags = "Зачёты"
+player = "Игрок"
+to = "За какую команду"
+# An override as the list says it.
+text_rename = '«{{.team}}» называется «{{.name}}»'
+text_city = 'Город команды «{{.team}}»: {{.city}}'
+text_flags = 'Зачёты команды «{{.team}}»: {{.flags}}'
+text_number = '«{{.team}}» под номером {{.number}}'
+text_add_team = 'Добавлена команда «{{.team}}»'
+text_remove_team = 'Убрана команда «{{.team}}»'
+text_add_player = '{{.player}} в составе «{{.team}}»'
+text_remove_player = '{{.player}} не в составе «{{.team}}»'
+text_move_player = '{{.player}} играет за «{{.team}}»'

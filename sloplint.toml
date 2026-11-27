@@ -19,7 +19,8 @@
 # KSI sticker menu and the game settings page's writes were split up,
 # 0.4881 once the minefield's ticks split ComputeODResults further, and
 # 0.4879 once the minefield always charged an empty tour, and 0.4878 once a
-# flat game kept a separate team list of its own.
+# flat game kept a separate team list of its own. 0.4872 once a game's teams
+# followed a source plus its overrides (ADR-0038).
 # Score with sloplint 3ab0283 or newer: an older binary still counts the
 # numbers an ignore comment vouches for, and reads about 0.03 higher.
-max-slop-score = 0.4877
+max-slop-score = 0.4872

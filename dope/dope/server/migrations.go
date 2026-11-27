@@ -1295,6 +1295,18 @@ drop table game_teams;
 	// table stays, renamed and unread, with matches.venue_id, which old
 	// checkpoints still carry (journal.RestoreGameCheckpoint).
 	{Version: 66, Name: "rooms and game venue maps", Up: roomsAndVenueMaps},
+	// A flat Game follows a source and adds overrides (ADR-0038): teams_from
+	// is the Game it takes its teams from (0: the rating site), overrides its
+	// changes in order (roster.Override), and roster_numbers each team's
+	// number at the last fold, by key, which carries answers to a new number.
+	{Version: 67, Name: "a flat game's source and overrides", Up: func(db *sql.DB) error {
+		_, err := db.Exec(`
+alter table games add column teams_from integer not null default 0;
+alter table games add column overrides text not null default '';
+alter table games add column roster_numbers text not null default '';
+`)
+		return err
+	}},
 }
 
 // overridesToHandRosters keeps every Game's teams playing with whom they play

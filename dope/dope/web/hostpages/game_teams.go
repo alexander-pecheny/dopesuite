@@ -9,14 +9,23 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
 	"dope/dope/web/route"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/idstr"
 )
 
-// A flat Game's entrants tab (roster.GameTeamsView): the fest's teams, or
-// the Game's separate list, which the host edits by hand or loads from a
-// roster sheet. The game page's tab and an agent use the same routes.
+// A flat Game's entrants tab (roster.GameTeamsView, ADR-0038): its source
+// and the overrides it adds, or its separate list, which the host edits in
+// the fest's team editor or loads from a roster sheet. The game page's tab
+// and an agent use the same routes.
 
 type gameTeamsMode struct {
-	Own bool `json:"own"`
+	Own  bool  `json:"own"`
+	From int64 `json:"from"`
+}
+
+type gameTeamNumber struct {
+	Team   string `json:"team"`
+	Number int64  `json:"number"`
 }
 
 type gameTeamsList struct {
@@ -31,15 +40,50 @@ func (s *Server) apiGameTeams(w http.ResponseWriter, r *http.Request, sc route.S
 	return route.JSON(w, view)
 }
 
-// apiSetGameTeamsMode is PUT {own}: the Game plays its separate list, made
-// from the teams it seats the first time, or the fest's teams again.
+// apiSetGameTeamsMode is PUT {own, from}: the Game plays a separate list,
+// made from the teams it seats now, or follows a source (from: a Game, 0 for
+// the rating site).
 func (s *Server) apiSetGameTeamsMode(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	var req gameTeamsMode
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	return s.writeGameTeams(w, r, sc, "game-teams:mode", func(ctx context.Context, tx *sql.Tx) (roster.GameStateBroadcast, error) {
-		return roster.SetOwnTeamsTx(ctx, tx, sc.FestID, sc.GameID, req.Own)
+	return s.writeGameTeams(w, r, sc, "game-teams:mode", func(ctx context.Context, tx *sql.Tx) ([]roster.GameStateBroadcast, error) {
+		return roster.SetTeamsSourceTx(ctx, tx, sc.FestID, sc.GameID, req.Own, req.From)
+	})
+}
+
+// apiAddGameOverride is POST …/teams/overrides {override}.
+func (s *Server) apiAddGameOverride(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req roster.Override
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	return s.writeGameTeams(w, r, sc, "game-teams:override", func(ctx context.Context, tx *sql.Tx) ([]roster.GameStateBroadcast, error) {
+		return roster.AddOverrideTx(ctx, tx, sc.FestID, sc.GameID, req)
+	})
+}
+
+// apiDeleteGameOverride is DELETE …/teams/overrides/{id}.
+func (s *Server) apiDeleteGameOverride(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	id, err := idstr.Parse(r.PathValue("id"))
+	if err != nil || id <= 0 {
+		return route.BadRequest("bad override")
+	}
+	return s.writeGameTeams(w, r, sc, "game-teams:override-delete", func(ctx context.Context, tx *sql.Tx) ([]roster.GameStateBroadcast, error) {
+		return roster.DeleteOverrideTx(ctx, tx, sc.FestID, sc.GameID, id)
+	})
+}
+
+// apiSetGameTeamNumber is PUT …/teams/number {team, number}: a tethered
+// Game's number for a team, kept as a number override.
+func (s *Server) apiSetGameTeamNumber(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
+	var req gameTeamNumber
+	if err := route.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+	return s.writeGameTeams(w, r, sc, "game-teams:number", func(ctx context.Context, tx *sql.Tx) ([]roster.GameStateBroadcast, error) {
+		return roster.SetTeamNumberTx(ctx, tx, sc.FestID, sc.GameID, req.Team, req.Number)
 	})
 }
 
@@ -50,7 +94,7 @@ func (s *Server) apiSaveGameTeams(w http.ResponseWriter, r *http.Request, sc rou
 	if err := route.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	return s.writeGameTeams(w, r, sc, "game-teams:list", func(ctx context.Context, tx *sql.Tx) (roster.GameStateBroadcast, error) {
+	return s.writeGameTeams(w, r, sc, "game-teams:list", func(ctx context.Context, tx *sql.Tx) ([]roster.GameStateBroadcast, error) {
 		return roster.SaveOwnTeamsTx(ctx, tx, sc.FestID, sc.GameID, req.Teams)
 	})
 }
@@ -63,10 +107,10 @@ func (s *Server) apiImportGameTeamsXLSX(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		return err
 	}
-	return s.writeGameTeams(w, r, sc, "game-teams:xlsx", func(ctx context.Context, tx *sql.Tx) (roster.GameStateBroadcast, error) {
+	return s.writeGameTeams(w, r, sc, "game-teams:xlsx", func(ctx context.Context, tx *sql.Tx) ([]roster.GameStateBroadcast, error) {
 		before, err := roster.GameSheetTeams(ctx, tx, sc.FestID, sc.GameID)
 		if err != nil {
-			return roster.GameStateBroadcast{}, err
+			return nil, err
 		}
 		return roster.SaveOwnTeamsTx(ctx, tx, sc.FestID, sc.GameID, sheetOwnTeams(sheet, before))
 	})
@@ -112,17 +156,21 @@ func (s *Server) apiGameTeamsSheet(w http.ResponseWriter, r *http.Request, sc ro
 	return err
 }
 
-// writeGameTeams runs one write to the Game's list, sends the document it
-// rewrote to the Game's open pages, and answers the tab afresh.
+// writeGameTeams runs one write to the Game's teams, sends the documents it
+// rewrote (the Game's and its followers') to their open pages, and answers
+// the tab afresh.
 func (s *Server) writeGameTeams(w http.ResponseWriter, r *http.Request, sc route.Scope, event string,
-	write func(ctx context.Context, tx *sql.Tx) (roster.GameStateBroadcast, error)) error {
+	write func(ctx context.Context, tx *sql.Tx) ([]roster.GameStateBroadcast, error)) error {
 	_, err := s.commit(r.Context(), sc.FestID, event, []int64{sc.GameID}, func(ctx context.Context, tx *sql.Tx) (core.FestWrite, error) {
-		update, err := write(ctx, tx)
+		updates, err := write(ctx, tx)
 		if err != nil {
 			return core.FestWrite{}, err
 		}
 		written := core.FestWrite{Event: event, Payload: map[string]any{"gameID": sc.GameID}}
-		written.Broadcast.States = []core.GameState{{GameID: update.GameID, StateJSON: update.StateJSON}}
+		for _, update := range updates {
+			written.Broadcast.States = append(written.Broadcast.States, core.GameState{GameID: update.GameID, StateJSON: update.StateJSON})
+			written.Broadcast.Views = append(written.Broadcast.Views, update.GameID)
+		}
 		return written, nil
 	})
 	if err != nil {
