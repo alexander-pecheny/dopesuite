@@ -204,10 +204,11 @@ insert or ignore into game_team_players(game_id, participant_id, player_id, rost
 	return nil
 }
 
-// handRostersToOverrides turns a plain bout game's hand rosters into player
+// handRostersToOverrides turns a plain bout game's rosters into player
 // overrides on the teams its source gives it, so the game plays the same
-// people once it follows the source. Its hand rosters go; the refresh writes
-// them back from the overrides.
+// people once it follows the source: its hand rosters, and the rosters its
+// teams brought when it was seeded, which the fest roster may have left
+// since. The refresh writes them back from the overrides.
 func handRostersToOverrides(ctx context.Context, tx *sql.Tx, festID int64, doc store.GameDoc, src teamsSource) (teamsSource, error) {
 	base, _, err := resolveTeams(ctx, tx, festID, src, map[int64]bool{})
 	if err != nil {
@@ -221,28 +222,34 @@ func handRostersToOverrides(ctx context.Context, tx *sql.Tx, festID int64, doc s
 	if err != nil {
 		return src, err
 	}
+	// Every team's roster first: a person a stale roster lists on two teams
+	// stays on both.
+	current := map[string][]store.RosterMember{}
 	for _, team := range teams {
-		at := teamAt(base, team.key)
-		if team.key == "" || at < 0 {
+		if team.key == "" || teamAt(base, team.key) < 0 {
 			continue
 		}
 		roster, err := currentRoster(ctx, tx, doc.GameID, game, team.participant)
 		if err != nil {
 			return src, err
 		}
-		if !roster.Hand {
-			continue
+		current[team.key] = roster.Players
+	}
+	for _, team := range teams {
+		if at := teamAt(base, team.key); team.key != "" && at >= 0 {
+			src.overrides = append(src.overrides, rosterOverrides(base, at, current, nextOverrideID(src.overrides))...)
 		}
-		src.overrides = append(src.overrides, rosterOverrides(base, at, roster.Players, nextOverrideID(src.overrides))...)
 	}
 	return src, nil
 }
 
-// rosterOverrides is the overrides that turn team at's players into hand:
-// whoever is missing taken off, whoever is new added, or moved from the team
-// the source has them on. Players are matched by name.
-func rosterOverrides(base []OwnTeam, at int, hand []store.RosterMember, id int64) []Override {
+// rosterOverrides is the overrides that turn team at's players into the
+// roster it has in the game: whoever is missing taken off, whoever is new
+// added, or moved from the team the source has them on unless that team still
+// lists them too. Players are matched by name.
+func rosterOverrides(base []OwnTeam, at int, current map[string][]store.RosterMember, id int64) []Override {
 	team := base[at]
+	hand := current[team.Key]
 	inHand := map[string]bool{}
 	for _, member := range hand {
 		inHand[util.AlphaKey(member.Name)] = true
@@ -266,13 +273,26 @@ func rosterOverrides(base []OwnTeam, at int, hand []store.RosterMember, id int64
 			continue
 		}
 		player, from := findPlayer(base, member.Name)
-		if from >= 0 {
+		if from >= 0 && !listed(current[base[from].Key], member.Name) {
 			add(Override{Kind: OverrideMovePlayer, To: team.Key, ToLabel: team.Name, Player: &player})
+		} else if from >= 0 {
+			add(Override{Kind: OverrideAddPlayer, Team: team.Key, Player: &player})
 		} else {
 			add(Override{Kind: OverrideAddPlayer, Team: team.Key, Player: &OwnPlayer{Name: strings.TrimSpace(member.Name)}})
 		}
 	}
 	return out
+}
+
+// listed says a roster lists a person of that name.
+func listed(roster []store.RosterMember, name string) bool {
+	key := util.AlphaKey(name)
+	for _, member := range roster {
+		if util.AlphaKey(member.Name) == key {
+			return true
+		}
+	}
+	return false
 }
 
 // findPlayer is the player of that name on a team of the source, with the

@@ -68,9 +68,25 @@ func TestABoutGameFollowsASourceForWhoItsTeamsAre(t *testing.T) {
 		}
 		return got
 	}
+	// Another team's fest roster loses a player after the seeding: the game
+	// still plays the roster the team brought.
+	other := seats[1]
+	brought := gameRosterTab(t, srv, festID, es, token)[other].names()
+	if _, err := db.Exec(`
+delete from fest_team_players where team_id = (select t.id from fest_teams t join participants p on p.fest_id = t.fest_id and p.number = t.number where p.id = ?)
+and roster_order = 1`, other); err != nil {
+		t.Fatal(err)
+	}
 	got := teams(http.MethodPut, "", map[string]any{"from": od.ID})
-	if !got.Bout || got.From != od.ID || len(got.Overrides) != 3 {
+	if !got.Bout || got.From != od.ID || len(got.Overrides) != 4 {
 		t.Fatalf("following the ЧГК: %+v", got)
+	}
+	// The same people; one an override brings back stands last.
+	now := gameRosterTab(t, srv, festID, es, token)[other].names()
+	slices.Sort(now)
+	slices.Sort(brought)
+	if !slices.Equal(now, brought) {
+		t.Fatalf("following the ЧГК changed a brought roster: %v, was %v", now, brought)
 	}
 	if after := gameRosterTab(t, srv, festID, es, token)[team]; !slices.Equal(after.names(), want) {
 		t.Fatalf("the hand roster did not survive as overrides: %v, want %v", after.names(), want)
