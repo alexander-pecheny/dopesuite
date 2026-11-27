@@ -558,6 +558,7 @@ export type Strings = {
     };
     member: {
       creatorProtected: () => string;
+      juryNeedsSynch: () => string;
       roleInvalid: () => string;
     };
   };

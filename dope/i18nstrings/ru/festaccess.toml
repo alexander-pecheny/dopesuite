@@ -31,6 +31,9 @@ line_prefix = 'строка {{.n}}: {{.msg}}'
 creator_protected = "создателя нельзя удалить или изменить"
 # A member row's new role is not admin, host or game_jury.
 role_invalid = "роль должна быть admin, host или game_jury"
+# A new game_jury on a fest that is not a synch one: only a synch fest takes
+# contested answers, which a jury rules on.
+jury_needs_synch = "Жюри бывает только у синхрона: на обычном фесте нет спорных ответов."
 
 [games]
 # The API's per-host Game limits (POST …/access with games).

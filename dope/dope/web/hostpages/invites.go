@@ -134,6 +134,11 @@ func (s *Server) MintJuryInvite(ctx context.Context, festID, userID int64, req i
 // mintInvite makes a link to a Game or venue of the fest. Nobody approves a
 // join, so a request for approval is ignored.
 func (s *Server) mintInvite(ctx context.Context, kind inviteKind, festID, scopeID, userID int64, req invitelink.MintRequest) error {
+	if kind.path == juryInvites.path {
+		if err := festaccess.RequireSynchJuryTx(ctx, s.h.Engine().DB, festID); err != nil {
+			return err
+		}
+	}
 	req.RequiresApproval = false
 	opt, err := req.Options()
 	if err != nil {

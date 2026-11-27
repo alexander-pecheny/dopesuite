@@ -133,7 +133,8 @@ func TestAHostInviteLinkMakesAHostOfOneGame(t *testing.T) {
 	}
 }
 
-// A jury link names the fest. A stranger who follows it becomes its jury, and
+// A jury link names the fest. Only a synch fest has a jury, as only it takes
+// contested answers. A stranger who follows the link becomes its jury, and
 // someone who already has a role keeps it.
 func TestAJuryInviteLinkMakesTheFestsJury(t *testing.T) {
 	t.Parallel()
@@ -148,6 +149,16 @@ func TestAJuryInviteLinkMakesTheFestsJury(t *testing.T) {
 	mint := fmt.Sprintf("/api/fest/%d/jury-invites", festID)
 	if resp := scopedAPIRequest(t, srv, http.MethodPost, mint, map[string]any{}, hostToken); resp.Code != http.StatusForbidden {
 		t.Fatalf("a host minted a jury link: %d", resp.Code)
+	}
+	if resp := scopedAPIRequest(t, srv, http.MethodPost, mint, map[string]any{"label": "Жюри"}, adminToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("a regular fest minted a jury link: %d", resp.Code)
+	}
+	// A synch fest's host leads a venue.
+	if _, err := srv.Eng().DB.Exec(`
+update fests set kind = 'synch' where id = ?1;
+insert into multifest_venues(fest_id, title) values(?1, 'Минск');
+insert into fest_venue_hosts(fest_id, multifest_venue_id, user_id) values(?1, last_insert_rowid(), ?2);`, festID, hostID); err != nil {
+		t.Fatal(err)
 	}
 	resp := scopedAPIRequest(t, srv, http.MethodPost, mint, map[string]any{"label": "Жюри"}, adminToken)
 	if resp.Code != http.StatusOK {
@@ -186,5 +197,41 @@ func TestAJuryInviteLinkMakesTheFestsJury(t *testing.T) {
 	}
 	if got := role(hostID); got != roles.Host {
 		t.Fatalf("the host's role after a jury link: %q", got)
+	}
+}
+
+// The access list gives game_jury on a synch fest alone, and a regular fest's
+// dashboard does not offer it; a jury a fest already has keeps the role.
+func TestOnlyASynchFestGetsAJury(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	adminID, adminToken := createAPITestSession(t, srv, "boss")
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	createAPITestSession(t, srv, "judge")
+	access := fmt.Sprintf("/api/fest/%d/access", festID)
+	jury := map[string]any{"changes": []map[string]any{{"user": "judge", "role": "game_jury"}}}
+	if resp := scopedAPIRequest(t, srv, http.MethodPost, access, jury, adminToken); resp.Code != http.StatusBadRequest {
+		t.Fatalf("a regular fest took a jury: %d %s", resp.Code, resp.Body.String())
+	}
+	dash := func() string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d", festID), nil)
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: adminToken})
+		rec := httptest.NewRecorder()
+		srv.HostPageServer().HandleHostRouter(rec, req)
+		return rec.Body.String()
+	}
+	if strings.Contains(dash(), `value="game_jury"`) {
+		t.Fatal("a regular fest's dashboard offers game_jury")
+	}
+	if _, err := srv.Eng().DB.Exec(`update fests set kind = 'synch' where id = ?`, festID); err != nil {
+		t.Fatal(err)
+	}
+	if resp := scopedAPIRequest(t, srv, http.MethodPost, access, jury, adminToken); resp.Code != http.StatusOK {
+		t.Fatalf("a synch fest refused a jury: %d %s", resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(dash(), `value="game_jury"`) {
+		t.Fatal("a synch fest's dashboard does not offer game_jury")
 	}
 }

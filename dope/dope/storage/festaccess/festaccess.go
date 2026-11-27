@@ -353,12 +353,31 @@ update fest_organizers set role = 'creator' where fest_id = ? and user_id = ?`, 
 	if !roles.Assignable(nextRole) {
 		return corei18n.User(dopestrings.Default.Festaccess.Member.RoleInvalid())
 	}
+	if nextRole == roles.GameJury && currentRole != roles.GameJury {
+		if err := RequireSynchJuryTx(ctx, tx, festID); err != nil {
+			return err
+		}
+	}
 	_, err := tx.ExecContext(ctx, `
 insert into fest_organizers(fest_id, user_id, role, added_at)
 values(?, ?, ?, ?)
 on conflict(fest_id, user_id) do update set role = excluded.role`,
 		festID, userID, nextRole, now)
 	return err
+}
+
+// RequireSynchJuryTx refuses a new game_jury on a fest that is not a synch
+// one: only a synch fest takes contested answers, which are all a jury rules
+// on. A jury a fest already has keeps its role.
+func RequireSynchJuryTx(ctx context.Context, q store.Queryer, festID int64) error {
+	var synch bool
+	if err := q.QueryRowContext(ctx, `select kind = 'synch' from fests where id = ?`, festID).Scan(&synch); err != nil {
+		return err
+	}
+	if !synch {
+		return corei18n.User(dopestrings.Default.Festaccess.Member.JuryNeedsSynch())
+	}
+	return nil
 }
 
 // deleteFestAccessMemberTx removes a member from the fest and from every game
