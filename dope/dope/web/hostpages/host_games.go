@@ -18,6 +18,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
+	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -94,6 +95,13 @@ type hostGameCreateData struct {
 	// A Game numbers whom it seats from 1 (ADR-0009), so a fest of 65 can hold
 	// an EK of 48 and a brain of a different 48.
 	Entrants []gameEntrantOption
+	// Divisions are the fest's Divisions, which a format that has them
+	// offers; Synch says the fest takes contested answers.
+	Divisions []string
+	Synch     bool
+	// Form is what the host posted, kept when the page is drawn again after
+	// a refusal.
+	Form url.Values
 }
 
 type gameEntrantOption struct {
@@ -151,13 +159,14 @@ func stickerRow(label, maxName, maxVal, colorName, colorSel string) *dopeui.Elem
 	)
 }
 
-// gameTypeRadio builds one game-type radio, pre-checked when it is the selected type.
-func gameTypeRadio(value, label, selected string) *dopeui.Element {
-	items := []dopeui.Item{dopeui.Name("game_type"), dopeui.Value(value)}
+// gameTypeOption is one format in the game-type select, chosen when it is
+// the selected type.
+func gameTypeOption(value, label, selected string) dopeui.Item {
+	items := []dopeui.Item{dopeui.Value(value), dopeui.Text(label)}
 	if value == selected {
-		items = append(items, dopeui.Checked())
+		items = append(items, dopeui.Selected())
 	}
-	return dopeui.Radio(append(items, dopeui.Text(label))...)
+	return dopeui.Option(items...)
 }
 
 // gameSettings wraps one game type's settings in a data-game-settings section,
@@ -187,18 +196,21 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
 	}
 
-	submit := []dopeui.Item{dopeui.Data("game-submit", "")}
 	if sel == "" {
-		submit = append(submit, dopeui.Hidden())
+		sel = games.All()[0].Code
+		data.SelectedType = sel
 	}
-	submit = append(submit, dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.CreateSubmit())))
-
 	form := []dopeui.Item{dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/" + ref + "/game/new"),
 		dopeui.Autocomplete("off"), dopeui.Data("game-create-form", ""),
-		dopeui.Pickgroup(append([]dopeui.Item{dopeui.Label(s.Host.Games.TypeLabel())}, typeRadios(sel)...)...),
+		dopeui.Field(dopeui.Label(s.Host.Games.TypeLabel()), dopeui.Selectfield(append([]dopeui.Item{dopeui.Name("game_type")}, typeOptions(sel)...)...)),
+		// An empty title is the format's, which the placeholder shows
+		// (gamecreate.js follows the select).
+		dopeui.Field(dopeui.Label(s.Host.Games.TitleLabel()), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Form.Get("title")), dopeui.Placeholder(typeTitle(sel)))),
+		dopeui.Field(dopeui.Label(s.Host.Games.SlugLabel()), dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Form.Get("slug")), dopeui.Pattern("[a-z0-9-]+"))),
 	}
 	form = append(form, settingsSections(data)...)
-	form = append(form, entrantPicker(data), dopeui.Row(submit...))
+	form = append(form, createOptionFields(data)...)
+	form = append(form, entrantPicker(data), dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.CreateSubmit()))))
 	page = append(page, dopeui.Form(form...))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
@@ -361,17 +373,124 @@ func dslFieldOf(code string) (string, bool) {
 	return code + "_dsl", true
 }
 
-// typeRadios is the game-type picker: every registered format in the
-// registry's order, each followed by its variants.
-func typeRadios(selected string) []dopeui.Item {
-	var out []dopeui.Item
-	for _, d := range games.All() {
-		out = append(out, gameTypeRadio(d.Code, d.Title, selected))
+// typeOptions is the game-type select: the registry's first format, the
+// most common (OD), then every other format and variant by its title.
+func typeOptions(selected string) []dopeui.Item {
+	type entry struct{ value, label string }
+	all := games.All()
+	var rest []entry
+	for i, d := range all {
+		if i > 0 {
+			rest = append(rest, entry{d.Code, d.Title})
+		}
 		if v := formatForms[d.Code].variant; v != nil {
-			out = append(out, gameTypeRadio(v.value, v.label, selected))
+			rest = append(rest, entry{v.value, v.label})
 		}
 	}
+	slices.SortFunc(rest, func(a, b entry) int { return strings.Compare(strings.ToLower(a.label), strings.ToLower(b.label)) })
+	out := []dopeui.Item{gameTypeOption(all[0].Code, all[0].Title, selected)}
+	for _, e := range rest {
+		out = append(out, gameTypeOption(e.value, e.label, selected))
+	}
 	return out
+}
+
+// typeTitle is the title a Game of the select's value takes by default: its
+// format's, or its variant's.
+func typeTitle(value string) string {
+	for _, d := range games.All() {
+		if v := formatForms[d.Code].variant; v != nil && v.value == value {
+			return v.label
+		}
+	}
+	return games.Label(value)
+}
+
+// typeValues is every select value whose format the predicate holds for,
+// its variants with it: the formats a creation field applies to.
+func typeValues(pred func(games.Definition) bool) string {
+	var out []string
+	for _, d := range games.All() {
+		if !pred(d) {
+			continue
+		}
+		out = append(out, d.Code)
+		if v := formatForms[d.Code].variant; v != nil {
+			out = append(out, v.value)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// forTypes shows a creation field for the formats named alone; gamecreate.js
+// hides it and disables its inputs for the rest, as a hidden input still
+// posts.
+func forTypes(types string, selected string, kids ...dopeui.Item) *dopeui.Element {
+	items := []dopeui.Item{dopeui.SpaceSM, dopeui.Data("game-types", types)}
+	if !slices.Contains(strings.Fields(types), selected) {
+		items = append(items, dopeui.Hidden())
+	}
+	return dopeui.Col(append(items, kids...)...)
+}
+
+// createOptionFields are the settings page's options a Game can be created
+// with, each for the formats it applies to: the Divisions it shows and ranks
+// outside, its grid's width, its venues by room, and contested answers.
+func createOptionFields(data hostGameCreateData) []dopeui.Item {
+	s := dopestrings.Default
+	form, sel := data.Form, data.SelectedType
+	var out []dopeui.Item
+	if len(data.Divisions) > 0 {
+		hidden := data.Divisions[:0:0]
+		if form.Get("divisions_present") != "" {
+			for _, d := range data.Divisions {
+				if !slices.Contains(form["division_shown"], d) {
+					hidden = append(hidden, d)
+				}
+			}
+		}
+		out = append(out, forTypes(typeValues(func(d games.Definition) bool { return d.Divisions }), sel, divisionsField(data.Divisions, hidden)...))
+		out = append(out, forTypes(typeValues(func(d games.Definition) bool { return d.Divisions && d.OutsideDivisions }), sel,
+			outsideDivisionsField(data.Divisions, form["division_outside"])...))
+	}
+	out = append(out, forTypes(typeValues(func(d games.Definition) bool { return d.DSL == games.DSLEditable }), sel,
+		gridWidthField(form.Get("grid_width"))))
+	out = append(out, forTypes(typeValues(func(d games.Definition) bool { return !d.Flat }), sel,
+		settingsSwitch("venue_rooms", form.Get("venue_rooms") == "1", s.Host.Games.VenueRoomsLabel())))
+	if data.Synch {
+		contestable := typeValues(func(d games.Definition) bool {
+			_, ok := games.As[games.Contestable](d.Code)
+			return ok
+		})
+		on := form.Get("contested_present") == "" || form.Get("contested") == "1"
+		out = append(out, forTypes(contestable, sel, settingsSwitch("contested", on, s.Host.Games.ContestedLabel())))
+	}
+	return out
+}
+
+// divisionsField is the Divisions a Game shows: a box per one it offers,
+// ticked unless hidden.
+func divisionsField(divisions, hidden []string) []dopeui.Item {
+	s := dopestrings.Default
+	boxes := []dopeui.Item{dopeui.Hiddenfield(dopeui.Name("divisions_present"), dopeui.Value("1"))}
+	for _, d := range divisions {
+		items := []dopeui.Item{dopeui.Name("division_shown"), dopeui.Value(d), dopeui.Text(d)}
+		if !slices.Contains(hidden, d) {
+			items = append(items, dopeui.Checked())
+		}
+		boxes = append(boxes, dopeui.Checkbox(items...))
+	}
+	return []dopeui.Item{
+		dopeui.Field(dopeui.Label(s.Host.Games.DivisionsLabel()), dopeui.Row(append([]dopeui.Item{dopeui.SpaceMD}, boxes...)...)),
+		dopeui.Hint(dopeui.Text(s.Host.Games.DivisionsHint())),
+	}
+}
+
+// gridWidthField is the width of a column of the Game's grid, empty for the
+// default.
+func gridWidthField(width string) dopeui.Item {
+	return dopeui.Field(dopeui.Label(dopestrings.Default.Host.Games.GridWidthLabel()),
+		dopeui.Textfield(dopeui.Name("grid_width"), dopeui.Value(width), dopeui.Inputmode("numeric")))
 }
 
 // settingsSections is every format's settings section, hidden unless picked.
@@ -474,22 +593,7 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 		dopeui.Field(dopeui.Label(s.Host.Games.SlugLabel()), dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"))),
 	}
 	if len(data.Divisions) > 0 {
-		hidden := map[string]bool{}
-		for _, d := range data.Hidden {
-			hidden[d] = true
-		}
-		boxes := []dopeui.Item{dopeui.Hiddenfield(dopeui.Name("divisions_present"), dopeui.Value("1"))}
-		for _, d := range data.Divisions {
-			items := []dopeui.Item{dopeui.Name("division_shown"), dopeui.Value(d), dopeui.Text(d)}
-			if !hidden[d] {
-				items = append(items, dopeui.Checked())
-			}
-			boxes = append(boxes, dopeui.Checkbox(items...))
-		}
-		form = append(form,
-			dopeui.Field(dopeui.Label(s.Host.Games.DivisionsLabel()), dopeui.Row(append([]dopeui.Item{dopeui.SpaceMD}, boxes...)...)),
-			dopeui.Hint(dopeui.Text(s.Host.Games.DivisionsHint())),
-		)
+		form = append(form, divisionsField(data.Divisions, data.Hidden)...)
 		if data.Ranks {
 			form = append(form, outsideDivisionsField(data.Divisions, data.Outside)...)
 		}
@@ -499,8 +603,7 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 		if data.GridWidth > 0 {
 			width = strconv.Itoa(data.GridWidth)
 		}
-		form = append(form, dopeui.Field(dopeui.Label(s.Host.Games.GridWidthLabel()),
-			dopeui.Textfield(dopeui.Name("grid_width"), dopeui.Value(width), dopeui.Inputmode("numeric"))))
+		form = append(form, gridWidthField(width))
 	}
 	if data.Contested != nil {
 		form = append(form, settingsSwitch("contested", *data.Contested, s.Host.Games.ContestedLabel()))
@@ -653,24 +756,7 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	g := GameSettings{Title: r.Form.Get("title"), Slug: r.Form.Get("slug"), SchemeDSL: r.Form.Get("scheme_dsl")}
-	if r.Form.Has("grid_width") {
-		width, err := strconv.Atoi(strings.TrimSpace(r.Form.Get("grid_width")))
-		if err != nil {
-			width = 0
-		}
-		g.GridWidth = &width
-	}
-	g.Contested, g.VenueRooms = formSwitch(r.Form, "contested"), formSwitch(r.Form, "venue_rooms")
-	if r.Form.Get("divisions_present") != "" {
-		// The boxes say which offered Divisions are shown (festops.Settings).
-		shown := r.Form["division_shown"]
-		g.ShownDivisions = &shown
-	}
-	if r.Form.Get("outside_present") != "" {
-		outside := r.Form["division_outside"]
-		g.OutsideDivisions = &outside
-	}
+	g := settingsFromForm(r.Form)
 	// Changed tours and shape go first: refused, they keep the rest unsaved,
 	// and the page shows what the host typed with the reason.
 	err := s.formTours(r, festID, gameID)
@@ -685,6 +771,30 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		gameRef = fmt.Sprintf("%d", gameID)
 	}
 	s.settingsWritten(w, r, festID, gameID, gameRef, err)
+}
+
+// settingsFromForm reads the settings a form carries, the settings page's
+// or the creation form's; a field the form lacks leaves its setting alone.
+func settingsFromForm(form url.Values) GameSettings {
+	g := GameSettings{Title: form.Get("title"), Slug: form.Get("slug"), SchemeDSL: form.Get("scheme_dsl")}
+	if form.Has("grid_width") {
+		width, err := strconv.Atoi(strings.TrimSpace(form.Get("grid_width")))
+		if err != nil {
+			width = 0
+		}
+		g.GridWidth = &width
+	}
+	g.Contested, g.VenueRooms = formSwitch(form, "contested"), formSwitch(form, "venue_rooms")
+	if form.Get("divisions_present") != "" {
+		// The boxes say which offered Divisions are shown (festops.Settings).
+		shown := form["division_shown"]
+		g.ShownDivisions = &shown
+	}
+	if form.Get("outside_present") != "" {
+		outside := form["division_outside"]
+		g.OutsideDivisions = &outside
+	}
+	return g
 }
 
 // settingsWritten ends a post of the settings page: a Game that left the fest
@@ -753,10 +863,21 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			return nil, err
 		}
+		divisions, err := roster.FestDivisions(r.Context(), s.h.Engine().DB, festID)
+		if err != nil {
+			return nil, err
+		}
+		var synch bool
+		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `select kind = 'synch' from fests where id = ?`, festID).Scan(&synch); err != nil {
+			return nil, err
+		}
 		return hostGameCreateDoc(hostGameCreateData{
 			Fest: fest, Error: errMsg, SelectedType: selectedType,
-			DSL:      createFormDSLs(teamCount, kept),
-			Entrants: entrants,
+			DSL:       createFormDSLs(teamCount, kept),
+			Entrants:  entrants,
+			Divisions: divisions,
+			Synch:     synch,
+			Form:      r.Form,
 		}), nil
 	})
 }
@@ -868,7 +989,11 @@ func chosenEntrantRefs(form url.Values) []string {
 // ways of creating a game go through one reader and one set of refusals.
 type GameCreateRequest struct {
 	// GameType is a games.* type, or "ksi_stickers" for KSI with stickers.
-	GameType string  `json:"game_type"`
+	GameType string `json:"game_type"`
+	// Title and Slug are the Game's, as its settings take them; an empty
+	// title is the format's.
+	Title    string  `json:"title"`
+	Slug     string  `json:"slug"`
 	Entrants []int64 `json:"entrants"`
 	// EntrantRefs are more entrants by the ref GET …/entrants gives, which
 	// also names a rating player who is not a Participant yet ("fp<id>").
@@ -933,7 +1058,7 @@ func (req GameCreateRequest) setKnobs(form url.Values) {
 }
 
 func (req GameCreateRequest) form() url.Values {
-	form := url.Values{}
+	form := url.Values{"title": {req.Title}, "slug": {req.Slug}}
 	for _, id := range req.Entrants {
 		form.Add("entrant_id", idstr.Format(id))
 	}
@@ -988,7 +1113,7 @@ func gameSpecFromForm(ctx context.Context, tx *sql.Tx, festID int64, gameType st
 		}
 	}
 	def := games.Get(spec.Type)
-	spec.Label = def.Title
+	spec.Label = cmp.Or(strings.TrimSpace(form.Get("title")), def.Title)
 	if field, ok := dslFieldOf(spec.Type); ok {
 		spec.DSL = strings.TrimSpace(form.Get(field))
 	}
@@ -1014,8 +1139,12 @@ func (s *Server) createHostGame(ctx context.Context, festID int64, gameType stri
 		if err != nil {
 			return core.FestWrite{}, err
 		}
+		// The creation form carries the settings page's fields too, so a Game
+		// is made with its title, slug and options at once.
+		settings := settingsFromForm(form)
+		settings.SchemeDSL = ""
 		var written core.FestWrite
-		gameID, written, err = festops.CreateGameTx(ctx, tx, spec)
+		gameID, written, err = festops.CreateGameWithSettingsTx(ctx, tx, spec, &settings)
 		return written, err
 	})
 	return gameID, err

@@ -1,30 +1,34 @@
-// Create-game form: reveal the settings section and the submit button for the
-// game type currently selected. Extracted verbatim from the page's former inline
-// <script>; keyed on data-game-create-form / data-game-settings / data-game-submit.
+// Create-game form: show the settings section of the game type the select
+// holds, and the fields that apply to it. Keyed on data-game-create-form /
+// data-game-settings / data-game-types / data-game-entrants.
 (() => {
   const form = document.querySelector<HTMLElement>("[data-game-create-form]");
-  if (!form) return;
-  const picker = form.querySelector<HTMLElement>("[data-game-entrants]");
-  const seatsChosen = (picker?.dataset.gameEntrants || "").split(" ").filter(Boolean);
+  const select = form?.querySelector<HTMLSelectElement>('select[name="game_type"]');
+  if (!form || !select) return;
+  // A field shown for some formats only is hidden for the rest, and its
+  // inputs disabled, because a hidden input still posts.
+  const offer = (box: HTMLElement, offered: boolean) => {
+    box.hidden = !offered;
+    box.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select").forEach((input) => {
+      input.disabled = !offered;
+    });
+  };
+  const title = form.querySelector<HTMLInputElement>('input[name="title"]');
   const sync = () => {
-    const selected = form.querySelector<HTMLInputElement>('input[name="game_type"]:checked')?.value || "";
+    const selected = select.value;
+    // An empty title is the format's: the chosen option's text.
+    if (title) title.placeholder = select.selectedOptions[0]?.textContent || "";
     form.querySelectorAll<HTMLElement>("[data-game-settings]").forEach((section) => {
       section.hidden = section.dataset.gameSettings !== selected;
     });
-    if (picker) {
-      // The flat formats seat the whole fest roster and refuse a chosen list,
-      // so the picker is hidden for them — and its boxes disabled, because a
-      // hidden checkbox still posts.
-      const offered = seatsChosen.includes(selected);
-      picker.hidden = !offered;
-      picker.querySelectorAll<HTMLInputElement>('input[name="entrant_id"]').forEach((box) => {
-        box.disabled = !offered;
-      });
-    }
-    const submit = form.querySelector<HTMLElement>("[data-game-submit]");
-    if (submit) submit.hidden = selected === "";
+    form.querySelectorAll<HTMLElement>("[data-game-types]").forEach((box) => {
+      offer(box, (box.dataset.gameTypes || "").split(" ").includes(selected));
+    });
+    // The flat formats seat the whole fest roster and refuse a chosen list.
+    const picker = form.querySelector<HTMLElement>("[data-game-entrants]");
+    if (picker) offer(picker, (picker.dataset.gameEntrants || "").split(" ").includes(selected));
   };
-  form.querySelectorAll<HTMLInputElement>('input[name="game_type"]').forEach((input) => input.addEventListener("change", sync));
+  select.addEventListener("change", sync);
   sync();
 })();
 

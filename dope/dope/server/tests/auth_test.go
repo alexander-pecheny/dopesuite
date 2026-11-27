@@ -552,16 +552,14 @@ func TestHostCreateGameFlow(t *testing.T) {
 		t.Fatalf("new game page status = %d, body %s", newResp.Code, newResp.Body.String())
 	}
 	if body := newResp.Body.String(); !strings.Contains(body, "ОД") || !strings.Contains(body, "КСИ") || !strings.Contains(body, "ЭК") {
-		t.Fatalf("new game page missing game type radios: %s", body)
-	} else if strings.Contains(body, `name="game_type" value="od" checked`) ||
-		strings.Contains(body, `name="game_type" value="ksi" checked`) ||
-		strings.Contains(body, `name="game_type" value="ek" checked`) {
-		t.Fatalf("new game page must not preselect game type: %s", body)
-	} else if !hiddenAttrPresent(body, `data-game-settings="od"`) ||
+		t.Fatalf("new game page missing game types: %s", body)
+	} else if !strings.Contains(body, `<option value="od" selected>`) {
+		// ОД, the most common, is chosen to begin with, and its settings shown.
+		t.Fatalf("new game page must start on ОД: %s", body)
+	} else if hiddenAttrPresent(body, `data-game-settings="od"`) ||
 		!hiddenAttrPresent(body, `data-game-settings="ksi"`) ||
-		!hiddenAttrPresent(body, `data-game-settings="ek"`) ||
-		!hiddenAttrPresent(body, "data-game-submit") {
-		t.Fatalf("new game page must hide settings and submit until game type is selected: %s", body)
+		!hiddenAttrPresent(body, `data-game-settings="ek"`) {
+		t.Fatalf("new game page must show ОД's settings alone: %s", body)
 	}
 
 	postGameForm := func(values url.Values) *httptest.ResponseRecorder {

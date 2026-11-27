@@ -7,6 +7,7 @@
 package festops
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"dope/dope/domain/contested"
@@ -34,12 +35,27 @@ import (
 // CreateGameTx creates a Game from its spec and anchors its journal: the
 // genesis checkpoint is what a later per-game revert replays from.
 func CreateGameTx(ctx context.Context, tx *sql.Tx, spec gamebuild.Spec) (int64, core.FestWrite, error) {
+	return CreateGameWithSettingsTx(ctx, tx, spec, nil)
+}
+
+// CreateGameWithSettingsTx is CreateGameTx that also gives the new Game the
+// Settings the creation form took: its title (empty: the format's), slug,
+// Divisions and switches. They are written before the genesis checkpoint, so
+// a revert to the Game's start keeps them.
+func CreateGameWithSettingsTx(ctx context.Context, tx *sql.Tx, spec gamebuild.Spec, settings *Settings) (int64, core.FestWrite, error) {
 	if err := festExistsTx(ctx, tx, spec.FestID); err != nil {
 		return 0, core.FestWrite{}, err
 	}
 	gameID, err := gamebuild.Create(ctx, tx, spec)
 	if err != nil {
 		return 0, core.FestWrite{}, compileErrorForHost(err)
+	}
+	if settings != nil {
+		g := *settings
+		g.Title = cmp.Or(strings.TrimSpace(g.Title), spec.Label)
+		if _, err := UpdateSettingsTx(ctx, tx, spec.FestID, gameID, g); err != nil {
+			return 0, core.FestWrite{}, err
+		}
 	}
 	revision, err := bumpTx(ctx, tx, spec.FestID, "game:create", map[string]any{"gameID": gameID, "gameType": spec.Type})
 	if err != nil {
