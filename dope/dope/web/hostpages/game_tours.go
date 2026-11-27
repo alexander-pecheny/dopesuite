@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -70,16 +71,14 @@ func parseTours(text string) []int {
 	return out
 }
 
-// toursBlock is the settings page's tours: the field, then its save and
-// the load from the fest's tournament side by side.
-func toursBlock(action string, t gameTours) []dopeui.Item {
-	return []dopeui.Item{
-		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action(action), dopeui.Autocomplete("off"),
-			dopeui.Field(dopeui.Label(dopestrings.Default.Host.Games.ToursLabel()), dopeui.Textfield(dopeui.Name("tours"), dopeui.Value(formatTours(t.Tours)))),
-			dopeui.Row(dopeui.SpaceSM, dopeui.Wrap(),
-				dopeui.Button(dopeui.Submit(), dopeui.Text(dopestrings.Default.Host.Games.ToursSave())),
-				dopeui.Button(dopeui.Submit(), dopeui.Name("from_site"), dopeui.Value("1"), dopeui.Text(dopestrings.Default.Host.Games.ToursFromSite())))),
-	}
+// toursField is the settings form's tours. The form's other button,
+// toursFromSiteButton, saves the form with the fest's tournament's tours.
+func toursField(t gameTours) dopeui.Item {
+	return dopeui.Field(dopeui.Label(dopestrings.Default.Host.Games.ToursLabel()), dopeui.Textfield(dopeui.Name("tours"), dopeui.Value(formatTours(t.Tours))))
+}
+
+func toursFromSiteButton() dopeui.Item {
+	return dopeui.Button(dopeui.Submit(), dopeui.Name("from_site"), dopeui.Value("1"), dopeui.Text(dopestrings.Default.Host.Games.ToursFromSite()))
 }
 
 // SetGameTours gives a Game the tours the source names (festops.SetToursTx).
@@ -120,23 +119,27 @@ func (s *Server) sourceTours(ctx context.Context, festID int64, from ToursSource
 	return tours, nil
 }
 
-func (s *Server) handleHostGameTours(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	// Tours that are no numbers come empty, and festops says what the field
-	// takes.
+// formTours writes the tours the settings form carries: the fest's
+// tournament's when its button was pressed, else the field's when it differs
+// from the Game's. Tours that are no numbers come empty, and festops says
+// what the field takes.
+func (s *Server) formTours(r *http.Request, festID, gameID int64) error {
 	from := ToursSource{FromSite: r.Form.Has("from_site")}
 	if !from.FromSite {
+		if !r.Form.Has("tours") {
+			return nil
+		}
 		from.Tours = parseTours(r.Form.Get("tours"))
+		current, err := loadGameTours(r.Context(), s.h.Engine().DB, festID, gameID)
+		if err != nil || current == nil || slices.Equal(current.Tours, from.Tours) {
+			return err
+		}
 	}
-	err := s.SetGameTours(r.Context(), festID, gameID, from)
-	s.settingsWritten(w, r, festID, gameID, s.gameRefOrID(r.Context(), gameID), err)
+	return s.SetGameTours(r.Context(), festID, gameID, from)
 }
 
-// apiGameTours is handleHostGameTours' twin: POST {tours} or {from_site:
-// true}; it answers the Game's settings.
+// apiGameTours is the settings form's tours as an API call: POST {tours} or
+// {from_site: true}; it answers the Game's settings.
 func (s *Server) apiGameTours(w http.ResponseWriter, r *http.Request, sc route.Scope) error {
 	var from ToursSource
 	if err := route.DecodeJSON(r, &from); err != nil {

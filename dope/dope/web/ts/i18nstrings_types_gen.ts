@@ -891,7 +891,6 @@ export type Strings = {
       titleLabel: () => string;
       toursFromSite: () => string;
       toursLabel: () => string;
-      toursSave: () => string;
       troikaHint: () => string;
       typeBrain: () => string;
       typeEk: () => string;

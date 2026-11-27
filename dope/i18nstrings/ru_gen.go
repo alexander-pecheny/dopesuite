@@ -1248,7 +1248,6 @@ var RU = Strings{
 			TitleLabel:    func() string { return "Название" },
 			ToursFromSite: func() string { return "Загрузить с турнирного сайта" },
 			ToursLabel:    func() string { return "Туры: сколько вопросов в каждом туре" },
-			ToursSave:     func() string { return "Сохранить туры" },
 			TroikaHint: func() string {
 				return "Тот же язык схем. themes — сколько тем в бою, theme_values — во сколько баллов каждая. swap_outriders: true — порядок опроса меняется в середине боя: рассадку вводят один раз, а со второй половины тем (с 4-й из 6, с 5-й из 8) Пристяжной 1 и Пристяжной 2 меняются местами сами. Рейтинговый балл описывается правилом подсчёта: points: [1, 0.5, 0] и standings.rating: points + taken / 50. Если в [init] написать division: Студ, игра сама загрузит тройки зачёта «Студ» со страницы «Тройки», и отмечать участников ниже не нужно."
 			},

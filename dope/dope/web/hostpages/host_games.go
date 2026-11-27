@@ -521,11 +521,15 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	if data.Shape != nil {
 		form = append(form, shapeFields(*data.Shape)...)
 	}
-	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.SaveSubmit()))))
-	page = append(page, dopeui.Form(form...))
+	// One form, one save button; the tours' load from the site saves it too,
+	// and sits after the save button, which Enter in a field presses.
+	buttons := []dopeui.Item{dopeui.SpaceSM, dopeui.Wrap(), dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Games.SaveSubmit()))}
 	if data.Tours != nil {
-		page = append(page, toursBlock("/host/fest/"+festRef+"/game/"+data.Game.Ref()+"/tours", *data.Tours)...)
+		form = append(form, toursField(*data.Tours))
+		buttons = append(buttons, toursFromSiteButton())
 	}
+	form = append(form, dopeui.Row(buttons...))
+	page = append(page, dopeui.Form(form...))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
 
@@ -595,9 +599,13 @@ from games g join fests f on f.id = g.fest_id where g.id = ? and g.fest_id = ?`,
 		if submitted := strings.TrimSpace(r.Form.Get("scheme_dsl")); submitted != "" && errMsg != "" {
 			schemeDSL = r.Form.Get("scheme_dsl")
 		}
-		// A refused save shows the title and slug as typed, not as stored.
+		// A refused save shows the title, slug and tours as typed, not as
+		// stored.
 		if errMsg != "" && r.Form.Has("title") {
 			title, slug.String = r.Form.Get("title"), r.Form.Get("slug")
+		}
+		if errMsg != "" && tours != nil && r.Form.Has("tours") {
+			tours = &gameTours{Tours: parseTours(r.Form.Get("tours"))}
 		}
 		return hostGameSettingsDoc(hostGameSettingsData{
 			Contested:  data.Contested,
@@ -663,9 +671,12 @@ func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		outside := r.Form["division_outside"]
 		g.OutsideDivisions = &outside
 	}
-	// A changed shape goes first: refused, it keeps the rest unsaved too,
+	// Changed tours and shape go first: refused, they keep the rest unsaved,
 	// and the page shows what the host typed with the reason.
-	err := s.formShape(r, festID, gameID)
+	err := s.formTours(r, festID, gameID)
+	if err == nil {
+		err = s.formShape(r, festID, gameID)
+	}
 	if err == nil {
 		err = s.UpdateGameSettings(r.Context(), festID, gameID, g)
 	}

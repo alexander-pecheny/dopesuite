@@ -5,8 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
+	"strings"
 	"testing"
+
+	"dope/dope/domain/games"
+
+	"code.pecheny.me/pecheny/dopesuite/dopecore/session"
 )
 
 // A ЧГК's tours change on a Game under way: the answers keep their question
@@ -110,5 +116,61 @@ func TestAGamesToursChangeWithItsAnswersKept(t *testing.T) {
 	}
 	if json.Unmarshal([]byte(body), &scheme) != nil || !slices.Equal(scheme.TourComp, []int{4, 4}) {
 		t.Fatalf("scheme: %s", body)
+	}
+}
+
+// A ЧГК's tours are on its settings form with the title: one Сохранить
+// saves both, and it comes before the load from the site, which Enter in a
+// field must not press.
+func TestAGamesToursSaveWithItsTitle(t *testing.T) {
+	t.Parallel()
+	srv := newAuthTestServer(t)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	festID := newFest(t, db, "retour-form", "Фест", systemUserID(t, db))
+	seedFestTeams(t, db, festID, 2)
+	resp := scopedAPIRequest(t, srv, http.MethodPost, fmt.Sprintf("/api/fest/%d/games", festID), map[string]any{"game_type": "od", "od_tours": 2, "od_questions": 3}, token)
+	var game struct {
+		ID int64 `json:"id"`
+	}
+	if resp.Code != http.StatusOK || json.Unmarshal(resp.Body.Bytes(), &game) != nil {
+		t.Fatalf("create: %d %s", resp.Code, resp.Body.String())
+	}
+	post := func(fields url.Values) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/%d/settings", festID, game.ID), strings.NewReader(fields.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+		out := httptest.NewRecorder()
+		srv.HostPageServer().HandleHostRouter(out, req)
+		return out
+	}
+	stored := func() (title string, tours []int) {
+		t.Helper()
+		var scheme string
+		if err := db.QueryRow(`select title, scheme_json from games where id = ?`, game.ID).Scan(&title, &scheme); err != nil {
+			t.Fatal(err)
+		}
+		return title, games.ParseTourComp(scheme)
+	}
+	if out := post(url.Values{"title": {"ЧГК"}, "tours": {"3, 3"}}); out.Code != http.StatusSeeOther {
+		t.Fatalf("save: %d %s", out.Code, out.Body.String())
+	}
+	if title, tours := stored(); title != "ЧГК" || !slices.Equal(tours, []int{3, 3}) {
+		t.Fatalf("stored %q %v", title, tours)
+	}
+	if out := post(url.Values{"title": {"ЧГК-2"}, "tours": {"2 4"}}); out.Code != http.StatusSeeOther {
+		t.Fatalf("save: %d %s", out.Code, out.Body.String())
+	}
+	if title, tours := stored(); title != "ЧГК-2" || !slices.Equal(tours, []int{2, 4}) {
+		t.Fatalf("stored %q %v", title, tours)
+	}
+	page := post(url.Values{"title": {"ЧГК-3"}, "tours": {"0 6"}}).Body.String()
+	first := strings.Index(page, `type="submit"`)
+	if first < 0 || !strings.Contains(page, `value="0 6"`) || strings.Count(page, "<form") != 1 || !strings.HasPrefix(page[first:], `type="submit">Сохранить<`) {
+		t.Fatalf("a refused save's page: %s", page)
+	}
+	if title, _ := stored(); title != "ЧГК-2" {
+		t.Fatalf("a refused save stored %q", title)
 	}
 }
