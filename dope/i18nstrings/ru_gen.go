@@ -1166,11 +1166,7 @@ var RU = Strings{
 			RatingExportLink:  func() string { return "Выгрузить на турнирный сайт" },
 			RatingExportMuted: func() string { return "составы и ответы ОД" },
 			RatingStatusNone:  func() string { return "нет rating ID" },
-			RosterImportLink:  func() string { return "Загрузить команды и игроков" },
-			RosterPlayersLink: func() string { return "Игроки" },
 			RosterSubhead:     func() string { return "Участники" },
-			RosterTeamsLink:   func() string { return "Команды" },
-			RosterTroikasLink: func() string { return "Тройки" },
 			SaveSubmit:        func() string { return "Сохранить" },
 			SettingsBtn:       func() string { return "Свойства" },
 			SlugLabel: func() string {
@@ -1179,7 +1175,6 @@ var RU = Strings{
 			StartDateLabel:  func() string { return "Дата начала" },
 			SyncSubmit:      func() string { return "Загрузить с турнирного сайта" },
 			SynchImportLink: func() string { return "Загрузить площадки" },
-			TeamsNumbered:   func(n string, numbered string) string { return fmt.Sprintf("%s, с номером: %s", n, numbered) },
 			TitleLabel:      func() string { return "Название" },
 			VenuesHint: func() string {
 				return "Ведущий площадки ведёт её игры и правит её команды и номера."

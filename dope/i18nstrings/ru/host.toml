@@ -430,17 +430,9 @@ add_btn = "Добавить"
 new_venue_none = "Площадка ведущего"
 # The participants links: subhead and list rows.
 roster_subhead = "Участники"
-roster_teams_link = "Команды"
-# The teams row of a fest without venues: how many teams, and how many of
-# them have a number.
-teams_numbered = '{{.n}}, с номером: {{.numbered}}'
-roster_players_link = "Игроки"
-# The dashboard link to the troikas page (hostTroikasDoc).
-roster_troikas_link = "Тройки"
-# The rating-import row's status note.
+# A synch fest's import row, which brings in the venues and their teams, and
+# its status note.
 rating_status_none = "нет rating ID"
-roster_import_link = "Загрузить команды и игроков"
-# The same row on a synch fest, whose import brings in the venues and their teams.
 synch_import_link = "Загрузить площадки"
 rating_export_link = "Выгрузить на турнирный сайт"
 rating_export_muted = "составы и ответы ОД"

@@ -371,30 +371,19 @@ func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
 	if data.RosterNotice != "" {
 		sect = append(sect, dopeui.Note(dopeui.Text(data.RosterNotice)))
 	}
-	teams := strconv.Itoa(data.TeamCount)
-	if data.TeamCount > 0 && len(data.MultiFestVenues) == 0 {
-		teams = s.Host.Dash.TeamsNumbered(teams, strconv.Itoa(data.NumbersAssigned))
-	}
+	// A regular fest's teams come from the sync beside the rating site's id
+	// and each game's own source (ADR-0038). A synch fest keeps its import
+	// here until it has a design round of its own.
 	var rows []dopeui.Item
-	// A synch fest's teams and numbers are on its venues' pages.
-	if data.Kind != multifest.Synch {
-		rows = append(rows,
-			dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTeamsLink())), dopeui.Muted(dopeui.Text(teams))),
-			dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/players"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterPlayersLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.PlayerCount)))),
-			dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/troikas"), dopeui.Listtitle(dopeui.Text(s.Host.Dash.RosterTroikasLink())), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TroikaCount)))),
-		)
-	}
-	ratingStatus := s.Host.Dash.RatingStatusNone()
-	if data.RatingID != 0 {
-		ratingStatus = "rating " + idstr.Format(data.RatingID)
-	}
-	importLink := s.Host.Dash.RosterImportLink()
 	if data.Kind == multifest.Synch {
-		importLink = s.Host.Dash.SynchImportLink()
+		ratingStatus := s.Host.Dash.RatingStatusNone()
+		if data.RatingID != 0 {
+			ratingStatus = "rating " + idstr.Format(data.RatingID)
+		}
+		rows = append(rows, dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/rating/import"),
+			dopeui.Listtitle(dopeui.Text(s.Host.Dash.SynchImportLink())), dopeui.Muted(dopeui.Text(ratingStatus))))
 	}
 	rows = append(rows,
-		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/rating/import"),
-			dopeui.Listtitle(dopeui.Text(importLink)), dopeui.Muted(dopeui.Text(ratingStatus))),
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/rating/export"),
 			dopeui.Listtitle(dopeui.Text(s.Host.Dash.RatingExportLink())), dopeui.Muted(dopeui.Text(s.Host.Dash.RatingExportMuted()))),
 		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/audit"),

@@ -12,6 +12,7 @@ import (
 	"dope/dope/domain/multifest"
 	"dope/dope/domain/ratingsync"
 	"dope/dope/domain/roster"
+	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	dopestrings "dope/i18nstrings"
 
@@ -220,6 +221,9 @@ func Build(ctx context.Context, db *sql.DB, festID, gameID int64, site Site, cho
 	if err != nil {
 		return p, err
 	}
+	if teams, err = withGameRoster(ctx, db, festID, gameID, teams); err != nil {
+		return p, err
+	}
 	var outside string
 	if err := db.QueryRowContext(ctx, `select coalesce(outside_divisions, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&outside); err != nil {
 		return p, err
@@ -294,6 +298,46 @@ func mask(state games.ODState, number int64, questions int) string {
 		}
 	}
 	return b.String()
+}
+
+// withGameRoster sends a game's teams as it plays them (ADR-0038): a game
+// that follows a source or carries overrides names its teams and their
+// players its own way. A player is the fest's person of that site id, else
+// of that name, so the export can still match them. A team the game does not
+// have goes as the fest has it.
+func withGameRoster(ctx context.Context, db *sql.DB, festID, gameID int64, teams []festTeam) ([]festTeam, error) {
+	game, err := roster.GameExportTeams(ctx, db, festID, gameID)
+	if err != nil || game == nil {
+		return teams, err
+	}
+	byRating, byName := map[int64]festPlayer{}, map[string]festPlayer{}
+	for _, team := range teams {
+		for _, p := range team.players {
+			if p.ratingID > 0 {
+				byRating[p.ratingID] = p
+			}
+			byName[util.AlphaKey(store.JoinPlayerName(p.first, p.last))] = p
+		}
+	}
+	for i, team := range teams {
+		played, ok := game[roster.FestTeamKey(team.ratingID, team.id)]
+		if !ok {
+			continue
+		}
+		teams[i].name, teams[i].city, teams[i].players = played.Name, played.City, nil
+		for _, p := range played.Players {
+			person, known := byRating[p.RatingID]
+			if !known || p.RatingID == 0 {
+				person, known = byName[util.AlphaKey(p.Name)]
+			}
+			if !known {
+				first, last, _ := strings.Cut(strings.TrimSpace(p.Name), " ")
+				person = festPlayer{ratingID: p.RatingID, first: first, last: strings.TrimSpace(last)}
+			}
+			teams[i].players = append(teams[i].players, person)
+		}
+	}
+	return teams, nil
 }
 
 func loadTeams(ctx context.Context, db *sql.DB, festID int64) ([]festTeam, error) {

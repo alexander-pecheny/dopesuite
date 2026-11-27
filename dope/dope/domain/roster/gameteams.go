@@ -268,6 +268,31 @@ func follows(ctx context.Context, q store.Queryer, game, target int64) (bool, er
 	return false, nil
 }
 
+// GameExportTeams is the teams a game that follows a source or carries
+// overrides plays with, by key, for the export to the rating site; nil for a
+// plain game, whose teams are the fest's.
+func GameExportTeams(ctx context.Context, q store.Queryer, festID, gameID int64) (map[string]OwnTeam, error) {
+	src, err := loadSource(ctx, q, gameID)
+	if err != nil || src.plain() {
+		return nil, err
+	}
+	resolved, _, err := resolveTeams(ctx, q, festID, src, map[int64]bool{})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]OwnTeam, len(resolved))
+	for _, team := range resolved {
+		out[team.Key] = team
+	}
+	return out, nil
+}
+
+// FestTeamKey is a fest team's key across syncs: its rating site id, else
+// its row.
+func FestTeamKey(ratingID, teamID int64) string {
+	return teamKey(FestRosterImportTeam{RatingID: ratingID, LocalID: teamID})
+}
+
 // GameSheetTeams is the teams a flat Game's entrants tab offers as a roster
 // sheet: the teams it seats.
 func GameSheetTeams(ctx context.Context, q store.Queryer, festID, gameID int64) ([]FestRosterImportTeam, error) {
