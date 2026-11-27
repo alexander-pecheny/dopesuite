@@ -106,11 +106,11 @@ func TestComputeODResultsTiesAndEmpty(t *testing.T) {
 func TestComputeODResultsMinus(t *testing.T) {
 	// Тминное поле in small: two tours of three, a wrong answer −3, a whole
 	// tour +3, an empty tour charged 3/3 = 1 wrong.
-	scheme := `{"tourComp":[3,3],"minus":{"wrong":3,"allBonus":3,"emptyTour":true}}`
+	scheme := `{"tourComp":[3,3],"minus":{"wrong":3,"allBonus":3}}`
 	state := `{
 		"teams":[{"name":"A","number":1},{"name":"B","number":2},{"name":"C","number":3},{"name":"D","number":4}],
 		"entries":[[1,2,-3],[1,2],[1],[1,2],[-1,2],[]],
-		"ticks":{"1":[true,true],"2":[true,true],"3":[true,true],"4":[true,true]}
+		"ticks":{"1":[true,true],"2":[true,true],"3":[true,true],"4":[true,false]}
 	}`
 	res, err := ComputeODResults(scheme, state)
 	if err != nil {
@@ -128,8 +128,9 @@ func TestComputeODResultsMinus(t *testing.T) {
 		{1, "1", 4, 4, 1, []int{6, -2}},
 		// B: 2 + 2 = 4, the same right answers, but the best tour is 2.
 		{2, "2", 4, 4, 0, []int{2, 2}},
-		// D answered nothing anywhere: no charge for its empty tours.
-		{4, "3", 0, 0, 0, []int{0, 0}},
+		// D handed in no sheet: its ticked first tour is charged one wrong,
+		// its second, not ticked yet, nothing.
+		{4, "3", -3, 0, 1, []int{-3, 0}},
 		// C: one wrong, then an empty tour charged one wrong.
 		{3, "4", -6, 0, 2, []int{-3, -3}},
 	}
@@ -148,7 +149,7 @@ func TestComputeODResultsMinus(t *testing.T) {
 func TestComputeODResultsMinusContestedAndUnfinishedTour(t *testing.T) {
 	// C's wrong answer on q0 is accepted on appeal: right, not wrong. Nobody
 	// ticked the second tour, so B's empty tour there is not charged yet.
-	scheme := `{"tourComp":[3,3],"minus":{"wrong":3,"emptyTour":true}}`
+	scheme := `{"tourComp":[3,3],"minus":{"wrong":3}}`
 	state := `{
 		"teams":[{"name":"B","number":2},{"name":"C","number":3}],
 		"entries":[[2,-3],[],[],[],[],[]],
@@ -173,7 +174,7 @@ func TestComputeODResultsMinusContestedAndUnfinishedTour(t *testing.T) {
 // its answers there score nothing and its empty tour is not charged, whatever
 // the other teams ticked.
 func TestComputeODResultsMinusCountsTickedTours(t *testing.T) {
-	scheme := `{"tourComp":[3,3],"minus":{"wrong":1,"emptyTour":true}}`
+	scheme := `{"tourComp":[3,3],"minus":{"wrong":1}}`
 	state := `{
 		"teams":[{"name":"A","number":1},{"name":"B","number":2}],
 		"entries":[[1,-2],[1,2],[],[2],[],[]],
@@ -200,13 +201,13 @@ func TestComputeODResultsMinusCountsTickedTours(t *testing.T) {
 }
 
 func TestODMinusSurvivesAClear(t *testing.T) {
-	scheme := `{"tourComp":[6,6],"minus":{"wrong":3,"allBonus":3,"emptyTour":true}}`
+	scheme := `{"tourComp":[6,6],"minus":{"wrong":3,"allBonus":3}}`
 	shape := mp{}.ShapeOf(scheme)
 	rebuilt, _, err := mp{}.PristineGame("s", "t", shape)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ParseODMinus(string(rebuilt)); got == nil || *got != (ODMinus{Wrong: 3, AllBonus: 3, EmptyTour: true}) {
+	if got := ParseODMinus(string(rebuilt)); got == nil || *got != (ODMinus{Wrong: 3, AllBonus: 3}) {
 		t.Fatalf("minus after a clear = %+v", got)
 	}
 }

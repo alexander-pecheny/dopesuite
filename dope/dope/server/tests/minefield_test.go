@@ -53,13 +53,12 @@ func TestAMinefieldTakesItsToursFromTheRatingSite(t *testing.T) {
 		TourComp []int `json:"tourComp"`
 		Minus    struct {
 			Wrong, AllBonus int
-			EmptyTour       bool
 		} `json:"minus"`
 	}
 	if code != http.StatusOK || json.Unmarshal([]byte(body), &scheme) != nil {
 		t.Fatalf("scheme: %d %s", code, body)
 	}
-	if !slices.Equal(scheme.TourComp, []int{18, 18, 18, 15, 15}) || scheme.Minus.Wrong != 3 || scheme.Minus.AllBonus != 3 || !scheme.Minus.EmptyTour {
+	if !slices.Equal(scheme.TourComp, []int{18, 18, 18, 15, 15}) || scheme.Minus.Wrong != 3 || scheme.Minus.AllBonus != 3 {
 		t.Fatalf("scheme = %s", body)
 	}
 

@@ -72,8 +72,6 @@ error_shape_not_editable = 'У игры типа {{.kind}} нет мини-иг�
 # tour adds. Also the field names their errors name.
 od_minus_wrong_label = "Штраф за неправильный ответ"
 od_minus_bonus_label = "Бонус за взятый тур целиком"
-# The checkbox charging an empty tour as a third of its questions wrong.
-od_minus_empty_label = "Тур без единого ответа — минус треть вопросов тура как неправильные"
 # The friendship cup's tables field; also the field its errors name.
 kd_tables_label = "Количество столов"
 # Under the friendship cup's fields: what the tables are and how many to take.

@@ -243,7 +243,6 @@ var formatForms = map[string]formatForm{
 				dopeui.Hint(dopeui.Text(s.Host.Games.WholeRosterHint())),
 				dopeui.Field(dopeui.Label(s.Host.Games.OdMinusWrongLabel()), dopeui.Textfield(dopeui.Name("mp_wrong"), dopeui.Inputmode("numeric"), dopeui.Value(strconv.Itoa(games.DefaultODMinus.Wrong)))),
 				dopeui.Field(dopeui.Label(s.Host.Games.OdMinusBonusLabel()), dopeui.Textfield(dopeui.Name("mp_bonus"), dopeui.Inputmode("numeric"), dopeui.Value("0"))),
-				dopeui.Checkbox(dopeui.Name("mp_empty"), dopeui.Value("1"), dopeui.Text(s.Host.Games.OdMinusEmptyLabel())),
 			)
 		},
 		read: func(spec *gamebuild.Spec, form url.Values) (err error) {
@@ -1054,7 +1053,7 @@ func odMinusFromForm(form url.Values) (*games.ODMinus, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &games.ODMinus{Wrong: wrong, AllBonus: bonus, EmptyTour: form.Get("mp_empty") != ""}, nil
+	return &games.ODMinus{Wrong: wrong, AllBonus: bonus}, nil
 }
 
 // toursKnobs are a ChGK sheet's tours: so many of so many questions, or a

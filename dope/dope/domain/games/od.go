@@ -218,14 +218,13 @@ func filterPositive(in []int) []int {
 // points (Tminnoe pole). The input tab enters a wrong answer as the team's number
 // with a minus («-5»); an empty cell is no answer. A tour scores
 // right − Wrong·wrong, plus AllBonus when every question of it was taken.
-// With EmptyTour, a team that answered nothing in a finished tour (but did
-// answer somewhere in the game) is charged size/3 wrong answers for it.
+// A team that answered nothing in a finished tour (an empty sheet, or none
+// handed in) is charged size/3 wrong answers for it, rounded down.
 // Places go by points, then right answers, then the best tour's right
 // answers, then the worst tour's.
 type ODMinus struct {
-	Wrong     int  `json:"wrong"`
-	AllBonus  int  `json:"allBonus,omitempty"`
-	EmptyTour bool `json:"emptyTour,omitempty"`
+	Wrong    int `json:"wrong"`
+	AllBonus int `json:"allBonus,omitempty"`
 }
 
 // odEmptyTourDivisor: an empty tour is charged a third of its questions.
@@ -382,9 +381,8 @@ func odMinusTours(minus ODMinus, tours []int, answers odAnswers, teamIdx int) (p
 		right[t], wrongs[t], done[t] = answers.tour(t, from, size, teamIdx)
 		from += size
 	}
-	answered := sumInts(right)+sumInts(wrongs) > 0
 	for t, size := range tours {
-		if minus.EmptyTour && answered && done[t] && right[t]+wrongs[t] == 0 {
+		if done[t] && right[t]+wrongs[t] == 0 {
 			wrongs[t] = size / odEmptyTourDivisor
 		}
 		points[t] = right[t] - minus.Wrong*wrongs[t]

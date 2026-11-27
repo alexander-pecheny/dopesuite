@@ -100,12 +100,11 @@ export interface QuestionStat {
 // MinusRules is the scheme's minus block: a ChGK where a wrong answer costs
 // points (Tminnoe pole). The server's games.ODMinus reckons the same: a tour
 // scores right − wrong·W, plus allBonus when every question of it was taken;
-// with emptyTour a team that answered nothing in a finished tour (but did
-// somewhere in the game) is charged size/3 wrong answers for it.
+// a team that answered nothing in a finished tour is charged size/3 wrong
+// answers for it, rounded down.
 export interface MinusRules {
   wrong: number;
   allBonus: number;
-  emptyTour: boolean;
 }
 
 // An empty tour is charged a third of its questions.
@@ -114,11 +113,11 @@ const EMPTY_TOUR_DIVISOR = 3;
 export function minusRulesOf(scheme: ODScheme): MinusRules | null {
   const raw = scheme.minus ?? scheme.stages?.[0]?.config?.minus;
   if (!raw || typeof raw !== "object") return null;
-  const block = raw as {wrong?: unknown; allBonus?: unknown; emptyTour?: unknown};
+  const block = raw as {wrong?: unknown; allBonus?: unknown};
   const wrong = Number(block.wrong) || 0;
   const allBonus = Number(block.allBonus) || 0;
   if (wrong < 0 || allBonus < 0) return null;
-  return {wrong, allBonus, emptyTour: Boolean(block.emptyTour)};
+  return {wrong, allBonus};
 }
 
 export interface RankKey {
@@ -614,8 +613,7 @@ export function minusScore(stats: QuestionStat[], teamIndex: number, tourLengths
     from += size;
     return tour;
   });
-  const answered = tours.some((tour) => tour.right + tour.wrong > 0);
-  const charged = (tour: {right: number; wrong: number; done: boolean}) => rules.emptyTour && answered && tour.done && tour.right + tour.wrong === 0;
+  const charged = (tour: {right: number; wrong: number; done: boolean}) => tour.done && tour.right + tour.wrong === 0;
   const tourRight = tours.map((tour) => tour.right);
   const tourWrong = tours.map((tour, t) => (charged(tour) ? Math.floor(tourLengths[t] / EMPTY_TOUR_DIVISOR) : tour.wrong));
   const tourPoints = tourLengths.map((size, t) =>

@@ -1208,9 +1208,6 @@ var RU = Strings{
 				return "Что решает при равном итоге (необязательно)"
 			},
 			OdMinusBonusLabel: func() string { return "Бонус за взятый тур целиком" },
-			OdMinusEmptyLabel: func() string {
-				return "Тур без единого ответа — минус треть вопросов тура как неправильные"
-			},
 			OdMinusWrongLabel: func() string { return "Штраф за неправильный ответ" },
 			OdQuestionsLabel:  func() string { return "Количество вопросов в туре" },
 			OdRatingLabel: func() string {

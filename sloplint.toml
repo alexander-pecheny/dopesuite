@@ -16,8 +16,9 @@
 # and the KSI sticker options split ComputeODResults and shared the KSI
 # sticker lookup with the export, 0.4890 once the minefield became its own
 # format, 0.4883 once the seat picker's floating panel was shared with the
-# KSI sticker menu and the game settings page's writes were split up, and
-# 0.4881 once the minefield's ticks split ComputeODResults further.
+# KSI sticker menu and the game settings page's writes were split up,
+# 0.4881 once the minefield's ticks split ComputeODResults further, and
+# 0.4879 once the minefield always charged an empty tour.
 # Score with sloplint 3ab0283 or newer: an older binary still counts the
 # numbers an ignore comment vouches for, and reads about 0.03 higher.
-max-slop-score = 0.4881
+max-slop-score = 0.4879

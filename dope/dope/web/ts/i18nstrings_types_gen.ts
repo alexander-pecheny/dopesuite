@@ -865,7 +865,6 @@ export type Strings = {
       multiSortingHint: () => string;
       multiSortingLabel: () => string;
       odMinusBonusLabel: () => string;
-      odMinusEmptyLabel: () => string;
       odMinusWrongLabel: () => string;
       odQuestionsLabel: () => string;
       odRatingLabel: () => string;
