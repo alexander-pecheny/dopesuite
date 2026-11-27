@@ -159,7 +159,11 @@ func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
 			dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"), dopeui.Placeholder("my-fest"))),
 		dopeui.Field(dopeui.Label(s.Host.Dash.StartDateLabel()), dopeui.Textfield(dopeui.Name("start_date"), dopeui.Value(data.Fest.StartDate))),
 		dopeui.Field(dopeui.Label(s.Host.Dash.EndDateLabel()), dopeui.Textfield(dopeui.Name("end_date"), dopeui.Value(data.Fest.EndDate))),
-		dopeui.Field(dopeui.Label("rating.chgk.info ID"), dopeui.Textfield(dopeui.Name("rating_id"), dopeui.Value(ratingID), dopeui.Inputmode("numeric"))),
+		// The sync saves the form, then loads the teams and players of the id
+		// typed (handleHostUpdateFest), and numbers the new teams.
+		dopeui.Row(dopeui.SpaceSM, dopeui.AlignEnd, dopeui.Wrap(),
+			dopeui.Field(dopeui.Grow(), dopeui.Label("rating.chgk.info ID"), dopeui.Textfield(dopeui.Name("rating_id"), dopeui.Value(ratingID), dopeui.Inputmode("numeric"))),
+			dopeui.Button(dopeui.Submit(), dopeui.Name("sync"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.SyncSubmit()))),
 		kindField(data.Kind, data.Games),
 		pub,
 		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.SaveSubmit()))),
@@ -619,6 +623,13 @@ func (s *Server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, fe
 	}
 	if err != nil {
 		route.WriteError(w, r, err)
+		return
+	}
+	// The sync button goes on to the import from the rating site, as its
+	// preview: the host sees what changes before anything does.
+	if r.Form.Has("sync") {
+		r.Form.Set("preview", "1")
+		s.handleHostImportRatingRoster(w, r, festID)
 		return
 	}
 	redirectRef := f.Slug

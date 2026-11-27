@@ -847,7 +847,40 @@ func (s *Server) ImportRatingRoster(ctx context.Context, festID int64, choice im
 	if err := s.ensureSynchGame(ctx, festID, ratingID); err != nil {
 		return result, err
 	}
+	if err := s.numberNewTeams(ctx, festID); err != nil {
+		return result, err
+	}
 	return result, s.ensureVenueInvites(ctx, festID)
+}
+
+// numberNewTeams gives each team of a regular fest that has no number the
+// next one free, in roster order, so a host never has to number teams the
+// rating site brought (ADR-0038). A team that has one keeps it. A synch fest
+// numbers its teams by venue and is left alone.
+func (s *Server) numberNewTeams(ctx context.Context, festID int64) error {
+	db := s.h.Engine().DB
+	if kind, err := multifest.FestKind(ctx, db, festID); err != nil || kind == multifest.Synch {
+		return err
+	}
+	teams, err := numbering.LoadTeams(ctx, db, festID, 0)
+	if err != nil {
+		return err
+	}
+	top := 0
+	for _, team := range teams {
+		top = max(top, team.Number)
+	}
+	var assignments []pages.NumberAssignment
+	for _, team := range teams {
+		if team.Number <= 0 {
+			top++
+			assignments = append(assignments, pages.NumberAssignment{TeamID: team.ID, Number: top})
+		}
+	}
+	if len(assignments) == 0 {
+		return nil
+	}
+	return s.pages().AssignFestNumbers(ctx, festID, 0, assignments)
 }
 
 // importRatingVenues makes the venues a synch fest's tournament has accepted

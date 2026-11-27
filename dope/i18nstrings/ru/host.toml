@@ -372,6 +372,8 @@ name_taken = 'Тройка «{{.name}}» уже есть — у двух тро�
 delete_seated = "Эта тройка уже играет в игре, удалить её нельзя."
 
 [dash]
+# The button beside the rating site's id: save, then load the teams.
+sync_submit = "Загрузить с турнирного сайта"
 # The fest dashboard (hostFestDashDoc): the fest-edit form, the games list, the
 # access section, the participants links and the delete section.
 # Dashboard page title: "<fest title> · ведущий".

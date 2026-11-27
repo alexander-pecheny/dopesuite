@@ -854,6 +854,7 @@ export type Strings = {
       settingsBtn: () => string;
       slugLabel: () => string;
       startDateLabel: () => string;
+      syncSubmit: () => string;
       synchImportLink: () => string;
       teamsNumbered: (n: string, numbered: string) => string;
       titleLabel: () => string;

@@ -855,6 +855,7 @@ export const RU: Strings = {
       settingsBtn: () => "Свойства",
       slugLabel: () => "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})",
       startDateLabel: () => "Дата начала",
+      syncSubmit: () => "Загрузить с турнирного сайта",
       synchImportLink: () => "Загрузить площадки",
       teamsNumbered: (n: string, numbered: string) => `${n}, с номером: ${numbered}`,
       titleLabel: () => "Название",

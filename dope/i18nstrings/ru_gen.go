@@ -1169,6 +1169,7 @@ var RU = Strings{
 				return "Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"
 			},
 			StartDateLabel:  func() string { return "Дата начала" },
+			SyncSubmit:      func() string { return "Загрузить с турнирного сайта" },
 			SynchImportLink: func() string { return "Загрузить площадки" },
 			TeamsNumbered:   func(n string, numbered string) string { return fmt.Sprintf("%s, с номером: %s", n, numbered) },
 			TitleLabel:      func() string { return "Название" },
