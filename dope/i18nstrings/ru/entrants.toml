@@ -130,6 +130,7 @@ own = "Отдельный список"
 # Confirm going back to the fest's teams once the Game has results.
 follow_confirm = "В игре уже есть результаты. Вернуться к командам с турнирного сайта? Результаты команд, которых там нет, пропадут."
 # The separate list's buttons.
+add_team = "Добавить команду"
 clear = "Очистить"
 clear_confirm = "Убрать из списка все команды?"
 xlsx_import = "Загрузить из xlsx"
@@ -137,14 +138,13 @@ xlsx_sample = "Скачать образец xlsx"
 # The table's columns.
 number = "№"
 name = "Команда"
-city = "Город"
 flags = "Зачёты"
 players = "Игроки"
-# A row's action, and why a team the Game holds answers for keeps its row.
+# A row's actions, and why a team the Game holds answers for keeps its row.
+edit = 'Изменить «{{.team}}»'
 remove = "Убрать из списка"
+remove_confirm = 'Убрать команду «{{.team}}» из списка игры?'
 entered_note = "В игре уже есть её ответы"
-# The empty row under the list that adds a team.
-new_team = "Новая команда"
 # The summary line over the table.
 summary = '{{.n}} {{plural .n "команда" "команды" "команд"}} в игре'
 empty = "В игре пока нет команд."

@@ -67,6 +67,13 @@ func (s *Server) APIRoutes(t *route.Table) {
 	t.Handle("PUT "+game+"/teams/list", route.Editor.Numbered(), s.apiSaveGameTeams)
 	t.Handle("POST "+game+"/teams/xlsx", route.Editor.Numbered(), s.apiImportGameTeamsXLSX)
 	t.Handle("GET "+game+"/teams/sample.xlsx", route.Editor, s.apiGameTeamsSheet)
+	// The team editor of the separate list is the fest roster's dialog
+	// (team-editor.ts): its people to suggest and the rating site's search,
+	// here for whoever runs the Game.
+	t.Handle("GET "+game+"/teams/editor", route.Editor, s.apiNewTeam)
+	t.Handle("GET "+game+"/rating/players", route.Editor, s.apiRatingPlayers)
+	t.Handle("GET "+game+"/rating/teams", route.Editor, s.apiRatingTeams)
+	t.Handle("GET "+game+"/rating/teams/{id}/base", route.Editor, s.apiRatingBaseRoster)
 	t.Handle("DELETE "+game, route.Manager, s.apiDeleteGame)
 	t.Handle("POST "+game+"/clear", route.Manager, s.apiClearGame)
 	t.Handle("GET "+game+"/journal", route.Manager, func(w http.ResponseWriter, r *http.Request, sc route.Scope) error {

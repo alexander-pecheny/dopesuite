@@ -342,9 +342,10 @@ var RU = Strings{
 			Run:       func() string { return "Загрузить список" },
 		},
 		Own: EntrantsOwnStrings{
-			City:         func() string { return "Город" },
+			AddTeam:      func() string { return "Добавить команду" },
 			Clear:        func() string { return "Очистить" },
 			ClearConfirm: func() string { return "Убрать из списка все команды?" },
+			Edit:         func(team string) string { return fmt.Sprintf("Изменить «%s»", team) },
 			Empty:        func() string { return "В игре пока нет команд." },
 			Entered: func(name string) string {
 				return fmt.Sprintf("«%s» нельзя убрать: в игре уже есть её ответы. Сначала очистите их.", name)
@@ -360,7 +361,6 @@ var RU = Strings{
 			NameMissing: func(row string) string {
 				return fmt.Sprintf("Впишите название команды в строке %s.", row)
 			},
-			NewTeam: func() string { return "Новая команда" },
 			NotFlat: func() string {
 				return "У этой игры свой список участников: его правят на вкладке «Участники» игры."
 			},
@@ -372,6 +372,9 @@ var RU = Strings{
 			Own:     func() string { return "Отдельный список" },
 			Players: func() string { return "Игроки" },
 			Remove:  func() string { return "Убрать из списка" },
+			RemoveConfirm: func(team string) string {
+				return fmt.Sprintf("Убрать команду «%s» из списка игры?", team)
+			},
 			Summary: func(n int) string {
 				return fmt.Sprintf("%d %s в игре", n, core.Plural("ru", n, "команда", "команды", "команд"))
 			},

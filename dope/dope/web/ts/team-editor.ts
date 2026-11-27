@@ -121,6 +121,10 @@ export interface EditorActions {
   // A new team on a venue's page takes its number there in the editor:
   // the number offered, and the ones the venue's teams already have.
   venueNumber?: {offered: number; taken: number[]; max: number};
+  // texts replaces what the dialog says about the fest roster, for a page
+  // whose teams are another list (a game's separate list): no hint over the
+  // form or under the name, and its own question before a team goes.
+  texts?: {deleteConfirm(team: string): string};
 }
 
 // remoteChoices keeps the rating site's answers per query and asks for a new
@@ -339,11 +343,11 @@ export function openTeamDialog(api: string, team: TeamDetail, pageVenue: number,
 
   const title = document.createElement("h2");
   title.textContent = isNew ? S.fest.teamEdit.titleNew() : S.fest.teamEdit.title(team.name);
-  const hint = hintLine(team.hand || isNew ? S.fest.teamEdit.hintHand() : S.fest.teamEdit.hintRating());
+  const hint = actions.texts ? null : hintLine(team.hand || isNew ? S.fest.teamEdit.hintHand() : S.fest.teamEdit.hintRating());
 
   const [nameField, nameInput] = field(S.fest.teamEdit.name(), team.name);
   nameInput.required = true;
-  nameField.appendChild(hintLine(S.fest.teamEdit.nameHint()));
+  if (!actions.texts) nameField.appendChild(hintLine(S.fest.teamEdit.nameHint()));
   const [cityField, cityInput] = field(S.fest.teamEdit.city(), team.city);
   const number = isNew && actions.venueNumber ? venueNumberField(actions.venueNumber) : null;
   const divisions = divisionsField(team);
@@ -483,7 +487,8 @@ export function openTeamDialog(api: string, team: TeamDetail, pageVenue: number,
     remove.className = "btn btn-ghost";
     remove.textContent = S.fest.teamEdit.delete();
     remove.addEventListener("click", () => {
-      if (!window.confirm(S.fest.teamEdit.deleteConfirm(team.name))) return;
+      const question = actions.texts ? actions.texts.deleteConfirm(team.name) : S.fest.teamEdit.deleteConfirm(team.name);
+      if (!window.confirm(question)) return;
       busy(true);
       void actions.remove().then(finish);
     });
@@ -531,7 +536,8 @@ export function openTeamDialog(api: string, team: TeamDetail, pageVenue: number,
     void actions.save(body).then(finish);
   });
 
-  form.append(title, hint);
+  form.appendChild(title);
+  if (hint) form.appendChild(hint);
   if (actions.offline) form.appendChild(hintLine(S.fest.teamEdit.offlineHint()));
   if (rating) form.appendChild(rating.node);
   else if (team.rating_id > 0) form.appendChild(hintLine(S.fest.teamEdit.ratingTeamOf(String(team.rating_id))));

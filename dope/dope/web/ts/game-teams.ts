@@ -1,10 +1,11 @@
 // The entrants tab of a flat Game (OD, the minefield, KSI, Multi): who
 // plays it. Either the fest's teams, which the rating import and the fest
 // teams page keep current, or the Game's separate list: a copy of those teams
-// made the first time, then the Game's alone. The host edits the list right
-// in the table (number, name, city, Divisions, people), adds a team in the
-// empty row under it, clears it or loads it from a roster sheet, and every
-// change is saved at once. The Game keeps the list while it plays the fest's
+// made the first time, then the Game's alone. The host changes a team's
+// number right in the table and the rest in the fest roster's team editor
+// (team-editor.ts: the rating site's teams and people, and anybody typed by
+// name), adds a team the same way, clears the list or loads it from a roster
+// sheet, and every change is saved at once. The Game keeps the list while it plays the fest's
 // teams, so the host may switch back and forth. The server decides every rule
 // (a team the Game holds answers for stays) and answers the tab afresh after
 // each write (roster.GameTeamsView).
@@ -14,6 +15,8 @@ import {resultsPins, resultsTeamCell} from "./standings.js";
 import {sheetHead} from "./sheet-pins.js";
 import {iconed} from "./icons_gen.js";
 import {actionButton, emptyNote, errorText, hint} from "./entrants.js";
+import {openTeamDialog, request} from "./team-editor.js";
+import type {Answer, TeamDetail, TeamPlayer} from "./team-editor.js";
 import S from "./i18nstrings.js";
 
 const TEAM_PINS = resultsPins();
@@ -50,16 +53,11 @@ export interface GameTeamsTab {
   refresh(): void;
 }
 
-// splitList reads a comma-separated cell.
-function splitList(text: string): string[] {
-  return text.split(",").map((part) => part.trim()).filter(Boolean);
-}
-
-// typedPlayers reads the people cell, keeping the rating id of each name the
-// team already had.
-function typedPlayers(text: string, before: GamePlayer[] = []): GamePlayer[] {
-  const ids = new Map(before.map((p) => [p.name.toLowerCase(), p.ratingID]));
-  return splitList(text).map((name) => ({name, ratingID: ids.get(name.toLowerCase())}));
+// teamPlayer is a person of the list as the team editor holds people: the
+// first word the given name, the rest the surname.
+function teamPlayer(player: GamePlayer): TeamPlayer {
+  const [first = "", ...rest] = player.name.trim().split(/\s+/);
+  return {rating_id: player.ratingID || 0, first_name: first, last_name: rest.join(" ")};
 }
 
 function nextNumber(teams: GameTeam[]): number {
@@ -248,7 +246,13 @@ export function createGameTeamsTab(apiBase: string): GameTeamsTab {
     sample.href = `${apiBase}/teams/sample.xlsx`;
     sample.download = "teams.xlsx";
     sample.append(...iconed("file-down", S.entrants.own.xlsxSample()));
-    row.append(clear, upload, file, sample);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn";
+    add.disabled = busy;
+    add.append(...iconed("plus", S.entrants.own.addTeam()));
+    add.addEventListener("click", () => void editTeam(null));
+    row.append(add, clear, upload, file, sample);
     return row;
   }
 
@@ -301,78 +305,113 @@ export function createGameTeamsTab(apiBase: string): GameTeamsTab {
     return tr;
   }
 
-  // ownTable is the separate list, each cell a field, with an empty row
-  // under it for a new team.
+  // ownTable is the separate list: the number a field of its own, the rest
+  // read here and changed in the fest roster's team editor.
   function ownTable(): HTMLElement {
     const node = document.createElement("table");
     node.className = "results-table seed-import-table game-teams-table";
     node.appendChild(sheetHead([{row: headRow([
       [S.entrants.own.number(), "results-place-head seed-number-head"],
-      [S.entrants.own.name(), "game-teams-name"],
-      [S.entrants.own.city(), "game-teams-city"],
+      [S.entrants.own.name(), "results-team-head seed-team-head"],
       [S.entrants.own.flags(), "game-teams-flags"],
       [S.entrants.own.players(), "game-teams-players"],
       ["", "entrant-actions-head"],
     ])}]));
     const body = document.createElement("tbody");
     draft.forEach((team, index) => body.appendChild(ownRow(team, index)));
-    body.appendChild(newRow());
     node.appendChild(body);
     return scroll(node);
   }
 
-  function field(value: string, label: string, className: string, onChange: (value: string) => void): HTMLInputElement {
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = className;
-    input.value = value;
-    input.setAttribute("aria-label", label);
-    input.addEventListener("change", () => onChange(input.value));
-    return input;
-  }
-
   function ownRow(team: GameTeam, index: number): HTMLTableRowElement {
-    const tr = rowShell(index, draft.length + 1);
-    const edit = (apply: (value: string) => void) => (value: string) => {
-      apply(value);
-      saveSoon();
-    };
-    const number = field(String(team.number || ""), S.entrants.own.number(), "seed-number-input", edit((value) => {
-      team.number = Number(value.trim()) || 0;
-    }));
+    const tr = rowShell(index, draft.length);
+    const number = document.createElement("input");
+    number.type = "text";
     number.inputMode = "numeric";
-    const remove = actionButton("trash-2", team.entered ? S.entrants.own.enteredNote() : S.entrants.own.remove(),
-      Boolean(team.entered), () => {
+    number.className = "seed-number-input";
+    number.value = String(team.number || "");
+    number.setAttribute("aria-label", S.entrants.own.number());
+    number.addEventListener("change", () => {
+      team.number = Number(number.value.trim()) || 0;
+      saveSoon();
+    });
+    const actions = document.createElement("div");
+    actions.className = "u-row u-gap-xs";
+    actions.append(
+      actionButton("pencil", S.entrants.own.edit(team.name), busy, () => void editTeam(team)),
+      actionButton("trash-2", team.entered ? S.entrants.own.enteredNote() : S.entrants.own.remove(), busy || Boolean(team.entered), () => {
         draft.splice(draft.indexOf(team), 1);
         void saveNow();
-      });
+      }),
+    );
     tr.append(
       td(number, "results-place seed-number-cell"),
-      td(field(team.name, S.entrants.own.name(), "venue-input", edit((value) => { team.name = value; })), "game-teams-name"),
-      td(field(team.city || "", S.entrants.own.city(), "venue-input", edit((value) => { team.city = value; })), "game-teams-city"),
-      td(field((team.flags || []).join(", "), S.entrants.own.flags(), "venue-input", edit((value) => { team.flags = splitList(value); })), "game-teams-flags"),
-      td(field((team.players || []).map((p) => p.name).join(", "), S.entrants.own.players(), "venue-input",
-        edit((value) => { team.players = typedPlayers(value, team.players); })), "game-teams-players"),
-      td(remove, "entrant-actions-cell"),
+      resultsTeamCell(team.name, {city: team.city}),
+      td((team.flags || []).join(", "), "game-teams-flags"),
+      td((team.players || []).map((p) => p.name).join(", "), "game-teams-players"),
+      td(actions, "entrant-actions-cell"),
     );
     return tr;
   }
 
-  // newRow adds a team once its name is typed, under the next number free,
-  // and puts the cursor in the new empty row for the team after it.
-  function newRow(): HTMLTableRowElement {
-    const tr = rowShell(draft.length, draft.length + 1);
-    const name = field("", S.entrants.own.newTeam(), "venue-input", (value) => {
-      if (!value.trim()) return;
-      draft.push({number: nextNumber(draft), name: value.trim()});
-      void saveNow().then(() => {
-        root.querySelector<HTMLInputElement>("tbody tr:last-child input")?.focus();
-      });
+  // editorBase is what the team editor offers every team: the fest's people
+  // to suggest and its Divisions, fetched once.
+  let editorBase: Promise<TeamDetail | null> | null = null;
+  function teamDetail(team: GameTeam | null): Promise<TeamDetail | null> {
+    editorBase ??= request(`${apiBase}/teams/editor`, "GET").then((answer) => (answer.ok ? answer.data as TeamDetail : null));
+    return editorBase.then((base) => base && {
+      ...base,
+      // A row of the list is no fest team: local keeps the editor from
+      // taking it for a new one, and hand lets the host pick its rating team.
+      id: 0, local: team !== null, hand: true, multifest_venue_id: 0, multifest_venues: [],
+      rating_id: team?.ratingID || 0, name: team?.name || "", city: team?.city || "", flags: team?.flags || [],
+      players: (team?.players || []).map(teamPlayer),
     });
-    name.placeholder = S.entrants.own.newTeam();
-    tr.append(td("", "results-place seed-number-cell"), td(name, "game-teams-name"), td("", "game-teams-city"),
-      td("", "game-teams-flags"), td("", "game-teams-players"), td("", "entrant-actions-cell"));
-    return tr;
+  }
+
+  // editTeam opens the fest roster's team editor on a row of the list, or on
+  // a new team (null), and saves the list with what it gives back.
+  async function editTeam(team: GameTeam | null): Promise<void> {
+    const detail = await teamDetail(team);
+    if (!detail) return;
+    // The row is found by its place: a refused save puts copies back.
+    const at = team ? draft.indexOf(team) : -1;
+    // A save the server refuses leaves the list as it was, and the editor
+    // open with the reason.
+    const keep = async (change: () => void): Promise<Answer> => {
+      const before = draft.map((t) => ({...t}));
+      change();
+      const answer = await persist();
+      if (!answer.ok) draft = before;
+      render();
+      return answer;
+    };
+    openTeamDialog(apiBase, detail, 0, {
+      texts: {deleteConfirm: (name) => S.entrants.own.removeConfirm(name)},
+      save: (body) => keep(() => {
+        const row: GameTeam = at >= 0 ? draft[at] : {number: nextNumber(draft), name: ""};
+        row.name = body.name.trim();
+        row.city = body.city.trim();
+        row.flags = body.flags;
+        row.players = body.players.map((p) => ({name: `${p.first_name} ${p.last_name}`.trim(), ratingID: p.rating_id || undefined}));
+        row.ratingID = (team ? body.rating_team : body.rating_id) || undefined;
+        if (at < 0) draft.push(row);
+      }),
+      remove: () => keep(() => { draft.splice(at, 1); }),
+    });
+  }
+
+  // persist saves the list as the editor's save does: the answer says
+  // whether it went through, and why not.
+  async function persist(): Promise<Answer> {
+    window.clearTimeout(saveTimer);
+    try {
+      adopt(await call("/list", json("PUT", {teams: draft})));
+      notice = "";
+      return {ok: true, message: ""};
+    } catch (error) {
+      return {ok: false, message: errorText(error)};
+    }
   }
 
   return {

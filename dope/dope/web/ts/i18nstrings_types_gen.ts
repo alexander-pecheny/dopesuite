@@ -267,9 +267,10 @@ export type Strings = {
       run: () => string;
     };
     own: {
-      city: () => string;
+      addTeam: () => string;
       clear: () => string;
       clearConfirm: () => string;
+      edit: (team: string) => string;
       empty: () => string;
       entered: (name: string) => string;
       enteredNote: () => string;
@@ -279,7 +280,6 @@ export type Strings = {
       follows: () => string;
       name: () => string;
       nameMissing: (row: string) => string;
-      newTeam: () => string;
       notFlat: () => string;
       number: () => string;
       numberMissing: (name: string) => string;
@@ -287,6 +287,7 @@ export type Strings = {
       own: () => string;
       players: () => string;
       remove: () => string;
+      removeConfirm: (team: string) => string;
       summary: (n: number) => string;
       xlsxImport: () => string;
       xlsxSample: () => string;
