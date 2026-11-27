@@ -262,8 +262,13 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 			roleCell = dopeui.Cell(dopeui.Hiddenfield(dopeui.Name("role_"+uid), dopeui.Value("creator")), dopeui.Text("creator"))
 			actionCell = dopeui.Cell()
 		} else {
-			roleCell = dopeui.Cell(dopeui.Selectfield(dopeui.Name("role_"+uid), dopeui.Data("autosubmit", ""),
-				roleOption(roles.Admin, m.Role), roleOption(roles.Host, m.Role), roleOption(roles.GameJury, m.Role)))
+			options := []dopeui.Item{dopeui.Name("role_" + uid), dopeui.Data("autosubmit", ""), roleOption(roles.Admin, m.Role), roleOption(roles.Host, m.Role)}
+			// Only a synch fest has a jury; a member who has the role keeps it
+			// in the select, which shows what they are.
+			if data.Kind == multifest.Synch || m.Role == roles.GameJury {
+				options = append(options, roleOption(roles.GameJury, m.Role))
+			}
+			roleCell = dopeui.Cell(dopeui.Selectfield(options...))
 			actionCell = dopeui.Cell(dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Name("delete_"+uid), dopeui.Value("1"),
 				dopeui.Data("confirm", s.Host.Dash.DeleteAccessConfirm(m.Nickname)), dopeui.Text(s.Host.Dash.DeleteBtn())))
 		}
@@ -273,10 +278,7 @@ func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
 	}
 	rows = append(rows, dopeui.Trow(
 		dopeui.Cell(dopeui.Textfield(dopeui.Name("new_nickname"), dopeui.Placeholder("nickname"))),
-		dopeui.Cell(dopeui.Col(dopeui.SpaceSM, dopeui.Selectfield(dopeui.Name("new_role"),
-			dopeui.Option(dopeui.Value(roles.Host), dopeui.Text(roles.Host)),
-			dopeui.Option(dopeui.Value(roles.Admin), dopeui.Text(roles.Admin)),
-			dopeui.Option(dopeui.Value(roles.GameJury), dopeui.Text(roles.GameJury))), newHostVenue(data))),
+		dopeui.Cell(dopeui.Col(dopeui.SpaceSM, dopeui.Selectfield(newRoleOptions(data)...), newHostVenue(data))),
 		dopeui.Cell(dopeui.Button(dopeui.Submit(), dopeui.Name("add_access"), dopeui.Value("1"), dopeui.Text(s.Host.Dash.AddBtn()))),
 	))
 	sect = append(sect,
@@ -353,6 +355,17 @@ func hostGames(data hostFestDashData, m festaccess.HostAccessMember) *dopeui.Ele
 	// for all the boxes ticked.
 	boxes = append(boxes, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text(s.Host.Dash.SaveSubmit()))))
 	return dopeui.Details(dopeui.Summary(dopeui.Text(strings.Join(summary, "; "))), dopeui.Col(boxes...))
+}
+
+// newRoleOptions is the add row's role select: a jury on a synch fest alone.
+func newRoleOptions(data hostFestDashData) []dopeui.Item {
+	out := []dopeui.Item{dopeui.Name("new_role"),
+		dopeui.Option(dopeui.Value(roles.Host), dopeui.Text(roles.Host)),
+		dopeui.Option(dopeui.Value(roles.Admin), dopeui.Text(roles.Admin))}
+	if data.Kind == multifest.Synch {
+		out = append(out, dopeui.Option(dopeui.Value(roles.GameJury), dopeui.Text(roles.GameJury)))
+	}
+	return out
 }
 
 func roleOption(value, current string) *dopeui.Element {

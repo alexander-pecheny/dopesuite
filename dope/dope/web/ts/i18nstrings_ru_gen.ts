@@ -600,6 +600,7 @@ export const RU: Strings = {
     },
     member: {
       creatorProtected: () => "создателя нельзя удалить или изменить",
+      juryNeedsSynch: () => "Жюри бывает только у синхрона: на обычном фесте нет спорных ответов.",
       roleInvalid: () => "роль должна быть admin, host или game_jury",
     },
   },

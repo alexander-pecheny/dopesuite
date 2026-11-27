@@ -808,7 +808,10 @@ var RU = Strings{
 		},
 		Member: FestaccessMemberStrings{
 			CreatorProtected: func() string { return "создателя нельзя удалить или изменить" },
-			RoleInvalid:      func() string { return "роль должна быть admin, host или game_jury" },
+			JuryNeedsSynch: func() string {
+				return "Жюри бывает только у синхрона: на обычном фесте нет спорных ответов."
+			},
+			RoleInvalid: func() string { return "роль должна быть admin, host или game_jury" },
 		},
 	},
 	Gallery: GalleryStrings{
